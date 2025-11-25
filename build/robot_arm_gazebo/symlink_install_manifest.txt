@@ -1,0 +1,17 @@
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/worlds/empty_world.world
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/launch/gazebo.launch.py
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/ament_index/resource_index/package_run_dependencies/robot_arm_gazebo
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/ament_index/resource_index/parent_prefix_path/robot_arm_gazebo
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/environment/ament_prefix_path.sh
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/environment/ament_prefix_path.dsv
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/environment/path.sh
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/environment/path.dsv
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/local_setup.bash
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/local_setup.sh
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/local_setup.zsh
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/local_setup.dsv
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/package.dsv
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/ament_index/resource_index/packages/robot_arm_gazebo
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/cmake/robot_arm_gazeboConfig.cmake
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/cmake/robot_arm_gazeboConfig-version.cmake
+/home/mustafacil/Desktop/Digital-Twin/install/robot_arm_gazebo/share/robot_arm_gazebo/package.xml

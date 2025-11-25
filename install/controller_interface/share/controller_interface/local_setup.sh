@@ -1,0 +1,1 @@
+/home/mustafacil/Desktop/Digital-Twin/build/controller_interface/ament_cmake_environment_hooks/local_setup.sh

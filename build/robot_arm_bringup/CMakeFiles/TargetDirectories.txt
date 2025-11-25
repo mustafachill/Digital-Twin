@@ -1,0 +1,9 @@
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/uninstall.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/robot_arm_bringup_uninstall.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/test.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/edit_cache.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/rebuild_cache.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/list_install_components.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/install.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/install/local.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_bringup/CMakeFiles/install/strip.dir

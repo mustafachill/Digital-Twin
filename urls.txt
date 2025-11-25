@@ -1,0 +1,4 @@
+https://www.ibm.com/think/topics/digital-twin
+https://docs.ros.org/en/humble/Tutorials/
+https://docs.ros.org/en/humble/index.html
+https://docs.ros.org/en/humble/Tutorials/Advanced/Simulators/Gazebo/Simulation-Gazebo.html

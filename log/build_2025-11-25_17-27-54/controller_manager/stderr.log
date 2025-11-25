@@ -1,0 +1,6 @@
+/usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+  warnings.warn(
+gmake[2]: *** No rule to make target '/home/mustafacil/Desktop/Digital-Twin/src/ros2_control/controller_manager/test/test_controller_manager.cpp', needed by 'CMakeFiles/test_controller_manager.dir/test/test_controller_manager.cpp.o'.  Stop.
+gmake[1]: *** [CMakeFiles/Makefile2:347: CMakeFiles/test_controller_manager.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+gmake: *** [Makefile:146: all] Error 2

@@ -1,0 +1,9 @@
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/uninstall.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/robot_arm_gazebo_uninstall.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/test.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/edit_cache.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/rebuild_cache.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/list_install_components.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/install.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/install/local.dir
+/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_gazebo/CMakeFiles/install/strip.dir

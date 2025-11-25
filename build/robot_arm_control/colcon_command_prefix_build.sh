@@ -1,0 +1,8 @@
+# generated from colcon_core/shell/template/command_prefix.sh.em
+. "/home/mustafacil/Desktop/Digital-Twin/install/controller_manager_msgs/share/controller_manager_msgs/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/joint_limits/share/joint_limits/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/ros2_control_test_assets/share/ros2_control_test_assets/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/hardware_interface/share/hardware_interface/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/controller_interface/share/controller_interface/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/hardware_interface_testing/share/hardware_interface_testing/package.sh"
+. "/home/mustafacil/Desktop/Digital-Twin/install/transmission_interface/share/transmission_interface/package.sh"
