@@ -101,3 +101,25 @@ Each significant task should append a new section with:
   - Test trajectory commands to verify joint control works.
   - Clean up RViz visualization (sync with Gazebo).
   - Begin planning real hardware interface.
+
+---
+
+## 2025-11-25 – RViz-Gazebo Twin Test and Control Guide
+
+- Task:
+  - Tested RViz and Gazebo twin synchronization.
+  - Created Quick Control Guide documentation.
+- Files touched:
+  - src/robot_arm_bringup/rviz/sim.rviz (updated for proper sync)
+  - docs/QUICK_CONTROL_GUIDE.md (new)
+  - README.md (added reference)
+- Summary:
+  - Successfully tested trajectory commands moving robot in both Gazebo and RViz simultaneously.
+  - Verified joint positions reach commanded values accurately.
+  - Created comprehensive control guide with example commands.
+- Verification:
+  - Sent multiple trajectory goals, all completed successfully.
+  - Gazebo physics simulation and RViz visualization remain synchronized.
+- Next steps:
+  - Consider MoveIt2 integration for interactive control.
+  - Begin real hardware interface planning when hardware is selected.

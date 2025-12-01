@@ -115,6 +115,7 @@ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory \
 
 ## Documentation
 
+- [Quick Control Guide](docs/QUICK_CONTROL_GUIDE.md) - Robot kontrol komutları ve örnekler
 - [Project Context](docs/PROJECT_CONTEXT.md)
 - [Goals](docs/GOALS.md)
 - [Work Log](docs/WORK_LOG.md)
