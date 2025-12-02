@@ -1,9 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/uninstall.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/robot_arm_description_uninstall.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/test.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/edit_cache.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/rebuild_cache.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/list_install_components.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/install.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/install/local.dir
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/CMakeFiles/install/strip.dir

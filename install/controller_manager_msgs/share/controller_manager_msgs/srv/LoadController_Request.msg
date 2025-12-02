@@ -1,1 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/build/controller_manager_msgs/rosidl_cmake/srv/LoadController_Request.msg

@@ -1,1 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/src/ros2_control/controller_interface/include/semantic_components/force_torque_sensor.hpp

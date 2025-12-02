@@ -1,1 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/src/robot_arm_description/launch/view_robot.launch.py

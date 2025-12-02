@@ -1,1 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/build/controller_manager_msgs/rosidl_generator_py/controller_manager_msgs/msg/_hardware_component_state.py

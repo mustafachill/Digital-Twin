@@ -1,1 +1,0 @@
-/home/mustafacil/Desktop/Digital-Twin/build/robot_arm_description/ament_cmake_core/robot_arm_descriptionConfig-version.cmake
