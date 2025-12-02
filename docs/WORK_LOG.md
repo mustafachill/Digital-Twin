@@ -163,3 +163,44 @@ Each significant task should append a new section with:
   - Test MoveIt2 interactive planning via RViz.
   - Implement custom digital twin synchronization layer.
   - Plan physical xArm 5 hardware integration.
+
+---
+
+## 2025-12-02 – Gazebo Laboratory Environment Setup
+
+- Task:
+  - Created infrastructure for custom Gazebo laboratory environment.
+  - Set up Blender-to-Gazebo model pipeline.
+  - Prepared template files for custom 3D models.
+- Files touched:
+  - src/digital_twin_environment/ (new ROS2 package)
+  - src/digital_twin_environment/CMakeLists.txt
+  - src/digital_twin_environment/package.xml
+  - src/digital_twin_environment/env-hooks/gazebo_model_path.dsv.in
+  - src/digital_twin_environment/worlds/robotics_lab.world
+  - src/digital_twin_environment/models/workbench/{model.config, model.sdf}
+  - src/digital_twin_environment/models/lab_floor/{model.config, model.sdf}
+  - src/digital_twin_environment/models/shelf/{model.config, model.sdf}
+  - src/digital_twin_environment/launch/lab_with_xarm5.launch.py
+  - docs/BLENDER_TO_GAZEBO_GUIDE.md (new)
+- Summary:
+  - Created `digital_twin_environment` ROS2 package with proper Gazebo model database structure.
+  - Implemented automatic GAZEBO_MODEL_PATH configuration via environment hooks.
+  - Created `robotics_lab.world` template with physics, lighting, and placeholder sections.
+  - Created model templates (workbench, lab_floor, shelf) with model.config and model.sdf files.
+  - Created comprehensive Blender-to-Gazebo pipeline documentation.
+  - Created launch file that integrates custom environment with xArm 5 simulation.
+- Package Structure:
+  ```
+  digital_twin_environment/
+  ├── worlds/robotics_lab.world
+  ├── models/{workbench,lab_floor,shelf}/
+  ├── materials/{textures,scripts}/
+  └── launch/lab_with_xarm5.launch.py
+  ```
+- Next steps:
+  - Build package: `colcon build --packages-select digital_twin_environment`
+  - Model the laboratory in Blender following BLENDER_TO_GAZEBO_GUIDE.md
+  - Export models and add them to the models/ directory
+  - Update robotics_lab.world with custom model placements
+  - Test full simulation with xArm 5 in custom environment
