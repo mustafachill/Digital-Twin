@@ -41,6 +41,7 @@
     robot_sn:='' 
     mesh_suffix:='stl' 
     kinematics_suffix:=''
+    ros_namespace:=''
     "
     > 
 
@@ -298,7 +299,7 @@
           <xacro:ignition_ros2_control_plugin prefix="${prefix}" ros2_control_params="${new_ros2_control_params}"/>
         </xacro:if>
         <xacro:if value="${ros2_control_plugin == 'gazebo_ros2_control/GazeboSystem'}">
-          <xacro:gazebo_ros2_control_plugin ros2_control_params="${new_ros2_control_params}"/>
+          <xacro:gazebo_ros2_control_plugin ros2_control_params="${new_ros2_control_params}" ros_namespace="${ros_namespace}"/>
         </xacro:if>
       </xacro:if>
       <xacro:unless value="${is_ros2}">

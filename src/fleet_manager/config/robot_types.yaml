@@ -1,0 +1,151 @@
+# ============================================
+# ROBOT TYPE DEFINITIONS
+# ============================================
+# Her robot tipi için URDF ve controller ayarları
+# ============================================
+
+robot_types:
+  xarm5:
+    description: "UFACTORY xArm 5 DOF"
+    manufacturer: "UFACTORY"
+    dof: 5
+    
+    # URDF configuration
+    urdf:
+      package: "xarm_description"
+      file: "urdf/xarm5/xarm5.urdf.xacro"
+      
+    # Controller configuration
+    controller:
+      package: "xarm_controller"
+      config_file: "config/xarm5_controllers.yaml"
+      trajectory_controller: "{prefix}xarm5_traj_controller"
+      joint_state_broadcaster: "joint_state_broadcaster"
+      
+    # Joint names (prefix will be added)
+    joints:
+      - "joint1"
+      - "joint2"
+      - "joint3"
+      - "joint4"
+      - "joint5"
+      
+    # Gripper options
+    grippers:
+      xarm_gripper:
+        urdf_macro: "xarm_gripper"
+        controller: "{prefix}xarm_gripper_traj_controller"
+        config_file: "config/xarm_gripper_controllers.yaml"
+        joints:
+          - "drive_joint"
+          
+      vacuum_gripper:
+        urdf_macro: "vacuum_gripper"
+        controller: "{prefix}vacuum_gripper_controller"
+        
+    # Physical limits
+    limits:
+      max_velocity: 1.0          # rad/s
+      max_acceleration: 2.0      # rad/s^2
+      workspace_radius: 0.7      # metres
+      
+  xarm6:
+    description: "UFACTORY xArm 6 DOF"
+    manufacturer: "UFACTORY"
+    dof: 6
+    
+    urdf:
+      package: "xarm_description"
+      file: "urdf/xarm6/xarm6.urdf.xacro"
+      
+    controller:
+      package: "xarm_controller"
+      config_file: "config/xarm6_controllers.yaml"
+      trajectory_controller: "{prefix}xarm6_traj_controller"
+      joint_state_broadcaster: "joint_state_broadcaster"
+      
+    joints:
+      - "joint1"
+      - "joint2"
+      - "joint3"
+      - "joint4"
+      - "joint5"
+      - "joint6"
+      
+    grippers:
+      xarm_gripper:
+        urdf_macro: "xarm_gripper"
+        controller: "{prefix}xarm_gripper_traj_controller"
+        joints:
+          - "drive_joint"
+          
+    limits:
+      max_velocity: 1.0
+      max_acceleration: 2.0
+      workspace_radius: 0.7
+
+  xarm7:
+    description: "UFACTORY xArm 7 DOF"
+    manufacturer: "UFACTORY"
+    dof: 7
+    
+    urdf:
+      package: "xarm_description"
+      file: "urdf/xarm7/xarm7.urdf.xacro"
+      
+    controller:
+      package: "xarm_controller"
+      config_file: "config/xarm7_controllers.yaml"
+      trajectory_controller: "{prefix}xarm7_traj_controller"
+      joint_state_broadcaster: "joint_state_broadcaster"
+      
+    joints:
+      - "joint1"
+      - "joint2"
+      - "joint3"
+      - "joint4"
+      - "joint5"
+      - "joint6"
+      - "joint7"
+      
+    grippers:
+      xarm_gripper:
+        urdf_macro: "xarm_gripper"
+        controller: "{prefix}xarm_gripper_traj_controller"
+        joints:
+          - "drive_joint"
+          
+    limits:
+      max_velocity: 1.0
+      max_acceleration: 2.0
+      workspace_radius: 0.7
+
+# ============================================
+# FUTURE ROBOT TYPES (Templates)
+# ============================================
+# Uncomment and configure when needed
+
+#  ur5:
+#    description: "Universal Robots UR5"
+#    manufacturer: "Universal Robots"
+#    dof: 6
+#    urdf:
+#      package: "ur_description"
+#      file: "urdf/ur5.urdf.xacro"
+#    controller:
+#      package: "ur_controllers"
+#      config_file: "config/ur5_controllers.yaml"
+#    joints:
+#      - "shoulder_pan_joint"
+#      - "shoulder_lift_joint"
+#      - "elbow_joint"
+#      - "wrist_1_joint"
+#      - "wrist_2_joint"
+#      - "wrist_3_joint"
+
+
+
+
+
+
+

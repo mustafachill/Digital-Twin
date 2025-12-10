@@ -1,41 +1,37 @@
-# Digital Twin - Robot Arm
+# Digital Twin - Multi-Robot Assembly Line
 
-A ROS 2 Humble digital twin project for a 6-DOF robot arm, featuring Gazebo simulation and ros2_control integration.
+A ROS 2 Humble digital twin project for a multi-robot pick & place assembly line, featuring xArm 5 robots, conveyor belt, and sensor integration.
 
 ## Overview
 
-This project implements a digital twin architecture where:
-- A simulated robot arm runs in Gazebo with full physics simulation
-- The same ROS 2 interfaces can control both the simulated and real robot
-- ros2_control provides hardware abstraction between simulation and real hardware
+This project implements a digital twin architecture for an industrial assembly line:
 
-## Package Structure
-
-| Package | Description |
-|---------|-------------|
-| `robot_arm_description` | URDF/Xacro model, meshes, and RViz configs |
-| `robot_arm_control` | ros2_control configuration and controller setup |
-| `robot_arm_gazebo` | Gazebo world files and simulation launch |
-| `robot_arm_bringup` | Unified launch files for different modes |
-
-## Prerequisites
-
-### Required ROS 2 Packages
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-    ros-humble-ros2-control \
-    ros-humble-ros2-controllers \
-    ros-humble-gazebo-ros2-control \
-    ros-humble-gazebo-ros \
-    ros-humble-joint-state-publisher \
-    ros-humble-joint-state-publisher-gui \
-    ros-humble-xacro \
-    ros-humble-rviz2
+```
+[BOX] --> [CONVEYOR] --> [Robot 1] --> [CONVEYOR] --> [Robot 2] --> [CONVEYOR] --> [Robot 3] --> [EXIT]
+                              |              |              |
+                         [Sensors]      [Sensors]      [Sensors]
 ```
 
-## Building
+### Key Features
+
+- **3x xArm 5 Robots**: UFACTORY 5-DOF robot arms with grippers
+- **Conveyor Belt**: ROS2-controlled conveyor with speed control
+- **Sensor Network**: Break beam sensors, proximity sensors, cameras
+- **Digital Twin Sync**: Same ROS2 interfaces for simulation and real hardware
+- **MoveIt2 Integration**: Interactive motion planning
+
+## Quick Start
+
+### Prerequisites
+
+```bash
+# ROS2 Humble packages
+sudo apt install ros-humble-moveit ros-humble-gazebo-ros2-control \
+    ros-humble-controller-manager ros-humble-joint-trajectory-controller \
+    ros-humble-ros2-controllers ros-humble-xacro ros-humble-rviz2
+```
+
+### Build
 
 ```bash
 cd ~/Desktop/Digital-Twin
@@ -44,83 +40,107 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-## Usage
-
-### View Robot Model in RViz (without simulation)
+### Launch
 
 ```bash
-ros2 launch robot_arm_description view_robot.launch.py
+# Main Digital Twin simulation
+ros2 launch assembly_line_bringup digital_twin.launch.py
+
+# Alternative: Single robot test
+ros2 launch assembly_line_bringup single_robot_test.launch.py
+
+# xArm official launch with MoveIt
+ros2 launch xarm_moveit_config xarm5_moveit_gazebo.launch.py add_gripper:=true
 ```
 
-This launches the robot model with a joint state publisher GUI, allowing you to manually move joints.
+## Package Structure
 
-### Run Full Simulation
+| Package | Description |
+|---------|-------------|
+| `assembly_line_bringup` | **Main launch package** - Digital Twin entry point |
+| `multi_robot_coordinator` | Robot coordination and state machine |
+| `conveyor_system` | Conveyor belt models and configuration |
+| `assembly_line_sensors` | Break beam and proximity sensor models |
+| `xarm_ros2` | UFACTORY xArm ROS2 packages |
+| `ifra_conveyor_belt` | Conveyor belt Gazebo plugin |
+| `digital_twin_environment` | Custom lab environment models |
+
+## Robot Control
+
+### Conveyor Belt
 
 ```bash
-ros2 launch robot_arm_bringup sim.launch.py
+# Start conveyor (50% power)
+ros2 service call /CONVEYORPOWER conveyorbelt_msgs/srv/ConveyorBeltControl "{power: 50.0}"
+
+# Stop conveyor
+ros2 service call /CONVEYORPOWER conveyorbelt_msgs/srv/ConveyorBeltControl "{power: 0.0}"
 ```
 
-This starts:
-- Gazebo with the robot arm spawned
-- ros2_control with joint_state_broadcaster and joint_trajectory_controller
-- RViz for visualization
-
-### Available Topics
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/robot_description` | `std_msgs/String` | Robot URDF |
-| `/joint_states` | `sensor_msgs/JointState` | Current joint states |
-| `/joint_trajectory_controller/joint_trajectory` | `trajectory_msgs/JointTrajectory` | Trajectory commands |
-
-### Test Joint Control
-
-Send a test trajectory:
+### xArm 5 Robot
 
 ```bash
-ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory \
+# Send trajectory command
+ros2 action send_goal /xarm5_traj_controller/follow_joint_trajectory \
     control_msgs/action/FollowJointTrajectory \
-    "{trajectory: {joint_names: ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6'], points: [{positions: [0.5, 0.3, -0.3, 0.2, 0.1, 0.0], time_from_start: {sec: 2}}]}}"
+    "{trajectory: {joint_names: ['joint1','joint2','joint3','joint4','joint5'], \
+    points: [{positions: [0.5, -0.5, 0.8, 0.0, 0.0], time_from_start: {sec: 2}}]}}"
 ```
 
-## Robot Arm Specifications
+### MoveIt2 Interactive Control
 
-- **DOF**: 6 revolute joints
-- **Joints**:
-  - Joint 1: Base rotation (yaw), ±180°
-  - Joint 2: Shoulder pitch, ±90°
-  - Joint 3: Elbow pitch, ±135°
-  - Joint 4: Wrist pitch, ±90°
-  - Joint 5: Wrist roll, ±180°
-  - Joint 6: Wrist yaw, ±180°
-- **End Effector**: Generic mounting point (TCP frame)
+Use the RViz MoveIt panel to:
+- Drag the interactive marker to set goal pose
+- Click "Plan & Execute" to move the robot
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      ROS 2 Control                          │
-│  ┌─────────────────────┐    ┌─────────────────────────────┐ │
-│  │ JointStateBroadcaster│    │ JointTrajectoryController │ │
-│  └─────────────────────┘    └─────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-         ┌────────────────────┴────────────────────┐
-         ▼                                         ▼
-┌─────────────────────┐                 ┌─────────────────────┐
-│   GazeboSystem      │                 │   FutureHardware    │
-│   (Simulation)      │                 │   (Real Robot)      │
-└─────────────────────┘                 └─────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         ROS 2 Control Layer                             │
+│  ┌────────────────┐  ┌─────────────────────┐  ┌────────────────────┐   │
+│  │ JointState     │  │ JointTrajectory     │  │ Gripper            │   │
+│  │ Broadcaster    │  │ Controller          │  │ Controller         │   │
+│  └────────────────┘  └─────────────────────┘  └────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+         ┌──────────────────────────┼──────────────────────────┐
+         ▼                          ▼                          ▼
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────────┐
+│  Gazebo Sim     │      │  Gazebo Sim     │      │  Physical xArm 5    │
+│  (Robot 1)      │      │  (Robot 2,3)    │      │  (Future)           │
+└─────────────────┘      └─────────────────┘      └─────────────────────┘
 ```
+
+## Topics & Services
+
+| Topic/Service | Type | Description |
+|---------------|------|-------------|
+| `/joint_states` | sensor_msgs/JointState | Current joint positions |
+| `/xarm5_traj_controller/...` | action | Trajectory execution |
+| `/CONVEYORPOWER` | service | Conveyor speed control |
+| `/CONVEYORSTATE` | conveyorbelt_msgs/ConveyorBeltState | Belt status |
+
+## Development Status
+
+| Component | Status |
+|-----------|--------|
+| xArm 5 Integration | ✅ Complete |
+| MoveIt2 Control | ✅ Complete |
+| Conveyor Belt | ✅ Complete |
+| Sensors | ✅ Complete |
+| Single Robot Sim | ✅ Working |
+| Multi-Robot | 🔄 In Progress |
+| Physical Integration | ⏳ Planned |
 
 ## Documentation
 
-- [Quick Control Guide](docs/QUICK_CONTROL_GUIDE.md) - Robot kontrol komutları ve örnekler
-- [Project Context](docs/PROJECT_CONTEXT.md)
-- [Goals](docs/GOALS.md)
-- [Work Log](docs/WORK_LOG.md)
+- [Scalable Architecture](docs/SCALABLE_ARCHITECTURE.md) - **Multi-robot system design**
+- [Quick Control Guide](docs/QUICK_CONTROL_GUIDE.md) - Control commands and examples
+- [Project Context](docs/PROJECT_CONTEXT.md) - System overview
+- [Blender to Gazebo Guide](docs/BLENDER_TO_GAZEBO_GUIDE.md) - Custom model pipeline
+- [Work Log](docs/WORK_LOG.md) - Development history
 
 ## License
 
 MIT
-

@@ -1,0 +1,47 @@
+# Sensor Topics Configuration
+# Mapping of sensor topics for each station
+
+stations:
+  station_1:
+    namespace: "/station1"
+    sensors:
+      break_beam: "/station1/break_beam"
+      proximity: "/station1/proximity"
+      camera:
+        color: "/station1/camera/color/image_raw"
+        depth: "/station1/camera/depth/image_raw"
+        camera_info: "/station1/camera/color/camera_info"
+        points: "/station1/camera/depth/points"
+  
+  station_2:
+    namespace: "/station2"
+    sensors:
+      break_beam: "/station2/break_beam"
+      proximity: "/station2/proximity"
+      camera:
+        color: "/station2/camera/color/image_raw"
+        depth: "/station2/camera/depth/image_raw"
+        camera_info: "/station2/camera/color/camera_info"
+        points: "/station2/camera/depth/points"
+  
+  station_3:
+    namespace: "/station3"
+    sensors:
+      break_beam: "/station3/break_beam"
+      proximity: "/station3/proximity"
+      camera:
+        color: "/station3/camera/color/image_raw"
+        depth: "/station3/camera/depth/image_raw"
+        camera_info: "/station3/camera/color/camera_info"
+        points: "/station3/camera/depth/points"
+
+# Detection thresholds
+detection:
+  break_beam:
+    max_range: 0.5        # metres - beyond this, beam is not broken
+    detection_threshold: 0.4  # metres - closer than this means object detected
+  
+  proximity:
+    max_range: 0.5        # metres
+    object_present_threshold: 0.15  # metres - object is close enough to pick
+

@@ -14,11 +14,16 @@
 
   </xacro:macro>
 
-  <xacro:macro name="gazebo_ros2_control_plugin" params="ros2_control_params:=''">
+  <xacro:macro name="gazebo_ros2_control_plugin" params="ros2_control_params:='' ros_namespace:=''">
 
     <gazebo>
       <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
         <robot_sim_type>gazebo_ros2_control/GazeboSystem</robot_sim_type>
+        <xacro:if value="${ros_namespace != ''}">
+          <ros>
+            <namespace>${ros_namespace}</namespace>
+          </ros>
+        </xacro:if>
         <xacro:if value="${ros2_control_params != ''}">
           <parameters>${ros2_control_params}</parameters>
         </xacro:if>

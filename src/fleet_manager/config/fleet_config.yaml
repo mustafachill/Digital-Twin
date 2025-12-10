@@ -1,0 +1,177 @@
+# ============================================
+# FLEET CONFIGURATION - 3 Parallel Conveyors
+# ============================================
+# Digital Twin - Multi-Robot Serial Transfer Assembly Line
+# 
+# System Architecture:
+# Pick Area -> Robot 1 -> Belt 1 -> Robot 2 -> Belt 2 -> Robot 3 -> Belt 3 -> Accumulation
+# ============================================
+
+fleet:
+  name: "parallel_conveyor_fleet"
+  version: "2.0"
+  
+  # ==========================================
+  # ROBOT DEFINITIONS
+  # ==========================================
+  # Robots are positioned at the START of each belt
+  # Each robot picks from source and places on their belt
+  # ==========================================
+  
+  robots:
+    - id: "robot_1"
+      type: "xarm5"
+      enabled: true
+      position:
+        x: -2.2                  # West of Belt 1 (belt at x=-1.5)
+        y: -0.5                  # Zigzag layout - baseline Y
+        z: 0.8
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0                 # Facing east (+X) toward Belt 1
+      config:
+        add_gripper: true
+        gripper_type: "xarm_gripper"
+      
+    - id: "robot_2"
+      type: "xarm5"
+      enabled: true
+      position:
+        x: -0.75                 # BETWEEN Belt 1 (x=-1.5) and Belt 2 (x=0.0)
+        y: 0.8                   # North side (Belt 1 front, Belt 2 back)
+        z: 0.8
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0                 # Facing east (+X) toward Belt 2
+      config:
+        add_gripper: true
+        gripper_type: "xarm_gripper"
+        
+    - id: "robot_3"
+      type: "xarm5"
+      enabled: true
+      position:
+        x: 0.8                   # West of Belt 3 (belt at x=1.5)
+        y: -0.5                  # SAME as Robot 1 - zigzag alignment!
+        z: 0.8
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0                 # Facing east (+X) toward Belt 3
+      config:
+        add_gripper: true
+        gripper_type: "xarm_gripper"
+
+# ==========================================
+# TOPOLOGY DEFINITION - Serial Transfer
+# ==========================================
+# Robot 1: Pick from pick_area → Place on Belt 1
+# Robot 2: Pick from Belt 1 end → Place on Belt 2
+# Robot 3: Pick from Belt 2 end → Place on Belt 3
+# ==========================================
+
+topology:
+  type: "serial_transfer"
+  
+  stations:
+    - id: "station_1"
+      robot: "robot_1"
+      role: "pick_to_belt"
+      upstream: "pick_area"
+      downstream: "belt_1"
+      sensor: none               # Manual trigger or always ready
+      # Pick area is at x=-3.0, y=-0.5, z=0.8
+      # Robot at x=-2.5, y=-1.0, needs to reach left(-X) and slightly back(-Y)
+      pick_position: [-0.5, 0.5, 0.05]   # Relative: left and back to pick area
+      # Belt 1 center at x=-2.0, y=0, robot reaches right(+X) and forward(+Y)
+      place_position: [0.5, 1.0, 0.05]   # Place at belt start
+      
+    - id: "station_2"
+      robot: "robot_2"
+      role: "belt_to_belt"
+      upstream: "belt_1"
+      downstream: "belt_2"
+      sensor: "belt_1_end_sensor"
+      # Belt 1 end at x=-1.0, y=1.0, robot at x=-0.5, y=-1.0
+      # Robot needs to reach left(-X) and far forward(+Y)
+      pick_position: [-0.5, 2.0, 0.05]   # Reach to belt 1 end
+      # Belt 2 center at x=0.0, y=0, place at start
+      place_position: [0.5, 1.0, 0.05]   # Place on belt 2 start
+      
+    - id: "station_3"
+      robot: "robot_3"
+      role: "belt_to_belt"
+      upstream: "belt_2"
+      downstream: "belt_3"
+      sensor: "belt_2_end_sensor"
+      # Belt 2 end at x=1.0, y=1.0, robot at x=1.5, y=-1.0
+      # Robot needs to reach left(-X) and far forward(+Y)
+      pick_position: [-0.5, 2.0, 0.05]   # Reach to belt 2 end
+      # Belt 3 center at x=2.0, y=0, place at start
+      place_position: [0.5, 1.0, 0.05]   # Place on belt 3 start
+
+# ==========================================
+# CONVEYOR CONFIGURATION
+# ==========================================
+
+conveyors:
+  belt_1:
+    enabled: true
+    length: 2.0                  # metre
+    width: 0.45                  # metre
+    speed: 0.1                   # m/s
+    position: [-2.0, 0.0, 0.8]   # Center position
+    orientation: [0, 0, 1.5708]  # 90° rotation (along Y axis)
+    entry_point: [-2.0, -1.0, 0.8]
+    exit_point: [-2.0, 1.0, 0.8]
+    
+  belt_2:
+    enabled: true
+    length: 2.0
+    width: 0.45
+    speed: 0.1
+    position: [0.0, 0.0, 0.8]
+    orientation: [0, 0, 1.5708]
+    entry_point: [0.0, -1.0, 0.8]
+    exit_point: [0.0, 1.0, 0.8]
+    
+  belt_3:
+    enabled: true
+    length: 2.0
+    width: 0.45
+    speed: 0.1
+    position: [2.0, 0.0, 0.8]
+    orientation: [0, 0, 1.5708]
+    entry_point: [2.0, -1.0, 0.8]
+    exit_point: [2.0, 1.0, 0.8]
+
+# ==========================================
+# WORK AREAS
+# ==========================================
+
+work_areas:
+  pick_area:
+    type: "source"
+    position: [-3.0, -0.5, 0.8]
+    size: [0.6, 0.6, 0.04]
+    
+  accumulation_area:
+    type: "sink"
+    position: [3.0, 0.5, 0.8]
+    size: [0.8, 0.8, 0.04]
+
+# ==========================================
+# SENSOR CONFIGURATION  
+# ==========================================
+
+sensors:
+  belt_1_end_sensor:
+    type: "break_beam"
+    position: [-1.0, 1.0, 0.85]
+    topic: "/sensors/belt_1_end/break_beam"
+    triggers: "robot_2"
+    
+  belt_2_end_sensor:
+    type: "break_beam"
+    position: [1.0, 1.0, 0.85]
+    topic: "/sensors/belt_2_end/break_beam"
+    triggers: "robot_3"

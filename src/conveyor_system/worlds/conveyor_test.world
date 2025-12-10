@@ -1,0 +1,101 @@
+<?xml version="1.0" ?>
+<!--
+  Conveyor System Test World
+  For testing conveyor belt and box spawning without robots
+-->
+<sdf version="1.6">
+  <world name="conveyor_test">
+    
+    <!-- Physics -->
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+    </physics>
+    
+    <!-- Lighting -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    
+    <!-- Ground plane -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+    
+    <!-- Long Conveyor Belt -->
+    <include>
+      <name>assembly_conveyor</name>
+      <uri>model://long_conveyor_belt</uri>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+    
+    <!-- Test box on conveyor -->
+    <include>
+      <name>test_box_1</name>
+      <uri>model://payload_box</uri>
+      <pose>0 -1.5 0.85 0 0 0</pose>
+    </include>
+    
+    <!-- Station markers (visual only) -->
+    <model name="station_1_marker">
+      <static>true</static>
+      <pose>0 -1.2 0.01 0 0 0</pose>
+      <link name="marker_link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>0.02</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>1 0 0 0.5</ambient>
+            <diffuse>1 0 0 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <model name="station_2_marker">
+      <static>true</static>
+      <pose>0 0 0.01 0 0 0</pose>
+      <link name="marker_link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>0.02</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.5</ambient>
+            <diffuse>0 1 0 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    
+    <model name="station_3_marker">
+      <static>true</static>
+      <pose>0 1.2 0.01 0 0 0</pose>
+      <link name="marker_link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.1</radius>
+              <length>0.02</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0 0 1 0.5</ambient>
+            <diffuse>0 0 1 0.5</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
+

@@ -204,3 +204,225 @@ Each significant task should append a new section with:
   - Export models and add them to the models/ directory
   - Update robotics_lab.world with custom model placements
   - Test full simulation with xArm 5 in custom environment
+
+---
+
+## 2025-12-04 – Multi-Robot Assembly Line Implementation
+
+- Task:
+  - Implemented a complete multi-robot pick and place assembly line system.
+  - Created conveyor belt integration, sensors, and coordination system.
+  - Set up 3 xArm 5 robots with grippers for synchronized operations.
+- New Packages Created:
+  1. `conveyor_system` - Conveyor belt models and configuration
+  2. `assembly_line_sensors` - Break beam and proximity sensors
+  3. `assembly_line_bringup` - Main launch package for full system
+  4. `multi_robot_coordinator` - State machine and robot coordination
+- External Packages Integrated:
+  - `ifra_conveyor_belt` - IFRA-Cranfield ROS2 conveyor belt plugin
+    - `conveyorbelt_msgs` - Custom messages/services
+    - `ros2_conveyorbelt` - Gazebo plugin
+    - `conveyorbelt_gazebo` - Models and worlds
+- Files touched:
+  - src/ifra_conveyor_belt/ (cloned from IFRA-Cranfield/IFRA_ConveyorBelt)
+  - src/conveyor_system/
+    - package.xml, CMakeLists.txt
+    - models/long_conveyor_belt/{model.config, model.sdf}
+    - models/payload_box/{model.config, model.sdf}
+    - config/conveyor_params.yaml
+    - worlds/conveyor_test.world
+    - launch/conveyor_test.launch.py
+  - src/assembly_line_sensors/
+    - package.xml, CMakeLists.txt
+    - models/break_beam_sensor/{model.config, model.sdf}
+    - models/proximity_sensor/{model.config, model.sdf}
+    - urdf/sensor_station.xacro
+    - config/sensor_topics.yaml
+    - launch/sensors_test.launch.py
+  - src/assembly_line_bringup/
+    - package.xml, CMakeLists.txt
+    - launch/three_robots.launch.py
+    - launch/assembly_line.launch.py
+    - worlds/assembly_line.world
+    - config/robot_positions.yaml
+    - rviz/assembly_line.rviz
+  - src/multi_robot_coordinator/
+    - package.xml, setup.py, setup.cfg
+    - multi_robot_coordinator/coordinator_node.py
+    - multi_robot_coordinator/sensor_monitor.py
+    - multi_robot_coordinator/box_spawner.py
+    - config/coordinator_params.yaml
+    - config/pick_place_poses.yaml
+    - launch/coordinator.launch.py
+- Summary:
+  - Created a 4-metre conveyor belt with ROS2 control plugin.
+  - Implemented break beam sensors at each robot station for box detection.
+  - Created payload box model for pick and place operations.
+  - Developed state machine coordinator for robot synchronization.
+  - Created sensor monitor for consolidated sensor data.
+  - Implemented box spawner for dynamic object spawning.
+  - Created assembly line world with 3 robot tables and sensors.
+  - Set up 3 xArm 5 robots with namespaced controllers and grippers.
+- System Architecture:
+  ```
+  [KUTU] --> [BANT] --> [Robot 1] --> [BANT] --> [Robot 2] --> [BANT] --> [Robot 3] --> [ÇIKIŞ]
+                              |              |              |
+                        [Sensor 1]     [Sensor 2]     [Sensor 3]
+  ```
+- Launch Commands:
+  - Test conveyor: `ros2 launch conveyor_system conveyor_test.launch.py`
+  - Test 3 robots: `ros2 launch assembly_line_bringup three_robots.launch.py`
+  - Full system: `ros2 launch assembly_line_bringup assembly_line.launch.py`
+  - With auto spawn: `ros2 launch assembly_line_bringup assembly_line.launch.py auto_spawn:=true`
+- Conveyor Control:
+  - Start belt: `ros2 service call /conveyor/CONVEYORPOWER conveyorbelt_msgs/srv/ConveyorBeltControl "{power: 50.0}"`
+  - Stop belt: `ros2 service call /conveyor/CONVEYORPOWER conveyorbelt_msgs/srv/ConveyorBeltControl "{power: 0.0}"`
+  - Spawn box: `ros2 topic pub --once /box_spawner/trigger std_msgs/msg/String "data: 'spawn'"`
+- Next steps:
+  - Test the full assembly line simulation.
+  - Tune pick and place poses for actual operations.
+  - Add MoveIt2 integration for motion planning.
+  - Implement gripper control in coordinator.
+  - Add vision-based box detection with cameras.
+
+---
+
+## 2025-12-04 – Project Reorganization (Multi-Robot as Main Project)
+
+- Task:
+  - Reorganized project structure to make multi-robot assembly line the main Digital Twin.
+  - Updated documentation and created unified launch entry point.
+- Files touched:
+  - README.md (complete rewrite for assembly line focus)
+  - docs/PROJECT_CONTEXT.md (updated architecture documentation)
+  - src/assembly_line_bringup/launch/digital_twin.launch.py (new main launch)
+  - src/assembly_line_bringup/launch/single_robot_test.launch.py (debug launch)
+  - src/assembly_line_bringup/worlds/assembly_line.world (simplified)
+- Summary:
+  - Established `assembly_line_bringup` as the main launch package.
+  - Created `digital_twin.launch.py` as the primary entry point.
+  - Fixed world file issues (sensor namespace conflicts).
+  - Single robot simulation confirmed working.
+  - Updated all documentation to reflect assembly line focus.
+- Main Launch Command:
+  ```bash
+  ros2 launch assembly_line_bringup digital_twin.launch.py
+  ```
+- Next steps:
+  - Debug multi-robot simultaneous spawning.
+  - Implement robot handoff coordination.
+  - Physical xArm 5 hardware integration.
+
+---
+
+## 2025-12-04 – Scalable Architecture Design
+
+- Task:
+  - Designed new scalable multi-robot architecture.
+  - Moved from bundled URDF approach to independent robot nodes.
+  - Created comprehensive architecture documentation.
+- Key Decisions:
+  1. **Config-Driven Fleet**: Robots defined in YAML, auto-spawned at startup
+  2. **Independent Namespaces**: Each robot in own namespace (/robot_1, /robot_2, ...)
+  3. **Topology Definition**: upstream/downstream relationships in config
+  4. **Direct Pub/Sub**: Robot-to-robot communication without central broker
+  5. **Neighbor Discovery**: Robots learn neighbors from config at startup
+- Files touched:
+  - docs/SCALABLE_ARCHITECTURE.md (new - comprehensive architecture doc)
+- Architecture Highlights:
+  ```
+  Fleet Config (YAML)
+       │
+       ▼
+  Fleet Manager ──► Spawn robots with namespaces
+       │
+       ├──► /robot_1/ (independent node)
+       ├──► /robot_2/ (independent node)
+       └──► /robot_N/ (independent node)
+             │
+             └──► Direct pub/sub to neighbors
+  ```
+- Message Types Defined:
+  - RobotStatus.msg: Robot state, position, payload status
+  - RobotCommand.msg: Commands from coordinator
+  - HandoffRequest.msg: Robot-to-robot transfer protocol
+- New Packages Planned:
+  - fleet_manager: Config loading, robot spawning
+  - robot_interface: Independent robot node, state machine
+  - assembly_coordinator: High-level orchestration
+- Next steps:
+  - Implement fleet_manager package
+  - Create parametric URDF template
+  - Implement robot_interface with state machine
+  - Test with 3+ robots
+
+---
+
+## 2025-12-04 – Scalable Fleet Implementation
+
+- Task:
+  - Implemented the scalable multi-robot fleet architecture.
+  - Created two new core packages: fleet_manager and robot_interface.
+- New Packages Created:
+  1. `fleet_manager` - Config-based fleet management and robot spawning
+  2. `robot_interface` - Independent robot node with state machine and handoff protocol
+- Files touched:
+  - src/fleet_manager/
+    - package.xml, CMakeLists.txt
+    - fleet_manager/__init__.py
+    - fleet_manager/config_loader.py - YAML parsing and typed dataclasses
+    - fleet_manager/robot_spawner.py - Gazebo spawn orchestration
+    - fleet_manager/fleet_manager_node.py - Main fleet management node
+    - config/fleet_config.yaml - 3-robot fleet definition
+    - config/robot_types.yaml - xArm 5/6/7 robot type definitions
+    - urdf/spawnable_robot.urdf.xacro - Parametric robot URDF
+    - srv/SpawnRobot.srv, RemoveRobot.srv, GetFleetStatus.srv
+    - launch/fleet.launch.py - Main fleet launch file
+    - launch/multi_robot_test.launch.py - Integration test launch
+  - src/robot_interface/
+    - package.xml, CMakeLists.txt
+    - robot_interface/__init__.py
+    - robot_interface/state_machine.py - Robot state machine (IDLE/PICKING/HOLDING/PLACING)
+    - robot_interface/robot_node.py - Independent robot controller
+    - robot_interface/handoff_coordinator.py - Robot-to-robot handoff management
+    - msg/RobotStatus.msg, HandoffRequest.msg, HandoffResponse.msg
+    - srv/RequestHandoff.srv
+    - config/robot_interface.yaml - Per-robot pick/place positions
+    - launch/robot_interface.launch.py
+  - src/assembly_line_bringup/package.xml (added dependencies)
+  - docs/WORK_LOG.md
+- Key Features Implemented:
+  1. **Config-Driven Fleet**:
+     - fleet_config.yaml defines all robots with positions, types, and roles
+     - robot_types.yaml contains URDF/controller mappings for each robot type
+     - Supports xArm 5, 6, and 7 (with templates for UR5 etc.)
+  2. **Topology Definition**:
+     - Stations with upstream/downstream relationships
+     - Sensor mappings per station
+     - Chain topology (robot_1 → robot_2 → robot_3)
+  3. **Independent Robot Nodes**:
+     - Each robot runs its own RobotNode
+     - State machine: IDLE → PICKING → HOLDING → PLACING
+     - Publishes status and handoff signals
+     - Subscribes to neighbor signals
+  4. **Handoff Protocol**:
+     - ready_to_give / ready_to_receive signals
+     - HandoffCoordinator manages transactions
+     - Timeout and error handling
+- Launch Commands:
+  - Fleet with 3 robots: `ros2 launch fleet_manager multi_robot_test.launch.py num_robots:=3`
+  - Fleet with interfaces: `ros2 launch fleet_manager multi_robot_test.launch.py launch_interfaces:=true`
+  - Single robot interface: `ros2 launch robot_interface robot_interface.launch.py robot_id:=robot_1`
+- Message Flow:
+  ```
+  /robot_1/status                 - Robot status (state, holding_object, etc.)
+  /robot_1/handoff/ready_to_give  - Bool signal when ready to hand off
+  /robot_1/handoff/ready_to_receive - Bool signal when ready to receive
+  /handoff_coordinator/status     - Overall coordination status
+  ```
+- Next steps:
+  - Build and test the new packages: `colcon build --packages-select fleet_manager robot_interface`
+  - Test 3-robot fleet spawning
+  - Implement actual motion execution (MoveIt2 integration)
+  - Add gripper control to state machine
+  - Physical hardware integration

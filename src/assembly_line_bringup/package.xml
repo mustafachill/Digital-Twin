@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>assembly_line_bringup</name>
+  <version>1.0.0</version>
+  <description>
+    Main bringup package for the multi-robot assembly line simulation.
+    Launches 3 xArm 5 robots with conveyor belt, sensors, and coordination.
+  </description>
+
+  <author email="mustafacil@example.com">Mustafa Cil</author>
+  <maintainer email="mustafacil@example.com">Mustafa Cil</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>gazebo_ros</depend>
+  <depend>xarm_description</depend>
+  <depend>xarm_gazebo</depend>
+  <depend>xarm_controller</depend>
+  <depend>xarm_moveit_config</depend>
+  <depend>conveyor_system</depend>
+  <depend>assembly_line_sensors</depend>
+  <depend>conveyorbelt_msgs</depend>
+  <depend>ros2_conveyorbelt</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>controller_manager</depend>
+  <depend>fleet_manager</depend>
+  <depend>robot_interface</depend>
+
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+
