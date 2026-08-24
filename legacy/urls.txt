@@ -1,0 +1,15 @@
+# v1 reference links and the original requirement note.
+#
+# Preserved for the record: the note at the bottom is the earliest written
+# statement of the multi-robot synchronisation requirement that this project
+# exists to satisfy. It is in Turkish, as originally written.
+#
+# Superseded by docs/reference/ — the links below target ROS 2 Humble and
+# Gazebo Classic, neither of which this project uses any more.
+
+https://www.ibm.com/think/topics/digital-twin
+https://docs.ros.org/en/humble/Tutorials/
+https://docs.ros.org/en/humble/index.html
+https://docs.ros.org/en/humble/Tutorials/Advanced/Simulators/Gazebo/Simulation-Gazebo.html
+
+dr mize dedi ki birden fazla robot olacak ve senkron çalışacaklar. mesela bir bant üzerinde malzeme yürüyecek, bir robot alacak öbür robota gidecek öbür robot bunu alacak
