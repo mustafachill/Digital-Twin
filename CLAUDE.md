@@ -1,0 +1,244 @@
+# CLAUDE.md
+
+Canonical working agreement for this repository. Auto-loaded into every session and every
+subagent. **This file is the rulebook; `what-we-are-doing.md` is the reason.** When you
+need to know *why* a rule exists, read the charter. When you need to know *what to do*,
+this file is enough.
+
+`AGENTS.md` points here. Do not duplicate this content anywhere else.
+
+---
+
+## 1. What this is
+
+The **CITE Digital Twin** — a facility-scale digital twin of the Center for Innovation,
+Technology and Entrepreneurship at Sam Houston State University, built on ROS 2 and
+Gazebo, whose first instrument is a multi-robot xArm work cell.
+
+It is a *twin*, not a simulation: real hardware and the virtual model share one control
+interface, and the system continuously measures how far the model is from reality.
+
+Full charter — identity, scope, architecture rationale, roadmap: **`what-we-are-doing.md`**.
+
+## 2. Current state — read this before assuming anything exists
+
+The project is in **Phase 1 of a rebuild**. The charter describes the target; the
+repository is partway there. Check before assuming.
+
+- **Environment foundation is in place** (Phase 1.A, first half): container image, the
+  `./scripts/*` contract, dependency manifests, CI, and the asset policy all exist and
+  work. Run `./scripts/doctor` to see the current state of any machine.
+- **`workspace/src/` and `model/` are empty.** The ROS packages and the L0 facility model
+  arrive in Phase 1.B. Commands that depend on them (`build`, `test`, `sim`, `scenario`,
+  `validate-model`) detect this and report SKIP rather than failing — that is deliberate,
+  so CI stays green while the tree fills in. Do not "fix" a SKIP by faking content.
+- **`legacy/` holds the previous iteration (v1).** It is reference material being replaced,
+  **not** a codebase to extend. Do not add features to it, fix its bugs, or treat its
+  patterns as precedent. It is excluded from the build by living outside `workspace/`, and
+  is deleted at the end of Phase 1. See `legacy/README.md` and charter §12.
+- **One Phase 1.A gate remains open**: `external/cite.repos` pins `xarm_ros2` to a branch
+  rather than a commit SHA, so two clones on different days can differ. `./scripts/doctor`
+  and CI report it. It is a real finding, not noise.
+- **Closed 2026-08-24**: xArm support for Jazzy + Harmonic is verified — the `jazzy` branch
+  declares `gz_ros2_control`, `ros_gz_sim` and `ros_gz_bridge`, and its README states that
+  Gazebo Harmonic is what it supports. (The Gazebo Classic instructions live in the `humble`
+  branch README; do not read that one and conclude otherwise.) See
+  [ADR-0003](docs/adr/0003-gazebo-harmonic.md).
+- **The documentation is written.** `docs/` holds the layer architecture, ADRs for every
+  locked decision, interface conventions, operations runbooks, and the reference library.
+  Layer documents are marked `DESIGNED` — they are the contract the code must satisfy, not
+  a description of code that exists. Read the layer document before touching a layer.
+
+State this honestly in reports. Never claim a capability exists because the charter
+describes it.
+
+## 3. Hard rules
+
+Violating any of these is a defect, regardless of how well the code otherwise works.
+Charter §4 carries the full reasoning.
+
+- **P1 — One source of truth.** The facility is described once, declaratively, in the L0
+  model. Worlds, descriptions, controller configs, and launch graphs are *generated* from
+  it. A value must never exist in two places.
+- **P2 — Sim and real are interchangeable.** Code that commands the simulated cell
+  commands the physical cell unmodified. Topic, action, controller, joint, and frame names
+  are identical; only the loaded `ros2_control` hardware plugin differs. Breaking this is
+  the highest-severity defect in the project.
+- **P3 — Typed contracts, always.** Every interface is a versioned `.msg`/`.srv`/`.action`
+  in an interface package. If a consumer cannot discover the shape with
+  `ros2 interface show`, the interface does not exist.
+- **P4 — Determinism over timing.** Startup, shutdown, and mode transitions are driven by
+  lifecycle states and events. Never by sleeping for a guessed duration.
+- **P5 — Configuration is data, code is mechanism.** Code encodes *how* things work, never
+  *which* things exist.
+- **P6 — Nothing is done until tested and reproducible.** Every capability ships with
+  automated tests that run headlessly in CI.
+- **P7 — Honest status.** Documentation states what the system does, not what was
+  intended. A checkbox is ticked only when a test proves it.
+- **P8 — The twin measures itself.** Any fidelity claim is backed by a published metric.
+- **P9 — Plug in, plug out.** Robot types, end-effectors, sensors, and process modules are
+  replaceable at their interface boundary. A new robot type must not touch orchestration.
+- **P10 — Everything in English.** Code, comments, identifiers, configuration, commit
+  messages, documentation, and agent reports. No exceptions.
+
+## 4. Standing prohibitions — rejected in review, without discussion
+
+- Hand-edited generated artifacts (world files, controller configs, launch graphs).
+- `std_msgs/String` carrying structured data.
+- `TimerAction` or `sleep` used to sequence startup.
+- Third-party source copied into the tree instead of pinned in the vcs manifest.
+- A capability marked complete in documentation without a test proving it.
+- Any identifier, comment, or document not in English.
+- A value that exists in two places.
+
+## 5. Layer stack
+
+```
+L7 PRESENTATION        operator HMI, remote access                    (Phase 4)
+L6 DATA & TELEMETRY    telemetry schema, recording, historian, replay (Phase 4)
+L5 TWIN SYNC           mode control, mirroring, divergence metrics    (Phase 2)
+L4 ORCHESTRATION       behaviour trees, line coordination, handoff
+L3 CAPABILITY          MoveTo / Pick / Place / Transfer / Grasp / Detect
+L2 CONTROL & HAL       ros2_control, controllers, MoveIt 2, hw interfaces
+L1 DESCRIPTION         URDF/Xacro, SDF, meshes, generated worlds
+L0 FACILITY MODEL      the single declarative source of truth
+```
+
+**A layer may depend only on layers below it.** An upward dependency is an architectural
+defect and an `ESCALATE`, not a finding.
+
+Each layer has a design document in [`docs/architecture/`](docs/architecture/README.md) —
+[L0](docs/architecture/L0-facility-model.md),
+[L1](docs/architecture/L1-description-and-assets.md),
+[L2](docs/architecture/L2-control-and-hal.md),
+[L3](docs/architecture/L3-capabilities.md),
+[L4](docs/architecture/L4-orchestration.md),
+[L5](docs/architecture/L5-twin-synchronization.md),
+[L6](docs/architecture/L6-data-and-telemetry.md),
+[L7](docs/architecture/L7-presentation.md).
+
+Cross-cutting: [safety and interlocks](docs/architecture/cross-cutting-safety.md),
+[lifecycle management](docs/architecture/cross-cutting-lifecycle.md),
+[testing](docs/architecture/cross-cutting-testing.md),
+[naming](docs/architecture/naming-and-namespaces.md), diagnostics, configuration, CI/CD,
+security.
+
+The architecture is aligned with the ISO 23247 reference architecture for manufacturing
+digital twins — see [standards-alignment.md](docs/architecture/standards-alignment.md).
+
+## 6. Technology baseline
+
+Every row below has an ADR recording why it was chosen and what it costs — see
+[`docs/adr/`](docs/adr/README.md). Changing any of them requires a new ADR.
+
+| Concern | Choice |
+|---|---|
+| OS | Ubuntu 24.04 LTS (Noble) |
+| Middleware | ROS 2 Jazzy Jalisco |
+| Simulator | Gazebo Harmonic (LTS) — **not** Gazebo Classic, which is EOL |
+| ROS↔Sim | `ros_gz_sim`, `ros_gz_bridge` |
+| Control | `ros2_control` + `gz_ros2_control` |
+| Motion planning | MoveIt 2 |
+| Orchestration | BehaviorTree.CPP v4 + Groot2 |
+| Robot support | `xarm_ros2`, pinned via manifest, local changes as patch files |
+| Recording | `rosbag2` with MCAP storage |
+| Visualization | RViz 2 (native debug), Foxglove (shareable) |
+| Dependencies | `vcstool` manifest + `rosdep` — never vendored into the tree |
+| Environment | Docker + devcontainer |
+| Languages | C++ for real-time and control paths; Python for orchestration, tooling, generators |
+
+## 7. Commands
+
+Fixed entry points. Always invoke these rather than the underlying tool, so that changes
+to the toolchain do not ripple through agent configurations and documentation.
+
+| Command | Purpose |
+|---|---|
+| `./scripts/bootstrap` | Prepare or repair the environment. Idempotent. `--host-only` skips everything needing ROS. |
+| `./scripts/doctor` | Diagnose the environment. Run first when something is wrong. |
+| `./scripts/build` | Build the workspace |
+| `./scripts/test` | Host tooling tests, then unit + integration + launch tests |
+| `./scripts/lint` | Linters and type checks |
+| `./scripts/format` | Apply formatting in place |
+| `./scripts/sim [--headless]` | Launch the simulated cell |
+| `./scripts/validate-model` | L0 schema validation + generator dry-run. Runs anywhere. |
+| `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
+| `./scripts/scenario [name]` | Headless simulation-in-the-loop scenario; no argument lists them |
+| `./scripts/enter [dev\|gui\|hardware]` | Interactive shell in the container |
+| `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
+| `./scripts/clean [--all]` | Remove build artifacts |
+
+Quality gate before any handoff: `./scripts/lint && ./scripts/build && ./scripts/test`.
+
+**Always invoke these rather than `colcon`, `docker`, or `ros2 launch` directly.** They
+route to the right environment automatically: on a machine without ROS they re-execute
+themselves inside the container, so the same command works from a macOS laptop and from
+the Linux workstation. A command written directly against `colcon` works for its author
+and for nobody else.
+
+Dependencies are declared in four layers, each with exactly one correct home — see
+`requirements/README.md`. In short: ROS and system packages in `package.xml` resolved by
+`rosdep`; external ROS source pinned in `external/cite.repos`; host Python tooling in
+`requirements/tools.txt`. Never install a ROS Python dependency with `pip`.
+
+## 8. Naming
+
+```
+/cite/<zone>/<asset_id>/<interface>
+```
+
+Deterministic, generated from the L0 model, identical in simulation and on hardware.
+Frame identifiers follow the same rule. No asset name is ever written by hand twice.
+
+## 9. Definition of Done
+
+A capability is done only when **all** hold. There is no partial credit.
+
+1. Generated from or declared in the L0 model where applicable.
+2. Interfaces are typed and live in an interface package.
+3. Tested at the right level — unit, integration (`launch_testing`), simulation-in-the-loop
+   scenario, and interface-contract regression — and passing in CI.
+4. Runs headlessly in CI on a clean container with no manual step.
+5. Works identically in simulation and on hardware, or its hardware path is explicitly
+   marked unimplemented.
+6. Documented: what it does, its interfaces, how to run it, how it fails.
+7. Reviewed by a human and by the relevant review agents.
+8. Startup and shutdown are event-driven, containing no timing guesses.
+
+## 10. ROS 2 practice notes
+
+Recurring failure classes in this domain. Treat each as a review checkpoint.
+
+- **QoS**: declare profiles explicitly. Incompatible publisher/subscriber QoS connects
+  silently and delivers nothing — the most common silent failure in ROS 2.
+- **Lifecycle**: use managed nodes. They are what makes P4 achievable.
+- **Executors and callback groups**: never block inside a callback; choose the callback
+  group deliberately, or you will deadlock under load.
+- **Time**: honour `use_sim_time` consistently. A mixed-time system produces plausible,
+  wrong results.
+- **TF**: one publisher per transform; watch for extrapolation errors at startup.
+- **Actions**: implement cancellation and preemption paths, not just the happy path.
+- **Inertia and collision geometry**: wrong inertia tensors and dense visual meshes reused
+  as collision geometry make a simulation run confidently and wrongly. Always validated by
+  `model-validator`.
+
+## 11. Agents
+
+Subagent roles live in `.claude/agents/`. The pipeline and dispatch routing are defined in
+**`.claude/orchestration.md`** — read it before delegating.
+
+- Agents propose; humans and tests decide. Nothing merges without review and green CI.
+- Agents are bound by this file. Output contradicting §3 or §4 is a defect.
+- Reports are written in **English**, with a `Status:` verdict line first, summarized
+  evidence, and never a full log dump.
+- A conflict with a locked decision is `ESCALATE` — returned to the user, never
+  self-resolved.
+
+## 12. Change control
+
+- **`what-we-are-doing.md` is protected.** It changes only by explicit user decision, with
+  a version bump and a §14 entry. Never edit it as a side effect of other work.
+- **ADRs** ([`docs/adr/`](docs/adr/README.md)) record every significant technical
+  decision, written *before* implementation. Use
+  [`0000-template.md`](docs/adr/0000-template.md).
+- **Commits and PRs** describe intent and reference the ADR or phase item they serve.
