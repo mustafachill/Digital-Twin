@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Launch the simulated cell.
+#
+#   ./scripts/sim              GUI (requires a display)
+#   ./scripts/sim --headless   no GUI — the form used by CI and by the tester agent
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+HEADLESS=0
+PASSTHROUGH=()
+for arg in "$@"; do
+    case "$arg" in
+        --headless) HEADLESS=1 ;;
+        -h|--help)  sed -n '2,6p' "$0"; exit 0 ;;
+        *)          PASSTHROUGH+=("$arg") ;;
+    esac
+done
+
+# GUI needs display passthrough, which is a different compose service.
+if [ "$HEADLESS" -eq 0 ] && ! in_container; then
+    if [ "$(host_os)" = "macos" ]; then
+        die "GUI simulation is not supported from macOS.
+  Use --headless here and inspect the run with Foxglove, or run on the Linux workstation."
+    fi
+    export CITE_SERVICE=gui
+fi
+
+require_ros_env sim "$@"
+
+if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
+    die "No build found. Run ./scripts/build first."
+fi
+source "${REPO_ROOT}/workspace/install/setup.bash"
+
+if ! ros2 pkg list 2>/dev/null | grep -q '^cite_bringup$'; then
+    warn "cite_bringup is not built yet — there is nothing to launch."
+    warn "The simulation bringup arrives in Phase 1.C. See CLAUDE.md §2."
+    exit 0
+fi
+
+info "Launching the simulated cell (headless=${HEADLESS})"
+exec ros2 launch cite_bringup simulation.launch.py \
+    headless:="$([ "$HEADLESS" -eq 1 ] && echo true || echo false)" \
+    "${PASSTHROUGH[@]}"

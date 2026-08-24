@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Open an interactive shell in the container.
+#
+#   ./scripts/enter             headless development shell
+#   ./scripts/enter gui         with display passthrough (Linux host)
+#   ./scripts/enter hardware    host network + device passthrough (real robots)
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+in_container && die "Already inside the container."
+
+SERVICE="${1:-dev}"
+case "$SERVICE" in
+    dev|gui|hardware) ;;
+    *) die "Unknown service '$SERVICE'. Use one of: dev, gui, hardware." ;;
+esac
+
+if [ "$SERVICE" = "hardware" ]; then
+    # docs/operations/safety-procedures.md states as a rule that nothing here reaches
+    # physical hardware without a deliberate opt-in. This service grants host networking,
+    # /dev passthrough and privileged execution, so it must enforce that rule rather than
+    # merely warn about it — a documented safety guarantee with no enforcement is worse
+    # than no guarantee, because people rely on it.
+    warn "The 'hardware' service has host networking, /dev passthrough and privileged execution."
+    warn "Anything you run inside it can reach and command the physical robots."
+    require_explicit_hardware_opt_in
+fi
+
+info "Entering container service '${SERVICE}'"
+compose run --rm "$SERVICE" bash

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cite-tools"
+version = "0.1.0"
+description = "Host-agnostic tooling for the CITE Digital Twin: facility model validation, artifact generation, and asset pipeline"
+requires-python = ">=3.10,<3.14"  # pinned wheels in requirements/ do not build on 3.14
+license = { text = "Apache-2.0" }
+
+# Dependencies are deliberately NOT declared here.
+#
+# `requirements/tools.txt` is their single source of truth (P1), and
+# `./scripts/bootstrap` installs it before installing this package. Setuptools
+# cannot read a file outside the package root, so mirroring the list here would
+# mean maintaining the same pins in two places — exactly the failure this
+# project's first principle forbids.
+#
+# Consequence, stated honestly: `pip install cite-tools` on its own installs no
+# dependencies. Use `./scripts/bootstrap`, which is the only supported path.
+dependencies = []
+
+[project.scripts]
+cite-model = "cite_tools.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["cite_tools*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

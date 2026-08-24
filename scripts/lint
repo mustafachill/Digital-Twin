@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Lint everything that can be linted on this machine.
+# Python, YAML, and shell run anywhere; ROS package linters need the ROS env.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+FAILED=0
+check() { "$@" || FAILED=1; }
+
+VENV="${REPO_ROOT}/.venv/bin"
+
+step "Python (ruff)"
+if [ -x "${VENV}/ruff" ]; then
+    check "${VENV}/ruff" check "${REPO_ROOT}/tools"
+    check "${VENV}/ruff" format --check "${REPO_ROOT}/tools"
+else
+    warn "ruff not installed — run ./scripts/bootstrap --host-only"
+fi
+
+step "Types (mypy)"
+if [ -x "${VENV}/mypy" ] && [ -d "${REPO_ROOT}/tools/cite_tools" ]; then
+    check "${VENV}/mypy" "${REPO_ROOT}/tools/cite_tools"
+else
+    warn "mypy not installed or nothing to check"
+fi
+
+step "Documentation links"
+if [ -x "${VENV}/python" ]; then
+    check "${VENV}/python" -m cite_tools.doclinks "${REPO_ROOT}"
+else
+    warn "cite_tools not installed — run ./scripts/bootstrap --host-only"
+fi
+
+step "YAML"
+if [ -x "${VENV}/yamllint" ]; then
+    # .yamllint's own ignore list scopes this; passing the repo root means a new
+    # YAML file is linted the day it appears rather than whenever someone
+    # remembers to add its directory here.
+    check "${VENV}/yamllint" -s "${REPO_ROOT}"
+else
+    warn "yamllint not installed"
+fi
+
+step "Shell"
+if have shellcheck; then
+    # -x follows sourced files, so the `source=` directives in each script resolve
+    check shellcheck -x -P "${REPO_ROOT}" "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh
+else
+    warn "shellcheck not installed — skipped"
+fi
+
+if in_container || native_ros_available; then
+    step "ROS packages"
+    if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/src" 2>/dev/null)" ]; then
+        (cd "${REPO_ROOT}/workspace" && colcon test --packages-skip-build-finished \
+            --ctest-args -R "lint" 2>/dev/null) || FAILED=1
+    else
+        warn "workspace/src is empty — no ROS linters to run yet"
+    fi
+fi
+
+if [ "$FAILED" -ne 0 ]; then
+    die "Lint failed"
+fi
+ok "Lint clean"

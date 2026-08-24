@@ -1,0 +1,29 @@
+# =============================================================================
+# Large binary asset manifest
+#
+# Raw 3D capture data is gigabyte-scale and does not belong in git. It lives in
+# Google Drive and on lab storage; this file records where each asset came from,
+# what it should hash to, and where it belongs in the working tree.
+#
+# `./scripts/fetch-assets` reads this file. See assets/README.md for the policy.
+#
+# Processed, simulator-ready meshes are small enough to be committed directly
+# under assets/meshes/ and are NOT listed here.
+# =============================================================================
+
+---
+version: 1
+
+assets: []
+# Example of the shape this takes once Phase 3 capture begins:
+#
+# - id: cite_main_floor_scan
+#   description: Raw photogrammetry capture of the CITE main floor
+#   source:
+#     type: gdrive
+#     url: https://drive.google.com/file/d/<FILE_ID>/view
+#   dest: assets/scans/raw/cite_main_floor.zip
+#   sha256: <64 hex characters>
+#   size_mb: 2400
+#   captured: 2026-09-15
+#   notes: Registered to the survey origin marker at the north entrance.

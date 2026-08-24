@@ -1,0 +1,46 @@
+# =============================================================================
+# External source dependencies — vcstool manifest
+#
+# Imported into workspace/src/external/ by ./scripts/bootstrap.
+#
+# RULES (enforced by the dependency-auditor agent, CLAUDE.md §4):
+#   1. Never copy third-party source into this repository. Declare it here.
+#   2. Pin `version` to an exact commit SHA, never a branch. A branch means two
+#      clones on different days produce different code, and reproducibility is
+#      gone without anyone noticing.
+#   3. Local modifications live in external/patches/ as reviewable patch files
+#      applied by bootstrap — never as edits inside a checked-out dependency.
+#
+# The previous iteration of this project was made unbuildable by breaking rules
+# 1 and 3 at once. See legacy/README.md.
+# =============================================================================
+
+---
+repositories:
+
+  # ---------------------------------------------------------------------------
+  # UFACTORY xArm ROS 2 support — robot description, controllers, hardware
+  # interface for the physical arms.
+  #
+  # Gazebo Harmonic support: VERIFIED 2026-08-24.
+  #   The `jazzy` branch declares gz_sim_vendor, gz_ros2_control, ros_gz_sim and
+  #   ros_gz_bridge in xarm_gazebo/package.xml, with no reference to gazebo_ros,
+  #   gazebo_ros2_control or gazebo_dev. It targets Gazebo Sim.
+  #   Verified against xarm_gazebo/package.xml on the `jazzy` branch. The branch
+  #   README agrees: "Classic Gazebo is no longer supported. Gazebo Harmonic is
+  #   supported instead". (The Gazebo Classic link is in the `humble` branch README
+  #   — do not read that one and conclude Harmonic is unsupported.) See ADR-0003.
+  #
+  # !! STILL UNPINNED — PHASE 1.A GATE !!
+  #   `version` below is a branch, not a commit SHA, so two clones on different
+  #   days can produce different code. Before this manifest can be called
+  #   reproducible:
+  #     1. Build the branch on Linux and confirm it works against our stack.
+  #     2. Replace `version` with that commit's exact SHA.
+  #   The dependency-auditor and CI report this until then. That is correct
+  #   behaviour, not a false positive.
+  # ---------------------------------------------------------------------------
+  external/xarm_ros2:
+    type: git
+    url: https://github.com/xArm-Developer/xarm_ros2.git
+    version: jazzy   # TODO(phase-1a): replace with a commit SHA

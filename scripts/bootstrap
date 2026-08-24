@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Prepare the environment. Safe to re-run; every step is idempotent.
+#
+#   ./scripts/bootstrap                 build the image and set the workspace up
+#   ./scripts/bootstrap --in-container  run the inner half only (used by devcontainer)
+#   ./scripts/bootstrap --host-only     Python tooling only — enough to validate the
+#                                       facility model from a machine without ROS
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+HOST_ONLY=0
+IN_CONTAINER=0
+for arg in "$@"; do
+    case "$arg" in
+        --host-only)    HOST_ONLY=1 ;;
+        --in-container) IN_CONTAINER=1 ;;
+        -h|--help)      sed -n '2,9p' "$0"; exit 0 ;;
+        *)              die "Unknown argument: $arg" ;;
+    esac
+done
+
+# --- Host-side Python tooling ------------------------------------------------
+# Pick an interpreter the pinned wheels actually support. The container runs
+# Python 3.12 (the Ubuntu 24.04 default), so preferring it here keeps the host
+# and the container on the same version — which is the point of pinning at all.
+# Without this check, a host on a newer Python falls through to building
+# packages from source and fails with a compiler error that says nothing about
+# the real cause.
+CITE_PY_MIN_MINOR=10
+CITE_PY_MAX_MINOR=13
+
+python_minor_ok() {
+    local py="$1" minor
+    minor="$("$py" -c 'import sys; print(sys.version_info[1])' 2>/dev/null)" || return 1
+    [ -n "$minor" ] && [ "$minor" -ge "$CITE_PY_MIN_MINOR" ] && [ "$minor" -le "$CITE_PY_MAX_MINOR" ]
+}
+
+select_python() {
+    local candidate
+    for candidate in python3.12 python3.11 python3.13 python3.10 python3; do
+        if have "$candidate" && python_minor_ok "$(command -v "$candidate")"; then
+            command -v "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+setup_host_tooling() {
+    step "Host tooling (Python)"
+
+    local py
+    if ! py="$(select_python)"; then
+        local found="none"
+        have python3 && found="$(python3 -V 2>&1)"
+        die "No suitable Python found (need 3.${CITE_PY_MIN_MINOR}-3.${CITE_PY_MAX_MINOR}, found: ${found}).
+  The pinned dependencies in requirements/ have no wheels outside that range and
+  would be built from source, which needs a full C and Fortran toolchain.
+  Install Python 3.12 to match the container:
+    macOS:  brew install python@3.12
+    Ubuntu: sudo apt install python3.12 python3.12-venv"
+    fi
+    ok "Using $("$py" -V 2>&1) at ${py}"
+
+    local venv="${REPO_ROOT}/.venv"
+    if [ -d "$venv" ] && ! python_minor_ok "$venv/bin/python"; then
+        warn "Existing .venv uses an unsupported Python — recreating"
+        rm -rf "$venv"
+    fi
+    if [ ! -d "$venv" ]; then
+        info "Creating virtualenv at .venv"
+        "$py" -m venv "$venv"
+    fi
+    "$venv/bin/pip" install --quiet --upgrade pip
+    "$venv/bin/pip" install --quiet \
+        -r "${REPO_ROOT}/requirements/tools.txt" \
+        -r "${REPO_ROOT}/requirements/dev.txt"
+    "$venv/bin/pip" install --quiet -e "${REPO_ROOT}/tools"
+    ok "Python tooling ready — activate with: source .venv/bin/activate"
+
+    if [ -f "${REPO_ROOT}/.pre-commit-config.yaml" ]; then
+        if "$venv/bin/pre-commit" install --install-hooks >/dev/null 2>&1; then
+            ok "pre-commit hooks installed"
+        else
+            warn "pre-commit hook installation failed (non-fatal)"
+        fi
+    fi
+}
+
+# --- Inner half: runs where ROS exists ---------------------------------------
+setup_ros_workspace() {
+    step "External sources (vcstool)"
+    mkdir -p "${REPO_ROOT}/workspace/src/external"
+    if have vcs; then
+        vcs import "${REPO_ROOT}/workspace/src" \
+            < "${REPO_ROOT}/external/cite.repos" || warn "vcs import reported problems"
+        ok "External repositories imported"
+    else
+        warn "vcstool not found — skipping external source import"
+    fi
+
+    step "Local patches"
+    shopt -s nullglob
+    local patches=("${REPO_ROOT}"/external/patches/*.patch)
+    shopt -u nullglob
+    if [ ${#patches[@]} -eq 0 ]; then
+        ok "No patches to apply"
+    else
+        for p in "${patches[@]}"; do
+            local repo
+            repo="$(sed -n 's/^# Repo:[[:space:]]*//p' "$p" | head -1)"
+            [ -n "$repo" ] || { warn "$(basename "$p"): no 'Repo:' header — skipped"; continue; }
+            local target="${REPO_ROOT}/workspace/src/${repo}"
+            [ -d "$target" ] || { warn "$(basename "$p"): target $repo missing — skipped"; continue; }
+            if git -C "$target" apply --check "$p" 2>/dev/null; then
+                git -C "$target" apply "$p" && ok "Applied $(basename "$p")"
+            else
+                info "$(basename "$p") already applied or does not apply — skipped"
+            fi
+        done
+    fi
+
+    step "System dependencies (rosdep)"
+    if have rosdep; then
+        rosdep update --rosdistro "${ROS_DISTRO:-jazzy}" >/dev/null 2>&1 || true
+        rosdep install --from-paths "${REPO_ROOT}/workspace/src" \
+            --ignore-src -r -y --rosdistro "${ROS_DISTRO:-jazzy}" \
+            || warn "rosdep reported unresolved dependencies"
+        ok "System dependencies resolved"
+    else
+        warn "rosdep not found — skipping"
+    fi
+
+    step "Environment file"
+    if [ ! -f "${REPO_ROOT}/.env" ] && [ -f "${REPO_ROOT}/.env.example" ]; then
+        cp "${REPO_ROOT}/.env.example" "${REPO_ROOT}/.env"
+        ok "Created .env from .env.example"
+    else
+        ok ".env present"
+    fi
+}
+
+# --- Dispatch ----------------------------------------------------------------
+if [ "$IN_CONTAINER" -eq 1 ] || in_container; then
+    setup_ros_workspace
+    step "Done"
+    ok "Container workspace ready. Next: ./scripts/build"
+    exit 0
+fi
+
+setup_host_tooling
+
+if [ "$HOST_ONLY" -eq 1 ]; then
+    step "Done"
+    ok "Host tooling only. You can run ./scripts/validate-model and ./scripts/lint here."
+    exit 0
+fi
+
+if native_ros_available; then
+    setup_ros_workspace
+    step "Done"
+    ok "Native ROS workspace ready. Next: ./scripts/build"
+    exit 0
+fi
+
+if ! have docker; then
+    warn "No native ROS 2 and no Docker on this machine."
+    warn "Host tooling is ready; building and running require Linux with ROS 2 Jazzy,"
+    warn "or Docker. See docs/onboarding/getting-started.md."
+    exit 0
+fi
+
+step "Container image"
+info "Building cite-digital-twin:dev — first run takes a while"
+compose build dev
+ok "Image built"
+
+step "Container workspace"
+compose run --rm dev ./scripts/bootstrap --in-container
+
+step "Done"
+ok "Ready. Next: ./scripts/build"

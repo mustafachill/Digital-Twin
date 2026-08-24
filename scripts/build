@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Build the ROS 2 workspace. Any extra arguments are passed to colcon.
+#
+#   ./scripts/build
+#   ./scripts/build --packages-select cite_interfaces
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+require_ros_env build "$@"
+
+cd "${REPO_ROOT}/workspace" || die "workspace/ not found"
+
+if [ ! -d src ] || [ -z "$(ls -A src 2>/dev/null)" ]; then
+    warn "workspace/src is empty — nothing to build yet."
+    warn "The ROS packages arrive in Phase 1.B. See CLAUDE.md §2."
+    exit 0
+fi
+
+# legacy/ is excluded by living outside workspace/, not by a flag. Keeping the
+# build root narrow is what makes that exclusion structural rather than a
+# setting somebody can forget.
+colcon build \
+    --symlink-install \
+    --event-handlers console_direct+ \
+    --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    "$@"
+
+ok "Build complete. Overlay: workspace/install/setup.bash"

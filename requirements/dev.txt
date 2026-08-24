@@ -1,0 +1,23 @@
+# Development and CI tooling. Not required to run the system.
+
+# --- Test ---
+pytest==9.0.3               # 8.3.3 carried PYSEC-2026-1845 (6.8)
+pytest-cov==6.0.0
+
+# --- Lint and format ---
+ruff==0.7.4                 # Python lint + format
+mypy==1.13.0                # static typing for the tooling layer
+yamllint==1.35.1            # YAML including the facility model and manifests
+pre-commit==4.0.1           # runs the above on commit
+
+# Transitive, pinned deliberately: pre-commit -> virtualenv -> filelock.
+# 3.19.1 carried PYSEC-2026-1374 / -1375. Remove this pin once pre-commit's own
+# constraint floats past it on its own.
+filelock==3.20.3
+
+# Transitive, pinned deliberately: pytest and rich both depend on pygments. Their
+# declared floor is old enough that a resolver reports the vulnerable 2.9.0 even
+# though pip installs a current version. Pinning what we actually use makes the
+# declaration true, which is better than suppressing a warning about a version we
+# never install.
+pygments==2.21.0

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Download large binary assets declared in assets/manifest.yaml.
+#
+# Raw 3D scans are gigabyte-scale and live outside git (Google Drive and local
+# lab storage). This repository holds the manifest — source, checksum, and
+# destination — plus the processed, simulator-ready meshes. See assets/README.md.
+#
+#   ./scripts/fetch-assets           fetch anything missing
+#   ./scripts/fetch-assets --verify  check checksums of what is already present
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+MANIFEST="${REPO_ROOT}/assets/manifest.yaml"
+[ -f "$MANIFEST" ] || die "No asset manifest at assets/manifest.yaml"
+
+PY="${REPO_ROOT}/.venv/bin/python"
+[ -x "$PY" ] || PY="${CITE_VENV:-/opt/cite-venv}/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || true)"
+[ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
+
+ENTRIES=$("$PY" - "$MANIFEST" <<'PYEOF'
+import sys, yaml
+with open(sys.argv[1]) as f:
+    doc = yaml.safe_load(f) or {}
+print(len(doc.get("assets") or []))
+PYEOF
+)
+
+if [ "${ENTRIES:-0}" -eq 0 ]; then
+    warn "SKIP — no assets declared yet. 3D capture is Phase 3. See assets/README.md."
+    exit 0
+fi
+
+if ! "$PY" -c "import cite_tools.assets" 2>/dev/null; then
+    warn "SKIP — the asset fetcher is not implemented yet (Phase 3)."
+    warn "${ENTRIES} asset(s) are declared in the manifest and must be fetched manually."
+    exit 0
+fi
+
+exec "$PY" -m cite_tools.assets fetch --manifest "$MANIFEST" "$@"

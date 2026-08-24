@@ -1,24 +1,44 @@
-# Colcon build artifacts
-build/
-install/
-log/
+# --- ROS 2 / colcon ---
+workspace/build/
+workspace/install/
+workspace/log/
+# External sources are imported by vcstool from external/cite.repos.
+# Committing them is what made the previous iteration unbuildable.
+workspace/src/external/
 
-# Python
+# --- Python ---
+.venv/
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# IDE
+# --- Agent configuration (local tooling, not distributed) ---
+.claude/
+
+# --- Environment / secrets ---
+.env
+
+# --- Assets: raw and intermediate capture data lives outside git ---
+assets/scans/raw/
+assets/scans/work/
+
+# --- Simulation / recording output ---
+*.mcap
+rosbag2_*/
+.gazebo/
+.gz/
+
+# --- Editors ---
 .vscode/
+.idea/
 *.swp
 *.swo
 
-# ROS2 generated
-*.egg-info/
-
-# Gazebo logs
-*.gazebo/
-
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Validate the L0 facility model and dry-run the generators.
+#
+# Runs anywhere — the L0 layer has no ROS dependency by design, so the model can
+# be validated from a laptop that could never build the simulator.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+PY="${REPO_ROOT}/.venv/bin/python"
+[ -x "$PY" ] || PY="${CITE_VENV:-/opt/cite-venv}/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || true)"
+[ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
+
+if [ ! -d "${REPO_ROOT}/model" ] || [ -z "$(ls -A "${REPO_ROOT}/model" 2>/dev/null)" ]; then
+    warn "SKIP — the L0 facility model does not exist yet."
+    warn "It is created in Phase 1.B. See CLAUDE.md §2."
+    exit 0
+fi
+
+if ! "$PY" -c "import cite_tools" 2>/dev/null; then
+    die "cite_tools is not installed. Run ./scripts/bootstrap --host-only"
+fi
+
+if ! "$PY" -c "import cite_tools.cli" 2>/dev/null; then
+    warn "SKIP — the model validator is not implemented yet (Phase 1.B)."
+    exit 0
+fi
+
+exec "$PY" -m cite_tools.cli validate --model "${REPO_ROOT}/model" "$@"

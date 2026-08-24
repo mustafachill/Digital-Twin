@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Run a headless simulation-in-the-loop scenario and report pass or fail.
+#
+#   ./scripts/scenario                 list available scenarios
+#   ./scripts/scenario pick_and_place  run one
+#
+# Scenarios are deterministic: the physics seed is fixed so that a failure is
+# reproducible rather than a coin flip.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+SCENARIO_DIR="${REPO_ROOT}/tests/scenarios"
+
+if [ $# -eq 0 ]; then
+    step "Available scenarios"
+    if [ -d "$SCENARIO_DIR" ] && [ -n "$(ls -A "$SCENARIO_DIR" 2>/dev/null)" ]; then
+        for s in "$SCENARIO_DIR"/*.py; do
+            [ -e "$s" ] || continue
+            printf '  %s\n' "$(basename "$s" .py)"
+        done
+    else
+        warn "No scenarios defined yet. They arrive with Phase 1.C. See CLAUDE.md §2."
+    fi
+    exit 0
+fi
+
+require_ros_env scenario "$@"
+
+NAME="$1"; shift
+SCENARIO="${SCENARIO_DIR}/${NAME}.py"
+[ -f "$SCENARIO" ] || die "No such scenario: ${NAME}  (run ./scripts/scenario to list)"
+
+[ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
+source "${REPO_ROOT}/workspace/install/setup.bash"
+
+export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
+info "Running scenario '${NAME}' (seed ${CITE_PHYSICS_SEED})"
+
+if launch_test "$SCENARIO" "$@"; then
+    ok "Scenario '${NAME}' passed"
+else
+    die "Scenario '${NAME}' failed"
+fi

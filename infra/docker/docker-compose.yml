@@ -1,0 +1,87 @@
+# =============================================================================
+# CITE Digital Twin — development services
+#
+# Invoked through ./scripts/*, not directly. The scripts pass the host UID/GID
+# and pick the right service, so that a developer never has to remember flags.
+#
+#   dev       default: headless build, test, and simulation
+#   gui       adds display passthrough for Gazebo GUI and RViz (Linux host)
+#   hardware  adds host networking and device passthrough for real robots
+# =============================================================================
+
+---
+x-common: &common
+  build:
+    context: ../..
+    dockerfile: infra/docker/Dockerfile
+    args:
+      USER_UID: ${CITE_UID:-1001}
+      USER_GID: ${CITE_GID:-1001}
+  image: cite-digital-twin:dev
+  working_dir: /workspace
+  volumes:
+    # The repository, mounted rather than copied: edits on the host are visible
+    # immediately, and build artifacts land in the host's gitignored dirs.
+    - ../..:/workspace:cached
+    # Named volumes for build output. Keeping these out of the bind mount makes
+    # builds substantially faster on macOS and avoids permission churn.
+    - cite-build:/workspace/workspace/build
+    - cite-install:/workspace/workspace/install
+    - cite-log:/workspace/workspace/log
+  environment:
+    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+    RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+    # Gazebo needs a writable home for its cache.
+    HOME: /home/cite
+  # Shared memory: the default 64 MB is not enough for DDS or Gazebo and
+  # produces failures that look like network problems.
+  shm_size: '2gb'
+  # No `init:` here — the image already runs tini as its entrypoint. Adding
+  # docker-init would make tini a child of it, which is what produced
+  # "Tini is not running as PID 1" and silently disabled zombie reaping.
+
+services:
+  dev:
+    <<: *common
+    container_name: cite-dev
+    command: bash
+
+  gui:
+    <<: *common
+    container_name: cite-gui
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
+      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      HOME: /home/cite
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: 1
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    volumes:
+      - ../..:/workspace:cached
+      - cite-build:/workspace/workspace/build
+      - cite-install:/workspace/workspace/install
+      - cite-log:/workspace/workspace/log
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: bash
+
+  # Real hardware. Host networking is required because DDS discovery does not
+  # cross Docker's default bridge reliably, and the physical arms must be
+  # reachable on the lab network.
+  hardware:
+    <<: *common
+    container_name: cite-hardware
+    network_mode: host
+    privileged: true
+    volumes:
+      - ../..:/workspace:cached
+      - cite-build:/workspace/workspace/build
+      - cite-install:/workspace/workspace/install
+      - cite-log:/workspace/workspace/log
+      - /dev:/dev
+    command: bash
+
+volumes:
+  cite-build:
+  cite-install:
+  cite-log:

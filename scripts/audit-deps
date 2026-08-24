@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Scan declared dependencies for known vulnerabilities.
+#
+#   ./scripts/audit-deps            report findings, exit 0
+#   ./scripts/audit-deps --strict   exit non-zero if anything is found
+#   ./scripts/audit-deps --json     machine-readable output
+#
+# WHAT THIS COVERS, AND WHAT IT DOES NOT.
+#
+# The project has four dependency layers (requirements/README.md). This scans two
+# of them. Saying "we scan for CVEs" without that qualification would be exactly
+# the kind of overclaim CLAUDE.md P7 forbids.
+#
+#   covered      Python tooling  — requirements/tools.txt, requirements/dev.txt
+#   opt-in       OS packages     — the container image's Debian/Ubuntu packages,
+#                                  via --image (slow: exports the image first)
+#   NOT covered  ROS packages    — apt-installed ros-jazzy-* are not in the OSV
+#                                  database as a distinct ecosystem
+#   NOT covered  External source — xarm_ros2 and anything else pinned in
+#                                  external/cite.repos. There is no lockfile, and
+#                                  osv-scanner does not analyse arbitrary C++ source.
+#
+# The uncovered layers are not safe by omission — they are unmeasured. Treat them
+# through upstream advisories and the pinned-SHA discipline in ADR-0008.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+STRICT=0
+FORMAT="table"
+SCAN_IMAGE=0
+for arg in "$@"; do
+    case "$arg" in
+        --strict)  STRICT=1 ;;
+        --json)    FORMAT="json" ;;
+        --image)   SCAN_IMAGE=1 ;;
+        -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+        *)         die "Unknown argument: $arg" ;;
+    esac
+done
+
+# The image scan needs the host's docker; the lockfile scan needs osv-scanner,
+# which lives in the container. Do the image export here, on the host, before
+# handing off — otherwise the image branch can never execute, which is how a
+# documented capability quietly becomes dead code.
+IMAGE="${CITE_IMAGE:-cite-digital-twin:dev}"
+IMAGE_TAR=""
+if [ "$SCAN_IMAGE" -eq 1 ] && ! in_container; then
+    if ! have docker; then
+        die "--image needs docker on the host"
+    elif ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        die "--image needs '${IMAGE}' built. Run ./scripts/bootstrap first."
+    fi
+    IMAGE_TAR="${REPO_ROOT}/.cite-image-scan.tar"
+    info "Exporting ${IMAGE} for scanning (this is the slow part)"
+    docker save "$IMAGE" -o "$IMAGE_TAR"
+    CITE_IMAGE_TAR="/workspace/$(basename "$IMAGE_TAR")"
+    export CITE_IMAGE_TAR
+    trap 'rm -f "${IMAGE_TAR}"' EXIT
+fi
+
+require_ros_env audit-deps "$@"
+
+have osv-scanner || die "osv-scanner is not installed.
+  It is provided by the container image. Rebuild with ./scripts/bootstrap,
+  or run this inside the container with ./scripts/enter."
+
+FOUND=0
+
+# --- Layer 3/4: Python tooling ------------------------------------------------
+# The files are deliberately not named requirements.txt (see requirements/README.md),
+# so the lockfile type has to be stated explicitly or osv-scanner finds nothing at
+# all — and reports "no package sources found", which reads like a clean result.
+step "Python tooling dependencies"
+LOCKFILES=()
+for f in tools dev; do
+    path="${REPO_ROOT}/requirements/${f}.txt"
+    [ -f "$path" ] && LOCKFILES+=(-L "requirements.txt:${path}")
+done
+
+if [ ${#LOCKFILES[@]} -eq 0 ]; then
+    warn "No requirements files found"
+else
+    if osv-scanner scan source --format "$FORMAT" "${LOCKFILES[@]}"; then
+        ok "No known vulnerabilities in the Python tooling layer"
+    else
+        FOUND=1
+        warn "Vulnerabilities reported above — triage with the dependency-auditor agent"
+    fi
+fi
+
+# --- Layer 1: OS packages in the image (opt-in) -------------------------------
+step "Container image OS packages"
+if [ -n "${CITE_IMAGE_TAR:-}" ] && [ -f "${CITE_IMAGE_TAR}" ]; then
+    if osv-scanner scan image --archive --format "$FORMAT" "${CITE_IMAGE_TAR}"; then
+        ok "No known vulnerabilities in the image's OS packages"
+    else
+        FOUND=1
+        warn "Vulnerabilities reported above. Most OS-layer findings are fixed by"
+        warn "rebuilding on a current base image, not by changing anything here."
+    fi
+else
+    warn "NOT SCANNED — pass --image to include the container image's OS packages."
+fi
+
+# --- Uncovered layers, stated every run ---------------------------------------
+step "Not scanned"
+printf '  %s\n' \
+    "ROS packages (ros-jazzy-*) — no OSV ecosystem covers them" \
+    "External source pinned in external/cite.repos — no lockfile to scan" \
+    "These are unmeasured, not clean. See the header of this script."
+
+if [ "$FOUND" -ne 0 ] && [ "$STRICT" -eq 1 ]; then
+    die "Vulnerabilities found (--strict)"
+fi
+if [ "$FOUND" -ne 0 ]; then
+    warn "Findings above. A finding is not automatically an action — assess whether the"
+    warn "affected code path is reachable before bumping a pin."
+fi
+ok "Audit complete"

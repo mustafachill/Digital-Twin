@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Apply formatting in place. `lint` checks; this fixes.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+VENV="${REPO_ROOT}/.venv/bin"
+
+step "Python (ruff)"
+if [ -x "${VENV}/ruff" ]; then
+    "${VENV}/ruff" format "${REPO_ROOT}/tools"
+    "${VENV}/ruff" check --fix "${REPO_ROOT}/tools"
+    ok "Python formatted"
+else
+    warn "ruff not installed — run ./scripts/bootstrap --host-only"
+fi
+
+if have clang-format; then
+    step "C++ (clang-format)"
+    find "${REPO_ROOT}/workspace/src" -maxdepth 6 \
+        \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) \
+        -not -path '*/external/*' -print0 2>/dev/null \
+        | xargs -0 -r clang-format -i
+    ok "C++ formatted"
+fi

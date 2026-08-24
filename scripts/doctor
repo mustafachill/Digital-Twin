@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Diagnose the environment and report what works, what does not, and why.
+#
+# Run this first when something is wrong. It answers the questions the debugger
+# agent would otherwise spend a session rediscovering.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+set +e   # a doctor reports problems, it does not exit on the first one
+
+PASS=0; FAIL=0; SKIP=0
+# `A && B || C` is not if-then-else — C also runs when A succeeds and B fails.
+# These helpers keep the report lines short without that trap.
+check_have() {   # check_have <command> <label> [detail-command]
+    if have "$1"; then
+        report pass "$2" "$( [ $# -ge 3 ] && eval "$3" || true )"
+    else
+        report fail "$2" "not found"
+    fi
+}
+check_file() {   # check_file <path> <label>
+    if [ -e "$1" ]; then report pass "$2" ""; else report fail "$2" "missing"; fi
+}
+
+report() {
+    case "$1" in
+        pass) printf '  %s✓%s %-34s %s\n' "$C_GRN" "$C_RST" "$2" "${3:-}"; PASS=$((PASS+1)) ;;
+        fail) printf '  %s✗%s %-34s %s\n' "$C_RED" "$C_RST" "$2" "${3:-}"; FAIL=$((FAIL+1)) ;;
+        skip) printf '  %s-%s %-34s %s\n' "$C_DIM" "$C_RST" "$2" "${3:-}"; SKIP=$((SKIP+1)) ;;
+    esac
+}
+
+step "Host"
+report pass "operating system" "$(uname -s) $(uname -r) ($(uname -m))"
+if in_container; then
+    report pass "context" "inside the container"
+else
+    report pass "context" "host machine"
+fi
+
+step "Toolchain"
+check_have git     "git"     "git --version | awk '{print \$3}'"
+check_have python3 "python3" "python3 -V 2>&1 | awk '{print \$2}'"
+if have docker; then
+    if docker info >/dev/null 2>&1; then
+        report pass "docker" "$(docker --version | awk '{print $3}' | tr -d ,) — daemon running"
+    else
+        report fail "docker" "installed but the daemon is not running"
+    fi
+else
+    report skip "docker" "not installed"
+fi
+
+step "ROS 2 / Gazebo"
+if native_ros_available; then
+    report pass "ros 2" "${ROS_DISTRO:-jazzy} at /opt/ros/${ROS_DISTRO:-jazzy}"
+    check_have colcon "colcon"
+    check_have vcs    "vcstool"
+    check_have rosdep "rosdep"
+    if have gz; then
+        report pass "gazebo" "$(gz sim --versions 2>/dev/null | head -1)"
+    else
+        report fail "gazebo" "gz not found"
+    fi
+else
+    if [ "$(host_os)" = "macos" ]; then
+        report skip "ros 2" "not available on macOS — expected; build runs in the container"
+    else
+        report fail "ros 2" "no /opt/ros/${ROS_DISTRO:-jazzy}/setup.bash"
+    fi
+fi
+
+step "Host tooling"
+if [ -x "${REPO_ROOT}/.venv/bin/python" ]; then
+    report pass "virtualenv" ".venv"
+    if "${REPO_ROOT}/.venv/bin/python" -c "import cite_tools" 2>/dev/null; then
+        report pass "cite_tools" "importable"
+    else
+        report fail "cite_tools" "not installed — run ./scripts/bootstrap --host-only"
+    fi
+else
+    report fail "virtualenv" "missing — run ./scripts/bootstrap --host-only"
+fi
+
+step "Repository"
+check_file "${REPO_ROOT}/CLAUDE.md"            "CLAUDE.md"
+check_file "${REPO_ROOT}/what-we-are-doing.md" "charter"
+check_file "${REPO_ROOT}/external/cite.repos"  "vcs manifest"
+if [ -d "${REPO_ROOT}/model" ] && [ -n "$(ls -A "${REPO_ROOT}/model" 2>/dev/null)" ]; then
+    report pass "L0 facility model" "present"
+else
+    report skip "L0 facility model" "not created yet (Phase 1.B)"
+fi
+if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/src" 2>/dev/null)" ]; then
+    report pass "workspace/src" "$(find "${REPO_ROOT}/workspace/src" -name package.xml 2>/dev/null | wc -l | tr -d ' ') package(s)"
+else
+    report skip "workspace/src" "empty (Phase 1.B)"
+fi
+if [ -d "${REPO_ROOT}/legacy" ]; then
+    report skip "legacy/" "present — reference only, not built"
+fi
+
+step "Documentation"
+DOCS="${REPO_ROOT}/docs"
+if [ -d "$DOCS" ]; then
+    # Every ADR on disk must appear in the index, and every indexed ADR must exist.
+    # An index that drifts from the files is how a decision record becomes unfindable.
+    # 0000 is the template, not a decision record — it is correctly absent from the index.
+    adr_files=$(find "$DOCS/adr" -name '[0-9][0-9][0-9][0-9]-*.md' -not -name '0000-*' 2>/dev/null | wc -l | tr -d ' ')
+    adr_indexed=$(grep -cE '^\| \[[0-9]{4}\]' "$DOCS/adr/README.md" 2>/dev/null || echo 0)
+    if [ "${adr_files:-0}" -eq "${adr_indexed:-0}" ] && [ "${adr_files:-0}" -gt 0 ]; then
+        report pass "ADR index" "${adr_files} records, all indexed"
+    else
+        report fail "ADR index" "${adr_files} file(s) on disk, ${adr_indexed} in the index"
+    fi
+
+    # Every ADR referenced from anywhere in docs/ must exist.
+    missing_adr=0
+    while IFS= read -r ref; do
+        [ -f "$DOCS/adr/$ref" ] || { missing_adr=$((missing_adr+1)); }
+    done < <(grep -rhoE '[0-9]{4}-[a-z0-9-]+\.md' "$DOCS" 2>/dev/null | sort -u)
+    if [ "$missing_adr" -eq 0 ]; then
+        report pass "ADR references" "all resolve"
+    else
+        report fail "ADR references" "${missing_adr} reference(s) to a missing ADR"
+    fi
+
+    # Architecture and interface documents must declare a status marker (P7).
+    unmarked=0
+    for f in "$DOCS"/architecture/L*.md "$DOCS"/architecture/cross-cutting-*.md \
+             "$DOCS"/architecture/standards-alignment.md "$DOCS"/interfaces/*.md; do
+        [ -f "$f" ] || continue
+        head -8 "$f" | grep -qE '\*\*Status:\*\* +`?(DESIGNED|PARTIAL|BUILT)' || unmarked=$((unmarked+1))
+    done
+    if [ "$unmarked" -eq 0 ]; then
+        report pass "status markers" "every design document declares one"
+    else
+        report fail "status markers" "${unmarked} document(s) missing a status marker"
+    fi
+else
+    report skip "documentation" "docs/ not present"
+fi
+
+step "Reproducibility"
+UNPINNED=$(grep -cE '^\s+version:\s*[a-z]' "${REPO_ROOT}/external/cite.repos" 2>/dev/null || echo 0)
+if [ "${UNPINNED:-0}" -gt 0 ]; then
+    report fail "manifest pinning" "${UNPINNED} entry not pinned to a commit SHA (Phase 1.A gate)"
+else
+    report pass "manifest pinning" "all entries pinned"
+fi
+GITLINKS=$(git -C "${REPO_ROOT}" ls-files -s 2>/dev/null | awk '$1=="160000"' | wc -l | tr -d ' ')
+if [ "${GITLINKS:-0}" -gt 0 ]; then
+    if [ -f "${REPO_ROOT}/.gitmodules" ]; then
+        report pass "submodules" "${GITLINKS} gitlink(s), .gitmodules present"
+    else
+        report fail "submodules" "${GITLINKS} gitlink(s) with NO .gitmodules — clone will lose them"
+    fi
+else
+    report pass "submodules" "none"
+fi
+
+step "Summary"
+printf '  %d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+if [ "$FAIL" -gt 0 ]; then
+    printf '\n  %sSome checks failed.%s Skipped items are expected at the current phase;\n' "$C_YEL" "$C_RST"
+    printf '  failures are not. See CLAUDE.md §2 for what should exist today.\n'
+    exit 1
+fi
+ok "Environment healthy for the current phase"

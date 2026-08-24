@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Remove build artifacts.
+#
+#   ./scripts/clean         workspace build/install/log
+#   ./scripts/clean --all   also the Python venv and container volumes
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+ALL=0
+[ "${1:-}" = "--all" ] && ALL=1
+
+step "Workspace artifacts"
+rm -rf "${REPO_ROOT}/workspace/build" "${REPO_ROOT}/workspace/install" "${REPO_ROOT}/workspace/log"
+ok "Removed workspace/{build,install,log}"
+
+if [ "$ALL" -eq 1 ]; then
+    step "Python virtualenv"
+    rm -rf "${REPO_ROOT}/.venv"
+    ok "Removed .venv"
+
+    if ! in_container && have docker; then
+        step "Container volumes"
+        compose down --volumes 2>/dev/null || true
+        ok "Removed container volumes"
+    fi
+fi
+
+ok "Clean. Next: ./scripts/bootstrap"

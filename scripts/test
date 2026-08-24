@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Run the test suites: host tooling tests, then ROS workspace tests.
+#
+#   ./scripts/test
+#   ./scripts/test --packages-select cite_facility
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+# Host tooling tests need no ROS, so run them wherever we already are.
+run_host_tests() {
+    local py="${REPO_ROOT}/.venv/bin/python"
+    [ -x "$py" ] || py="$(command -v python3 || true)"
+    if [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ]; then
+        step "Host tooling tests"
+        "$py" -m pytest "${REPO_ROOT}/tools" -q
+    fi
+}
+
+if ! in_container && ! native_ros_available; then
+    run_host_tests
+    require_ros_env test "$@"
+fi
+
+run_host_tests
+
+step "ROS workspace tests"
+cd "${REPO_ROOT}/workspace" || die "workspace/ not found"
+
+if [ ! -d src ] || [ -z "$(ls -A src 2>/dev/null)" ]; then
+    warn "workspace/src is empty — no ROS tests yet. See CLAUDE.md §2."
+    exit 0
+fi
+
+colcon test --event-handlers console_direct+ --return-code-on-test-failure "$@"
+colcon test-result --verbose
+
+ok "Tests complete"

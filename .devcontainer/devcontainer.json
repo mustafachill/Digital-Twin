@@ -1,0 +1,33 @@
+{
+  "name": "CITE Digital Twin",
+  "dockerComposeFile": ["../infra/docker/docker-compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "cite",
+
+  "postCreateCommand": "./scripts/bootstrap --in-container",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools-extension-pack",
+        "ms-python.python",
+        "ms-iot.vscode-ros",
+        "redhat.vscode-yaml",
+        "redhat.vscode-xml",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "C_Cpp.default.compileCommands": "/workspace/workspace/build/compile_commands.json",
+        "python.defaultInterpreterPath": "/opt/cite-venv/bin/python",
+        "files.associations": {
+          "*.urdf": "xml",
+          "*.xacro": "xml",
+          "*.sdf": "xml",
+          "*.world": "xml",
+          "*.repos": "yaml"
+        }
+      }
+    }
+  }
+}
