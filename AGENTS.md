@@ -27,5 +27,5 @@ If your tooling cannot follow a file reference, load `CLAUDE.md` explicitly.
 |---|---|
 | `CLAUDE.md` | Canonical rulebook — rules, architecture, commands, quality gates |
 | `what-we-are-doing.md` | Project charter — identity, scope, roadmap, rationale |
-| `.claude/orchestration.md` | Agent pipeline and dispatch routing |
-| `.claude/agents/` | Active subagent role definitions |
+| `.claude/orchestration.md` | Agent pipeline and dispatch routing — *local, not committed* |
+| `.claude/agents/` | Active subagent role definitions — *local, not committed* |

@@ -227,6 +227,10 @@ Recurring failure classes in this domain. Treat each as a review checkpoint.
 Subagent roles live in `.claude/agents/`. The pipeline and dispatch routing are defined in
 **`.claude/orchestration.md`** — read it before delegating.
 
+`.claude/` is local tooling and **is not committed**, so a fresh clone will not contain it.
+This file is committed, which is the point: the rules below bind every contributor whether
+or not they have the agents.
+
 - Agents propose; humans and tests decide. Nothing merges without review and green CI.
 - Agents are bound by this file. Output contradicting §3 or §4 is a defect.
 - Reports are written in **English**, with a `Status:` verdict line first, summarized

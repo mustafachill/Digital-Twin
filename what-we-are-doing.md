@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Owner** | Center for Innovation, Technology and Entrepreneurship (CITE), Sam Houston State University |
-| **Document version** | 1.3 |
+| **Document version** | 1.4 |
 | **Date** | 2026-08-24 |
 | **Status** | Active — this is the authoritative source of truth |
 
@@ -329,7 +329,7 @@ Digital-Twin/
 │                                   explaining which of the four dependency layers
 │                                   each kind belongs in.
 │
-├── .claude/                      ← Agent configuration
+├── .claude/                      ← Agent configuration      (local; not committed)
 │   ├── agents/                   ←   active subagent roles (11)
 │   └── orchestration.md          ←   pipeline and dispatch routing
 │
@@ -468,6 +468,8 @@ The engineering team operates under CITE. This document defines *what* is built 
 
 AI agents are first-class participants in this project, with defined roles and defined limits. `CLAUDE.md` is the canonical rulebook loaded by every session and every agent; `AGENTS.md` points to it; the pipeline and dispatch routing are defined in `.claude/orchestration.md`.
 
+**`.claude/` is local tooling and is not committed to this repository.** A fresh clone will not contain it, and every reference to it below describes a directory the reader may have to obtain separately. The rules the agents enforce are in `CLAUDE.md`, which *is* committed — so the standards survive without the tooling, and a contributor working without agents is held to exactly the same bar.
+
 The active roster is eleven roles in `.claude/agents/`:
 
 - **Core pipeline** — `coder`, `reviewer`, `tester`, `fixer`.
@@ -508,7 +510,7 @@ The operating rules:
 | What does this term mean here? | `docs/onboarding/glossary.md` |
 | How do I bring up / calibrate / recover the cell? | `docs/operations/` |
 | Where do I read more? | `docs/reference/` — standards, literature, toolchain |
-| How should an AI agent behave here? | `CLAUDE.md`, `AGENTS.md`, `.claude/orchestration.md` |
+| How should an AI agent behave here? | `CLAUDE.md` and `AGENTS.md` (committed); `.claude/orchestration.md` (local, not committed) |
 | What is being worked on right now? | The issue tracker — **not** this document |
 
 Every architecture and interface document carries a status marker — `DESIGNED`, `PARTIAL`, or `BUILT` — so that a specification is never mistaken for a description (P7).
@@ -549,6 +551,7 @@ The project underwent an extended R&D period before this charter. That work prod
 
 | Version | Date | Change |
 |---|---|---|
+| 1.4 | 2026-08-24 | Marked `.claude/` as local tooling that is not committed, in the §7 tree, §10.2 and the §11 documentation map. The agent configuration is excluded from the repository by decision; without the marker a reader would look for a directory a clone does not contain. Notes that the rules the agents enforce live in `CLAUDE.md`, which is committed, so the standards do not depend on the tooling. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.3 | 2026-08-24 | §7 repository structure brought back in line with the tree and given an explicit meaning: it describes the **target** structure, with markers for what does not yet exist (`model/`, `workspace/src/`, `hmi/`) and what is temporary (`legacy/`). Added `tools/`, `requirements/`, `docs/reference/`, `.devcontainer/`, `.github/` and `legacy/`; corrected the claim that `infra/` holds the devcontainer and CI, which live at the repository root because their tooling requires it. Removed `subagents/`, the portable upstream template library the active roles were adapted from — it was never tracked in git and is no longer present; the adapted roles in `.claude/agents/` are the only roster. §10.2 updated accordingly: the two roles deferred to Phase 4 will be written then rather than carried as dormant templates. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.2 | 2026-08-24 | Documentation tree written. Twin maturity levels renamed to align with the established literature: L1 `Mirror`→`Shadow`, L2 `Shadow`→`Validated`, with the corresponding L5 operating modes renamed to match (§2, §5). Architecture aligned with the ISO 23247 reference architecture (§2). The xArm Jazzy/Harmonic risk is closed following verification (§13). §11 documentation map expanded to the full tree and the status-marker convention introduced. No change to scope, layer architecture, technology baseline, or roadmap. |
 | 1.1 | 2026-08-24 | Agent configuration integrated. Added `.claude/` and `subagents/` to the repository structure (§7); replaced the agent paragraph in §10.2 with the concrete eleven-role roster, the rationale for the two domain auditors, and the two roles deferred to Phase 4. No change to scope, architecture, technology baseline, or roadmap. |
