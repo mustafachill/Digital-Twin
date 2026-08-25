@@ -14,12 +14,14 @@ asset_type:
   category: end_effector
   vendor: ufactory
 
-  frames:
-    - id: grasp
-      # The point between the pads where a grasped object sits, relative to the
-      # gripper base. Written once here, referenced by every skill.
-      xyz_m: [0.0, 0.0, 0.172]
-      link: link_tcp
+  # No frames. There was a `grasp` frame here declaring the point between the
+  # pads as 0.172 m from the gripper base; it is deleted because it was the same
+  # fact twice and false besides. The vendor's own chain already ends at
+  # `link_tcp`, exactly 0.172 m past `link_eef`, and `robot_state_publisher`
+  # publishes it — while nothing generated or written here ever emitted or read
+  # the `grasp` frame, so its comment's claim that every skill referenced it was
+  # untrue (P7). Plan to `<prefix>link_tcp`, which `planning.tip_link_suffix`
+  # on the arm type already names.
 
   description:
     # No description of its own: the vendor macro builds the gripper into the arm

@@ -150,7 +150,28 @@ class Aabb:
     def contains(self, point: tuple[float, float, float]) -> bool:
         return all(lo <= v <= hi for lo, v, hi in zip(self.min_m, point, self.max_m, strict=True))
 
+    def contains_box(self, other: Aabb) -> bool:
+        """Whether ``other`` lies wholly inside this box, touching faces allowed."""
+        return all(
+            self.min_m[i] <= other.min_m[i] and other.max_m[i] <= self.max_m[i] for i in range(3)
+        )
+
     def intersects(self, other: Aabb) -> bool:
         return all(
             self.min_m[i] < other.max_m[i] and other.min_m[i] < self.max_m[i] for i in range(3)
         )
+
+    def separation(self, other: Aabb) -> float:
+        """Shortest distance between the two boxes; ``0.0`` if they touch or overlap.
+
+        Distinct from ``intersects``, which uses a strict inequality and so calls
+        two boxes sharing a face "not intersecting". That is true and useless:
+        exact face contact is what a layout looks like one micrometre before it
+        becomes a penetration, and a check that only fires on penetration finds
+        it after the physics engine has already flung both bodies apart.
+        """
+        gaps = [
+            max(0.0, self.min_m[i] - other.max_m[i], other.min_m[i] - self.max_m[i])
+            for i in range(3)
+        ]
+        return float(math.sqrt(sum(g * g for g in gaps)))

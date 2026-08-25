@@ -78,6 +78,15 @@ asset_type:
       # Phase 2. Declared now so that a mixed fleet is a data change.
       instance_params: [robot_ip, report_type]
 
+  control:
+    # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is
+    # a fact about the robot rather than about the generator — it lived in
+    # generate/control.py, where it was applied identically to every type the
+    # generator would ever see, which is the P5 inversion ("code encodes how,
+    # never which"). A controller loop that cannot hold this rate is a
+    # performance finding, not a value to quietly lower.
+    update_rate_hz: 150
+
   controllers:
     # Stage 0 must be active before stage 1: the controllers below read the state
     # this broadcaster publishes. Expressing that as data rather than as a sleep
@@ -117,3 +126,10 @@ asset_type:
     # description; these are what MoveIt is allowed to ask for.
     max_velocity_scaling: 0.35
     max_acceleration_scaling: 0.35
+    # Joint acceleration ceiling, rad/s^2. The vendor description carries
+    # velocity and effort limits but no acceleration limit, and MoveIt's time
+    # parameterisation needs one — without it the planner emits trajectories the
+    # controller cannot track, which presents as following error rather than as
+    # a missing limit. A ceiling is a property of THIS arm, so it is stated here
+    # rather than as a constant in generate/moveit.py (P5).
+    max_acceleration_rad_s2: 2.0

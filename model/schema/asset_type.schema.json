@@ -15,6 +15,17 @@
           "title": "Category",
           "type": "string"
         },
+        "control": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControlSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "controllers": {
           "items": {
             "$ref": "#/$defs/ControllerSpec"
@@ -206,6 +217,22 @@
         "size_m"
       ],
       "title": "BoxGeometry",
+      "type": "object"
+    },
+    "ControlSpec": {
+      "additionalProperties": false,
+      "description": "How the `ros2_control` manager for this type is configured.\n\nThe update rate is a fact about the robot — the vendor ships one — and it\nused to be a module constant in the generator, applied identically to every\ntype. P5 puts it here instead: code encodes how a controller manager is\nconfigured, never which rate a particular arm runs at.",
+      "properties": {
+        "update_rate_hz": {
+          "exclusiveMinimum": 0,
+          "title": "Update Rate Hz",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "update_rate_hz"
+      ],
+      "title": "ControlSpec",
       "type": "object"
     },
     "ControllerSpec": {
@@ -739,6 +766,11 @@
           "title": "Kinematics Timeout S",
           "type": "number"
         },
+        "max_acceleration_rad_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Acceleration Rad S2",
+          "type": "number"
+        },
         "max_acceleration_scaling": {
           "default": 0.5,
           "title": "Max Acceleration Scaling",
@@ -812,7 +844,8 @@
       },
       "required": [
         "group_suffix",
-        "tip_link_suffix"
+        "tip_link_suffix",
+        "max_acceleration_rad_s2"
       ],
       "title": "PlanningSpec",
       "type": "object"

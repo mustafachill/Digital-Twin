@@ -70,6 +70,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         frames,
         moveit,
         package,
+        planning_scene,
         topology,
         world,
     )
@@ -84,6 +85,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         artifacts += world.generate(cell)
         artifacts += control.generate(cell)
         artifacts += moveit.generate(cell)
+        artifacts += planning_scene.generate(cell)
         artifacts += frames.generate(cell)
         artifacts += topology.generate(model, cell)
         artifacts += bringup.generate(cell)

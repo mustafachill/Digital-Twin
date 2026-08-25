@@ -36,7 +36,20 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                     "rpy_rad": [round(v, 9) for v in asset.world_pose.rpy_rad],
                 }
             )
+        # A frame that names a `link` is NOT emitted here. It belongs to a link
+        # in a robot description, so `robot_state_publisher` already publishes
+        # it, at wherever forward kinematics puts it. Emitting it as well made
+        # `cell_a__arm_1__tcp` a STATIC transform sitting at the arm's mount —
+        # byte-identical to `cell_a__arm_1__base`, and 0.836 m from where the
+        # tool centre point actually is at the model's own home configuration.
+        # Under the naming rule that is *the* canonical name for the arm's TCP,
+        # so a consumer resolving it got a constant, confidently wrong answer
+        # with nothing reporting anything. `NamedFrame.link` exists to record
+        # exactly this distinction; this is the code that reads it.
+        published_by_state_publisher = {f.id for f in asset.asset_type.frames if f.link is not None}
         for frame_id, pose in sorted(asset.frames.items()):
+            if frame_id in published_by_state_publisher:
+                continue
             transforms.append(
                 {
                     "parent": ids.WORLD_FRAME,
