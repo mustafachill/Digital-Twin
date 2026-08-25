@@ -28,7 +28,7 @@ from ament_index_python.packages import get_package_share_directory
 from cite_interfaces.action import MoveTo
 from cite_interfaces.msg import ModelVersion, ResultCode
 from cite_interfaces.qos import LATCHED, STATE
-from control_msgs.action import FollowJointTrajectory
+from control_msgs.action import FollowJointTrajectory, GripperCommand
 from controller_manager_msgs.srv import ListControllers
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
@@ -40,6 +40,34 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 
 ZONE = "cell_a"
 ARMS = ("arm_1", "arm_2", "arm_3")
+
+#: The five axes of an xArm 5.
+ARM_JOINT_SUFFIXES = tuple(f"joint{n}" for n in range(1, 6))
+
+#: The gripper's one actuated joint.
+DRIVE_JOINT_SUFFIX = "drive_joint"
+
+#: The five joints of the parallel linkage that follow `drive_joint` through URDF
+#: <mimic> tags. They are on `/joint_states` because
+#: `external/patches/01-xarm_ros2-gripper-mimic-joints.patch` declares them in the
+#: gripper's <ros2_control> block; the vendor lists only `drive_joint` there, and
+#: a <mimic> tag that never reaches ros2_control couples nothing.
+FOLLOWER_JOINT_SUFFIXES = (
+    "left_finger_joint",
+    "left_inner_knuckle_joint",
+    "right_finger_joint",
+    "right_inner_knuckle_joint",
+    "right_outer_knuckle_joint",
+)
+
+#: Every joint one arm publishes. Written once, because more than one test below
+#: asserts against it and they must not be able to disagree.
+JOINT_SUFFIXES = (*ARM_JOINT_SUFFIXES, DRIVE_JOINT_SUFFIX, *FOLLOWER_JOINT_SUFFIXES)
+
+
+def joints_of(arm: str) -> set[str]:
+    return {f"{arm}_{suffix}" for suffix in JOINT_SUFFIXES}
+
 
 #: Wall-clock ceilings, not schedules. Nothing is sequenced by them; they exist so
 #: a hang fails the run with a diagnosis instead of blocking CI indefinitely.
@@ -163,10 +191,9 @@ class TestCellBringUp(unittest.TestCase):
                     f"a message on {topic}",
                 )
                 names = set(received[-1].name)
-                expected = {f"{arm}_joint{n}" for n in range(1, 6)} | {f"{arm}_drive_joint"}
                 self.assertEqual(
                     names,
-                    expected,
+                    joints_of(arm),
                     f"{topic} carries {sorted(names)}; every joint must be prefixed "
                     f"with the L0 asset id, because P2 is made of these names",
                 )
@@ -207,8 +234,110 @@ class TestCellBringUp(unittest.TestCase):
                     owners[joint] = arm
             finally:
                 self.node.destroy_subscription(subscription)
-        # Three five-axis arms with a gripper each: eighteen distinct names.
-        self.assertEqual(len(owners), 18, sorted(owners))
+        # Three five-axis arms, each with a gripper whose drive joint and five
+        # linkage followers are all real, actuated and published: 3 x 11 = 33
+        # distinct names.
+        #
+        # This read 18 while the five followers were absent from the gripper's
+        # <ros2_control> block. Their absence was the defect, not the baseline:
+        # the joints exist in the vendor URDF, move under the linkage, and should
+        # have been observable all along. Raising the count is a correction, not a
+        # relaxation — and on its own it is a weak one, which is why
+        # `test_the_gripper_linkage_is_actually_coupled` asserts that they TRACK
+        # the drive joint. A count alone would pass again the day the patch is
+        # reverted and the followers reappear as five joints that never move.
+        self.assertEqual(len(owners), len(ARMS) * len(JOINT_SUFFIXES), sorted(owners))
+        self.assertEqual(len(owners), 33, sorted(owners))
+
+    def test_the_gripper_linkage_is_actually_coupled(self) -> None:
+        """The five follower joints track `drive_joint`, rather than merely existing.
+
+        This is the assertion that has teeth. Counting joint names proves only
+        that they are declared; a gripper whose followers are declared and then
+        stand still passes a count and grasps nothing, which is exactly the state
+        this cell was in for the whole of Phase 1.C. Three mechanisms that could
+        have coupled them were dead at once: the vendor's <ros2_control> block
+        lists only `drive_joint`, Gazebo Harmonic's dartsim does not implement
+        SetMimicConstraintFeature, and the vendor's Gazebo Classic mimic plugin
+        cannot load under Harmonic. The measured symptom was a right finger that
+        moved 1.5 mm across the entire stroke — gravity sag, not actuation — and
+        a left finger that tilted instead of closing parallel, so the pads never
+        touched a 50 mm block at all.
+
+        Commanding the gripper is what makes this test able to fail: at rest every
+        joint reads zero and any broken coupling looks perfect.
+        """
+        arm = ARMS[0]
+        action = f"/cite/{ZONE}/{arm}/{arm}_gripper_controller/gripper_cmd"
+        client = ActionClient(self.node, GripperCommand, action)
+        self._spin_until(
+            lambda: client.wait_for_server(timeout_sec=0.5) or None,
+            BRING_UP_CEILING_S,
+            action,
+        )
+
+        # Mid-stroke, well clear of both limits, so a follower that is merely
+        # resting at its own zero cannot be mistaken for one that is tracking.
+        commanded = 0.40
+        goal = GripperCommand.Goal()
+        goal.command.position = commanded
+        goal.command.max_effort = 60.0
+
+        send = client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self.node, send, timeout_sec=TRAJECTORY_CEILING_S)
+        handle = send.result()
+        self.assertIsNotNone(handle, "the gripper goal was never accepted")
+        self.assertTrue(handle.accepted, "the gripper controller rejected the command")
+
+        result = handle.get_result_async()
+        rclpy.spin_until_future_complete(self.node, result, timeout_sec=TRAJECTORY_CEILING_S)
+        self.assertIsNotNone(result.result(), "the gripper never reported a result")
+
+        received: list[JointState] = []
+        topic = f"/cite/{ZONE}/{arm}/joint_states"
+        subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
+        try:
+            # Read a state published after the close finished, not one buffered
+            # from before it: a stale message would show the pre-command pose and
+            # the comparison would be against the wrong instant.
+            received.clear()
+            self._spin_until(
+                lambda messages=received: messages or None,
+                DELIVERY_CEILING_S,
+                f"a joint state after the gripper closed on {topic}",
+            )
+            state = received[-1]
+            by_name = dict(zip(state.name, state.position, strict=True))
+        finally:
+            self.node.destroy_subscription(subscription)
+
+        drive = by_name[f"{arm}_{DRIVE_JOINT_SUFFIX}"]
+        self.assertGreater(
+            drive,
+            0.25,
+            f"{arm}_{DRIVE_JOINT_SUFFIX} reads {drive:.4f} after being commanded to "
+            f"{commanded}; the gripper did not close, so this test can say nothing "
+            "about whether the linkage follows it",
+        )
+
+        # Generous next to the failure it exists to catch. An uncoupled follower
+        # sits near zero while the drive joint is past 0.25 rad, so the gap is the
+        # better part of half a radian; this tolerance only has to absorb the lag
+        # of gz_ros2_control's proportional mimic servo.
+        for suffix in FOLLOWER_JOINT_SUFFIXES:
+            follower = by_name[f"{arm}_{suffix}"]
+            self.assertAlmostEqual(
+                follower,
+                drive,
+                delta=0.05,
+                msg=(
+                    f"{arm}_{suffix} reads {follower:.4f} while "
+                    f"{arm}_{DRIVE_JOINT_SUFFIX} reads {drive:.4f}. The linkage is not "
+                    "coupled: the URDF <mimic> tags are reaching nothing, so only one "
+                    "finger is driven and the pads never close parallel. Check that "
+                    "external/patches/01-xarm_ros2-gripper-mimic-joints.patch applied"
+                ),
+            )
 
     def test_a_trajectory_executes(self) -> None:
         """The arm moves when commanded, through the action the skills will use."""
