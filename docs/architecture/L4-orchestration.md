@@ -7,11 +7,19 @@
   **Not built:** handoff and `Transfer` ([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)),
   parallel stations (the leaves are `SyncActionNode` and tick one station at a time), line
   state publication, and Groot2 integration.
-  **Not proven:** the cycle does not complete — see [L3](L3-capabilities.md). The
-  sensor-driven line does not run: `cite_simulation`'s `break_beam.cpp` is in no CMake
-  target, and the conveyor plugin is built but instantiated by no generated artifact, so the
-  conveyor and beam topics `cell_a_plan.yaml` declares have no publisher.
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [L3](L3-capabilities.md)
+  **Proven, narrowly:** the tree drives one arm through a full pick-and-place cycle — see
+  [L3](L3-capabilities.md) for the evidence and for what the scenario around it does *not*
+  yet establish.
+  **Not proven:** the **three-arm sensor-driven line does not run.** The belt and beam
+  plugins build and the generated world instantiates one per asset, but they publish on
+  **Gazebo transport**; `cite_bringup` starts a `ros_gz_bridge` for `/clock` only, so the
+  topics `cell_a_plan.yaml` declares have no ROS publisher — and `line_coordinator.cpp`
+  subscribes to none of them in any case. Phase 1.D.
+  **Carrying a leak:** `PickAt` in `include/cite_orchestration/skill_nodes.hpp` defaults
+  `grasp_height_m` to 0.03 m, written into the file in two places, so an L4 node decides a
+  piece of end-effector geometry that belongs in L0 — see [L0](L0-facility-model.md) and
+  [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
+- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 

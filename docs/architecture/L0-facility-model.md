@@ -4,10 +4,18 @@
   across 14 files) and the generators in `tools/cite_tools/generate/` emit every artifact in
   the table below except the last two. All five validation levels run: `./scripts/validate-model`
   exits 0, and that command includes the fresh-generator diff **and** a determinism check that
-  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 132
+  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 183
   tests, all passing.
   **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
   (Phase 4) — the two rows whose consumers do not exist yet.
+  **Two fields it is now known to be missing.** L0 describes no work-piece *geometry* —
+  `Facility.workpiece_models` holds names only — so the grasp-width rule in
+  `tools/cite_tools/validate/physical.py` cannot check the bound that actually matters
+  under a friction grasp ("narrower than the part") and says so in its own docstring. And
+  the end-effector type declares no grasp-plane offset, so
+  `cite_orchestration`'s `PickAt` carries a hand-written `grasp_height_m` instead;
+  [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md)
+  concludes that offset belongs here, as the stroke-dependent quantity it is.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md)
 
 ## Responsibility

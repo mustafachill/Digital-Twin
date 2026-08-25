@@ -4,13 +4,19 @@
   **Built:** `MoveTo`, `Grasp`, `Pick` and `Place` are action servers in
   `cite_skills/src/skill_server.cpp`. `MoveTo` to the `home` configuration is asserted by
   `./scripts/scenario bringup`.
+  `Pick` and `Place` complete a cycle on one arm: the pads close on a 50 mm work-piece,
+  stall on it, and friction carries it — the cycle passed 8/8 in the campaign recorded in
+  the message of commit `39931d1`, which is the only place that campaign is written down.
   **Not built:** `Transfer` and `Detect`. Both have `.action` definitions in
   `cite_interfaces` and no implementation anywhere.
-  **Not proven:** no pick-and-place cycle has completed, and **no work-piece has been
-  grasped**. `./scripts/scenario pick_and_place` does not pass and runs in CI as
-  `continue-on-error`. `MoveTo.Goal.cartesian_path` returns `NOT_IMPLEMENTED`
+  **Not proven:** `./scripts/scenario pick_and_place` is not a green gate. It runs in CI as
+  `continue-on-error` at this commit, and in the same campaign the *scenario verdict* was
+  6/8 — two runs failed the post-cycle teardown check after the cycle had passed, cause
+  unknown. `MoveTo.Goal.cartesian_path` returns `NOT_IMPLEMENTED`
   ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
-- **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../interfaces/README.md`](../interfaces/README.md)
+  **Not assertable:** how a part is oriented in the jaws — see "A grasp is evidenced by a
+  stall" below.
+- **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [`../interfaces/README.md`](../interfaces/README.md)
 
 ## Responsibility
 
@@ -88,6 +94,39 @@ Every skill must therefore implement:
 - **Structured failure** — a typed reason, never a string. "Failed" is not a result; "IK
   solution not found for target pose" is.
 
+### A grasp is evidenced by a stall, and a stall says nothing about orientation
+
+`Grasp` commands a width on the `ros2_control` gripper controller and nothing else
+([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md)). The part is held when the
+pads **fail** to reach the commanded width — `stalled=true, reached_goal=false`, *and* the
+width they did reach exceeds the command by more than the controller's own end-of-goal bias
+(`cite_skills::gripper_is_holding`). A gripper that reaches its command reached it through
+empty space, so success at the controller level is evidence of an *empty* gripper. `Pick`
+reads it that way.
+
+That is now the whole mechanism. There is no simulation-side attachment
+([ADR-0029](../adr/0029-simulated-grasping-by-friction.md)), and the same code runs on both
+paths — which is the point, and is why nothing in this layer branches on simulation.
+
+**What the mechanism does not give is orientation.** A friction grasp in this cell is
+repeatable in position and not in orientation: the part rotates between the jaws while the
+pads themselves barely move. The two campaigns behind that statement are
+[`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+and
+[`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md);
+their figures are not restated here (P1).
+
+The standing restriction from ADR-0029 binds this layer:
+
+> A scenario may assert **where** a part ends up. No scenario may assert **how** a part is
+> oriented in the jaws.
+
+Two pieces of unwritten work inherit that restriction rather than work around it.
+`Transfer` — a two-party handoff — needs to know how a part is held, not only that it is
+([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)). So does the continuous line
+of Phase 1.D, which accumulates orientation error across stations. Whoever writes either
+one closes this gap first or states plainly that they have not.
+
 ### Skills are stateless between goals
 
 A skill server holds no memory of previous goals. Work-piece tracking, station state, and
@@ -104,6 +143,8 @@ restartable, and it stops L3 from quietly becoming a second orchestrator.
 | Untyped failure reason | L4 cannot choose a recovery; everything becomes a generic retry | `reviewer` |
 | Skill reaching into L2 internals | Layer violation; controller change breaks the skill | `architect-reviewer` |
 | Planning latency assumed bounded | Intermittent timeout under load | `tester`, `performance-engineer` |
+| A grasp reported from the controller's own success | The gripper reaching its commanded width means it closed on *nothing* | `reviewer`; `cite_skills::gripper_is_holding` requires a stall **and** a width margin wider than the controller's end-of-goal bias |
+| A skill or scenario relying on part orientation | Passes while the part turns tens of degrees in the jaws | `reviewer` — the restriction above is a review checkpoint |
 
 ## Open questions
 

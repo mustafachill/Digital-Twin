@@ -18,13 +18,15 @@ and P2 intact. On hardware the physical world does these jobs and no plugin is l
 | `cite_break_beam` | world (one per sensor) | an optical through-beam | header of `src/break_beam.cpp` |
 
 There was a third, `cite_grasp_attachment`, which welded a work-piece to a finger with a
-`DetachableJoint` instead of letting friction hold it (ADR-0023). It is **removed**. The
-84-trial campaign in `docs/measurements/2026-08-25-friction-grasp/` measured it firing at
-first pad contact — 0.30 rad against the 0.4056 rad at which the pads reach a 50 mm part —
-so it welded the part before any contact force developed and the jaws closed through it
-feeling nothing. `Pick` then failed 8/8 while the weld carried the part 0.576 m anyway.
-Friction alone held in all 84 trials, dropped nothing and flung nothing. Grasping in this
-cell is now plain friction, with no simulation-side aid at all.
+`DetachableJoint` instead of letting friction hold it. It is **removed** by
+[ADR-0029](../../../docs/adr/0029-simulated-grasping-by-friction.md), which supersedes
+ADR-0023. The 84-trial campaign in
+[`docs/measurements/2026-08-25-friction-grasp/`](../../../docs/measurements/2026-08-25-friction-grasp/results.md)
+measured it firing at first pad contact, before any contact force could develop, so the jaws
+then closed through the part feeling nothing and `Pick` failed while the weld carried the
+part anyway. In the friction arm of the same campaign the gripper stalled on the part and
+held it every time it was asked to. **Grasping in this cell is now plain friction, with no
+simulation-side aid at all.** The figures are in `results.md` and are not restated here (P1).
 
 The belts and the beams are **world** systems rather than model plugins, and that is
 forced rather than chosen: every authored body in the scene is joined to the cell root by
@@ -54,8 +56,10 @@ Gazebo transport, below the ROS boundary. `<zone>` and `<asset_id>` come from th
 
 **The ROS side of these names does not exist yet.** `cite_bringup` starts no
 `ros_gz_bridge` for them, so `ros2 topic list` does not show them even though
-`cell_a_plan.yaml` declares them — see the handoff in this branch's fix report. Bridging
-them by hand is one command:
+`cell_a_plan.yaml` declares them. `simulation.launch.py` starts exactly one
+`ros_gz_bridge`, for `/clock`, and nothing in `cite_orchestration` subscribes to these
+topics in any case — that, not a missing plugin, is why the sensor-driven line does not run.
+Bridging them by hand is one command:
 
 ```
 ros2 run ros_gz_bridge parameter_bridge \
@@ -76,10 +80,12 @@ Transport replaces a physical interaction with a deterministic one, and it flatt
 P8 applies: any claim about transport reliability needs a measurement against hardware,
 and this package cannot provide one. Grasping is no longer in this list because no plugin
 assists it — but the same caution applies for a different reason. The friction grasp is
-measured *in simulation only*: the campaign above found the part rotates between the jaws
-by up to 34.3°, with median twist scaling by a factor of 24.5 with the physics timestep.
-Position is repeatable; orientation is not. Nothing here evidences how either behaves on
-the physical arm.
+measured *in simulation only*, and it is repeatable in **position** and not in
+**orientation**: the part rotates between the jaws. The physics timestep changes how often
+the large rotations occur, so a change to `max_step_size` moves grasp quality and has to be
+re-measured rather than assumed. Both campaigns are in
+[`docs/measurements/`](../../../docs/measurements/README.md); their numbers live there.
+Nothing here evidences how any of it behaves on the physical arm.
 
 ## How it fails
 

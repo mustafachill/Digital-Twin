@@ -4,15 +4,21 @@
   **Built:** robot descriptions and the world SDF are generated from L0 into
   `workspace/src/cite_generated/` and load in Gazebo Harmonic — asserted by
   `./scripts/scenario bringup`. Inertial validation is implemented and tested
-  (`tools/cite_tools/validate/physical.py`).
+  (`tools/cite_tools/validate/physical.py`). Two simulation fidelity aids ship as Gazebo
+  system plugins in `cite_simulation` — the belt and the through-beam — and the generated
+  world instantiates one per asset.
   **Not built:** no first-party meshes or materials exist — `assets/` holds only its README
   and manifest — and the scan pipeline is Phase 3.
+  **Removed:** the contact-triggered grasp attachment plugin, per
+  [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). No `<plugin>` element in any
+  generated arm description assists a grasp; see "Grasping is not simulated" below.
   **Violated:** this layer's own first rule, below. Twelve links per arm collide against
   their *visual* mesh, and the validator written to catch that cannot fire on a vendor
-  description. See [ADR-0028](../adr/0028-convex-hull-collision-meshes.md); the section
-  "Visual and collision geometry are always separate" states the rule, not the current state.
+  description. See [ADR-0028](../adr/0028-convex-hull-collision-meshes.md), which is
+  `Proposed` with nothing yet in `assets/`; the section "Visual and collision geometry are
+  always separate" states the rule, not the current state.
 - **Asset policy and pipeline:** [`../../assets/README.md`](../../assets/README.md)
-- **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md)
+- **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md)
 
 ## Responsibility
 
@@ -62,6 +68,36 @@ Reusing a dense visual mesh as collision geometry is the most reliable way to de
 Gazebo's real-time factor and to produce contact behaviour nobody can explain. It presents
 as "the simulation got slow" or "the arm jitters", and the cause is never where people
 look. `model-validator` rejects it.
+
+### Grasping is not simulated
+
+There is no simulation-side grasp mechanism, and that is a decision rather than an
+omission. A work-piece is held by contact friction between the pads and the part, exactly
+as on hardware; L1 contributes the surface properties and the geometry and nothing else.
+
+This layer used to carry a Gazebo system plugin that welded a work-piece to a finger with a
+`DetachableJoint` on contact. It is removed.
+[ADR-0029](../adr/0029-simulated-grasping-by-friction.md) is the decision and
+[`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+is the evidence; the numbers live there and are deliberately not copied here (P1).
+
+Two consequences belong to this layer specifically.
+
+- **Grasp quality is coupled to the physics timestep**, in the unhelpful direction: a finer
+  timestep makes the grasp worse. `max_step_size` is a generator constant, so any change to
+  it — and both [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) and Phase 3 point at
+  retuning physics for real-time factor — moves grasp quality with it and must be
+  **re-measured, not assumed**.
+- **The part rotates between the jaws.** The cause of the large rotations is a grasp-plane
+  offset — the pads engage the part above its centre of mass, which is a couple — measured
+  in
+  [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
+  **The correction is not in the tree at this commit.** A residual rotation survives it in
+  any case and is an open sim/real divergence for Phase 2.
+
+The belt and beam plugins that remain are described in
+[`cite_simulation`'s README](../../workspace/src/cite_simulation/README.md), including what
+they flatter us about.
 
 ### Inertial properties are validated, not trusted
 

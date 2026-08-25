@@ -1,15 +1,16 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **132**
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **183**
   host tests, all passing, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The
   contract level is populated: 22 interface definitions are frozen against a stored baseline.
   The scenario level has `bringup`, which is a blocking CI gate run twice per run, and
-  `pick_and_place`, which is not. Three gaps below are still open and are called out where
-  they occur: **scenarios are not deterministic**, ROS package linters register nothing, and
-  `pick_and_place` does not pass. Everything else below the status line is design, not
-  description.
-- **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md)
+  `pick_and_place`, which is not — it runs as `continue-on-error` at this commit. Three gaps
+  below are still open and are called out where they occur: **scenarios are not
+  deterministic**, ROS package linters register nothing, and `pick_and_place` is not yet a
+  gate. Everything else below the status line is design, not description.
+- **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md),
+  [`../measurements/README.md`](../measurements/README.md)
 
 ## Why this is a cross-cutting concern rather than a chore
 
@@ -39,7 +40,7 @@ Everything in `cite_tools` — schema validation, generators, geometry and inert
 is pure Python and must be unit-tested. No ROS runtime, no simulator, no waiting. These
 run on macOS.
 
-`tools/tests/` exists and holds **132 tests**, all passing, covering the schema loader, the
+`tools/tests/` exists and holds **183 tests**, all passing, covering the schema loader, the
 generators, identifiers, units, and the geometric and referential validators. `./scripts/test`
 runs them, and `./scripts/test --host-only` runs them without Docker.
 
@@ -100,6 +101,35 @@ is what the seed exists for: a fixed seed so that a failure reproduces instead o
 coin flip, because a non-deterministic scenario test is worse than no test — it trains
 people to re-run until green.
 
+### Measuring in this cell: interleave, never block
+
+This follows from the paragraphs above rather than softening them — the cell is still not
+reproducible, and nothing here should be read as saying otherwise. It is about how to
+compare two configurations *given* that it is not.
+
+**Some of what this cell does is bimodal, not continuous.** The grasp twist is the worked
+example: a trial lands in a high state or a low one, and the physics timestep changes how
+often the high state is entered rather than moving a magnitude. Both campaigns in
+[`../measurements/`](../measurements/README.md) turn on this, and the second one had to
+withdraw a published "×24.5 median scaling" from the first because of it.
+
+Two rules come out of that, and they apply to any comparison run against this cell.
+
+1. **Interleave the conditions against one running cell.** The first campaign ran each
+   condition as its own consecutive block; the second reports that five of those blocks —
+   which it treats as the same condition — have medians spread from 5.2° to 29.8°, a
+   two-state process sampled with too few trials per block to see it. Block structure buys
+   nothing here and hides a great deal. The second campaign alternated conditions and got an
+   answer a rank test over the pairs agrees with.
+2. **A median is the wrong summary for a two-state variable.** Report the rate of entering
+   the high state, at a threshold fixed before the data was seen, with an interval on it.
+
+The general form of the mistake is worth naming, because it is not specific to grasping: in
+a system whose runs are independent samples rather than replicates, any structure in the
+*order* of the runs can be read as an effect of the variable. Interleaving is what removes
+it. Where a comparison genuinely cannot be interleaved, say so, and treat the result as
+weaker than a threshold test makes it look.
+
 A scenario asserts on **outcomes and constraints**, never on exact trajectories. Sampling
 -based planners are stochastic ([ADR-0006](../adr/0006-moveit2-motion-planning.md)); a test
 asserting an exact joint sequence will be flaky and will be deleted by whoever is on call.
@@ -122,7 +152,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The line actually works — **not met today**: `pick_and_place` does not pass, and no work-piece has been grasped |
+| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes, the three-arm sensor-driven line does not run, and `pick_and_place` is not yet a merge gate. See [L3](L3-capabilities.md) and [L4](L4-orchestration.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
 | Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
@@ -158,15 +188,21 @@ about the C++.
 
 Two container-stage steps are marked `continue-on-error` and are **not** merge gates yet:
 the ROS package lint step, because no first-party package declares a linter set for
-`ament_lint_auto` to find, and `pick_and_place`, because it does not pass. Both run so the
-failure is visible; neither is allowed to report success. The conditions for promoting each
-to blocking are recorded next to it in `.github/workflows/ci.yml`.
+`ament_lint_auto` to find, and `pick_and_place`. Both run so the failure is visible; neither
+is allowed to report success. The conditions for promoting each to blocking are recorded
+next to it in `.github/workflows/ci.yml`.
+
+`pick_and_place`'s cycle now completes (see [L3](L3-capabilities.md)); what still stands
+between it and a merge gate is that **it is not reproducible** and that its own teardown has
+failed after a passing cycle. Promoting it before that is understood would install exactly
+the flaky gate the failure-mode table below warns about.
 
 ## Failure modes
 
 | Failure | How it shows | Detection |
 |---|---|---|
 | Flaky scenario | Re-run until green becomes normal; the suite stops meaning anything | Determinism check; repeated runs in CI |
+| Block-structured comparison in this cell | A confident effect that is the run order, not the variable | Interleave; see "Measuring in this cell" above |
 | Test asserting on a mock | Passes while the system is broken | `reviewer` |
 | QoS mismatch untested | Silent no-op in production (v1's handoff) | Message-delivery assertion |
 | Coverage of the happy path only | Cancellation and recovery untested | `reviewer`; scenario review |
