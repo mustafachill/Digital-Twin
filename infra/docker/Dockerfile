@@ -133,7 +133,15 @@ RUN python3 -m venv "$CITE_VENV" \
  && "$CITE_VENV/bin/pip" install --no-cache-dir --upgrade pip \
  && "$CITE_VENV/bin/pip" install --no-cache-dir \
       -r /tmp/requirements/tools.txt -r /tmp/requirements/dev.txt \
- && rm -rf /tmp/requirements
+ && rm -rf /tmp/requirements \
+ # cite_tools itself is NOT installed here. It lives in the bind-mounted
+ # workspace, so it cannot be copied in at image build time without going stale,
+ # and a `pip install -e` at run time would be discarded when the container
+ # exits — every ephemeral `docker run` would need to repeat it. A path entry
+ # pointing at the mount makes it importable and always current, with no install
+ # step anywhere.
+ && echo "/workspace/tools" \
+      > "$("$CITE_VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')/cite_tools.pth"
 
 # --- Non-root user -----------------------------------------------------------
 # UID/GID are build args so that files created in the mounted workspace are

@@ -52,11 +52,16 @@ fi
 
 if in_container || native_ros_available; then
     step "ROS packages"
-    if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/src" 2>/dev/null)" ]; then
-        (cd "${REPO_ROOT}/workspace" && colcon test --packages-skip-build-finished \
+    mapfile -t OUR_PACKAGES < <(first_party_packages)
+    if [ "${#OUR_PACKAGES[@]}" -gt 0 ]; then
+        # Scoped to our own packages: linting vcstool-imported vendor source
+        # reports their style choices, which we neither control nor should change.
+        (cd "${REPO_ROOT}/workspace" && colcon test \
+            --packages-select "${OUR_PACKAGES[@]}" \
+            --packages-skip-build-finished \
             --ctest-args -R "lint" 2>/dev/null) || FAILED=1
     else
-        warn "workspace/src is empty — no ROS linters to run yet"
+        warn "no first-party packages in workspace/src yet — no ROS linters to run"
     fi
 fi
 

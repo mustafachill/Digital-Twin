@@ -1,0 +1,24 @@
+# Pick an object: approach, grasp, and retreat.
+#
+# Composed of MoveTo and Grasp rather than duplicating them, but exposed as one
+# action because the intermediate states are not independently useful — an arm
+# left halfway through a pick is a state L4 has no sensible response to.
+
+geometry_msgs/PoseStamped object_pose   # where the object is
+string workpiece_id                     # what to record as held on success
+float64 approach_distance_m             # m, standoff along the approach axis
+float64 retreat_distance_m              # m, lift after grasping
+float64 grasp_width_m                   # m; 0 means use the object type's default
+---
+ResultCode result
+bool holding                            # false with SUCCESS is impossible and
+                                        # would be a defect in the skill server
+geometry_msgs/PoseStamped grasp_pose    # where the grasp actually occurred
+builtin_interfaces/Duration duration
+---
+uint8 PHASE_PLANNING=0
+uint8 PHASE_APPROACHING=1
+uint8 PHASE_GRASPING=2
+uint8 PHASE_RETREATING=3
+uint8 phase
+float64 fraction_complete               # 0..1

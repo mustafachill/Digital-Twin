@@ -2,20 +2,49 @@
 # Run the test suites: host tooling tests, then ROS workspace tests.
 #
 #   ./scripts/test
+#   ./scripts/test --host-only              host tooling tests only, never Docker
 #   ./scripts/test --packages-select cite_facility
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 # Host tooling tests need no ROS, so run them wherever we already are.
+#
+# PYTHONPATH is cleared deliberately. Inside the container the ROS setup puts
+# /opt/ros/jazzy/lib/python3.12/site-packages on PYTHONPATH, and pytest autoloads
+# a plugin from every distribution it can see there — including launch_testing,
+# which then fails to import `lark` because that lives in the system interpreter's
+# dist-packages and not in the tooling virtualenv. The host suite is ROS-free by
+# design (ADR-0013); letting it see the ROS Python path at all is the bug, and the
+# symptom is a traceback deep inside launch_testing that has nothing to do with
+# the tests being run.
 run_host_tests() {
     local py
     py="$(cite_python)" || true
     if [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ]; then
         step "Host tooling tests"
-        "$py" -m pytest "${REPO_ROOT}/tools" -q
+        PYTHONPATH="" "$py" -m pytest "${REPO_ROOT}/tools" -q
     fi
 }
+
+# --host-only runs the ROS-free suite and stops. CI's fast job uses it: without
+# it, `./scripts/test` on a runner with Docker but no ROS would build the whole
+# container image and duplicate the job that already does exactly that.
+HOST_ONLY=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --host-only) HOST_ONLY=1 ;;
+        *)           ARGS+=("$arg") ;;
+    esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
+if [ "$HOST_ONLY" -eq 1 ]; then
+    run_host_tests
+    ok "Host tooling tests complete (--host-only)"
+    exit 0
+fi
 
 if ! in_container && ! native_ros_available; then
     run_host_tests
@@ -32,7 +61,24 @@ if [ ! -d src ] || [ -z "$(ls -A src 2>/dev/null)" ]; then
     exit 0
 fi
 
-colcon test --event-handlers console_direct+ --return-code-on-test-failure "$@"
-colcon test-result --verbose
+mapfile -t OUR_PACKAGES < <(first_party_packages)
+if [ "${#OUR_PACKAGES[@]}" -eq 0 ]; then
+    warn "No first-party packages in workspace/src yet — only external source is present."
+    exit 0
+fi
+
+info "Testing ${#OUR_PACKAGES[@]} first-party package(s): ${OUR_PACKAGES[*]}"
+colcon test \
+    --packages-select "${OUR_PACKAGES[@]}" \
+    --event-handlers console_direct+ \
+    --return-code-on-test-failure "$@"
+# test-result aggregates every result file under build/, including any left by a
+# previous unscoped run over vendor packages. Scoping it to our own packages keeps
+# the summary about our code — the exit status above is what actually gates.
+for package in "${OUR_PACKAGES[@]}"; do
+    if [ -d "build/${package}" ]; then
+        colcon test-result --verbose --test-result-base "build/${package}" || true
+    fi
+done
 
 ok "Tests complete"

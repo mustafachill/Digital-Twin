@@ -35,7 +35,16 @@ jobs:
       - name: Lint
         run: ./scripts/lint
 
+      - name: Host tooling tests
+        # --host-only: this job has no ROS, and without the flag the script would
+        # route itself into the container and duplicate the ros-workspace job.
+        run: ./scripts/test --host-only
+
       - name: Validate facility model
+        # Also the hand-edit and determinism check: it regenerates every artifact
+        # and diffs the result against the committed tree (ADR-0021). Running it
+        # here, on a job with no ROS at all, is what makes the check cheap enough
+        # to be on every pull request.
         run: ./scripts/validate-model
 
   ros-workspace:

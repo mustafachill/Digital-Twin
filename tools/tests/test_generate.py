@@ -32,16 +32,24 @@ class TestDeterminism:
         }
         assert len(digests) == 1
 
-    def test_no_timestamp_or_host_leaks_into_output(self, real_model: Path) -> None:
+    def test_no_timestamp_leaks_into_output(self, real_model: Path) -> None:
         # A timestamp would make every artifact differ on every run, which turns
         # the hand-edit check into noise and gets it ignored.
-        import getpass
-        import platform
+        import re
 
         blob = "\n".join(artifacts(real_model).values())
-        for leak in (platform.node(), getpass.getuser(), str(Path.home())):
-            if leak:
-                assert leak not in blob, f"{leak!r} leaked into a generated artifact"
+        for pattern in (r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", r"\b\d{10}\.\d+\b"):
+            assert not re.search(pattern, blob), f"a timestamp matching {pattern} was emitted"
+
+    def test_the_model_source_path_does_not_leak_into_output(self, real_model: Path) -> None:
+        # `real_model` is a temporary copy, so if any generator embedded the path
+        # it read from, that path appears here and would differ on every machine
+        # and every run. This is the check that catches an absolute path leak,
+        # which a hostname or username check cannot — "cite" is both this
+        # project's name and the container's user.
+        blob = "\n".join(artifacts(real_model).values())
+        assert str(real_model) not in blob
+        assert str(real_model.parent) not in blob
 
     def test_splitting_a_model_file_changes_nothing(
         self, real_model: Path, edit_yaml: Callable

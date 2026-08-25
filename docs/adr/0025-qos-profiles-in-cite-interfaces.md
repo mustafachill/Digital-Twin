@@ -86,6 +86,14 @@ nothing keeping them consistent.
 - Two implementations — C++ and Python — of the same five profiles, kept honest by a test
   rather than by construction. That is a real duplication; it is unavoidable, because ROS 2
   has two client libraries, and a test is the strongest available mitigation.
+- **The Python half needs an unusual install.** This ADR said a `rosidl` package "can carry
+  an installed C++ header and a Python module alongside its generated interfaces". The C++
+  half is ordinary. The Python half is not: `rosidl_generate_interfaces` already creates a
+  Python package of this name for the generated bindings, so `ament_python_install_package`
+  fails with a duplicate-target error. The module is therefore installed directly into that
+  generated package's directory. It works and `cite_interfaces.qos` imports exactly as a
+  consumer expects, but it is a non-obvious line in `CMakeLists.txt` and it is recorded here
+  rather than left to be rediscovered. Found on 2026-08-24, during the first build.
 - If a sixth profile is ever genuinely needed, it must be added to the document, both
   libraries and the consistency test together.
 

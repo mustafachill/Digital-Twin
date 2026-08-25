@@ -1,0 +1,6 @@
+# Ask which facility model this system was generated from.
+#
+# A service as well as a latched topic, because a diagnostic tool wants to ask
+# once rather than subscribe.
+---
+ModelVersion version

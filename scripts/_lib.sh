@@ -166,6 +166,27 @@ exec_in_container() {
     exit $?
 }
 
+# -----------------------------------------------------------------------------
+# first_party_packages — the package names we are responsible for.
+#
+# workspace/src/external/ holds vcstool-imported third-party source (ADR-0008).
+# It has to be *built*, because we depend on it, but its tests are not ours: the
+# vendor's copyright, cpplint, flake8 and uncrustify checks fail against their own
+# code and tell us nothing about ours. Running them would leave CI permanently red
+# for reasons no change of ours could fix, which is how a red build stops meaning
+# anything.
+#
+# Prints one package name per line, sorted. Empty output means there is nothing of
+# ours to test yet.
+# -----------------------------------------------------------------------------
+first_party_packages() {
+    local src="${REPO_ROOT}/workspace/src"
+    [ -d "$src" ] || return 0
+    find "$src" -mindepth 2 -name package.xml -not -path '*/external/*' -print0 2>/dev/null \
+        | xargs -0 -r -n1 sed -n 's:.*<name>\([^<]*\)</name>.*:\1:p' \
+        | sort -u
+}
+
 # Guard for anything that must not run against physical hardware by accident.
 require_explicit_hardware_opt_in() {
     if [ "${CITE_ALLOW_HARDWARE:-0}" != "1" ]; then

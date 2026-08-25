@@ -1,0 +1,17 @@
+# Request a twin mode transition (ADR-0011).
+#
+# A service rather than an action because the request is bounded: it either is
+# permitted now or it is not. The transition itself is observable on
+# /cite/twin/mode, which is where a caller watches it complete.
+#
+# SIM -> REAL and entry to CLOSED_LOOP are the two transitions that matter most,
+# and both require CITE_ALLOW_HARDWARE to have been set deliberately.
+
+uint8 mode                  # one of TwinMode.MODE_*
+string reason               # recorded; required, so every transition has a why
+bool force                  # skip non-safety preconditions. Never skips a safety
+                            # check — no value of this field can do that.
+---
+bool accepted
+ResultCode result
+uint8 current_mode          # the mode in force after this call, accepted or not

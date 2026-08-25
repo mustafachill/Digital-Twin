@@ -1,0 +1,22 @@
+# Move the arm to a pose, or to a named configuration.
+#
+# The goal is in task space, never joint space. A joint-space goal leaks the
+# robot's kinematics upward and breaks every promise L3 makes — swapping an
+# xArm 5 for a 7-DOF arm must change nothing above this line.
+
+geometry_msgs/PoseStamped target        # in any frame TF can resolve
+string named_configuration              # alternative to `target`, e.g. "home";
+                                        # exactly one of the two must be set
+float64 velocity_scaling                # 0..1 of the arm's configured limit
+float64 acceleration_scaling            # 0..1
+bool cartesian_path                     # follow a straight line rather than a
+                                        # planned joint path
+---
+ResultCode result
+geometry_msgs/PoseStamped reached       # where the tool actually ended up
+float64 position_error_m                # m, between `reached` and `target`
+builtin_interfaces/Duration duration
+---
+float64 fraction_complete               # 0..1
+geometry_msgs/PoseStamped current
+float64 distance_remaining_m            # m
