@@ -16,6 +16,16 @@ uint8 PRECONDITION_FAILED=5   # the world was not in the state the goal assumed
 uint8 TIMEOUT=6
 uint8 HARDWARE_FAULT=7
 uint8 NOT_IMPLEMENTED=8       # a path deliberately unbuilt, per P7
+uint8 UNREACHABLE=9           # no inverse-kinematics solution exists for the
+                              # requested pose, at all. Distinct from
+                              # PLANNING_FAILED, which means a solution exists
+                              # and no collision-free path to it was found. The
+                              # remedies differ completely — move the station or
+                              # re-reach the pose, versus clear the obstacle —
+                              # and reporting the first as the second sent three
+                              # investigations to the wrong place in a cell whose
+                              # planning scene was empty and therefore contained
+                              # no obstacle to clear.
 
 uint8 code
 string detail
