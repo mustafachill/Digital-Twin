@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ cell.zone }}">
+
+  <!-- The facility root. Tied to the surveyed physical origin (L5); every frame
+       below is expressed relative to it. -->
+  <link name="{{ world_frame }}"/>
+
+{% for asset in bodies %}
+  <!-- {{ asset.id }} — {{ asset.asset_type.id }} -->
+  <link name="{{ asset.prefix }}base_link">
+    <inertial>
+      <origin xyz="{{ asset.body.inertial.com_m | triple }}" rpy="0 0 0"/>
+      <mass value="{{ asset.body.inertial.mass_kg | m }}"/>
+      <inertia ixx="{{ asset.body.inertial.ixx | m }}" ixy="{{ asset.body.inertial.ixy | m }}"
+               ixz="{{ asset.body.inertial.ixz | m }}" iyy="{{ asset.body.inertial.iyy | m }}"
+               iyz="{{ asset.body.inertial.iyz | m }}" izz="{{ asset.body.inertial.izz | m }}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 {{ asset.half_height | m }}" rpy="0 0 0"/>
+      <geometry>{{ asset.visual_xml }}</geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 {{ asset.half_height | m }}" rpy="0 0 0"/>
+      <geometry>{{ asset.collision_xml }}</geometry>
+    </collision>
+  </link>
+  <joint name="{{ asset.prefix }}anchor" type="fixed">
+    <parent link="{{ world_frame }}"/>
+    <child link="{{ asset.prefix }}base_link"/>
+    <origin xyz="{{ asset.world_pose.xyz_m | triple }}" rpy="{{ asset.world_pose.rpy_rad | triple }}"/>
+  </joint>
+{% for frame in asset.named_frames %}
+  <link name="{{ frame.name }}"/>
+  <joint name="{{ frame.name }}_fixed" type="fixed">
+    <parent link="{{ asset.prefix }}base_link"/>
+    <child link="{{ frame.name }}"/>
+    <origin xyz="{{ frame.xyz_m | triple }}" rpy="{{ frame.rpy_rad | triple }}"/>
+  </joint>
+{% endfor %}
+
+{% endfor %}
+{% for arm in arms %}
+  <!-- {{ arm.id }} — {{ arm.asset_type.id }} from {{ arm.package }}, invoked unmodified.
+       The vendor description is called, never ingested: no file from that package
+       is read, copied or patched here. Every argument below comes from the L0
+       model, so a vendor parameter rename is a model edit, not a code change. -->
+  <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
+  <xacro:{{ arm.macro }}
+{% for name, value in arm.args %}
+      {{ name }}="{{ value }}"
+{% endfor %}
+  />
+
+  <!-- The plugin is emitted here rather than by the vendor macro, which has no
+       way to set <ros><namespace>. The controller manager must live at
+       {{ arm.namespace }}/controller_manager so that its controllers, and every
+       name above them, follow /cite/<zone>/<asset_id>. -->
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find cite_generated)/control/{{ cell.zone }}_{{ arm.id }}_controllers.yaml</parameters>
+      <ros>
+        <namespace>{{ arm.namespace }}</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+{% endfor %}
+</robot>

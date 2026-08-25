@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+{{ xml_banner() }}
+<package format="3">
+  <name>cite_generated</name>
+  <version>0.1.0</version>
+  <description>
+    Every artifact generated from the L0 facility model: descriptions, worlds,
+    controller configuration, static frames, process topology, and the bring-up
+    plan. This package is generated in its entirety, including this file.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+{% for dependency in dependencies %}
+  <exec_depend>{{ dependency }}</exec_depend>
+{% endfor %}
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

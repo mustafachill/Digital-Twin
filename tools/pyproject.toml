@@ -27,6 +27,12 @@ cite-model = "cite_tools.cli:app"
 [tool.setuptools.packages.find]
 include = ["cite_tools*"]
 
+# Jinja2 templates are data, not modules, so setuptools would otherwise
+# leave them out of a non-editable install and every generator would fail
+# with TemplateNotFound on any machine that installed the package normally.
+[tool.setuptools.package-data]
+cite_tools = ["templates/**/*.j2"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

@@ -1,0 +1,49 @@
+---
+{{ hash_banner() }}
+#
+# The bring-up plan: what to start, in what order, and what each node needs to
+# know. It is data rather than generated Python on purpose (P5) — the launch
+# mechanism in cite_bringup is written once, reviewed once, and tested once;
+# adding a fourth arm changes this list, not that code.
+#
+# `stage` expresses dependency, not time. The launch mechanism gates each stage
+# on the previous one reporting success, never on a duration (P4).
+plan:
+  zone: {{ cell.zone }}
+  world: package://cite_generated/worlds/{{ cell.zone }}.sdf
+  description: package://cite_generated/description/{{ cell.zone }}.urdf.xacro
+  static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
+  topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml
+
+  controller_managers:
+{% for manager in managers %}
+    - asset: {{ manager.asset }}
+      node: {{ manager.node }}
+      backend: {{ manager.backend }}
+      # `simulator` means the controller manager is created inside the Gazebo
+      # process by gz_ros2_control, so there is no separate process to wait on —
+      # the spawner's service-availability wait is the synchronisation point.
+      hosted_by: {{ manager.hosted_by }}
+      description_topic: {{ manager.description_topic }}
+      parameters: package://cite_generated/control/{{ cell.zone }}_{{ manager.asset }}_controllers.yaml
+      controllers:
+{% for controller in manager.controllers %}
+        - {name: {{ controller.name }}, stage: {{ controller.stage }}}
+{% endfor %}
+{% endfor %}
+
+  conveyors:
+{% for conveyor in conveyors %}
+    - asset: {{ conveyor.asset }}
+      state_topic: {{ conveyor.state_topic }}
+      command_topic: {{ conveyor.command_topic }}
+      installed_speed_mps: {{ conveyor.installed_speed_mps | m }}
+{% endfor %}
+
+  sensors:
+{% for sensor in sensors %}
+    - asset: {{ sensor.asset }}
+      detection_topic: {{ sensor.detection_topic }}
+      beam_axis: {{ sensor.beam_axis }}
+      beam_length_m: {{ sensor.beam_length_m | m }}
+{% endfor %}

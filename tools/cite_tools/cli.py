@@ -16,6 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from cite_tools import generate as gen
 from cite_tools.model import export
 from cite_tools.model.loader import ModelError, load
 from cite_tools.model.resolve import ResolveError, resolve
@@ -34,6 +35,36 @@ ModelOption = Annotated[
     Path,
     typer.Option("--model", "-m", help="Path to the model/ directory.", show_default=False),
 ]
+
+
+def generated_dir(model: Path) -> Path:
+    """Where the generated package lives, relative to the model directory.
+
+    `model/` and `workspace/src/` are siblings, so this derives the location
+    rather than taking it as an option — one fewer way for a developer and CI to
+    point at different trees.
+    """
+    return model.resolve().parent / "workspace" / "src" / gen.PACKAGE
+
+
+def _determinism_problems(facility_model: object, artifacts: list[gen.Artifact]) -> list[str]:
+    """Generate a second time and compare, byte for byte.
+
+    ADR-0004 requires byte-identical output because the hand-edit check compares
+    against a fresh run. Under non-determinism that check reports false positives
+    and gets ignored, which silently disables the mechanism the architecture rests
+    on — so the property is asserted on every validation rather than assumed.
+    """
+    again = gen.generate(facility_model)  # type: ignore[arg-type]
+    first = {a.path: a.content for a in artifacts}
+    second = {a.path: a.content for a in again}
+    problems: list[str] = []
+    if first.keys() != second.keys():
+        problems.append("the generator emitted a different set of files on two consecutive runs")
+    for path in sorted(first.keys() & second.keys()):
+        if first[path] != second[path]:
+            problems.append(f"{path}: generator is not deterministic — two runs differ")
+    return problems
 
 
 def _report(findings: list[Finding]) -> int:
@@ -58,6 +89,10 @@ def _report(findings: list[Finding]) -> int:
 def validate(
     model: ModelOption = Path("model"),
     strict: Annotated[bool, typer.Option("--strict", help="Treat warnings as errors.")] = False,
+    write: Annotated[
+        bool,
+        typer.Option("--write", help="Regenerate the schema export and the generated package."),
+    ] = False,
 ) -> None:
     """Validate the model: schema, then referential integrity.
 
@@ -74,6 +109,10 @@ def validate(
     # Order matters. Referential integrity runs first because the geometric and
     # physical levels resolve poses and types, and resolving against a dangling
     # reference produces a traceback instead of a finding.
+    if write:
+        export.write(model / "schema")
+        gen.write(gen.generate(facility_model), generated_dir(model))
+
     findings = referential.check(facility_model)
     findings += physical.check(facility_model)
 
@@ -89,7 +128,18 @@ def validate(
     for problem in schema_problems:
         err_console.print(f"[red]error[/red] [dim]schema-export[/dim] {problem}")
 
-    error_count = _report(findings) + len(schema_problems)
+    # The fifth validation level: the committed artifacts must equal a fresh
+    # generator run. This is the hand-edit check, and it only means anything
+    # because generation is deterministic (ADR-0004).
+    generated_problems: list[str] = []
+    if not any(f.severity is Severity.ERROR for f in findings) and not schema_problems:
+        artifacts = gen.generate(facility_model)
+        generated_problems = _determinism_problems(facility_model, artifacts)
+        generated_problems += gen.differences(artifacts, generated_dir(model))
+        for problem in generated_problems:
+            err_console.print(f"[red]error[/red] [dim]generated[/dim] {problem}")
+
+    error_count = _report(findings) + len(schema_problems) + len(generated_problems)
     if strict:
         error_count += sum(1 for f in findings if f.severity is Severity.WARNING)
 
