@@ -148,8 +148,13 @@ public:
     state_publisher_ = node_.Advertise<gz::msgs::Double>(state_topic_);
 
     configured_ = true;
-    gzmsg << "[cite_conveyor] belt at " << surface_pose_ << " commanded on '" << command_topic_
-          << "', reporting on '" << state_topic_ << "'\n";
+    // `gzwarn` rather than `gzmsg` for something that is not a warning: the cell
+    // runs the simulator at verbosity 2 and `gzmsg` is level 3, so this line —
+    // the only evidence that the belt exists at all — was never printed. A belt
+    // that failed to load and a belt that loaded and was never commanded both
+    // produced silence.
+    gzwarn << "[cite_conveyor] belt at " << surface_pose_ << " commanded on '" << command_topic_
+           << "', reporting on '" << state_topic_ << "'\n";
   }
 
   void PreUpdate(

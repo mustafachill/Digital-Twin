@@ -39,6 +39,20 @@
 // in ADR-0023 rather than hidden. No claim about grasp reliability can rest on
 // this plugin.
 
+// WHY THE TRANSITIONS BELOW ARE LOGGED AS WARNINGS, WHEN THEY ARE NOT WARNINGS.
+//
+// `gzmsg` is verbosity level 3 and the cell is launched at level 2, so every
+// line this plugin wrote was invisible on a normal run. ADR-0023 lists "logs its
+// attach and detach transitions" as one of this plugin's properties, and as the
+// thing that disambiguates an attachment from friction when someone is trying to
+// work out which is holding a part. As shipped, that property did not hold: a
+// grasp that never engaged and a grasp that engaged wrongly produced identical
+// output, which is silence, and the defect this file was fixed for went unfound
+// for exactly that reason. Until the verbosity the cell runs at is a decision
+// somebody has made deliberately, the level that is actually printed is the only
+// one worth writing to. Three attaches and three detaches per line cycle is not
+// noise worth being blind for.
+
 #include <string>
 #include <unordered_set>
 
@@ -134,8 +148,8 @@ public:
     }
 
     configured_ = true;
-    gzmsg << "[cite_grasp] watching '" << drive_joint_ << "' on model '"
-          << model_.Name(ecm) << "', attaching to '" << attach_link_ << "'\n";
+    gzwarn << "[cite_grasp] watching '" << drive_joint_ << "' on model '"
+           << model_.Name(ecm) << "', attaching to '" << attach_link_ << "'\n";
   }
 
   void PreUpdate(
@@ -275,8 +289,8 @@ private:
 
     const auto * name = ecm.Component<gz::sim::components::Name>(target);
     attached_ = target;
-    gzmsg << "[cite_grasp] attached '" << (name != nullptr ? name->Data() : "?")
-          << "'\n";
+    gzwarn << "[cite_grasp] attached '" << (name != nullptr ? name->Data() : "?")
+           << "'\n";
   }
 
   void Detach(gz::sim::EntityComponentManager & ecm)
@@ -285,7 +299,7 @@ private:
       ecm.RequestRemoveEntity(joint_entity_);
       joint_entity_ = gz::sim::kNullEntity;
     }
-    gzmsg << "[cite_grasp] released\n";
+    gzwarn << "[cite_grasp] released\n";
     attached_ = gz::sim::kNullEntity;
   }
 

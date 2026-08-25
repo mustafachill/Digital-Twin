@@ -105,8 +105,13 @@ public:
 
     publisher_ = node_.Advertise<gz::msgs::Boolean>(state_topic_);
     configured_ = true;
-    gzmsg << "[cite_beam] beam at " << beam_pose_ << " reporting on '" << state_topic_
-          << "'\n";
+    // `gzwarn` rather than `gzmsg` for something that is not a warning: the cell
+    // runs the simulator at verbosity 2 and `gzmsg` is level 3, so this line —
+    // the only evidence that the beam exists at all — was never printed. A beam
+    // that failed to load and a beam that nothing has crossed both produced
+    // silence.
+    gzwarn << "[cite_beam] beam at " << beam_pose_ << " reporting on '" << state_topic_
+           << "'\n";
   }
 
   void PostUpdate(

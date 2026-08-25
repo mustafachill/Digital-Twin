@@ -133,7 +133,7 @@ def _footprint(asset: ResolvedAsset) -> tuple[float, float]:
     return body.collision.size_m[0], body.collision.size_m[1]
 
 
-def _pose6(asset_pose) -> tuple[float, ...]:  # noqa: ANN001 - geometry.Pose
+def _pose6(asset_pose) -> tuple[float, ...]:
     return (*asset_pose.xyz_m, *asset_pose.rpy_rad)
 
 

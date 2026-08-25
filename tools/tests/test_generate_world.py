@@ -31,7 +31,7 @@ def cell(real_model: Path):
     return resolve(load(real_model), ZONE)
 
 
-def world_xml(cell) -> ElementTree.Element:  # noqa: ANN001 - ResolvedCell
+def world_xml(cell) -> ElementTree.Element:
     artifacts = world.generate(cell)
     assert len(artifacts) == 1
     return ElementTree.fromstring(artifacts[0].content).find("world")
@@ -126,9 +126,7 @@ class TestGeometryComesFromTheModel:
         assert float(value(plugin, "belt_length_m")) == pytest.approx(size[0])
         assert float(value(plugin, "belt_width_m")) == pytest.approx(size[1])
 
-    def test_the_beam_crosses_the_belt_rather_than_being_centred_on_its_housing(
-        self, cell
-    ) -> None:
+    def test_the_beam_crosses_the_belt_rather_than_being_centred_on_its_housing(self, cell) -> None:
         # beam_c1_out stands 250 mm to the side of a 400 mm belt and declares a
         # 500 mm beam. Centred on the housing that spans y in [0.000, 0.500] —
         # half of it beside the belt, with its near edge exactly on the

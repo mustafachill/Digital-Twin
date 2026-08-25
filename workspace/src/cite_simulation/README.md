@@ -82,6 +82,7 @@ against hardware, and this package cannot provide one.
 | a belt reports state but carries nothing | nobody commanded it; an uncommanded belt is inert by design |
 | a belt carries nothing while commanded | the part is not in the carry volume, or its model name is not in `facility.workpiece_models` |
 | a beam never trips | the part's model name is not watched, or the beam does not reach across the belt |
+| a part is grasped off a *running* belt and the simulator warns about a velocity command | a part held by the grasp plugin is no longer a free body, so the belt cannot command its velocity. Stop the belt before picking from it — which is what a real line does |
 | nothing loads at all | `GZ_SIM_SYSTEM_PLUGIN_PATH` does not include this package's `lib` — the environment hook in `hooks/` sets it |
 
 ## Tests
