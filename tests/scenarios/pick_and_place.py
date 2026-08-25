@@ -24,8 +24,8 @@ import os
 import re
 import subprocess
 import unittest
-from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import launch_testing
 import launch_testing.markers
@@ -148,9 +148,29 @@ def _workpiece_sdf() -> str:
 """
 
 
-@dataclass
-class CycleOutcome:
-    """What the coordinator process did, for the failure message to quote."""
+class CycleOutcome(NamedTuple):
+    """What the coordinator process did, for the failure message to quote.
+
+    A `NamedTuple` and deliberately NOT a `@dataclass`, which is the obvious
+    choice here and is a trap. This module has `from __future__ import
+    annotations`, so `summary: str` reaches the decorator as the *string*
+    `"str"`. To decide whether a string annotation means `ClassVar` or
+    `InitVar`, `dataclasses._is_type` resolves it against the defining module:
+    `sys.modules.get(cls.__module__).__dict__`. `launch_test` loads a scenario
+    by path — `spec_from_file_location` / `module_from_spec` / `exec_module`,
+    with no `sys.modules` registration — so that lookup returns `None` and
+    `@dataclass` raises `AttributeError: 'NoneType' object has no attribute
+    '__dict__'` at import time, before a single test runs and with a message
+    naming neither this file nor this line.
+
+    `typing.NamedTuple` converts a string annotation to a `ForwardRef` without
+    consulting `sys.modules`, so it loads under either loader. Registering this
+    module in `sys.modules` would also work and was rejected: it would make the
+    scenario depend on a detail of how its runner happens to import it.
+
+    `tests/scenarios/guards/test_scenario_modules_load.py` fails if a dataclass
+    comes back here.
+    """
 
     summary: str
     stdout: str
