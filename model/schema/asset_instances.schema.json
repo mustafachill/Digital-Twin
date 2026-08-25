@@ -97,6 +97,12 @@
           "title": "Beam Length M",
           "type": "number"
         },
+        "beam_width_m": {
+          "default": 0.04,
+          "exclusiveMinimum": 0.0,
+          "title": "Beam Width M",
+          "type": "number"
+        },
         "idle_state": {
           "default": "clear",
           "enum": [
@@ -126,6 +132,12 @@
     "ConveyorConfiguration": {
       "additionalProperties": false,
       "properties": {
+        "carry_height_m": {
+          "default": 0.1,
+          "exclusiveMinimum": 0.0,
+          "title": "Carry Height M",
+          "type": "number"
+        },
         "direction": {
           "default": "forward",
           "enum": [

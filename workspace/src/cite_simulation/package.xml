@@ -16,15 +16,23 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>rclcpp</depend>
+  <!-- No rclcpp and no cite_interfaces. Neither was ever find_package'd or
+       linked, and the cite_interfaces entry in particular invited the belief
+       that these plugins speak ROS types — which is exactly what the
+       description above denies and what ADR-0023 depends on staying false. -->
   <depend>gz_sim_vendor</depend>
   <depend>gz_plugin_vendor</depend>
   <depend>gz_transport_vendor</depend>
   <depend>gz_math_vendor</depend>
   <depend>gz_msgs_vendor</depend>
-  <depend>cite_interfaces</depend>
 
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       run having checked nothing. -->
   <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

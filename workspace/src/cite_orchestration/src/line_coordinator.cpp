@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // L4: the line coordinator.
 //
 // Behaviour trees rather than a hand-written state machine (ADR-0007), from
@@ -7,255 +21,42 @@
 //
 // This node decides *what happens next*. It never plans a trajectory and never
 // commands a controller — every leaf of every tree is an L3 skill called as a
-// ROS 2 action. The topology it sequences comes from the generated artifact, so
-// which stations exist is data (P5).
+// ROS 2 action, and the leaves themselves live in `skill_nodes.hpp` so that they
+// can be tested.
+//
+// It builds no name. Every action it calls arrives as a parameter, exactly as
+// the frames and the asset do — CLAUDE.md §8 puts name construction in the model
+// and says no asset name is ever written by hand twice, and this file used to
+// compose `/cite/<zone>/<asset>/<skill>` from a format string of its own. What
+// remains unfinished is stated in the report rather than here: nothing generated
+// yet declares these names, so whoever launches this node still writes them.
 
-#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include <behaviortree_cpp/bt_factory.h>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
 
-#include <cite_interfaces/action/move_to.hpp>
-#include <cite_interfaces/action/pick.hpp>
-#include <cite_interfaces/action/place.hpp>
-#include <cite_interfaces/msg/result_code.hpp>
+#include "behaviortree_cpp/bt_factory.h"
+#include "cite_orchestration/skill_nodes.hpp"
 
 namespace
 {
 
-using cite_interfaces::action::MoveTo;
-using cite_interfaces::action::Pick;
-using cite_interfaces::action::Place;
-using cite_interfaces::msg::ResultCode;
+using cite_orchestration::Context;
 
-/// Shared context every leaf needs. Passed in rather than looked up, so a leaf
-/// cannot quietly acquire a dependency nobody declared.
-struct Context
+/// Read a parameter that must be supplied, collecting the missing ones.
+std::string required(
+  const rclcpp::Node::SharedPtr & node, const std::string & name,
+  std::vector<std::string> & missing)
 {
-  rclcpp::Node::SharedPtr node;
-  std::string zone;
-  std::chrono::seconds skill_deadline{180};
-};
-
-/// Base for a leaf that calls one L3 action.
-///
-/// Synchronous on purpose for Phase 1.C: the tree ticks one station at a time,
-/// so a blocking leaf is honest about what is happening. When 1.D runs three
-/// stations in parallel these become StatefulActionNodes, which is a change to
-/// this file and to nothing else.
-template <typename ActionT>
-class SkillNode : public BT::SyncActionNode
-{
-public:
-  SkillNode(const std::string & name, const BT::NodeConfig & config, Context context)
-  : BT::SyncActionNode(name, config), context_(std::move(context))
-  {
+  node->declare_parameter(name, "");
+  const auto value = node->get_parameter(name).as_string();
+  if (value.empty()) {
+    missing.push_back(name);
   }
-
-protected:
-  /// Send a goal and wait for its result, with a deadline that fails.
-  BT::NodeStatus send(const std::string & action_name, const typename ActionT::Goal & goal)
-  {
-    auto client = rclcpp_action::create_client<ActionT>(context_.node, action_name);
-    if (!client->wait_for_action_server(std::chrono::seconds(30))) {
-      RCLCPP_ERROR(
-        context_.node->get_logger(), "no skill server at %s", action_name.c_str());
-      return BT::NodeStatus::FAILURE;
-    }
-
-    auto goal_future = client->async_send_goal(goal);
-    if (rclcpp::spin_until_future_complete(
-          context_.node, goal_future, std::chrono::seconds(30)) !=
-        rclcpp::FutureReturnCode::SUCCESS)
-    {
-      RCLCPP_ERROR(context_.node->get_logger(), "%s never accepted the goal",
-                   action_name.c_str());
-      return BT::NodeStatus::FAILURE;
-    }
-    auto handle = goal_future.get();
-    if (!handle) {
-      RCLCPP_ERROR(context_.node->get_logger(), "%s rejected the goal", action_name.c_str());
-      return BT::NodeStatus::FAILURE;
-    }
-
-    auto result_future = client->async_get_result(handle);
-    if (rclcpp::spin_until_future_complete(
-          context_.node, result_future, context_.skill_deadline) !=
-        rclcpp::FutureReturnCode::SUCCESS)
-    {
-      RCLCPP_ERROR(context_.node->get_logger(), "%s did not finish in time",
-                   action_name.c_str());
-      return BT::NodeStatus::FAILURE;
-    }
-
-    const auto outcome = result_future.get().result->result;
-    if (outcome.code != ResultCode::SUCCESS) {
-      // The code, not the text, is what a recovery branch reacts to. v1 could
-      // only retry generically because its failures were prose.
-      RCLCPP_WARN(
-        context_.node->get_logger(), "%s returned code %u: %s", action_name.c_str(),
-        outcome.code, outcome.detail.c_str());
-      return BT::NodeStatus::FAILURE;
-    }
-    return BT::NodeStatus::SUCCESS;
-  }
-
-  std::string skill_action(const std::string & asset, const std::string & skill) const
-  {
-    // The one place this node composes a name, and it composes it from the zone
-    // and asset it was given rather than from anything it decided.
-    return "/cite/" + context_.zone + "/" + asset + "/" + skill;
-  }
-
-  Context context_;
-};
-
-class MoveToHome : public SkillNode<MoveTo>
-{
-public:
-  using SkillNode::SkillNode;
-
-  static BT::PortsList providedPorts() { return {BT::InputPort<std::string>("asset")}; }
-
-  BT::NodeStatus tick() override
-  {
-    const auto asset = getInput<std::string>("asset");
-    if (!asset) {
-      return BT::NodeStatus::FAILURE;
-    }
-    MoveTo::Goal goal;
-    // "home" resolves against the L0 model inside the skill server, not here:
-    // where an arm rests between cycles is a fact about the facility.
-    goal.named_configuration = "home";
-    return send(skill_action(asset.value(), "move_to"), goal);
-  }
-};
-
-class PickAt : public SkillNode<Pick>
-{
-public:
-  using SkillNode::SkillNode;
-
-  static BT::PortsList providedPorts()
-  {
-    return {
-      BT::InputPort<std::string>("asset"),
-      BT::InputPort<std::string>("frame"),
-      // How far above the station's frame the work-piece is grasped. A stand-in
-      // for Detect, which is what tells the line where a work-piece actually is;
-      // until that skill exists, saying so with a port is more honest than
-      // burying the number in this file.
-      BT::InputPort<double>("grasp_height_m", 0.03, "grasp height above the frame"),
-      BT::InputPort<double>("approach_m", 0.10, "standoff before grasping"),
-      BT::InputPort<double>("retreat_m", 0.12, "lift after grasping"),
-    };
-  }
-
-  BT::NodeStatus tick() override
-  {
-    const auto asset = getInput<std::string>("asset");
-    const auto frame = getInput<std::string>("frame");
-    if (!asset || !frame) {
-      return BT::NodeStatus::FAILURE;
-    }
-
-    Pick::Goal goal;
-    // The pose is a frame the station named in L0, resolved through TF. No world
-    // coordinate is written here, which is what stopped v1's pick tables from
-    // diverging from the cell they described.
-    goal.object_pose.header.frame_id = frame.value();
-    goal.object_pose.pose.position.z = getInput<double>("grasp_height_m").value_or(0.03);
-
-    // Pointing DOWN — a half turn about X. This is not cosmetic: the skill stands
-    // off along the tool's own -Z, so with an identity orientation the approach
-    // pose would be *below* the table rather than above it, and the plan would
-    // fail with an inverse-kinematics error that says nothing about orientation.
-    goal.object_pose.pose.orientation.x = 1.0;
-    goal.object_pose.pose.orientation.y = 0.0;
-    goal.object_pose.pose.orientation.z = 0.0;
-    goal.object_pose.pose.orientation.w = 0.0;
-
-    goal.approach_distance_m = getInput<double>("approach_m").value_or(0.10);
-    goal.retreat_distance_m = getInput<double>("retreat_m").value_or(0.12);
-    return send(skill_action(asset.value(), "pick"), goal);
-  }
-};
-
-class PlaceAt : public SkillNode<Place>
-{
-public:
-  using SkillNode::SkillNode;
-
-  static BT::PortsList providedPorts()
-  {
-    return {
-      BT::InputPort<std::string>("asset"),
-      BT::InputPort<std::string>("frame"),
-      BT::InputPort<double>("release_height_m", 0.04, "release height above the frame"),
-      BT::InputPort<double>("approach_m", 0.10, "standoff before releasing"),
-      BT::InputPort<double>("retreat_m", 0.12, "lift after releasing"),
-    };
-  }
-
-  BT::NodeStatus tick() override
-  {
-    const auto asset = getInput<std::string>("asset");
-    const auto frame = getInput<std::string>("frame");
-    if (!asset || !frame) {
-      return BT::NodeStatus::FAILURE;
-    }
-
-    Place::Goal goal;
-    goal.target_pose.header.frame_id = frame.value();
-    goal.target_pose.pose.position.z = getInput<double>("release_height_m").value_or(0.04);
-    // Pointing down, for the same reason Pick does: the skill stands off along
-    // the tool's own -Z, so an identity orientation would put the approach below
-    // the belt rather than above it.
-    goal.target_pose.pose.orientation.x = 1.0;
-    goal.target_pose.pose.orientation.w = 0.0;
-    goal.approach_distance_m = getInput<double>("approach_m").value_or(0.10);
-    goal.retreat_distance_m = getInput<double>("retreat_m").value_or(0.12);
-    // Refuse to mime a place with an empty gripper: the line would believe a
-    // work-piece arrived somewhere it never did, and the failure would surface
-    // at the next station instead.
-    goal.require_holding = true;
-    return send(skill_action(asset.value(), "place"), goal);
-  }
-};
-
-/// Report a station as blocked. The recovery branch's terminal step.
-class ReportBlocked : public BT::SyncActionNode
-{
-public:
-  ReportBlocked(const std::string & name, const BT::NodeConfig & config,
-                rclcpp::Node::SharedPtr node)
-  : BT::SyncActionNode(name, config), node_(std::move(node))
-  {
-  }
-
-  static BT::PortsList providedPorts()
-  {
-    return {BT::InputPort<std::string>("asset"), BT::InputPort<std::string>("reason")};
-  }
-
-  BT::NodeStatus tick() override
-  {
-    RCLCPP_ERROR(
-      node_->get_logger(), "station blocked at %s: %s",
-      getInput<std::string>("asset").value_or("?").c_str(),
-      getInput<std::string>("reason").value_or("no reason given").c_str());
-    // SUCCESS: reporting the blockage is what this node was asked to do. The
-    // line's state, not this tick, is what says the station is not working.
-    return BT::NodeStatus::SUCCESS;
-  }
-
-private:
-  rclcpp::Node::SharedPtr node_;
-};
+  return value;
+}
 
 }  // namespace
 
@@ -264,41 +65,48 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("line_coordinator");
 
-  node->declare_parameter("zone", "cell_a");
-  node->declare_parameter("tree", "");
-  node->declare_parameter("asset", "");
-  node->declare_parameter("pick_frame", "");
-  node->declare_parameter("place_frame", "");
+  std::vector<std::string> missing;
+  const auto tree_path = required(node, "tree", missing);
+  const auto asset = required(node, "asset", missing);
+  const auto pick_frame = required(node, "pick_frame", missing);
+  const auto place_frame = required(node, "place_frame", missing);
+  const auto workpiece = required(node, "workpiece", missing);
+  const auto move_to_action = required(node, "move_to_action", missing);
+  const auto pick_action = required(node, "pick_action", missing);
+  const auto place_action = required(node, "place_action", missing);
 
-  Context context;
-  context.node = node;
-  context.zone = node->get_parameter("zone").as_string();
-
-  const auto tree_path = node->get_parameter("tree").as_string();
-  const auto asset = node->get_parameter("asset").as_string();
-  const auto pick_frame = node->get_parameter("pick_frame").as_string();
-  const auto place_frame = node->get_parameter("place_frame").as_string();
-
-  if (tree_path.empty() || asset.empty() || pick_frame.empty() || place_frame.empty()) {
+  if (!missing.empty()) {
+    std::string names;
+    for (const auto & name : missing) {
+      names += (names.empty() ? "" : ", ") + name;
+    }
     RCLCPP_FATAL(
       node->get_logger(),
-      "the 'tree', 'asset', 'pick_frame' and 'place_frame' parameters are all "
-      "required. They come from the generated topology; refusing to start rather "
-      "than choosing a station on this node's own initiative.");
+      "these parameters are required and were not supplied: %s. They describe which "
+      "station this is and what it calls, and they come from the model rather than from "
+      "this node's own initiative — refusing to start rather than guessing.",
+      names.c_str());
     rclcpp::shutdown();
     return 1;
   }
 
+  Context context;
+  context.node = node;
+
   BT::BehaviorTreeFactory factory;
-  factory.registerNodeType<MoveToHome>("MoveToHome", context);
-  factory.registerNodeType<PickAt>("PickAt", context);
-  factory.registerNodeType<PlaceAt>("PlaceAt", context);
-  factory.registerNodeType<ReportBlocked>("ReportBlocked", node);
+  factory.registerNodeType<cite_orchestration::MoveToHome>("MoveToHome", context);
+  factory.registerNodeType<cite_orchestration::PickAt>("PickAt", context);
+  factory.registerNodeType<cite_orchestration::PlaceAt>("PlaceAt", context);
+  factory.registerNodeType<cite_orchestration::ReportBlocked>("ReportBlocked", node);
 
   auto blackboard = BT::Blackboard::create();
   blackboard->set("asset", asset);
   blackboard->set("pick_frame", pick_frame);
   blackboard->set("place_frame", place_frame);
+  blackboard->set("workpiece", workpiece);
+  blackboard->set("move_to_action", move_to_action);
+  blackboard->set("pick_action", pick_action);
+  blackboard->set("place_action", place_action);
 
   auto tree = factory.createTreeFromFile(tree_path, blackboard);
   RCLCPP_INFO(node->get_logger(), "running station cycle for %s", asset.c_str());
