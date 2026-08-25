@@ -49,6 +49,14 @@ from cite_bringup.plan import Plan, PlanError, default_plan_path, load
 #: than waited on forever. Nothing about correct behaviour depends on the value.
 SPAWNER_DEADLINE_S = 120
 
+#: The spawner's own default for a controller state switch is five seconds, and
+#: that is a timing assumption inside a tool we do not control. Three controller
+#: managers switching at once, on top of a 1 kHz physics loop, exceeded it on a
+#: loaded machine and bring-up failed — which is precisely the lurking timing
+#: assumption cross-cutting-lifecycle.md says a loaded machine must catch.
+#: Raised to a real deadline; correctness still does not depend on the value.
+SWITCH_DEADLINE_S = 60
+
 
 def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
@@ -215,9 +223,16 @@ def _controllers(plan: Plan) -> list:
     naming the step, rather than leaving a half-built system running.
     """
     actions: list = []
+    previous: object | None = None
 
+    # One chain across every manager and stage, rather than one chain per arm.
+    # Spawning three arms concurrently means three controller managers performing
+    # a state switch simultaneously while physics runs, and the contention made
+    # bring-up intermittent — a scenario that passed and then failed on the very
+    # next run. A single chain is still entirely event-gated: each step starts
+    # when the previous one exits, so bring-up remains as fast as the machine
+    # allows. It is simply no longer racing itself.
     for manager in plan.controller_managers:
-        previous: object | None = None
         for stage, names in manager.stages():
             spawner = Node(
                 package="controller_manager",
@@ -229,15 +244,17 @@ def _controllers(plan: Plan) -> list:
                     manager.node,
                     "--controller-manager-timeout",
                     str(SPAWNER_DEADLINE_S),
+                    "--switch-timeout",
+                    str(SWITCH_DEADLINE_S),
                 ],
                 output="screen",
             )
 
             if previous is None:
-                # The first stage waits on the controller manager's service, which
-                # exists only once gz_ros2_control has instantiated it — which in
-                # turn happens only once the model is in the world. The dependency
-                # is enforced by service availability, not by a guess.
+                # The first spawner waits on its controller manager's service,
+                # which exists only once gz_ros2_control has instantiated it —
+                # which in turn happens only once the model is in the world. The
+                # dependency is enforced by service availability, not by a guess.
                 actions.append(spawner)
             else:
                 actions.append(

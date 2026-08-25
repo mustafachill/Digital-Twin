@@ -28,22 +28,30 @@ repository is partway there. Check before assuming.
 - **Environment foundation is in place** (Phase 1.A, first half): container image, the
   `./scripts/*` contract, dependency manifests, CI, and the asset policy all exist and
   work. Run `./scripts/doctor` to see the current state of any machine.
-- **`workspace/src/` and `model/` are empty.** The ROS packages and the L0 facility model
-  arrive in Phase 1.B. Commands that depend on them (`build`, `test`, `sim`, `scenario`,
-  `validate-model`) detect this and report SKIP rather than failing — that is deliberate,
-  so CI stays green while the tree fills in. Do not "fix" a SKIP by faking content.
+- **The L0 model and its generators exist** (Phase 1.B). `model/` describes the three-arm
+  cell — six component types, fourteen instances, five stations — and
+  `workspace/src/cite_generated/` holds everything derived from it: descriptions, the
+  world, controller configuration, static frames, process topology and the bring-up plan.
+  That directory is **generated in its entirety and must never be hand-edited**;
+  `./scripts/validate-model` diffs it against a fresh generator run and fails on any
+  difference (ADR-0021).
+- **The simulated cell comes up** (Phase 1.C, in progress). `./scripts/sim --headless`
+  brings the scene and three arms into Gazebo Harmonic with nine controllers active, and
+  `./scripts/scenario bringup` asserts it. Still missing from 1.C: the `cite_facility`
+  runtime nodes, generated MoveIt configuration, the L3 skill servers, and the behaviour
+  tree. `cite_skills`, `cite_orchestration`, `cite_twin`, `cite_telemetry`, `cite_safety`,
+  `cite_description`, `cite_control`, `cite_hardware` and `cite_simulation` do not exist yet.
+- **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
+  Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this
+  model does not transfer to the building, and no report should imply that it does.
 - **`legacy/` holds the previous iteration (v1).** It is reference material being replaced,
   **not** a codebase to extend. Do not add features to it, fix its bugs, or treat its
   patterns as precedent. It is excluded from the build by living outside `workspace/`, and
   is deleted at the end of Phase 1. See `legacy/README.md` and charter §12.
-- **One Phase 1.A gate remains open**: `external/cite.repos` pins `xarm_ros2` to a branch
-  rather than a commit SHA, so two clones on different days can differ. `./scripts/doctor`
-  and CI report it. It is a real finding, not noise.
-- **Closed 2026-08-24**: xArm support for Jazzy + Harmonic is verified — the `jazzy` branch
-  declares `gz_ros2_control`, `ros_gz_sim` and `ros_gz_bridge`, and its README states that
-  Gazebo Harmonic is what it supports. (The Gazebo Classic instructions live in the `humble`
-  branch README; do not read that one and conclude otherwise.) See
-  [ADR-0003](docs/adr/0003-gazebo-harmonic.md).
+- **Phase 1.A is closed.** `external/cite.repos` pins `xarm_ros2` to a commit SHA, after
+  the branch was built and driven against our stack rather than merely inspected — see the
+  verification table in [`docs/reference/toolchain.md`](docs/reference/toolchain.md).
+  `./scripts/doctor` exits 0.
 - **The documentation is written.** `docs/` holds the layer architecture, ADRs for every
   locked decision, interface conventions, operations runbooks, and the reference library.
   Layer documents are marked `DESIGNED` — they are the contract the code must satisfy, not

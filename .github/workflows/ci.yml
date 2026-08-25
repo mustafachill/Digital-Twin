@@ -81,6 +81,20 @@ jobs:
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/test
 
+      - name: Simulation-in-the-loop scenarios
+        # The gate the charter's exit criterion actually names: the cell brought
+        # up headlessly and driven through its real interfaces. Run twice, because
+        # a scenario that passes once proves less than one that passes repeatably
+        # — and a flaky scenario trains people to re-run until green, which is
+        # worse than having none.
+        run: |
+          for attempt in 1 2; do
+            echo "::group::scenario bringup (attempt $attempt)"
+            docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
+              cite-digital-twin:dev ./scripts/scenario bringup
+            echo "::endgroup::"
+          done
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
