@@ -1,0 +1,98 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# UFACTORY xArm 5 — the reference manipulator (charter §3.1).
+#
+# This entry is the whole of the generator's knowledge of `xarm_description`. The
+# vendor description is *invoked*, never ingested: nothing here opens a vendor
+# file, copies one, or patches one, so a vendor upgrade that renames a macro
+# parameter is a two-line diff in this file rather than a change to code. That is
+# the rule L1 left open for incorporating vendor descriptions.
+asset_type:
+  id: xarm5
+  category: robot
+  vendor: ufactory
+
+  kinematics:
+    dof: 5
+    # The vendor's own joint names, verbatim. They are not reformatted: a
+    # controller whose joint names differ from the description by one character
+    # fails at runtime with an error naming the spawner, not the mismatch.
+    joint_suffixes: [joint1, joint2, joint3, joint4, joint5]
+    base_link_suffix: link_base
+    tip_link_suffix: link_eef
+    # UFACTORY specification. Used by the geometric validator to reject a station
+    # whose pick or place point is beyond what the arm can actually reach.
+    max_reach_m: 0.700
+
+  frames:
+    - id: base
+      xyz_m: [0.0, 0.0, 0.0]
+      link: link_base
+    - id: tcp
+      xyz_m: [0.0, 0.0, 0.0]
+      link: link_tcp
+
+  description:
+    provider: xacro_macro
+    package: xarm_description
+    file: urdf/xarm_device_macro.xacro
+    macro: xarm_device
+    # Facts about the type — identical for every instance of it.
+    fixed_args:
+      robot_type: xarm
+      dof: 5
+      limited: false
+      velocity_control: false
+      effort_control: false
+      model1300: false
+      mesh_suffix: stl
+      # We generate the mount link ourselves, so the vendor must not add one.
+      create_attach_link: false
+      # Suppressed deliberately: the vendor's plugin emission has no way to set
+      # <ros><namespace>, and the controller manager must live under
+      # /cite/<zone>/<asset_id>. The cell generator emits the plugin instead.
+      load_gazebo_plugin: false
+    # Macro parameter -> generator binding. A binding name the generator does not
+    # know is an error, so a vendor rename fails loudly here instead of silently
+    # producing a description with a default in it.
+    bound_args:
+      prefix: instance.prefix
+      hw_ns: instance.id
+      attach_to: instance.parent_link
+      attach_xyz: instance.parent_xyz_m
+      attach_rpy: instance.parent_rpy_rad
+      ros2_control_plugin: instance.hardware.ros2_control_plugin
+      add_gripper: instance.end_effector.vendor_integrated
+
+  # The plugin class string exists exactly once, here. That is what makes
+  # ADR-0005's "the only thing that differs is which plugin is loaded" true by
+  # construction rather than by discipline.
+  hardware_backends:
+    sim:
+      ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+      instance_params: []
+    real:
+      ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
+      # Phase 2. Declared now so that a mixed fleet is a data change.
+      instance_params: [robot_ip, report_type]
+
+  controllers:
+    # Stage 0 must be active before stage 1: the controllers below read the state
+    # this broadcaster publishes. Expressing that as data rather than as a sleep
+    # is what P4 requires of bring-up.
+    - suffix: joint_state_broadcaster
+      type: joint_state_broadcaster/JointStateBroadcaster
+      joints: none
+      stage: 0
+    - suffix: joint_trajectory_controller
+      type: joint_trajectory_controller/JointTrajectoryController
+      joints: arm
+      stage: 1
+      command_interfaces: [position]
+      state_interfaces: [position, velocity]
+
+  planning:
+    group: manipulator
+    tip_link_suffix: link_eef

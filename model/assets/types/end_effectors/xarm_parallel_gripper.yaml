@@ -1,0 +1,46 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# UFACTORY parallel gripper, as built into the xArm description by the vendor's
+# `add_gripper` argument. It is a separate type because it is separately
+# replaceable (P9) — a vacuum end-effector is a different type on the same arm.
+#
+# One actuated joint, `drive_joint`; the five finger joints follow it through
+# URDF <mimic> tags. See ADR-0022 for why it is a ros2_control controller rather
+# than a separate action server, and for the Harmonic mimic-constraint caveat.
+asset_type:
+  id: xarm_parallel_gripper
+  category: end_effector
+  vendor: ufactory
+
+  frames:
+    - id: grasp
+      # The point between the pads where a grasped object sits, relative to the
+      # gripper base. Written once here, referenced by every skill.
+      xyz_m: [0.0, 0.0, 0.172]
+      link: link_tcp
+
+  description:
+    # No description of its own: the vendor macro builds the gripper into the arm
+    # when `add_gripper` is true, so emitting a second one would place the same
+    # geometry twice.
+    provider: xacro_macro
+    package: xarm_description
+    file: urdf/xarm_device_macro.xacro
+    macro: xarm_device
+
+  controllers:
+    - suffix: gripper_controller
+      # GripperActionController, not a trajectory controller: a grasp is "close
+      # to this width with at most this effort, and tell me if you stalled", and
+      # a stall is precisely what a trajectory controller reports as failure.
+      type: position_controllers/GripperActionController
+      joints: end_effector
+      stage: 1
+      parameters:
+        # Metres of joint travel below which the gripper is treated as stalled.
+        # A stall is how a successful grasp is distinguished from closing on air.
+        stall_velocity_threshold: 0.001
+        stall_timeout: 0.3
+        max_effort: 60.0

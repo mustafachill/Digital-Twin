@@ -1,0 +1,57 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Pedestals and tables. Placed first because arms and work areas are placed
+# relative to *their* frames, so the height of the line is stated once.
+#
+# LAYOUT STATUS: PROVISIONAL. These are engineered coordinates, not a survey of
+# the building. Charter §8 puts the physical scan in Phase 3; until then a
+# measurement taken from this model does not transfer to the room. Stated here
+# rather than implied, per P7.
+#
+# The line runs along +X. Every arm sits 0.35 m in front of the belt centreline
+# and reaches 0.45 m along ∓X, giving a 0.570 m working distance against a
+# 0.700 m envelope.
+assets:
+  # --- arm pedestals ---
+  - id: pedestal_1
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [0.000, -0.350, 0.000]
+    hardware: {backend: sim}
+
+  - id: pedestal_2
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [2.100, -0.350, 0.000]
+    hardware: {backend: sim}
+
+  - id: pedestal_3
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [4.200, -0.350, 0.000]
+    hardware: {backend: sim}
+
+  # --- work surfaces at each end of the line ---
+  - id: table_pick
+    zone: cell_a
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [-0.450, 0.000, 0.000]
+    hardware: {backend: sim}
+
+  - id: table_accumulation
+    zone: cell_a
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [6.150, 0.000, 0.000]
+    hardware: {backend: sim}

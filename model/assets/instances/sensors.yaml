@@ -1,0 +1,47 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Break-beam sensors just short of each belt's outfeed, placed relative to that
+# belt rather than in world coordinates — so moving a conveyor moves its sensor
+# with it, and the two cannot drift apart.
+assets:
+  - id: beam_c1_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_1/outfeed
+      # 50 mm back from the belt end, 80 mm above the belt surface.
+      xyz_m: [-0.050, 0.000, 0.080]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear
+
+  - id: beam_c2_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_2/outfeed
+      xyz_m: [-0.050, 0.000, 0.080]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear
+
+  - id: beam_c3_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_3/outfeed
+      xyz_m: [-0.050, 0.000, 0.080]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear

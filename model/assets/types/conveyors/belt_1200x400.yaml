@@ -1,0 +1,49 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# A 1.2 m belt conveyor, ours rather than a vendor's.
+#
+# The infeed and outfeed frames are the reason this type exists: the coordinate
+# of a belt's end is written once, here, and every station that reaches for it
+# references `<asset_id>/infeed` or `<asset_id>/outfeed`. In v1 those coordinates
+# were copied into a second configuration file and diverged, which is the defect
+# ADR-0004 exists to make impossible.
+asset_type:
+  id: belt_1200x400
+  category: conveyor
+
+  frames:
+    - id: surface
+      xyz_m: [0.000, 0.000, 0.600]
+    - id: infeed
+      xyz_m: [-0.600, 0.000, 0.600]
+    - id: outfeed
+      xyz_m: [0.600, 0.000, 0.600]
+
+  description:
+    provider: body
+    body:
+      # Visual and collision are separate fields with no default linking them.
+      # Here they happen to be the same primitive, which is fine — the point is
+      # that reusing a dense visual mesh as collision geometry has to be a
+      # visible choice, never an omission (L1).
+      visual:
+        kind: box
+        size_m: [1.200, 0.400, 0.100]
+      collision:
+        kind: box
+        size_m: [1.200, 0.400, 0.100]
+      inertial:
+        # A steel-framed belt of this size. Plausible rather than measured, and
+        # the physical validator checks it is at least self-consistent.
+        mass_kg: 45.0
+        com_m: [0.0, 0.0, 0.0]
+        # Solid-box tensor for 1.2 x 0.4 x 0.1 m at 45 kg:
+        #   ixx = m/12 * (y^2 + z^2) = 45/12 * (0.16 + 0.01)  = 0.6375
+        #   iyy = m/12 * (x^2 + z^2) = 45/12 * (1.44 + 0.01)  = 5.4375
+        #   izz = m/12 * (x^2 + y^2) = 45/12 * (1.44 + 0.16)  = 6.0000
+        ixx: 0.6375
+        iyy: 5.4375
+        izz: 6.0000
+      material: conveyor_frame

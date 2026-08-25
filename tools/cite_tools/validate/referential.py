@@ -20,12 +20,13 @@ from cite_tools.model.loader import FacilityModel
 from cite_tools.model.schema import FlowEdge
 from cite_tools.validate import Finding, error
 
-_CATEGORY_CONFIG_KIND = {
+#: Which configuration kind each category expects. `None` means the category
+#: carries no configuration at all, so any configuration on it is a mistake.
+_CATEGORY_CONFIG_KIND: dict[str, str | None] = {
     "robot": "robot",
     "conveyor": "conveyor",
     "sensor": "sensor",
-    "work_area": "work_area",
-    "fixture": "fixture",
+    "fixture": None,
     "end_effector": None,
 }
 
@@ -252,7 +253,16 @@ def _configuration_matches_category(model: FacilityModel) -> list[Finding]:
             continue
         expected = _CATEGORY_CONFIG_KIND.get(asset_type.category)
         actual = asset.configuration.kind
-        if expected is not None and actual != expected:
+        if expected is None:
+            findings.append(
+                error(
+                    "configuration-mismatch",
+                    f"assets.{asset.id}.configuration",
+                    f"type {asset_type.id!r} is a {asset_type.category}, which takes no "
+                    "configuration",
+                )
+            )
+        elif actual != expected:
             findings.append(
                 error(
                     "configuration-mismatch",

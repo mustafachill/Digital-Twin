@@ -1,0 +1,50 @@
+---
+# yaml-language-server: $schema=../schema/stations.schema.json
+schema: cite/stations/v1
+
+# A station says what it is connected to, never what it does. Behaviour is L4's —
+# that separation is what keeps a layout change from being a code change.
+#
+# Every pick and place point is a reference to a frame on another asset. There is
+# no coordinate anywhere in this file, which is the property that made v1's
+# diverged pick/place tables impossible to reproduce here.
+stations:
+  - id: station_infeed
+    zone: cell_a
+    type: source_station
+    assets: [table_pick]
+    capacity: 6
+
+  - id: station_transfer_1
+    zone: cell_a
+    type: transfer_station
+    actor: arm_1
+    assets: [arm_1, pedestal_1]
+    pick_from: {asset: table_pick, frame: surface}
+    place_to: {asset: conveyor_1, frame: infeed}
+    # No trigger: the infeed is fed externally, so L4 starts this station rather
+    # than a sensor doing it.
+
+  - id: station_transfer_2
+    zone: cell_a
+    type: transfer_station
+    actor: arm_2
+    assets: [arm_2, pedestal_2]
+    pick_from: {asset: conveyor_1, frame: outfeed}
+    place_to: {asset: conveyor_2, frame: infeed}
+    trigger: {sensor: beam_c1_out, state: blocked}
+
+  - id: station_transfer_3
+    zone: cell_a
+    type: transfer_station
+    actor: arm_3
+    assets: [arm_3, pedestal_3]
+    pick_from: {asset: conveyor_2, frame: outfeed}
+    place_to: {asset: conveyor_3, frame: infeed}
+    trigger: {sensor: beam_c2_out, state: blocked}
+
+  - id: station_accumulation
+    zone: cell_a
+    type: sink_station
+    assets: [table_accumulation]
+    capacity: 12

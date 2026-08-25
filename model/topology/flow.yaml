@@ -1,0 +1,15 @@
+---
+# yaml-language-server: $schema=../schema/flow.schema.json
+schema: cite/flow/v1
+
+# The process flow as an edge list, not as per-station upstream/downstream
+# fields: writing both ends of a link states the same fact twice. Each station's
+# neighbours are derived.
+flow:
+  id: cell_a_serial_transfer
+  zone: cell_a
+  edges:
+    - {from: station_infeed, to: station_transfer_1, via: null, buffer: 6}
+    - {from: station_transfer_1, to: station_transfer_2, via: conveyor_1, buffer: 4}
+    - {from: station_transfer_2, to: station_transfer_3, via: conveyor_2, buffer: 4}
+    - {from: station_transfer_3, to: station_accumulation, via: conveyor_3, buffer: 12}

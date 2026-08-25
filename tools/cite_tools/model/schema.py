@@ -204,7 +204,7 @@ class AssetType(Strict):
     """A reusable definition, instantiated many times with different prefixes."""
 
     id: Identifier
-    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture", "work_area"]
+    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture"]
     vendor: str | None = None
     kinematics: Kinematics | None = None
     frames: list[NamedFrame] = Field(default_factory=list)
@@ -212,10 +212,6 @@ class AssetType(Strict):
     hardware_backends: dict[Identifier, HardwareBackend] = Field(default_factory=dict)
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
-    graspable: bool = Field(
-        default=False,
-        description="May be attached by the simulated grasp plugin (ADR-0023).",
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -272,27 +268,17 @@ class BreakBeamConfiguration(Strict):
     idle_state: Literal["clear", "blocked"] = "clear"
 
 
-class WorkAreaConfiguration(Strict):
-    kind: Literal["work_area"] = "work_area"
-    size_m: Triple
-    role: Literal["source", "sink", "buffer"]
-
-
 class RobotConfiguration(Strict):
     kind: Literal["robot"] = "robot"
     home_rad: list[float] = Field(default_factory=list)
 
 
-class FixtureConfiguration(Strict):
-    kind: Literal["fixture"] = "fixture"
-
-
+#: Only the categories that actually carry settings appear here. A fixture has
+#: no configuration, so it has no member — adding an empty one "for symmetry"
+#: would put a construct in the schema that nothing reads, which is exactly the
+#: kind of unused surface P7 asks us not to claim.
 Configuration = Annotated[
-    ConveyorConfiguration
-    | BreakBeamConfiguration
-    | WorkAreaConfiguration
-    | RobotConfiguration
-    | FixtureConfiguration,
+    ConveyorConfiguration | BreakBeamConfiguration | RobotConfiguration,
     Field(discriminator="kind"),
 ]
 
@@ -362,8 +348,17 @@ class StationPoint(Strict):
 
 
 class StationTrigger(Strict):
+    """The sensor state that starts this station's work.
+
+    The field is ``state`` and not ``on``, which reads better, because YAML 1.1
+    resolves a bare ``on`` to the boolean ``true``. A key that quietly becomes
+    ``True`` is precisely the silently-wrong-value class this model exists to
+    eliminate, and relying on every author remembering to quote it is not a
+    defence.
+    """
+
     sensor: Identifier
-    on: Literal["blocked", "clear"]
+    state: Literal["blocked", "clear"]
 
 
 class Station(Strict):

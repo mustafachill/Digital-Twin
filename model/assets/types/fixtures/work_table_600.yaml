@@ -1,0 +1,31 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# A 0.6 m square work surface at belt height. Its `surface` frame is where a
+# source station presents work-pieces and where a sink station accumulates them.
+asset_type:
+  id: work_table_600
+  category: fixture
+
+  frames:
+    - id: surface
+      xyz_m: [0.000, 0.000, 0.600]
+
+  description:
+    provider: body
+    body:
+      visual:
+        kind: box
+        size_m: [0.600, 0.600, 0.600]
+      collision:
+        kind: box
+        size_m: [0.600, 0.600, 0.600]
+      inertial:
+        mass_kg: 30.0
+        com_m: [0.0, 0.0, 0.0]
+        # Solid box 0.6 x 0.6 x 0.6 at 30 kg: 30/12 * (0.36 + 0.36) = 1.8 on all axes
+        ixx: 1.8
+        iyy: 1.8
+        izz: 1.8
+      material: table_top

@@ -18,7 +18,8 @@ from rich.table import Table
 
 from cite_tools.model import export
 from cite_tools.model.loader import ModelError, load
-from cite_tools.validate import Finding, Severity, referential
+from cite_tools.model.resolve import ResolveError, resolve
+from cite_tools.validate import Finding, Severity, geometric, physical, referential
 
 app = typer.Typer(
     add_completion=False,
@@ -70,7 +71,19 @@ def validate(
         err_console.print(f"[red]error[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
+    # Order matters. Referential integrity runs first because the geometric and
+    # physical levels resolve poses and types, and resolving against a dangling
+    # reference produces a traceback instead of a finding.
     findings = referential.check(facility_model)
+    findings += physical.check(facility_model)
+
+    if not any(f.severity is Severity.ERROR for f in findings):
+        for zone in facility_model.zones:
+            try:
+                findings += geometric.check(resolve(facility_model, zone.id))
+            except ResolveError as exc:
+                err_console.print(f"[red]error[/red] [dim]resolve[/dim] zone {zone.id}: {exc}")
+                raise typer.Exit(code=1) from exc
 
     schema_problems = export.differences(model / "schema")
     for problem in schema_problems:

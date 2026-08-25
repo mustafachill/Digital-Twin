@@ -1,0 +1,25 @@
+---
+# yaml-language-server: $schema=../schema/facility.schema.json
+schema: cite/facility/v1
+
+# The facility itself. One document, one facility; zones are how it subdivides.
+facility:
+  id: cite
+  name: Center for Innovation, Technology and Entrepreneurship
+  root_frame: cite_world
+  # A closed enum with a single member. Its existence is a tripwire: adding a
+  # second member requires an ADR, because ADR-0020 forbids a second
+  # representation of any quantity anywhere in this model.
+  units: si_m_rad_kg_s
+
+  # cite_world is tied to a surveyed physical origin (L5). Until that survey
+  # exists, every coordinate in this model is engineered intent rather than a
+  # measurement of the building, and status says so rather than implying
+  # otherwise (P7).
+  survey_origin:
+    status: provisional
+    marker_id: CITE-SRV-001
+    description: >-
+      Not yet surveyed. Intended reference is the north-east column base plate on
+      the ground floor. Until a survey is recorded here, measurements taken from
+      this model do not transfer to the building.

@@ -1,0 +1,34 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# A 0.6 m pedestal an arm bolts to. Its `top` frame is what an arm instance is
+# placed against, so arm height is stated once, in this type, and changing it
+# raises every arm together.
+asset_type:
+  id: pedestal_600
+  category: fixture
+
+  frames:
+    - id: top
+      xyz_m: [0.000, 0.000, 0.600]
+
+  description:
+    provider: body
+    body:
+      visual:
+        kind: box
+        size_m: [0.300, 0.300, 0.600]
+      collision:
+        kind: box
+        size_m: [0.300, 0.300, 0.600]
+      inertial:
+        mass_kg: 40.0
+        com_m: [0.0, 0.0, 0.0]
+        # Solid box 0.3 x 0.3 x 0.6 at 40 kg:
+        #   ixx = iyy = 40/12 * (0.09 + 0.36) = 1.5
+        #   izz       = 40/12 * (0.09 + 0.09) = 0.6
+        ixx: 1.5
+        iyy: 1.5
+        izz: 0.6
+      material: pedestal_steel
