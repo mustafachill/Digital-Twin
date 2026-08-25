@@ -22,28 +22,6 @@
 {% endfor %}
   />
 
-{% if arm.grasp %}
-  <!-- Simulated grasping by attachment (ADR-0023). A simulation fidelity aid,
-       NOT a control path: nothing above ros2_control knows it exists. The Grasp
-       skill commands the gripper's controller and nothing else, in simulation
-       and on hardware alike; this plugin observes the result of that command
-       inside the simulator, exactly as the physical world would.
-
-       The cost is stated rather than hidden: a grasp that would slip in reality
-       holds here, so no claim about grasp reliability can rest on this. -->
-  <gazebo>
-    <plugin filename="cite_grasp_attachment" name="cite_simulation::GraspAttachment">
-      <attach_link>{{ arm.grasp.attach_link }}</attach_link>
-      <drive_joint>{{ arm.grasp.drive_joint }}</drive_joint>
-      <closed_threshold_rad>{{ arm.grasp.closed_threshold_rad | m }}</closed_threshold_rad>
-      <open_threshold_rad>{{ arm.grasp.open_threshold_rad | m }}</open_threshold_rad>
-{% for model in arm.grasp.graspable %}
-      <graspable>{{ model }}</graspable>
-{% endfor %}
-    </plugin>
-  </gazebo>
-{% endif %}
-
   <!-- Bolt the arm to the world.
 
        `create_attach_link` is false and `{{ arm.mount_link }}` is not the name

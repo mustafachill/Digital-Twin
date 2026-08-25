@@ -437,21 +437,11 @@
     },
     "GraspSpec": {
       "additionalProperties": false,
-      "description": "How this end effector grasps: what the plugin watches, and what a skill commands.\n\nDeclared here rather than hardcoded in the plugin: an end effector with\ndifferent link names is a data change, and a plugin that guessed a link name\nwould be a second place a name is made (P1). ADR-0023 requires these to come\nfrom the model for exactly that reason.\n\nTwo audiences, deliberately one block. The thresholds below are read by the\nsimulation plugin; the travel and width values are read by the L3 skill\nserver on both the simulated and the physical path. They belong together\nbecause they are *the same stroke* described once — splitting them would put\n`closed_position` and `closed_threshold_rad` in different files, where\nnothing would notice the day they stopped agreeing.",
+      "description": "How this end effector grasps: the stroke it has, and what a skill commands.\n\nOne audience, on both paths. Every value here is read by the L3 skill server\nin simulation and on hardware alike; none of it is simulation-only. That is a\nchange from what this block used to be. It also carried\n`attach_link_suffix`, `closed_threshold_rad` and `open_threshold_rad`, which\nexisted solely to configure the contact-triggered attachment plugin ADR-0023\nintroduced. That plugin is gone — superseded on the evidence of the 84-trial\nfriction campaign in `docs/measurements/2026-08-25-friction-grasp/`, which\nmeasured it firing at first pad contact and destroying the very stall this\nblock exists to produce — so the fields that fed it are gone with it.\n\nWhat remains is one stroke described once: where the joint travels, how fast,\nhow its angle maps to a pad opening, and how wide to close by default. A\ngrasp is now evidenced the way ADR-0022 always said it was — the pads meet\nthe part, the joint stops short of its command, and the controller reports a\nstall.",
       "properties": {
-        "attach_link_suffix": {
-          "title": "Attach Link Suffix",
-          "type": "string"
-        },
         "closed_position": {
           "default": 0.85,
           "title": "Closed Position",
-          "type": "number"
-        },
-        "closed_threshold_rad": {
-          "default": 0.3,
-          "exclusiveMinimum": 0.0,
-          "title": "Closed Threshold Rad",
           "type": "number"
         },
         "default_grasp_width_m": {
@@ -488,16 +478,9 @@
           "default": 0.0,
           "title": "Open Position",
           "type": "number"
-        },
-        "open_threshold_rad": {
-          "default": 0.15,
-          "minimum": 0.0,
-          "title": "Open Threshold Rad",
-          "type": "number"
         }
       },
       "required": [
-        "attach_link_suffix",
         "drive_joint_suffix",
         "max_drive_rate_rad_s",
         "follower_max_rate_rad_s",

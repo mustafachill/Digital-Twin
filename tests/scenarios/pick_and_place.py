@@ -114,7 +114,15 @@ def generate_test_description() -> LaunchDescription:
 def _workpiece_sdf() -> str:
     """A plain box. Its inertia is computed, not guessed — a wrong tensor here
     would make the pick behave oddly for reasons that look like a controller
-    fault (L1)."""
+    fault (L1).
+
+    It used to carry a `<sensor type="contact">`, which existed for exactly one
+    reader: `GraspAttachment::FindGraspable` iterated every `ContactSensorData`
+    in the world, and no pad link declares a sensor, so without one here the
+    attachment plugin could not fire at all. That plugin is removed, so the
+    sensor has no reader and is gone with it. `<mu>` stays and is now the only
+    thing holding the part: the grasp is friction, measured over 84 trials in
+    `docs/measurements/2026-08-25-friction-grasp/`."""
     mass = 0.2
     side = WORKPIECE_SIZE
     inertia = mass * (side * side + side * side) / 12.0
@@ -137,11 +145,6 @@ def _workpiece_sdf() -> str:
         <geometry><box><size>{side} {side} {side}</size></box></geometry>
         <material><ambient>0.8 0.3 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material>
       </visual>
-      <sensor name="contact" type="contact">
-        <contact><collision>collision</collision></contact>
-        <always_on>true</always_on>
-        <update_rate>100</update_rate>
-      </sensor>
     </link>
   </model>
 </sdf>

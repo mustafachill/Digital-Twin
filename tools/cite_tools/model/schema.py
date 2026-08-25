@@ -307,29 +307,26 @@ class GripperLinkage(Strict):
 
 
 class GraspSpec(Strict):
-    """How this end effector grasps: what the plugin watches, and what a skill commands.
+    """How this end effector grasps: the stroke it has, and what a skill commands.
 
-    Declared here rather than hardcoded in the plugin: an end effector with
-    different link names is a data change, and a plugin that guessed a link name
-    would be a second place a name is made (P1). ADR-0023 requires these to come
-    from the model for exactly that reason.
+    One audience, on both paths. Every value here is read by the L3 skill server
+    in simulation and on hardware alike; none of it is simulation-only. That is a
+    change from what this block used to be. It also carried
+    `attach_link_suffix`, `closed_threshold_rad` and `open_threshold_rad`, which
+    existed solely to configure the contact-triggered attachment plugin ADR-0023
+    introduced. That plugin is gone — superseded on the evidence of the 84-trial
+    friction campaign in `docs/measurements/2026-08-25-friction-grasp/`, which
+    measured it firing at first pad contact and destroying the very stall this
+    block exists to produce — so the fields that fed it are gone with it.
 
-    Two audiences, deliberately one block. The thresholds below are read by the
-    simulation plugin; the travel and width values are read by the L3 skill
-    server on both the simulated and the physical path. They belong together
-    because they are *the same stroke* described once — splitting them would put
-    `closed_position` and `closed_threshold_rad` in different files, where
-    nothing would notice the day they stopped agreeing.
+    What remains is one stroke described once: where the joint travels, how fast,
+    how its angle maps to a pad opening, and how wide to close by default. A
+    grasp is now evidenced the way ADR-0022 always said it was — the pads meet
+    the part, the joint stops short of its command, and the controller reports a
+    stall.
     """
 
-    attach_link_suffix: str
     drive_joint_suffix: str
-    #: The xArm gripper's drive joint opens towards zero and closes towards its
-    #: upper limit, so "closed" is the LARGER value. The gap between the two is
-    #: hysteresis — with a single threshold the object drops and re-attaches
-    #: repeatedly while the gripper rests near it.
-    closed_threshold_rad: Annotated[float, Field(gt=0.0)] = 0.30
-    open_threshold_rad: Annotated[float, Field(ge=0.0)] = 0.15
     #: The drive joint's own units at each end of its travel, and the opening
     #: those correspond to.
     #:
