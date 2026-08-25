@@ -198,6 +198,33 @@ class ControlSpec(Strict):
 
     update_rate_hz: Annotated[int, Field(gt=0)]
 
+    #: Whether the controller manager clamps every command it is about to write
+    #: against the limits declared for that joint.
+    #:
+    #: Required rather than defaulted, and that is the point of the field. It was
+    #: absent, `ros2_control` defaults it to **false**, and the consequence was
+    #: not a missing feature but a false one: the arm and gripper both declare
+    #: position, velocity and effort limits, `cross-cutting-safety.md` requires
+    #: limits enforced at planning *and* at execution, MoveIt's generated
+    #: `joint_limits.yaml` says in as many words that "the controller is the
+    #: other" half — and nothing anywhere was enforcing them. A limit that
+    #: nothing checks is documentation, not a limit.
+    #:
+    #: A default would have re-created exactly that: a type that omits the field
+    #: silently gets no enforcement, which is the one outcome no reader would
+    #: guess from looking at the model. Making it required forces every robot
+    #: type to state its position where a reviewer can see it.
+    #:
+    #: Scope, stated honestly because it is narrower than the name suggests. The
+    #: manager clamps commands for joints it owns, using limits it read from the
+    #: URDF — `hardware_interface::ResourceManager::import_joint_limiters` takes
+    #: the *most restrictive* of the URDF `<limit>` and any `<command_interface>`
+    #: min/max in the `<ros2_control>` block. It reads no ROS parameter for this:
+    #: the limiter is constructed with `init(..., nullptr, nullptr)`, so there is
+    #: no `joint_limits.<joint>.*` override, and a limit cannot be declared here.
+    #: This flag turns enforcement on; the *values* live in the description.
+    enforce_command_limits: bool
+
 
 class ControllerSpec(Strict):
     """A controller a type needs, named by suffix and ordered by stage.
@@ -314,6 +341,31 @@ class GraspSpec(Strict):
     #: robot-specific numbers stay in the model.
     open_position: float = 0.0
     closed_position: float = 0.85
+    #: How fast the drive joint is allowed to travel, in rad/s, in either
+    #: direction. Required: an end effector that does not say how fast it moves
+    #: is an end effector nobody can reason about, and the omission is invisible.
+    #:
+    #: This is a *declaration about the actuator*, not a simulation tuning knob,
+    #: and it has two distinct consumers on two different paths. In simulation it
+    #: bounds the drive joint's command so the linkage's follower joints keep
+    #: authority to correct (see `follower_headroom_fraction`). On hardware the
+    #: same number is what the UFACTORY SDK's gripper speed argument has to be
+    #: derived from — the physical gripper is driven through `xarm_api`'s service
+    #: layer in r/min, not through `ros2_control`, so the value transfers but the
+    #: mechanism does not. Declaring it here is what keeps those two from drifting.
+    max_drive_rate_rad_s: Annotated[float, Field(gt=0.0)]
+    #: The follower joints' own velocity limit, rad/s, as the *description*
+    #: declares it — not a limit we impose, but a fact about the description we
+    #: have to know in order to check `max_drive_rate_rad_s` against it.
+    #:
+    #: It is stated rather than read out of the vendor's URDF on purpose. L1's
+    #: rule is that a vendor description is invoked, never ingested: nothing in
+    #: this repository opens `xarm_gripper.urdf.xacro`, so the alternative to
+    #: writing the number here is a validator that parses a vendor file, which is
+    #: precisely the coupling that rule exists to prevent. Stating it makes the
+    #: assumption checkable and makes a vendor change that invalidates it a
+    #: failing test rather than a silent regression.
+    follower_max_rate_rad_s: Annotated[float, Field(gt=0.0)]
     #: The linkage that turns the drive joint's angle into an opening between the
     #: pads. Required, because without it a width in metres cannot be commanded at
     #: all — and a plausible-looking linear guess is exactly how this gripper spent
@@ -348,6 +400,39 @@ class GraspSpec(Strict):
     def min_width_m(self) -> float:
         """The narrowest the pads close to, at ``closed_position``."""
         return self.linkage.opening_m(self.closed_position)
+
+    @property
+    def follower_headroom_fraction(self) -> float:
+        """How much of a follower joint's speed is left over while the leader moves.
+
+        Derived, never declared, because it is the quantity the close rate is
+        *chosen* by and a declared copy would be a second place to be wrong.
+
+        The five finger joints are `<mimic>` followers of `drive_joint`, and
+        under Gazebo Harmonic nothing couples them mechanically — dartsim
+        implements no mimic constraint. `gz_ros2_control` closes the loop in
+        software instead, with a proportional servo whose gain is the controller
+        manager's update rate::
+
+            velocity_setpoint = -(q_follower - q_leader * multiplier) * rate
+
+        A follower therefore *must* carry a standing position error to command
+        any speed at all: holding the leader's speed ``v`` needs an error of
+        ``v / rate``, and the velocity it commands to do so is ``v`` itself. What
+        is left for correcting a disturbance is whatever remains below the
+        follower's own velocity limit:
+
+            headroom = 1 - max_drive_rate_rad_s / follower_max_rate_rad_s
+
+        At zero headroom the servo is saturated for the whole stroke and the
+        linkage stops being a linkage: a perturbed follower departs at the
+        saturated rate, runs to its position limit and stays there, leaving one
+        pad roughly 23 degrees out of position while the controller reports the
+        goal reached. That is not a hypothetical — it is the measured failure
+        this field exists to prevent, at a leader and follower limit that were
+        both 2 rad/s and so gave a headroom of exactly zero.
+        """
+        return 1.0 - (self.max_drive_rate_rad_s / self.follower_max_rate_rad_s)
 
 
 class PlanningSpec(Strict):

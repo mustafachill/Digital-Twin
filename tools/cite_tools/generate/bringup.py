@@ -48,6 +48,7 @@ class _ManagerView:
     gripper_closed_position: float | None
     gripper_default_grasp_width_m: float | None
     gripper_goal_tolerance_rad: float | None
+    gripper_max_drive_rate_rad_s: float | None
     gripper_drive_pivot_y_m: float | None
     gripper_finger_offset_y_m: float | None
     gripper_finger_offset_z_m: float | None
@@ -202,6 +203,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_goal_tolerance_rad=_controller_parameter(
                 asset, "gripper_controller", "goal_tolerance"
             ),
+            gripper_max_drive_rate_rad_s=_grasp(cell, asset, "max_drive_rate_rad_s"),
             gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),
             gripper_finger_offset_y_m=_linkage(cell, asset, "finger_offset_y_m"),
             gripper_finger_offset_z_m=_linkage(cell, asset, "finger_offset_z_m"),

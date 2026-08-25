@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from cite_tools.generate import Artifact
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
+from cite_tools.model.schema import ControlSpec
 from cite_tools.render import environment
 
 #: Controllers whose parameter is a single `joint`, not a `joints` list. Getting
@@ -64,23 +65,27 @@ def _controlled(cell: ResolvedCell) -> tuple[ResolvedAsset, ...]:
     return tuple(a for a in cell.assets if a.controllers)
 
 
-def _update_rate_hz(asset: ResolvedAsset) -> int:
-    """The controller-manager rate this asset's type declares.
+def _control_spec(asset: ResolvedAsset) -> ControlSpec:
+    """The controller-manager configuration this asset's type declares.
 
-    Read from the model rather than held as a module constant. A rate is a fact
-    about a robot — the vendor ships one — and a constant here would apply one
-    arm's rate to every type the generator ever sees, which is the P5 inversion.
-    Missing is an error rather than a default: silently running a manager at a
-    rate nobody chose produces an arm that tracks badly for no visible reason.
+    Read from the model rather than held as module constants. An update rate is a
+    fact about a robot — the vendor ships one — and a constant here would apply
+    one arm's rate to every type the generator ever sees, which is the P5
+    inversion. Missing is an error rather than a default: silently running a
+    manager at a rate nobody chose produces an arm that tracks badly for no
+    visible reason, and silently leaving limit enforcement off produces an arm
+    whose declared limits are decoration.
     """
     control = asset.asset_type.control
     if control is None:
         raise MissingControlSpecError(
             f"asset {asset.id!r} of type {asset.asset_type.id!r} declares controllers "
             "but no `control:` section, so there is no update rate to run its "
-            "controller manager at. Add `control: {update_rate_hz: <hz>}` to the type."
+            "controller manager at, and no statement of whether its declared "
+            "limits are enforced. Add `control: {update_rate_hz: <hz>, "
+            "enforce_command_limits: <bool>}` to the type."
         )
-    return control.update_rate_hz
+    return control
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
@@ -88,11 +93,13 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
     template = env.get_template("control/controllers.yaml.j2")
     artifacts: list[Artifact] = []
     for asset in _controlled(cell):
+        control = _control_spec(asset)
         text = template.render(
             zone=cell.zone,
             arm=asset,
             namespace=asset.namespace,
-            update_rate=_update_rate_hz(asset),
+            update_rate=control.update_rate_hz,
+            enforce_command_limits=_yaml_scalar(control.enforce_command_limits),
             use_sim_time="true" if asset.instance.hardware.backend == "sim" else "false",
             controllers=[_view(c) for c in asset.controllers],
         )

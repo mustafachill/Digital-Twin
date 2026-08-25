@@ -14,6 +14,18 @@
   ros__parameters:
     update_rate: 150  # Hz
     use_sim_time: true
+    # Clamp each command against the limits the description declares for that
+    # joint, before it is written. `ros2_control` defaults this to false, which is
+    # how every declared limit in this cell came to be inert — see the
+    # `control:` block of the robot type for the finding.
+    #
+    # The limit VALUES are not here and cannot be. The controller manager builds
+    # its limiters with `init(..., nullptr, nullptr)`, so it reads no
+    # `joint_limits.<joint>.*` parameter; it takes the most restrictive of the
+    # URDF `<limit>` and the `<ros2_control>` command-interface bounds. This flag
+    # is the switch, the description holds the numbers, and stating a value here
+    # as well would be a second place to be wrong that nothing would ever read.
+    enforce_command_limits: true
     arm_3_joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
     arm_3_gripper_controller:

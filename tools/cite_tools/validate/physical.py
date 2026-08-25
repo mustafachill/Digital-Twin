@@ -29,6 +29,18 @@ MAX_DENSITY = 12000.0
 #: someone computed by hand and wrote to four decimal places.
 TRIANGLE_TOLERANCE = 1e-6
 
+#: The least follower headroom that has actually been measured sufficient, as a
+#: fraction of the follower joints' own velocity limit.
+#:
+#: Not a round number chosen for looking careful. Eleven candidate remedies were
+#: measured for the saturated-mimic defect, three repetitions each, round-robin
+#: interleaved, with the criteria fixed before any data was taken. A leader rate
+#: of 1.5 rad/s against a follower limit of 2 rad/s — a headroom of 0.25 — settled
+#: with a worst follower error of 0.0000 rad in 3 of 3 runs, and is the loosest
+#: bound for which that is true. Below it nothing has been measured at all, which
+#: is what the warning says; it does not claim the value fails.
+MIN_MEASURED_FOLLOWER_HEADROOM = 0.25
+
 
 def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
@@ -36,6 +48,7 @@ def check(model: FacilityModel) -> list[Finding]:
 
     for asset_type in model.types:
         findings += _default_grasp_width_can_close(asset_type)
+        findings += _followers_can_still_correct(asset_type)
 
         body = asset_type.description.body
         if body is None:
@@ -289,3 +302,69 @@ def _no_copied_placeholder_tensors(
                 )
             )
     return findings
+
+
+def _followers_can_still_correct(asset_type: AssetType) -> list[Finding]:
+    """A mimic linkage whose followers run at their limit is not a linkage.
+
+    The derivation, written out because it is the whole reason the close rate is
+    declared at all and a reader who cannot recompute it has to take it on trust.
+
+    The five finger joints of a parallel gripper follow ``drive_joint`` through
+    URDF ``<mimic>`` tags. Under Gazebo Harmonic nothing enforces that
+    mechanically — dartsim implements no mimic constraint — so `gz_ros2_control`
+    substitutes a proportional servo, ``velocity_sp = -(q_follower - q_leader *
+    multiplier) * update_rate``. A follower holding the leader's speed ``v``
+    therefore commands ``v`` itself, and what it has left to reject a disturbance
+    is whatever lies below its own velocity limit:
+
+        headroom = 1 - max_drive_rate_rad_s / follower_max_rate_rad_s
+
+    At zero the servo is saturated for the entire stroke and the coupling stops
+    behaving like one. This is not inferred: with both limits at the vendor's
+    2 rad/s the leader slewed at exactly 2.000 rad/s, the followers needed a
+    standing error of 2/150 = 0.0133 rad to keep up and carried a measured 0.0124,
+    and a perturbed follower left at the saturated rate, reached its 0.85 position
+    limit and stayed there — one pad about 23 degrees out of position while the
+    controller reported the goal reached.
+
+    ERROR below zero headroom, because there the mechanism cannot work at all.
+    WARNING below ``MIN_MEASURED_FOLLOWER_HEADROOM``, because there it is merely
+    unmeasured — a distinction worth keeping, since a warning that claims to be a
+    failure trains people to ignore warnings.
+    """
+    grasp = asset_type.grasp
+    if grasp is None:
+        return []
+
+    where = f"types.{asset_type.id}.grasp.max_drive_rate_rad_s"
+    headroom = grasp.follower_headroom_fraction
+
+    if headroom <= 0.0:
+        return [
+            error(
+                "gripper-followers-have-no-headroom",
+                where,
+                f"the drive joint may travel at {grasp.max_drive_rate_rad_s} rad/s while its "
+                f"mimic followers are limited to {grasp.follower_max_rate_rad_s} rad/s, "
+                f"leaving {headroom:.0%} of their authority for correction",
+                "The followers are servoed, not linked: holding the leader's speed already "
+                "commands that same speed, so at or above their limit they cannot correct a "
+                "disturbance at all and a displaced pad never returns. Declare a "
+                "max_drive_rate_rad_s below follower_max_rate_rad_s.",
+            )
+        ]
+
+    if headroom < MIN_MEASURED_FOLLOWER_HEADROOM:
+        return [
+            warning(
+                "gripper-follower-headroom-is-unmeasured",
+                where,
+                f"followers keep {headroom:.0%} of their authority, below the "
+                f"{MIN_MEASURED_FOLLOWER_HEADROOM:.0%} that has been measured sufficient",
+                "Not known to fail — known not to have been tested. Either lower "
+                "max_drive_rate_rad_s, or measure this one and move the constant.",
+            )
+        ]
+
+    return []

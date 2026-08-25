@@ -223,6 +223,10 @@
       "additionalProperties": false,
       "description": "How the `ros2_control` manager for this type is configured.\n\nThe update rate is a fact about the robot — the vendor ships one — and it\nused to be a module constant in the generator, applied identically to every\ntype. P5 puts it here instead: code encodes how a controller manager is\nconfigured, never which rate a particular arm runs at.",
       "properties": {
+        "enforce_command_limits": {
+          "title": "Enforce Command Limits",
+          "type": "boolean"
+        },
         "update_rate_hz": {
           "exclusiveMinimum": 0,
           "title": "Update Rate Hz",
@@ -230,7 +234,8 @@
         }
       },
       "required": [
-        "update_rate_hz"
+        "update_rate_hz",
+        "enforce_command_limits"
       ],
       "title": "ControlSpec",
       "type": "object"
@@ -466,8 +471,18 @@
           "title": "Drive Joint Suffix",
           "type": "string"
         },
+        "follower_max_rate_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Follower Max Rate Rad S",
+          "type": "number"
+        },
         "linkage": {
           "$ref": "#/$defs/GripperLinkage"
+        },
+        "max_drive_rate_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Drive Rate Rad S",
+          "type": "number"
         },
         "open_position": {
           "default": 0.0,
@@ -484,6 +499,8 @@
       "required": [
         "attach_link_suffix",
         "drive_joint_suffix",
+        "max_drive_rate_rad_s",
+        "follower_max_rate_rad_s",
         "linkage"
       ],
       "title": "GraspSpec",
