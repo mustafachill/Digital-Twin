@@ -119,24 +119,69 @@ jobs:
       # outside workspace/ so colcon test does not collect it either. A claim no job
       # exercises is not evidence.
       #
-      # NOT BLOCKING YET, deliberately, and not because it is inconvenient: this
-      # scenario fails today for reasons tracked against other packages, and making
-      # it a hard gate now would only paint a mid-remediation branch red without
-      # telling anyone anything new. It runs, its output is captured, and the
-      # failure is visible on every run instead of invisible.
+      # STILL NOT BLOCKING, and the reason has changed, so the old conditions below
+      # were re-checked one at a time rather than carried forward. The headline
+      # claim that prompted the re-check — "the cycle now passes 8/8" — did not
+      # survive measurement: 11 consecutive runs on an otherwise idle machine gave
+      # 10 cycle passes and 1 cycle failure. It is closer than it was, and it is
+      # not a gate yet.
       #
-      # Before this becomes a merge blocker, all of the following must hold:
-      #   1. The stochastic path is seeded end to end (T-03/R-13). The scenario is
-      #      not reproducible today: four runs under one seed produced two distinct
-      #      failure modes. A flaky hard gate is worse than no gate.
-      #   2. The grasp/skill failure in cite_skills is closed.
-      #   3. cell_a_plan.yaml's declared topics exist at runtime (T-06):
-      #      /cite/cell_a/conveyor_{1,2,3}/{state,command} and
-      #      /cite/cell_a/beam_c{1,2,3}_out/detection are declared but unpublished —
-      #      break_beam.cpp is in no CMakeLists target and the conveyor plugin is
-      #      instantiated by no generated artifact. This step may well fail on that
-      #      alone; it is listed here so nobody reads its red as a new regression.
-      - name: Simulation-in-the-loop scenario — pick_and_place (expected failing)
+      # Measured on 2026-08-25, 11 runs, one build, nothing else on the machine
+      # (the earlier 8-run sample was taken while a second container and an
+      # unrelated service stack were competing for 7.6 GB, and two of its findings
+      # do not survive on a quiet host):
+      #
+      #   cycle test          10/11 pass. The one failure is real, not a test
+      #                       artefact: the part was placed 0.119 m short of the
+      #                       infeed and ended on the floor at z=0.025 rather than
+      #                       on the belt at 0.625. That is a placement-accuracy
+      #                       defect in the skill/grasp path, not in this workflow.
+      #   clean-shutdown test 10/11 pass. The one failure is the /clock bridge
+      #                       aborting inside its own SIGINT handler; it is
+      #                       characterised next to the assertion that catches it,
+      #                       in tests/scenarios/bringup.py, and is deliberately
+      #                       NOT exempted.
+      #   move_group -11      33/33 process exits, every run, all three arms.
+      #                       Consistent with the upstream MoveIt destructor
+      #                       segfault, and already exempted in the scenario.
+      #   gz -9               0/11. The single -9 in the contended sample was on a
+      #                       179 s run against an 84-123 s norm here; on this
+      #                       evidence it was launch's SIGKILL escalation firing on
+      #                       a machine too loaded for gz to finish inside its
+      #                       10 s/15 s window, not a defect of its own. Not
+      #                       reproduced, and NOT therefore declared absent.
+      #
+      # The three conditions recorded here previously, each re-checked:
+      #
+      #   1. "The stochastic path is seeded end to end (T-03/R-13)." NOT met, and
+      #      not meetable as written. CITE_PHYSICS_SEED does now reach the
+      #      simulator — `simulation.launch.py` passes it to `gz sim --seed` — but
+      #      that seeds gz::math::Rand, so sensor noise and the transport RNG, and
+      #      neither the physics solver nor OMPL. MoveIt exposes no hook to seed
+      #      OMPL and is apt-installed rather than pinned in external/cite.repos,
+      #      so there is no patch point either (ADR-0027). Planning here stays
+      #      genuinely non-deterministic. What this condition was protecting
+      #      against is a flaky hard gate, and that has to be answered with a
+      #      measured pass rate instead of with a seed. 10/11 is not it.
+      #   2. "The grasp/skill failure in cite_skills is closed." MET. The arm
+      #      grasps by friction since the attachment plugin was removed (ADR-0029),
+      #      and the work-piece is lifted in every one of the 11 runs.
+      #   3. "cell_a_plan.yaml's declared topics exist at runtime (T-06)." The two
+      #      blockers this condition named are gone: break_beam.cpp is in a
+      #      CMakeLists target now, and the conveyor plugin is instantiated three
+      #      times in the generated world. The topics themselves still do not exist
+      #      as ROS topics — both plugins speak Gazebo transport and only /clock is
+      #      bridged — but the guess attached to this condition, that the step "may
+      #      well fail on that alone", is measured false: this scenario never
+      #      subscribes to them and passes without them. It is a real gap, tracked
+      #      elsewhere, and it is not what is holding this gate up.
+      #
+      # So: no promotion, and deliberately no half-promotion either. Gating the
+      # cycle test alone while leaving the shutdown check advisory was considered
+      # and rejected — at 10/11 the cycle is the flakier half, so that split would
+      # buy a red main branch roughly one run in eleven and call it a gate. The
+      # honest blocker is placement accuracy, and it belongs to the skill path.
+      - name: Simulation-in-the-loop scenario — pick_and_place (advisory)
         continue-on-error: true
         run: |
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \

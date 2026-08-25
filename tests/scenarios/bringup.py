@@ -119,10 +119,12 @@ class TestCellBringUp(unittest.TestCase):
         # No seed is read here. There was a `cls.seed` that nothing used, beside
         # a comment claiming scenarios are deterministic — a claim this
         # repository cannot currently support. `./scripts/scenario` exports
-        # CITE_PHYSICS_SEED and nothing consumes it: `gz sim` takes a seed as a
-        # command-line flag rather than an SDF element and `simulation.launch.py`
-        # passes none, and MoveIt exposes no way to seed OMPL's RNG at all. The
-        # script itself now says so on every run. Assertions below are on
+        # CITE_PHYSICS_SEED and `simulation.launch.py` does now pass it to
+        # `gz sim --seed`; an earlier version of this comment said it "passes
+        # none", which is stale. It buys less than it sounds like: `--seed` seeds
+        # `gz::math::Rand`, so sensor noise and the transport RNG, and neither the
+        # physics solver nor OMPL — and MoveIt exposes no way to seed OMPL's RNG
+        # at all. The script says so on every run. Assertions below are on
         # outcomes and constraints precisely because a plan cannot be reproduced.
 
     @classmethod
@@ -502,24 +504,82 @@ class TestCleanShutdown(unittest.TestCase):
     An orphaned `gz sim` holds ports and names, and the NEXT bring-up then fails
     pointing nowhere near the cause. That is why this is asserted rather than
     assumed.
+
+    KNOWN INTERMITTENT FAILURE, characterised and deliberately not exempted.
+
+    The `/clock` bridge — `ros_gz_bridge/parameter_bridge`, launched as
+    `clock_bridge` — sometimes aborts with SIGABRT (-6) during teardown:
+
+        Fatal glibc error: pthread_mutex_lock.c:450 (__pthread_mutex_lock_full):
+        assertion failed: e != ESRCH || !robust
+
+    Observed once in 11 consecutive runs on an idle machine (2026-08-25). Two
+    things about it are worth writing down, because both were guessed wrongly
+    before being measured:
+
+    * It is NOT a slow-machine artefact. The abort lands in the same millisecond
+      as the process logs `signal_handler(SIGINT/SIGTERM)` — it crashes inside
+      its own signal handling, not after failing to finish in time. No
+      `sigterm_timeout`, retry, or wait could affect it, and reaching for one
+      would be a P4 violation dressed up as a fix.
+    * The signature is a robust mutex whose owner is already dead: glibc raises
+      exactly this assertion when `pthread_mutex_lock` finds an ESRCH owner.
+      gz-transport keeps such mutexes in shared memory between the bridge and
+      `gz sim`, and launch signals both in one dispatch, so the bridge can reach
+      for a lock whose owner has already gone. That makes it the same class as
+      the move_group crash below — an unmanaged teardown — but in upstream code
+      we do not own.
+
+    It is NOT exempted. The -11 allowance below already makes this assertion
+    weak for the one process that most needs it; adding -6 (and the -9 that a
+    contended machine once produced for `gz`) would leave an assertion that
+    cannot fail, which is worse than not having it. A run that fails here has
+    found something real, and the fix is a teardown coordinator in
+    `cite_bringup` or a lifecycle-managed bridge — not a wider allowlist.
     """
 
-    #: move_group does not exit cleanly, and the shape of that is NOT understood.
-    #: This exemption was written as though it were a characterised upstream bug
-    #: ("segfaults during its own teardown ... reproduced on every run"). Two
-    #: independent sets of runs since then contradict each other and that claim:
-    #: one saw all three move_group processes exit -11 with no SIGTERM
-    #: escalation, another saw -15 on six consecutive runs and no -11 at all.
-    #: Same code. Mutually exclusive outcomes point at one defect — an unmanaged
-    #: racing teardown whose visible form depends on machine speed — rather than
-    #: at a deterministic upstream segfault.
+    #: move_group segfaults in its own teardown. That is now measured rather than
+    #: assumed, and the history matters, because this comment has been wrong in
+    #: both directions.
     #:
-    #: The consequence for THIS test is that it is currently weak: tolerating
-    #: -11 for move_group means the process that most needs a shutdown assertion
-    #: is the one exempt from it. The exemption is left in place unchanged
-    #: because the underlying teardown defect is owned elsewhere; neither -11 nor
-    #: -15 should be read as the expected outcome, and this must be narrowed once
-    #: the teardown is managed rather than raced.
+    #: It first claimed a characterised upstream bug "reproduced on every run".
+    #: Two independent run sets falsified that: one saw all three move_group
+    #: processes exit -11 with no SIGTERM escalation, another saw -15 on six
+    #: consecutive runs and no -11 at all. The comment was then rewritten to say
+    #: the shape was NOT understood and might be a speed-dependent racing
+    #: teardown. That is also stale, and this is the measurement that settled it.
+    #:
+    #: Raising `sigterm_timeout` to 45 s as a diagnostic — widening the window
+    #: before launch escalates SIGINT to SIGTERM — produced -11 on 3/3 runs with
+    #: ZERO SIGTERM escalations. So the -15 runs were not a second outcome: they
+    #: were launch's escalation timer firing before the crash had finished. There
+    #: is one defect underneath, and it is a genuine segfault:
+    #:
+    #:     SIGSEGV (address not mapped) in
+    #:       rclcpp::CallbackGroup::~CallbackGroup
+    #:     reached from
+    #:       MoveItCpp::~MoveItCpp
+    #:         -> TrajectoryExecutionManager::~TrajectoryExecutionManager
+    #:           -> rclcpp::Node::~Node
+    #:             -> rclcpp::node_interfaces::NodeBase::~NodeBase
+    #:
+    #: (captured from the move_group stack trace printed on the scenario's own
+    #: teardown; all three arms produce the identical chain.)
+    #:
+    #: This is upstream, in MoveIt's own destructor ordering. It is NOT a clock
+    #: race, and the earlier hypothesis that ordering our shutdown would fix it
+    #: was measured wrong. Ordered shutdown is in any case not expressible in
+    #: `launch` as it stands: `LaunchService` broadcasts `Shutdown` and every
+    #: `ExecuteLocal` returns its SIGINT `EmitEvent` in a single dispatch. A real
+    #: fix needs either a lifecycle-managed move_group, which MoveIt does not
+    #: ship, or a teardown coordinator in `cite_bringup`.
+    #:
+    #: The consequence for THIS test is unchanged and still bad: tolerating -11
+    #: for move_group means the process that most needs a shutdown assertion is
+    #: the one exempt from it. The exemption is therefore kept exactly this wide
+    #: — one signal, one process name — and must be deleted, not widened, once
+    #: the teardown is managed. Any other process exiting on a signal is a
+    #: finding, including move_group exiting on any signal but -11.
     UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
