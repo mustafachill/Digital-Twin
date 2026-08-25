@@ -1,0 +1,17 @@
+commanded grasp height: 0.0300 m (published) -> 0.0058 m
+pick frame  cell_a__table_pick__surface at (-0.475, 0.0, 0.6)
+place frame cell_a__conveyor_1__infeed at (0.45, 0.0, 0.6)
+waiting for the whole stack to be up and matched...
+stack ready
+recording from /world/cell_a/dynamic_pose/info
+arm model arm_1 world position (0.0, -0.35, 0.6)
+
+=== trial 1/1  model=probe_part_smoke_corrected_001 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [diag] pose feed carries 41 entities; matching: ['arm_1_left_finger', 'arm_1_right_finger', 'arm_2_left_finger', 'arm_2_right_finger', 'arm_3_left_finger', 'arm_3_right_finger', 'probe_part_smoke_corrected_001']
+  [diag] arm world pose p=(0.0, -0.35, 0.6) q=(0.0, 0.0, 0.7071067823197225, 0.7071067800533724)
+  [diag] pad composed into world: (0.011940235949384814, 0.1497760208555649, 1.143468525991806) (gz model -m arm_1 -p said (0.0, -0.35, 0.6))
+  {"trial": 1, "label": "smoke_corrected", "model": "probe_part_smoke_corrected_001", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 46.3, "t_grasp_sim": 55.633, "t_release_sim": 67.739, "q_at_stall_rad": 0.41518889799173353, "note": "", "z_rest": 0.624999, "z_max": 0.7587961713502701, "lift_m": 0.13379717135027014, "n_samples_wp": 2956, "n_samples_pad": 2956, "v_max_mps": 3.1505896053033497, "carry_samples": 1210, "carry_duration_s": 12.099000000000004, "lifted_during_carry": true, "z_min_during_carry": 0.6250808844247963, "twist_max_deg": 17.448590656784205, "twist_final_deg": 17.422704693555723, "pad_distance_drift_mm_max": 0.7462846522837623, "slip_max_mm": 2.094953924169092, "slip_final_mm": 1.0825539785541682, "slip_rate_mm_per_s": 0.1164966472194849, "held_through_transport": true, "pad_separation_mm_min": 101.04941324251804, "pad_separation_mm_max": 102.00838084146403, "pad_separation_mm_mean": 101.56165334050453, "place_err_m": 0.11069958588505462}
+
+wrote /workspace/docs/measurements/2026-08-25-grasp-plane-offset/raw/smoke_corrected_trials.json
+stamped commanded_grasp_height_m=0.0058 into /workspace/docs/measurements/2026-08-25-grasp-plane-offset/raw/smoke_corrected_trials.json
