@@ -12,8 +12,21 @@ VENV="$(cite_venv_bin || echo "${REPO_ROOT}/.venv/bin")"
 
 step "Python (ruff)"
 if [ -x "${VENV}/ruff" ]; then
-    check "${VENV}/ruff" check "${REPO_ROOT}/tools"
-    check "${VENV}/ruff" format --check "${REPO_ROOT}/tools"
+    # Both trees, not just tools/. The scenario suite is Python that runs in CI
+    # and gates every phase item, and it went unlinted for as long as this line
+    # named one directory — three violations sat in tests/scenarios/bringup.py
+    # without anything reporting them. Each tree resolves its own ruff
+    # configuration by discovery: tools/pyproject.toml declares the rules, and
+    # tests/ruff.toml extends it rather than restating it.
+    # A loop rather than `mapfile`: this step runs on the host, where macOS still
+    # ships bash 3.2 and `mapfile` does not exist. The one in ros_lint() below is
+    # safe because that block only runs where ROS does.
+    PY_TREES=()
+    while IFS= read -r tree; do
+        [ -n "$tree" ] && PY_TREES+=("$tree")
+    done < <(python_trees)
+    check "${VENV}/ruff" check "${PY_TREES[@]}"
+    check "${VENV}/ruff" format --check "${PY_TREES[@]}"
 else
     warn "ruff not installed — run ./scripts/bootstrap --host-only"
 fi

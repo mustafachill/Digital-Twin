@@ -309,6 +309,32 @@ first_party_packages() {
 }
 
 # -----------------------------------------------------------------------------
+# python_trees — the Python trees this repository owns, one absolute path a line.
+#
+# Both the linter and the host test suite walk exactly these, and they walk the
+# same ones deliberately. When the two lists were written out separately at their
+# call sites they drifted: `tools/` was linted and tested, `tests/` was neither,
+# and three ruff violations plus an entire guard suite sat in the branch with
+# nothing collecting or reporting them. A list named once cannot drift from
+# itself (P1).
+#
+# `tests/` holds the simulation scenarios and their guards. The scenarios are not
+# collected by pytest — they are named `bringup.py` and `pick_and_place.py`, not
+# `test_*.py`, and they need a running simulator — but the guards under
+# `tests/scenarios/guards/` are, and they are the reason this path is here.
+#
+# Only paths that exist are printed, so a checkout part-way through a phase does
+# not fail on a directory that has not been created yet.
+# -----------------------------------------------------------------------------
+python_trees() {
+    local tree
+    for tree in tools tests; do
+        [ -d "${REPO_ROOT}/${tree}" ] && printf '%s\n' "${REPO_ROOT}/${tree}"
+    done
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # source_overlay — source the colcon overlay without tripping `set -u`.
 #
 # _lib.sh sets `set -euo pipefail`, and colcon's generated setup.bash references

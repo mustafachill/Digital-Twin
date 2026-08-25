@@ -216,12 +216,19 @@ class ControllerSpec(Strict):
 
 
 class GraspSpec(Strict):
-    """How the simulated grasp plugin recognises a grasp on this end effector.
+    """How this end effector grasps: what the plugin watches, and what a skill commands.
 
     Declared here rather than hardcoded in the plugin: an end effector with
     different link names is a data change, and a plugin that guessed a link name
     would be a second place a name is made (P1). ADR-0023 requires these to come
     from the model for exactly that reason.
+
+    Two audiences, deliberately one block. The thresholds below are read by the
+    simulation plugin; the travel and width values are read by the L3 skill
+    server on both the simulated and the physical path. They belong together
+    because they are *the same stroke* described once — splitting them would put
+    `closed_position` and `closed_threshold_rad` in different files, where
+    nothing would notice the day they stopped agreeing.
     """
 
     attach_link_suffix: str
@@ -244,6 +251,19 @@ class GraspSpec(Strict):
     open_position: float = 0.0
     closed_position: float = 0.85
     max_width_m: Annotated[float, Field(gt=0.0)] = 0.085
+    #: What a `Pick` closes to when its goal names no width — the fallback L3
+    #: applies for `grasp_width_m == 0`, in metres between the pads.
+    #:
+    #: It has to be *narrower than the work-piece*, not equal to it. A parallel
+    #: gripper reports a grasp by failing to reach where it was told: the pads
+    #: meet the part, the drive joint stops short, and the controller reports a
+    #: stall. Commanding the part's own width means the gripper arrives exactly
+    #: where it was sent, reports `reached_goal`, and the skill learns nothing
+    #: about whether anything is between the pads (ADR-0022).
+    #:
+    #: The upper bound is a real constraint, not a preference; it is checked by
+    #: `cite_tools.validate.physical`. See that check for the derivation.
+    default_grasp_width_m: Annotated[float, Field(gt=0.0)] | None = None
 
 
 class PlanningSpec(Strict):

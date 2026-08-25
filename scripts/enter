@@ -1,19 +1,42 @@
 #!/usr/bin/env bash
-# Open an interactive shell in the container.
+# Open an interactive shell in the container, or run one command inside it.
 #
-#   ./scripts/enter             headless development shell
-#   ./scripts/enter gui         with display passthrough (Linux host)
-#   ./scripts/enter hardware    host network + device passthrough (real robots)
+#   ./scripts/enter                        headless development shell
+#   ./scripts/enter gui                    with display passthrough (Linux host)
+#   ./scripts/enter hardware               host network + device passthrough (real robots)
+#   ./scripts/enter dev ros2 topic list    run one command in the container and exit
+#
+# The trailing command form exists because without it people reach for
+# `docker compose run` directly, which is exactly what CLAUDE.md §7 says these
+# entry points exist to prevent: an entry point that is routinely worked around
+# stops insulating callers from the toolchain. The service must still be named
+# first, so that `enter` never has to guess whether `gui` meant the service or a
+# program to run.
+#
+# Arguments are passed to the container as argv, not through a shell, so quoting
+# survives intact. The image's entrypoint sources the ROS environment and the
+# built overlay before `exec "$@"`, so a command sees the same environment an
+# interactive shell does. For shell syntax — pipes, redirection, `&&` — ask for a
+# shell explicitly: ./scripts/enter dev bash -lc 'colcon list | wc -l'
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 in_container && die "Already inside the container."
 
-SERVICE="${1:-dev}"
+SERVICE="dev"
+if [ "$#" -gt 0 ]; then
+    SERVICE="$1"
+    shift
+fi
+
 case "$SERVICE" in
     dev|gui|hardware) ;;
-    *) die "Unknown service '$SERVICE'. Use one of: dev, gui, hardware." ;;
+    *)
+        die "Unknown service '${SERVICE}'. Use one of: dev, gui, hardware.
+  To run a command in the container, name the service first:
+    ./scripts/enter dev ${SERVICE} $*"
+        ;;
 esac
 
 if [ "$SERVICE" = "hardware" ]; then
@@ -22,10 +45,22 @@ if [ "$SERVICE" = "hardware" ]; then
     # /dev passthrough and privileged execution, so it must enforce that rule rather than
     # merely warn about it — a documented safety guarantee with no enforcement is worse
     # than no guarantee, because people rely on it.
+    #
+    # Gated on the service, never on whether a command was given: a one-off command in
+    # this service reaches the robots exactly as an interactive shell does, and an opt-in
+    # that a caller can skip by appending arguments is not an opt-in.
     warn "The 'hardware' service has host networking, /dev passthrough and privileged execution."
     warn "Anything you run inside it can reach and command the physical robots."
     require_explicit_hardware_opt_in
 fi
 
-info "Entering container service '${SERVICE}'"
-compose run --rm "$SERVICE" bash
+if [ "$#" -eq 0 ]; then
+    info "Entering container service '${SERVICE}'"
+    compose run --rm "$SERVICE" bash
+else
+    # -T disables pseudo-TTY allocation. A one-off command is normally being
+    # captured, piped or run from CI, and a TTY corrupts that output with control
+    # sequences — or fails outright when there is no terminal to allocate.
+    info "Running in container service '${SERVICE}': $*"
+    compose run --rm -T "$SERVICE" "$@"
+fi

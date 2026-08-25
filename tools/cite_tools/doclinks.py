@@ -19,7 +19,25 @@ LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)]+)\)")
 # "## Some Heading" -> "some-heading"
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
 
-SKIP_DIRS = {".git", ".venv", "legacy", "node_modules", "build", "install", "log"}
+#: Directories whose Markdown is not ours to report on.
+#:
+#: `.claude` is here for a reason worth stating: CLAUDE.md §11 makes it local
+#: tooling that is deliberately **not committed**, and it holds agent worktrees —
+#: whole copies of the repository. Walking it reports the same document many
+#: times over, and reports dead links in those copies that no commit can repair,
+#: because the target they reach for is itself uncommitted. A gate that fails on
+#: files no change of ours can fix is a gate people learn to ignore, which is the
+#: failure `./scripts/lint` documents at length elsewhere.
+SKIP_DIRS = {
+    ".claude",
+    ".git",
+    ".venv",
+    "build",
+    "install",
+    "legacy",
+    "log",
+    "node_modules",
+}
 
 
 def slugify(heading: str) -> str:

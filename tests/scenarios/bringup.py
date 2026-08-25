@@ -25,6 +25,9 @@ import launch_testing.markers
 import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from cite_interfaces.action import MoveTo
+from cite_interfaces.msg import ModelVersion, ResultCode
+from cite_interfaces.qos import LATCHED, STATE
 from control_msgs.action import FollowJointTrajectory
 from controller_manager_msgs.srv import ListControllers
 from launch import LaunchDescription
@@ -34,10 +37,6 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
-
-from cite_interfaces.action import MoveTo
-from cite_interfaces.msg import ModelVersion, ResultCode
-from cite_interfaces.qos import LATCHED, STATE
 
 ZONE = "cell_a"
 ARMS = ("arm_1", "arm_2", "arm_3")
@@ -62,7 +61,9 @@ SKILL_CEILING_S = 120.0
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description() -> LaunchDescription:
-    simulation = Path(get_package_share_directory("cite_bringup")) / "launch" / "simulation.launch.py"
+    simulation = (
+        Path(get_package_share_directory("cite_bringup")) / "launch" / "simulation.launch.py"
+    )
     return LaunchDescription(
         [
             IncludeLaunchDescription(
@@ -126,9 +127,7 @@ class TestCellBringUp(unittest.TestCase):
                 rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
                 if future.result() is None:
                     return None
-                names = {
-                    ctrl.name for ctrl in future.result().controller if ctrl.state == "active"
-                }
+                names = {ctrl.name for ctrl in future.result().controller if ctrl.state == "active"}
                 expected = {
                     f"{a}_joint_state_broadcaster",
                     f"{a}_joint_trajectory_controller",
@@ -148,12 +147,20 @@ class TestCellBringUp(unittest.TestCase):
         for arm in ARMS:
             received: list[JointState] = []
             topic = f"/cite/{ZONE}/{arm}/joint_states"
-            subscription = self.node.create_subscription(
-                JointState, topic, received.append, STATE
-            )
+            subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
             try:
+                # `received` is bound as a default argument, not captured. Each
+                # iteration rebinds the name to a fresh list, so a closure over it
+                # reads whichever list the loop is on when the predicate finally
+                # runs — correct today only because `_spin_until` calls it before
+                # the loop moves on. That is the kind of accident that turns into a
+                # test which passes while watching the wrong arm's topic. Binding
+                # at definition removes the hazard rather than the warning, and
+                # matches how `active(c=client, a=arm)` above already does it.
                 self._spin_until(
-                    lambda: received or None, DELIVERY_CEILING_S, f"a message on {topic}"
+                    lambda messages=received: messages or None,
+                    DELIVERY_CEILING_S,
+                    f"a message on {topic}",
                 )
                 names = set(received[-1].name)
                 expected = {f"{arm}_joint{n}" for n in range(1, 6)} | {f"{arm}_drive_joint"}
@@ -236,7 +243,6 @@ class TestCellBringUp(unittest.TestCase):
             result.result().result.error_string,
         )
 
-
     def test_the_facility_publishes_its_model_version(self) -> None:
         """L6 stamps this into every recording.
 
@@ -249,9 +255,7 @@ class TestCellBringUp(unittest.TestCase):
             ModelVersion, "/cite/facility/model_version", received.append, LATCHED
         )
         try:
-            self._spin_until(
-                lambda: received or None, DELIVERY_CEILING_S, "the model version"
-            )
+            self._spin_until(lambda: received or None, DELIVERY_CEILING_S, "the model version")
             self.assertEqual(len(received[-1].model_hash), 64)
             self.assertIn(ZONE, received[-1].zones)
         finally:
@@ -309,9 +313,7 @@ class TestCellBringUp(unittest.TestCase):
         self.assertTrue(handle.accepted, "the skill server rejected a MoveTo goal")
 
         result = handle.get_result_async()
-        rclpy.spin_until_future_complete(
-            self.node, result, timeout_sec=SKILL_CEILING_S
-        )
+        rclpy.spin_until_future_complete(self.node, result, timeout_sec=SKILL_CEILING_S)
         self.assertIsNotNone(result.result(), "MoveTo never returned a result")
         outcome = result.result().result.result
         self.assertEqual(
@@ -352,9 +354,9 @@ class TestCleanShutdown(unittest.TestCase):
         allowed = [0, launch_testing.asserts.EXIT_SIGINT]
         for info in proc_info:
             name = str(info.process_name)
-            expected = [*allowed, -11] if name.startswith(
-                self.UPSTREAM_TEARDOWN_SEGFAULT
-            ) else allowed
+            expected = (
+                [*allowed, -11] if name.startswith(self.UPSTREAM_TEARDOWN_SEGFAULT) else allowed
+            )
             self.assertIn(
                 info.returncode,
                 expected,

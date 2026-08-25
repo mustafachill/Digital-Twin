@@ -55,6 +55,30 @@ asset_type:
     open_position: 0.0
     closed_position: 0.85
     max_width_m: 0.085
+    # What a Pick closes to when its goal names no width. 45 mm, and the two
+    # bounds that produce that number rather than any other:
+    #
+    #   * At most 55 mm. `cite_tools.validate.physical` derives and enforces this
+    #     ceiling from the three values above: a wider command leaves the drive
+    #     joint short of `closed_threshold_rad`, so the gripper reports the goal
+    #     reached, never stalls, and the attachment plugin never fires. Anything
+    #     above 55 mm is a gripper that closes politely on air.
+    #   * Below the work-piece, not equal to it. The cell's reference work-piece
+    #     is a 50 mm cube, and a parallel gripper evidences a grasp by *failing*
+    #     to reach where it was sent: the pads meet the part, the joint stops
+    #     short, the controller reports a stall, and the skill compares the width
+    #     it reached against the width it asked for. Commanding 50 mm would let
+    #     the gripper arrive exactly on target and teach the skill nothing.
+    #     45 mm leaves 5 mm of squeeze, which is 0.05 rad at the drive joint —
+    #     five times the controller's 0.01 rad default `goal_tolerance`, so the
+    #     stall is unambiguous rather than marginal.
+    #
+    # Honest about its home (P7): this is a property of an end effector *paired
+    # with a work-piece*, and it sits on the end-effector type because the model
+    # has no work-piece types yet. The day a second work-piece size exists, this
+    # value moves to the work-piece and the goal carries it; the end-effector
+    # keeps only the stroke. Until then it is written once, here.
+    default_grasp_width_m: 0.045
 
   controllers:
     - suffix: gripper_controller
@@ -70,3 +94,18 @@ asset_type:
         stall_velocity_threshold: 0.001
         stall_timeout: 0.3
         max_effort: 60.0
+        # A stall is an OUTCOME, not a fault — ADR-0022: "a stall is reported,
+        # not interpreted", and deciding what it means is the Grasp skill's job.
+        #
+        # GripperActionController defaults this to false, and false means a stall
+        # calls `setAborted` on the goal. That is the controller ruling on a
+        # question it cannot answer: the one case a parallel gripper exists to
+        # report — pads closed onto a part and stopped — is delivered to the
+        # caller as a failed action, indistinguishable at the action layer from a
+        # controller that fell over. The skill then has to read success out of an
+        # abort, which is exactly the interpretation ADR-0022 puts above the
+        # controller, not inside it.
+        #
+        # True makes the controller report `stalled` and let L3 judge it. Model
+        # data, so simulation and hardware are configured identically (P2).
+        allow_stalling: true

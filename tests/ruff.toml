@@ -1,0 +1,18 @@
+# Lint rules for the scenario suite.
+#
+# This file exists only to point at the rules, not to declare a second set of
+# them: `tools/pyproject.toml` is where ruff is configured for this repository
+# and `extend` pulls that configuration in wholesale. A copy of `select` and
+# `line-length` here would be the same decision written twice, which is what P1
+# forbids — and the copy would drift silently, because nothing compares them.
+#
+# Why a file at all, rather than passing `--config` from `./scripts/lint`: ruff
+# discovers configuration by walking up from each file it lints, and there is no
+# configuration between `tests/` and the repository root. Without this, `ruff
+# check tests` silently falls back to ruff's built-in defaults — a narrower rule
+# set at a different line length — and reports "All checks passed" having checked
+# almost nothing. That is exactly how the violations in `bringup.py` survived.
+# Passing `--config` on the command line instead would fix `tests/` and break
+# `tools/`, because an explicit config changes how `src` is resolved and
+# `cite_tools` stops being recognised as first-party.
+extend = "../tools/pyproject.toml"

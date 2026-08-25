@@ -291,12 +291,20 @@ class TestPickAndPlace(unittest.TestCase):
         sdf_path.write_text(_workpiece_sdf())
         created = subprocess.run(
             [
-                "ros2", "run", "ros_gz_sim", "create",
-                "-file", str(sdf_path),
-                "-name", WORKPIECE,
-                "-x", str(spawn[0]),
-                "-y", str(spawn[1]),
-                "-z", str(spawn[2]),
+                "ros2",
+                "run",
+                "ros_gz_sim",
+                "create",
+                "-file",
+                str(sdf_path),
+                "-name",
+                WORKPIECE,
+                "-x",
+                str(spawn[0]),
+                "-y",
+                str(spawn[1]),
+                "-z",
+                str(spawn[2]),
             ],
             capture_output=True,
             text=True,
@@ -333,17 +341,26 @@ class TestPickAndPlace(unittest.TestCase):
             Path(get_package_share_directory("cite_orchestration")) / "trees" / "station_cycle.xml"
         )
         command = [
-            "ros2", "run", "cite_orchestration", "line_coordinator",
+            "ros2",
+            "run",
+            "cite_orchestration",
+            "line_coordinator",
             "--ros-args",
-            "-p", f"zone:={ZONE}",
-            "-p", f"tree:={tree}",
-            "-p", f"asset:={ARM}",
-            "-p", f"pick_frame:={PICK_FRAME}",
+            "-p",
+            f"zone:={ZONE}",
+            "-p",
+            f"tree:={tree}",
+            "-p",
+            f"asset:={ARM}",
+            "-p",
+            f"pick_frame:={PICK_FRAME}",
             # Where station_transfer_1 places, per the L0 topology: the first
             # conveyor's infeed. The scenario names the frame, never a
             # coordinate — that is the property the model exists to give.
-            "-p", f"place_frame:={PLACE_FRAME}",
-            "-p", "use_sim_time:=true",
+            "-p",
+            f"place_frame:={PLACE_FRAME}",
+            "-p",
+            "use_sim_time:=true",
         ]
         outcome, highest = self._run_cycle(command, resting)
 

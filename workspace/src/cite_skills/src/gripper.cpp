@@ -33,4 +33,9 @@ GraspWidth resolve_grasp_width(double requested_m, double configured_default_m)
   return GraspWidth{0.0, GraspWidthSource::Unknown};
 }
 
+bool gripper_is_holding(const GripperReport & report)
+{
+  return report.stalled && report.reached_width_m > report.commanded_width_m;
+}
+
 }  // namespace cite_skills

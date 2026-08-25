@@ -432,7 +432,7 @@
     },
     "GraspSpec": {
       "additionalProperties": false,
-      "description": "How the simulated grasp plugin recognises a grasp on this end effector.\n\nDeclared here rather than hardcoded in the plugin: an end effector with\ndifferent link names is a data change, and a plugin that guessed a link name\nwould be a second place a name is made (P1). ADR-0023 requires these to come\nfrom the model for exactly that reason.",
+      "description": "How this end effector grasps: what the plugin watches, and what a skill commands.\n\nDeclared here rather than hardcoded in the plugin: an end effector with\ndifferent link names is a data change, and a plugin that guessed a link name\nwould be a second place a name is made (P1). ADR-0023 requires these to come\nfrom the model for exactly that reason.\n\nTwo audiences, deliberately one block. The thresholds below are read by the\nsimulation plugin; the travel and width values are read by the L3 skill\nserver on both the simulated and the physical path. They belong together\nbecause they are *the same stroke* described once — splitting them would put\n`closed_position` and `closed_threshold_rad` in different files, where\nnothing would notice the day they stopped agreeing.",
       "properties": {
         "attach_link_suffix": {
           "title": "Attach Link Suffix",
@@ -448,6 +448,19 @@
           "exclusiveMinimum": 0.0,
           "title": "Closed Threshold Rad",
           "type": "number"
+        },
+        "default_grasp_width_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Grasp Width M"
         },
         "drive_joint_suffix": {
           "title": "Drive Joint Suffix",

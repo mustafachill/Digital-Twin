@@ -602,3 +602,69 @@ class TestTheDeterminismCheckCanSeeWhatItClaimsTo:
         produced = gen.generate(load(real_model))
         problems = cli._determinism_problems(real_model / "does_not_exist", produced)
         assert problems and "subprocess" in problems[0]
+
+
+class TestGraspPolicyReachesTheBringUpPlan:
+    """The grasp default is L0 data, and the plan is how L3 receives it.
+
+    Written once in the end-effector type, delivered to every arm that carries
+    one. A value the model states but the plan does not carry is a value the
+    skill server never sees, and the visible symptom is a gripper closing against
+    its effort limit while the model looks correct.
+    """
+
+    EFFECTOR = "assets/types/end_effectors/xarm_parallel_gripper.yaml"
+
+    def test_the_default_width_is_delivered_to_every_arm(self, real_model: Path) -> None:
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        managers = [m for m in plan["controller_managers"] if m.get("gripper_action")]
+        assert managers, "no arm in the plan has a gripper; this test would prove nothing"
+        for manager in managers:
+            assert manager["gripper_default_grasp_width_m"] == 0.045, manager["asset"]
+
+    def test_the_value_comes_from_the_model_and_is_not_a_generator_constant(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / self.EFFECTOR,
+            lambda d: d["asset_type"]["grasp"].__setitem__("default_grasp_width_m", 0.031),
+        )
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        widths = {
+            m["gripper_default_grasp_width_m"]
+            for m in plan["controller_managers"]
+            if m.get("gripper_action")
+        }
+        assert widths == {0.031}
+
+    def test_an_unset_default_emits_no_key_rather_than_a_zero(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Absent, not 0.0. Zero is what `Pick.Goal.grasp_width_m` uses to mean
+        "no width supplied", so emitting it as the *default* would turn "nobody
+        configured one" into a configured value meaning the same thing — and the
+        skill server's warning about the missing datum would never fire."""
+        edit_yaml(
+            real_model / self.EFFECTOR,
+            lambda d: d["asset_type"]["grasp"].pop("default_grasp_width_m", None),
+        )
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        for manager in plan["controller_managers"]:
+            assert "gripper_default_grasp_width_m" not in manager
+
+    def test_a_stall_is_reported_by_the_controller_rather_than_aborted(
+        self, real_model: Path
+    ) -> None:
+        """ADR-0022: a stall is reported, not interpreted.
+
+        `GripperActionController` defaults `allow_stalling` to false, and false
+        makes it call `setAborted` on the one outcome a parallel gripper exists to
+        report — pads closed onto a part. The skill would then have to read
+        success out of a failed action. This is model data so that simulation and
+        hardware are configured identically (P2).
+        """
+        produced = artifacts(real_model)
+        for asset in ("arm_1", "arm_2", "arm_3"):
+            controllers = yaml.safe_load(produced[f"control/cell_a_{asset}_controllers.yaml"])
+            gripper = controllers[f"/cite/cell_a/{asset}/{asset}_gripper_controller"]
+            assert gripper["ros__parameters"]["allow_stalling"] is True

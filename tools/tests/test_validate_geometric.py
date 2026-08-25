@@ -273,3 +273,76 @@ class TestZoneContainmentUsesExtents:
 
     def test_a_body_wholly_inside_is_accepted(self, real_model: Path) -> None:
         assert "outside-zone" not in geometric_rules(real_model)
+
+
+class TestDefaultGraspWidth:
+    """The default a `Pick` closes to has to be a width the gripper can act on.
+
+    Both bounds below are silent failures in the simulator: the gripper closes,
+    the controller reports success, nothing attaches, and every layer above
+    reports that it picked something up. The cost of finding that at run time is
+    a full bring-up; the cost of finding it here is a millisecond.
+    """
+
+    #: The end-effector type carrying the default, as a path fragment.
+    EFFECTOR = "assets/types/end_effectors/xarm_parallel_gripper.yaml"
+
+    def _set(self, model: Path, edit_yaml: Callable, **fields: float) -> None:
+        def mutate(document: dict) -> None:
+            document["asset_type"]["grasp"].update(fields)
+
+        edit_yaml(model / self.EFFECTOR, mutate)
+
+    def test_the_shipped_default_is_within_the_bound(self, real_model: Path) -> None:
+        assert "default-grasp-width-never-closes" not in physical_rules(real_model)
+
+    def test_a_width_that_never_reaches_the_threshold_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # 60 mm on this gripper maps to a drive-joint position short of
+        # closed_threshold_rad, so it can never stall and never attach — while
+        # being a perfectly plausible-looking number under max_width_m.
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.060)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_the_bound_moves_with_the_threshold(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The ceiling is derived, not a constant. Raising the threshold lowers it.
+
+        This is what stops the check from being a hardcoded 55 mm that quietly
+        stops matching the model it is checking.
+        """
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.045)
+        assert "default-grasp-width-never-closes" not in physical_rules(real_model)
+
+        self._set(real_model, edit_yaml, closed_threshold_rad=0.6)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_a_width_wider_than_the_stroke_is_caught_by_the_same_rule(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """One rule, not two: the ceiling is always below the full opening.
+
+        `closed_threshold_rad` must be positive, so the derived ceiling is
+        strictly under `max_width_m` and a separate "wider than the stroke" check
+        could never fire. There was one, and this test is what found it dead.
+        """
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.2)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_an_end_effector_without_a_default_is_not_faulted(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Declining to name a default is a real state, not an omission.
+
+        A vacuum end effector has no grasp width at all, and a parallel one may
+        prefer the skill's explicit "no width was supplied" warning to a wrong
+        number applied silently.
+        """
+
+        def mutate(document: dict) -> None:
+            document["asset_type"]["grasp"].pop("default_grasp_width_m", None)
+
+        edit_yaml(real_model / self.EFFECTOR, mutate)
+        assert physical_rules(real_model) == set()

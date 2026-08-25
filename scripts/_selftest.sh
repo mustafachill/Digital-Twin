@@ -197,6 +197,75 @@ expect_eq "an explicit ROS_DOMAIN_ID survives sourcing _lib.sh" \
                   _ "${REPO_ROOT}/scripts/_lib.sh")"
 
 # -----------------------------------------------------------------------------
+# python_trees — T-08. The linter and the host suite must walk the scenarios.
+#
+# The defect being pinned: both ./scripts/lint and ./scripts/test named `tools`
+# and only `tools`. tests/ was neither linted nor collected, so three ruff
+# violations and a whole guard suite sat in the branch reporting nothing. These
+# assertions fail if either tree is dropped again.
+# -----------------------------------------------------------------------------
+TREES="$(python_trees)"
+case "$TREES" in
+    *"${REPO_ROOT}/tools"*) SELFTEST_PASS=$((SELFTEST_PASS + 1)) ;;
+    *) SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+       printf '  %sFAIL%s python_trees includes tools/\n' "$C_RED" "$C_RST" >&2 ;;
+esac
+case "$TREES" in
+    *"${REPO_ROOT}/tests"*) SELFTEST_PASS=$((SELFTEST_PASS + 1)) ;;
+    *) SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+       printf '  %sFAIL%s python_trees includes tests/\n' "$C_RED" "$C_RST" >&2 ;;
+esac
+
+# Tied to the file it exists to collect, not merely to a directory name: moving
+# the guard out from under a walked tree has to fail here rather than silently
+# stop being run. This is the assertion that would have caught the original gap.
+GUARD_FOUND=0
+while IFS= read -r tree; do
+    [ -n "$tree" ] || continue
+    if find "$tree" -name 'test_scenario_modules_load.py' -print -quit 2>/dev/null | grep -q .; then
+        GUARD_FOUND=1
+    fi
+done <<< "$TREES"
+expect_eq "the scenario-load guard lies inside a tree the host suite collects" \
+          "1" "$GUARD_FOUND"
+
+# ruff must resolve real configuration for every walked tree. Without a config
+# between a tree and the repository root ruff falls back to its own defaults —
+# a narrower rule set at a different line length — and reports "All checks
+# passed" having checked almost nothing, which is how tests/ stayed dirty.
+while IFS= read -r tree; do
+    [ -n "$tree" ] || continue
+    FOUND=""
+    dir="$tree"
+    while [ "$dir" != "/" ] && [ -n "$dir" ]; do
+        if [ -f "${dir}/ruff.toml" ] || [ -f "${dir}/.ruff.toml" ] \
+           || grep -qs '\[tool\.ruff' "${dir}/pyproject.toml"; then
+            FOUND="$dir"
+            break
+        fi
+        dir="$(dirname "$dir")"
+    done
+    expect_eq "ruff configuration is discoverable from $(basename "$tree")/" \
+              "found" "$( [ -n "$FOUND" ] && printf 'found' || printf 'missing' )"
+done <<< "$TREES"
+
+# -----------------------------------------------------------------------------
+# scripts/enter — T-09. A trailing command must not weaken the hardware opt-in.
+#
+# The hardware service grants host networking, /dev passthrough and privileged
+# execution. `require_explicit_hardware_opt_in` is what stands between that and
+# an accidental command to a physical arm, and it is gated on the SERVICE, never
+# on whether arguments were supplied — an opt-in a caller can skip by appending
+# a command is not an opt-in. Both forms are asserted, and neither reaches Docker.
+# -----------------------------------------------------------------------------
+expect_fail "enter rejects an unknown service" \
+            "${REPO_ROOT}/scripts/enter" definitely_not_a_service
+expect_fail "enter hardware refuses without the opt-in" \
+            env CITE_ALLOW_HARDWARE=0 "${REPO_ROOT}/scripts/enter" hardware
+expect_fail "enter hardware refuses without the opt-in when given a command" \
+            env CITE_ALLOW_HARDWARE=0 "${REPO_ROOT}/scripts/enter" hardware ros2 topic list
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"

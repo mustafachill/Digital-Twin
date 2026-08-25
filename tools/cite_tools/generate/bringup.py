@@ -47,6 +47,7 @@ class _ManagerView:
     gripper_open_position: float | None
     gripper_closed_position: float | None
     gripper_max_width_m: float | None
+    gripper_default_grasp_width_m: float | None
 
 
 @dataclass(frozen=True)
@@ -80,13 +81,21 @@ def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
 
 
 def _grasp(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | None:
-    """One value from the end effector's grasp specification, or None."""
+    """One value from the end effector's grasp specification, or None.
+
+    ``None`` when the arm has no end effector, when its type declares no grasp
+    specification, or when that specification leaves this particular field unset
+    — which is a real state rather than an error: a vacuum end effector has no
+    grasp *width* at all, and a parallel one may deliberately decline to name a
+    default rather than have a wrong one applied silently.
+    """
     if asset.instance.end_effector is None:
         return None
     effector = cell.end_effector_type(asset.instance.end_effector.type)
     if effector is None or effector.grasp is None:
         return None
-    return float(getattr(effector.grasp, field))
+    value = getattr(effector.grasp, field)
+    return None if value is None else float(value)
 
 
 def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
@@ -153,6 +162,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_open_position=_grasp(cell, asset, "open_position"),
             gripper_closed_position=_grasp(cell, asset, "closed_position"),
             gripper_max_width_m=_grasp(cell, asset, "max_width_m"),
+            gripper_default_grasp_width_m=_grasp(cell, asset, "default_grasp_width_m"),
         )
         for asset in cell.assets
         if asset.controllers

@@ -1,4 +1,4 @@
-"""Physical plausibility: mass, inertia, and collision geometry.
+"""Physical plausibility: mass, inertia, collision geometry, and gripper stroke.
 
 L1 is blunt about why this exists: *inertial properties are validated, not
 trusted*. A wrong inertia tensor raises no error anywhere. The simulation runs,
@@ -35,6 +35,8 @@ def check(model: FacilityModel) -> list[Finding]:
     seen_tensors: dict[tuple[float, ...], list[str]] = {}
 
     for asset_type in model.types:
+        findings += _default_grasp_width_can_close(asset_type)
+
         body = asset_type.description.body
         if body is None:
             continue
@@ -185,6 +187,74 @@ def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[F
                 "behaviour nobody can explain. Use a primitive or a convex hull.",
             )
         ]
+    return []
+
+
+def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
+    """A default grasp width the gripper would never reach is not a default.
+
+    The derivation, written here because it is the kind of number that is
+    rediscovered painfully every time it is left implicit.
+
+    The skill server maps a task-space width linearly onto the drive joint's own
+    units::
+
+        position(w) = closed_position + (open_position - closed_position) * w / max_width_m
+
+    The simulated grasp only exists once the drive joint has travelled past
+    ``closed_threshold_rad`` — that is the condition ADR-0023's attachment plugin
+    watches. So a commanded width whose position never reaches the threshold
+    leaves the gripper still on the open side of it: the controller reports the
+    goal reached, no stall is possible, and the plugin never fires. The gripper
+    closes politely on air and every layer above reports success at doing nothing.
+
+    Requiring ``position(w) >= closed_threshold_rad`` and solving for ``w``::
+
+        w <= max_width_m * (closed_position - closed_threshold_rad)
+                         / (closed_position - open_position)
+
+    For the xArm parallel gripper — 0.085 m across a 0 to 0.85 rad stroke with a
+    0.30 rad threshold — that ceiling is 55 mm.
+
+    Note what this subsumes. ``closed_threshold_rad`` is required to be positive,
+    so the ceiling is always strictly below ``max_width_m``: a default wider than
+    the gripper opens is caught here too, and a second check for it would be
+    unreachable. There was one, until a test tried to reach it.
+
+    This is an ERROR rather than a warning. It is not a matter of degree: below
+    the bound the grasp can happen, above it the mechanism is unreachable.
+    """
+    grasp = asset_type.grasp
+    if grasp is None or grasp.default_grasp_width_m is None:
+        return []
+
+    where = f"types.{asset_type.id}.grasp.default_grasp_width_m"
+    stroke = grasp.closed_position - grasp.open_position
+    if stroke == 0.0:
+        return [
+            error(
+                "gripper-stroke-is-zero",
+                f"types.{asset_type.id}.grasp",
+                "open_position and closed_position are equal, so the gripper has no travel",
+                "Every width maps to the same joint position; no width can be commanded.",
+            )
+        ]
+
+    ceiling = grasp.max_width_m * (grasp.closed_position - grasp.closed_threshold_rad) / stroke
+    if grasp.default_grasp_width_m > ceiling:
+        return [
+            error(
+                "default-grasp-width-never-closes",
+                where,
+                f"{grasp.default_grasp_width_m} m commands the drive joint to a position "
+                f"short of closed_threshold_rad ({grasp.closed_threshold_rad}), so the "
+                f"grasp can never be recognised; the ceiling is {ceiling:.4f} m",
+                "Lower default_grasp_width_m below the ceiling, or lower "
+                "closed_threshold_rad. A width above it leaves the gripper still "
+                "closing when it meets the part: it never stalls, so nothing attaches.",
+            )
+        ]
+
     return []
 
 

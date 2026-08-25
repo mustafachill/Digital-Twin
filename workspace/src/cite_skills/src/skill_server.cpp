@@ -34,6 +34,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -142,7 +143,12 @@ public:
     // What `Pick.Goal.grasp_width_m == 0` resolves to — the end effector's
     // default grasp opening. Zero means "not supplied", which is a state the
     // skill reports rather than papers over.
-    declare_parameter("default_grasp_width_m", 0.0);
+    //
+    // Named to match the key the generated bring-up plan carries, exactly as the
+    // three values above are. Every other gripper value crosses that boundary
+    // under one spelling; this one used to change name in transit, which is a
+    // place for a delivery to fail silently and read as "no default configured".
+    declare_parameter("gripper_default_grasp_width_m", 0.0);
     // How many seeds IK is tried from before a pose is called unreachable
     // (ADR-0026). Seed 0 is the arm's current state; the rest are random within
     // the joint limits, which is what recovers the choice of IK branch that a
@@ -192,7 +198,7 @@ public:
         "cannot be mapped onto the gripper's own units");
       return false;
     }
-    default_grasp_width_m_ = get_parameter("default_grasp_width_m").as_double();
+    default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
 
     ik_seeds_ = static_cast<int>(get_parameter("ik_seeds").as_int());
     if (ik_seeds_ < 1) {
@@ -662,9 +668,8 @@ private:
     // carry an imaginary work-piece all the way to the next station and fail
     // there instead, which is much harder to attribute.
     if (goal->expect_object && !result->holding) {
-      const auto outcome = make_result(
-        ResultCode::EXECUTION_FAILED,
-        "the gripper closed without stalling, so it is holding nothing");
+      const auto outcome =
+        make_result(ResultCode::EXECUTION_FAILED, describe_empty_grasp(gripper));
       result->result = outcome;
       terminate(handle, result, outcome);
       return;
@@ -737,16 +742,16 @@ private:
     if (width.source == cite_skills::GraspWidthSource::Unknown) {
       // Not silent. `grasp_width_m == 0` means "use the object type's default",
       // and that default is L0 data this skill has not been given: no
-      // `default_grasp_width_m` is configured for this arm's end effector, and
-      // nothing here knows what a work-piece is. Closing against the effort
-      // limit is what a parallel gripper does with an unknown object, and it is
-      // said out loud rather than presented as a resolved width.
+      // `gripper_default_grasp_width_m` reached this node, and nothing here knows
+      // what a work-piece is. Closing against the effort limit is what a parallel
+      // gripper does with an unknown object, and it is said out loud rather than
+      // presented as a resolved width.
       RCLCPP_WARN(
         get_logger(),
         "no grasp width for work-piece '%s': the goal left grasp_width_m at 0 and no "
-        "default_grasp_width_m is configured, so the gripper closes against its %.0f N "
-        "effort limit. The object type's default belongs in the L0 end-effector type "
-        "and has to be delivered by the bring-up plan.",
+        "gripper_default_grasp_width_m reached this node, so the gripper closes against "
+        "its %.0f N effort limit. The end-effector type declares one; the bring-up plan "
+        "carries it; check that the launch mechanism passes it through.",
         goal->workpiece_id.c_str(), max_effort);
     }
     gripper = command_gripper(width.width_m, max_effort, handle);
@@ -755,9 +760,7 @@ private:
       return;
     }
     if (!gripper.holding) {
-      finish(make_result(
-        ResultCode::EXECUTION_FAILED,
-        "the gripper closed without stalling, so nothing was picked up"));
+      finish(make_result(ResultCode::EXECUTION_FAILED, describe_empty_grasp(gripper)));
       return;
     }
     result->holding = true;
@@ -1039,7 +1042,39 @@ private:
     bool holding{false};
     double reached_width_m{0.0};
     double effort_n{0.0};
+    // Kept so that a failure can quote the numbers it was decided on. A grasp
+    // that reports "nothing was picked up" without saying what it commanded and
+    // what came back sends the next reader to the simulator to find out (P8).
+    double commanded_width_m{0.0};
+    bool stalled{false};
+    bool reached_goal{false};
   };
+
+  /// Why a close ended up holding nothing, in the numbers it was judged on.
+  ///
+  /// The two cases fail for opposite reasons and are fixed in opposite
+  /// directions, so telling them apart here saves the reader a simulation run.
+  static std::string describe_empty_grasp(const GripperOutcome & gripper)
+  {
+    std::ostringstream message;
+    message.setf(std::ios::fixed);
+    message.precision(1);
+    message << "nothing was picked up: commanded " << gripper.commanded_width_m * 1000.0
+            << " mm, reached " << gripper.reached_width_m * 1000.0 << " mm, stalled="
+            << (gripper.stalled ? "true" : "false") << ". ";
+    if (gripper.reached_goal) {
+      message << "The gripper arrived where it was sent, so nothing was between the "
+                 "pads to stop it — either the work-piece was not there, or the "
+                 "commanded width is wider than the part. A grasp is evidenced by "
+                 "FAILING to reach the command, so the width must be narrower than the "
+                 "object it closes on";
+    } else {
+      message << "The gripper stopped at or past the width it was commanded to, so "
+                 "nothing is holding it open. That is a gripper closed on itself, not "
+                 "one closed on a part";
+    }
+    return message.str();
+  }
 
   using GripperProgressFn = std::function<void(double, double)>;
 
@@ -1130,13 +1165,27 @@ private:
 
     const auto wrapped = result_future.get();
     if (wrapped.result) {
-      // `stalled` is what distinguishes holding something from closing on air.
-      // GripperActionController reports it; a controller that could not would
-      // make this skill unable to tell the two apart (ADR-0022).
-      outcome.holding = wrapped.result->stalled;
+      // A stall is reported by the controller and judged here, which is the split
+      // ADR-0022 fixes. `stalled` alone used to stand in for "holding", and it
+      // cannot: it says the joint stopped short of its command, not what stopped
+      // it. gripper_is_holding adds the question that distinguishes a part from a
+      // jam — did it stop on the OPEN side of the width we asked for.
       outcome.reached_width_m =
         cite_skills::gripper_width_for(wrapped.result->position, travel_);
       outcome.effort_n = wrapped.result->effort;
+      outcome.commanded_width_m = width_m;
+      outcome.stalled = wrapped.result->stalled;
+      outcome.reached_goal = wrapped.result->reached_goal;
+      outcome.holding = cite_skills::gripper_is_holding(
+        {width_m, outcome.reached_width_m, outcome.stalled, outcome.reached_goal});
+
+      RCLCPP_INFO(
+        get_logger(),
+        "gripper: commanded %.1f mm, reached %.1f mm, stalled=%s, reached_goal=%s, "
+        "effort=%.1f -> %s",
+        width_m * 1000.0, outcome.reached_width_m * 1000.0,
+        outcome.stalled ? "true" : "false", outcome.reached_goal ? "true" : "false",
+        outcome.effort_n, outcome.holding ? "holding" : "empty");
     }
 
     if (wrapped.code == rclcpp_action::ResultCode::CANCELED ||

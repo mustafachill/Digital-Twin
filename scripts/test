@@ -48,8 +48,27 @@ run_host_tests() {
     py="$(cite_python)" || true
     [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ] || return 0
 
+    # tests/ as well as tools/, because the scenario guards live there and were
+    # collected by nothing. `tests/scenarios/guards/` checks that every scenario
+    # module loads the way `launch_test` actually loads it — by path, never
+    # registered in sys.modules — which is a defect class that reaches the branch
+    # precisely when verification does not match how the code is loaded. A guard
+    # no suite collects is not a guard.
+    #
+    # Read with a loop rather than `mapfile`, which is bash 4+. This suite runs
+    # on the host BEFORE any re-execution into the container, and macOS still
+    # ships bash 3.2 — the other `mapfile` call in this file is safe only because
+    # it sits after that boundary. ADR-0013 is the whole point: the same command
+    # has to work from the laptop.
+    local paths=()
+    local tree
+    while IFS= read -r tree; do
+        [ -n "$tree" ] && paths+=("$tree")
+    done < <(python_trees)
+    [ "${#paths[@]}" -gt 0 ] || return 0
+
     step "Host tooling tests"
-    PYTHONPATH="" "$py" -m pytest "${REPO_ROOT}/tools" -q
+    PYTHONPATH="" "$py" -m pytest "${paths[@]}" -q
     export CITE_HOST_TESTS_DONE=1
 }
 

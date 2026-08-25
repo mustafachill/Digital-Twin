@@ -44,6 +44,14 @@ plan:
       gripper_open_position: {{ manager.gripper_open_position | f }}
       gripper_closed_position: {{ manager.gripper_closed_position | f }}
       gripper_max_width_m: {{ manager.gripper_max_width_m | f }}
+{% if manager.gripper_default_grasp_width_m is not none %}
+      # What a Pick closes to when its goal names no width. Narrower than the
+      # work-piece on purpose: a parallel gripper evidences a grasp by failing to
+      # reach where it was sent, so a width equal to the part teaches the skill
+      # nothing (ADR-0022). Its ceiling is derived and enforced in
+      # cite_tools.validate.physical.
+      gripper_default_grasp_width_m: {{ manager.gripper_default_grasp_width_m | f }}
+{% endif %}
 {% endif %}
       controllers:
 {% for controller in manager.controllers %}
