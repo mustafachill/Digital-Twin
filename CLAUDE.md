@@ -38,23 +38,46 @@ repository is partway there. Check before assuming.
   process topology and the bring-up plan. That directory is **generated in its entirety and
   must never be hand-edited** (ADR-0021). `./scripts/validate-model` diffs it against a
   fresh generator run *and* regenerates in a second interpreter under a different hash seed
-  to prove the output is byte-identical; it exits 0. `tools/tests/` holds 132 passing tests.
+  to prove the output is byte-identical; it exits 0. `tools/tests/` passes — 183 tests at
+  this commit.
 - **Seven first-party packages exist**, and `workspace/src/external/` adds the twelve from
   `xarm_ros2`. `./scripts/build` is a blocking CI step. The seven are `cite_interfaces`,
   `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`, `cite_orchestration`
   and `cite_simulation`. **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`,
   `cite_control` and `cite_hardware` do not exist.**
-- **The simulated cell comes up, and that is the extent of what is proven.**
-  `./scripts/sim --headless` brings the scene and three arms into Gazebo Harmonic with nine
-  controllers active, one `move_group` and one skill server per arm, the generated planning
-  scene applied and read back, and the facility's model version, frames and topology served.
-  `./scripts/scenario bringup` asserts it and is a blocking CI gate, run twice per CI run.
+- **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
+  arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
+  server per arm, the generated planning scene applied and read back, and the facility's
+  model version, frames and topology served. `./scripts/scenario bringup` asserts it and is
+  a blocking CI gate, run twice per CI run.
+- **One arm now picks and places a work-piece, and friction alone holds it.** ADR-0029
+  removed the contact-triggered attachment plugin, so nothing on the simulation side
+  assists a grasp: the pads close on the part, stall on it, and the controller reports
+  `stalled=true, reached_goal=false -> holding` — the evidence ADR-0022 shaped the gripper
+  path around. The cycle passed **8/8** at a reached width of 49.2–49.9 mm; that campaign is
+  recorded in the message of commit `39931d1`, which is the only place it is written down.
+  The 84-trial measurement the decision rests on is
+  [`docs/measurements/2026-08-25-friction-grasp/`](docs/measurements/2026-08-25-friction-grasp/results.md).
+  **Do not read that as a green scenario.** In the same campaign the *scenario verdict* was
+  6/8: two runs failed the post-cycle teardown check — `parameter_bridge` exiting -6, `gz`
+  exiting -9 — after the cycle itself had passed. No exemption was added for either, the
+  cause is not established, and one baseline run is not evidence that they are
+  pre-existing. `./scripts/scenario pick_and_place` runs in CI as `continue-on-error` at
+  this commit.
 - **What does not work, stated plainly** (Phase 1.C, in progress):
-  - **The pick-and-place cycle does not complete, and no work-piece has ever been grasped.**
-    `./scripts/scenario pick_and_place` fails and runs in CI as `continue-on-error`.
-  - **The sensor-driven line does not run.** `cite_simulation/src/break_beam.cpp` is in no
-    CMake target, and the conveyor plugin is built but instantiated by no generated
-    artifact, so the conveyor and beam topics the bring-up plan declares have no publisher.
+  - **The three-arm sensor-driven line does not run.** The belt and beam plugins now build
+    and are instantiated by the generated world, publishing on **Gazebo transport** under
+    the same names `cell_a_plan.yaml` declares. `cite_bringup` bridges only `/clock`, so
+    those names have **no ROS publisher**, and nothing in `cite_orchestration` subscribes
+    to them. Phase 1.D.
+  - **A grasp holds a position, not an orientation.** The work-piece rotates between the
+    jaws. Correcting the grasp-plane offset took rotations above 20° from 60% to 0% of
+    trials (20 per condition, interleaved, p < 0.0001) and left a residual of up to 18.7° —
+    [`docs/measurements/2026-08-25-grasp-plane-offset/`](docs/measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
+    **That correction is not in the tree:** `PickAt` still defaults `grasp_height_m` to
+    0.03 m in `cite_orchestration/include/cite_orchestration/skill_nodes.hpp`, which is the
+    *uncorrected* condition the published trials ran under. Per ADR-0029, a scenario may assert where a part ends up and
+    **may not assert how it is held**.
   - **Four of the six L3 skills exist** — `MoveTo`, `Grasp`, `Pick`, `Place`. `Transfer` and
     `Detect` are typed `.action` definitions with no server.
   - **L4 runs one station.** One behaviour tree, ticked synchronously; no handoff.
@@ -62,8 +85,11 @@ repository is partway there. Check before assuming.
     seeds sensor noise and nothing else — not the physics solver, not the planner. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
     determinism.
+  - **ADR-0027's Pilz pipeline is decided and not implemented.** Every generated
+    `*_ompl_planning.yaml` still lists `planning_pipelines: [ompl]` and nothing else.
   - **Twelve links per arm use their visual mesh as collision geometry**, which §10 below
-    names as a defect class. Real-time factor on the development host is 0.14. See ADR-0028.
+    names as a defect class. Real-time factor on the development host is 0.14. ADR-0028
+    decides the fix and is still `Proposed`: `assets/` holds only its README and manifest.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this
   model does not transfer to the building, and no report should imply that it does.
@@ -76,6 +102,9 @@ repository is partway there. Check before assuming.
   `BUILT`, with the evidence named. `DESIGNED` means the contract the code must satisfy;
   `PARTIAL` says which part is real and which is not. Read the layer document before
   touching a layer, and read its status line before believing its body.
+- **Measured evidence lives in [`docs/measurements/`](docs/measurements/README.md)**, one
+  directory per campaign, each with its thresholds written down before the first trial.
+  This is what P8 looks like in practice. Cite a campaign; do not copy its numbers around.
 
 State this honestly in reports. Never claim a capability exists because the charter
 describes it.

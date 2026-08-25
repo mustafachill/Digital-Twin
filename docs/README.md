@@ -25,6 +25,7 @@ disagreement is a defect in the loser — fix it, do not leave both standing.
 | How does this relate to ISO 23247? | [`architecture/standards-alignment.md`](architecture/standards-alignment.md) |
 | What shape is this interface? | [`interfaces/`](interfaces/README.md) |
 | How do I bring up / calibrate / recover the cell? | [`operations/`](operations/README.md) |
+| What number backs that claim? | [`measurements/`](measurements/README.md) |
 | Where do I read more? | [`reference/`](reference/README.md) |
 
 ## Reading order for a new contributor
@@ -57,8 +58,12 @@ same severity as a broken test. Reviewers check this.
 ## Writing here
 
 - **English only**, without exception (P10).
-- **Ground every claim in code**, a test, or a cited source. Mark anything else
-  `unverified` rather than stating it plainly.
+- **Ground every claim in code**, a test, a published measurement, or a cited source. Mark
+  anything else `unverified` rather than stating it plainly.
+- **A claim about physical behaviour needs a measurement, not an argument.** Two ADRs here
+  have had to be corrected because a plausible sentence about physics was written down as a
+  fact and relied upon. Cite [`measurements/`](measurements/README.md) or say that nothing
+  has been run.
 - **Prefer deleting a stale sentence to hedging it.** Stale documentation is more
   dangerous than missing documentation, because it is trusted.
 - **Never duplicate.** Link instead. A value that exists in two places will diverge (P1),

@@ -5,7 +5,10 @@
   `gz_ros2_control`, with **9 controllers active across three arms** — asserted by
   `./scripts/scenario bringup`. Controller configuration, MoveIt configuration and the
   planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
-  the scene per arm and reads it back rather than trusting the service result.
+  the scene per arm and reads it back rather than trusting the service result. The gripper
+  runs as a `ros2_control` controller ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md))
+  and its stall is now the sole evidence that a part is held, no simulation plugin having
+  survived to forge it ([ADR-0029](../adr/0029-simulated-grasping-by-friction.md)).
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
   **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
@@ -126,5 +129,11 @@ incomplete scene generates confidently unsafe trajectories.
 - **Real-time requirements.** Whether the controller loop needs a real-time kernel, and
   whether that is compatible with containerized execution
   ([ADR-0009](../adr/0009-docker-primary-environment.md)).
-- **Gripper control interface.** Whether the gripper is a `ros2_control` controller or a
-  separate action server. Affects how L3's `Grasp` skill is shaped.
+- **Whether a stall is enough evidence of a grasp on hardware.** In simulation it is: the
+  pads stop short of the commanded width and the controller reports
+  `stalled=true, reached_goal=false` ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md)).
+  Nothing has been run on a physical xArm, so whether the vendor gripper reports the same
+  shape under the same conditions is a Phase 2 question.
+
+*(The gripper's control interface is no longer open: it is a `ros2_control` controller,
+decided in [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md).)*
