@@ -57,8 +57,10 @@ class TestEveryAidIsInstantiated:
         assert len(plugins(root, "cite_break_beam")) == len(cell.of_category("sensor")) == 3
 
     def test_the_world_still_loads_the_systems_the_cell_depends_on(self, cell) -> None:
-        # Contact reporting in particular: the grasp attachment plugin reads it,
-        # and without it a grasp silently never holds (ADR-0023).
+        # Contact reporting is in this set although nothing reads it today: it
+        # was loaded for ADR-0023's attachment plugin, which is removed. It is a
+        # generic capability any `<sensor type="contact">` needs, kept
+        # deliberately — see the comment in the world template.
         root = world_xml(cell)
         names = {p.get("name") for p in root.findall("plugin")}
         assert {

@@ -48,22 +48,20 @@ asset_type:
     file: urdf/xarm_device_macro.xacro
     macro: xarm_device
 
-  # How the simulated grasp plugin recognises a grasp (ADR-0023). These are the
-  # vendor's own link and joint names; declaring them here keeps the plugin free
-  # of any name it invented for itself.
+  # The gripper's stroke, and what a skill commands on it. Every value below is
+  # read by the L3 skill server on the simulated and the physical path alike.
+  #
+  # THREE FIELDS USED TO LIVE HERE AND NO LONGER DO: `attach_link_suffix`,
+  # `closed_threshold_rad` and `open_threshold_rad`. They configured ADR-0023's
+  # contact-triggered attachment plugin, which is removed. The 84-trial campaign
+  # in `docs/measurements/2026-08-25-friction-grasp/` measured why: the plugin
+  # armed at 0.30 rad while the pads only reach a 50 mm part at 0.4056 rad, so it
+  # welded the part to a finger before any contact force existed, the jaws then
+  # closed through it to 46 mm feeling nothing, and `Pick` failed 8/8 while the
+  # weld carried the part 0.576 m anyway. It destroyed the stall this block
+  # exists to produce. Friction alone held in all 84 trials.
   grasp:
-    # A finger, not link_tcp. Converting URDF to SDF lumps any link joined by a
-    # fixed joint into its parent, so link_base, link_eef, xarm_gripper_base_link
-    # and link_tcp do not exist in the spawned model at all — only links moved by
-    # a real joint survive. Naming a lumped link makes the plugin log "model has
-    # no link" and then silently never grasp anything.
-    #
-    # Attaching to a finger is also the more honest description of what holds the
-    # work-piece.
-    attach_link_suffix: left_finger
     drive_joint_suffix: drive_joint
-    closed_threshold_rad: 0.3
-    open_threshold_rad: 0.15
     # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed).
     # GripperCommand.position is passed straight to the joint, so a skill sending
     # metres would be sending radians — and 0.085 is a valid angle, so nothing
@@ -170,14 +168,9 @@ asset_type:
       finger_offset_y_m: 0.035465
       finger_offset_z_m: 0.042039
       pad_inset_m: 0.026
-    # What a Pick closes to when its goal names no width. 45 mm, and the two
-    # bounds that produce that number rather than any other:
+    # What a Pick closes to when its goal names no width. 45 mm, and the bound
+    # that produces that number rather than any other:
     #
-    #   * At most 60.92 mm. `cite_tools.validate.physical` derives and enforces
-    #     this ceiling as opening(closed_threshold_rad): a wider command leaves
-    #     the drive joint short of `closed_threshold_rad`, so the gripper reports
-    #     the goal reached, never stalls, and the attachment plugin never fires.
-    #     Anything above it is a gripper that closes politely on air.
     #   * Below the work-piece, not equal to it. The cell's reference work-piece
     #     is a 50 mm cube, and a parallel gripper evidences a grasp by *failing*
     #     to reach where it was sent: the pads meet the part, the joint stops
@@ -200,6 +193,13 @@ asset_type:
     # the pads to 50.59 mm — 0.3 mm of clearance per side on a 50 mm part, which
     # is why no work-piece was ever grasped. The value did not need recomputing;
     # the map that read it did.
+    #
+    # `cite_tools.validate.physical` still enforces a ceiling, but only the
+    # gripper's own 88.93 mm opening: the tighter 60.92 mm ceiling it used to
+    # apply was derived from `closed_threshold_rad` and died with the plugin. The
+    # bound that actually matters — narrower than the part — cannot be machine-
+    # checked while L0 records no work-piece geometry, so it is enforced by the
+    # reasoning above and by the scenario, not by the validator.
     #
     # Honest about its home (P7): this is a property of an end effector *paired
     # with a work-piece*, and it sits on the end-effector type because the model

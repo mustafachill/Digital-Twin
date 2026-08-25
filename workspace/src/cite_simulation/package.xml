@@ -19,7 +19,7 @@
   <!-- No rclcpp and no cite_interfaces. Neither was ever find_package'd or
        linked, and the cite_interfaces entry in particular invited the belief
        that these plugins speak ROS types — which is exactly what the
-       description above denies and what ADR-0023 depends on staying false. -->
+       description above denies and what ADR-0005 depends on staying false. -->
   <depend>gz_sim_vendor</depend>
   <depend>gz_plugin_vendor</depend>
   <depend>gz_transport_vendor</depend>

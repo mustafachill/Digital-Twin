@@ -53,15 +53,6 @@ class _BodyView:
 
 
 @dataclass(frozen=True)
-class _GraspView:
-    attach_link: str
-    drive_joint: str
-    closed_threshold_rad: float
-    open_threshold_rad: float
-    graspable: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class _ArmView:
     id: str
     asset_type: Any
@@ -71,7 +62,6 @@ class _ArmView:
     namespace: str
     mount_link: str
     args: tuple[tuple[str, str], ...]
-    grasp: _GraspView | None
 
 
 def _geometry_xml(geometry: Any) -> str:
@@ -246,31 +236,6 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         namespace=asset.namespace,
         mount_link=_mount_link(asset),
         args=tuple(sorted(args)),
-        grasp=_grasp_view(asset, cell),
-    )
-
-
-def _grasp_view(asset: ResolvedAsset, cell: ResolvedCell) -> _GraspView | None:
-    """The grasp plugin's configuration, or None when no end effector is fitted.
-
-    Every value comes from the model: the link and joint names from the
-    end-effector type, the graspable model names from the facility. A plugin that
-    guessed any of them would be a second place a name is made (P1), and would
-    break silently the day a different end effector is fitted.
-    """
-    if asset.instance.end_effector is None:
-        return None
-    effector = cell.end_effector_type(asset.instance.end_effector.type)
-    if effector is None or effector.grasp is None:
-        return None
-    if not cell.workpiece_models:
-        return None
-    return _GraspView(
-        attach_link=ids.link(asset.id, effector.grasp.attach_link_suffix),
-        drive_joint=ids.joint(asset.id, effector.grasp.drive_joint_suffix),
-        closed_threshold_rad=effector.grasp.closed_threshold_rad,
-        open_threshold_rad=effector.grasp.open_threshold_rad,
-        graspable=tuple(sorted(cell.workpiece_models)),
     )
 
 

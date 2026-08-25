@@ -42,11 +42,10 @@
 // leaves that volume. The belt geometry stays exactly where the L0 model put it,
 // which is also what lets the cell furniture remain one static body.
 //
-// THE FIDELITY COST, stated rather than hidden, exactly as ADR-0023 states the
-// equivalent cost for grasping: transport here is kinematic, not frictional. A
-// part that would slip, tumble, jam against a neighbour or fail to be driven at
-// all in reality is carried smoothly here. No claim about belt handling,
-// accumulation pressure or singulation can rest on this plugin. What it is for
+// THE FIDELITY COST, stated rather than hidden: transport here is kinematic,
+// not frictional. A part that would slip, tumble, jam against a neighbour or
+// fail to be driven at all in reality is carried smoothly here. No claim about
+// belt handling, accumulation pressure or singulation can rest on this plugin. What it is for
 // is making a station act because a work-piece ARRIVED — which is what the break
 // beam observes and what makes the line sensor-driven rather than timed.
 //

@@ -204,37 +204,34 @@ def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[F
 
 
 def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
-    """A default grasp width the gripper would never reach is not a default.
+    """A default grasp width the gripper cannot even open to is not a default.
 
-    The derivation, written here because it is the kind of number that is
-    rediscovered painfully every time it is left implicit.
+    WHAT THIS BOUND USED TO BE, because the change matters and a silent
+    relaxation would be worse than the rule. It was
+    ``opening(closed_threshold_rad)`` — 60.92 mm on this gripper — and its whole
+    justification was ADR-0023's attachment plugin: a width above it left the
+    drive joint short of the threshold the plugin watched, so the plugin never
+    fired. That plugin is gone (see `GraspSpec`), and with it the only meaning
+    ``closed_threshold_rad`` ever had. A bound derived from a threshold that
+    nothing thresholds is an arbitrary number wearing a derivation, so it is not
+    kept.
 
-    The simulated grasp only exists once the drive joint has travelled past
-    ``closed_threshold_rad`` — that is the condition ADR-0023's attachment plugin
-    watches. So a commanded width whose position never reaches the threshold
-    leaves the gripper still on the open side of it: the controller reports the
-    goal reached, no stall is possible, and the plugin never fires. The gripper
-    closes politely on air and every layer above reports success at doing nothing.
+    WHAT SURVIVES is the bound the old rule's own docstring said it subsumed: the
+    pads cannot open wider than the linkage opens them, so a default above
+    ``max_width_m`` commands a width this gripper cannot reach at either end of
+    its travel. That is still an ERROR and still not a matter of degree. It is
+    derived through the end effector's own linkage — the same map the skill
+    server uses, read from the same place (P1) — so the day the linkage changes,
+    the bound moves with it.
 
-    The opening shrinks monotonically as the drive joint closes, so requiring
-    ``position(w) >= closed_threshold_rad`` is exactly ``w <=
-    opening(closed_threshold_rad)``. The ceiling is that opening, evaluated
-    through the end effector's own linkage — the same map the skill server uses,
-    read from the same place (P1).
-
-    For the xArm parallel gripper, with a 0.30 rad threshold, that ceiling is
-    60.92 mm. It read 55 mm until the linkage replaced a linear approximation of
-    the stroke; that approximation was wrong by about 5 mm across the working
-    range, which is the entire clearance a 50 mm grasp has to play with.
-
-    Note what this subsumes. ``closed_threshold_rad`` is required to be positive
-    and the opening is strictly decreasing over the stroke, so the ceiling is
-    always strictly below ``max_width_m``: a default wider than the gripper opens
-    is caught here too, and a second check for it would be unreachable. There was
-    one, until a test tried to reach it.
-
-    This is an ERROR rather than a warning. It is not a matter of degree: below
-    the bound the grasp can happen, above it the mechanism is unreachable.
+    WHAT THIS RULE NO LONGER CHECKS, stated rather than left to be discovered.
+    The bound that actually matters for a friction grasp is "narrower than the
+    part", because that is what makes the pads stop short of the command and the
+    controller report the stall ADR-0022 reads as holding. This rule cannot check
+    it: L0 describes no work-piece geometry — `Facility.workpiece_models` holds
+    names and nothing else — so there is no part width to compare against. The
+    day L0 gains work-piece dimensions, that is the check to add here, and it is
+    strictly tighter than this one.
     """
     grasp = asset_type.grasp
     if grasp is None or grasp.default_grasp_width_m is None:
@@ -252,18 +249,18 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
             )
         ]
 
-    ceiling = grasp.linkage.opening_m(grasp.closed_threshold_rad)
+    ceiling = grasp.max_width_m
     if grasp.default_grasp_width_m > ceiling:
         return [
             error(
                 "default-grasp-width-never-closes",
                 where,
-                f"{grasp.default_grasp_width_m} m commands the drive joint to a position "
-                f"short of closed_threshold_rad ({grasp.closed_threshold_rad}), so the "
-                f"grasp can never be recognised; the ceiling is {ceiling:.4f} m",
-                "Lower default_grasp_width_m below the ceiling, or lower "
-                "closed_threshold_rad. A width above it leaves the gripper still "
-                "closing when it meets the part: it never stalls, so nothing attaches.",
+                f"{grasp.default_grasp_width_m} m is wider than the pads open; the "
+                f"linkage reaches {ceiling:.4f} m at open_position "
+                f"({grasp.open_position}), so this width is not commandable at all",
+                "Lower default_grasp_width_m below the gripper's own opening. A width "
+                "above it is saturated by the linkage, so the gripper is commanded to "
+                "its open limit and reports success without ever approaching the part.",
             )
         ]
 

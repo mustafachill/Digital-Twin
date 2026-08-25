@@ -14,8 +14,11 @@
     <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
-    <!-- Contact reporting is what the grasp attachment plugin listens to
-         (ADR-0023) and what a scenario asserts collisions against. -->
+    <!-- Contact reporting. Kept deliberately, though nothing in this repository
+         reads it today: it was loaded for ADR-0023's attachment plugin, which is
+         removed, and it is what any `<sensor type="contact">` a scenario declares
+         would need. It is a generic simulator capability rather than plugin
+         apparatus, so it is left in place rather than removed and rediscovered. -->
     <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
 
     <!-- conveyor_1 — a belt, as a simulation fidelity aid.

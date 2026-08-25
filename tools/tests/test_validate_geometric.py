@@ -298,41 +298,52 @@ class TestDefaultGraspWidth:
     def test_the_shipped_default_is_within_the_bound(self, real_model: Path) -> None:
         assert "default-grasp-width-never-closes" not in physical_rules(real_model)
 
-    def test_a_width_that_never_reaches_the_threshold_is_caught(
+    def test_a_width_the_pads_cannot_open_to_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        # 65 mm on this gripper maps to a drive-joint position short of
-        # closed_threshold_rad, so it can never stall and never attach — while
-        # being a perfectly plausible-looking number under the 88.93 mm the pads
-        # actually open to.
-        #
-        # This read 60 mm while the width map was a linear interpolation of the
-        # stroke, which put the ceiling at 55 mm. The true ceiling is
-        # opening(0.30 rad) = 60.92 mm, so 60 mm is a width this gripper really
-        # can close on and the case had stopped being the one it names. Raised
-        # rather than deleted: the boundary moved, the rule did not.
-        self._set(real_model, edit_yaml, default_grasp_width_m=0.065)
+        """95 mm on a gripper whose pads reach 88.93 mm is not commandable.
+
+        This case used to read 65 mm, against a ceiling of
+        opening(closed_threshold_rad) = 60.92 mm. That ceiling went with
+        ADR-0023's attachment plugin: it bounded the width at which the plugin
+        would fire, and nothing fires now. 65 mm is a width this gripper can
+        genuinely close on, so asserting it is faulted would be asserting a
+        defect as a requirement. The case is moved to the bound that survives
+        rather than deleted, and the loosening is deliberate and recorded — see
+        `_default_grasp_width_can_close`.
+        """
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.095)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
-    def test_the_bound_sits_where_the_linkage_puts_it(self, real_model: Path) -> None:
-        """The ceiling is the opening at the threshold, to the millimetre.
+    def test_a_width_the_gripper_can_reach_is_not_faulted(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The complement of the case above, and the reason it is stated.
 
-        Pinned because the number is load-bearing and was wrong for the whole of
-        Phase 1.C: a linear stroke approximation put it at 55 mm, and a default
-        that looked safely under it was in fact commanding the pads wider than the
-        work-piece. Asserting the derivation rather than the constant means the
-        day the linkage changes, this test moves with it instead of lying.
+        65 mm is inside the stroke. It is a poor default against the cell's 50 mm
+        work-piece — it would close on air and never stall — but that is a bound
+        this rule cannot see, because L0 records no work-piece geometry. The test
+        says so out loud so that the gap is documented rather than implied by an
+        absence.
+        """
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.065)
+        assert "default-grasp-width-never-closes" not in physical_rules(real_model)
+
+    def test_the_bound_sits_where_the_linkage_puts_it(self, real_model: Path) -> None:
+        """The ceiling is the opening at `open_position`, to the millimetre.
+
+        Pinned because the number is load-bearing. Asserting the derivation
+        rather than the constant means the day the linkage changes, this test
+        moves with it instead of lying.
         """
         model = load(real_model)
         grasp = model.asset_type("xarm_parallel_gripper").grasp
-        ceiling = grasp.linkage.opening_m(grasp.closed_threshold_rad)
-        assert ceiling == pytest.approx(0.06092, abs=1e-5)
+        ceiling = grasp.max_width_m
+        assert ceiling == pytest.approx(0.08893, abs=1e-5)
         assert grasp.default_grasp_width_m < ceiling
 
-    def test_the_bound_moves_with_the_threshold(
-        self, real_model: Path, edit_yaml: Callable
-    ) -> None:
-        """The ceiling is derived, not a constant. Raising the threshold lowers it.
+    def test_the_bound_moves_with_the_linkage(self, real_model: Path, edit_yaml: Callable) -> None:
+        """The ceiling is derived, not a constant. Shortening the crank lowers it.
 
         This is what stops the check from being a hardcoded millimetre count
         that quietly stops matching the model it is checking.
@@ -340,19 +351,10 @@ class TestDefaultGraspWidth:
         self._set(real_model, edit_yaml, default_grasp_width_m=0.045)
         assert "default-grasp-width-never-closes" not in physical_rules(real_model)
 
-        self._set(real_model, edit_yaml, closed_threshold_rad=0.6)
-        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+        def shrink(document: dict) -> None:
+            document["asset_type"]["grasp"]["linkage"]["finger_offset_y_m"] = 0.010
 
-    def test_a_width_wider_than_the_stroke_is_caught_by_the_same_rule(
-        self, real_model: Path, edit_yaml: Callable
-    ) -> None:
-        """One rule, not two: the ceiling is always below the full opening.
-
-        `closed_threshold_rad` must be positive, so the derived ceiling is
-        strictly under `max_width_m` and a separate "wider than the stroke" check
-        could never fire. There was one, and this test is what found it dead.
-        """
-        self._set(real_model, edit_yaml, default_grasp_width_m=0.2)
+        edit_yaml(real_model / self.EFFECTOR, shrink)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
     def test_an_end_effector_without_a_default_is_not_faulted(
