@@ -64,8 +64,12 @@ is how the wrong claim survived review in the first place. So:
 If the *decision* is what turned out wrong, this is not a correction. Write a new ADR and
 set this one to `Superseded by NNNN`.
 
-[ADR-0022](0022-gripper-as-ros2-control-controller.md) and
-[ADR-0023](0023-simulated-grasping-via-attachment.md) are the worked examples.
+[ADR-0022](0022-gripper-as-ros2-control-controller.md) is the worked example of a
+correction. [ADR-0023](0023-simulated-grasping-via-attachment.md) is the worked example of
+the distinction: it was corrected on 2026-08-25 for a claim, and superseded by
+[ADR-0029](0029-simulated-grasping-by-friction.md) the same day when measurement showed the
+decision itself was wrong. Its correction section is left in place — a superseded record is
+not rewritten either.
 
 ## Status values
 
@@ -103,9 +107,10 @@ set this one to `Superseded by NNNN`.
 | [0020](0020-facility-model-conventions.md) | Fix the facility model's units, axes, and file layout | Accepted |
 | [0021](0021-generated-artifacts-are-committed.md) | Commit generated artifacts, in one generated package | Accepted |
 | [0022](0022-gripper-as-ros2-control-controller.md) | Drive the gripper through `ros2_control`, not a separate action server | Accepted (corrected 2026-08-25) |
-| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Accepted (corrected 2026-08-25) |
+| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Superseded by [0029](0029-simulated-grasping-by-friction.md) |
 | [0024](0024-handoff-split-between-l3-and-l4.md) | Split handoff — L4 owns the negotiation, L3 owns the motion | Accepted |
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted |
 | [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted |
 | [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed |
+| [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted |
