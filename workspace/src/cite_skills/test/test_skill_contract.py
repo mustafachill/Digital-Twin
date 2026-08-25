@@ -1,3 +1,17 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """The parts of the skill contract that only a running server can show.
 
 Three of them, and each one is a defect this branch shipped:
@@ -23,31 +37,30 @@ distinction the failing `pick_and_place` needed and could not make.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import threading
 import time
 import unittest
-from pathlib import Path
 
-import launch_testing
-import launch_testing.markers
-import pytest
-import rclpy
-import yaml
 from ament_index_python.packages import get_package_share_directory
+from cite_interfaces.action import Grasp, MoveTo
+from cite_interfaces.msg import ResultCode
 from control_msgs.action import GripperCommand
 from geometry_msgs.msg import PoseStamped
 from launch import LaunchDescription
 from launch.substitutions import Command
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+import launch_testing
+import launch_testing.markers
+import pytest
+import rclpy
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node as RclpyNode
 from sensor_msgs.msg import JointState
-
-from cite_interfaces.action import Grasp, MoveTo
-from cite_interfaces.msg import ResultCode
+import yaml
 
 ZONE = "cell_a"
 ASSET = "arm_1"
@@ -74,14 +87,14 @@ def _read(path: Path) -> dict:
 
 
 def _resolve(uri: str) -> Path:
-    """A `package://cite_generated/...` reference from the plan, as a path."""
+    """Resolve a `package://cite_generated/...` reference from the plan to a path."""
     prefix = "package://cite_generated/"
     assert uri.startswith(prefix), f"unexpected artifact reference: {uri}"
     return GENERATED / uri[len(prefix):]
 
 
 def _plan() -> dict:
-    """This arm's entry in the generated bring-up plan.
+    """Return this arm's entry in the generated bring-up plan.
 
     Read rather than restated. The planning group, the tip link and the home
     configuration are facts about the facility that already exist in the L0
@@ -96,7 +109,7 @@ def _plan() -> dict:
 
 
 def _joints(manager: dict) -> list:
-    """The arm's joints, plus the gripper's drive joint, as ros2_control has them.
+    """Return the arm's joints, plus the gripper's drive joint, as ros2_control has them.
 
     The skill server's MoveIt client waits for a complete joint state, so a
     missing drive joint means it never learns where the arm is.

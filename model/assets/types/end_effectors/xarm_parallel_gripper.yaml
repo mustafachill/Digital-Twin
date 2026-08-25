@@ -133,26 +133,39 @@ asset_type:
     # removing the margin above.
     follower_max_rate_rad_s: 2.0
 
-    # The pad opening, as a function of the drive joint. This is the ONLY place
-    # that relationship is written (P1); the L3 skill server and
-    # `cite_tools.validate.physical` both derive from these four numbers.
+    # Where the pads are, as a function of the drive joint — across the tool axis
+    # and along it. This is the ONLY place either relationship is written (P1);
+    # the L3 skill server and `cite_tools.validate.physical` derive from these
+    # seven numbers and never restate the maps.
     #
     #   opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
     #                     + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))
     #
+    #   pad_plane_offset(q) = tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m
+    #                         - (finger_offset_y_m*sin(q)
+    #                            + finger_offset_z_m*cos(q))
+    #
     # Why this shape: `drive_joint` rotates `left_outer_knuckle` about +x, and
     # `left_finger_joint` mimics it about -x, so the two rotations cancel and the
-    # pad face stays parallel to the tool axis while its y translates. The pad's
-    # distance from the centreline is therefore the rotated `left_finger_joint`
-    # offset plus the drive pivot, less the pad's own inset. Doubled for two jaws.
+    # pad face stays parallel to the tool axis while its origin translates. Both
+    # maps are that one translation, read on two axes: the y component opens the
+    # jaws, the z component slides the pad face along the tool axis. They share a
+    # crank, which is why they share a block — writing the axial map anywhere else
+    # would mean a second copy of `finger_offset_y_m` and `finger_offset_z_m`.
     #
     # Every number is a fact in the vendor's own files, so each can be re-checked
     # rather than believed:
     #   drive_pivot_y_m    drive_joint <origin xyz="0 0.035 0.059098">
+    #   drive_pivot_z_m    ... the z of that same origin
     #   finger_offset_y_m  left_finger_joint <origin xyz="0 0.035465 0.042039">
     #   finger_offset_z_m  ... the z of that same origin
     #   pad_inset_m        left_finger.stl, whose y_min is -0.026003 in the link
     #                      frame — a 26 mm design dimension, stored as float32
+    #   tip_link_z_m       joint_tcp <origin>, which is what puts `link_tcp`
+    #                      0.172 m past the gripper base
+    #   pad_face_centre_z_m  left_finger.stl again: its y = -0.026003 pad face
+    #                      spans z 0.022253 .. 0.059753 in the link frame, so the
+    #                      face is 37.5 mm tall and centred at 0.041003
     #
     # This replaces a linear interpolation across the stroke, which was not an
     # approximation but simply wrong: it claimed 85.00 mm fully open against a
@@ -162,12 +175,40 @@ asset_type:
     #
     # Derived rather than declared, because a declared copy is a second place to
     # be wrong: fully open is opening(0.00) = 88.93 mm, fully closed is
-    # opening(0.85) = 1.65 mm.
+    # opening(0.85) = 1.65 mm; and the pad plane sits 29.86 mm proximal of
+    # `link_tcp` fully open, 18.58 mm at the 45 mm default width.
+    #
+    # WHAT THE AXIAL MAP IS FOR, because it is the newer half and the one that
+    # was missing. `link_tcp` — which `planning.tip_link_suffix` on the arm type
+    # names, and which every skill plans to — is the FINGERTIP plane. The pads
+    # grip with their faces, whose centre sits proximal of that tip by
+    # `pad_plane_offset(q)`. A skill that sent an object's pose straight to the
+    # planner therefore parked the pad face that far ABOVE the object, and the
+    # interleaved 40-trial campaign in
+    # `docs/measurements/2026-08-25-grasp-plane-offset/` measured what that
+    # costs: 24.4 mm high, 19.3 mm of a 37.5 mm pad face engaged, a 15.35 mm
+    # lever arm on the contact patch, and a work-piece that rotated more than
+    # 20 degrees in 12 of 20 trials. Corrected, 0 of 20, p < 0.0001.
+    #
+    # The number 0.0718988 that campaign quotes is the constant part of the map,
+    # `tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m`. It is derived and
+    # never declared, for the same reason `max_width_m` is: a declared copy is a
+    # second place to be wrong.
+    #
+    # NOT A CONSTANT, and this is the trap the deleted `grasp` frame fell into.
+    # That frame declared a single 0.172 m and called it the point between the
+    # pads; 0.172 is the fingertip, and the pad centre moves 11.3 mm along the
+    # tool axis across the stroke. Anything that bakes in one number is wrong at
+    # every width but one — and, being per-end-effector, must live here rather
+    # than in a skill (P9).
     linkage:
       drive_pivot_y_m: 0.035
+      drive_pivot_z_m: 0.059098
       finger_offset_y_m: 0.035465
       finger_offset_z_m: 0.042039
       pad_inset_m: 0.026
+      tip_link_z_m: 0.172
+      pad_face_centre_z_m: 0.041003
     # What a Pick closes to when its goal names no width. 45 mm, and the bound
     # that produces that number rather than any other:
     #

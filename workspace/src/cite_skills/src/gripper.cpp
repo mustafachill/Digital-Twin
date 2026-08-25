@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "cite_skills/gripper.hpp"
 
 #include <algorithm>
@@ -58,6 +72,16 @@ double gripper_max_width_m(const GripperTravel & travel)
 double gripper_min_width_m(const GripperTravel & travel)
 {
   return gripper_width_for(travel.closed_position, travel);
+}
+
+double gripper_pad_plane_offset_m(double position, const GripperTravel & travel)
+{
+  // The constant term is derived, never carried: the campaign's 0.0718988 m is
+  // these three dimensions, and a fourth field holding their sum would be a
+  // second place for one fact to live.
+  const double axial_reach_m =
+    travel.tip_link_z_m - travel.drive_pivot_z_m - travel.pad_face_centre_z_m;
+  return axial_reach_m - crank_m(travel) * std::sin(position + phase_rad(travel));
 }
 
 double gripper_width_tolerance_m(double position, const GripperTravel & travel)

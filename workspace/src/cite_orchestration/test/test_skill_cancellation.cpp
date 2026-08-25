@@ -47,7 +47,23 @@ using cite_orchestration::Context;
 using cite_orchestration::MoveToHome;
 using namespace std::chrono_literals;
 
-constexpr char kAction[] = "/cite/cell_a/arm_1/move_to";
+//: The fake server below is a FIXTURE, so it is named as one — outside `/cite/`,
+//: where no generated name can ever land.
+//:
+//: It used to be `/cite/cell_a/arm_1/move_to`, which is the real action arm_1
+//: serves in the real cell. `colcon test` runs packages concurrently on one ROS
+//: domain, and `cite_skills`'s `test_skill_contract.py` launches an actual skill
+//: server advertising exactly that name — so two servers answered one action.
+//: The leaf's client sent its goal to both (`accepted()` counted 3 instead of 1)
+//: while the contract test's client logged "Ignoring unexpected goal response.
+//: There may be more than one action server" and failed its own assertions. Each
+//: suite passed alone and both failed together, which is why this looked like two
+//: unrelated long-standing failures rather than one name.
+//:
+//: Nothing here asserts anything about the name — see the third test, whose whole
+//: point is that a leaf builds no name of its own — so a realistic one bought
+//: nothing and cost this.
+constexpr char kAction[] = "/skill_cancellation_test/move_to";
 
 /// A skill server that accepts a goal and never finishes it on its own.
 ///

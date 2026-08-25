@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Gripper arithmetic: task-space metres against the drive joint's own units,
 // and what a `Pick` closes to when the goal leaves the width unset.
 
@@ -24,6 +38,9 @@ cite_skills::GripperTravel travel()
   t.finger_offset_y_m = 0.035465;
   t.finger_offset_z_m = 0.042039;
   t.pad_inset_m = 0.026;
+  t.drive_pivot_z_m = 0.059098;
+  t.tip_link_z_m = 0.172;
+  t.pad_face_centre_z_m = 0.041003;
   t.goal_tolerance = 0.01;
   return t;
 }
@@ -263,10 +280,10 @@ TEST(GripperHolding, RequiresAMarginWiderThanTheControllerBias)
 
   // Just inside the threshold: not a grasp.
   EXPECT_FALSE(cite_skills::gripper_is_holding(
-    {reached - 0.9 * threshold, kWorkpieceStall, true, false}, travel()));
+      {reached - 0.9 * threshold, kWorkpieceStall, true, false}, travel()));
   // Just outside it: a grasp.
   EXPECT_TRUE(cite_skills::gripper_is_holding(
-    {reached - 1.1 * threshold, kWorkpieceStall, true, false}, travel()));
+      {reached - 1.1 * threshold, kWorkpieceStall, true, false}, travel()));
 }
 
 TEST(GripperHolding, WidensItsMarginWhenTheControllerToleranceIsLooser)
@@ -293,4 +310,82 @@ TEST(GripperHolding, IsDecidedFromFieldsBothPathsCarry)
   const cite_skills::GripperReport empty{0.045, kFreeAirSettle, true, false};
   EXPECT_TRUE(cite_skills::gripper_is_holding(holding, travel()));
   EXPECT_FALSE(cite_skills::gripper_is_holding(empty, travel()));
+}
+
+// ---------------------------------------------------------------------------
+// The pad plane: the axial half of the same linkage
+// ---------------------------------------------------------------------------
+//
+// `link_tcp`, which every skill here plans to, is the FINGERTIP plane. The pads
+// grip with their faces, which sit proximal of it by a stroke-dependent amount.
+// A `Pick` that planned an object's pose straight to the tip link therefore held
+// the object off the centre of the pad face by exactly that much.
+//
+// The numbers below are the campaign's, from
+// `docs/measurements/2026-08-25-grasp-plane-offset/harness/geometry.py`, which
+// derived them from the vendor URDF and the parsed pad mesh before any trial ran.
+// `tools/tests/test_gripper_linkage.py` pins the same values on the model side.
+
+//: Pad-centre offsets, in metres, at three drive positions.
+constexpr double kOffsetFullyOpen = 0.029860;    // q = 0.0000
+constexpr double kOffsetAtWorkpiece = 0.019277;  // q = 0.4056, a 50 mm part
+constexpr double kOffsetAtDefault = 0.018581;    // q = 0.4528, the 45 mm command
+
+//: The drive position the 45 mm default grasp width commands.
+constexpr double kDefaultGraspPosition = 0.452805;
+
+TEST(GripperPadPlane, MatchesTheMeasuredCampaign)
+{
+  EXPECT_NEAR(
+    cite_skills::gripper_pad_plane_offset_m(0.0, travel()), kOffsetFullyOpen, 5e-6);
+  EXPECT_NEAR(
+    cite_skills::gripper_pad_plane_offset_m(kWorkpieceStall, travel()),
+    kOffsetAtWorkpiece, 5e-6);
+  EXPECT_NEAR(
+    cite_skills::gripper_pad_plane_offset_m(kDefaultGraspPosition, travel()),
+    kOffsetAtDefault, 5e-6);
+}
+
+TEST(GripperPadPlane, IsNotAConstant)
+{
+  // The mistake a deleted `grasp` frame in the L0 model made: it declared one
+  // number, 0.172 m, and called it the point between the pads. That is the
+  // fingertip, and the pad centre travels 11.3 mm along the tool axis across the
+  // stroke — so no single constant is right at more than one width.
+  const double travelled = cite_skills::gripper_pad_plane_offset_m(0.0, travel()) -
+    cite_skills::gripper_pad_plane_offset_m(kDefaultGraspPosition, travel());
+  EXPECT_NEAR(travelled, 0.011279, 5e-6);
+}
+
+TEST(GripperPadPlane, IsPositiveAcrossTheWholeStroke)
+{
+  // Proximal, always. A negative offset would put the pad face BEYOND the
+  // fingertip, and the correction built on it would then drive the tool through
+  // whatever it was reaching for rather than onto it.
+  for (double q = 0.0; q <= 0.85 + 1e-12; q += 0.05) {
+    EXPECT_GT(cite_skills::gripper_pad_plane_offset_m(q, travel()), 0.0) << "at q=" << q;
+  }
+}
+
+TEST(GripperPadPlane, DerivesItsConstantTermRatherThanCarryingIt)
+{
+  // The campaign quotes 0.0718988 m. It is `tip_link_z - drive_pivot_z -
+  // pad_face_centre_z` and is never stored: a field holding their sum would be a
+  // second place for one fact to live, free to disagree after an edit. Evaluated
+  // at minus the crank's phase, where the sine term vanishes and only it is left.
+  const auto t = travel();
+  const double phase = std::atan2(t.finger_offset_z_m, t.finger_offset_y_m);
+  EXPECT_NEAR(cite_skills::gripper_pad_plane_offset_m(-phase, t), 0.0718988, 5e-7);
+}
+
+TEST(GripperPadPlane, MovesWithTheEndEffectorRatherThanBeingBakedIn)
+{
+  // P9: a different end effector must not need a change here or anywhere above.
+  // Lengthening the gripper's tip moves the pad plane by exactly as much.
+  auto longer = travel();
+  longer.tip_link_z_m += 0.010;
+  EXPECT_NEAR(
+    cite_skills::gripper_pad_plane_offset_m(0.4, longer) -
+    cite_skills::gripper_pad_plane_offset_m(0.4, travel()),
+    0.010, kTolerance);
 }

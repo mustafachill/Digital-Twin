@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // L3 skill server: one node per arm, hosting that arm's capabilities.
 //
 // Everything this node knows about its arm arrives as a generated parameter —
@@ -46,8 +60,8 @@
 #include <moveit/robot_state/robot_state.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include <cite_interfaces/action/grasp.hpp>
@@ -147,6 +161,19 @@ public:
     declare_parameter("gripper_finger_offset_y_m", 0.035465);
     declare_parameter("gripper_finger_offset_z_m", 0.042039);
     declare_parameter("gripper_pad_inset_m", 0.026);
+    // The rest of the same linkage, resolved along the tool axis instead of
+    // across it: where the planning tip link is, where the drive pivot is, and
+    // where on the finger the pad face is centred. Together with the two finger
+    // offsets above they give `gripper_pad_plane_offset_m`, which is what lets
+    // `Pick` and `Place` take an OBJECT pose rather than a tool pose.
+    //
+    // Three dimensions rather than the one constant the campaign quotes, for the
+    // reason the widest opening is derived rather than declared: 0.0718988 is
+    // their difference, and storing the difference alongside them is a second
+    // place for one fact to live.
+    declare_parameter("gripper_drive_pivot_z_m", 0.059098);
+    declare_parameter("gripper_tip_link_z_m", 0.172);
+    declare_parameter("gripper_pad_face_centre_z_m", 0.041003);
     // The gripper controller's own goal tolerance, carried here from the same L0
     // controller parameters that configure the controller. gripper_is_holding
     // needs it to size the margin that separates a real grasp from the position
@@ -187,8 +214,9 @@ public:
     home_ = get_parameter("home_rad").as_double_array();
 
     for (const auto & [name, value] :
-         {std::pair{"asset_id", asset_id_}, std::pair{"zone", zone_},
-          std::pair{"planning_group", planning_group_}, std::pair{"tip_link", tip_link_}}) {
+      {std::pair{"asset_id", asset_id_}, std::pair{"zone", zone_},
+        std::pair{"planning_group", planning_group_}, std::pair{"tip_link", tip_link_}})
+    {
       if (value.empty()) {
         RCLCPP_ERROR(
           get_logger(),
@@ -206,6 +234,9 @@ public:
     travel_.finger_offset_y_m = get_parameter("gripper_finger_offset_y_m").as_double();
     travel_.finger_offset_z_m = get_parameter("gripper_finger_offset_z_m").as_double();
     travel_.pad_inset_m = get_parameter("gripper_pad_inset_m").as_double();
+    travel_.drive_pivot_z_m = get_parameter("gripper_drive_pivot_z_m").as_double();
+    travel_.tip_link_z_m = get_parameter("gripper_tip_link_z_m").as_double();
+    travel_.pad_face_centre_z_m = get_parameter("gripper_pad_face_centre_z_m").as_double();
     travel_.goal_tolerance = get_parameter("gripper_goal_tolerance_rad").as_double();
     if (cite_skills::gripper_max_width_m(travel_) <= 0.0) {
       RCLCPP_ERROR(
@@ -223,6 +254,10 @@ public:
       return false;
     }
     default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
+    held_drive_position_.store(
+      default_grasp_width_m_ > 0.0 ?
+          cite_skills::gripper_position_for(default_grasp_width_m_, travel_) :
+          travel_.closed_position);
 
     ik_seeds_ = static_cast<int>(get_parameter("ik_seeds").as_int());
     if (ik_seeds_ < 1) {
@@ -349,7 +384,7 @@ public:
         return cancel(handle);
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<MoveTo>> handle) {
-        start([this, handle] { execute_move_to(handle); });
+        start([this, handle] {execute_move_to(handle);});
       });
 
     grasp_server_ = rclcpp_action::create_server<Grasp>(
@@ -361,7 +396,7 @@ public:
         return cancel(handle);
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Grasp>> handle) {
-        start([this, handle] { execute_grasp(handle); });
+        start([this, handle] {execute_grasp(handle);});
       });
 
     place_server_ = rclcpp_action::create_server<Place>(
@@ -373,7 +408,7 @@ public:
         return cancel(handle);
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>> handle) {
-        start([this, handle] { execute_place(handle); });
+        start([this, handle] {execute_place(handle);});
       });
 
     pick_server_ = rclcpp_action::create_server<Pick>(
@@ -385,7 +420,7 @@ public:
         return cancel(handle);
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Pick>> handle) {
-        start([this, handle] { execute_pick(handle); });
+        start([this, handle] {execute_pick(handle);});
       });
 
     RCLCPP_INFO(get_logger(), "skills for %s are accepting goals", asset_id_.c_str());
@@ -442,7 +477,7 @@ private:
   ///
   /// `move_group->stop()` stops whatever is executing. A cancel that did not
   /// check whose goal it was would stop an unrelated skill's trajectory.
-  template <typename Handle>
+  template<typename Handle>
   rclcpp_action::CancelResponse cancel(const Handle & handle)
   {
     if (!gate_.owns(handle->get_goal_id())) {
@@ -476,7 +511,7 @@ private:
   ///
   /// Owned rather than detached: a detached thread cannot be waited for, and at
   /// teardown it outlives the node it holds a raw pointer to.
-  template <typename Work>
+  template<typename Work>
   void start(Work work)
   {
     std::thread previous;
@@ -484,8 +519,8 @@ private:
       const std::lock_guard<std::mutex> lock(worker_mutex_);
       previous = std::move(worker_);
       worker_ = std::thread([this, work] {
-        work();
-        gate_.release();
+            work();
+            gate_.release();
       });
     }
     // The previous goal has already released the gate — otherwise this one would
@@ -496,7 +531,7 @@ private:
     }
   }
 
-  template <typename Handle>
+  template<typename Handle>
   bool cancelled(const Handle & handle) const
   {
     return handle->is_canceling() || cancel_requested_.load() ||
@@ -507,7 +542,7 @@ private:
   ///
   /// At teardown the context may already be shut down, and a throw here would
   /// take the goal thread down with it and leave the client with nothing.
-  template <typename Handle, typename Result>
+  template<typename Handle, typename Result>
   void terminate(
     const Handle & handle, const std::shared_ptr<Result> & result, const ResultCode & outcome)
   {
@@ -529,7 +564,7 @@ private:
   /// The state machine moves to CANCELING only after the cancel callback has
   /// returned, and the goal thread can get there first. Without this the result
   /// would be reported with `abort()` on a goal the caller cancelled.
-  template <typename Handle>
+  template<typename Handle>
   bool wait_until_cancelling(const Handle & handle)
   {
     if (!cancel_requested_.load()) {
@@ -542,7 +577,7 @@ private:
     return handle->is_canceling();
   }
 
-  template <typename Handle, typename Feedback>
+  template<typename Handle, typename Feedback>
   void report_feedback(const Handle & handle, const std::shared_ptr<Feedback> & feedback)
   {
     try {
@@ -567,11 +602,11 @@ private:
     result->position_error_m = std::numeric_limits<double>::quiet_NaN();
 
     const auto finish = [&](const ResultCode & outcome) {
-      result->result = outcome;
-      result->duration = now() - started;
-      result->reached = current_pose();
-      terminate(handle, result, outcome);
-    };
+        result->result = outcome;
+        result->duration = now() - started;
+        result->reached = current_pose();
+        terminate(handle, result, outcome);
+      };
 
     if (goal->cartesian_path) {
       // Refused rather than silently planned as a joint-space move. A straight
@@ -634,18 +669,18 @@ private:
     // is not thread-safe. The tool's pose on /tf is the same fact from a source
     // that is.
     const auto publish_progress = [&](double fraction) {
-      auto feedback = std::make_shared<MoveTo::Feedback>();
-      feedback->fraction_complete = fraction;
-      geometry_msgs::msg::PoseStamped current;
-      if (tool_pose(&current)) {
-        feedback->current = current;
-        feedback->distance_remaining_m =
-          distance_between(current.pose.position, target.pose.position);
-      } else {
-        feedback->distance_remaining_m = std::numeric_limits<double>::quiet_NaN();
-      }
-      report_feedback(handle, feedback);
-    };
+        auto feedback = std::make_shared<MoveTo::Feedback>();
+        feedback->fraction_complete = fraction;
+        geometry_msgs::msg::PoseStamped current;
+        if (tool_pose(&current)) {
+          feedback->current = current;
+          feedback->distance_remaining_m =
+            distance_between(current.pose.position, target.pose.position);
+        } else {
+          feedback->distance_remaining_m = std::numeric_limits<double>::quiet_NaN();
+        }
+        report_feedback(handle, feedback);
+      };
 
     const auto outcome = move_to_pose(target, handle, publish_progress);
     result->reached = current_pose();
@@ -667,11 +702,11 @@ private:
     auto result = std::make_shared<Grasp::Result>();
 
     const auto publish_progress = [&](double width_m, double effort_n) {
-      auto feedback = std::make_shared<Grasp::Feedback>();
-      feedback->current_width_m = width_m;
-      feedback->current_effort_n = effort_n;
-      report_feedback(handle, feedback);
-    };
+        auto feedback = std::make_shared<Grasp::Feedback>();
+        feedback->current_width_m = width_m;
+        feedback->current_effort_n = effort_n;
+        report_feedback(handle, feedback);
+      };
 
     const auto gripper = command_gripper(
       goal->width_m, goal->max_effort_n, handle, publish_progress);
@@ -713,20 +748,41 @@ private:
     const auto started = now();
 
     const auto report = [&](uint8_t phase, double fraction) {
-      auto feedback = std::make_shared<Pick::Feedback>();
-      feedback->phase = phase;
-      feedback->fraction_complete = fraction;
-      report_feedback(handle, feedback);
-    };
+        auto feedback = std::make_shared<Pick::Feedback>();
+        feedback->phase = phase;
+        feedback->fraction_complete = fraction;
+        report_feedback(handle, feedback);
+      };
 
     const auto finish = [&](const ResultCode & outcome) {
-      result->result = outcome;
-      result->duration = now() - started;
-      terminate(handle, result, outcome);
-    };
+        result->result = outcome;
+        result->duration = now() - started;
+        terminate(handle, result, outcome);
+      };
 
     apply_scaling(0.0, 0.0);
     const double max_effort = get_parameter("gripper_max_effort_n").as_double();
+
+    // The width is resolved before anything moves, because the pose planned to
+    // depends on it: the pad face slides along the tool axis as the jaws close,
+    // so where the tip link has to be put is a function of how wide the grasp is.
+    const auto width = cite_skills::resolve_grasp_width(
+      goal->grasp_width_m, default_grasp_width_m_);
+    if (width.source == cite_skills::GraspWidthSource::Unknown) {
+      // Not silent. `grasp_width_m == 0` means "use the object type's default",
+      // and that default is L0 data this skill has not been given: no
+      // `gripper_default_grasp_width_m` reached this node, and nothing here knows
+      // what a work-piece is. Closing against the effort limit is what a parallel
+      // gripper does with an unknown object, and it is said out loud rather than
+      // presented as a resolved width.
+      RCLCPP_WARN(
+        get_logger(),
+        "no grasp width for work-piece '%s': the goal left grasp_width_m at 0 and no "
+        "gripper_default_grasp_width_m reached this node, so the gripper closes against "
+        "its %.0f N effort limit. The end-effector type declares one; the bring-up plan "
+        "carries it; check that the launch mechanism passes it through.",
+        goal->workpiece_id.c_str(), max_effort);
+    }
 
     // Open before approaching. Arriving at the object with a closed gripper is a
     // collision, and the planner has no way to know the gripper's state.
@@ -743,6 +799,27 @@ private:
       finish(resolved);
       return;
     }
+    // `object_pose` is where the OBJECT is, which the action has always said and
+    // this skill did not do: it planned the tip link straight to it. The tip link
+    // is the fingertip plane, so that parked the pad faces a stroke-dependent
+    // distance above the object — 24.4 mm at the shipped grasp, which the 40-trial
+    // campaign in `docs/measurements/2026-08-25-grasp-plane-offset/` measured
+    // engaging half of a 37.5 mm pad face and rotating the work-piece past 20
+    // degrees in 12 of 20 trials. Correcting it removed every one of them.
+    //
+    // Evaluated at the drive angle the RESOLVED WIDTH commands, not at the angle
+    // the jaws are open to now: the arm holds still while the gripper closes, and
+    // it is the closed configuration that has to be right. The part stops the
+    // stroke a little wider than commanded, which leaves the pad centre 0.65 mm
+    // high on the cell's 50 mm reference part. That residual cannot be removed
+    // here, because the part's width is neither recorded in L0 nor carried by the
+    // goal; against the 24.4 mm being corrected it is not the term that matters.
+    //
+    // Negative, because `offset_along_tool_z` stands OFF along the tool axis while
+    // the pad plane sits proximal of the tip: the tip link has to go further in.
+    const double pad_offset_m = cite_skills::gripper_pad_plane_offset_m(
+      cite_skills::gripper_position_for(width.width_m, travel_), travel_);
+    grasp.pose = cite_skills::offset_along_tool_z(grasp.pose, -pad_offset_m);
 
     report(Pick::Feedback::PHASE_APPROACHING, 0.2);
     auto approach = grasp;
@@ -761,23 +838,6 @@ private:
     result->grasp_pose = current_pose();
 
     report(Pick::Feedback::PHASE_GRASPING, 0.6);
-    const auto width = cite_skills::resolve_grasp_width(
-      goal->grasp_width_m, default_grasp_width_m_);
-    if (width.source == cite_skills::GraspWidthSource::Unknown) {
-      // Not silent. `grasp_width_m == 0` means "use the object type's default",
-      // and that default is L0 data this skill has not been given: no
-      // `gripper_default_grasp_width_m` reached this node, and nothing here knows
-      // what a work-piece is. Closing against the effort limit is what a parallel
-      // gripper does with an unknown object, and it is said out loud rather than
-      // presented as a resolved width.
-      RCLCPP_WARN(
-        get_logger(),
-        "no grasp width for work-piece '%s': the goal left grasp_width_m at 0 and no "
-        "gripper_default_grasp_width_m reached this node, so the gripper closes against "
-        "its %.0f N effort limit. The end-effector type declares one; the bring-up plan "
-        "carries it; check that the launch mechanism passes it through.",
-        goal->workpiece_id.c_str(), max_effort);
-    }
     gripper = command_gripper(width.width_m, max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
       finish(gripper.result);
@@ -815,17 +875,17 @@ private:
     const auto started = now();
 
     const auto report = [&](uint8_t phase, double fraction) {
-      auto feedback = std::make_shared<Place::Feedback>();
-      feedback->phase = phase;
-      feedback->fraction_complete = fraction;
-      report_feedback(handle, feedback);
-    };
+        auto feedback = std::make_shared<Place::Feedback>();
+        feedback->phase = phase;
+        feedback->fraction_complete = fraction;
+        report_feedback(handle, feedback);
+      };
 
     const auto finish = [&](const ResultCode & outcome) {
-      result->result = outcome;
-      result->duration = now() - started;
-      terminate(handle, result, outcome);
-    };
+        result->result = outcome;
+        result->duration = now() - started;
+        terminate(handle, result, outcome);
+      };
 
     // Miming a place with an empty gripper would leave the line believing a
     // work-piece arrived somewhere it never did — and the failure would surface
@@ -847,6 +907,20 @@ private:
       finish(resolved);
       return;
     }
+    // `target_pose` is where the OBJECT should end up, and the object is between
+    // the pads — not at the fingertip plane the planner drives. Same correction
+    // as `Pick`, and it has to be here too: `Place` plans to the same tip link,
+    // so leaving it out would release the work-piece a stroke-dependent distance
+    // from where the caller asked for it, in the same direction and by the same
+    // amount that miscentred every grasp.
+    //
+    // Evaluated at the angle the jaws are ACTUALLY at rather than at a commanded
+    // one, because here that is known: the part stopped the stroke during the
+    // pick and `held_drive_position_` recorded where. Unlike `Pick`, this leaves
+    // no residual.
+    const double pad_offset_m =
+      cite_skills::gripper_pad_plane_offset_m(held_drive_position_.load(), travel_);
+    release.pose = cite_skills::offset_along_tool_z(release.pose, -pad_offset_m);
 
     auto approach = release;
     approach.pose = cite_skills::offset_along_tool_z(release.pose, goal->approach_distance_m);
@@ -917,7 +991,7 @@ private:
   /// because a pose goal is satisfied by drawing random poses from inside its
   /// tolerance, and on this arm almost every draw tilts the tool out of the
   /// plane its three parallel pitch joints live in and has no IK solution at all.
-  template <typename Handle>
+  template<typename Handle>
   ResultCode move_to_pose(
     const geometry_msgs::msg::PoseStamped & target, const Handle & handle,
     const ProgressFn & on_progress)
@@ -965,7 +1039,7 @@ private:
         }
         return move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
       },
-      [&] { return cancelled(handle); }, &attempts);
+      [&] {return cancelled(handle);}, &attempts);
 
     switch (failure) {
       case cite_skills::PoseGoalFailure::None:
@@ -991,7 +1065,7 @@ private:
     return execute_plan(plan, handle, on_progress);
   }
 
-  template <typename Handle>
+  template<typename Handle>
   ResultCode execute_plan(
     const MoveGroupInterface::Plan & plan, const Handle & handle,
     const ProgressFn & on_progress)
@@ -1011,12 +1085,12 @@ private:
         points.empty() ? 0.0 : rclcpp::Duration(points.back().time_from_start).seconds();
       const auto started = now();
       reporter = std::thread([this, &running, total, started, &on_progress] {
-        while (running.load()) {
-          const double elapsed = (now() - started).seconds();
-          on_progress(total > 0.0 ? std::min(1.0, elapsed / total) : 0.0);
-          std::this_thread::sleep_for(
+            while (running.load()) {
+              const double elapsed = (now() - started).seconds();
+              on_progress(total > 0.0 ? std::min(1.0, elapsed / total) : 0.0);
+              std::this_thread::sleep_for(
             std::chrono::duration_cast<std::chrono::milliseconds>(feedback_period_));
-        }
+            }
       });
     }
 
@@ -1089,23 +1163,23 @@ private:
             << (gripper.stalled ? "true" : "false") << ". ";
     if (gripper.reached_goal) {
       message << "The gripper arrived where it was sent, so nothing was between the "
-                 "pads to stop it — either the work-piece was not there, or the "
-                 "commanded width is wider than the part. A grasp is evidenced by "
-                 "FAILING to reach the command, so the width must be narrower than the "
-                 "object it closes on";
+        "pads to stop it — either the work-piece was not there, or the "
+        "commanded width is wider than the part. A grasp is evidenced by "
+        "FAILING to reach the command, so the width must be narrower than the "
+        "object it closes on";
     } else {
       message << "The gripper stopped short of its command, but not by enough width to "
-                 "be a part: a close that ends within the controller's own goal "
-                 "tolerance reports a little more width than it actually reached, and "
-                 "that phantom margin is what this rejects. Either nothing was between "
-                 "the pads, or the gripper jammed or fouled its own fingers";
+        "be a part: a close that ends within the controller's own goal "
+        "tolerance reports a little more width than it actually reached, and "
+        "that phantom margin is what this rejects. Either nothing was between "
+        "the pads, or the gripper jammed or fouled its own fingers";
     }
     return message.str();
   }
 
   using GripperProgressFn = std::function<void(double, double)>;
 
-  template <typename Handle>
+  template<typename Handle>
   GripperOutcome command_gripper(
     double width_m, double max_effort_n, const Handle & handle,
     const GripperProgressFn & on_progress = {})
@@ -1132,8 +1206,8 @@ private:
       const auto travel = travel_;
       options.feedback_callback =
         [on_progress, travel](
-          rclcpp_action::ClientGoalHandle<GripperCommand>::SharedPtr,
-          const std::shared_ptr<const GripperCommand::Feedback> feedback) {
+        rclcpp_action::ClientGoalHandle<GripperCommand>::SharedPtr,
+        const std::shared_ptr<const GripperCommand::Feedback> feedback) {
           on_progress(cite_skills::gripper_width_for(feedback->position, travel),
                       feedback->effort);
         };
@@ -1205,6 +1279,16 @@ private:
       outcome.reached_goal = wrapped.result->reached_goal;
       outcome.holding = cite_skills::gripper_is_holding(
         {width_m, wrapped.result->position, outcome.stalled, outcome.reached_goal}, travel_);
+      if (outcome.holding) {
+        // Where the jaws actually stopped, kept for `Place`. The pad face sits a
+        // stroke-dependent distance back up the tool axis, so releasing an object
+        // *where the caller asked for it* needs the angle the part is held at —
+        // and that angle is not the commanded one, because the part is what
+        // stopped the stroke. Stored as the drive position rather than as an
+        // offset in metres, so the linkage stays the only thing that converts
+        // between the two (P1).
+        held_drive_position_.store(wrapped.result->position);
+      }
 
       RCLCPP_INFO(
         get_logger(),
@@ -1216,10 +1300,11 @@ private:
     }
 
     if (wrapped.code == rclcpp_action::ResultCode::CANCELED ||
-        wrapped.code == rclcpp_action::ResultCode::ABORTED) {
-      outcome.result = wrapped.code == rclcpp_action::ResultCode::CANCELED
-                         ? make_result(ResultCode::CANCELLED, "the gripper command was cancelled")
-                         : make_result(
+      wrapped.code == rclcpp_action::ResultCode::ABORTED)
+    {
+      outcome.result = wrapped.code == rclcpp_action::ResultCode::CANCELED ?
+        make_result(ResultCode::CANCELLED, "the gripper command was cancelled") :
+        make_result(
                              ResultCode::EXECUTION_FAILED,
                              "the gripper controller aborted the command");
       return outcome;
@@ -1269,6 +1354,17 @@ private:
 
   cite_skills::GripperTravel travel_;
   double default_grasp_width_m_{0.0};
+
+  //: The drive-joint position the gripper last closed to while holding something.
+  //: `Place` reads it to work out where the pad face — and therefore the object —
+  //: is relative to the tip link it plans to.
+  //:
+  //: Initialised in `configure` to the position the default grasp width commands,
+  //: which is only ever the value used when a caller places with
+  //: `require_holding` false and an empty gripper. That is a mimed place; the
+  //: number then describes where a part would have been rather than where one is,
+  //: and nothing is holding it to be wrong about.
+  std::atomic<double> held_drive_position_{0.0};
 
   int ik_seeds_{8};
   double current_state_timeout_s_{5.0};
@@ -1320,7 +1416,7 @@ int main(int argc, char ** argv)
   // executor inside a callback is how this deadlocks under load.
   rclcpp::executors::MultiThreadedExecutor executor;
   executor.add_node(node);
-  std::thread spinner([&executor] { executor.spin(); });
+  std::thread spinner([&executor] {executor.spin();});
 
   if (!node->activate(node)) {
     node->shutdown();

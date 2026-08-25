@@ -39,6 +39,16 @@ MEASURED_OPENINGS_M = {
 WORKPIECE_M = 0.050
 MEASURED_STALL_POSITION_RAD = 0.4056
 
+#: How far proximal of `link_tcp` the centre of the pad face sits, in metres, by
+#: drive-joint position. From the grasp-plane campaign's own `harness/geometry.py`,
+#: which derived them from the vendor URDF and the parsed pad-face mesh before any
+#: trial ran — not from this model's arithmetic played back.
+CAMPAIGN_OFFSETS_M = {
+    0.0000: 0.029860,
+    0.4056: 0.019277,
+    0.4528: 0.018581,
+}
+
 
 @pytest.fixture
 def grasp(real_model: Path):
@@ -131,3 +141,65 @@ class TestTheDefaultGraspActuallySqueezes:
             - grasp.default_grasp_width_m
         )
         assert margin == pytest.approx(0.005, abs=1e-4)
+
+
+class TestThePadPlaneSitsWhereTheCampaignMeasuredIt:
+    """The axial half of the same linkage, pinned against its own campaign.
+
+    `link_tcp` — the link every skill plans to — is the FINGERTIP plane, and the
+    pads grip with their faces, which sit proximal of it. The 40-trial interleaved
+    campaign in `docs/measurements/2026-08-25-grasp-plane-offset/` measured the
+    consequence of ignoring that: the commanded tool pose was 24.4 mm high, 19.3 mm
+    of a 37.5 mm pad face was engaged, and the resulting couple rotated the
+    work-piece past 20 degrees in 12 of 20 trials. Correcting it: 0 of 20,
+    p < 0.0001.
+
+    The numbers below are that campaign's, not this model's arithmetic played
+    back: they come from `harness/geometry.py`, which derived them from the vendor
+    URDF and the parsed pad-face mesh before any trial ran.
+    """
+
+    @pytest.mark.parametrize(("position", "expected_m"), sorted(CAMPAIGN_OFFSETS_M.items()))
+    def test_the_offset_matches_the_campaign(self, grasp, position, expected_m) -> None:
+        assert grasp.linkage.pad_plane_offset_m(position) == pytest.approx(expected_m, abs=5e-6)
+
+    def test_the_constant_term_is_the_campaigns(self, grasp) -> None:
+        """The 0.0718988 m the analysis quotes, derived rather than declared."""
+        assert grasp.linkage._axial_reach_m == pytest.approx(0.0718988, abs=5e-7)
+
+    def test_the_offset_is_not_a_constant(self, grasp) -> None:
+        """The mistake the deleted `grasp` frame made, kept out by a test.
+
+        That frame declared one number, 0.172 m, and called it the point between
+        the pads. Both halves were wrong: 0.172 is the fingertip, and the pad
+        centre travels 11.3 mm along the tool axis across the stroke, so no single
+        constant is right at more than one width.
+        """
+        wide = grasp.linkage.pad_plane_offset_m(grasp.open_position)
+        narrow = grasp.linkage.pad_plane_offset_m(
+            grasp.linkage.position_for(grasp.default_grasp_width_m)
+        )
+        assert wide - narrow == pytest.approx(0.01128, abs=5e-5)
+
+    def test_correcting_it_puts_the_pad_face_on_the_work_piece(self, grasp) -> None:
+        """End to end, in the terms the campaign reported.
+
+        A 50 mm cube resting on a surface has its centre 25 mm up. Planning the
+        tip link straight there — which is what `Pick` did — leaves the pad centre
+        24.2 mm above the part's centre of mass. Backing the tip link off by this
+        offset instead leaves it within a millimetre, with the whole pad face on
+        the part.
+        """
+        stall = grasp.linkage.position_for(WORKPIECE_M)
+        uncorrected = grasp.linkage.pad_plane_offset_m(stall)
+        assert uncorrected == pytest.approx(0.0193, abs=5e-4)
+
+        commanded = grasp.linkage.pad_plane_offset_m(
+            grasp.linkage.position_for(grasp.default_grasp_width_m)
+        )
+        # Where the pad centre lands, relative to the part's centre of mass, once
+        # the tip link is put `commanded` below the object's pose. The residual is
+        # the clearance between the commanded width and the part's own, which this
+        # layer cannot remove: L0 records no work-piece geometry.
+        residual_m = uncorrected - commanded
+        assert 0.0 < residual_m < 0.001

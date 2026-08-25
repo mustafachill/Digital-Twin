@@ -29,7 +29,12 @@
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
 
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       package having checked nothing. -->
   <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <!-- The action contract needs a running server to show it, so the integration
        test brings up move_group against the generated description. No simulator

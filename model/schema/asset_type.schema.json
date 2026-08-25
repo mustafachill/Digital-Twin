@@ -491,10 +491,14 @@
     },
     "GripperLinkage": {
       "additionalProperties": false,
-      "description": "The geometry that maps a parallel gripper's drive angle onto a pad opening.\n\n``opening(q) = 2 * (drive_pivot_y_m - pad_inset_m\n                    + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))``\n\nThis is the single home of that relationship (P1). The L3 skill server\nreceives these four numbers through the generated bring-up plan and evaluates\nthe same closed form, so task-space widths mean the same thing in the model,\nin the validator, and on the robot.\n\nIt is a closed form rather than a fit or a table because it is derivable: the\ndrive joint and the finger joint rotate about opposite axes by the same angle,\nso their rotations cancel, the pad stays parallel, and its offset from the\ncentreline is plain trigonometry. A lookup table would be the same fact stored\nat lower precision and with more places to drift.\n\nEvery field is a dimension in the robot's own description, which is what makes\nan audit possible: each can be checked against the vendor URDF or mesh rather\nthan taken on trust.",
+      "description": "Where a parallel gripper's pads are, as a function of its drive angle.\n\nTwo maps, one crank. Across the tool axis::\n\n    opening(q) = 2 * (drive_pivot_y_m - pad_inset_m\n                      + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))\n\nand along it, how far PROXIMAL of the planning tip link the centre of the pad\nface sits::\n\n    pad_plane_offset(q) = tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m\n                          - (finger_offset_y_m*sin(q)\n                             + finger_offset_z_m*cos(q))\n\nThis is the single home of both relationships (P1). The L3 skill server\nreceives these seven numbers through the generated bring-up plan and\nevaluates the same closed forms, so task-space widths and task-space *poses*\nmean the same thing in the model, in the validator, and on the robot.\n\nThey are closed forms rather than fits or tables because they are derivable:\nthe drive joint and the finger joint rotate about opposite axes by the same\nangle, so their rotations cancel, the pad face stays parallel to the tool\naxis, and only its origin translates. The two maps are that one translation\nresolved on two axes — which is also why they belong in one model rather than\ntwo, since separating them would mean a second copy of the crank.\n\nEvery field is a dimension in the robot's own description, which is what makes\nan audit possible: each can be checked against the vendor URDF or mesh rather\nthan taken on trust.",
       "properties": {
         "drive_pivot_y_m": {
           "title": "Drive Pivot Y M",
+          "type": "number"
+        },
+        "drive_pivot_z_m": {
+          "title": "Drive Pivot Z M",
           "type": "number"
         },
         "finger_offset_y_m": {
@@ -505,17 +509,28 @@
           "title": "Finger Offset Z M",
           "type": "number"
         },
+        "pad_face_centre_z_m": {
+          "title": "Pad Face Centre Z M",
+          "type": "number"
+        },
         "pad_inset_m": {
           "minimum": 0.0,
           "title": "Pad Inset M",
+          "type": "number"
+        },
+        "tip_link_z_m": {
+          "title": "Tip Link Z M",
           "type": "number"
         }
       },
       "required": [
         "drive_pivot_y_m",
+        "drive_pivot_z_m",
         "finger_offset_y_m",
         "finger_offset_z_m",
-        "pad_inset_m"
+        "pad_inset_m",
+        "tip_link_z_m",
+        "pad_face_centre_z_m"
       ],
       "title": "GripperLinkage",
       "type": "object"

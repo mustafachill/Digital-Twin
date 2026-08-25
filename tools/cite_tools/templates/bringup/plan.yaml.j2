@@ -42,17 +42,32 @@ plan:
       # mapping a width in metres would be commanded as an angle.
       gripper_open_position: {{ manager.gripper_open_position | f }}
       gripper_closed_position: {{ manager.gripper_closed_position | f }}
-      # The linkage that converts between the two, as four dimensions of the end
-      # effector rather than as a fitted curve:
+      # The linkage that converts between the two, and that places the pads on
+      # the tool axis, as seven dimensions of the end effector rather than as two
+      # fitted curves:
       #   opening(q) = 2*(drive_pivot_y - pad_inset
       #                   + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+      #   pad_plane_offset(q) = tip_link_z - drive_pivot_z - pad_face_centre_z
+      #                         - (finger_offset_y*sin(q)
+      #                            + finger_offset_z*cos(q))
       # The widest opening is derived from these, never carried alongside them —
       # a declared maximum is a second place for one fact to be stated, and the
-      # one it used to state (85 mm, against a true 88.93 mm) was wrong.
+      # one it used to state (85 mm, against a true 88.93 mm) was wrong. The
+      # axial map's constant term, 0.0718988 m, is derived for the same reason.
+      #
+      # `pad_plane_offset` is why L3 can be given an object's pose rather than a
+      # tool pose: the planning tip link is the FINGERTIP plane and the pads grip
+      # with their faces, so a skill that planned straight to an object's pose
+      # held it that far off centre. Measured at 24.4 mm, and measured to cause
+      # every work-piece rotation above 20 degrees
+      # (docs/measurements/2026-08-25-grasp-plane-offset/).
       gripper_drive_pivot_y_m: {{ manager.gripper_drive_pivot_y_m | f }}
+      gripper_drive_pivot_z_m: {{ manager.gripper_drive_pivot_z_m | f }}
       gripper_finger_offset_y_m: {{ manager.gripper_finger_offset_y_m | f }}
       gripper_finger_offset_z_m: {{ manager.gripper_finger_offset_z_m | f }}
       gripper_pad_inset_m: {{ manager.gripper_pad_inset_m | f }}
+      gripper_tip_link_z_m: {{ manager.gripper_tip_link_z_m | f }}
+      gripper_pad_face_centre_z_m: {{ manager.gripper_pad_face_centre_z_m | f }}
 {% if manager.gripper_goal_tolerance_rad is not none %}
       # The gripper controller's own goal tolerance, delivered to L3 because the
       # skill server needs it to judge a grasp: the controller ends a goal as soon
