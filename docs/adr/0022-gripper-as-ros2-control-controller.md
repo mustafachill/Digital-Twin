@@ -1,8 +1,105 @@
 # ADR-0022: Drive the gripper through `ros2_control`, not a separate action server
 
-- **Status:** Accepted
+- **Status:** Accepted — the decision stands. Two supporting claims in this record were
+  false and are corrected below; nothing that was decided is withdrawn. See the
+  section "Correction — 2026-08-25: the 'known wart' was not harmless", immediately
+  after this block.
 - **Date:** 2026-08-24
 - **Related:** ADR-0005, ADR-0006, ADR-0023, [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md)
+
+## Correction — 2026-08-25: the "known wart" was not harmless
+
+Two statements in this record are false as configured. They are marked where they stand
+rather than deleted: the record of an inference that turned out wrong is the useful part.
+
+**What was written.** The Context said the five finger joints are "ordinary URDF joints
+carrying `<mimic>` tags, which `ros2_control` resolves natively", and the *Known wart* note
+said the vendor's five Gazebo Classic mimic-plugin blocks are "harmless because the
+`<mimic>` tags carry the behaviour".
+
+**What is true.** Nothing carried the behaviour. The five finger joints were coupled by no
+mechanism at all in simulation, from the day this record was written until the patch
+described below is applied.
+
+**Why neither mechanism resolved them.** Measured on 2026-08-25:
+
+- **`ros2_control` cannot.** It resolves mimics declared *inside* the `<ros2_control>`
+  block, not URDF `<mimic>` tags elsewhere in the description — and the vendor's gripper
+  block declares exactly one joint. Verified against
+  `xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro` at the SHA pinned in
+  `external/cite.repos`: it contains a single `<joint name="${prefix}drive_joint">` and no
+  other. `/opt/ros/jazzy/lib/libhardware_interface.so` carries the string
+  `Mimic joint '{}' not found in <ros2_control> tag`, which is what it emits for a mimic it
+  is asked to resolve and cannot find there.
+- **Gazebo cannot either, and the description is not at fault.** `gz sdf -p` *does*
+  correctly translate a URDF `<mimic multiplier="1" offset="0"/>` into a native SDF 1.11
+  `<axis><mimic>` constraint carrying `<multiplier>`, `<offset>` and `<reference>` —
+  verified on 2026-08-25 by converting a two-joint URDF in the container image and reading
+  the output. The constraint is then dropped by the physics engine. dartsim is the default
+  engine and the one this cell runs — `cite_generated/worlds/cell_a.sdf` loads
+  `gz-sim-physics-system` with no `<engine>` override — and it does not implement
+  `SetMimicConstraintFeature` in gz-physics 7. `nm -DC` finds **0** mimic symbols in
+  `libgz-physics7-dartsim-plugin.so` against **285** in
+  `libgz-physics7-bullet-featherstone-plugin.so`. `gz-sim` says so out loud:
+  `src/systems/physics/Physics.cc` on the `gz-sim8` branch logs at `gzerr` "Attempting to
+  create a mimic constraint for joint [...] but the chosen physics engine does not support
+  mimic constraints, so no constraint will be created."
+- **The Classic plugin fails to load, exactly as this record predicted** — 15 errors per
+  run, five mimic joints on each of three arms. The five are five
+  `mimic_joint_plugin_gazebo` invocations in
+  `xarm_description/urdf/gripper/xarm_gripper_macro.xacro` at the pinned SHA.
+
+**The measured consequence.** Across the whole gripper stroke the right finger moves
+**1.5 mm**, and that is gravity sag rather than actuation: the right-hand chain is
+unconstrained and free-hanging, so it does not even reach its own open position. **The
+gripper never grasped anything.** Every lift observed during Phase 1.C came from the
+attachment plugin of [ADR-0023](0023-simulated-grasping-via-attachment.md) instead — see
+that record's own correction, which holds the detail.
+
+**What survives, unchanged.** The decision. `position_controllers/GripperActionController`
+on `drive_joint` was and remains the right interface, and `stalled` is real, reachable and
+correctly reported when the drive joint is physically blocked — demonstrated directly on
+2026-08-25. The controller was never the problem, and nothing in the Decision section is
+withdrawn beyond the one sentence marked in it.
+
+**The resolution**, chosen by measuring three candidates rather than by inference: declare
+the five finger joints as mimics **inside** the vendor's `<ros2_control>` block, through a
+patch file in `external/patches/` per
+[ADR-0008](0008-external-dependencies-via-vcstool.md) — the same remedy this record already
+named for the load noise, applied now for a far larger reason. `gz_ros2_control` 1.2.19
+(the version in the container image) honours `HardwareInfo::mimic_joints`: `gz_system.cpp`
+lines 841-867 run a per-mimic-joint proportional velocity servo, commanding
+`velocity_sp = -(position_mimic - position_mimicked * multiplier) * update_rate` on each
+mimic joint every update. P7 applies to this paragraph: it records the decision, and the
+patch is what makes it true.
+
+Two alternatives were measured and rejected:
+
+- **A first-party Harmonic mimic plugin.** Mechanically identical to the servo above,
+  about **35 % worse real-time factor** during contact, and roughly **120 lines** of ours
+  to maintain for as long as the project exists. It buys nothing the upstream servo does
+  not already give.
+- **Switching the physics engine to bullet-featherstone.** It has the mimic feature, and
+  it failed outright: the pads closed, but contact drove the joint *backwards* past its
+  command, the arm was displaced **10-43 mm**, and the action never returned a result. A
+  larger change than the defect, and it did not work.
+
+**Upstream limitation, recorded so it is not rediscovered.** That servo uses `multiplier`
+and ignores the mimic `offset` term — `gz_system.cpp` line 853 computes the position error
+from the multiplier alone, and `offset` appears only in a configuration-time log line. All
+five of our mimic joints declare `offset="0"`, verified in
+`xarm_description/urdf/gripper/xarm_gripper.urdf.xacro` at the pinned SHA, so it changes
+nothing today. Given what this record is being corrected for: **"harmless today" is a claim
+with an expiry date, not a dismissal.** It expires the moment an end-effector with a
+non-zero mimic offset is described, and whoever describes one owns this.
+
+**How the error survived, which is the part worth carrying forward.** "`ros2_control`
+resolves `<mimic>` natively" is true of mimics declared inside the `<ros2_control>` block.
+It was generalised to the URDF's `<mimic>` tags and written down as a settled fact without
+a test that any finger moved. The "harmless" label then did active harm: it pre-authorised
+the only symptom the system emitted — fifteen plugin load errors at every start-up — as
+known noise, so the single available signal had already been explained away in writing.
+Nothing asserted on a finger's position until 2026-08-25.
 
 ## Context
 
@@ -21,6 +118,7 @@ separate `<ros2_control>` block** for the gripper, carrying one actuated joint �
 `<prefix>drive_joint` — with `position` and `velocity` command and state interfaces. The
 five remaining finger joints are ordinary URDF joints carrying `<mimic joint="drive_joint">`
 tags, which `ros2_control` resolves natively.
+**[Corrected 2026-08-25 — see the Correction section above.]**
 
 So the gripper is already presented to us as a `ros2_control` hardware component with one
 degree of freedom, in both the simulated and the vendor-hardware configurations. That is
@@ -71,13 +169,19 @@ work-piece — and translates it into one controller goal. It never touches a ve
 never talks to the simulator.
 
 The mimic-joint coupling of the remaining five finger joints is left to the URDF `<mimic>`
-tags that `ros2_control` already resolves. We do not add a coupling mechanism of our own.
+tags that `ros2_control` already resolves.
+**[Corrected 2026-08-25 — see the Correction section above.]** It does not resolve them;
+the coupling is declared inside the `<ros2_control>` block instead. What survives is the
+part that was the actual decision: we add no coupling *mechanism* of our own.
 
 **Known wart, recorded rather than hidden:** the vendor expansion also emits five
 `<gazebo><plugin filename="libgazebo_mimic_joint_plugin.so">` blocks. That is a Gazebo
 Classic plugin and will not load under Harmonic; the upstream README says as much. It is
 harmless because the `<mimic>` tags carry the behaviour, but it produces a load error per
-gripper at start-up. If that noise ever obscures a real fault, the fix is a patch file in
+gripper at start-up.
+**[Corrected 2026-08-25 — see the Correction section above.]** It was not harmless:
+nothing carried the behaviour.
+If that noise ever obscures a real fault, the fix is a patch file in
 `external/patches/` per [ADR-0008](0008-external-dependencies-via-vcstool.md) — never an
 edit inside the checked-out dependency.
 

@@ -37,6 +37,36 @@ Numbers are permanent. A superseded ADR is **never deleted or rewritten** — it
 changes to `Superseded by NNNN` and it stays exactly as written. The record of a decision
 that turned out wrong is more valuable than the record of one that turned out right.
 
+## Corrections
+
+A **correction** is not a supersession. It is what you write when the decision holds but a
+supporting claim in the record turns out to be false — an inference that was written down
+as a fact and later measured. The decision survives; only the claim is wrong.
+
+The same rule applies as for supersession: **nothing is rewritten.** A record that quietly
+repairs itself teaches the reader nothing, and the most valuable thing in a corrected ADR
+is how the wrong claim survived review in the first place. So:
+
+1. Add a `## Correction — YYYY-MM-DD: <what was wrong>` section immediately **after** the
+   metadata block and **before** `## Context`, so nobody can read the false text without
+   first meeting the correction.
+2. Leave the false sentences exactly where they are, each followed by
+   `**[Corrected YYYY-MM-DD — see the Correction section above.]**`.
+3. Qualify the `**Status:**` line with what stands and what does not, and name the
+   correction section. Name it rather than linking to it: the heading carries an em
+   dash and a colon, and Markdown renderers do not agree on the anchor that produces.
+4. State plainly what survives. A correction that leaves a reader unsure whether the
+   decision still binds has replaced one ambiguity with another.
+5. End the correction with **how the error survived** — the untested inference, the silent
+   failure mode, the missing assertion. That is the part that transfers.
+6. Mark the index row `Accepted (corrected YYYY-MM-DD)`.
+
+If the *decision* is what turned out wrong, this is not a correction. Write a new ADR and
+set this one to `Superseded by NNNN`.
+
+[ADR-0022](0022-gripper-as-ros2-control-controller.md) and
+[ADR-0023](0023-simulated-grasping-via-attachment.md) are the worked examples.
+
 ## Status values
 
 | Status | Meaning |
@@ -45,6 +75,7 @@ that turned out wrong is more valuable than the record of one that turned out ri
 | `Accepted` | Binding. Violating it is an `ESCALATE`, not a code-review finding. |
 | `Superseded by NNNN` | Replaced. Kept for the record. |
 | `Deprecated` | No longer applies, and nothing replaced it. |
+| `Accepted (corrected YYYY-MM-DD)` | Binding, and a supporting claim in it was measured false. See **Corrections** above. |
 
 ## Index
 
@@ -71,8 +102,8 @@ that turned out wrong is more valuable than the record of one that turned out ri
 | [0019](0019-language-split-cpp-python.md) | C++ for control paths, Python for orchestration and tooling | Accepted |
 | [0020](0020-facility-model-conventions.md) | Fix the facility model's units, axes, and file layout | Accepted |
 | [0021](0021-generated-artifacts-are-committed.md) | Commit generated artifacts, in one generated package | Accepted |
-| [0022](0022-gripper-as-ros2-control-controller.md) | Drive the gripper through `ros2_control`, not a separate action server | Accepted |
-| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Accepted |
+| [0022](0022-gripper-as-ros2-control-controller.md) | Drive the gripper through `ros2_control`, not a separate action server | Accepted (corrected 2026-08-25) |
+| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Accepted (corrected 2026-08-25) |
 | [0024](0024-handoff-split-between-l3-and-l4.md) | Split handoff — L4 owns the negotiation, L3 owns the motion | Accepted |
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted |
