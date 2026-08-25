@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_skills</name>
+  <version>0.1.0</version>
+  <description>
+    L3: robot-agnostic capability servers.
+
+    Skills are the vocabulary the system speaks about work. Goals are in task
+    space, never joint space — a joint-space goal leaks the robot's kinematics
+    upward and breaks the promise that swapping an xArm 5 for a different arm
+    changes nothing above this line.
+
+    C++ because every skill sits on a motion path, and cross-cutting-safety.md
+    requires simulation-only code to be audited as if it were hardware code.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>cite_interfaces</depend>
+  <depend>control_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!-- One station's work cycle.
+
+     Recovery is expressed, not implied. The Fallback below is what makes a
+     failed pick a decision rather than an exception: the station returns home
+     and reports itself blocked, so the line attributes the failure here instead
+     of discovering it downstream.
+
+     Nothing in this tree plans a trajectory or commands a controller. Every leaf
+     is an L3 skill called as a ROS 2 action — that separation is what lets an
+     arm be swapped without touching orchestration (P9).
+
+     Place is deliberately absent: the skill server implements MoveTo, Grasp and
+     Pick today, and a tree calling an action nobody serves would fail at run
+     time rather than at review. It arrives with the rest of the line in 1.D. -->
+<root BTCPP_format="4" main_tree_to_execute="StationCycle">
+
+  <BehaviorTree ID="StationCycle">
+    <Fallback name="cycle_with_recovery">
+
+      <Sequence name="nominal">
+        <MoveToHome asset="{asset}" />
+        <PickAt     asset="{asset}" frame="{pick_frame}" />
+        <MoveToHome asset="{asset}" />
+      </Sequence>
+
+      <!-- Returning home first is deliberate: a station that failed mid-cycle
+           may have left the arm somewhere the next attempt would collide with. -->
+      <Sequence name="recover">
+        <MoveToHome    asset="{asset}" />
+        <ReportBlocked asset="{asset}" reason="the station could not complete its cycle" />
+      </Sequence>
+
+    </Fallback>
+  </BehaviorTree>
+</root>

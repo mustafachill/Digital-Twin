@@ -22,6 +22,20 @@ from cite_tools.render import hash_banner
 def generate(cell: ResolvedCell) -> list[Artifact]:
     transforms: list[dict[str, object]] = []
     for asset in cell.assets:
+        # An arm is spawned as its own model whose root link is its mount, so
+        # nothing else ties that root to the facility. Without this transform TF
+        # has two disconnected trees, and a skill given a pose in cite_world can
+        # never resolve it into the arm's planning frame — which surfaces as an
+        # extrapolation or lookup error naming the frames but not the cause.
+        if asset.asset_type.category == "robot":
+            transforms.append(
+                {
+                    "parent": ids.WORLD_FRAME,
+                    "child": ids.link(asset.id, "mount"),
+                    "xyz_m": [round(v, 9) for v in asset.world_pose.xyz_m],
+                    "rpy_rad": [round(v, 9) for v in asset.world_pose.rpy_rad],
+                }
+            )
         for frame_id, pose in sorted(asset.frames.items()):
             transforms.append(
                 {

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ arm.id }}">
+
+  <!-- The vendor SRDF macro, invoked with our prefix — never copied. It carries
+       the self-collision matrix, which is a property of the vendor's geometry
+       rather than of our facility; re-deriving it here would mean inventing an
+       answer the vendor already has, and getting it wrong is how a planner
+       starts refusing valid states or permitting invalid ones. -->
+  <xacro:include filename="$(find {{ arm.srdf_package }})/{{ arm.srdf_file }}"/>
+  <xacro:{{ arm.srdf_macro }}
+{% for name, value in arm.srdf_args %}
+      {{ name }}="{{ value }}"
+{% endfor %}
+  />
+</robot>

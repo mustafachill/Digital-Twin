@@ -32,6 +32,17 @@
           "title": "Frames",
           "type": "array"
         },
+        "grasp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraspSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "hardware_backends": {
           "patternProperties": {
             "^[a-z][a-z0-9_]*$": {
@@ -392,6 +403,38 @@
       "title": "DescriptionSpec",
       "type": "object"
     },
+    "GraspSpec": {
+      "additionalProperties": false,
+      "description": "How the simulated grasp plugin recognises a grasp on this end effector.\n\nDeclared here rather than hardcoded in the plugin: an end effector with\ndifferent link names is a data change, and a plugin that guessed a link name\nwould be a second place a name is made (P1). ADR-0023 requires these to come\nfrom the model for exactly that reason.",
+      "properties": {
+        "attach_link_suffix": {
+          "title": "Attach Link Suffix",
+          "type": "string"
+        },
+        "closed_threshold_rad": {
+          "default": 0.3,
+          "exclusiveMinimum": 0.0,
+          "title": "Closed Threshold Rad",
+          "type": "number"
+        },
+        "drive_joint_suffix": {
+          "title": "Drive Joint Suffix",
+          "type": "string"
+        },
+        "open_threshold_rad": {
+          "default": 0.15,
+          "minimum": 0.0,
+          "title": "Open Threshold Rad",
+          "type": "number"
+        }
+      },
+      "required": [
+        "attach_link_suffix",
+        "drive_joint_suffix"
+      ],
+      "title": "GraspSpec",
+      "type": "object"
+    },
     "HardwareBackend": {
       "additionalProperties": false,
       "description": "One selectable ``ros2_control`` backend for a type.\n\nThe plugin class string exists exactly once, here. That is what makes\n'the only thing that differs is which plugin is loaded' (ADR-0005) true by\nconstruction rather than by discipline.",
@@ -647,11 +690,104 @@
     },
     "PlanningSpec": {
       "additionalProperties": false,
+      "description": "How this type is planned for, and where its SRDF comes from.\n\nGroup names are the vendor's, prefixed with the asset id exactly as joints\nand controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording\nthe vendor's suffix here rather than hardcoding it keeps the same property\nthe description has: a vendor rename is a model edit.",
       "properties": {
-        "group": {
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "title": "Group",
+        "end_effector_group_suffix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Effector Group Suffix"
+        },
+        "group_suffix": {
+          "title": "Group Suffix",
           "type": "string"
+        },
+        "kinematics_plugin": {
+          "default": "kdl_kinematics_plugin/KDLKinematicsPlugin",
+          "title": "Kinematics Plugin",
+          "type": "string"
+        },
+        "kinematics_resolution": {
+          "default": 0.005,
+          "title": "Kinematics Resolution",
+          "type": "number"
+        },
+        "kinematics_timeout_s": {
+          "default": 0.05,
+          "title": "Kinematics Timeout S",
+          "type": "number"
+        },
+        "max_acceleration_scaling": {
+          "default": 0.5,
+          "title": "Max Acceleration Scaling",
+          "type": "number"
+        },
+        "max_velocity_scaling": {
+          "default": 0.5,
+          "title": "Max Velocity Scaling",
+          "type": "number"
+        },
+        "srdf_args": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Srdf Args",
+          "type": "object"
+        },
+        "srdf_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf File"
+        },
+        "srdf_macro": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf Macro"
+        },
+        "srdf_package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf Package"
         },
         "tip_link_suffix": {
           "title": "Tip Link Suffix",
@@ -659,7 +795,7 @@
         }
       },
       "required": [
-        "group",
+        "group_suffix",
         "tip_link_suffix"
       ],
       "title": "PlanningSpec",

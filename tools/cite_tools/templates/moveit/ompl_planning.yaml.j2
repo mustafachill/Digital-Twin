@@ -1,0 +1,38 @@
+---
+{{ hash_banner() }}
+#
+# Sampling-based planning is stochastic (ADR-0006). A scenario therefore asserts
+# on outcomes and constraints, never on an exact joint sequence — a test that pins
+# a trajectory will be flaky and will be deleted by whoever is on call.
+#
+# The nesting matters. MoveIt looks for a planner under its pipeline's name; with
+# these keys at the top level it falls back to looking in the node's own namespace
+# and dies with "Planning plugin name is empty or not defined in namespace
+# 'move_group'", which names the node rather than the missing pipeline.
+planning_pipelines:
+  - ompl
+default_planning_pipeline: ompl
+
+ompl:
+  planning_plugins:
+    - ompl_interface/OMPLPlanner
+  request_adapters:
+    - default_planning_request_adapters/ResolveConstraintFrames
+    - default_planning_request_adapters/ValidateWorkspaceBounds
+    - default_planning_request_adapters/CheckStartStateBounds
+    - default_planning_request_adapters/CheckStartStateCollision
+  response_adapters:
+    - default_planning_response_adapters/AddTimeOptimalParameterization
+    - default_planning_response_adapters/ValidateSolution
+    - default_planning_response_adapters/DisplayMotionPath
+
+  planner_configs:
+    RRTConnectkConfigDefault:
+      type: geometric::RRTConnect
+      range: {{ 0.0 | f }}
+
+  {{ arm.group }}:
+    planner_configs:
+      - RRTConnectkConfigDefault
+    projection_evaluator: joints({{ arm.joints[0] }},{{ arm.joints[1] }})
+    longest_valid_segment_fraction: {{ 0.005 | f }}

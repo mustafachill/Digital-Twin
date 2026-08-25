@@ -94,5 +94,26 @@ asset_type:
       state_interfaces: [position, velocity]
 
   planning:
-    group: manipulator
-    tip_link_suffix: link_eef
+    # The vendor's own SRDF group names, prefixed with the asset id exactly as
+    # joints and controllers are: arm_1 plans with group arm_1_xarm5.
+    group_suffix: xarm5
+    end_effector_group_suffix: xarm_gripper
+    # link_tcp rather than link_eef: with a gripper fitted the vendor's chain
+    # continues to the tool centre point, and planning to the flange instead
+    # would put the gripper's length quietly into every placement error.
+    tip_link_suffix: link_tcp
+    # The SRDF is invoked, not copied — same rule as the description. It carries
+    # the self-collision matrix, which is a fact about the vendor's geometry.
+    srdf_package: xarm_moveit_config
+    srdf_file: srdf/xarm_macro.srdf.xacro
+    srdf_macro: xarm_macro_srdf
+    srdf_args:
+      dof: 5
+      robot_type: xarm
+    kinematics_plugin: kdl_kinematics_plugin/KDLKinematicsPlugin
+    kinematics_resolution: 0.005
+    kinematics_timeout_s: 0.05
+    # Conservative planning-time scaling. The arm's own limits are in the vendor
+    # description; these are what MoveIt is allowed to ask for.
+    max_velocity_scaling: 0.35
+    max_acceleration_scaling: 0.35

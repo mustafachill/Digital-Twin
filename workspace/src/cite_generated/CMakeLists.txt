@@ -14,6 +14,7 @@ install(
     control
     description
     frames
+    moveit
     topology
     worlds
   DESTINATION share/${PROJECT_NAME}

@@ -17,6 +17,10 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <exec_depend>cite_generated</exec_depend>
+  <exec_depend>cite_facility</exec_depend>
+  <exec_depend>cite_skills</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>cite_interfaces</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>launch</exec_depend>

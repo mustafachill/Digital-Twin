@@ -33,6 +33,14 @@
           ],
           "title": "Units",
           "type": "string"
+        },
+        "workpiece_models": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Workpiece Models",
+          "type": "array"
         }
       },
       "required": [

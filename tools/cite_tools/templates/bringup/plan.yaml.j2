@@ -32,10 +32,30 @@ plan:
       spawn_xyz_m: "{{ manager.spawn_xyz_m }}"
       spawn_rpy_rad: "{{ manager.spawn_rpy_rad }}"
       parameters: package://cite_generated/control/{{ cell.zone }}_{{ manager.asset }}_controllers.yaml
+{% if manager.trajectory_action %}
+      trajectory_action: {{ manager.trajectory_action }}
+{% endif %}
+{% if manager.gripper_action %}
+      gripper_action: {{ manager.gripper_action }}
+{% endif %}
       controllers:
 {% for controller in manager.controllers %}
         - {name: {{ controller.name }}, stage: {{ controller.stage }}}
 {% endfor %}
+{% if manager.planning_group %}
+      moveit:
+        group: {{ manager.planning_group }}
+        base_link: {{ manager.planning_base_link }}
+        tip_link: {{ manager.planning_tip_link }}
+        # The home configuration comes from L0: where an arm rests between cycles
+        # is a fact about this facility, not about the vendor's robot.
+        home_rad: [{{ manager.home_rad | map('m') | join(', ') }}]
+        srdf: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}.srdf.xacro
+        kinematics: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_kinematics.yaml
+        ompl: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_ompl_planning.yaml
+        joint_limits: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_joint_limits.yaml
+        controllers: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_moveit_controllers.yaml
+{% endif %}
 {% endfor %}
 
   conveyors:

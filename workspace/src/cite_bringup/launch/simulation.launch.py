@@ -30,6 +30,7 @@ import os
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
+    EmitEvent,
     DeclareLaunchArgument,
     ExecuteProcess,
     LogInfo,
@@ -38,9 +39,15 @@ from launch.actions import (
     Shutdown,
 )
 from launch.event_handlers import OnProcessExit
+from launch.events import matches_action
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
+from lifecycle_msgs.msg import Transition
 from launch.substitutions import Command, LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import LifecycleNode, Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+import yaml
 
 from cite_bringup.plan import Plan, PlanError, default_plan_path, load
 
@@ -105,7 +112,19 @@ def _bring_up(context: LaunchContext) -> list:
     actions += _simulator(plan, headless=headless)
     actions += _scene(plan)
     actions += _arms(plan)
-    actions += _controllers(plan)
+    actions += _facility(plan)
+    controller_actions, last_spawner = _controllers(plan)
+    actions += controller_actions
+    actions += _motion_planning(plan)
+    # Skills come last, gated on the final controller spawner. That is the order
+    # cross-cutting-lifecycle.md fixes — controllers, then MoveIt, then skills —
+    # and it is a real dependency, not a preference: MoveGroupInterface needs a
+    # current robot state, which does not exist until a broadcaster is publishing.
+    actions.append(
+        RegisterEventHandler(
+            OnProcessExit(target_action=last_spawner, on_exit=_skills(plan))
+        )
+    )
     return actions
 
 
@@ -214,7 +233,7 @@ def _arms(plan: Plan) -> list:
     return actions
 
 
-def _controllers(plan: Plan) -> list:
+def _controllers(plan: Plan) -> tuple[list, Node]:
     """Spawn each manager's controllers, stage by stage, gated on the previous.
 
     The chain starts from `create` exiting — the moment the cell is genuinely in
@@ -267,7 +286,230 @@ def _controllers(plan: Plan) -> list:
                 )
             previous = spawner
 
+    assert previous is not None, "the plan declared no controllers to spawn"
+    return actions, previous
+
+
+def _managed(node: LifecycleNode) -> list:
+    """Drive a managed node through configure and activate, on its transitions.
+
+    Not on a timer. `configure` is where a node reads and validates everything it
+    needs; if it cannot, it returns FAILURE and never reaches `inactive`, so the
+    activation below simply never fires and bring-up stops with the node's own
+    diagnosis rather than with a system that came up half-built.
+    """
+    configure = EmitEvent(
+        event=ChangeState(
+            lifecycle_node_matcher=matches_action(node),
+            transition_id=Transition.TRANSITION_CONFIGURE,
+        )
+    )
+    activate = RegisterEventHandler(
+        OnStateTransition(
+            target_lifecycle_node=node,
+            goal_state="inactive",
+            entities=[
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(node),
+                        transition_id=Transition.TRANSITION_ACTIVATE,
+                    )
+                )
+            ],
+        )
+    )
+    # The handler is registered before the transition is emitted, so a node that
+    # configures very quickly cannot reach `inactive` before anything is watching.
+    return [activate, node, configure]
+
+
+def _facility(plan: Plan) -> list:
+    """Runtime access to the generated artifacts: frames, model version, topology.
+
+    These are managed nodes with no dependency on the simulator, so they come up
+    alongside it rather than after it. The frame server matters most: without it
+    an arm's own model is a disconnected TF tree, and a skill given a pose in
+    cite_world can never resolve it into the arm's planning frame.
+    """
+    zone = {"zone": plan.zone}
+    return [
+        *_managed(
+            LifecycleNode(
+                package="cite_facility",
+                executable="frame_server.py",
+                name="frame_server",
+                namespace="/cite/facility",
+                parameters=[zone, {"use_sim_time": True}],
+                remappings=[("/tf_static", "/tf_static")],
+                output="screen",
+            )
+        ),
+        *_managed(
+            LifecycleNode(
+                package="cite_facility",
+                executable="model_info.py",
+                name="model_info",
+                namespace="/cite/facility",
+                parameters=[{"zones": [plan.zone]}, {"use_sim_time": True}],
+                output="screen",
+            )
+        ),
+        *_managed(
+            LifecycleNode(
+                package="cite_facility",
+                executable="topology_server.py",
+                name="topology_server",
+                namespace="/cite/facility",
+                parameters=[zone, {"use_sim_time": True}],
+                output="screen",
+            )
+        ),
+    ]
+
+
+def _skills(plan: Plan) -> list:
+    """One skill server per arm, in that arm's namespace.
+
+    Every name it uses arrives as a generated parameter — the planning group, the
+    tip link, the controller actions, the home configuration. The server builds
+    none of them, which is what keeps the number of places a name is made at one
+    (P2). It refuses to start if any is missing, rather than guessing and
+    advertising skills that command nothing.
+    """
+    actions: list = []
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        namespace = manager.node.rsplit("/", 1)[0]
+        # MoveGroupInterface builds its own RobotModel, so the skill server needs
+        # the same description, semantics and kinematics parameters move_group
+        # has. Without the kinematics entry it loads the model, warns "No
+        # kinematics plugins defined", and then fails every pose goal with an
+        # inverse-kinematics error that says nothing about a missing parameter.
+        robot_description = ParameterValue(
+            Command(["xacro ", str(manager.description)]), value_type=str
+        )
+        semantic = ParameterValue(
+            Command(["xacro ", str(manager.moveit.srdf)]), value_type=str
+        )
+        actions.append(
+            Node(
+                package="cite_skills",
+                executable="skill_server",
+                name="skill_server",
+                namespace=namespace,
+                parameters=[
+                    {
+                        "robot_description": robot_description,
+                        "robot_description_semantic": semantic,
+                    },
+                    _yaml_parameters(
+                        manager.moveit.kinematics, prefix="robot_description_kinematics"
+                    ),
+                    _yaml_parameters(
+                        manager.moveit.joint_limits, prefix="robot_description_planning"
+                    ),
+                    {
+                        "asset_id": manager.asset,
+                        "zone": plan.zone,
+                        "planning_group": manager.moveit.group,
+                        "tip_link": manager.moveit.tip_link,
+                        "gripper_action": manager.gripper_action or "",
+                        "home_rad": list(manager.moveit.home_rad),
+                        "use_sim_time": True,
+                    }
+                ],
+                remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+                output="screen",
+            )
+        )
     return actions
+
+
+def _motion_planning(plan: Plan) -> list:
+    """One move_group per arm, in that arm's namespace.
+
+    Per arm rather than per cell, because each arm is its own model with its own
+    description and its own controller manager. Nothing above L3 talks to MoveIt
+    (ADR-0006); the skill servers are its only client.
+
+    move_group is started unconditionally rather than gated on the controllers:
+    it waits for /joint_states on its own, and gating it here would add an
+    ordering constraint that the system does not actually have.
+    """
+    actions: list = []
+    for manager in plan.controller_managers:
+        moveit = manager.moveit
+        if moveit is None:
+            continue
+
+        namespace = manager.node.rsplit("/", 1)[0]
+        robot_description = ParameterValue(
+            Command(["xacro ", str(manager.description)]), value_type=str
+        )
+        semantic = ParameterValue(Command(["xacro ", str(moveit.srdf)]), value_type=str)
+
+        parameters: list = [
+            {
+                "robot_description": robot_description,
+                "robot_description_semantic": semantic,
+                "use_sim_time": True,
+                "publish_robot_description_semantic": True,
+            },
+            _yaml_parameters(moveit.kinematics, prefix="robot_description_kinematics"),
+            _yaml_parameters(moveit.joint_limits, prefix="robot_description_planning"),
+            # Loaded as dictionaries rather than passed as --params-file. A ROS
+            # parameter FILE must be shaped `<node>: ros__parameters: ...`; these
+            # generated files hold the content without that wrapper, because the
+            # wrapper is a ROS plumbing convention and not a fact about the
+            # facility. Passing them as files fails at rcl with "Sequences can
+            # only be values and not keys in params", which points at the YAML
+            # rather than at the missing wrapper.
+            _yaml_parameters(moveit.ompl),
+            _yaml_parameters(moveit.controllers),
+            {
+                # No depth sensor feeds this cell yet, so the octomap monitor
+                # has nothing to update from. Setting the resolution silences the
+                # "Resolution not specified" warning; it does NOT silence the
+                # accompanying "No 3D sensor plugin(s) defined for octomap
+                # updates" ERROR, which move_group logs regardless and which is
+                # accurate — there are no sensors. It goes away when Phase 3
+                # brings depth sensing, not before.
+                "octomap_resolution": 0.05,
+                "publish_planning_scene": True,
+                "publish_geometry_updates": True,
+                "publish_state_updates": True,
+                "publish_transforms_updates": True,
+            },
+        ]
+
+        actions.append(
+            Node(
+                package="moveit_ros_move_group",
+                executable="move_group",
+                name="move_group",
+                namespace=namespace,
+                parameters=parameters,
+                # move_group listens on the global TF tree; without these it would
+                # subscribe inside its namespace and never see the arm it plans for.
+                remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+                output="screen",
+            )
+        )
+    return actions
+
+
+def _yaml_parameters(path, *, prefix: str | None = None) -> dict:
+    """Load a generated YAML file under a parameter prefix.
+
+    MoveIt expects kinematics and joint limits nested under
+    `robot_description_kinematics` and `robot_description_planning`. The generated
+    files hold the content without that nesting, because the nesting is a MoveIt
+    convention rather than a fact about the facility — so it is applied here,
+    where MoveIt is the consumer.
+    """
+    document = yaml.safe_load(path.read_text()) or {}
+    return {prefix: document} if prefix else document
 
 
 def _gate(spawner: Node, asset: str, stage: int) -> callable:

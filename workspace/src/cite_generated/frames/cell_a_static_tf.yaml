@@ -8,6 +8,36 @@
 # Frames for assets that are not links in the robot description.
 static_transforms:
 - parent: cite_world
+  child: arm_1_mount
+  xyz_m:
+  - 0.0
+  - -0.35
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 1.570796327
+- parent: cite_world
+  child: arm_2_mount
+  xyz_m:
+  - 2.1
+  - -0.35
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 1.570796327
+- parent: cite_world
+  child: arm_3_mount
+  xyz_m:
+  - 4.2
+  - -0.35
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 1.570796327
+- parent: cite_world
   child: cell_a__arm_1__base
   xyz_m:
   - 0.0

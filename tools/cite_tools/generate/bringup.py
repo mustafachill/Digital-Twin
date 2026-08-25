@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from cite_tools.generate import Artifact
 from cite_tools.model import ids
-from cite_tools.model.resolve import ResolvedCell
+from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.model.units import fmt
 from cite_tools.render import environment
 
@@ -38,6 +38,12 @@ class _ManagerView:
     spawn_xyz_m: str
     spawn_rpy_rad: str
     controllers: tuple[_ControllerRef, ...]
+    planning_group: str | None
+    planning_tip_link: str | None
+    planning_base_link: str | None
+    home_rad: tuple[float, ...]
+    trajectory_action: str | None
+    gripper_action: str | None
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,46 @@ class _SensorView:
     detection_topic: str
     beam_axis: str
     beam_length_m: float
+
+
+def _planning_group(asset: ResolvedAsset) -> str | None:
+    planning = asset.asset_type.planning
+    return ids.controller(asset.id, planning.group_suffix) if planning else None
+
+
+def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
+    planning = asset.asset_type.planning
+    kinematics = asset.asset_type.kinematics
+    if planning is None or kinematics is None:
+        return None
+    suffix = planning.tip_link_suffix if which == "tip" else kinematics.base_link_suffix
+    return ids.link(asset.id, suffix)
+
+
+def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
+    """The full action name a controller exposes, built once by ids.py.
+
+    The skill server receives this as a parameter rather than constructing it,
+    which is what keeps the number of places a name is made at exactly one.
+    """
+    name = ids.controller(asset.id, suffix)
+    if not any(c.name == name for c in asset.controllers):
+        return None
+    action = "follow_joint_trajectory" if "trajectory" in suffix else "gripper_cmd"
+    return ids.interface(asset.zone, asset.id, f"{name}/{action}")
+
+
+def _home(asset: ResolvedAsset) -> tuple[float, ...]:
+    """The retracted pose an arm returns to between cycles.
+
+    Taken from L0 rather than from the SRDF: where an arm rests between cycles is
+    a decision about this facility, not a property of the vendor's robot, and the
+    vendor's SRDF declares no named states anyway.
+    """
+    configuration = asset.instance.configuration
+    if configuration is not None and configuration.kind == "robot":
+        return tuple(configuration.home_rad)
+    return ()
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
@@ -85,6 +131,12 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             controllers=tuple(
                 _ControllerRef(name=c.name, stage=c.stage) for c in asset.controllers
             ),
+            planning_group=_planning_group(asset),
+            planning_tip_link=_planning_link(asset, "tip"),
+            planning_base_link=_planning_link(asset, "base"),
+            home_rad=_home(asset),
+            trajectory_action=_controller_action(asset, "joint_trajectory_controller"),
+            gripper_action=_controller_action(asset, "gripper_controller"),
         )
         for asset in cell.assets
         if asset.controllers

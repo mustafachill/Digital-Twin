@@ -1,0 +1,26 @@
+---
+{{ hash_banner() }}
+#
+# What MoveIt is allowed to ask for, as a fraction of the limits declared in the
+# robot description. The description's limits are the arm's; these are the
+# planner's. cross-cutting-safety.md requires limits enforced at planning AND at
+# execution — this file is the planning half, and the controller is the other.
+default_velocity_scaling_factor: {{ arm.max_velocity_scaling | f }}
+default_acceleration_scaling_factor: {{ arm.max_acceleration_scaling | f }}
+
+# Only the acceleration limit is stated here. Velocity and effort limits are in
+# the robot description, which is where a limit belongs — it is a property of the
+# arm. Repeating them would be the same fact in two places, and declaring
+# `has_velocity_limits` without a value makes MoveIt refuse to load the model
+# ("specified a velocity limit ... but did not set a max velocity").
+#
+# Acceleration is the exception: the vendor description carries no acceleration
+# limit, and MoveIt's time parameterisation needs one. Without it the planner
+# emits trajectories the controller cannot track, which presents as following
+# error rather than as a missing limit.
+joint_limits:
+{% for joint in arm.joints %}
+  {{ joint }}:
+    has_acceleration_limits: true
+    max_acceleration: {{ arm.max_acceleration_rad_s2 | f }}
+{% endfor %}

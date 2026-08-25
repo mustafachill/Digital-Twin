@@ -74,8 +74,33 @@ def test_stage_grouping_is_deterministic() -> None:
             ControllerRef("a", 1),
             ControllerRef("jsb", 0),
         ),
+        moveit=None,
+        trajectory_action=None,
+        gripper_action=None,
     )
     assert manager.stages() == [(0, ("jsb",)), (1, ("a", "b"))]
+
+
+def test_every_arm_gets_a_planning_configuration() -> None:
+    """MoveIt and ros2_control must be told the same controller names.
+
+    Both come from the same L0 model here, so they cannot disagree — a mismatch
+    fails at run time with an error naming neither of them.
+    """
+    plan = load(Path(resolve_uri("package://cite_generated/bringup/cell_a_plan.yaml")))
+    for manager in plan.controller_managers:
+        assert manager.moveit is not None, manager.asset
+        assert manager.moveit.group.startswith(manager.asset)
+        assert manager.moveit.srdf.exists()
+        assert manager.moveit.controllers.exists()
+
+        declared = yaml.safe_load(manager.moveit.controllers.read_text())
+        named = set(declared["moveit_simple_controller_manager"]["controller_names"])
+        spawned = {c.name for c in manager.controllers}
+        assert named <= spawned, (
+            f"{manager.asset}: MoveIt is configured for {sorted(named - spawned)}, "
+            "which ros2_control never spawns"
+        )
 
 
 def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:

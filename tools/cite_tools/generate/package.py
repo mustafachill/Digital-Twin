@@ -17,17 +17,28 @@ from cite_tools.render import environment
 
 #: Directories the package installs. Listed rather than globbed so that CMake
 #: fails loudly if a generator stops emitting one, instead of installing nothing.
-DIRECTORIES = ("bringup", "control", "description", "frames", "topology", "worlds")
+DIRECTORIES = (
+    "bringup",
+    "control",
+    "description",
+    "frames",
+    "moveit",
+    "topology",
+    "worlds",
+)
 
 
 def generate(model: FacilityModel) -> list[Artifact]:
-    dependencies = sorted(
-        {
-            asset_type.description.package
-            for asset_type in model.types
-            if asset_type.description.package
-        }
-    )
+    # Derived from the model, so a component library entry that starts
+    # referencing a new vendor package brings the dependency with it instead of
+    # being discovered as a missing package on someone else's machine.
+    packages: set[str] = set()
+    for asset_type in model.types:
+        if asset_type.description.package:
+            packages.add(asset_type.description.package)
+        if asset_type.planning and asset_type.planning.srdf_package:
+            packages.add(asset_type.planning.srdf_package)
+    dependencies = sorted(packages)
 
     env = environment()
     return [

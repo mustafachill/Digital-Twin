@@ -30,6 +30,23 @@ asset_type:
     file: urdf/xarm_device_macro.xacro
     macro: xarm_device
 
+  # How the simulated grasp plugin recognises a grasp (ADR-0023). These are the
+  # vendor's own link and joint names; declaring them here keeps the plugin free
+  # of any name it invented for itself.
+  grasp:
+    # A finger, not link_tcp. Converting URDF to SDF lumps any link joined by a
+    # fixed joint into its parent, so link_base, link_eef, xarm_gripper_base_link
+    # and link_tcp do not exist in the spawned model at all — only links moved by
+    # a real joint survive. Naming a lumped link makes the plugin log "model has
+    # no link" and then silently never grasp anything.
+    #
+    # Attaching to a finger is also the more honest description of what holds the
+    # work-piece.
+    attach_link_suffix: left_finger
+    drive_joint_suffix: drive_joint
+    closed_threshold_rad: 0.3
+    open_threshold_rad: 0.15
+
   controllers:
     - suffix: gripper_controller
       # GripperActionController, not a trajectory controller: a grasp is "close

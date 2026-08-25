@@ -17,6 +17,7 @@
   <license>Apache-2.0</license>
 
   <exec_depend>xarm_description</exec_depend>
+  <exec_depend>xarm_moveit_config</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

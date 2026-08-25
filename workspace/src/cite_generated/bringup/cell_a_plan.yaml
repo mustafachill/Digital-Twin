@@ -35,10 +35,24 @@ plan:
       spawn_xyz_m: "0 -0.35 0.6"
       spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_1_controllers.yaml
+      trajectory_action: /cite/cell_a/arm_1/arm_1_joint_trajectory_controller/follow_joint_trajectory
+      gripper_action: /cite/cell_a/arm_1/arm_1_gripper_controller/gripper_cmd
       controllers:
         - {name: arm_1_joint_state_broadcaster, stage: 0}
         - {name: arm_1_gripper_controller, stage: 1}
         - {name: arm_1_joint_trajectory_controller, stage: 1}
+      moveit:
+        group: arm_1_xarm5
+        base_link: arm_1_link_base
+        tip_link: arm_1_link_tcp
+        # The home configuration comes from L0: where an arm rests between cycles
+        # is a fact about this facility, not about the vendor's robot.
+        home_rad: [0, -0.35, -1.05, 0, 1.4]
+        srdf: package://cite_generated/moveit/cell_a_arm_1.srdf.xacro
+        kinematics: package://cite_generated/moveit/cell_a_arm_1_kinematics.yaml
+        ompl: package://cite_generated/moveit/cell_a_arm_1_ompl_planning.yaml
+        joint_limits: package://cite_generated/moveit/cell_a_arm_1_joint_limits.yaml
+        controllers: package://cite_generated/moveit/cell_a_arm_1_moveit_controllers.yaml
     - asset: arm_2
       node: /cite/cell_a/arm_2/controller_manager
       backend: sim
@@ -54,10 +68,24 @@ plan:
       spawn_xyz_m: "2.1 -0.35 0.6"
       spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_2_controllers.yaml
+      trajectory_action: /cite/cell_a/arm_2/arm_2_joint_trajectory_controller/follow_joint_trajectory
+      gripper_action: /cite/cell_a/arm_2/arm_2_gripper_controller/gripper_cmd
       controllers:
         - {name: arm_2_joint_state_broadcaster, stage: 0}
         - {name: arm_2_gripper_controller, stage: 1}
         - {name: arm_2_joint_trajectory_controller, stage: 1}
+      moveit:
+        group: arm_2_xarm5
+        base_link: arm_2_link_base
+        tip_link: arm_2_link_tcp
+        # The home configuration comes from L0: where an arm rests between cycles
+        # is a fact about this facility, not about the vendor's robot.
+        home_rad: [0, -0.35, -1.05, 0, 1.4]
+        srdf: package://cite_generated/moveit/cell_a_arm_2.srdf.xacro
+        kinematics: package://cite_generated/moveit/cell_a_arm_2_kinematics.yaml
+        ompl: package://cite_generated/moveit/cell_a_arm_2_ompl_planning.yaml
+        joint_limits: package://cite_generated/moveit/cell_a_arm_2_joint_limits.yaml
+        controllers: package://cite_generated/moveit/cell_a_arm_2_moveit_controllers.yaml
     - asset: arm_3
       node: /cite/cell_a/arm_3/controller_manager
       backend: sim
@@ -73,10 +101,24 @@ plan:
       spawn_xyz_m: "4.2 -0.35 0.6"
       spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_3_controllers.yaml
+      trajectory_action: /cite/cell_a/arm_3/arm_3_joint_trajectory_controller/follow_joint_trajectory
+      gripper_action: /cite/cell_a/arm_3/arm_3_gripper_controller/gripper_cmd
       controllers:
         - {name: arm_3_joint_state_broadcaster, stage: 0}
         - {name: arm_3_gripper_controller, stage: 1}
         - {name: arm_3_joint_trajectory_controller, stage: 1}
+      moveit:
+        group: arm_3_xarm5
+        base_link: arm_3_link_base
+        tip_link: arm_3_link_tcp
+        # The home configuration comes from L0: where an arm rests between cycles
+        # is a fact about this facility, not about the vendor's robot.
+        home_rad: [0, -0.35, -1.05, 0, 1.4]
+        srdf: package://cite_generated/moveit/cell_a_arm_3.srdf.xacro
+        kinematics: package://cite_generated/moveit/cell_a_arm_3_kinematics.yaml
+        ompl: package://cite_generated/moveit/cell_a_arm_3_ompl_planning.yaml
+        joint_limits: package://cite_generated/moveit/cell_a_arm_3_joint_limits.yaml
+        controllers: package://cite_generated/moveit/cell_a_arm_3_moveit_controllers.yaml
 
   conveyors:
     - asset: conveyor_1

@@ -63,7 +63,16 @@ def model_hash(model: FacilityModel) -> str:
 
 def generate(model: FacilityModel) -> list[Artifact]:
     """Every artifact, in a stable order."""
-    from cite_tools.generate import bringup, control, description, frames, package, topology, world
+    from cite_tools.generate import (
+        bringup,
+        control,
+        description,
+        frames,
+        moveit,
+        package,
+        topology,
+        world,
+    )
 
     artifacts: list[Artifact] = [
         Artifact(MARKER, _marker_text()),
@@ -74,6 +83,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         artifacts += description.generate(cell)
         artifacts += world.generate(cell)
         artifacts += control.generate(cell)
+        artifacts += moveit.generate(cell)
         artifacts += frames.generate(cell)
         artifacts += topology.generate(model, cell)
         artifacts += bringup.generate(cell)

@@ -1,0 +1,6 @@
+---
+{{ hash_banner() }}
+{{ arm.group }}:
+  kinematics_solver: {{ arm.kinematics_plugin }}
+  kinematics_solver_search_resolution: {{ arm.kinematics_resolution | f }}
+  kinematics_solver_timeout: {{ arm.kinematics_timeout_s | f }}

@@ -28,6 +28,27 @@ class ControllerRef:
 
 
 @dataclass(frozen=True)
+class MoveItConfig:
+    """Everything move_group needs for one arm, all generated from L0.
+
+    The controller names here and the ones ros2_control was configured with come
+    from the same model, which is what stops MoveIt and the controller manager
+    from disagreeing about what a controller is called — a mismatch that fails at
+    run time with an error naming neither.
+    """
+
+    group: str
+    base_link: str
+    tip_link: str
+    home_rad: tuple[float, ...]
+    srdf: Path
+    kinematics: Path
+    ompl: Path
+    joint_limits: Path
+    controllers: Path
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -39,6 +60,9 @@ class ControllerManager:
     spawn_rpy_rad: tuple[float, float, float]
     parameters: str
     controllers: tuple[ControllerRef, ...]
+    moveit: MoveItConfig | None
+    trajectory_action: str | None
+    gripper_action: str | None
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Controllers grouped by stage, in ascending order.
@@ -134,6 +158,9 @@ def load(path: Path) -> Plan:
             controllers=tuple(
                 ControllerRef(name=c["name"], stage=c["stage"]) for c in entry["controllers"]
             ),
+            moveit=_moveit(entry.get("moveit")),
+            trajectory_action=entry.get("trajectory_action"),
+            gripper_action=entry.get("gripper_action"),
         )
         for entry in plan.get("controller_managers") or []
     )
@@ -174,6 +201,22 @@ def load(path: Path) -> Plan:
         controller_managers=managers,
         conveyors=conveyors,
         sensors=sensors,
+    )
+
+
+def _moveit(entry: dict | None) -> MoveItConfig | None:
+    if entry is None:
+        return None
+    return MoveItConfig(
+        group=entry["group"],
+        base_link=entry["base_link"],
+        tip_link=entry["tip_link"],
+        home_rad=tuple(float(v) for v in entry.get("home_rad") or []),
+        srdf=resolve_uri(entry["srdf"]),
+        kinematics=resolve_uri(entry["kinematics"]),
+        ompl=resolve_uri(entry["ompl"]),
+        joint_limits=resolve_uri(entry["joint_limits"]),
+        controllers=resolve_uri(entry["controllers"]),
     )
 
 

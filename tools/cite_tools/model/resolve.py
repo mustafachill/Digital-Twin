@@ -101,6 +101,16 @@ class ResolvedCell:
     zone_bounds: Aabb
     assets: tuple[ResolvedAsset, ...]
     stations: tuple[ResolvedStation, ...]
+    #: Types not placed as instances — an end effector is fitted to an arm rather
+    #: than standing somewhere, so it has a type but no pose.
+    unplaced_types: tuple[AssetType, ...] = ()
+    workpiece_models: tuple[str, ...] = ()
+
+    def end_effector_type(self, type_id: str) -> AssetType | None:
+        return next(
+            (t for t in self.unplaced_types if t.id == type_id and t.category == "end_effector"),
+            None,
+        )
 
     def asset(self, asset_id: str) -> ResolvedAsset | None:
         return next((a for a in self.assets if a.id == asset_id), None)
@@ -262,4 +272,6 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         zone_bounds=Aabb(min_m=zone.bounds.min_m, max_m=zone.bounds.max_m),
         assets=tuple(sorted(assets, key=lambda a: a.id)),
         stations=stations,
+        unplaced_types=tuple(sorted(model.types, key=lambda t: t.id)),
+        workpiece_models=tuple(sorted(model.facility.workpiece_models)),
     )

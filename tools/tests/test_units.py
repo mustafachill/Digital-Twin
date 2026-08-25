@@ -42,3 +42,26 @@ class TestDisplayOnly:
     def test_degrees_are_display_only(self) -> None:
         # Present for `cite-model show`; must never appear in the model itself.
         assert units.degrees_for_display(1.5707963267948966) == "90"
+
+
+class TestYamlSafeFloat:
+    """Generated YAML read back as ROS parameters must keep its floats floating."""
+
+    def test_whole_numbers_keep_a_decimal_point(self) -> None:
+        # YAML parses `2` as an integer, and a node declaring the parameter as a
+        # double then rejects it with "expected [double] got [integer]" — an
+        # error that names the type but not the missing decimal point.
+        assert units.fmt_float(2.0) == "2.0"
+        assert units.fmt_float(0.0) == "0.0"
+        assert units.fmt_float(-3.0) == "-3.0"
+
+    def test_fractional_values_are_unchanged(self) -> None:
+        assert units.fmt_float(0.35) == "0.35"
+        assert units.fmt_float(0.005) == "0.005"
+
+    def test_round_trips_through_yaml_as_a_float(self) -> None:
+        import yaml
+
+        for value in (2.0, 0.0, 0.35, 1200.0):
+            loaded = yaml.safe_load(f"x: {units.fmt_float(value)}")["x"]
+            assert isinstance(loaded, float), f"{value} came back as {type(loaded).__name__}"

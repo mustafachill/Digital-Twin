@@ -21,7 +21,7 @@ from xml.sax.saxutils import escape, quoteattr
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
-from cite_tools.model.units import fmt, fmt_triple
+from cite_tools.model.units import fmt, fmt_float, fmt_triple
 
 #: Header stamped into every generated artifact. It names the command that
 #: regenerates the file, because the most useful thing a generated file can tell
@@ -67,6 +67,8 @@ def environment() -> Environment:
         keep_trailing_newline=True,
     )
     env.filters["m"] = fmt
+    # `f` where the output is read back as a ROS parameter and the type matters.
+    env.filters["f"] = fmt_float
     env.filters["triple"] = _triple
     env.filters["xml"] = escape
     env.filters["attr"] = quoteattr

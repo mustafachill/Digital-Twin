@@ -61,6 +61,25 @@ def fmt(value: float) -> str:
     return f"{float(value):.{PRECISION}g}"
 
 
+def fmt_float(value: float) -> str:
+    """Format a float so YAML still reads it as a float.
+
+    `fmt` drops a trailing ".0" because URDF and SDF do not care and shorter text
+    is easier to read. A ROS parameter file does care: YAML parses `2` as an
+    integer, and a node declaring that parameter as a double rejects it with
+    "invalid type: expected [double] got [integer]" — which names the type but
+    not the missing decimal point. Any generated YAML consumed as ROS parameters
+    uses this instead.
+
+    >>> fmt_float(2.0), fmt_float(0.35), fmt_float(0.0)
+    ('2.0', '0.35', '0.0')
+    """
+    text = fmt(value)
+    if "." in text or "e" in text or "E" in text:
+        return text
+    return f"{text}.0"
+
+
 def fmt_triple(values: Iterable[float]) -> str:
     """Format three floats as a space-separated triple, as URDF and SDF want.
 

@@ -195,9 +195,51 @@ class ControllerSpec(Strict):
     parameters: dict[str, str | bool | int | float] = Field(default_factory=dict)
 
 
+class GraspSpec(Strict):
+    """How the simulated grasp plugin recognises a grasp on this end effector.
+
+    Declared here rather than hardcoded in the plugin: an end effector with
+    different link names is a data change, and a plugin that guessed a link name
+    would be a second place a name is made (P1). ADR-0023 requires these to come
+    from the model for exactly that reason.
+    """
+
+    attach_link_suffix: str
+    drive_joint_suffix: str
+    #: The xArm gripper's drive joint opens towards zero and closes towards its
+    #: upper limit, so "closed" is the LARGER value. The gap between the two is
+    #: hysteresis — with a single threshold the object drops and re-attaches
+    #: repeatedly while the gripper rests near it.
+    closed_threshold_rad: Annotated[float, Field(gt=0.0)] = 0.30
+    open_threshold_rad: Annotated[float, Field(ge=0.0)] = 0.15
+
+
 class PlanningSpec(Strict):
-    group: Identifier
+    """How this type is planned for, and where its SRDF comes from.
+
+    Group names are the vendor's, prefixed with the asset id exactly as joints
+    and controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording
+    the vendor's suffix here rather than hardcoding it keeps the same property
+    the description has: a vendor rename is a model edit.
+    """
+
+    group_suffix: str
+    end_effector_group_suffix: str | None = None
     tip_link_suffix: str
+    #: The vendor SRDF macro, invoked with our prefix rather than copied. It
+    #: carries the self-collision matrix, which is a property of the vendor's
+    #: geometry and not of our facility — re-deriving it here would be inventing
+    #: an answer the vendor already has.
+    srdf_package: str | None = None
+    srdf_file: str | None = None
+    srdf_macro: str | None = None
+    srdf_args: dict[str, str | bool | int | float] = Field(default_factory=dict)
+    #: Kinematics solver, and the planning-time limits MoveIt applies.
+    kinematics_plugin: str = "kdl_kinematics_plugin/KDLKinematicsPlugin"
+    kinematics_resolution: float = 0.005
+    kinematics_timeout_s: float = 0.05
+    max_velocity_scaling: float = 0.5
+    max_acceleration_scaling: float = 0.5
 
 
 class AssetType(Strict):
@@ -212,6 +254,7 @@ class AssetType(Strict):
     hardware_backends: dict[Identifier, HardwareBackend] = Field(default_factory=dict)
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
+    grasp: GraspSpec | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -318,6 +361,15 @@ class Facility(Strict):
         ),
     )
     survey_origin: SurveyOrigin = Field(default_factory=SurveyOrigin)
+    #: Model names a gripper in this facility may pick up.
+    #:
+    #: The minimal answer to L0's open question "does the model describe products
+    #: and work-pieces, or only equipment?". Not a work-piece *type* with
+    #: attributes — only the names, because that is all anything needs today and
+    #: inventing the rest before a consumer exists is how a schema acquires
+    #: fields nobody reads. A gripper that attached to whatever it touched would
+    #: pick up the table.
+    workpiece_models: list[Identifier] = Field(default_factory=list)
 
 
 class ZoneBounds(Strict):

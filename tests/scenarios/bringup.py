@@ -36,7 +36,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-from cite_interfaces.qos import STATE
+from cite_interfaces.action import MoveTo
+from cite_interfaces.msg import ModelVersion, ResultCode
+from cite_interfaces.qos import LATCHED, STATE
 
 ZONE = "cell_a"
 ARMS = ("arm_1", "arm_2", "arm_3")
@@ -46,6 +48,9 @@ ARMS = ("arm_1", "arm_2", "arm_3")
 BRING_UP_CEILING_S = 240.0
 DELIVERY_CEILING_S = 30.0
 TRAJECTORY_CEILING_S = 60.0
+#: Planning is stochastic, so a skill takes longer and varies more than a raw
+#: trajectory. Still a ceiling, not a schedule.
+SKILL_CEILING_S = 120.0
 
 
 @pytest.mark.launch_test
@@ -183,11 +188,119 @@ class TestCellBringUp(unittest.TestCase):
         )
 
 
+    def test_the_facility_publishes_its_model_version(self) -> None:
+        """L6 stamps this into every recording.
+
+        A bag recorded against yesterday's layout is not comparable to today's,
+        and without this the two are indistinguishable after the fact. Published
+        LATCHED, so a node that starts later still receives it.
+        """
+        received: list[ModelVersion] = []
+        subscription = self.node.create_subscription(
+            ModelVersion, "/cite/facility/model_version", received.append, LATCHED
+        )
+        try:
+            self._spin_until(
+                lambda: received or None, DELIVERY_CEILING_S, "the model version"
+            )
+            self.assertEqual(len(received[-1].model_hash), 64)
+            self.assertIn(ZONE, received[-1].zones)
+        finally:
+            self.node.destroy_subscription(subscription)
+
+    def test_station_frames_resolve_against_the_world(self) -> None:
+        """Without this an arm's model is a disconnected TF tree.
+
+        A skill given a pose in cite_world could never resolve it into the arm's
+        planning frame, and the failure reads as a lookup error naming the frames
+        rather than the missing link between them.
+        """
+        import tf2_ros
+
+        buffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(buffer, self.node)
+        try:
+            for frame in (
+                f"{ZONE}__table_pick__surface",
+                f"{ZONE}__conveyor_1__infeed",
+                "arm_1_mount",
+                "arm_1_link_base",
+            ):
+                self._spin_until(
+                    lambda target=frame: buffer.can_transform(
+                        "cite_world", target, rclpy.time.Time()
+                    )
+                    or None,
+                    DELIVERY_CEILING_S,
+                    f"a transform from cite_world to {frame}",
+                )
+        finally:
+            del listener
+
+    def test_a_skill_moves_the_arm_to_its_home_configuration(self) -> None:
+        """The vertical slice, end to end: L3 goal -> MoveIt -> ros2_control.
+
+        `home` comes from the L0 model, not from the vendor's SRDF — where an arm
+        rests between cycles is a fact about this facility.
+        """
+        arm = ARMS[0]
+        client = ActionClient(self.node, MoveTo, f"/cite/{ZONE}/{arm}/move_to")
+        self._spin_until(
+            lambda: client.wait_for_server(timeout_sec=0.5),
+            BRING_UP_CEILING_S,
+            f"the {arm} skill server",
+        )
+
+        goal = MoveTo.Goal()
+        goal.named_configuration = "home"
+        send = client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self.node, send, timeout_sec=TRAJECTORY_CEILING_S)
+        handle = send.result()
+        self.assertIsNotNone(handle, "the MoveTo goal was never accepted")
+        self.assertTrue(handle.accepted, "the skill server rejected a MoveTo goal")
+
+        result = handle.get_result_async()
+        rclpy.spin_until_future_complete(
+            self.node, result, timeout_sec=SKILL_CEILING_S
+        )
+        self.assertIsNotNone(result.result(), "MoveTo never returned a result")
+        outcome = result.result().result.result
+        self.assertEqual(
+            outcome.code,
+            ResultCode.SUCCESS,
+            f"MoveTo failed with code {outcome.code}: {outcome.detail}",
+        )
+
+
 @launch_testing.post_shutdown_test()
 class TestCleanShutdown(unittest.TestCase):
-    def test_nothing_exited_badly(self, proc_info) -> None:
-        """An orphaned gz sim holds ports and names, and the NEXT run fails
-        pointing nowhere near the cause. That is why shutdown is asserted."""
-        launch_testing.asserts.assertExitCodes(
-            proc_info, allowable_exit_codes=[0, launch_testing.asserts.EXIT_SIGINT]
-        )
+    """Shutdown is a designed path, not an afterthought.
+
+    An orphaned `gz sim` holds ports and names, and the NEXT bring-up then fails
+    pointing nowhere near the cause. That is why this is asserted rather than
+    assumed.
+    """
+
+    #: move_group segfaults during its own teardown, after logging "Deleting
+    #: MoveItCpp", on SIGINT. Reproduced on every run here with MoveIt 2.12.4 on
+    #: Jazzy: the node has already stopped serving by then, it leaves no orphan,
+    #: and no configuration of ours changes it.
+    #:
+    #: Tolerated for move_group ALONE, deliberately not by widening the allowable
+    #: codes for every process — a segfault in one of our own nodes must still
+    #: fail this test. Re-check on the next MoveIt release and delete this
+    #: exemption if it is fixed, rather than leaving it to cover something new.
+    UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
+
+    def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
+        allowed = [0, launch_testing.asserts.EXIT_SIGINT]
+        for info in proc_info:
+            name = str(info.process_name)
+            expected = [*allowed, -11] if name.startswith(
+                self.UPSTREAM_TEARDOWN_SEGFAULT
+            ) else allowed
+            self.assertIn(
+                info.returncode,
+                expected,
+                f"{name} exited with {info.returncode}",
+            )

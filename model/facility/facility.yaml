@@ -16,6 +16,13 @@ facility:
   # exists, every coordinate in this model is engineered intent rather than a
   # measurement of the building, and status says so rather than implying
   # otherwise (P7).
+  # What a gripper in this facility may pick up. Only names: L0 describes
+  # equipment, and giving work-pieces attributes before anything reads them
+  # would be inventing schema. A gripper that attached to whatever it touched
+  # would pick up the table (ADR-0023).
+  workpiece_models:
+    - workpiece
+
   survey_origin:
     status: provisional
     marker_id: CITE-SRV-001
