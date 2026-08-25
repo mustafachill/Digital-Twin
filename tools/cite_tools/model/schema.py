@@ -360,12 +360,33 @@ class ConveyorConfiguration(Strict):
     kind: Literal["conveyor"] = "conveyor"
     installed_speed_mps: Annotated[float, Field(gt=0.0)]
     direction: Literal["forward", "reverse"] = "forward"
+    #: How far above the belt's working surface a part still counts as resting
+    #: on it, and is therefore carried.
+    #:
+    #: An engineering floor, not a derived value, and the same floor the beam
+    #: heights are: L0 describes no work-piece geometry — `Facility.workpiece_models`
+    #: holds names and nothing else — so there is no model fact to compute the
+    #: right headroom from. 0.100 m clears the 50 mm box the scenario uses while
+    #: staying well below the 0.12 m an arm retreats to after a pick, so a part
+    #: that has been lifted is released rather than fought over. It becomes
+    #: derivable the day a work-piece carries a height.
+    carry_height_m: Annotated[float, Field(gt=0.0)] = 0.100
 
 
 class BreakBeamConfiguration(Strict):
     kind: Literal["sensor"] = "sensor"
     beam_axis: Literal["x", "y", "z"]
     beam_length_m: Annotated[float, Field(gt=0.0)]
+    #: How thick the beam is across its axis.
+    #:
+    #: A real through beam is a few millimetres. This is deliberately wider, so
+    #: that a work-piece travelling at belt speed cannot cross the beam between
+    #: two physics steps and go unnoticed: at the installed 0.150 m/s and a 1 ms
+    #: step a part advances 0.15 mm, so 40 mm is roughly 260 steps of margin.
+    #: It lives here rather than as a plugin default because it decides whether a
+    #: sensor can detect anything at all, and code must never be where that is
+    #: decided (P5).
+    beam_width_m: Annotated[float, Field(gt=0.0)] = 0.040
     idle_state: Literal["clear", "blocked"] = "clear"
 
 

@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Contact-triggered grasp attachment (ADR-0023).
 //
 // A parallel gripper holding a box by friction alone is one of the least
@@ -25,10 +39,22 @@
 // in ADR-0023 rather than hidden. No claim about grasp reliability can rest on
 // this plugin.
 
-#include <mutex>
+// WHY THE TRANSITIONS BELOW ARE LOGGED AS WARNINGS, WHEN THEY ARE NOT WARNINGS.
+//
+// `gzmsg` is verbosity level 3 and the cell is launched at level 2, so every
+// line this plugin wrote was invisible on a normal run. ADR-0023 lists "logs its
+// attach and detach transitions" as one of this plugin's properties, and as the
+// thing that disambiguates an attachment from friction when someone is trying to
+// work out which is holding a part. As shipped, that property did not hold: a
+// grasp that never engaged and a grasp that engaged wrongly produced identical
+// output, which is silence, and the defect this file was fixed for went unfound
+// for exactly that reason. Until the verbosity the cell runs at is a decision
+// somebody has made deliberately, the level that is actually printed is the only
+// one worth writing to. Three attaches and three detaches per line cycle is not
+// noise worth being blind for.
+
 #include <string>
 #include <unordered_set>
-#include <vector>
 
 #include <gz/plugin/Register.hh>
 #include <gz/sim/Model.hh>
@@ -41,7 +67,8 @@
 #include <gz/sim/components/ParentEntity.hh>
 #include <gz/sim/components/CanonicalLink.hh>
 #include <gz/sim/components/Link.hh>
-#include <gz/transport/Node.hh>
+
+#include "cite_simulation/grasp_rules.hpp"
 
 namespace cite_simulation
 {
@@ -49,8 +76,8 @@ namespace cite_simulation
 /// Attach a graspable model to a gripper while the gripper holds it.
 class GraspAttachment
   : public gz::sim::System,
-    public gz::sim::ISystemConfigure,
-    public gz::sim::ISystemPreUpdate
+  public gz::sim::ISystemConfigure,
+  public gz::sim::ISystemPreUpdate
 {
 public:
   void Configure(
@@ -84,7 +111,8 @@ public:
     // The set of models this gripper may pick up. Declared, not inferred: a
     // gripper that attached to whatever it touched would grab the table.
     for (auto element = sdf->FindElement("graspable"); element;
-         element = element->GetNextElement("graspable")) {
+      element = element->GetNextElement("graspable"))
+    {
       graspable_.insert(element->Get<std::string>());
     }
     if (graspable_.empty()) {
@@ -95,7 +123,7 @@ public:
     attach_link_entity_ = model_.LinkByName(ecm, attach_link_);
     drive_joint_entity_ = model_.JointByName(ecm, drive_joint_);
     if (attach_link_entity_ == gz::sim::kNullEntity ||
-        drive_joint_entity_ == gz::sim::kNullEntity)
+      drive_joint_entity_ == gz::sim::kNullEntity)
     {
       gzerr << "[cite_grasp] model '" << model_.Name(ecm) << "' has no link '"
             << attach_link_ << "' or no joint '" << drive_joint_ << "'\n";
@@ -107,9 +135,21 @@ public:
     // reads as empty every step and the gripper never appears to close.
     ecm.CreateComponent(drive_joint_entity_, gz::sim::components::JointPosition());
 
+    // Recorded once, and read through `topLevelModel` rather than taken from
+    // `Model::Name` directly, so that both sides of a contact pair are compared
+    // at the same level of nesting. Without it the comparison in FindGraspable
+    // would silently never match if this plugin were ever attached to a nested
+    // model.
+    own_model_name_ = TopLevelModelName(ecm, entity);
+    if (own_model_name_.empty()) {
+      gzerr << "[cite_grasp] this model has no name, so no contact can be attributed to "
+            << "it; refusing to attach anything\n";
+      return;
+    }
+
     configured_ = true;
-    gzmsg << "[cite_grasp] watching '" << drive_joint_ << "' on model '"
-          << model_.Name(ecm) << "', attaching to '" << attach_link_ << "'\n";
+    gzwarn << "[cite_grasp] watching '" << drive_joint_ << "' on model '"
+           << model_.Name(ecm) << "', attaching to '" << attach_link_ << "'\n";
   }
 
   void PreUpdate(
@@ -127,8 +167,12 @@ public:
     const double opening = position->Data().front();
 
     if (attached_ == gz::sim::kNullEntity) {
-      // Attach only while the gripper is CLOSING onto something. Attaching on
-      // contact alone would let the arm pick things up by brushing past them.
+      // BOTH conditions, and the second one is the one that used to be missing:
+      // the gripper is closed past its threshold, AND this gripper is actually
+      // touching a graspable model. Closure alone is what an arm reaches at the
+      // end of every Grasp whether or not anything is between the pads, so on
+      // its own it attaches whatever happens to be declared graspable, wherever
+      // it happens to be.
       if (opening >= closed_threshold_rad_) {
         const auto candidate = FindGraspable(ecm);
         if (candidate != gz::sim::kNullEntity) {
@@ -146,27 +190,50 @@ public:
   }
 
 private:
-  /// The nearest graspable model whose links are in contact with this gripper.
+  /// A graspable model that THIS gripper is in contact with.
+  ///
+  /// The pair test lives in `grasp_rules::graspable_of_pair` so that it can be
+  /// exercised without a simulator — ADR-0023 requires a test that a near-miss
+  /// does not attach, and that test would otherwise need a running world.
+  ///
+  /// Note what this iterates: every `ContactSensorData` in the world, wherever
+  /// its sensor happens to be declared. The sensor may sit on the work-piece or
+  /// on the gripper pads and this reads the same either way, because the
+  /// decision is made on the pair rather than on which side reported it.
   gz::sim::Entity FindGraspable(const gz::sim::EntityComponentManager & ecm) const
   {
     gz::sim::Entity found = gz::sim::kNullEntity;
 
     ecm.Each<gz::sim::components::ContactSensorData>(
       [&](const gz::sim::Entity &, const gz::sim::components::ContactSensorData * contacts)
-        -> bool {
+      -> bool {
         for (const auto & contact : contacts->Data().contact()) {
-          for (const auto * collision : {&contact.collision1(), &contact.collision2()}) {
-            const auto model = TopLevelModelName(ecm, collision->id());
-            if (!model.empty() && graspable_.count(model) > 0) {
-              found = TopLevelModelEntity(ecm, collision->id());
+          const auto first = TopLevelModelEntity(ecm, contact.collision1().id());
+          const auto second = TopLevelModelEntity(ecm, contact.collision2().id());
+          switch (grasp_rules::graspable_of_pair(
+              NameOf(ecm, first), NameOf(ecm, second), graspable_, own_model_name_))
+          {
+            case grasp_rules::PairSide::kFirst:
+              found = first;
               return false;
-            }
+            case grasp_rules::PairSide::kSecond:
+              found = second;
+              return false;
+            case grasp_rules::PairSide::kNeither:
+              break;
           }
         }
         return true;
       });
 
     return found;
+  }
+
+  static std::string NameOf(
+    const gz::sim::EntityComponentManager & ecm, gz::sim::Entity entity)
+  {
+    const auto * name = ecm.Component<gz::sim::components::Name>(entity);
+    return name != nullptr ? name->Data() : std::string{};
   }
 
   static std::string TopLevelModelName(
@@ -194,7 +261,7 @@ private:
     gz::sim::Entity link = gz::sim::kNullEntity;
     ecm.Each<gz::sim::components::CanonicalLink, gz::sim::components::ParentEntity>(
       [&](const gz::sim::Entity & entity, const gz::sim::components::CanonicalLink *,
-          const gz::sim::components::ParentEntity * parent) -> bool {
+      const gz::sim::components::ParentEntity * parent) -> bool {
         if (parent->Data() == model) {
           link = entity;
           return false;
@@ -222,8 +289,8 @@ private:
 
     const auto * name = ecm.Component<gz::sim::components::Name>(target);
     attached_ = target;
-    gzmsg << "[cite_grasp] attached '" << (name != nullptr ? name->Data() : "?")
-          << "'\n";
+    gzwarn << "[cite_grasp] attached '" << (name != nullptr ? name->Data() : "?")
+           << "'\n";
   }
 
   void Detach(gz::sim::EntityComponentManager & ecm)
@@ -232,7 +299,7 @@ private:
       ecm.RequestRemoveEntity(joint_entity_);
       joint_entity_ = gz::sim::kNullEntity;
     }
-    gzmsg << "[cite_grasp] released\n";
+    gzwarn << "[cite_grasp] released\n";
     attached_ = gz::sim::kNullEntity;
   }
 
@@ -244,6 +311,9 @@ private:
 
   std::string attach_link_;
   std::string drive_joint_;
+  //: The model this plugin is attached to. Half of every contact test: a
+  //: contact that does not involve this gripper is not this gripper's grasp.
+  std::string own_model_name_;
   std::unordered_set<std::string> graspable_;
 
   //: The xArm gripper's drive joint opens towards zero and closes towards its

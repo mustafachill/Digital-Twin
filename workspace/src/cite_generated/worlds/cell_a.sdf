@@ -18,6 +18,147 @@
          (ADR-0023) and what a scenario asserts collisions against. -->
     <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
 
+    <!-- conveyor_1 — a belt, as a simulation fidelity aid.
+
+         A world system rather than a model plugin, because converting the scene
+         from URDF to SDF lumps every fixed-jointed body into one link: there is
+         no conveyor_1 model in the spawned world to attach to. Every
+         value below is resolved from L0, including the pose, which comes from
+         the same surface frame the stations pick and place against.
+
+         Nothing above ros2_control knows this exists. It speaks Gazebo transport
+         only; naming and typing it for ROS is a bridge's business, above this
+         boundary and identical on the hardware path. -->
+    <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
+      <surface_pose>1.05 0 0.6 0 0 0</surface_pose>
+      <belt_length_m>1.2</belt_length_m>
+      <belt_width_m>0.4</belt_width_m>
+      <carry_height_m>0.1</carry_height_m>
+      <direction>forward</direction>
+      <installed_speed_mps>0.15</installed_speed_mps>
+      <command_topic>/cite/cell_a/conveyor_1/command</command_topic>
+      <state_topic>/cite/cell_a/conveyor_1/state</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <carry>workpiece</carry>
+    </plugin>
+
+    <!-- conveyor_2 — a belt, as a simulation fidelity aid.
+
+         A world system rather than a model plugin, because converting the scene
+         from URDF to SDF lumps every fixed-jointed body into one link: there is
+         no conveyor_2 model in the spawned world to attach to. Every
+         value below is resolved from L0, including the pose, which comes from
+         the same surface frame the stations pick and place against.
+
+         Nothing above ros2_control knows this exists. It speaks Gazebo transport
+         only; naming and typing it for ROS is a bridge's business, above this
+         boundary and identical on the hardware path. -->
+    <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
+      <surface_pose>3.15 0 0.6 0 0 0</surface_pose>
+      <belt_length_m>1.2</belt_length_m>
+      <belt_width_m>0.4</belt_width_m>
+      <carry_height_m>0.1</carry_height_m>
+      <direction>forward</direction>
+      <installed_speed_mps>0.15</installed_speed_mps>
+      <command_topic>/cite/cell_a/conveyor_2/command</command_topic>
+      <state_topic>/cite/cell_a/conveyor_2/state</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <carry>workpiece</carry>
+    </plugin>
+
+    <!-- conveyor_3 — a belt, as a simulation fidelity aid.
+
+         A world system rather than a model plugin, because converting the scene
+         from URDF to SDF lumps every fixed-jointed body into one link: there is
+         no conveyor_3 model in the spawned world to attach to. Every
+         value below is resolved from L0, including the pose, which comes from
+         the same surface frame the stations pick and place against.
+
+         Nothing above ros2_control knows this exists. It speaks Gazebo transport
+         only; naming and typing it for ROS is a bridge's business, above this
+         boundary and identical on the hardware path. -->
+    <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
+      <surface_pose>5.25 0 0.6 0 0 0</surface_pose>
+      <belt_length_m>1.2</belt_length_m>
+      <belt_width_m>0.4</belt_width_m>
+      <carry_height_m>0.1</carry_height_m>
+      <direction>forward</direction>
+      <installed_speed_mps>0.15</installed_speed_mps>
+      <command_topic>/cite/cell_a/conveyor_3/command</command_topic>
+      <state_topic>/cite/cell_a/conveyor_3/state</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <carry>workpiece</carry>
+    </plugin>
+
+    <!-- beam_c1_out — a through-beam presence sensor.
+
+         A world system for the same reason the belts are: its housing is lumped
+         into the scene's single link, so there is no beam_c1_out model to
+         attach to and its pose has to arrive as data. It is resolved from the
+         same L0 placement that positions the housing, so the beam and the thing
+         it is drawn as cannot end up in different places.
+
+         beam_pose is where the HOUSING stands. beam_offset_m is how far past it,
+         along the beam axis, the middle of the beam lies — because a through
+         beam is emitted from its housing and crosses what it watches, rather
+         than being centred on it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>1.6 0.25 0.63 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.04</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/cite/cell_a/beam_c1_out/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
+    <!-- beam_c2_out — a through-beam presence sensor.
+
+         A world system for the same reason the belts are: its housing is lumped
+         into the scene's single link, so there is no beam_c2_out model to
+         attach to and its pose has to arrive as data. It is resolved from the
+         same L0 placement that positions the housing, so the beam and the thing
+         it is drawn as cannot end up in different places.
+
+         beam_pose is where the HOUSING stands. beam_offset_m is how far past it,
+         along the beam axis, the middle of the beam lies — because a through
+         beam is emitted from its housing and crosses what it watches, rather
+         than being centred on it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>3.7 0.25 0.63 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.04</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/cite/cell_a/beam_c2_out/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
+    <!-- beam_c3_out — a through-beam presence sensor.
+
+         A world system for the same reason the belts are: its housing is lumped
+         into the scene's single link, so there is no beam_c3_out model to
+         attach to and its pose has to arrive as data. It is resolved from the
+         same L0 placement that positions the housing, so the beam and the thing
+         it is drawn as cannot end up in different places.
+
+         beam_pose is where the HOUSING stands. beam_offset_m is how far past it,
+         along the beam axis, the middle of the beam lies — because a through
+         beam is emitted from its housing and crosses what it watches, rather
+         than being centred on it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>5.8 0.25 0.63 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.04</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/cite/cell_a/beam_c3_out/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <diffuse>0.8 0.8 0.8 1</diffuse>

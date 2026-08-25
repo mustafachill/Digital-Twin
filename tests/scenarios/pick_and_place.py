@@ -340,6 +340,12 @@ class TestPickAndPlace(unittest.TestCase):
         tree = (
             Path(get_package_share_directory("cite_orchestration")) / "trees" / "station_cycle.xml"
         )
+        # The coordinator builds no name. Every action it calls, and the
+        # work-piece it handles, arrive as parameters — see line_coordinator.cpp.
+        # They are written here for now because nothing generated declares a
+        # station's skill actions yet; when the topology artifact does, this
+        # block reads them from it instead.
+        skills = f"/cite/{ZONE}/{ARM}"
         command = [
             "ros2",
             "run",
@@ -347,11 +353,17 @@ class TestPickAndPlace(unittest.TestCase):
             "line_coordinator",
             "--ros-args",
             "-p",
-            f"zone:={ZONE}",
-            "-p",
             f"tree:={tree}",
             "-p",
             f"asset:={ARM}",
+            "-p",
+            f"workpiece:={WORKPIECE}",
+            "-p",
+            f"move_to_action:={skills}/move_to",
+            "-p",
+            f"pick_action:={skills}/pick",
+            "-p",
+            f"place_action:={skills}/place",
             "-p",
             f"pick_frame:={PICK_FRAME}",
             # Where station_transfer_1 places, per the L0 topology: the first

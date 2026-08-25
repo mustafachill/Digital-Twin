@@ -28,7 +28,12 @@
 
   <exec_depend>cite_generated</exec_depend>
 
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       run having checked nothing. -->
   <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
 
   <export>
