@@ -32,7 +32,7 @@ SCENARIO="${SCENARIO_DIR}/${NAME}.py"
 [ -f "$SCENARIO" ] || die "No such scenario: ${NAME}  (run ./scripts/scenario to list)"
 
 [ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
-source "${REPO_ROOT}/workspace/install/setup.bash"
+source_overlay
 
 export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
 info "Running scenario '${NAME}' (seed ${CITE_PHYSICS_SEED})"

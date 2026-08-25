@@ -15,7 +15,7 @@
 plan:
   zone: cell_a
   world: package://cite_generated/worlds/cell_a.sdf
-  description: package://cite_generated/description/cell_a.urdf.xacro
+  scene: package://cite_generated/description/cell_a_scene.urdf.xacro
   static_frames: package://cite_generated/frames/cell_a_static_tf.yaml
   topology: package://cite_generated/topology/cell_a_flow.yaml
 
@@ -28,6 +28,12 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_1/robot_description
+      description: package://cite_generated/description/cell_a_arm_1.urdf.xacro
+      # Where this model is placed in the world. Stated here rather than inside
+      # the description, so the description says what the arm IS and the model
+      # says where it stands (L1).
+      spawn_xyz_m: "0 -0.35 0.6"
+      spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_1_controllers.yaml
       controllers:
         - {name: arm_1_joint_state_broadcaster, stage: 0}
@@ -41,6 +47,12 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_2/robot_description
+      description: package://cite_generated/description/cell_a_arm_2.urdf.xacro
+      # Where this model is placed in the world. Stated here rather than inside
+      # the description, so the description says what the arm IS and the model
+      # says where it stands (L1).
+      spawn_xyz_m: "2.1 -0.35 0.6"
+      spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_2_controllers.yaml
       controllers:
         - {name: arm_2_joint_state_broadcaster, stage: 0}
@@ -54,6 +66,12 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_3/robot_description
+      description: package://cite_generated/description/cell_a_arm_3.urdf.xacro
+      # Where this model is placed in the world. Stated here rather than inside
+      # the description, so the description says what the arm IS and the model
+      # says where it stands (L1).
+      spawn_xyz_m: "4.2 -0.35 0.6"
+      spawn_rpy_rad: "0 0 1.57079633"
       parameters: package://cite_generated/control/cell_a_arm_3_controllers.yaml
       controllers:
         - {name: arm_3_joint_state_broadcaster, stage: 0}

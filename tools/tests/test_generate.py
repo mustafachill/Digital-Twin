@@ -172,7 +172,8 @@ class TestGrowingTheLineIsDataOnly:
         assert (
             "arm_4_joint_trajectory_controller" in produced["control/cell_a_arm_4_controllers.yaml"]
         )
-        assert "/cite/cell_a/arm_4" in produced["description/cell_a.urdf.xacro"]
+        assert "description/cell_a_arm_4.urdf.xacro" in produced
+        assert "/cite/cell_a/arm_4" in produced["description/cell_a_arm_4.urdf.xacro"]
         assert "arm_4" in produced["bringup/cell_a_plan.yaml"]
 
 
@@ -201,18 +202,22 @@ class TestSimRealParity:
             == real["control/cell_a_arm_1_controllers.yaml"]
         )
 
-        # The description differs in exactly one respect: the plugin class.
+        # The description differs in exactly one respect: the plugin class. Only
+        # arm_1 was switched, so arm_2's and arm_3's descriptions must be
+        # untouched — a backend is a per-instance choice, not a global mode.
         differing = [
-            line
+            a
             for a, b in zip(
-                sim["description/cell_a.urdf.xacro"].splitlines(),
-                real["description/cell_a.urdf.xacro"].splitlines(),
+                sim["description/cell_a_arm_1.urdf.xacro"].splitlines(),
+                real["description/cell_a_arm_1.urdf.xacro"].splitlines(),
                 strict=True,
             )
             if a != b
-            for line in (a,)
         ]
         assert all("ros2_control_plugin" in line for line in differing), differing
+        for other in ("arm_2", "arm_3"):
+            key = f"description/cell_a_{other}.urdf.xacro"
+            assert sim[key] == real[key], f"{other} changed when only arm_1 was switched"
 
 
 class TestBindings:

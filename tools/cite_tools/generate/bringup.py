@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from cite_tools.generate import Artifact
 from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedCell
+from cite_tools.model.units import fmt
 from cite_tools.render import environment
 
 
@@ -33,6 +34,9 @@ class _ManagerView:
     backend: str
     hosted_by: str
     description_topic: str
+    description: str
+    spawn_xyz_m: str
+    spawn_rpy_rad: str
     controllers: tuple[_ControllerRef, ...]
 
 
@@ -70,7 +74,14 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             # the global topic. The description publisher must match, or the
             # manager waits forever on a topic nobody writes to and the visible
             # error names the spawner instead.
+            # Each arm is its own Gazebo model with its own controller manager,
+            # so it publishes its own description into its own namespace. One
+            # manager per model is what keeps a manager from claiming hardware
+            # that belongs to another arm.
             description_topic=f"{asset.namespace}/robot_description",
+            description=(f"package://cite_generated/description/{cell.zone}_{asset.id}.urdf.xacro"),
+            spawn_xyz_m=" ".join(fmt(v) for v in asset.world_pose.xyz_m),
+            spawn_rpy_rad=" ".join(fmt(v) for v in asset.world_pose.rpy_rad),
             controllers=tuple(
                 _ControllerRef(name=c.name, stage=c.stage) for c in asset.controllers
             ),

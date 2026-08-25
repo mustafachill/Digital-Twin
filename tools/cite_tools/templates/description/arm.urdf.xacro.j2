@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ arm.id }}">
+
+  <!-- One description per arm, spawned as its own Gazebo model.
+       gz_ros2_control attaches to a MODEL, and the controller manager it creates
+       claims every ros2_control component in that model's description. With all
+       three arms in one model, all three managers claimed all eighteen joints and
+       wrote to them every cycle. Splitting the arms into separate models gives
+       each manager exactly its own hardware — and keeps the namespace
+       /cite/<zone>/<asset_id> that the naming scheme requires. -->
+
+  <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
+       generated static transform table, so this description states no world
+       coordinate of its own. -->
+  <link name="{{ arm.mount_link }}"/>
+
+  <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
+  <xacro:{{ arm.macro }}
+{% for name, value in arm.args %}
+      {{ name }}="{{ value }}"
+{% endfor %}
+  />
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find cite_generated)/control/{{ zone }}_{{ arm.id }}_controllers.yaml</parameters>
+      <ros>
+        <namespace>{{ arm.namespace }}</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+</robot>

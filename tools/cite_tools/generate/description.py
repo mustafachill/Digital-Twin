@@ -58,6 +58,7 @@ class _ArmView:
     file: str
     macro: str
     namespace: str
+    mount_link: str
     args: tuple[tuple[str, str], ...]
 
 
@@ -116,23 +117,21 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
     handing the vendor macro its own default — which would produce a description
     that loads and is wrong.
     """
-    parent = cell.asset(asset.parent_asset) if asset.parent_asset else None
-    parent_link = (
-        ids.link(parent.id, asset.parent_frame)
-        if parent is not None and asset.parent_frame
-        else ids.WORLD_FRAME
-    )
-
+    # An arm is its own Gazebo model, so it attaches to its own root link rather
+    # than to a link in the scene. Where that root sits in the world is stated
+    # once, by the generated static transform table and the spawn pose — not
+    # inside this description.
     values: dict[str, str] = {
         "instance.id": asset.id,
         "instance.prefix": asset.prefix,
         "instance.zone": asset.zone,
         "instance.namespace": asset.namespace,
-        "instance.parent_link": parent_link,
-        # The arm is attached to an already-placed frame, so its own offset is
-        # zero: the placement is expressed once, by the parent link's joint.
-        "instance.parent_xyz_m": fmt_triple(asset.instance.pose.xyz_m),
-        "instance.parent_rpy_rad": fmt_triple(asset.instance.pose.rpy_rad),
+        "instance.parent_link": _mount_link(asset),
+        # Zero: the arm's root link IS its mount, and the model is placed in the
+        # world at spawn time. Writing the pose here as well would state the same
+        # fact twice.
+        "instance.parent_xyz_m": fmt_triple((0.0, 0.0, 0.0)),
+        "instance.parent_rpy_rad": fmt_triple((0.0, 0.0, 0.0)),
         "instance.hardware.ros2_control_plugin": asset.ros2_control_plugin,
         "instance.end_effector.vendor_integrated": str(
             bool(asset.instance.end_effector and asset.instance.end_effector.vendor_integrated)
@@ -171,8 +170,14 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         file=spec.file,
         macro=spec.macro,
         namespace=asset.namespace,
+        mount_link=_mount_link(asset),
         args=tuple(sorted(args)),
     )
+
+
+def _mount_link(asset: ResolvedAsset) -> str:
+    """The root link of an arm's own model, which the vendor macro attaches to."""
+    return ids.link(asset.id, "mount")
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
@@ -187,14 +192,20 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
         if a.asset_type.description.provider == "xacro_macro" and a.asset_type.category == "robot"
     )
 
-    text = (
-        environment()
-        .get_template("description/cell.urdf.xacro.j2")
-        .render(
-            cell=cell,
-            world_frame=ids.WORLD_FRAME,
-            bodies=bodies,
-            arms=arms,
+    env = environment()
+    artifacts = [
+        Artifact(
+            f"description/{cell.zone}_scene.urdf.xacro",
+            env.get_template("description/scene.urdf.xacro.j2").render(
+                cell=cell, world_frame=ids.WORLD_FRAME, bodies=bodies
+            ),
         )
-    )
-    return [Artifact(f"description/{cell.zone}.urdf.xacro", text)]
+    ]
+    artifacts += [
+        Artifact(
+            f"description/{cell.zone}_{arm.id}.urdf.xacro",
+            env.get_template("description/arm.urdf.xacro.j2").render(zone=cell.zone, arm=arm),
+        )
+        for arm in arms
+    ]
+    return artifacts

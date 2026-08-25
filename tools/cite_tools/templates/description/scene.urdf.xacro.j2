@@ -40,29 +40,4 @@
 {% endfor %}
 
 {% endfor %}
-{% for arm in arms %}
-  <!-- {{ arm.id }} — {{ arm.asset_type.id }} from {{ arm.package }}, invoked unmodified.
-       The vendor description is called, never ingested: no file from that package
-       is read, copied or patched here. Every argument below comes from the L0
-       model, so a vendor parameter rename is a model edit, not a code change. -->
-  <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
-  <xacro:{{ arm.macro }}
-{% for name, value in arm.args %}
-      {{ name }}="{{ value }}"
-{% endfor %}
-  />
-
-  <!-- The plugin is emitted here rather than by the vendor macro, which has no
-       way to set <ros><namespace>. The controller manager must live at
-       {{ arm.namespace }}/controller_manager so that its controllers, and every
-       name above them, follow /cite/<zone>/<asset_id>. -->
-  <gazebo>
-    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-      <parameters>$(find cite_generated)/control/{{ cell.zone }}_{{ arm.id }}_controllers.yaml</parameters>
-      <ros>
-        <namespace>{{ arm.namespace }}</namespace>
-      </ros>
-    </plugin>
-  </gazebo>
-{% endfor %}
 </robot>

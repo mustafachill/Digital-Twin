@@ -132,7 +132,11 @@ if [ -d "$DOCS" ]; then
     for f in "$DOCS"/architecture/L*.md "$DOCS"/architecture/cross-cutting-*.md \
              "$DOCS"/architecture/standards-alignment.md "$DOCS"/interfaces/*.md; do
         [ -f "$f" ] || continue
-        head -8 "$f" | grep -qE '\*\*Status:\*\* +`?(DESIGNED|PARTIAL|BUILT)' || unmarked=$((unmarked+1))
+        # Same SIGPIPE/pipefail trap as elsewhere: a document that *does* carry a
+        # marker could be counted as unmarked when grep closes the pipe early.
+        head_lines="$(head -8 "$f")"
+        grep -qE '\*\*Status:\*\* +`?(DESIGNED|PARTIAL|BUILT)' <<<"$head_lines" \
+            || unmarked=$((unmarked+1))
     done
     if [ "$unmarked" -eq 0 ]; then
         report pass "status markers" "every design document declares one"
