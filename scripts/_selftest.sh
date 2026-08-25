@@ -266,6 +266,112 @@ expect_fail "enter hardware refuses without the opt-in when given a command" \
             env CITE_ALLOW_HARDWARE=0 "${REPO_ROOT}/scripts/enter" hardware ros2 topic list
 
 # -----------------------------------------------------------------------------
+# patch_state — T-10. The four states must be four states.
+#
+# The defect being pinned, exactly as it happened: bootstrap asked only
+# `git apply --check`, so "already applied" (success, and the reason the check
+# exists) and "does not apply" (a declared modification missing from every build)
+# both took the else branch and printed the same info line at info level.
+# 01-xarm_ros2-gripper-mimic-joints.patch was committed and then absent from
+# every build and every measurement for hours with nothing anywhere reporting it.
+#
+# Built against a real git repository rather than mocked, because the whole
+# question is what `git apply` does — a fake that returned what we expected would
+# be asserting our own assumption. Each state below is reached by putting a
+# checkout into it for real.
+# -----------------------------------------------------------------------------
+PATCHDIR="${FIXTURE}/patches"
+REPO="${FIXTURE}/checkout"
+mkdir -p "$PATCHDIR" "$REPO"
+
+git -C "$REPO" init --quiet
+git -C "$REPO" config user.email selftest@example.invalid
+git -C "$REPO" config user.name  selftest
+printf 'alpha\nbravo\ncharlie\n' > "${REPO}/file.txt"
+git -C "$REPO" add file.txt
+git -C "$REPO" commit --quiet -m "base"
+
+# A patch that applies to the checkout above.
+cat >"${PATCHDIR}/01-good.patch" <<'EOF'
+# Repo:     checkout
+diff --git a/file.txt b/file.txt
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+ alpha
+-bravo
++BRAVO
+ charlie
+EOF
+
+# A patch whose context does not exist — the "declared but unreachable" case that
+# used to read as "already applied or does not apply".
+cat >"${PATCHDIR}/02-stale.patch" <<'EOF'
+# Repo:     checkout
+diff --git a/file.txt b/file.txt
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+ alpha
+-delta
++DELTA
+ charlie
+EOF
+
+# A patch with no Repo: header binds to no checkout at all.
+printf 'diff --git a/x b/x\n' >"${PATCHDIR}/03-headerless.patch"
+
+expect_eq "declared_patches lists every patch in filename order" \
+          "01-good.patch 02-stale.patch 03-headerless.patch" \
+          "$(declared_patches "$PATCHDIR" | xargs -n1 basename | tr '\n' ' ' | sed 's/ $//')"
+expect_eq "declared_patches on a directory that does not exist is empty, not an error" \
+          "" "$(declared_patches "${FIXTURE}/nope")"
+expect_eq "patch_target_repo reads the Repo: header" \
+          "checkout" "$(patch_target_repo "${PATCHDIR}/01-good.patch")"
+expect_eq "patch_target_repo reports a missing header as empty" \
+          "" "$(patch_target_repo "${PATCHDIR}/03-headerless.patch")"
+
+# The state machine, one state at a time.
+expect_eq "a patch that applies cleanly is pending, not applied" \
+          "pending" "$(patch_state "${PATCHDIR}/01-good.patch" "$REPO")"
+expect_eq "a patch that cannot apply is conflict, NOT the same answer as applied" \
+          "conflict" "$(patch_state "${PATCHDIR}/02-stale.patch" "$REPO")"
+
+git -C "$REPO" apply "${PATCHDIR}/01-good.patch"
+expect_eq "once applied, the same patch reads applied — this is what keeps bootstrap idempotent" \
+          "applied" "$(patch_state "${PATCHDIR}/01-good.patch" "$REPO")"
+expect_eq "an applied patch and a stale one are still distinguishable" \
+          "conflict" "$(patch_state "${PATCHDIR}/02-stale.patch" "$REPO")"
+
+# The two absence states. `empty` is the signature of an import that failed
+# part-way, which is what a git worktree produced inside the container, and it is
+# the state that used to be reported as "skipped" while the build lost the patch.
+expect_eq "a target that was never imported is no-target" \
+          "no-target" "$(patch_state "${PATCHDIR}/01-good.patch" "${FIXTURE}/absent")"
+mkdir -p "${FIXTURE}/hollow"
+expect_eq "a target directory that exists and is EMPTY is its own state" \
+          "empty" "$(patch_state "${PATCHDIR}/01-good.patch" "${FIXTURE}/hollow")"
+
+# The property that ties the four together, and the one the old code failed:
+# success and total failure must never produce the same word.
+if [ "$(patch_state "${PATCHDIR}/01-good.patch" "$REPO")" \
+     != "$(patch_state "${PATCHDIR}/02-stale.patch" "$REPO")" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s an applied patch and an unappliable one report differently\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# Every patch this repository actually ships must carry the header that binds it
+# to a checkout. A patch without one is silently unappliable forever.
+while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    expect_eq "$(basename "$p") declares its target repository" \
+              "found" "$( [ -n "$(patch_target_repo "$p")" ] && printf 'found' || printf 'missing' )"
+done < <(declared_patches)
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"

@@ -65,6 +65,20 @@ asset_type:
       attach_rpy: instance.parent_rpy_rad
       ros2_control_plugin: instance.hardware.ros2_control_plugin
       add_gripper: instance.end_effector.vendor_integrated
+      # The fitted end effector's declared close rate, handed to the vendor macro
+      # so that it bounds the drive joint's velocity command interface — which is
+      # the only route a limit has into the running system. A limit cannot live in
+      # the controller configuration: controller_manager 4.45.2's
+      # ResourceManager::import_joint_limiters passes null node interfaces, so no
+      # `joint_limits.<joint>.*` key there is ever read, and
+      # GripperActionController has no rate parameter. Limits come from the
+      # description or they do not exist.
+      #
+      # The macro parameter this binds to arrives with
+      # external/patches/02-xarm_ros2-gripper-drive-rate-parameter.patch; the
+      # vendor hardcodes +/-3.14 rad/s. Read that patch's header before assuming
+      # the physical gripper is bounded too — it is not, and the header says why.
+      gripper_max_drive_rate_rad_s: instance.end_effector.max_drive_rate_rad_s
 
   # The plugin class string exists exactly once, here. That is what makes
   # ADR-0005's "the only thing that differs is which plugin is loaded" true by

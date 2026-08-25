@@ -23,7 +23,9 @@ import pytest
 import yaml
 
 from cite_tools import generate as gen
+from cite_tools.generate.description import BindingError
 from cite_tools.model.loader import load
+from cite_tools.model.units import fmt
 from cite_tools.validate import Severity, physical
 
 #: Vendor fact: `xarm_gripper.urdf.xacro` gives all six gripper joints
@@ -214,3 +216,75 @@ class TestTheRateReachesTheSkillLayer:
             assert manager["gripper_max_drive_rate_rad_s"] == pytest.approx(
                 grasp.max_drive_rate_rad_s
             )
+
+
+class TestTheRateReachesTheDescription:
+    """The half that actually enforces anything.
+
+    `TestTheRateReachesTheSkillLayer` above proves the number travels to L3, and
+    `TestEnforcementReachesTheGeneratedConfiguration` proves something is enabled
+    to enforce limits — but neither proves the limiter is handed THIS limit.
+    Between them sat the gap that made the bound inert for a whole branch:
+    `enforce_command_limits` clamps against the joint's declared velocity, and
+    that comes from the description alone. controller_manager 4.45.2 builds its
+    limiters with null node interfaces, so no `joint_limits.<joint>.*` parameter
+    is ever read, and `GripperActionController` has no rate parameter of its own.
+    If the value does not reach the description, it reaches nothing.
+    """
+
+    ARGUMENT = "gripper_max_drive_rate_rad_s"
+
+    def arm_descriptions(self, path: Path) -> dict[str, str]:
+        return {
+            name: text
+            for name, text in generated(path).items()
+            if name.startswith("description/") and self.ARGUMENT in text
+        }
+
+    def test_every_arm_with_a_gripper_carries_the_bound(self, real_model: Path, grasp) -> None:
+        descriptions = self.arm_descriptions(real_model)
+        assert descriptions, (
+            f"no generated description passes {self.ARGUMENT} to the vendor macro, so "
+            "nothing bounds the drive joint and the declared rate is inert"
+        )
+        expected = f'{self.ARGUMENT}="{fmt(grasp.max_drive_rate_rad_s)}"'
+        for name, text in descriptions.items():
+            assert expected in text, name
+
+    def test_the_value_follows_the_model_rather_than_the_generator(
+        self,
+        real_model: Path,
+        edit_yaml: Callable[[Path, Callable[[dict], None]], None],
+    ) -> None:
+        """P1 and P5 at once: one statement of the rate, and code that carries it.
+
+        A generator holding its own copy would keep emitting 1.0 here and the two
+        would drift the first time the model changed, leaving the L3 plan and the
+        description disagreeing about the same gripper.
+        """
+        path = real_model / "assets/types/end_effectors/xarm_parallel_gripper.yaml"
+        edit_yaml(
+            path,
+            lambda d: d["asset_type"]["grasp"].__setitem__("max_drive_rate_rad_s", 0.75),
+        )
+        descriptions = self.arm_descriptions(real_model)
+        assert descriptions
+        for name, text in descriptions.items():
+            assert f'{self.ARGUMENT}="0.75"' in text, name
+
+    def test_an_arm_with_no_end_effector_raises_rather_than_defaulting(
+        self,
+        real_model: Path,
+        edit_yaml: Callable[[Path, Callable[[dict], None]], None],
+    ) -> None:
+        """The failure this generator exists to prevent, applied to a rate.
+
+        Handing the vendor macro its own default would emit a description that
+        loads, runs, and bounds the drive joint at 2.0 rad/s — a number nobody
+        chose, and precisely the headroom-free configuration measured to fail
+        3 of 3. Silence is the one unacceptable answer here, so it raises.
+        """
+        path = real_model / "assets/instances/arms.yaml"
+        edit_yaml(path, lambda d: d["assets"][0].pop("end_effector"))
+        with pytest.raises(BindingError, match="max_drive_rate_rad_s"):
+            generated(real_model)

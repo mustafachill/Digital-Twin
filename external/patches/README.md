@@ -33,6 +33,29 @@ its own reason for existing.
 A patch with no removal condition is a permanent fork. If that is genuinely the
 intent, say so in the header and write an ADR — do not leave it implied.
 
+## A declared patch that is not present is a build failure
+
+`./scripts/bootstrap` classifies every patch into one of four states and only one
+of them is quiet:
+
+| State | What happens |
+|---|---|
+| already applied | `ok`, and bootstrap continues. This is what makes re-running it idempotent. |
+| applies cleanly | applied, then `ok`. |
+| does not apply and is not present | **bootstrap stops**, naming the patch and the reason. |
+| target checkout missing or empty | **bootstrap stops**. An empty target is an import that failed part-way. |
+
+`./scripts/doctor` audits the same four states without applying anything, so the
+question "is every declared patch actually in the build?" is answerable in one
+second on any machine, with or without ROS. Both use `patch_state` in
+`scripts/_lib.sh`, so the applier and the auditor cannot drift apart.
+
+This is not decoration. `01-xarm_ros2-gripper-mimic-joints.patch` was committed
+and then absent from every build and every measurement for hours: bootstrap asked
+only `git apply --check`, so "already applied" and "does not apply" both fell to
+the same `info` line — *"already applied or does not apply — skipped"* — and
+nothing else in the repository looked at all.
+
 ## Generating one
 
 ```bash
