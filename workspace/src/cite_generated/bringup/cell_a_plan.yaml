@@ -38,12 +38,27 @@ plan:
       trajectory_action: /cite/cell_a/arm_1/arm_1_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_1/arm_1_gripper_controller/gripper_cmd
       # The gripper's drive joint travels between these two values in its OWN
-      # units, and that stroke is max_width_m between the pads. The skill server
-      # maps a task-space width onto it; without the mapping a width in metres
-      # would be commanded as an angle.
+      # units. The skill server maps a task-space width onto it; without the
+      # mapping a width in metres would be commanded as an angle.
       gripper_open_position: 0.0
       gripper_closed_position: 0.85
-      gripper_max_width_m: 0.085
+      # The linkage that converts between the two, as four dimensions of the end
+      # effector rather than as a fitted curve:
+      #   opening(q) = 2*(drive_pivot_y - pad_inset
+      #                   + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+      # The widest opening is derived from these, never carried alongside them —
+      # a declared maximum is a second place for one fact to be stated, and the
+      # one it used to state (85 mm, against a true 88.93 mm) was wrong.
+      gripper_drive_pivot_y_m: 0.035
+      gripper_finger_offset_y_m: 0.035465
+      gripper_finger_offset_z_m: 0.042039
+      gripper_pad_inset_m: 0.026
+      # The gripper controller's own goal tolerance, delivered to L3 because the
+      # skill server needs it to judge a grasp: the controller ends a goal as soon
+      # as |error| < goal_tolerance, so the position it reports is systematically
+      # short of the command, and that bias has to be exceeded before a width
+      # margin means anything. Same number the controller is configured with.
+      gripper_goal_tolerance_rad: 0.01
       # What a Pick closes to when its goal names no width. Narrower than the
       # work-piece on purpose: a parallel gripper evidences a grasp by failing to
       # reach where it was sent, so a width equal to the part teaches the skill
@@ -84,12 +99,27 @@ plan:
       trajectory_action: /cite/cell_a/arm_2/arm_2_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_2/arm_2_gripper_controller/gripper_cmd
       # The gripper's drive joint travels between these two values in its OWN
-      # units, and that stroke is max_width_m between the pads. The skill server
-      # maps a task-space width onto it; without the mapping a width in metres
-      # would be commanded as an angle.
+      # units. The skill server maps a task-space width onto it; without the
+      # mapping a width in metres would be commanded as an angle.
       gripper_open_position: 0.0
       gripper_closed_position: 0.85
-      gripper_max_width_m: 0.085
+      # The linkage that converts between the two, as four dimensions of the end
+      # effector rather than as a fitted curve:
+      #   opening(q) = 2*(drive_pivot_y - pad_inset
+      #                   + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+      # The widest opening is derived from these, never carried alongside them —
+      # a declared maximum is a second place for one fact to be stated, and the
+      # one it used to state (85 mm, against a true 88.93 mm) was wrong.
+      gripper_drive_pivot_y_m: 0.035
+      gripper_finger_offset_y_m: 0.035465
+      gripper_finger_offset_z_m: 0.042039
+      gripper_pad_inset_m: 0.026
+      # The gripper controller's own goal tolerance, delivered to L3 because the
+      # skill server needs it to judge a grasp: the controller ends a goal as soon
+      # as |error| < goal_tolerance, so the position it reports is systematically
+      # short of the command, and that bias has to be exceeded before a width
+      # margin means anything. Same number the controller is configured with.
+      gripper_goal_tolerance_rad: 0.01
       # What a Pick closes to when its goal names no width. Narrower than the
       # work-piece on purpose: a parallel gripper evidences a grasp by failing to
       # reach where it was sent, so a width equal to the part teaches the skill
@@ -130,12 +160,27 @@ plan:
       trajectory_action: /cite/cell_a/arm_3/arm_3_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_3/arm_3_gripper_controller/gripper_cmd
       # The gripper's drive joint travels between these two values in its OWN
-      # units, and that stroke is max_width_m between the pads. The skill server
-      # maps a task-space width onto it; without the mapping a width in metres
-      # would be commanded as an angle.
+      # units. The skill server maps a task-space width onto it; without the
+      # mapping a width in metres would be commanded as an angle.
       gripper_open_position: 0.0
       gripper_closed_position: 0.85
-      gripper_max_width_m: 0.085
+      # The linkage that converts between the two, as four dimensions of the end
+      # effector rather than as a fitted curve:
+      #   opening(q) = 2*(drive_pivot_y - pad_inset
+      #                   + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+      # The widest opening is derived from these, never carried alongside them —
+      # a declared maximum is a second place for one fact to be stated, and the
+      # one it used to state (85 mm, against a true 88.93 mm) was wrong.
+      gripper_drive_pivot_y_m: 0.035
+      gripper_finger_offset_y_m: 0.035465
+      gripper_finger_offset_z_m: 0.042039
+      gripper_pad_inset_m: 0.026
+      # The gripper controller's own goal tolerance, delivered to L3 because the
+      # skill server needs it to judge a grasp: the controller ends a goal as soon
+      # as |error| < goal_tolerance, so the position it reports is systematically
+      # short of the command, and that bias has to be exceeded before a width
+      # margin means anything. Same number the controller is configured with.
+      gripper_goal_tolerance_rad: 0.01
       # What a Pick closes to when its goal names no width. Narrower than the
       # work-piece on purpose: a parallel gripper evidences a grasp by failing to
       # reach where it was sent, so a width equal to the part teaches the skill

@@ -9,6 +9,22 @@ schema: cite/asset_type/v1
 # One actuated joint, `drive_joint`; the five finger joints follow it through
 # URDF <mimic> tags. See ADR-0022 for why it is a ros2_control controller rather
 # than a separate action server, and for the Harmonic mimic-constraint caveat.
+#
+# HOW THE FOLLOWERS ARE ACTUALLY COUPLED, and the one limit of it.
+#   A URDF <mimic> tag reaches ros2_control only for a joint that also appears in
+#   the vendor's <ros2_control> block, and the vendor lists only `drive_joint`.
+#   `external/patches/01-xarm_ros2-gripper-mimic-joints.patch` adds the five
+#   followers there as state-only mimic joints, which is what populates
+#   `HardwareInfo::mimic_joints` and lets gz_ros2_control drive them. Nothing else
+#   would: Gazebo Harmonic's dartsim does not implement SetMimicConstraintFeature,
+#   and the vendor's Gazebo Classic mimic plugin cannot load under Harmonic.
+#
+#   LIMIT — gz_ros2_control 1.2.19 honours a mimic's `multiplier` but IGNORES its
+#   `offset`. Its servo is velocity_sp = -(q_follower - q_leader*multiplier)*rate,
+#   with no offset term. All five joints of THIS gripper declare offset="0", so
+#   the coupling is exact here. A different end effector whose linkage needs a
+#   non-zero offset would be silently wrong in simulation while looking correct in
+#   its URDF — check that before adding one, because nothing here will report it.
 asset_type:
   id: xarm_parallel_gripper
   category: end_effector
@@ -48,30 +64,78 @@ asset_type:
     drive_joint_suffix: drive_joint
     closed_threshold_rad: 0.3
     open_threshold_rad: 0.15
-    # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed), and
-    # that stroke is about 85 mm between the pads. GripperCommand.position is
-    # passed straight to the joint, so a skill sending metres would be sending
-    # radians — and 0.085 is a valid angle, so nothing would report the mistake.
+    # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed).
+    # GripperCommand.position is passed straight to the joint, so a skill sending
+    # metres would be sending radians — and 0.085 is a valid angle, so nothing
+    # would report the mistake. `linkage` below is what converts between the two.
     open_position: 0.0
     closed_position: 0.85
-    max_width_m: 0.085
+
+    # The pad opening, as a function of the drive joint. This is the ONLY place
+    # that relationship is written (P1); the L3 skill server and
+    # `cite_tools.validate.physical` both derive from these four numbers.
+    #
+    #   opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
+    #                     + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))
+    #
+    # Why this shape: `drive_joint` rotates `left_outer_knuckle` about +x, and
+    # `left_finger_joint` mimics it about -x, so the two rotations cancel and the
+    # pad face stays parallel to the tool axis while its y translates. The pad's
+    # distance from the centreline is therefore the rotated `left_finger_joint`
+    # offset plus the drive pivot, less the pad's own inset. Doubled for two jaws.
+    #
+    # Every number is a fact in the vendor's own files, so each can be re-checked
+    # rather than believed:
+    #   drive_pivot_y_m    drive_joint <origin xyz="0 0.035 0.059098">
+    #   finger_offset_y_m  left_finger_joint <origin xyz="0 0.035465 0.042039">
+    #   finger_offset_z_m  ... the z of that same origin
+    #   pad_inset_m        left_finger.stl, whose y_min is -0.026003 in the link
+    #                      frame — a 26 mm design dimension, stored as float32
+    #
+    # This replaces a linear interpolation across the stroke, which was not an
+    # approximation but simply wrong: it claimed 85.00 mm fully open against a
+    # true 88.93 mm, and 45.00 mm at q=0.400 against a true 50.59 mm. That last
+    # error is the whole width of the clearance the default grasp depends on, so
+    # the gripper closed on air and every layer above reported success.
+    #
+    # Derived rather than declared, because a declared copy is a second place to
+    # be wrong: fully open is opening(0.00) = 88.93 mm, fully closed is
+    # opening(0.85) = 1.65 mm.
+    linkage:
+      drive_pivot_y_m: 0.035
+      finger_offset_y_m: 0.035465
+      finger_offset_z_m: 0.042039
+      pad_inset_m: 0.026
     # What a Pick closes to when its goal names no width. 45 mm, and the two
     # bounds that produce that number rather than any other:
     #
-    #   * At most 55 mm. `cite_tools.validate.physical` derives and enforces this
-    #     ceiling from the three values above: a wider command leaves the drive
-    #     joint short of `closed_threshold_rad`, so the gripper reports the goal
-    #     reached, never stalls, and the attachment plugin never fires. Anything
-    #     above 55 mm is a gripper that closes politely on air.
+    #   * At most 60.92 mm. `cite_tools.validate.physical` derives and enforces
+    #     this ceiling as opening(closed_threshold_rad): a wider command leaves
+    #     the drive joint short of `closed_threshold_rad`, so the gripper reports
+    #     the goal reached, never stalls, and the attachment plugin never fires.
+    #     Anything above it is a gripper that closes politely on air.
     #   * Below the work-piece, not equal to it. The cell's reference work-piece
     #     is a 50 mm cube, and a parallel gripper evidences a grasp by *failing*
     #     to reach where it was sent: the pads meet the part, the joint stops
     #     short, the controller reports a stall, and the skill compares the width
     #     it reached against the width it asked for. Commanding 50 mm would let
     #     the gripper arrive exactly on target and teach the skill nothing.
-    #     45 mm leaves 5 mm of squeeze, which is 0.05 rad at the drive joint —
-    #     five times the controller's 0.01 rad default `goal_tolerance`, so the
-    #     stall is unambiguous rather than marginal.
+    #
+    # What 45 mm actually buys, through the map above rather than through the
+    # linear one that used to be here:
+    #     commanded 45 mm      -> q = 0.4528 rad
+    #     50 mm part stops it  -> q = 0.4056 rad, i.e. opening 50.00 mm
+    #     unrelieved error     -> 0.047 rad, about 4.7x the controller's 0.01 rad
+    #                             goal_tolerance, so the stall is unambiguous
+    #     width margin         -> 5.00 mm, against a 2.11 mm discrimination
+    #                             threshold (see gripper_is_holding)
+    #
+    # The number is unchanged from before the map was corrected, and that is a
+    # coincidence worth naming rather than hiding: 45 mm was always the right
+    # *intent*, but the linear map turned it into a 0.400 rad command that opened
+    # the pads to 50.59 mm — 0.3 mm of clearance per side on a 50 mm part, which
+    # is why no work-piece was ever grasped. The value did not need recomputing;
+    # the map that read it did.
     #
     # Honest about its home (P7): this is a property of an end effector *paired
     # with a work-piece*, and it sits on the end-effector type because the model
@@ -89,11 +153,21 @@ asset_type:
       joints: end_effector
       stage: 1
       parameters:
-        # Metres of joint travel below which the gripper is treated as stalled.
-        # A stall is how a successful grasp is distinguished from closing on air.
+        # Drive-joint speed, in rad/s, below which the gripper is treated as
+        # stalled. NOT metres of travel, which is what this said until the width
+        # map was corrected — `drive_joint` is revolute, and every quantity the
+        # controller sees is in its units, not in task space.
         stall_velocity_threshold: 0.001
         stall_timeout: 0.3
         max_effort: 60.0
+        # Declared rather than left to GripperActionController's default, because
+        # L3 needs the same number: `gripper_is_holding` sizes its discrimination
+        # threshold from this tolerance, since the controller ends a goal as soon
+        # as |error| < goal_tolerance and so reports a position systematically
+        # short of the command. Left implicit, that number would have had to be
+        # guessed in the skill server — a value in two places, one of them a
+        # guess. It reaches L3 through the generated bring-up plan.
+        goal_tolerance: 0.01
         # A stall is an OUTCOME, not a fault — ADR-0022: "a stall is reported,
         # not interpreted", and deciding what it means is the Grasp skill's job.
         #

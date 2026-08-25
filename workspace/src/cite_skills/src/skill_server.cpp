@@ -139,7 +139,19 @@ public:
     // nothing would report it because 0.085 is a perfectly valid angle.
     declare_parameter("gripper_open_position", 0.0);
     declare_parameter("gripper_closed_position", 0.85);
-    declare_parameter("gripper_max_width_m", 0.085);
+    // The linkage that converts between the two. The widest opening is derived
+    // from these rather than declared beside them: it was declared once, as
+    // 0.085, and disagreed with the mechanism's true 0.08893 for as long as it
+    // existed.
+    declare_parameter("gripper_drive_pivot_y_m", 0.035);
+    declare_parameter("gripper_finger_offset_y_m", 0.035465);
+    declare_parameter("gripper_finger_offset_z_m", 0.042039);
+    declare_parameter("gripper_pad_inset_m", 0.026);
+    // The gripper controller's own goal tolerance, carried here from the same L0
+    // controller parameters that configure the controller. gripper_is_holding
+    // needs it to size the margin that separates a real grasp from the position
+    // bias the controller's own end-of-goal test produces.
+    declare_parameter("gripper_goal_tolerance_rad", 0.01);
     // What `Pick.Goal.grasp_width_m == 0` resolves to — the end effector's
     // default grasp opening. Zero means "not supplied", which is a state the
     // skill reports rather than papers over.
@@ -190,12 +202,24 @@ public:
 
     travel_.open_position = get_parameter("gripper_open_position").as_double();
     travel_.closed_position = get_parameter("gripper_closed_position").as_double();
-    travel_.max_width_m = get_parameter("gripper_max_width_m").as_double();
-    if (travel_.max_width_m <= 0.0) {
+    travel_.drive_pivot_y_m = get_parameter("gripper_drive_pivot_y_m").as_double();
+    travel_.finger_offset_y_m = get_parameter("gripper_finger_offset_y_m").as_double();
+    travel_.finger_offset_z_m = get_parameter("gripper_finger_offset_z_m").as_double();
+    travel_.pad_inset_m = get_parameter("gripper_pad_inset_m").as_double();
+    travel_.goal_tolerance = get_parameter("gripper_goal_tolerance_rad").as_double();
+    if (cite_skills::gripper_max_width_m(travel_) <= 0.0) {
       RCLCPP_ERROR(
         get_logger(),
-        "gripper_max_width_m must be positive; without it a task-space width "
-        "cannot be mapped onto the gripper's own units");
+        "the gripper linkage yields a non-positive opening at open_position; without a "
+        "usable linkage a task-space width cannot be mapped onto the gripper's own units");
+      return false;
+    }
+    if (travel_.goal_tolerance <= 0.0) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "gripper_goal_tolerance_rad must be positive; it is what sizes the margin "
+        "separating a real grasp from the controller's own end-of-goal position bias, "
+        "and at zero every close in free air reports as holding");
       return false;
     }
     default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
@@ -707,7 +731,7 @@ private:
     // Open before approaching. Arriving at the object with a closed gripper is a
     // collision, and the planner has no way to know the gripper's state.
     report(Pick::Feedback::PHASE_PLANNING, 0.0);
-    auto gripper = command_gripper(travel_.max_width_m, max_effort, handle);
+    auto gripper = command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
       finish(gripper.result);
       return;
@@ -841,7 +865,8 @@ private:
     result->release_pose = current_pose();
 
     report(Place::Feedback::PHASE_RELEASING, 0.7);
-    const auto gripper = command_gripper(travel_.max_width_m, max_effort, handle);
+    const auto gripper =
+      command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
       finish(gripper.result);
       return;
@@ -1069,9 +1094,11 @@ private:
                  "FAILING to reach the command, so the width must be narrower than the "
                  "object it closes on";
     } else {
-      message << "The gripper stopped at or past the width it was commanded to, so "
-                 "nothing is holding it open. That is a gripper closed on itself, not "
-                 "one closed on a part";
+      message << "The gripper stopped short of its command, but not by enough width to "
+                 "be a part: a close that ends within the controller's own goal "
+                 "tolerance reports a little more width than it actually reached, and "
+                 "that phantom margin is what this rejects. Either nothing was between "
+                 "the pads, or the gripper jammed or fouled its own fingers";
     }
     return message.str();
   }
@@ -1177,7 +1204,7 @@ private:
       outcome.stalled = wrapped.result->stalled;
       outcome.reached_goal = wrapped.result->reached_goal;
       outcome.holding = cite_skills::gripper_is_holding(
-        {width_m, outcome.reached_width_m, outcome.stalled, outcome.reached_goal});
+        {width_m, wrapped.result->position, outcome.stalled, outcome.reached_goal}, travel_);
 
       RCLCPP_INFO(
         get_logger(),

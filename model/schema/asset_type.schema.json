@@ -466,11 +466,8 @@
           "title": "Drive Joint Suffix",
           "type": "string"
         },
-        "max_width_m": {
-          "default": 0.085,
-          "exclusiveMinimum": 0.0,
-          "title": "Max Width M",
-          "type": "number"
+        "linkage": {
+          "$ref": "#/$defs/GripperLinkage"
         },
         "open_position": {
           "default": 0.0,
@@ -486,9 +483,41 @@
       },
       "required": [
         "attach_link_suffix",
-        "drive_joint_suffix"
+        "drive_joint_suffix",
+        "linkage"
       ],
       "title": "GraspSpec",
+      "type": "object"
+    },
+    "GripperLinkage": {
+      "additionalProperties": false,
+      "description": "The geometry that maps a parallel gripper's drive angle onto a pad opening.\n\n``opening(q) = 2 * (drive_pivot_y_m - pad_inset_m\n                    + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))``\n\nThis is the single home of that relationship (P1). The L3 skill server\nreceives these four numbers through the generated bring-up plan and evaluates\nthe same closed form, so task-space widths mean the same thing in the model,\nin the validator, and on the robot.\n\nIt is a closed form rather than a fit or a table because it is derivable: the\ndrive joint and the finger joint rotate about opposite axes by the same angle,\nso their rotations cancel, the pad stays parallel, and its offset from the\ncentreline is plain trigonometry. A lookup table would be the same fact stored\nat lower precision and with more places to drift.\n\nEvery field is a dimension in the robot's own description, which is what makes\nan audit possible: each can be checked against the vendor URDF or mesh rather\nthan taken on trust.",
+      "properties": {
+        "drive_pivot_y_m": {
+          "title": "Drive Pivot Y M",
+          "type": "number"
+        },
+        "finger_offset_y_m": {
+          "title": "Finger Offset Y M",
+          "type": "number"
+        },
+        "finger_offset_z_m": {
+          "title": "Finger Offset Z M",
+          "type": "number"
+        },
+        "pad_inset_m": {
+          "minimum": 0.0,
+          "title": "Pad Inset M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "drive_pivot_y_m",
+        "finger_offset_y_m",
+        "finger_offset_z_m",
+        "pad_inset_m"
+      ],
+      "title": "GripperLinkage",
       "type": "object"
     },
     "HardwareBackend": {

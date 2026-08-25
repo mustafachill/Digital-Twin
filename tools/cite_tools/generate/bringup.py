@@ -46,8 +46,12 @@ class _ManagerView:
     gripper_action: str | None
     gripper_open_position: float | None
     gripper_closed_position: float | None
-    gripper_max_width_m: float | None
     gripper_default_grasp_width_m: float | None
+    gripper_goal_tolerance_rad: float | None
+    gripper_drive_pivot_y_m: float | None
+    gripper_finger_offset_y_m: float | None
+    gripper_finger_offset_z_m: float | None
+    gripper_pad_inset_m: float | None
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,39 @@ def _grasp(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | None
         return None
     value = getattr(effector.grasp, field)
     return None if value is None else float(value)
+
+
+def _linkage(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | None:
+    """One dimension of the end effector's opening linkage, or None.
+
+    Separate from :func:`_grasp` only because the value sits one level deeper.
+    The four dimensions travel together to L3, where the same closed form is
+    evaluated — the map itself is never transmitted, only the geometry it is
+    built from, so there is still exactly one statement of it (P1).
+    """
+    if asset.instance.end_effector is None:
+        return None
+    effector = cell.end_effector_type(asset.instance.end_effector.type)
+    if effector is None or effector.grasp is None:
+        return None
+    return float(getattr(effector.grasp.linkage, field))
+
+
+def _controller_parameter(asset: ResolvedAsset, suffix: str, key: str) -> float | None:
+    """One parameter of one of this asset's controllers, or None if unset.
+
+    This is how a number that configures a *controller* also reaches the skill
+    server without being written twice. `goal_tolerance` is the case that forced
+    it: the controller decides when a goal is close enough to end, and L3 cannot
+    tell a real grasp from the resulting position bias unless it knows the same
+    threshold.
+    """
+    name = ids.controller(asset.id, suffix)
+    for controller in asset.controllers:
+        if controller.name == name:
+            value = controller.parameters.get(key)
+            return None if value is None else float(value)
+    return None
 
 
 def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
@@ -161,8 +198,14 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_action=_controller_action(asset, "gripper_controller"),
             gripper_open_position=_grasp(cell, asset, "open_position"),
             gripper_closed_position=_grasp(cell, asset, "closed_position"),
-            gripper_max_width_m=_grasp(cell, asset, "max_width_m"),
             gripper_default_grasp_width_m=_grasp(cell, asset, "default_grasp_width_m"),
+            gripper_goal_tolerance_rad=_controller_parameter(
+                asset, "gripper_controller", "goal_tolerance"
+            ),
+            gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),
+            gripper_finger_offset_y_m=_linkage(cell, asset, "finger_offset_y_m"),
+            gripper_finger_offset_z_m=_linkage(cell, asset, "finger_offset_z_m"),
+            gripper_pad_inset_m=_linkage(cell, asset, "pad_inset_m"),
         )
         for asset in cell.assets
         if asset.controllers

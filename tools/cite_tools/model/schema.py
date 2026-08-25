@@ -22,6 +22,7 @@ defaults, and nothing anywhere reported it.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -215,6 +216,69 @@ class ControllerSpec(Strict):
     parameters: dict[str, str | bool | int | float] = Field(default_factory=dict)
 
 
+class GripperLinkage(Strict):
+    """The geometry that maps a parallel gripper's drive angle onto a pad opening.
+
+    ``opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
+                        + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))``
+
+    This is the single home of that relationship (P1). The L3 skill server
+    receives these four numbers through the generated bring-up plan and evaluates
+    the same closed form, so task-space widths mean the same thing in the model,
+    in the validator, and on the robot.
+
+    It is a closed form rather than a fit or a table because it is derivable: the
+    drive joint and the finger joint rotate about opposite axes by the same angle,
+    so their rotations cancel, the pad stays parallel, and its offset from the
+    centreline is plain trigonometry. A lookup table would be the same fact stored
+    at lower precision and with more places to drift.
+
+    Every field is a dimension in the robot's own description, which is what makes
+    an audit possible: each can be checked against the vendor URDF or mesh rather
+    than taken on trust.
+    """
+
+    #: y of the drive joint's origin in the gripper base frame.
+    drive_pivot_y_m: float
+    #: y and z of the driven finger joint's origin in the outer-knuckle frame —
+    #: together the crank whose rotation opens and closes the jaw.
+    finger_offset_y_m: float
+    finger_offset_z_m: float
+    #: How far the pad face lies inboard of the finger link's own origin. Taken
+    #: from the collision mesh, because the URDF never states it.
+    pad_inset_m: Annotated[float, Field(ge=0.0)]
+
+    @property
+    def _pivot_m(self) -> float:
+        """Half the opening the crank swings about."""
+        return self.drive_pivot_y_m - self.pad_inset_m
+
+    @property
+    def _crank_m(self) -> float:
+        """Length of the crank formed by the finger joint's offset."""
+        return math.hypot(self.finger_offset_y_m, self.finger_offset_z_m)
+
+    @property
+    def _phase_rad(self) -> float:
+        """Where the crank starts, so that ``opening`` is a single cosine."""
+        return math.atan2(self.finger_offset_z_m, self.finger_offset_y_m)
+
+    def opening_m(self, position: float) -> float:
+        """The distance between the pads at drive-joint position ``position``."""
+        return 2.0 * (self._pivot_m + self._crank_m * math.cos(position + self._phase_rad))
+
+    def position_for(self, width_m: float) -> float:
+        """The drive-joint position that opens the pads to ``width_m``.
+
+        The exact inverse of :meth:`opening_m`, valid over the half-turn the
+        gripper actually uses. Widths outside the linkage's reach saturate rather
+        than raise: the caller's own travel limits decide what is commandable,
+        and this function's job is only to be the inverse of the map.
+        """
+        cosine = (width_m / 2.0 - self._pivot_m) / self._crank_m
+        return math.acos(max(-1.0, min(1.0, cosine))) - self._phase_rad
+
+
 class GraspSpec(Strict):
     """How this end effector grasps: what the plugin watches, and what a skill commands.
 
@@ -250,7 +314,11 @@ class GraspSpec(Strict):
     #: robot-specific numbers stay in the model.
     open_position: float = 0.0
     closed_position: float = 0.85
-    max_width_m: Annotated[float, Field(gt=0.0)] = 0.085
+    #: The linkage that turns the drive joint's angle into an opening between the
+    #: pads. Required, because without it a width in metres cannot be commanded at
+    #: all — and a plausible-looking linear guess is exactly how this gripper spent
+    #: Phase 1.C closing on air.
+    linkage: GripperLinkage
     #: What a `Pick` closes to when its goal names no width — the fallback L3
     #: applies for `grasp_width_m == 0`, in metres between the pads.
     #:
@@ -264,6 +332,22 @@ class GraspSpec(Strict):
     #: The upper bound is a real constraint, not a preference; it is checked by
     #: `cite_tools.validate.physical`. See that check for the derivation.
     default_grasp_width_m: Annotated[float, Field(gt=0.0)] | None = None
+
+    @property
+    def max_width_m(self) -> float:
+        """The widest the pads open, at ``open_position``.
+
+        Derived, never declared. It used to be a field, and the declared 0.085 m
+        disagreed with the linkage's true 0.08893 m — the textbook shape of the
+        duplication P1 forbids, where two places state one fact and only one of
+        them is right.
+        """
+        return self.linkage.opening_m(self.open_position)
+
+    @property
+    def min_width_m(self) -> float:
+        """The narrowest the pads close to, at ``closed_position``."""
+        return self.linkage.opening_m(self.closed_position)
 
 
 class PlanningSpec(Strict):

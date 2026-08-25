@@ -196,11 +196,6 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
     The derivation, written here because it is the kind of number that is
     rediscovered painfully every time it is left implicit.
 
-    The skill server maps a task-space width linearly onto the drive joint's own
-    units::
-
-        position(w) = closed_position + (open_position - closed_position) * w / max_width_m
-
     The simulated grasp only exists once the drive joint has travelled past
     ``closed_threshold_rad`` — that is the condition ADR-0023's attachment plugin
     watches. So a commanded width whose position never reaches the threshold
@@ -208,18 +203,22 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
     goal reached, no stall is possible, and the plugin never fires. The gripper
     closes politely on air and every layer above reports success at doing nothing.
 
-    Requiring ``position(w) >= closed_threshold_rad`` and solving for ``w``::
+    The opening shrinks monotonically as the drive joint closes, so requiring
+    ``position(w) >= closed_threshold_rad`` is exactly ``w <=
+    opening(closed_threshold_rad)``. The ceiling is that opening, evaluated
+    through the end effector's own linkage — the same map the skill server uses,
+    read from the same place (P1).
 
-        w <= max_width_m * (closed_position - closed_threshold_rad)
-                         / (closed_position - open_position)
+    For the xArm parallel gripper, with a 0.30 rad threshold, that ceiling is
+    60.92 mm. It read 55 mm until the linkage replaced a linear approximation of
+    the stroke; that approximation was wrong by about 5 mm across the working
+    range, which is the entire clearance a 50 mm grasp has to play with.
 
-    For the xArm parallel gripper — 0.085 m across a 0 to 0.85 rad stroke with a
-    0.30 rad threshold — that ceiling is 55 mm.
-
-    Note what this subsumes. ``closed_threshold_rad`` is required to be positive,
-    so the ceiling is always strictly below ``max_width_m``: a default wider than
-    the gripper opens is caught here too, and a second check for it would be
-    unreachable. There was one, until a test tried to reach it.
+    Note what this subsumes. ``closed_threshold_rad`` is required to be positive
+    and the opening is strictly decreasing over the stroke, so the ceiling is
+    always strictly below ``max_width_m``: a default wider than the gripper opens
+    is caught here too, and a second check for it would be unreachable. There was
+    one, until a test tried to reach it.
 
     This is an ERROR rather than a warning. It is not a matter of degree: below
     the bound the grasp can happen, above it the mechanism is unreachable.
@@ -240,7 +239,7 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
             )
         ]
 
-    ceiling = grasp.max_width_m * (grasp.closed_position - grasp.closed_threshold_rad) / stroke
+    ceiling = grasp.linkage.opening_m(grasp.closed_threshold_rad)
     if grasp.default_grasp_width_m > ceiling:
         return [
             error(
