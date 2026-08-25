@@ -76,6 +76,25 @@ jobs:
           docker run --rm -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/build
 
+      # The host-tooling job above also runs ./scripts/lint, but that runner has no
+      # ROS at all, so its ROS-package block skips itself and reports so. This is
+      # the only place the C++, CMake and package linters can actually run —
+      # without this step the project has no C++ linting in CI whatsoever, which
+      # is how ~630 lines of new C++ reached this branch unlinted (T-04).
+      #
+      # NOT BLOCKING YET, deliberately. ./scripts/lint now fails when it is about
+      # to check nothing, and it currently is: every first-party package declares
+      # <test_depend>ament_lint_auto</test_depend> without a linter set, so
+      # ament_lint_auto_find_test_dependencies() registers zero linters and ctest
+      # reports "No tests were found!!!". Fixing that means editing package.xml and
+      # CMakeLists.txt in each package. Flip continue-on-error to false in the same
+      # change that adds <test_depend>ament_lint_common</test_depend> to them.
+      - name: Lint ROS packages (expected failing — see T-04)
+        continue-on-error: true
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace \
+            cite-digital-twin:dev ./scripts/lint
+
       - name: Test
         run: |
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
@@ -94,6 +113,34 @@ jobs:
               cite-digital-twin:dev ./scripts/scenario bringup
             echo "::endgroup::"
           done
+
+      # Phase 1.C's acceptance claim rests on pick_and_place, and until now no gate
+      # ran it: CI ran bringup twice and never this one, and tests/scenarios/ lives
+      # outside workspace/ so colcon test does not collect it either. A claim no job
+      # exercises is not evidence.
+      #
+      # NOT BLOCKING YET, deliberately, and not because it is inconvenient: this
+      # scenario fails today for reasons tracked against other packages, and making
+      # it a hard gate now would only paint a mid-remediation branch red without
+      # telling anyone anything new. It runs, its output is captured, and the
+      # failure is visible on every run instead of invisible.
+      #
+      # Before this becomes a merge blocker, all of the following must hold:
+      #   1. The stochastic path is seeded end to end (T-03/R-13). The scenario is
+      #      not reproducible today: four runs under one seed produced two distinct
+      #      failure modes. A flaky hard gate is worse than no gate.
+      #   2. The grasp/skill failure in cite_skills is closed.
+      #   3. cell_a_plan.yaml's declared topics exist at runtime (T-06):
+      #      /cite/cell_a/conveyor_{1,2,3}/{state,command} and
+      #      /cite/cell_a/beam_c{1,2,3}_out/detection are declared but unpublished —
+      #      break_beam.cpp is in no CMakeLists target and the conveyor plugin is
+      #      instantiated by no generated artifact. This step may well fail on that
+      #      alone; it is listed here so nobody reads its red as a new regression.
+      - name: Simulation-in-the-loop scenario — pick_and_place (expected failing)
+        continue-on-error: true
+        run: |
+          docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
+            cite-digital-twin:dev ./scripts/scenario pick_and_place
 
       - name: Upload test results
         if: always()
@@ -142,10 +189,22 @@ jobs:
             cite-digital-twin:dev ./scripts/audit-deps
 
       - name: Manifest entries not pinned to a commit SHA
+        # One implementation, shared with ./scripts/doctor (P1). This step used to
+        # restate the check as `grep -E '^\s+version:\s*[a-z]'`, which is a
+        # starts-with-lowercase test rather than a SHA validator: it called a real
+        # 40-character SHA beginning with a-f unpinned, and passed a branch named
+        # `2.x` as pinned. Two copies of a check are two chances to be wrong
+        # differently, which is what happened.
+        #
+        # Blocking, not advisory. This is the only mechanical guard on ADR-0008.
         run: |
-          if grep -nE '^\s+version:\s*[a-z]' external/cite.repos; then
-            echo "::warning::Unpinned dependency above. Reproducibility is not \
-            guaranteed until every entry pins a commit SHA (Phase 1.A gate)."
-          else
-            echo "All manifest entries pinned."
+          # shellcheck source=scripts/_lib.sh
+          source scripts/_lib.sh
+          unpinned="$(unpinned_manifest_entries)"
+          if [ -n "$unpinned" ]; then
+            echo "$unpinned" | while read -r entry; do
+              echo "::error file=external/cite.repos::Not pinned to a commit SHA: ${entry}"
+            done
+            exit 1
           fi
+          echo "All manifest entries pinned to a 40-character commit SHA."

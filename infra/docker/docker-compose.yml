@@ -18,6 +18,25 @@
 # project and takes those containers and their volumes with it.
 name: cite-digital-twin
 
+# The environment is anchored separately from the rest of the service definition
+# because a YAML merge key does not deep-merge a mapping: a service that declares
+# `environment:` at all replaces this block wholesale rather than adding to it.
+# The gui service does exactly that, and before this anchor existed it restated
+# every variable — so ROS_DOMAIN_ID had two definitions that had to be kept in
+# step by hand, which is the duplication P1 exists to forbid.
+x-common-env: &common-env
+  # Supplied by scripts/_lib.sh, which derives one domain per checkout so that two
+  # cells on this host cannot discover each other. The previous ${...:-0} default
+  # put every container on domain 0 and DDS discovery crossed between them: a
+  # scenario run took 421 s instead of 105 s because another workspace's
+  # move_group was in its graph. The fallback below is only for a direct
+  # `docker compose` invocation, and is deliberately not 0. Prefer ./scripts/enter,
+  # which supplies the derived value — see cite_domain_id in scripts/_lib.sh.
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+  RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+  # Gazebo needs a writable home for its cache.
+  HOME: /home/cite
+
 x-common: &common
   build:
     context: ../..
@@ -36,11 +55,7 @@ x-common: &common
     - cite-build:/workspace/workspace/build
     - cite-install:/workspace/workspace/install
     - cite-log:/workspace/workspace/log
-  environment:
-    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
-    RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
-    # Gazebo needs a writable home for its cache.
-    HOME: /home/cite
+  environment: *common-env
   # Shared memory: the default 64 MB is not enough for DDS or Gazebo and
   # produces failures that look like network problems.
   shm_size: '2gb'
@@ -58,9 +73,9 @@ services:
     <<: *common
     container_name: cite-gui
     environment:
-      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-0}
-      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
-      HOME: /home/cite
+      # Merged, not restated: a GUI shell and the headless cell it inspects must
+      # be on the same ROS_DOMAIN_ID or they see nothing of each other.
+      <<: *common-env
       DISPLAY: ${DISPLAY:-:0}
       QT_X11_NO_MITSHM: 1
       NVIDIA_VISIBLE_DEVICES: all
@@ -76,6 +91,12 @@ services:
   # Real hardware. Host networking is required because DDS discovery does not
   # cross Docker's default bridge reliably, and the physical arms must be
   # reachable on the lab network.
+  #
+  # This service inherits the per-checkout ROS_DOMAIN_ID from x-common, which is
+  # what you want for isolation and is *not* what you want when joining a lab
+  # network where other machines are already on a known domain. Set ROS_DOMAIN_ID
+  # explicitly in the environment before ./scripts/enter hardware in that case.
+  # Phase 2 concern; recorded here so it is not rediscovered at the robot.
   hardware:
     <<: *common
     container_name: cite-hardware

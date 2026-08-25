@@ -4,8 +4,16 @@
 #   ./scripts/scenario                 list available scenarios
 #   ./scripts/scenario pick_and_place  run one
 #
-# Scenarios are deterministic: the physics seed is fixed so that a failure is
-# reproducible rather than a coin flip.
+# SCENARIOS ARE NOT YET DETERMINISTIC. This header used to claim that they were,
+# on the strength of CITE_PHYSICS_SEED being exported below. The variable reaches
+# nothing: not Gazebo, not the generated world SDF, and not OMPL — which is the
+# stochastic component that matters (ADR-0006). Running pick_and_place four times
+# under one seed produced two distinct failure modes, each twice.
+#
+# The seed is still exported, because that is the transport a consumer will read
+# and it is decided in exactly one place. Until a consumer exists, treat a passing
+# scenario as evidence about this run and not about the next one. See
+# docs/architecture/cross-cutting-testing.md for what is and is not guaranteed.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -25,6 +33,12 @@ if [ $# -eq 0 ]; then
     exit 0
 fi
 
+# Decided before re-entry, not after, so the host and the container cannot derive
+# it independently. Being a CITE_ variable, exec_in_container carries it across;
+# with the export below the re-exec point, the container recomputed its own value
+# and the two agreed only because the default happens to be a constant.
+export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
+
 require_ros_env scenario "$@"
 
 NAME="$1"; shift
@@ -34,8 +48,12 @@ SCENARIO="${SCENARIO_DIR}/${NAME}.py"
 [ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
 source_overlay
 
-export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
-info "Running scenario '${NAME}' (seed ${CITE_PHYSICS_SEED})"
+info "Running scenario '${NAME}' on DDS domain ${ROS_DOMAIN_ID}"
+# Stated on every run rather than buried in a header nobody opens: the seed is
+# carried, but nothing downstream consumes it yet, so a green run here does not
+# mean the next one is green. Removing this line requires a consumer to exist.
+warn "Seed ${CITE_PHYSICS_SEED} is exported but unconsumed — this run is not reproducible."
+warn "  OMPL is unseeded (ADR-0006); the generated world SDF carries no seed."
 
 if launch_test "$SCENARIO" "$@"; then
     ok "Scenario '${NAME}' passed"

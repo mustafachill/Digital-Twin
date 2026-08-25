@@ -8,7 +8,15 @@
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
-# Host tooling tests need no ROS, so run them wherever we already are.
+# The ROS-free suites, run wherever this script happens to be.
+#
+# Once per invocation, not once per environment. On a machine without ROS this
+# script ran them, re-executed itself inside the container, and the inner run
+# reached them again — the log showed "94 passed in 1.52s" and then "94 passed in
+# 1.97s", and the total a reader takes away from that is twice the truth. The
+# CITE_*_DONE flags are carried across the boundary by exec_in_container, and are
+# set only once a suite has actually run, so a host with no virtualenv still gets
+# the Python suite in the container instead of it being skipped in both places.
 #
 # PYTHONPATH is cleared deliberately. Inside the container the ROS setup puts
 # /opt/ros/jazzy/lib/python3.12/site-packages on PYTHONPATH, and pytest autoloads
@@ -18,13 +26,36 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 # design (ADR-0013); letting it see the ROS Python path at all is the bug, and the
 # symptom is a traceback deep inside launch_testing that has nothing to do with
 # the tests being run.
+
+# Regression tests for the gate logic itself. No interpreter, no ROS and no
+# virtualenv, so this is never the suite that quietly gets skipped.
+run_shell_selftests() {
+    if [ "${CITE_SELFTESTS_DONE:-0}" = "1" ]; then
+        return 0
+    fi
+    step "Shell gate self-tests"
+    bash "${REPO_ROOT}/scripts/_selftest.sh"
+    export CITE_SELFTESTS_DONE=1
+}
+
 run_host_tests() {
+    if [ "${CITE_HOST_TESTS_DONE:-0}" = "1" ]; then
+        info "Host tooling tests already ran on the host — not repeating them here."
+        return 0
+    fi
+
     local py
     py="$(cite_python)" || true
-    if [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ]; then
-        step "Host tooling tests"
-        PYTHONPATH="" "$py" -m pytest "${REPO_ROOT}/tools" -q
-    fi
+    [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ] || return 0
+
+    step "Host tooling tests"
+    PYTHONPATH="" "$py" -m pytest "${REPO_ROOT}/tools" -q
+    export CITE_HOST_TESTS_DONE=1
+}
+
+run_ros_free_suites() {
+    run_shell_selftests
+    run_host_tests
 }
 
 # --host-only runs the ROS-free suite and stops. CI's fast job uses it: without
@@ -41,17 +72,17 @@ done
 set -- ${ARGS[@]+"${ARGS[@]}"}
 
 if [ "$HOST_ONLY" -eq 1 ]; then
-    run_host_tests
-    ok "Host tooling tests complete (--host-only)"
+    run_ros_free_suites
+    ok "ROS-free suites complete (--host-only)"
     exit 0
 fi
 
 if ! in_container && ! native_ros_available; then
-    run_host_tests
+    run_ros_free_suites
     require_ros_env test "$@"
 fi
 
-run_host_tests
+run_ros_free_suites
 
 step "ROS workspace tests"
 cd "${REPO_ROOT}/workspace" || die "workspace/ not found"
