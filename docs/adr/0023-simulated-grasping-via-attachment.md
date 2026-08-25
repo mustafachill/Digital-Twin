@@ -1,10 +1,13 @@
 # ADR-0023: Simulate a grasp by attachment, triggered by contact
 
-- **Status:** Accepted — the decision stands. The attach *condition* this record
-  specifies has never been implementable and is corrected below; the mechanism, the
-  boundary it protects and the rejected options are unchanged. See the section
-  "Correction — 2026-08-25: the attach condition was never implementable",
-  immediately after this block.
+- **Status:** Superseded by [ADR-0029](0029-simulated-grasping-by-friction.md) — the
+  *decision* is reversed, not merely corrected: the attachment plugin is removed and
+  simulated grasping rests on friction, after an 84-trial measurement. Nothing below is
+  rewritten. It was also corrected on 2026-08-25, before it was superseded, and that
+  correction still explains why the shipped plugin never matched this record — see the
+  section "Correction — 2026-08-25: the attach condition was never implementable",
+  immediately after this block. **Nothing in this record binds any longer.** Read
+  ADR-0029 for what does.
 - **Date:** 2026-08-24
 - **Related:** ADR-0003, ADR-0005, ADR-0022, [L1](../architecture/L1-description-and-assets.md), [cross-cutting-testing.md](../architecture/cross-cutting-testing.md)
 
