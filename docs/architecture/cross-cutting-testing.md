@@ -1,12 +1,14 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds 94
-  host tests, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The scenario
-  level has `bringup` and `pick_and_place`. Three gaps below are still open and are called
-  out where they occur: **scenario determinism is documented but not implemented**, ROS
-  package linters register nothing, and `pick_and_place` does not pass. Everything else
-  below the status line is design, not description.
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **132**
+  host tests, all passing, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The
+  contract level is populated: 22 interface definitions are frozen against a stored baseline.
+  The scenario level has `bringup`, which is a blocking CI gate run twice per run, and
+  `pick_and_place`, which is not. Three gaps below are still open and are called out where
+  they occur: **scenarios are not deterministic**, ROS package linters register nothing, and
+  `pick_and_place` does not pass. Everything else below the status line is design, not
+  description.
 - **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md)
 
 ## Why this is a cross-cutting concern rather than a chore
@@ -37,9 +39,9 @@ Everything in `cite_tools` — schema validation, generators, geometry and inert
 is pure Python and must be unit-tested. No ROS runtime, no simulator, no waiting. These
 run on macOS.
 
-`tools/tests/` exists and holds **94 tests** covering the schema loader, the generators,
-identifiers, units, and the geometric and referential validators. `./scripts/test` runs
-them, and `./scripts/test --host-only` runs them without Docker.
+`tools/tests/` exists and holds **132 tests**, all passing, covering the schema loader, the
+generators, identifiers, units, and the geometric and referential validators. `./scripts/test`
+runs them, and `./scripts/test --host-only` runs them without Docker.
 
 Alongside them, `scripts/_selftest.sh` covers the **gate logic itself** — the lint coverage
 assertion, the manifest SHA validator, and the DDS domain derivation. Those checks had no
@@ -71,20 +73,32 @@ launched. Export `ROS_DOMAIN_ID` to override it and join someone else's cell del
 **Scenarios are not deterministic yet.** This section previously stated that they were.
 They are not, and the gap is load-bearing enough to state plainly:
 
-`./scripts/scenario` exports `CITE_PHYSICS_SEED`, and both scenarios read it into an
-attribute they never use again. It reaches nothing else — not Gazebo, not the generated
-world SDF, and not OMPL, which under [ADR-0006](../adr/0006-moveit2-motion-planning.md) is
-the stochastic component that decides whether a plan succeeds. Measured: `pick_and_place`
-run four times under an identical seed produced **two distinct failure modes**, each twice,
-both under domain isolation.
+`./scripts/scenario` decides `CITE_PHYSICS_SEED` once per run, and
+`cite_bringup/launch/simulation.launch.py` now passes it as `gz sim --seed`. **That is less
+than it sounds and must not be read as more.** `gz sim --seed N` reaches
+`ServerConfig::SetSeed()`, whose body is `math::Rand::Seed(_seed)` — so it seeds
+`gz::math::Rand`, which is what sensor noise and the comms systems draw from. It does not
+seed the physics solver: no library under `gz_physics_vendor` or `gz_dartsim_vendor`
+references `gz::math::Rand` at all. And it has nothing to do with OMPL, which under
+[ADR-0006](../adr/0006-moveit2-motion-planning.md) is the stochastic component that decides
+whether a plan succeeds. Measured before the seed was plumbed: `pick_and_place` run four
+times under an identical seed produced **two distinct failure modes**, each twice, both
+under domain isolation.
 
-The design intent stands and is what the seed exists for — a fixed seed so that a failure
-reproduces instead of being a coin flip, because a non-deterministic scenario test is worse
-than no test: it trains people to re-run until green. Closing it needs a consumer at each
-end: a seed in the generated world SDF, and an OMPL seed in the generated MoveIt
-configuration. Until both exist, a passing scenario is evidence about that run only, and
-[ADR-0023](../adr/0023-simulated-grasping-via-attachment.md) rests part of its argument on a premise
-the code does not yet provide.
+**OMPL cannot be seeded from here, and a seed would not be enough if it could.** MoveIt
+never calls `ompl::RNG::setSeed` and exposes no parameter for it; MoveIt is apt-installed
+rather than pinned as source, so there is no patch hook; and OMPL draws each instance's seed
+from a process-global generator whose hand-out order across threads is not fixed, while
+MoveIt's default termination is wall-clock. The full evidence, and the decision taken
+because of it, are in [ADR-0027](../adr/0027-pilz-planning-pipeline.md): station-to-station
+motion moves to a non-sampling planner. **That decision does not by itself make a scenario
+reproducible**, and nothing here may be upgraded on the strength of it — under P8 the claim
+is earned by running scenarios repeatedly and measuring, or it is not made.
+
+Until then a passing scenario is evidence about that run only. The design intent stands and
+is what the seed exists for: a fixed seed so that a failure reproduces instead of being a
+coin flip, because a non-deterministic scenario test is worse than no test — it trains
+people to re-run until green.
 
 A scenario asserts on **outcomes and constraints**, never on exact trajectories. Sampling
 -based planners are stochastic ([ADR-0006](../adr/0006-moveit2-motion-planning.md)); a test
@@ -105,12 +119,12 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 
 | Guarantee | Why |
 |---|---|
-| Sim/hardware interface parity | P2 — the project's central claim |
+| Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The line actually works |
+| Cycle completion | The line actually works — **not met today**: `pick_and_place` does not pass, and no work-piece has been grasped |
 | Twin divergence within bound (Phase 2+) | P8 |
-| Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above |
+| Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
 ## What tests are not allowed to do
 

@@ -96,8 +96,8 @@ to the active roster at that point.
 ## Open questions
 
 - **Gateway technology** — `rosbridge`, Foxglove, or purpose-built. Phase 4.
-- **Front-end stack.** Unconstrained today. The `ui-ux-pro-max` skill referenced in
-  `.claude/agents/coder.md` applies when it is chosen.
+- **Front-end stack.** Unconstrained today, and to be decided in an ADR when Phase 4
+  starts.
 - **Whether operators can command anything at all**, or whether L7 is read-only in its
   first version. Read-only is the safer starting point and probably right.
 - **Multi-tenancy.** If CITE demonstrates the twin to visitors, what should a visitor see?

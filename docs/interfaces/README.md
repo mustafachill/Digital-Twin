@@ -1,6 +1,12 @@
 # Interfaces
 
-- **Status:** `DESIGNED` — conventions are binding; no interface packages exist yet (Phase 1.B).
+- **Status:** `BUILT` — `cite_interfaces` exists and holds **22 definitions** (14 `.msg`,
+  2 `.srv`, 6 `.action`), every one frozen against a stored baseline at
+  `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
+  build rather than surfacing at runtime. The conventions below are what that package does,
+  not what it intends to do.
+  Two of the six actions — `Transfer` and `Detect` — are defined and have no server. That is
+  an [L3](../architecture/L3-capabilities.md) gap, not an interface gap.
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a
@@ -33,7 +39,7 @@ workspace/src/cite_interfaces/
 The most common mistake is a service where an action belongs. **If it can take more than a
 few hundred milliseconds, or should be cancellable, it is an action.** A service call that
 blocks for ten seconds blocks its executor, and the symptom is a hang with no error at all
-— see the trap list in `.claude/agents/debugger.md`.
+— see [`../operations/troubleshooting.md`](../operations/troubleshooting.md).
 
 ## Naming
 
@@ -58,6 +64,12 @@ A measurement without a timestamp cannot be correlated. A measurement without an
 identity cannot be attributed. Both are required for L6 recording to be interpretable
 later ([L6](../architecture/L6-data-and-telemetry.md)).
 
+This binds messages that are **published**. A message that only ever appears nested inside
+another — `StationState`, `StationTopology`, `StationEdge`, `Detection` — carries neither,
+because it inherits both from its container, and stamping it twice would be the same fact in
+two places. `LineTopology` carries a `header` and a `zone` rather than an `asset_id`: a
+topology is not about one asset.
+
 ## Enumerations are constants, not strings
 
 ```
@@ -74,17 +86,24 @@ impossible, and the valid set is discoverable rather than folklore.
 
 ## Failure is structured
 
+`ResultCode.msg`, as shipped:
+
 ```
-uint8 RESULT_SUCCESS=0
-uint8 RESULT_PLANNING_FAILED=1
-uint8 RESULT_EXECUTION_FAILED=2
-uint8 RESULT_CANCELLED=3
-uint8 RESULT_SAFETY_BLOCKED=4
-uint8 result_code
+uint8 SUCCESS=0
+uint8 PLANNING_FAILED=1
+uint8 EXECUTION_FAILED=2
+uint8 CANCELLED=3
+uint8 SAFETY_BLOCKED=4
+uint8 PRECONDITION_FAILED=5
+uint8 TIMEOUT=6
+uint8 HARDWARE_FAULT=7
+uint8 NOT_IMPLEMENTED=8
+uint8 UNREACHABLE=9
+uint8 code
 string detail                 # human-readable context, never the machine-readable part
 ```
 
-`result_code` drives recovery; `detail` explains it to a person. L4 chooses a recovery
+`code` drives recovery; `detail` explains it to a person. L4 chooses a recovery
 strategy from the code — which is impossible if failure is a free-text string, and is why
 v1's orchestration could only ever retry generically.
 

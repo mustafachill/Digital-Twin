@@ -1,6 +1,12 @@
 # Naming and namespaces
 
-- **Status:** `DESIGNED` — the scheme is defined; the generator that enforces it is Phase 1.B.
+- **Status:** `PARTIAL` — the generator exists and forms every name, with one exception
+  documented under "Frames" below.
+  **Built:** `tools/cite_tools/model/ids.py` is the single place a name is formed, and
+  `./scripts/scenario bringup` asserts the result — controller and joint names, the
+  `/cite/facility/` scope, and station frames resolving against the world.
+  **Not exercised:** of the reserved scopes, only `/cite/facility/` and `/cite/line/topology`
+  have a publisher. `/cite/twin/` and the rest of `/cite/line/` are Phase 2 and later.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [L0](L0-facility-model.md)
 
 Naming looks like a style question. In this project it is a correctness question: P2 says
@@ -30,16 +36,38 @@ hardware.
 
 ## Frames
 
-TF frames use the same identity, flattened because TF has no hierarchy:
+There are **two** frame forms, and which one applies depends on where the frame comes from.
+Both are formed in `tools/cite_tools/model/ids.py` and neither is ever written by hand.
+
+**Frames the model declares** — a conveyor's infeed, a table's surface, a pedestal's top —
+use the full identity, flattened because TF has no hierarchy:
 
 ```
-<zone>__<asset_id>__<link>
-cell_a__arm_1__link_base
+<zone>__<asset_id>__<link>          ids.frame()
+cell_a__conveyor_1__infeed
+cell_a__table_pick__surface
 ```
 
 Double underscore separates the three parts, so a single-underscore link name is
-unambiguous. Frame names are generated with the description; there is never a hand-written
-frame string in code.
+unambiguous.
+
+**Links inside a robot description** carry the instance prefix instead, because the link
+names are the vendor's and the description is invoked rather than ingested (L1):
+
+```
+<asset_id>_<link>                   ids.link()
+arm_1_link_base
+arm_1_link_tcp
+arm_1_mount
+```
+
+The distinction is not cosmetic and it is not optional: a URDF's link names are what
+`robot_state_publisher` broadcasts, and rewriting them to the three-part form would mean
+editing the vendor description, which P1 and L1 both forbid. A frame name in this system is
+therefore either `<zone>__<asset_id>__<link>` or `<asset_id>_<link>`, and reading one form
+where the other applies is a `frame does not exist` at runtime.
+
+The facility root frame is `cite_world` and takes neither form.
 
 The facility root frame is `cite_world`, and it is tied to the **surveyed physical origin**
 — see [L5](L5-twin-synchronization.md). This is the frame in which a measurement in the

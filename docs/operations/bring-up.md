@@ -1,6 +1,9 @@
 # Bring-up
 
-- **Status:** `DESIGNED` — the simulated path is buildable once Phase 1.C lands; the physical path is Phase 2.
+- **Status:** `PARTIAL` — the simulated path below works and is what `./scripts/scenario bringup`
+  drives; the last two stages of the step-4 sequence, twin sync and orchestration, are not
+  part of it (no `cite_twin` package exists, and the line coordinator is not launched by
+  `./scripts/sim`). The physical path is Phase 2 and has never been run.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell

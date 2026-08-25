@@ -1,6 +1,15 @@
 # L3 — Capabilities (skills)
 
-- **Status:** `DESIGNED` — no skill servers exist. The first skill is Phase 1.C.
+- **Status:** `PARTIAL` — **four of the six skills below have a server.**
+  **Built:** `MoveTo`, `Grasp`, `Pick` and `Place` are action servers in
+  `cite_skills/src/skill_server.cpp`. `MoveTo` to the `home` configuration is asserted by
+  `./scripts/scenario bringup`.
+  **Not built:** `Transfer` and `Detect`. Both have `.action` definitions in
+  `cite_interfaces` and no implementation anywhere.
+  **Not proven:** no pick-and-place cycle has completed, and **no work-piece has been
+  grasped**. `./scripts/scenario pick_and_place` does not pass and runs in CI as
+  `continue-on-error`. `MoveTo.Goal.cartesian_path` returns `NOT_IMPLEMENTED`
+  ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
 - **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../interfaces/README.md`](../interfaces/README.md)
 
 ## Responsibility

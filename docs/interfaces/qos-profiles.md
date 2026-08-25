@@ -1,6 +1,11 @@
 # QoS profiles
 
-- **Status:** `DESIGNED` — the policy is binding; no publishers exist yet.
+- **Status:** `BUILT` — the five profiles ship as a library in both languages,
+  `cite_interfaces/cite_interfaces/qos.py` and `include/cite_interfaces/qos.hpp`
+  ([ADR-0025](../adr/0025-qos-profiles-in-cite-interfaces.md)), with a test asserting the two
+  agree. The table below was checked against `qos.py` and matches it exactly. Every publisher
+  in the tree declares a named profile from it, and `./scripts/scenario bringup` asserts that
+  a subscriber actually **receives** — the only test a QoS mismatch cannot pass.
 - **Related:** [`README.md`](README.md), [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md)
 
 ## Why this has its own document
@@ -58,8 +63,9 @@ ros2 topic info /cite/cell_a/arm_1/joint_states --verbose
 
 Compare reliability, durability, and history on both sides. If the topic exists, both
 endpoints are listed, and no data arrives, this is almost certainly the cause — check it
-**before** looking anywhere else. It is on the `debugger` agent's trap list for exactly
-this reason.
+**before** looking anywhere else. It is the first entry under "A topic exists but no data
+arrives" in [`../operations/troubleshooting.md`](../operations/troubleshooting.md) for
+exactly this reason.
 
 ## Testing
 

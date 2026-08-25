@@ -61,9 +61,14 @@ are real.
 | `./scripts/validate-model` | Validate the L0 facility model. Runs anywhere. |
 | `./scripts/sim [--headless]` | Launch the simulated cell. |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
-| `./scripts/enter [dev\|gui\|hardware]` | Interactive shell in the container. |
+| `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
 | `./scripts/clean [--all]` | Remove build artifacts. |
+
+`enter` also takes a one-off command after the service name — `./scripts/enter dev
+ros2 topic list` runs it in the container and exits. Use that instead of reaching for
+`docker compose run`, which is the working-around these entry points exist to prevent.
+Shell syntax needs a shell: `./scripts/enter dev bash -lc 'colcon list | wc -l'`.
 
 The quality gate before any handoff:
 
@@ -109,5 +114,6 @@ appears to want hardware access, that is a bug — report it.
 1. `./scripts/doctor`
 2. `./scripts/clean && ./scripts/bootstrap` — a stale build explains a
    surprising share of inexplicable failures.
-3. Check the known traps in `.claude/agents/debugger.md`. That list exists
-   because these specific problems cost someone a day already.
+3. Work through [`../operations/troubleshooting.md`](../operations/troubleshooting.md).
+   It is organised by symptom — environment, build, runtime — and each entry is
+   there because that specific problem cost someone a day already.

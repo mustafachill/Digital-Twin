@@ -60,6 +60,62 @@ architecturally load-bearing dependency in the project —
 |---|---|
 | MoveIt 2 | <https://moveit.picknik.ai/main/index.html> |
 | MoveIt 2 tutorials | <https://moveit.picknik.ai/main/doc/tutorials/tutorials.html> |
+| Pilz Industrial Motion Planner (PTP / LIN / CIRC) | <https://moveit.picknik.ai/main/doc/how_to_guides/pilz_industrial_motion_planner/pilz_industrial_motion_planner.html> |
+| OMPL (the sampling pipeline Pilz replaces for station-to-station motion) | <https://ompl.kavrakilab.org/> |
+
+### Pilz availability — verified 2026-08-25
+
+Checked rather than assumed, because [ADR-0027](../adr/0027-pilz-planning-pipeline.md)
+rests on it costing no new dependency:
+
+```bash
+docker run --rm ros:jazzy-ros-base-noble bash -lc \
+  'apt-get update -qq; apt-cache policy ros-jazzy-pilz-industrial-motion-planner'
+docker run --rm cite-digital-twin:dev bash -lc 'ls /opt/ros/jazzy/lib | grep -i pilz'
+```
+
+| Check | Result |
+|---|---|
+| `ros-jazzy-pilz-industrial-motion-planner` resolves | yes — candidate `2.12.4-1noble.20260617.154917` |
+| Same version line as MoveIt | yes — `ros-jazzy-moveit` is also `2.12.4` |
+| Pulled in by the planners metapackage | yes — `ros-jazzy-moveit-planners` `Depends:` lists `pilz-industrial-motion-planner` alongside `-chomp`, `-ompl`, `-stomp` |
+| Already present in `cite-digital-twin:dev` | yes — `libpilz_industrial_motion_planner.so` and `share/pilz_industrial_motion_planner` |
+
+### Planner determinism — verified 2026-08-25
+
+The claim that a scenario can be made reproducible by seeding was checked in the container
+image and in the shipped upstream sources, not inferred. It does not hold. The findings are
+argued in [ADR-0027](../adr/0027-pilz-planning-pipeline.md); the commands are here so the
+next reader can repeat them rather than trust them.
+
+```bash
+docker run --rm cite-digital-twin:dev bash -lc '
+  strings /opt/ros/jazzy/lib/libmoveit_ompl_interface.so.2.12.4 | wc -l
+  strings /opt/ros/jazzy/lib/libmoveit_ompl_interface.so.2.12.4 | grep -ci seed
+  nm -D -u /opt/ros/jazzy/lib/libmoveit_ompl_interface.so.2.12.4 | c++filt | grep -i setSeed
+  nm -D --defined-only /opt/ros/jazzy/lib/aarch64-linux-gnu/libompl.so.1.7.0 \
+    | c++filt | grep "RNG::setSeed"'
+```
+
+| Check | Result |
+|---|---|
+| Strings in MoveIt's OMPL interface | 2553 |
+| …of which contain `seed`, case-insensitive | **0** |
+| MoveIt's OMPL interface references `ompl::RNG::setSeed` | no such undefined symbol — it never calls it |
+| OMPL exports a seeding entry point | yes — `T ompl::RNG::setSeed(unsigned long)` in `libompl.so.1.7.0` |
+| A patch hook exists for MoveIt | no — MoveIt is apt-installed (`infra/docker/Dockerfile`), and `external/cite.repos` pins only `xarm_ros2` |
+| OMPL per-instance seeds | drawn from a process-global singleton: `ompl::RNG::RNG() : localSeed_(getRNGSeedGenerator().nextSeed())` — [`RandomNumbers.cpp`](https://github.com/ompl/ompl/blob/main/src/ompl/util/src/RandomNumbers.cpp) |
+| OMPL says so itself | the shipped `libompl.so.1.7.0` carries the string *"Random number generation already started. Changing seed now will not lead to deterministic sampling."* |
+| MoveIt's default termination | wall-clock — `ompl_interface::ModelBasedPlanningContext::constructPlannerTerminationCondition(double, const std::chrono::time_point<std::chrono::system_clock, …>&)` |
+
+### `gz sim --seed` — what it actually seeds, verified 2026-08-25
+
+| Check | Result |
+|---|---|
+| Where the flag goes | `src/gz.cc` → `ServerConfig::SetSeed()`, whose body is `math::Rand::Seed(_seed)` — [`gz-sim8/src/ServerConfig.cc`](https://github.com/gazebosim/gz-sim/blob/gz-sim8/src/ServerConfig.cc) |
+| A seed of `0` | discarded by `if (_seed != 0)` in `src/gz.cc`; our default is `20260824` |
+| Who draws from `gz::math::Rand` | `libgz-sensors8`, the RF and acoustic comms systems, the odometry publisher, the multicopter controller, the render engines |
+| Does the physics stack draw from it | **no** — scanning every shared object under `/opt/ros/jazzy/opt` for undefined references to `gz::math::v7::Rand` returns nothing from `gz_physics_vendor` or `gz_dartsim_vendor` |
 
 ## Orchestration
 
