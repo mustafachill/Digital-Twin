@@ -7,17 +7,33 @@
 // that guarantee is made of names. A name built here would be a second place a
 // name is made, and `ids.py`'s tests would not cover it.
 //
-// Goals are in task space. A joint-space goal would leak the robot's kinematics
-// upward and break the promise that swapping this arm for a different one
-// changes nothing above this line.
+// Goals are in task space. A joint-space goal in the *interface* would leak the
+// robot's kinematics upward and break the promise that swapping this arm for a
+// different one changes nothing above this line. Inside the skill it is the
+// opposite: a Cartesian pose goal is never handed to the planner. The pose is
+// resolved, IK is solved on that exact pose, and the planner is given the
+// resulting joint configuration (ADR-0026) — because a pose goal is satisfied by
+// random draws from inside its tolerance, and on an arm with fewer than six
+// degrees of freedom almost every draw is unreachable.
+//
+// One arm executes one skill at a time. Four action servers share one
+// MoveGroupInterface, which is not thread-safe and whose target, start state and
+// scaling factors are per-object; a second goal accepted while one is in flight
+// can plan to the target the first just installed, and the arm executes it. A
+// second goal is therefore rejected rather than queued.
 //
 // Every skill implements the full action contract, cancellation included. L3 is
 // explicit that covering only the happy path is a review finding — a skill that
 // cannot be cancelled leaves L4 with no way to recover from anything.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <functional>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -25,13 +41,13 @@
 #include <control_msgs/action/gripper_command.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
+#include <moveit/robot_model/joint_model_group.hpp>
+#include <moveit/robot_state/robot_state.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
 
 #include <cite_interfaces/action/grasp.hpp>
 #include <cite_interfaces/action/move_to.hpp>
@@ -40,6 +56,9 @@
 #include <cite_interfaces/msg/result_code.hpp>
 
 #include "cite_skills/approach.hpp"
+#include "cite_skills/exclusive_goal.hpp"
+#include "cite_skills/gripper.hpp"
+#include "cite_skills/pose_goal.hpp"
 
 namespace
 {
@@ -52,12 +71,45 @@ using cite_interfaces::msg::ResultCode;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
 
+/// A pose the arm cannot reach at all, as distinct from one it cannot find a
+/// path to.
+///
+/// These are different diagnoses with different recoveries and they should not
+/// share a code. `cite_interfaces` has no constant for reachability yet, and
+/// that package is not this change's to edit, so the two share `PLANNING_FAILED`
+/// for now and are told apart only by their `detail` — which nothing may parse.
+/// Adding `uint8 UNREACHABLE` to `ResultCode.msg` and pointing this alias at it
+/// is the whole of the follow-up.
+constexpr uint8_t kUnreachable = ResultCode::PLANNING_FAILED;
+
+//: How long to wait for the gripper controller, its acceptance, and its result.
+constexpr std::chrono::seconds kGripperServerWait{10};
+constexpr std::chrono::seconds kGripperAcceptWait{10};
+constexpr std::chrono::seconds kGripperResultWait{20};
+//: How often a wait on the gripper's result looks up to see whether the goal it
+//: is serving has been cancelled. A poll period on a future, not a guess at how
+//: long anything takes (P4).
+constexpr std::chrono::milliseconds kCancelPollPeriod{20};
+//: How long the goal thread waits for an accepted cancel to reach the goal
+//: handle before reporting the result. Bounded, so a cancel that is never
+//: completed cannot hold a goal open.
+constexpr std::chrono::milliseconds kCancelHandshake{2000};
+
 ResultCode make_result(uint8_t code, const std::string & detail = "")
 {
   ResultCode result;
   result.code = code;
   result.detail = detail;
   return result;
+}
+
+double distance_between(
+  const geometry_msgs::msg::Point & a, const geometry_msgs::msg::Point & b)
+{
+  const double dx = a.x - b.x;
+  const double dy = a.y - b.y;
+  const double dz = a.z - b.z;
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 /// The skill server for one arm.
@@ -87,6 +139,23 @@ public:
     declare_parameter("gripper_open_position", 0.0);
     declare_parameter("gripper_closed_position", 0.85);
     declare_parameter("gripper_max_width_m", 0.085);
+    // What `Pick.Goal.grasp_width_m == 0` resolves to — the end effector's
+    // default grasp opening. Zero means "not supplied", which is a state the
+    // skill reports rather than papers over.
+    declare_parameter("default_grasp_width_m", 0.0);
+    // How many seeds IK is tried from before a pose is called unreachable
+    // (ADR-0026). Seed 0 is the arm's current state; the rest are random within
+    // the joint limits, which is what recovers the choice of IK branch that a
+    // pose goal would have had.
+    declare_parameter("ik_seeds", 8);
+    declare_parameter("current_state_timeout_s", 5.0);
+    declare_parameter("tf_timeout_s", 5.0);
+    declare_parameter("feedback_period_s", 0.1);
+  }
+
+  ~SkillServer() override
+  {
+    shutdown();
   }
 
   /// Read parameters and build the MoveIt client. Returns false with a reason.
@@ -113,16 +182,31 @@ public:
       }
     }
 
-    gripper_open_position_ = get_parameter("gripper_open_position").as_double();
-    gripper_closed_position_ = get_parameter("gripper_closed_position").as_double();
-    gripper_max_width_ = get_parameter("gripper_max_width_m").as_double();
-    if (gripper_max_width_ <= 0.0) {
+    travel_.open_position = get_parameter("gripper_open_position").as_double();
+    travel_.closed_position = get_parameter("gripper_closed_position").as_double();
+    travel_.max_width_m = get_parameter("gripper_max_width_m").as_double();
+    if (travel_.max_width_m <= 0.0) {
       RCLCPP_ERROR(
         get_logger(),
         "gripper_max_width_m must be positive; without it a task-space width "
         "cannot be mapped onto the gripper's own units");
       return false;
     }
+    default_grasp_width_m_ = get_parameter("default_grasp_width_m").as_double();
+
+    ik_seeds_ = static_cast<int>(get_parameter("ik_seeds").as_int());
+    if (ik_seeds_ < 1) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "ik_seeds must be at least 1: every motion this node commands is planned to a "
+        "joint configuration obtained from IK (ADR-0026), so zero seeds is a node that "
+        "can never move");
+      return false;
+    }
+    current_state_timeout_s_ = get_parameter("current_state_timeout_s").as_double();
+    tf_timeout_s_ = get_parameter("tf_timeout_s").as_double();
+    feedback_period_ = std::chrono::duration<double>(
+      get_parameter("feedback_period_s").as_double());
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -171,6 +255,53 @@ public:
     move_group_->setNumPlanningAttempts(
       static_cast<unsigned int>(get_parameter("planning_attempts").as_int()));
 
+    // The scaling factors MoveGroupInterface started with. They come from
+    // `robot_description_planning.default_*_scaling_factor`, which the bring-up
+    // plan hands this node out of the generated joint_limits.yaml — so the
+    // default speed of this arm is stated in exactly one place (P1). Recorded
+    // here because every goal resets to it: a factor set by one goal on a
+    // long-lived MoveGroupInterface otherwise stays set for the next one, and
+    // motion speed becomes a function of goal history.
+    default_velocity_scaling_ = move_group_->getMaxVelocityScalingFactor();
+    default_acceleration_scaling_ = move_group_->getMaxAccelerationScalingFactor();
+
+    const auto model = move_group_->getRobotModel();
+    const moveit::core::JointModelGroup * group =
+      model != nullptr ? model->getJointModelGroup(planning_group_) : nullptr;
+    if (group == nullptr) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "the robot model has no planning group '%s'. The group name comes from the "
+        "generated bring-up plan and the SRDF comes from the same model, so a mismatch "
+        "here means they were generated from different sources.",
+        planning_group_.c_str());
+      return false;
+    }
+    // Without a kinematics solver every skill fails at IK, one goal at a time,
+    // with an error that names inverse kinematics rather than the missing
+    // `robot_description_kinematics` parameter that caused it.
+    if (!group->getSolverInstance()) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "planning group '%s' has no kinematics solver. Every motion this node commands "
+        "is planned to a joint configuration obtained from IK (ADR-0026), so without a "
+        "solver it can advertise skills but never move one.",
+        planning_group_.c_str());
+      return false;
+    }
+    // Checked here rather than on first use: a home configuration of the wrong
+    // length leaves the previous target installed and the arm plans somewhere
+    // unrelated, with no diagnostic anywhere.
+    if (!home_.empty() && home_.size() != group->getVariableCount()) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "home_rad has %zu values but planning group '%s' has %u; the home configuration "
+        "comes from the L0 model and the group from the generated SRDF, and the two "
+        "disagree.",
+        home_.size(), planning_group_.c_str(), group->getVariableCount());
+      return false;
+    }
+
     RCLCPP_INFO(
       get_logger(), "planning for group '%s' with end effector '%s' (planning frame '%s')",
       planning_group_.c_str(), tip_link_.c_str(), move_group_->getPlanningFrame().c_str());
@@ -181,62 +312,216 @@ public:
 
     move_to_server_ = rclcpp_action::create_server<MoveTo>(
       self, "move_to",
-      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const MoveTo::Goal>) {
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-      },
-      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<MoveTo>>) {
-        // Cancellation stops the arm rather than letting the trajectory finish.
-        // A skill that ignores cancellation leaves L4 unable to recover.
-        move_group_->stop();
-        return rclcpp_action::CancelResponse::ACCEPT;
+      [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const MoveTo::Goal>) {
+        return claim(uuid, "move_to");
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<MoveTo>> handle) {
-        std::thread{[this, handle] { execute_move_to(handle); }}.detach();
+        return cancel(handle);
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<MoveTo>> handle) {
+        start([this, handle] { execute_move_to(handle); });
       });
 
     grasp_server_ = rclcpp_action::create_server<Grasp>(
       self, "grasp",
-      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Grasp::Goal>) {
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-      },
-      [](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Grasp>>) {
-        return rclcpp_action::CancelResponse::ACCEPT;
+      [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const Grasp::Goal>) {
+        return claim(uuid, "grasp");
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Grasp>> handle) {
-        std::thread{[this, handle] { execute_grasp(handle); }}.detach();
+        return cancel(handle);
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Grasp>> handle) {
+        start([this, handle] { execute_grasp(handle); });
       });
 
     place_server_ = rclcpp_action::create_server<Place>(
       self, "place",
-      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Place::Goal>) {
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-      },
-      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>>) {
-        move_group_->stop();
-        return rclcpp_action::CancelResponse::ACCEPT;
+      [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const Place::Goal>) {
+        return claim(uuid, "place");
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>> handle) {
-        std::thread{[this, handle] { execute_place(handle); }}.detach();
+        return cancel(handle);
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>> handle) {
+        start([this, handle] { execute_place(handle); });
       });
 
     pick_server_ = rclcpp_action::create_server<Pick>(
       self, "pick",
-      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Pick::Goal>) {
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-      },
-      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Pick>>) {
-        move_group_->stop();
-        return rclcpp_action::CancelResponse::ACCEPT;
+      [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const Pick::Goal>) {
+        return claim(uuid, "pick");
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Pick>> handle) {
-        std::thread{[this, handle] { execute_pick(handle); }}.detach();
+        return cancel(handle);
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Pick>> handle) {
+        start([this, handle] { execute_pick(handle); });
       });
 
     RCLCPP_INFO(get_logger(), "skills for %s are accepting goals", asset_id_.c_str());
     return true;
   }
 
+  /// Stop moving and let the goal thread finish, before anything is destroyed.
+  ///
+  /// `spin()` returns on SIGINT while a goal may still be inside `plan()`,
+  /// `execute()` or `publish_feedback()`. Releasing the node under it is a
+  /// use-after-free at every teardown — and one that would look exactly like the
+  /// teardown noise the scenarios already tolerate for move_group, which is why
+  /// it has to be joined rather than lived with.
+  void shutdown()
+  {
+    if (shutting_down_.exchange(true)) {
+      return;
+    }
+    abort_motion();
+
+    std::thread worker;
+    {
+      const std::lock_guard<std::mutex> lock(worker_mutex_);
+      worker = std::move(worker_);
+    }
+    if (worker.joinable()) {
+      worker.join();
+    }
+  }
+
 private:
+  // ---------------------------------------------------------------------------
+  // Goal admission: one arm, one skill at a time
+  // ---------------------------------------------------------------------------
+  rclcpp_action::GoalResponse claim(const rclcpp_action::GoalUUID & uuid, const char * skill)
+  {
+    if (shutting_down_.load()) {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    if (gate_.claim(uuid, skill)) {
+      cancel_requested_.store(false);
+      return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    }
+    RCLCPP_WARN(
+      get_logger(),
+      "rejecting a '%s' goal: '%s' still holds this arm. One arm runs one skill at a "
+      "time — a second goal would share this arm's planner and its trajectory with the "
+      "first. The caller that abandoned the earlier goal has to cancel it.",
+      skill, gate_.skill().c_str());
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+
+  /// Accept a cancellation only for the goal that actually holds the arm.
+  ///
+  /// `move_group->stop()` stops whatever is executing. A cancel that did not
+  /// check whose goal it was would stop an unrelated skill's trajectory.
+  template <typename Handle>
+  rclcpp_action::CancelResponse cancel(const Handle & handle)
+  {
+    if (!gate_.owns(handle->get_goal_id())) {
+      return rclcpp_action::CancelResponse::REJECT;
+    }
+    // Recorded as well as acted on. `is_canceling()` only becomes true once this
+    // callback has returned, so a goal thread that looked only at the handle
+    // could see its own motion stopped and report it as an execution failure.
+    cancel_requested_.store(true);
+    abort_motion();
+    return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  /// Stop the arm and the gripper, whichever of them is moving.
+  void abort_motion()
+  {
+    if (move_group_) {
+      move_group_->stop();
+    }
+    rclcpp_action::ClientGoalHandle<GripperCommand>::SharedPtr gripper;
+    {
+      const std::lock_guard<std::mutex> lock(gripper_mutex_);
+      gripper = gripper_goal_;
+    }
+    if (gripper && gripper_client_) {
+      gripper_client_->async_cancel_goal(gripper);
+    }
+  }
+
+  /// Run one goal on the node's single worker thread.
+  ///
+  /// Owned rather than detached: a detached thread cannot be waited for, and at
+  /// teardown it outlives the node it holds a raw pointer to.
+  template <typename Work>
+  void start(Work work)
+  {
+    std::thread previous;
+    {
+      const std::lock_guard<std::mutex> lock(worker_mutex_);
+      previous = std::move(worker_);
+      worker_ = std::thread([this, work] {
+        work();
+        gate_.release();
+      });
+    }
+    // The previous goal has already released the gate — otherwise this one would
+    // have been rejected — so this join is the handshake that reaps its thread,
+    // not a wait for it to finish its work.
+    if (previous.joinable()) {
+      previous.join();
+    }
+  }
+
+  template <typename Handle>
+  bool cancelled(const Handle & handle) const
+  {
+    return handle->is_canceling() || cancel_requested_.load() ||
+           shutting_down_.load() || !rclcpp::ok();
+  }
+
+  /// Report a result on the goal handle, whatever state the process is in.
+  ///
+  /// At teardown the context may already be shut down, and a throw here would
+  /// take the goal thread down with it and leave the client with nothing.
+  template <typename Handle, typename Result>
+  void terminate(
+    const Handle & handle, const std::shared_ptr<Result> & result, const ResultCode & outcome)
+  {
+    try {
+      if (outcome.code == ResultCode::SUCCESS) {
+        handle->succeed(result);
+      } else if (outcome.code == ResultCode::CANCELLED && wait_until_cancelling(handle)) {
+        handle->canceled(result);
+      } else {
+        handle->abort(result);
+      }
+    } catch (const std::exception & error) {
+      RCLCPP_WARN(get_logger(), "could not report a goal's result: %s", error.what());
+    }
+  }
+
+  /// Wait for the cancel that is in progress to reach the goal handle.
+  ///
+  /// The state machine moves to CANCELING only after the cancel callback has
+  /// returned, and the goal thread can get there first. Without this the result
+  /// would be reported with `abort()` on a goal the caller cancelled.
+  template <typename Handle>
+  bool wait_until_cancelling(const Handle & handle)
+  {
+    if (!cancel_requested_.load()) {
+      return false;
+    }
+    const auto deadline = std::chrono::steady_clock::now() + kCancelHandshake;
+    while (!handle->is_canceling() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(kCancelPollPeriod);
+    }
+    return handle->is_canceling();
+  }
+
+  template <typename Handle, typename Feedback>
+  void report_feedback(const Handle & handle, const std::shared_ptr<Feedback> & feedback)
+  {
+    try {
+      handle->publish_feedback(feedback);
+    } catch (const std::exception & error) {
+      RCLCPP_WARN(get_logger(), "could not publish feedback: %s", error.what());
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // MoveTo
   // ---------------------------------------------------------------------------
@@ -246,40 +531,101 @@ private:
     auto result = std::make_shared<MoveTo::Result>();
     const auto started = now();
 
-    if (!goal->named_configuration.empty()) {
-      if (goal->named_configuration != "home") {
-        result->result = make_result(
-          ResultCode::PRECONDITION_FAILED,
-          "the only named configuration is 'home', which comes from the L0 model");
-        handle->abort(result);
-        return;
-      }
-      if (home_.empty()) {
-        result->result = make_result(
-          ResultCode::PRECONDITION_FAILED,
-          "no home configuration was delivered for this arm");
-        handle->abort(result);
-        return;
-      }
-      move_group_->setJointValueTarget(home_);
-    } else {
-      move_group_->setPoseTarget(goal->target, tip_link_);
+    // No requested Cartesian target means there is nothing to measure a position
+    // error against. NaN says "not measured"; 0.0 would be a standing claim of
+    // perfect accuracy, which is exactly what P8 forbids.
+    result->position_error_m = std::numeric_limits<double>::quiet_NaN();
+
+    const auto finish = [&](const ResultCode & outcome) {
+      result->result = outcome;
+      result->duration = now() - started;
+      result->reached = current_pose();
+      terminate(handle, result, outcome);
+    };
+
+    if (goal->cartesian_path) {
+      // Refused rather than silently planned as a joint-space move. A straight
+      // line is a continuum of poses, and on an arm whose reachable orientations
+      // at a point form a measure-zero set almost none of the interpolated poses
+      // has an IK solution (ADR-0026). A caller asking for a straight line along
+      // a surface and receiving an arbitrary joint path would be receiving a
+      // different, possibly colliding, motion.
+      finish(make_result(
+        ResultCode::NOT_IMPLEMENTED,
+        "a straight-line Cartesian path is not implemented for this arm; see ADR-0026"));
+      return;
     }
 
     apply_scaling(goal->velocity_scaling, goal->acceleration_scaling);
 
-    const auto outcome = plan_and_execute(handle);
+    if (!goal->named_configuration.empty()) {
+      if (goal->named_configuration != "home") {
+        finish(make_result(
+          ResultCode::PRECONDITION_FAILED,
+          "the only named configuration is 'home', which comes from the L0 model"));
+        return;
+      }
+      if (home_.empty()) {
+        finish(make_result(
+          ResultCode::PRECONDITION_FAILED,
+          "no home configuration was delivered for this arm"));
+        return;
+      }
+      // Checked: on a size mismatch this returns false AND leaves the previous
+      // target installed, so an unchecked call plans somewhere unrelated.
+      if (!move_group_->setJointValueTarget(home_)) {
+        finish(make_result(
+          ResultCode::PRECONDITION_FAILED,
+          "the home configuration was refused by the planning group; it is out of "
+          "bounds or does not match the group's joints"));
+        return;
+      }
+
+      MoveGroupInterface::Plan plan;
+      if (move_group_->plan(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
+        finish(make_result(
+          ResultCode::PLANNING_FAILED,
+          "no path was found from the current state to the home configuration"));
+        return;
+      }
+      finish(execute_plan(plan, handle, {}));
+      return;
+    }
+
+    geometry_msgs::msg::PoseStamped target;
+    const auto resolved = to_planning_frame(goal->target, &target);
+    if (resolved.code != ResultCode::SUCCESS) {
+      finish(resolved);
+      return;
+    }
+
+    // Feedback comes from TF rather than from MoveGroupInterface: it is
+    // published from a second thread while `execute()` blocks, and the planner
+    // is not thread-safe. The tool's pose on /tf is the same fact from a source
+    // that is.
+    const auto publish_progress = [&](double fraction) {
+      auto feedback = std::make_shared<MoveTo::Feedback>();
+      feedback->fraction_complete = fraction;
+      geometry_msgs::msg::PoseStamped current;
+      if (tool_pose(&current)) {
+        feedback->current = current;
+        feedback->distance_remaining_m =
+          distance_between(current.pose.position, target.pose.position);
+      } else {
+        feedback->distance_remaining_m = std::numeric_limits<double>::quiet_NaN();
+      }
+      report_feedback(handle, feedback);
+    };
+
+    const auto outcome = move_to_pose(target, handle, publish_progress);
+    result->reached = current_pose();
+    // Measured, not assumed: with a joint-space goal the residual is the IK
+    // solver's, and P8 requires the number behind the claim.
+    result->position_error_m =
+      distance_between(result->reached.pose.position, target.pose.position);
     result->result = outcome;
     result->duration = now() - started;
-    result->reached = current_pose();
-
-    if (outcome.code == ResultCode::SUCCESS) {
-      handle->succeed(result);
-    } else if (outcome.code == ResultCode::CANCELLED) {
-      handle->canceled(result);
-    } else {
-      handle->abort(result);
-    }
+    terminate(handle, result, outcome);
   }
 
   // ---------------------------------------------------------------------------
@@ -290,12 +636,25 @@ private:
     const auto goal = handle->get_goal();
     auto result = std::make_shared<Grasp::Result>();
 
-    const auto outcome = command_gripper(goal->width_m, goal->max_effort_n, &result->holding);
-    result->result = outcome;
-    result->reached_width_m = goal->width_m;
+    const auto publish_progress = [&](double width_m, double effort_n) {
+      auto feedback = std::make_shared<Grasp::Feedback>();
+      feedback->current_width_m = width_m;
+      feedback->current_effort_n = effort_n;
+      report_feedback(handle, feedback);
+    };
 
-    if (outcome.code != ResultCode::SUCCESS) {
-      handle->abort(result);
+    const auto gripper = command_gripper(
+      goal->width_m, goal->max_effort_n, handle, publish_progress);
+    result->result = gripper.result;
+    // What the gripper reached, not the request echoed back. The two differ by
+    // exactly the object's width whenever it stalls on something, which is the
+    // case a caller most needs to see.
+    result->reached_width_m = gripper.reached_width_m;
+    result->measured_effort_n = gripper.effort_n;
+    result->holding = gripper.holding;
+
+    if (gripper.result.code != ResultCode::SUCCESS) {
+      terminate(handle, result, gripper.result);
       return;
     }
 
@@ -303,15 +662,16 @@ private:
     // carry an imaginary work-piece all the way to the next station and fail
     // there instead, which is much harder to attribute.
     if (goal->expect_object && !result->holding) {
-      result->result = make_result(
+      const auto outcome = make_result(
         ResultCode::EXECUTION_FAILED,
         "the gripper closed without stalling, so it is holding nothing");
-      handle->abort(result);
+      result->result = outcome;
+      terminate(handle, result, outcome);
       return;
     }
 
     holding_ = result->holding;
-    handle->succeed(result);
+    terminate(handle, result, gripper.result);
   }
 
   // ---------------------------------------------------------------------------
@@ -323,72 +683,79 @@ private:
     auto result = std::make_shared<Pick::Result>();
     const auto started = now();
 
-    auto feedback = std::make_shared<Pick::Feedback>();
     const auto report = [&](uint8_t phase, double fraction) {
+      auto feedback = std::make_shared<Pick::Feedback>();
       feedback->phase = phase;
       feedback->fraction_complete = fraction;
-      handle->publish_feedback(feedback);
+      report_feedback(handle, feedback);
     };
 
-    const auto fail = [&](const ResultCode & code) {
-      result->result = code;
+    const auto finish = [&](const ResultCode & outcome) {
+      result->result = outcome;
       result->duration = now() - started;
-      if (code.code == ResultCode::CANCELLED) {
-        handle->canceled(result);
-      } else {
-        handle->abort(result);
-      }
+      terminate(handle, result, outcome);
     };
+
+    apply_scaling(0.0, 0.0);
+    const double max_effort = get_parameter("gripper_max_effort_n").as_double();
 
     // Open before approaching. Arriving at the object with a closed gripper is a
     // collision, and the planner has no way to know the gripper's state.
     report(Pick::Feedback::PHASE_PLANNING, 0.0);
-    bool holding = false;
-    auto outcome = command_gripper(
-      gripper_max_width_, get_parameter("gripper_max_effort_n").as_double(), &holding);
-    if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+    auto gripper = command_gripper(travel_.max_width_m, max_effort, handle);
+    if (gripper.result.code != ResultCode::SUCCESS) {
+      finish(gripper.result);
+      return;
+    }
+
+    geometry_msgs::msg::PoseStamped grasp;
+    const auto resolved = to_planning_frame(goal->object_pose, &grasp);
+    if (resolved.code != ResultCode::SUCCESS) {
+      finish(resolved);
       return;
     }
 
     report(Pick::Feedback::PHASE_APPROACHING, 0.2);
-    bool adjusted = false;
-    const auto grasp = feasible_grasp(goal->object_pose, &adjusted);
-    if (adjusted) {
-      RCLCPP_INFO(
-        get_logger(),
-        "top-down grasp: yaw taken from the target's direction rather than the "
-        "request, because a 5-DOF arm cannot choose it freely");
-    }
-
     auto approach = grasp;
-    approach.pose = cite_skills::offset_along_tool_z(
-      grasp.pose, goal->approach_distance_m);
-    move_group_->setPoseTarget(approach, tip_link_);
-    outcome = plan_and_execute(handle);
+    approach.pose = cite_skills::offset_along_tool_z(grasp.pose, goal->approach_distance_m);
+    auto outcome = move_to_pose(approach, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+      finish(outcome);
       return;
     }
 
-    move_group_->setPoseTarget(grasp, tip_link_);
-    outcome = plan_and_execute(handle);
+    outcome = move_to_pose(grasp, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+      finish(outcome);
       return;
     }
     result->grasp_pose = current_pose();
 
     report(Pick::Feedback::PHASE_GRASPING, 0.6);
-    const double width = goal->grasp_width_m > 0.0 ? goal->grasp_width_m : 0.0;
-    outcome = command_gripper(
-      width, get_parameter("gripper_max_effort_n").as_double(), &holding);
-    if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+    const auto width = cite_skills::resolve_grasp_width(
+      goal->grasp_width_m, default_grasp_width_m_);
+    if (width.source == cite_skills::GraspWidthSource::Unknown) {
+      // Not silent. `grasp_width_m == 0` means "use the object type's default",
+      // and that default is L0 data this skill has not been given: no
+      // `default_grasp_width_m` is configured for this arm's end effector, and
+      // nothing here knows what a work-piece is. Closing against the effort
+      // limit is what a parallel gripper does with an unknown object, and it is
+      // said out loud rather than presented as a resolved width.
+      RCLCPP_WARN(
+        get_logger(),
+        "no grasp width for work-piece '%s': the goal left grasp_width_m at 0 and no "
+        "default_grasp_width_m is configured, so the gripper closes against its %.0f N "
+        "effort limit. The object type's default belongs in the L0 end-effector type "
+        "and has to be delivered by the bring-up plan.",
+        goal->workpiece_id.c_str(), max_effort);
+    }
+    gripper = command_gripper(width.width_m, max_effort, handle);
+    if (gripper.result.code != ResultCode::SUCCESS) {
+      finish(gripper.result);
       return;
     }
-    if (!holding) {
-      fail(make_result(
+    if (!gripper.holding) {
+      finish(make_result(
         ResultCode::EXECUTION_FAILED,
         "the gripper closed without stalling, so nothing was picked up"));
       return;
@@ -400,18 +767,15 @@ private:
     auto retreat = result->grasp_pose;
     retreat.pose = cite_skills::offset_along_world_z(
       result->grasp_pose.pose, goal->retreat_distance_m);
-    move_group_->setPoseTarget(retreat, tip_link_);
-    outcome = plan_and_execute(handle);
+    outcome = move_to_pose(retreat, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
       // Still holding: report it so L4 knows the work-piece's owner.
-      fail(outcome);
+      finish(outcome);
       return;
     }
 
     report(Pick::Feedback::PHASE_RETREATING, 1.0);
-    result->result = make_result(ResultCode::SUCCESS);
-    result->duration = now() - started;
-    handle->succeed(result);
+    finish(make_result(ResultCode::SUCCESS));
   }
 
   // ---------------------------------------------------------------------------
@@ -423,62 +787,60 @@ private:
     auto result = std::make_shared<Place::Result>();
     const auto started = now();
 
-    auto feedback = std::make_shared<Place::Feedback>();
     const auto report = [&](uint8_t phase, double fraction) {
+      auto feedback = std::make_shared<Place::Feedback>();
       feedback->phase = phase;
       feedback->fraction_complete = fraction;
-      handle->publish_feedback(feedback);
+      report_feedback(handle, feedback);
     };
 
-    const auto fail = [&](const ResultCode & code) {
-      result->result = code;
+    const auto finish = [&](const ResultCode & outcome) {
+      result->result = outcome;
       result->duration = now() - started;
-      if (code.code == ResultCode::CANCELLED) {
-        handle->canceled(result);
-      } else {
-        handle->abort(result);
-      }
+      terminate(handle, result, outcome);
     };
 
     // Miming a place with an empty gripper would leave the line believing a
     // work-piece arrived somewhere it never did — and the failure would surface
     // at the next station, which is much harder to attribute.
     if (goal->require_holding && !holding_) {
-      fail(make_result(
+      finish(make_result(
         ResultCode::PRECONDITION_FAILED,
         "asked to place, but the gripper is not holding anything"));
       return;
     }
 
+    apply_scaling(0.0, 0.0);
+    const double max_effort = get_parameter("gripper_max_effort_n").as_double();
+
     report(Place::Feedback::PHASE_PLANNING, 0.0);
-    bool adjusted = false;
-    const auto release = feasible_grasp(goal->target_pose, &adjusted);
+    geometry_msgs::msg::PoseStamped release;
+    const auto resolved = to_planning_frame(goal->target_pose, &release);
+    if (resolved.code != ResultCode::SUCCESS) {
+      finish(resolved);
+      return;
+    }
 
     auto approach = release;
-    approach.pose = cite_skills::offset_along_tool_z(
-      release.pose, goal->approach_distance_m);
-    move_group_->setPoseTarget(approach, tip_link_);
-    auto outcome = plan_and_execute(handle);
+    approach.pose = cite_skills::offset_along_tool_z(release.pose, goal->approach_distance_m);
+    auto outcome = move_to_pose(approach, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+      finish(outcome);
       return;
     }
 
     report(Place::Feedback::PHASE_APPROACHING, 0.4);
-    move_group_->setPoseTarget(release, tip_link_);
-    outcome = plan_and_execute(handle);
+    outcome = move_to_pose(release, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+      finish(outcome);
       return;
     }
     result->release_pose = current_pose();
 
     report(Place::Feedback::PHASE_RELEASING, 0.7);
-    bool holding = false;
-    outcome = command_gripper(
-      gripper_max_width_, get_parameter("gripper_max_effort_n").as_double(), &holding);
-    if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+    const auto gripper = command_gripper(travel_.max_width_m, max_effort, handle);
+    if (gripper.result.code != ResultCode::SUCCESS) {
+      finish(gripper.result);
       return;
     }
     holding_ = false;
@@ -487,169 +849,334 @@ private:
     auto retreat = result->release_pose;
     retreat.pose = cite_skills::offset_along_world_z(
       result->release_pose.pose, goal->retreat_distance_m);
-    move_group_->setPoseTarget(retreat, tip_link_);
-    outcome = plan_and_execute(handle);
+    outcome = move_to_pose(retreat, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
-      fail(outcome);
+      finish(outcome);
       return;
     }
 
     report(Place::Feedback::PHASE_RETREATING, 1.0);
-    result->result = make_result(ResultCode::SUCCESS);
-    result->duration = now() - started;
-    handle->succeed(result);
+    finish(make_result(ResultCode::SUCCESS));
   }
 
   // ---------------------------------------------------------------------------
-  // Shared helpers
+  // Motion
   // ---------------------------------------------------------------------------
-  /// Make a top-down grasp pose that a 5-DOF arm can actually reach.
-  ///
-  /// An xArm 5 has five joints, so it cannot achieve an arbitrary 6-DOF pose:
-  /// with the tool pointing straight down, the rotation ABOUT that axis is not
-  /// free — it is fixed by where the target is relative to the base. Asking for
-  /// a particular yaw over-constrains the problem, and the planner correctly
-  /// reports that no collision-free path exists, which reads as a reachability
-  /// problem rather than as a degrees-of-freedom one.
-  ///
-  /// So when the caller asks for a top-down grasp, the yaw is not taken from the
-  /// request. It is computed from the target's direction in the planning frame,
-  /// whose origin is the arm's own base. Choosing the grasp orientation is L3's
-  /// job — the L3 document assigns "grasp strategy and approach/retreat
-  /// behaviour" to this layer — so this is the right place for it, and a caller
-  /// asking for a non-top-down grasp is left exactly as it asked.
-  geometry_msgs::msg::PoseStamped feasible_grasp(
-    const geometry_msgs::msg::PoseStamped & requested, bool * adjusted)
+  using ProgressFn = std::function<void(double)>;
+
+  /// Resolve a requested pose into the frame the planner works in.
+  ResultCode to_planning_frame(
+    const geometry_msgs::msg::PoseStamped & requested,
+    geometry_msgs::msg::PoseStamped * resolved) const
   {
-    *adjusted = false;
-    geometry_msgs::msg::PoseStamped in_planning_frame;
     try {
-      in_planning_frame = tf_buffer_->transform(
-        requested, move_group_->getPlanningFrame(), tf2::durationFromSec(5.0));
+      *resolved = tf_buffer_->transform(
+        requested, move_group_->getPlanningFrame(), tf2::durationFromSec(tf_timeout_s_));
     } catch (const std::exception & error) {
-      RCLCPP_WARN(
-        get_logger(), "could not transform the grasp pose into '%s': %s",
-        move_group_->getPlanningFrame().c_str(), error.what());
-      return requested;
-    }
-
-    // Is the requested tool axis pointing (roughly) down?
-    tf2::Quaternion requested_q(
-      in_planning_frame.pose.orientation.x, in_planning_frame.pose.orientation.y,
-      in_planning_frame.pose.orientation.z, in_planning_frame.pose.orientation.w);
-    requested_q.normalize();
-    const tf2::Matrix3x3 rotation(requested_q);
-    const tf2::Vector3 tool_z(rotation[0][2], rotation[1][2], rotation[2][2]);
-    constexpr double kDownTolerance = -0.9;  // cos(~155 deg): comfortably downward
-    if (tool_z.z() > kDownTolerance) {
-      return in_planning_frame;
-    }
-
-    const double yaw = std::atan2(
-      in_planning_frame.pose.position.y, in_planning_frame.pose.position.x);
-    tf2::Quaternion feasible;
-    // Roll by pi to point the tool down, then yaw to face the target radially.
-    feasible.setRPY(M_PI, 0.0, yaw);
-    feasible.normalize();
-    in_planning_frame.pose.orientation = tf2::toMsg(feasible);
-    *adjusted = true;
-    return in_planning_frame;
-  }
-
-  template <typename Handle>
-  ResultCode plan_and_execute(const Handle & handle)
-  {
-    MoveGroupInterface::Plan plan;
-    const auto planned = move_group_->plan(plan);
-    if (planned != moveit::core::MoveItErrorCode::SUCCESS) {
       return make_result(
-        ResultCode::PLANNING_FAILED,
-        "no collision-free path was found to the requested pose");
-    }
-
-    if (handle->is_canceling()) {
-      return make_result(ResultCode::CANCELLED, "cancelled before execution began");
-    }
-
-    const auto executed = move_group_->execute(plan);
-    if (handle->is_canceling()) {
-      return make_result(ResultCode::CANCELLED, "cancelled during execution");
-    }
-    if (executed != moveit::core::MoveItErrorCode::SUCCESS) {
-      return make_result(
-        ResultCode::EXECUTION_FAILED,
-        "the controller did not complete the planned trajectory");
+        ResultCode::PRECONDITION_FAILED,
+        "the target is in frame '" + requested.header.frame_id +
+          "', which TF could not resolve into the planning frame '" +
+          move_group_->getPlanningFrame() + "': " + error.what());
     }
     return make_result(ResultCode::SUCCESS);
   }
 
-  /// Task-space opening in metres to the gripper's own command units.
+  /// Move the tool to a pose (ADR-0026).
   ///
-  /// Linear across the stroke. That is an approximation for a linkage gripper —
-  /// the true relation is not linear — but it is a stated approximation with the
-  /// numbers in the model, rather than a unit confusion in the code.
-  double gripper_position_for(double width_m) const
+  /// The pose is never handed to the planner as a goal. IK is solved on the
+  /// exact pose and the planner is given the joint configuration that came out,
+  /// because a pose goal is satisfied by drawing random poses from inside its
+  /// tolerance, and on this arm almost every draw tilts the tool out of the
+  /// plane its three parallel pitch joints live in and has no IK solution at all.
+  template <typename Handle>
+  ResultCode move_to_pose(
+    const geometry_msgs::msg::PoseStamped & target, const Handle & handle,
+    const ProgressFn & on_progress)
   {
-    const double clamped = std::max(0.0, std::min(gripper_max_width_, width_m));
-    const double fraction = clamped / gripper_max_width_;
-    return gripper_closed_position_ +
-           (gripper_open_position_ - gripper_closed_position_) * fraction;
-  }
-
-  ResultCode command_gripper(double width_m, double max_effort_n, bool * holding)
-  {
-    *holding = false;
-    if (!gripper_client_) {
-      return make_result(
-        ResultCode::NOT_IMPLEMENTED, "this arm has no gripper action configured");
-    }
-    if (!gripper_client_->wait_for_action_server(std::chrono::seconds(10))) {
+    const auto state = move_group_->getCurrentState(current_state_timeout_s_);
+    if (!state) {
       return make_result(
         ResultCode::PRECONDITION_FAILED,
-        "the gripper controller's action server is not available");
+        "the arm's joint state has not arrived, so there is no seed for IK and no start "
+        "state to plan from");
+    }
+    const moveit::core::JointModelGroup * group = state->getJointModelGroup(planning_group_);
+    if (group == nullptr) {
+      return make_result(
+        ResultCode::PRECONDITION_FAILED,
+        "the robot model has no planning group '" + planning_group_ + "'");
     }
 
-    GripperCommand::Goal goal;
-    goal.command.position = gripper_position_for(width_m);
-    goal.command.max_effort = max_effort_n;
+    moveit::core::RobotState solution(*state);
+    MoveGroupInterface::Plan plan;
+    cite_skills::PoseGoalAttempts attempts;
 
-    auto future = gripper_client_->async_send_goal(goal);
-    if (future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
-      return make_result(ResultCode::TIMEOUT, "the gripper never accepted the command");
-    }
-    auto handle = future.get();
-    if (!handle) {
-      return make_result(ResultCode::EXECUTION_FAILED, "the gripper rejected the command");
+    const auto failure = cite_skills::plan_to_pose(
+      ik_seeds_,
+      [&](int seed) {
+        // Seed 0 is where the arm stands, so the branch chosen is the one
+        // nearest the current configuration. The rest are random within the
+        // joint limits: a joint-space goal commits to one IK branch, and this is
+        // what recovers the choice among branches that a pose goal had.
+        if (seed == 0) {
+          solution = *state;
+        } else {
+          solution.setToRandomPositions(group);
+        }
+        // A zero timeout means the solver's own configured timeout, which comes
+        // from the generated kinematics.yaml.
+        return solution.setFromIK(group, target.pose, tip_link_, 0.0);
+      },
+      [&] {
+        if (!move_group_->setJointValueTarget(solution)) {
+          RCLCPP_WARN(
+            get_logger(),
+            "discarding an IK solution that falls outside the joint limits");
+          return false;
+        }
+        return move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+      },
+      [&] { return cancelled(handle); }, &attempts);
+
+    switch (failure) {
+      case cite_skills::PoseGoalFailure::None:
+        break;
+      case cite_skills::PoseGoalFailure::Cancelled:
+        return make_result(ResultCode::CANCELLED, "cancelled before execution began");
+      case cite_skills::PoseGoalFailure::NoIkSolution:
+        return make_result(
+          kUnreachable,
+          "this arm cannot reach the requested pose: inverse kinematics found no "
+          "solution from any of " + std::to_string(attempts.seeds_tried) +
+            " seeds. This is a reachability or degrees-of-freedom failure, not an "
+            "obstacle");
+      case cite_skills::PoseGoalFailure::NoPlan:
+        return make_result(
+          ResultCode::PLANNING_FAILED,
+          "inverse kinematics reached the requested pose (" +
+            std::to_string(attempts.branches_planned) +
+            " configuration(s) tried) but the planner found no path to any of them from "
+            "where the arm stands");
     }
 
-    auto result_future = gripper_client_->async_get_result(handle);
-    if (result_future.wait_for(std::chrono::seconds(20)) != std::future_status::ready) {
-      return make_result(ResultCode::TIMEOUT, "the gripper never reported a result");
-    }
-    const auto result = result_future.get();
+    return execute_plan(plan, handle, on_progress);
+  }
 
-    // `stalled` is what distinguishes holding something from closing on air.
-    // GripperActionController reports it; a controller that could not would make
-    // this skill unable to tell the two apart (ADR-0022).
-    *holding = result.result->stalled;
+  template <typename Handle>
+  ResultCode execute_plan(
+    const MoveGroupInterface::Plan & plan, const Handle & handle,
+    const ProgressFn & on_progress)
+  {
+    if (cancelled(handle)) {
+      return make_result(ResultCode::CANCELLED, "cancelled before execution began");
+    }
+
+    // Progress is reported from a second thread because `execute()` blocks until
+    // the trajectory finishes. The period is a publication RATE — nothing is
+    // sequenced by it, and the motion's completion is still an event (P4).
+    std::atomic<bool> running{true};
+    std::thread reporter;
+    if (on_progress) {
+      const auto & points = plan.trajectory.joint_trajectory.points;
+      const double total =
+        points.empty() ? 0.0 : rclcpp::Duration(points.back().time_from_start).seconds();
+      const auto started = now();
+      reporter = std::thread([this, &running, total, started, &on_progress] {
+        while (running.load()) {
+          const double elapsed = (now() - started).seconds();
+          on_progress(total > 0.0 ? std::min(1.0, elapsed / total) : 0.0);
+          std::this_thread::sleep_for(
+            std::chrono::duration_cast<std::chrono::milliseconds>(feedback_period_));
+        }
+      });
+    }
+
+    const auto executed = move_group_->execute(plan);
+    running.store(false);
+    if (reporter.joinable()) {
+      reporter.join();
+    }
+    if (on_progress) {
+      on_progress(1.0);
+    }
+
+    if (cancelled(handle)) {
+      return make_result(ResultCode::CANCELLED, "cancelled during execution");
+    }
+    if (executed != moveit::core::MoveItErrorCode::SUCCESS) {
+      // MoveIt's own code, carried through. "The controller did not complete the
+      // trajectory" covers a controller that refused the goal, one that timed
+      // out, and one that finished outside tolerance, and telling them apart
+      // from the text alone cost a whole investigation.
+      return make_result(
+        ResultCode::EXECUTION_FAILED,
+        "the controller did not complete the planned trajectory (MoveIt error code " +
+          std::to_string(executed.val) + ")");
+    }
     return make_result(ResultCode::SUCCESS);
   }
 
   void apply_scaling(double velocity, double acceleration)
   {
-    // Zero means "use the configured default", not "do not move". A goal that
-    // left these unset would otherwise command a stationary trajectory.
-    if (velocity > 0.0) {
-      move_group_->setMaxVelocityScalingFactor(velocity);
-    }
-    if (acceleration > 0.0) {
-      move_group_->setMaxAccelerationScalingFactor(acceleration);
-    }
+    // Both factors are set at the start of every goal, never left as the last
+    // goal's. They live on the long-lived MoveGroupInterface, so a goal that
+    // asked for 10% used to leave every later goal at 10% — motion speed as a
+    // function of goal history. Zero still means "the configured default", which
+    // is now what it actually gets.
+    move_group_->setMaxVelocityScalingFactor(
+      velocity > 0.0 ? velocity : default_velocity_scaling_);
+    move_group_->setMaxAccelerationScalingFactor(
+      acceleration > 0.0 ? acceleration : default_acceleration_scaling_);
   }
 
+  // ---------------------------------------------------------------------------
+  // Gripper
+  // ---------------------------------------------------------------------------
+  struct GripperOutcome
+  {
+    ResultCode result;
+    bool holding{false};
+    double reached_width_m{0.0};
+    double effort_n{0.0};
+  };
+
+  using GripperProgressFn = std::function<void(double, double)>;
+
+  template <typename Handle>
+  GripperOutcome command_gripper(
+    double width_m, double max_effort_n, const Handle & handle,
+    const GripperProgressFn & on_progress = {})
+  {
+    GripperOutcome outcome;
+    if (!gripper_client_) {
+      outcome.result = make_result(
+        ResultCode::NOT_IMPLEMENTED, "this arm has no gripper action configured");
+      return outcome;
+    }
+    if (!gripper_client_->wait_for_action_server(kGripperServerWait)) {
+      outcome.result = make_result(
+        ResultCode::PRECONDITION_FAILED,
+        "the gripper controller's action server is not available");
+      return outcome;
+    }
+
+    GripperCommand::Goal goal;
+    goal.command.position = cite_skills::gripper_position_for(width_m, travel_);
+    goal.command.max_effort = max_effort_n;
+
+    rclcpp_action::Client<GripperCommand>::SendGoalOptions options;
+    if (on_progress) {
+      const auto travel = travel_;
+      options.feedback_callback =
+        [on_progress, travel](
+          rclcpp_action::ClientGoalHandle<GripperCommand>::SharedPtr,
+          const std::shared_ptr<const GripperCommand::Feedback> feedback) {
+          on_progress(cite_skills::gripper_width_for(feedback->position, travel),
+                      feedback->effort);
+        };
+    }
+
+    auto future = gripper_client_->async_send_goal(goal, options);
+    if (future.wait_for(kGripperAcceptWait) != std::future_status::ready) {
+      outcome.result = make_result(
+        ResultCode::TIMEOUT, "the gripper never accepted the command");
+      return outcome;
+    }
+    auto gripper_handle = future.get();
+    if (!gripper_handle) {
+      outcome.result = make_result(
+        ResultCode::EXECUTION_FAILED, "the gripper rejected the command");
+      return outcome;
+    }
+
+    {
+      const std::lock_guard<std::mutex> lock(gripper_mutex_);
+      gripper_goal_ = gripper_handle;
+    }
+
+    auto result_future = gripper_client_->async_get_result(gripper_handle);
+    // Waited on in slices rather than in one block, so that a cancellation
+    // reaches the gripper rather than being noticed after it has finished. A
+    // Grasp that accepted a cancel and then ran to completion is a Grasp that
+    // cannot be cancelled at all.
+    const auto deadline = std::chrono::steady_clock::now() + kGripperResultWait;
+    bool requested_cancel = false;
+    std::future_status status = std::future_status::timeout;
+    while (true) {
+      status = result_future.wait_for(kCancelPollPeriod);
+      if (status == std::future_status::ready) {
+        break;
+      }
+      if (!requested_cancel && cancelled(handle)) {
+        gripper_client_->async_cancel_goal(gripper_handle);
+        requested_cancel = true;
+      }
+      if (std::chrono::steady_clock::now() >= deadline) {
+        break;
+      }
+    }
+
+    {
+      const std::lock_guard<std::mutex> lock(gripper_mutex_);
+      gripper_goal_.reset();
+    }
+
+    if (status != std::future_status::ready) {
+      outcome.result = make_result(
+        ResultCode::TIMEOUT, "the gripper never reported a result");
+      return outcome;
+    }
+
+    const auto wrapped = result_future.get();
+    if (wrapped.result) {
+      // `stalled` is what distinguishes holding something from closing on air.
+      // GripperActionController reports it; a controller that could not would
+      // make this skill unable to tell the two apart (ADR-0022).
+      outcome.holding = wrapped.result->stalled;
+      outcome.reached_width_m =
+        cite_skills::gripper_width_for(wrapped.result->position, travel_);
+      outcome.effort_n = wrapped.result->effort;
+    }
+
+    if (wrapped.code == rclcpp_action::ResultCode::CANCELED ||
+        wrapped.code == rclcpp_action::ResultCode::ABORTED) {
+      outcome.result = wrapped.code == rclcpp_action::ResultCode::CANCELED
+                         ? make_result(ResultCode::CANCELLED, "the gripper command was cancelled")
+                         : make_result(
+                             ResultCode::EXECUTION_FAILED,
+                             "the gripper controller aborted the command");
+      return outcome;
+    }
+
+    outcome.result = make_result(ResultCode::SUCCESS);
+    return outcome;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Where the tool is
+  // ---------------------------------------------------------------------------
   geometry_msgs::msg::PoseStamped current_pose()
   {
     return move_group_->getCurrentPose(tip_link_);
+  }
+
+  /// The tool's pose from TF, which — unlike MoveGroupInterface — may be read
+  /// while a motion is executing.
+  bool tool_pose(geometry_msgs::msg::PoseStamped * pose) const
+  {
+    try {
+      const auto transform = tf_buffer_->lookupTransform(
+        move_group_->getPlanningFrame(), tip_link_, tf2::TimePointZero);
+      pose->header = transform.header;
+      pose->pose.position.x = transform.transform.translation.x;
+      pose->pose.position.y = transform.transform.translation.y;
+      pose->pose.position.z = transform.transform.translation.z;
+      pose->pose.orientation = transform.transform.rotation;
+      return true;
+    } catch (const std::exception &) {
+      return false;
+    }
   }
 
   std::string asset_id_;
@@ -664,9 +1191,26 @@ private:
   //: owns ownership (ADR-0024); this exists only so Place can refuse to mime one.
   std::atomic<bool> holding_{false};
 
-  double gripper_open_position_{0.0};
-  double gripper_closed_position_{0.85};
-  double gripper_max_width_{0.085};
+  cite_skills::GripperTravel travel_;
+  double default_grasp_width_m_{0.0};
+
+  int ik_seeds_{8};
+  double current_state_timeout_s_{5.0};
+  double tf_timeout_s_{5.0};
+  std::chrono::duration<double> feedback_period_{0.1};
+  double default_velocity_scaling_{1.0};
+  double default_acceleration_scaling_{1.0};
+
+  //: One goal at a time, and cancellation addressed to the goal that owns the arm.
+  cite_skills::ExclusiveGoal<rclcpp_action::GoalUUID> gate_;
+  std::mutex worker_mutex_;
+  std::thread worker_;
+  std::atomic<bool> shutting_down_{false};
+
+  std::atomic<bool> cancel_requested_{false};
+
+  std::mutex gripper_mutex_;
+  rclcpp_action::ClientGoalHandle<GripperCommand>::SharedPtr gripper_goal_;
 
   std::shared_ptr<MoveGroupInterface> move_group_;
   rclcpp_action::Client<GripperCommand>::SharedPtr gripper_client_;
@@ -695,14 +1239,15 @@ int main(int argc, char ** argv)
   }
 
   // MoveGroupInterface talks to move_group over services, so this node must be
-  // spinning before it is constructed. A multi-threaded executor because each
-  // goal runs on its own thread and blocking the executor inside a callback is
-  // how this deadlocks under load.
+  // spinning before it is constructed. A multi-threaded executor because the
+  // goal thread waits on results the executor has to deliver, and blocking the
+  // executor inside a callback is how this deadlocks under load.
   rclcpp::executors::MultiThreadedExecutor executor;
   executor.add_node(node);
   std::thread spinner([&executor] { executor.spin(); });
 
   if (!node->activate(node)) {
+    node->shutdown();
     executor.cancel();
     spinner.join();
     rclcpp::shutdown();
@@ -710,6 +1255,10 @@ int main(int argc, char ** argv)
   }
 
   spinner.join();
+  // spin() returns on SIGINT, and a goal may still be inside plan(), execute()
+  // or a feedback publication at that moment. Stop the arm and join the goal
+  // thread before anything this node owns is destroyed.
+  node->shutdown();
   rclcpp::shutdown();
   return 0;
 }
