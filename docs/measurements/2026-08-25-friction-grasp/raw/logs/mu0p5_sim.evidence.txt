@@ -1,0 +1,46 @@
+[gz-1] [Err] [Physics.cc:1808] Attempting to create a mimic constraint for joint [arm_1_left_finger_joint] but the chosen physics engine does not support mimic constraints, so no constraint will be created.
+[gz-1] [Err] [SystemLoader.cc:92] Failed to load system plugin [libgazebo_mimic_joint_plugin.so] : Could not find shared library.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_001] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_002] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_003] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_004] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_005] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_006] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_007] of type [2] not found, so not removed.
+[gz-1] [Err] [UserCommands.cc:1120] Entity named [probe_part_mu0p5_008] of type [2] not found, so not removed.
+[gz-1] [Wrn] [grasp_attachment.cpp:151] [cite_grasp] watching 'arm_1_drive_joint' on model 'arm_1', attaching to 'arm_1_left_finger'
+[gz-1] [Wrn] [grasp_attachment.cpp:151] [cite_grasp] watching 'arm_2_drive_joint' on model 'arm_2', attaching to 'arm_2_left_finger'
+[gz-1] [Wrn] [grasp_attachment.cpp:151] [cite_grasp] watching 'arm_3_drive_joint' on model 'arm_3', attaching to 'arm_3_left_finger'
+[skill_server-26] [INFO] [1787678853.209043839] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787678861.097994218] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.9 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787678879.868217046] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787678903.305265210] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787678911.244556630] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.9 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787678929.836558458] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787678953.328168719] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787678961.276761209] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.8 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787678979.971989093] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679002.979060006] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679013.490023553] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.8 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787679032.905138006] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679056.473651086] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679064.613168632] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.9 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787679082.989171501] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679105.911394179] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679115.237592127] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.6 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787679134.202023345] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679157.498219591] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679165.353430970] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.8 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787679183.505169464] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679206.697422420] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-26] [INFO] [1787679214.486879840] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 49.7 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-26] [INFO] [1787679232.479803418] [cite.cell_a.arm_1.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[spawner-14] [INFO] [1787678809.728745916] [spawn_arm_1_stage0]: Configured and activated arm_1_joint_state_broadcaster
+[spawner-18] [INFO] [1787678812.111409834] [spawn_arm_1_stage1]: Configured and activated arm_1_gripper_controller
+[spawner-18] [INFO] [1787678812.499387668] [spawn_arm_1_stage1]: Configured and activated arm_1_joint_trajectory_controller
+[spawner-19] [INFO] [1787678813.517338668] [spawn_arm_2_stage0]: Configured and activated arm_2_joint_state_broadcaster
+[spawner-20] [INFO] [1787678814.176449543] [spawn_arm_2_stage1]: Configured and activated arm_2_gripper_controller
+[spawner-20] [INFO] [1787678814.232379793] [spawn_arm_2_stage1]: Configured and activated arm_2_joint_trajectory_controller
+[spawner-21] [INFO] [1787678814.856379835] [spawn_arm_3_stage0]: Configured and activated arm_3_joint_state_broadcaster
+[spawner-22] [INFO] [1787678815.811377336] [spawn_arm_3_stage1]: Configured and activated arm_3_gripper_controller
+[spawner-22] [INFO] [1787678815.869339794] [spawn_arm_3_stage1]: Configured and activated arm_3_joint_trajectory_controller
