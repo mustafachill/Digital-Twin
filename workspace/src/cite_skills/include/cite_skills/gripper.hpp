@@ -11,28 +11,68 @@
 namespace cite_skills
 {
 
-/// The gripper's travel and what opening it corresponds to. All three come from
-/// the end-effector type in the L0 model; nothing here invents one.
+/// The gripper's travel and the linkage that turns it into an opening. Every
+/// field comes from the end-effector type in the L0 model, delivered by the
+/// generated bring-up plan; nothing here invents one.
 struct GripperTravel
 {
   double open_position{0.0};
   double closed_position{0.85};
-  double max_width_m{0.085};
+
+  /// The four dimensions of the parallel linkage. See `gripper_width_for`.
+  double drive_pivot_y_m{0.035};
+  double finger_offset_y_m{0.035465};
+  double finger_offset_z_m{0.042039};
+  double pad_inset_m{0.026};
+
+  /// The gripper controller's own `goal_tolerance`, in drive-joint units. Not a
+  /// property of the mechanism but of how the controller decides a goal is done,
+  /// which `gripper_is_holding` has to account for.
+  double goal_tolerance{0.01};
 };
 
-/// A task-space opening in metres, in the gripper's own command units.
+/// What opening a reported drive position corresponds to, in metres.
 ///
-/// Linear across the stroke. That is an approximation for a linkage gripper —
-/// the true relation is not linear — but it is a stated approximation with the
-/// numbers in the model, rather than a unit confusion in the code.
+///     opening(q) = 2 * (drive_pivot_y - pad_inset
+///                       + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+///
+/// Exact, not a fit. The drive joint rotates the outer knuckle about +x and the
+/// finger joint mimics it about -x, so the two rotations cancel: the pad stays
+/// parallel to the tool axis and only translates, and its distance from the
+/// centreline is the rotated finger offset plus the drive pivot, less the pad's
+/// own inset. Doubled, because there are two jaws.
+///
+/// This replaced a linear interpolation across the stroke. That was not a
+/// harmless simplification: it read 85.00 mm fully open against a true 88.93 mm,
+/// and 45.00 mm at q=0.400 against a true 50.59 mm — an error the size of the
+/// entire clearance a 50 mm grasp works within, which is why the gripper spent
+/// Phase 1.C closing on air while every layer above reported success.
+///
+/// This is also what makes `Grasp.Result.reached_width_m` a measurement rather
+/// than the request echoed back — the two differ by the object's width whenever
+/// the gripper stalls on something, which is the case that matters.
+double gripper_width_for(double position, const GripperTravel & travel);
+
+/// The inverse: the drive position that opens the pads to `width_m`.
+///
+/// Clamped to the gripper's own travel, so a width it cannot reach becomes the
+/// nearest end of the stroke rather than a NaN out of `acos`.
 double gripper_position_for(double width_m, const GripperTravel & travel);
 
-/// The inverse: what opening a reported drive position corresponds to.
+/// The widest and narrowest the pads go, derived from the travel and linkage.
 ///
-/// This is what makes `Grasp.Result.reached_width_m` a measurement rather than
-/// the request echoed back — the two differ by exactly the object's width
-/// whenever the gripper stalls on something, which is the case that matters.
-double gripper_width_for(double position, const GripperTravel & travel);
+/// Derived rather than configured. A declared maximum would be the same fact in
+/// a second place, and when it was one it disagreed with the linkage.
+double gripper_max_width_m(const GripperTravel & travel);
+double gripper_min_width_m(const GripperTravel & travel);
+
+/// How much apparent width the controller's `goal_tolerance` is worth at
+/// `position`, in metres.
+///
+/// The opening is not linear in the drive angle, so the tolerance is worth a
+/// different number of millimetres at each point of the stroke; this evaluates it
+/// where the gripper actually stopped rather than assuming a constant.
+double gripper_width_tolerance_m(double position, const GripperTravel & travel);
 
 /// Where a commanded grasp width came from.
 enum class GraspWidthSource
@@ -60,13 +100,16 @@ GraspWidth resolve_grasp_width(double requested_m, double configured_default_m);
 
 /// What the gripper controller reported at the end of one close.
 ///
-/// `GripperCommand.Result` in task-space terms, with the width that was asked
-/// for kept alongside the width that came back — because neither number means
-/// anything on its own.
+/// `GripperCommand.Result` alongside the width that was asked for, because
+/// neither means anything on its own. `reached_position` is kept in the drive
+/// joint's own units exactly as the controller reported it, rather than as a
+/// width: the width is derived from it through `gripper_width_for`, and storing
+/// both would be one fact in two places, free to disagree after an edit to the
+/// linkage.
 struct GripperReport
 {
   double commanded_width_m{0.0};
-  double reached_width_m{0.0};
+  double reached_position{0.0};
   bool stalled{false};
   bool reached_goal{false};
 };
@@ -74,27 +117,50 @@ struct GripperReport
 /// Whether the gripper is holding something, judged from what it reported.
 ///
 /// This is the "real width check" ADR-0022 names as `Grasp`'s own work, and it
-/// is deliberately not `stalled` on its own. A stall says the joint stopped
-/// short of its command and then stopped moving; it does not say *why*. A
-/// gripper that jams, or one whose fingers foul each other, stalls just as
-/// truthfully as one holding a part, and `stalled` alone reports both as a
-/// successful grasp.
+/// is deliberately not `stalled` on its own. A stall says the joint stopped short
+/// of its command and then stopped moving; it does not say *why*. A gripper that
+/// jams, or one whose fingers foul each other, stalls just as truthfully as one
+/// holding a part.
 ///
-/// What distinguishes them is *where* it stopped. A closing command travels from
-/// open towards closed, so the only way to stall on the open side of the width
-/// that was commanded is for something to occupy the space between the pads. The
-/// part's own width is what holds the joint there. Stalling at or beyond the
-/// commanded width means nothing was in the way — the gripper closed on itself.
+/// Two independent signals have to agree, and each covers the other's blind spot.
 ///
-/// No tolerance term is needed, and adding one would be a second place to get a
-/// number wrong: the controller only reports a stall once the position error has
-/// exceeded its own `goal_tolerance`, so a stall already guarantees a margin.
-/// The one thing it does not tell us is the sign, and the sign is the answer.
+///   1. The goal was NOT reached. A gripper closing on nothing arrives where it
+///      was sent. One stopped by a part never gets there. This needs no threshold
+///      at all, which is exactly why it is here: it cannot be miscalibrated.
+///   2. The pads stopped WIDER than commanded, by more than the controller's own
+///      end-of-goal bias. A closing command travels from open towards closed, so
+///      stopping on the open side of the commanded width means something occupies
+///      the space between the pads.
+///
+/// ---------------------------------------------------------------------------
+/// DO NOT SIMPLIFY THE MARGIN AWAY. It is the whole point of this function.
+///
+/// The obvious predicate — `reached_width_m > commanded_width_m` — is TRUE IN
+/// FREE AIR, and this was shipped and measured before anyone noticed.
+/// `GripperActionController` ends a goal the instant `|error| < goal_tolerance`,
+/// so the position it reports is systematically short of the command, which
+/// through the map above reads as *phantom width* that was never there:
+///
+///     free air, commanded 45.0 mm   ->  reports 45.85 mm   (+0.85 mm, no part)
+///     50 mm part, commanded 45.0 mm ->  reports 50.00 mm   (+5.00 mm, a part)
+///
+/// A bare `>` calls both of those a grasp. The margin must therefore clear the
+/// bias, not merely be positive. `goal_tolerance` is worth about 1.05 mm of
+/// width here, so requiring twice it separates 0.85 mm from 5.00 mm with roughly
+/// 2.4x of headroom on each side.
+///
+/// The factor of two, and not some other number: one tolerance is the largest
+/// bias the controller can produce, so anything above it is real; doubling it
+/// buys margin against the position being sampled a cycle early. It is derived
+/// from the declared tolerance rather than written as a millimetre count, so a
+/// gripper configured with a looser tolerance widens this automatically instead
+/// of quietly reporting phantom grasps.
+/// ---------------------------------------------------------------------------
 ///
 /// Identical on hardware. It reads only fields `GripperCommand.Result` carries on
 /// both paths, and asks a question about the mechanism rather than about the
 /// simulator (P2).
-bool gripper_is_holding(const GripperReport & report);
+bool gripper_is_holding(const GripperReport & report, const GripperTravel & travel);
 
 }  // namespace cite_skills
 
