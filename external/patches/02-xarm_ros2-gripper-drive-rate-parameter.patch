@@ -1,0 +1,154 @@
+# Repo:     external/xarm_ros2
+# Upstream: https://github.com/xArm-Developer/xarm_ros2/issues/ (not yet filed)
+# Reason:   The gripper's drive-joint velocity bound is hardcoded at +/-3.14 rad/s
+#           in the vendor's <ros2_control> block, so a close rate declared in the
+#           L0 model cannot reach the running system at all. There is no other
+#           route: controller_manager 4.45.2's
+#           ResourceManager::import_joint_limiters passes null node interfaces, so
+#           no `joint_limits.<joint>.*` key in a controller configuration is ever
+#           read, and GripperActionController has no rate parameter of its own.
+#           Limits come from the description or they do not exist. This patch
+#           makes the bound a macro parameter, defaulted to the vendor's own
+#           `<limit velocity="2"/>`, so the model can state it once and have it
+#           enforced.
+#
+#           What goes wrong without it: the five follower joints are mimic joints
+#           driven by gz_ros2_control's proportional servo, whose entire
+#           correction authority is `follower velocity limit - leader rate`. At
+#           the vendor's 2 rad/s for both, that headroom is exactly zero. The
+#           servo saturates for the whole stroke, one follower runs to its 0.85
+#           limit and stays there, and a pad sits about 23 degrees out of
+#           position — measured, 3 of 3.
+#
+# Removal:  Delete when xarm_ros2 accepts a velocity bound for the gripper's
+#           drive joint from its callers, by any spelling. Check
+#           xarm_gripper.ros2_control.xacro on any version bump: if upstream has
+#           parameterised those two <param> elements, this patch will conflict
+#           rather than silently reintroduce a second bound.
+#
+# Scope on the hardware path (P2), because a vendor patch changes both paths.
+# This one is SIMULATION-PATH-ONLY BY CONSTRUCTION, and that is a fact about the
+# vendor's architecture rather than a shortcut taken here:
+#
+#   1. xarm_gripper_macro.xacro:13 emits the gripper's <ros2_control> block only
+#      when `ros2_control_plugin != 'uf_robot_hardware/UFRobotSystemHardware'`,
+#      so the real hardware plugin never instantiates the block this patch edits.
+#      The paths it does reach are gz_ros2_control/GazeboSimSystem (ours) and
+#      uf_robot_hardware/UFRobotFakeSystemHardware.
+#   2. On hardware the gripper is not a ros2_control joint at all.
+#      uf_robot_system_hardware.cpp:130-137 reads `add_gripper` as a hardware
+#      PARAMETER and hands it to the driver node; the gripper is then driven
+#      through the SDK's service layer, whose speed argument is motor r/min over
+#      1-5000 (xarm_driver.cpp:594, `arm->set_gripper_speed`, default 2000).
+#      UFACTORY publishes no conversion from r/min to jaw travel.
+#
+#   So the declared rate TRANSFERS to hardware as a value — it is one number in
+#   the L0 end-effector type, carried to both paths by the generated bring-up
+#   plan — while the ENFORCEMENT MECHANISM cannot: there is no ros2_control
+#   limiter in the physical gripper's path to enforce it. Per Definition of Done
+#   item 5 the hardware path is therefore explicitly UNIMPLEMENTED, not
+#   equivalent. Deriving an r/min argument from `max_drive_rate_rad_s` is Phase 2
+#   work and needs a conversion UFACTORY does not publish. Nothing in this
+#   repository should be read as claiming the two paths enforce this bound alike,
+#   because they do not.
+diff --git a/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro b/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
+index 3feeae4..9ee3d81 100644
+--- a/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
++++ b/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
+@@ -1,7 +1,8 @@
+ <?xml version="1.0"?>
+ <robot xmlns:xacro="http://ros.org/wiki/xacro">
+   <xacro:macro name="xarm_gripper_ros2_control" params="prefix:='' 
+-    ros2_control_plugin:='uf_robot_hardware/UFRobotFakeSystemHardware' ">
++    ros2_control_plugin:='uf_robot_hardware/UFRobotFakeSystemHardware'
++    max_drive_rate_rad_s:='2.0' ">
+     <ros2_control name="${prefix}XArmGripperSystem" type="system">
+       <hardware>
+         <plugin>${ros2_control_plugin}</plugin>
+@@ -9,9 +10,36 @@
+       <joint name="${prefix}drive_joint">
+         <command_interface name="position">
+         </command_interface>
++        <!-- The drive joint's velocity bound, and the ONLY route by which a
++             declared close rate reaches the running system.
++
++             `enforce_command_limits` clamps a POSITION command against the
++             joint's velocity limit, so this pair decides how fast the gripper
++             may close. There is no other way in: controller_manager 4.45.2's
++             ResourceManager::import_joint_limiters passes null node interfaces,
++             so no `joint_limits.<joint>.*` key in a controller configuration is
++             ever read, and GripperActionController has no rate parameter of its
++             own. Limits come from the description or they do not exist.
++
++             The default is the vendor's own figure — xarm_gripper.urdf.xacro
++             declares `<limit velocity="2"/>` on all six joints — rather than the
++             3.14 that used to be here, which sat above that limit and was
++             therefore inert. A caller that says nothing now gets what the URDF
++             already says instead of a looser number that reads as a decision.
++
++             WHY IT IS A PARAMETER. The five followers of this linkage are mimic
++             joints driven by gz_ros2_control's proportional servo, whose entire
++             correction authority is `follower velocity limit - leader rate`. At
++             the vendor's 2 rad/s for both, that headroom is exactly zero: the
++             servo saturates for the whole stroke and any perturbation is
++             uncorrectable, which was the measured defect — one follower ran to
++             its 0.85 limit and stayed there, leaving a pad about 23 degrees out
++             of position. Bounding the leader below the follower limit is what
++             gives the servo room to catch up. How far below is a fact about the
++             end effector, not about this file, so it is passed in. -->
+         <command_interface name="velocity">
+-          <param name="min">-3.14</param>
+-          <param name="max">3.14</param>
++          <param name="min">-${max_drive_rate_rad_s}</param>
++          <param name="max">${max_drive_rate_rad_s}</param>
+         </command_interface>
+         <state_interface name="position"/>
+         <state_interface name="velocity"/>
+diff --git a/xarm_description/urdf/gripper/xarm_gripper_macro.xacro b/xarm_description/urdf/gripper/xarm_gripper_macro.xacro
+index e5d8cf2..4e5259f 100644
+--- a/xarm_description/urdf/gripper/xarm_gripper_macro.xacro
++++ b/xarm_description/urdf/gripper/xarm_gripper_macro.xacro
+@@ -8,10 +8,18 @@
+   <xacro:include filename="$(find xarm_description)/urdf/gripper/xarm_gripper.gazebo.xacro" />
+ 
+   <xacro:macro name="xarm_gripper_macro" params="prefix:='' attach_to:='' ns:='xarm' attach_xyz:='0 0 0' attach_rpy:='0 0 0' 
+-    ros2_control_plugin:='uf_robot_hardware/UFRobotFakeSystemHardware' dof:=7 hard_interface:='PositionJointInterface' gripper_version:='G1'"> ">
+-
++    ros2_control_plugin:='uf_robot_hardware/UFRobotFakeSystemHardware' dof:=7 hard_interface:='PositionJointInterface' gripper_version:='G1'
++    max_drive_rate_rad_s:='2.0'"> ">
++
++    <!-- Note WHICH paths `max_drive_rate_rad_s` reaches. The condition below
++         emits the gripper's <ros2_control> block only when the plugin is not the
++         real hardware one, so the bound applies to the simulated and mock paths
++         and never to the physical gripper — which is not a ros2_control joint at
++         all. See the patch header for why that asymmetry is structural rather
++         than an omission. -->
+     <xacro:if value="${is_ros2 and ros2_control_plugin != 'uf_robot_hardware/UFRobotSystemHardware'}">
+-      <xacro:xarm_gripper_ros2_control prefix="${prefix}" ros2_control_plugin="${ros2_control_plugin}" />
++      <xacro:xarm_gripper_ros2_control prefix="${prefix}" ros2_control_plugin="${ros2_control_plugin}"
++        max_drive_rate_rad_s="${max_drive_rate_rad_s}" />
+     </xacro:if>
+ 
+     <xacro:xarm_gripper_urdf prefix="${prefix}" attach_to="${attach_to}" attach_xyz="${attach_xyz}" attach_rpy="${attach_rpy}" gripper_version="${gripper_version}" />
+diff --git a/xarm_description/urdf/xarm_device_macro.xacro b/xarm_description/urdf/xarm_device_macro.xacro
+index b8f87c8..56c91cf 100644
+--- a/xarm_description/urdf/xarm_device_macro.xacro
++++ b/xarm_description/urdf/xarm_device_macro.xacro
+@@ -42,6 +42,7 @@
+     mesh_suffix:='stl' 
+     kinematics_suffix:=''
+     gripper_version:='G1'
++    gripper_max_drive_rate_rad_s:='2.0'
+     "
+     > 
+ 
+@@ -256,7 +257,8 @@
+         <xacro:include filename="$(find xarm_description)/urdf/gripper/xarm_gripper_macro.xacro" />
+         <xacro:xarm_gripper_macro prefix="${prefix}" attach_to="${prefix}link_eef" 
+           ros2_control_plugin="${ros2_control_plugin}" dof="${dof}" hard_interface="${hard_interface}" 
+-          gripper_version="${gripper_version}" />
++          gripper_version="${gripper_version}"
++          max_drive_rate_rad_s="${gripper_max_drive_rate_rad_s}" />
+       </xacro:unless>
+     </xacro:if>
+ 

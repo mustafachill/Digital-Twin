@@ -173,6 +173,28 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
             bool(asset.instance.end_effector and asset.instance.end_effector.vendor_integrated)
         ).lower(),
     }
+
+    # How fast the fitted end effector's drive joint may travel. Resolved from the
+    # END-EFFECTOR TYPE rather than from the instance, because the rate is a fact
+    # about the hardware rather than about this arm's use of it — the instance
+    # only names which type is fitted.
+    #
+    # Absence raises rather than defaulting, for the reason in this function's
+    # docstring: handing the vendor macro its own default here would produce a
+    # description that loads, runs, and bounds the gripper at a number nobody
+    # chose. `vendor_integrated` above may legitimately resolve to "false" for an
+    # arm with no end effector, because that IS the answer; a drive rate has no
+    # such answer.
+    rate = _end_effector_drive_rate(asset, cell)
+    if rate is not None:
+        values["instance.end_effector.max_drive_rate_rad_s"] = fmt(rate)
+    elif binding == "instance.end_effector.max_drive_rate_rad_s":
+        raise BindingError(
+            f"type {asset.asset_type.id!r} binds a macro argument to {binding!r}, but "
+            f"asset {asset.id!r} fits no end effector whose type declares a grasp "
+            f"specification. Fit one, or remove the binding from the type."
+        )
+
     if binding not in values:
         raise BindingError(
             f"type {asset.asset_type.id!r} binds a macro argument to {binding!r}, "
@@ -180,6 +202,22 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
             f"{', '.join(sorted(values))}."
         )
     return values[binding]
+
+
+def _end_effector_drive_rate(asset: ResolvedAsset, cell: ResolvedCell) -> float | None:
+    """The fitted end effector's declared drive rate in rad/s, or None if unfitted.
+
+    None for an arm with no end effector, and for one whose end-effector type
+    declares no grasp specification — a real state rather than an error, and the
+    same shape `generate.bringup._grasp` uses for the same reason. The caller
+    decides whether the absence matters.
+    """
+    if asset.instance.end_effector is None:
+        return None
+    effector = cell.end_effector_type(asset.instance.end_effector.type)
+    if effector is None or effector.grasp is None:
+        return None
+    return float(effector.grasp.max_drive_rate_rad_s)
 
 
 def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:

@@ -385,7 +385,18 @@ class TestCellBringUp(unittest.TestCase):
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = [f"{arm}_joint{n}" for n in range(1, 6)]
         point = JointTrajectoryPoint()
-        point.positions = [0.4, -0.3, 0.2, 0.0, 0.3]
+        # Every one of these is inside its joint's declared limit, and joint3 is
+        # the one that has to be checked rather than assumed: its upper limit is
+        # 0.19198 rad, not something round. This asked for 0.200 — a goal the
+        # robot may not legally reach.
+        #
+        # It was silent until `enforce_command_limits` was turned on, because
+        # nothing was enforcing any declared limit anywhere in this cell. Now the
+        # limiter clamps it and logs a throttled ERROR for as long as the goal is
+        # held, which is the enforcement working. The defect is the goal: a
+        # bring-up scenario that proves the arm moves must ask for motion the arm
+        # is allowed to make, or it proves the limiter instead.
+        point.positions = [0.4, -0.3, 0.15, 0.0, 0.3]
         point.time_from_start.sec = 3
         goal.trajectory.points = [point]
 

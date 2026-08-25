@@ -28,6 +28,7 @@
       create_attach_link="false"
       dof="5"
       effort_control="false"
+      gripper_max_drive_rate_rad_s="1"
       hw_ns="arm_3"
       limited="false"
       load_gazebo_plugin="false"

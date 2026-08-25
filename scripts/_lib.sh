@@ -138,6 +138,116 @@ unpinned_manifest_entries() {
     ' "$manifest"
 }
 
+# -----------------------------------------------------------------------------
+# Local patches (ADR-0008) — one implementation, two callers.
+#
+# ./scripts/bootstrap APPLIES these; ./scripts/doctor AUDITS them. The two must
+# agree on what "present" means, and while bootstrap alone decided, it could not
+# tell the states apart at all: a failing `git apply --check` meant either
+# "already applied", which is success and the reason the check is there, or
+# "does not apply", which is a declared modification missing from every build.
+# Both printed the same info line and execution continued.
+#
+# That is not hypothetical. 01-xarm_ros2-gripper-mimic-joints.patch was committed
+# and then absent from every build and every measurement taken for hours, while
+# bootstrap reported "already applied or does not apply — skipped" each time and
+# nothing else in the repository looked at all. The four states below exist so
+# that success and total failure can never again print the same sentence.
+# -----------------------------------------------------------------------------
+
+# declared_patches [dir] — every patch file, in the order bootstrap applies them.
+declared_patches() {
+    local dir="${1:-${REPO_ROOT}/external/patches}"
+    [ -d "$dir" ] || return 0
+    find "$dir" -maxdepth 1 -type f -name '*.patch' 2>/dev/null | sort
+}
+
+# patch_target_repo <patch-file> — the `# Repo:` header, or empty if absent.
+#
+# The header is what binds a patch to a checkout. A patch without one can never
+# be applied to anything, so both callers treat empty as a defect in the patch
+# rather than as a reason to move on.
+patch_target_repo() {
+    sed -n 's/^# Repo:[[:space:]]*//p' "$1" | head -1
+}
+
+# patch_state <patch-file> <target-dir>
+#
+# Prints exactly one word. The point of the function is that these are five
+# different words rather than one:
+#
+#   applied     the change is in the checkout. Re-applying it would fail, so
+#               bootstrap skips it — this is what makes bootstrap idempotent,
+#               and it is a PASS, not a "could not tell".
+#   pending     it applies cleanly and is not yet in the checkout.
+#   conflict    it neither applies nor is present. A declared modification that
+#               cannot reach the build: fatal, never an info line. The usual
+#               cause is a version bump that moved the code the patch edits.
+#   no-target   the target directory does not exist — external source has not
+#               been imported here yet.
+#   empty       the target directory exists and is empty. Distinct from
+#               no-target on purpose: this is the signature of an import that
+#               failed part-way, which is precisely what a broken worktree
+#               produced, and it is the state that used to read as "skipped".
+patch_state() {
+    local patch="$1" target="$2"
+    [ -d "$target" ] || { printf 'no-target'; return 0; }
+    [ -n "$(ls -A "$target" 2>/dev/null)" ] || { printf 'empty'; return 0; }
+    # Reverse-check first. An applied patch fails the forward check, so asking
+    # the forward question alone is what conflated success with failure.
+    if git -C "$target" apply --reverse --check "$patch" >/dev/null 2>&1; then
+        printf 'applied'
+    elif git -C "$target" apply --check "$patch" >/dev/null 2>&1; then
+        printf 'pending'
+    else
+        printf 'conflict'
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# git_without_enclosing_repo <command...>
+#
+# Runs <command> with git's repository discovery stopped at REPO_ROOT.
+#
+# THE DEFECT THIS EXISTS FOR. A git worktree's `.git` is a FILE holding an
+# absolute path to the real gitdir, which lives inside the main checkout —
+# outside the directory docker-compose bind-mounts as /workspace. Inside the
+# container that path does not exist, so git's upward search finds the pointer,
+# fails to open what it names, and aborts *every* git command run anywhere under
+# /workspace with
+#
+#     fatal: not a git repository: /Users/.../.git/worktrees/<name>
+#
+# `vcs import` hits this in its ref-type probe. It reports the failure, but it
+# has already created workspace/src/external/xarm_ros2, so what the build sees is
+# an empty directory rather than a missing one. Bootstrap then found no source to
+# patch and said "skipped". Three agents independently worked around this by
+# cloning the pinned SHA on the host; a workaround everybody reinvents is a
+# defect, not a technique.
+#
+# WHY THIS IS THE FIX AND NOT A DODGE. The import does not need the enclosing
+# repository. It clones fresh repositories into workspace/src, and its only
+# interest in an outer repository is an accident of git's upward search.
+# GIT_CEILING_DIRECTORIES is git's own mechanism for bounding that search, and it
+# is applied unconditionally rather than only in worktrees: a branch that fires
+# on one machine's directory layout and nowhere else is a branch nobody tests.
+#
+# Scoped to the one command and to the search *above* REPO_ROOT, so nothing below
+# it changes — `git -C <clone> apply` still finds the clone's own .git at once.
+# -----------------------------------------------------------------------------
+git_without_enclosing_repo() {
+    GIT_CEILING_DIRECTORIES="${REPO_ROOT}" "$@"
+}
+
+# repo_git_readable — can git open the repository that contains REPO_ROOT?
+#
+# False in a worktree seen from inside the container, per the block above. Any
+# check that needs repository metadata has to ask this first, or it reports the
+# absence of an answer as a clean result.
+repo_git_readable() {
+    git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1
+}
+
 host_os() {
     case "$(uname -s)" in
         Linux)  echo linux ;;
