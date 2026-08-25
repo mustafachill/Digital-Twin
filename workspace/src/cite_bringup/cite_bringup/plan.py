@@ -63,6 +63,9 @@ class ControllerManager:
     moveit: MoveItConfig | None
     trajectory_action: str | None
     gripper_action: str | None
+    gripper_open_position: float
+    gripper_closed_position: float
+    gripper_max_width_m: float
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Controllers grouped by stage, in ascending order.
@@ -161,6 +164,9 @@ def load(path: Path) -> Plan:
             moveit=_moveit(entry.get("moveit")),
             trajectory_action=entry.get("trajectory_action"),
             gripper_action=entry.get("gripper_action"),
+            gripper_open_position=float(entry.get("gripper_open_position", 0.0)),
+            gripper_closed_position=float(entry.get("gripper_closed_position", 0.0)),
+            gripper_max_width_m=float(entry.get("gripper_max_width_m", 0.0)),
         )
         for entry in plan.get("controller_managers") or []
     )

@@ -212,6 +212,18 @@ class GraspSpec(Strict):
     #: repeatedly while the gripper rests near it.
     closed_threshold_rad: Annotated[float, Field(gt=0.0)] = 0.30
     open_threshold_rad: Annotated[float, Field(ge=0.0)] = 0.15
+    #: The drive joint's own units at each end of its travel, and the opening
+    #: those correspond to.
+    #:
+    #: `GripperCommand.position` is passed straight through to the joint, so for
+    #: this gripper it is an ANGLE, not a width. A skill that sent metres would
+    #: command a nearly-closed gripper when it meant fully open — and nothing
+    #: would report it, because 0.085 is a perfectly valid angle. Keeping the
+    #: mapping here lets the Grasp action stay in task terms (ADR-0022) while the
+    #: robot-specific numbers stay in the model.
+    open_position: float = 0.0
+    closed_position: float = 0.85
+    max_width_m: Annotated[float, Field(gt=0.0)] = 0.085
 
 
 class PlanningSpec(Strict):

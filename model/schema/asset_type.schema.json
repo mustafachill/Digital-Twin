@@ -411,6 +411,11 @@
           "title": "Attach Link Suffix",
           "type": "string"
         },
+        "closed_position": {
+          "default": 0.85,
+          "title": "Closed Position",
+          "type": "number"
+        },
         "closed_threshold_rad": {
           "default": 0.3,
           "exclusiveMinimum": 0.0,
@@ -420,6 +425,17 @@
         "drive_joint_suffix": {
           "title": "Drive Joint Suffix",
           "type": "string"
+        },
+        "max_width_m": {
+          "default": 0.085,
+          "exclusiveMinimum": 0.0,
+          "title": "Max Width M",
+          "type": "number"
+        },
+        "open_position": {
+          "default": 0.0,
+          "title": "Open Position",
+          "type": "number"
         },
         "open_threshold_rad": {
           "default": 0.15,

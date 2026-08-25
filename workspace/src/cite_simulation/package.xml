@@ -21,6 +21,7 @@
   <depend>gz_plugin_vendor</depend>
   <depend>gz_transport_vendor</depend>
   <depend>gz_math_vendor</depend>
+  <depend>gz_msgs_vendor</depend>
   <depend>cite_interfaces</depend>
 
   <test_depend>ament_lint_auto</test_depend>

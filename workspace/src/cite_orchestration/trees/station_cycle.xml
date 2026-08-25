@@ -10,9 +10,9 @@
      is an L3 skill called as a ROS 2 action — that separation is what lets an
      arm be swapped without touching orchestration (P9).
 
-     Place is deliberately absent: the skill server implements MoveTo, Grasp and
-     Pick today, and a tree calling an action nobody serves would fail at run
-     time rather than at review. It arrives with the rest of the line in 1.D. -->
+     The cycle is pick-then-place, which is one station's whole contribution to
+     the line. Transfer — the two-party handoff — is L4's protocol and arrives
+     with the second station (ADR-0024). -->
 <root BTCPP_format="4" main_tree_to_execute="StationCycle">
 
   <BehaviorTree ID="StationCycle">
@@ -21,6 +21,7 @@
       <Sequence name="nominal">
         <MoveToHome asset="{asset}" />
         <PickAt     asset="{asset}" frame="{pick_frame}" />
+        <PlaceAt    asset="{asset}" frame="{place_frame}" />
         <MoveToHome asset="{asset}" />
       </Sequence>
 

@@ -39,6 +39,8 @@
 #include <gz/sim/components/JointPosition.hh>
 #include <gz/sim/components/Name.hh>
 #include <gz/sim/components/ParentEntity.hh>
+#include <gz/sim/components/CanonicalLink.hh>
+#include <gz/sim/components/Link.hh>
 #include <gz/transport/Node.hh>
 
 namespace cite_simulation
@@ -181,12 +183,44 @@ private:
     return gz::sim::topLevelModel(entity, ecm);
   }
 
+  /// The link a detachable joint can attach to: the model's canonical link.
+  ///
+  /// DetachableJointInfo takes two LINK entities, not models. Passing a model
+  /// entity produces a joint the physics engine silently never creates, so the
+  /// gripper closes, reports a stall, and the object stays exactly where it was.
+  static gz::sim::Entity CanonicalLinkOf(
+    const gz::sim::EntityComponentManager & ecm, gz::sim::Entity model)
+  {
+    gz::sim::Entity link = gz::sim::kNullEntity;
+    ecm.Each<gz::sim::components::CanonicalLink, gz::sim::components::ParentEntity>(
+      [&](const gz::sim::Entity & entity, const gz::sim::components::CanonicalLink *,
+          const gz::sim::components::ParentEntity * parent) -> bool {
+        if (parent->Data() == model) {
+          link = entity;
+          return false;
+        }
+        return true;
+      });
+    return link;
+  }
+
   void Attach(gz::sim::EntityComponentManager & ecm, gz::sim::Entity target)
   {
-    const auto * name = ecm.Component<gz::sim::components::Name>(target);
+    const auto child_link = CanonicalLinkOf(ecm, target);
+    if (child_link == gz::sim::kNullEntity) {
+      gzerr << "[cite_grasp] graspable model has no canonical link; not attaching\n";
+      return;
+    }
+
+    // The component goes on a NEW entity rather than on either link. That is how
+    // the physics system finds it — the same shape gz-sim's own DetachableJoint
+    // system uses — and it gives detach something to remove.
+    joint_entity_ = ecm.CreateEntity();
     ecm.CreateComponent(
-      target, gz::sim::components::DetachableJoint(
-                {attach_link_entity_, target, "fixed"}));
+      joint_entity_,
+      gz::sim::components::DetachableJoint({attach_link_entity_, child_link, "fixed"}));
+
+    const auto * name = ecm.Component<gz::sim::components::Name>(target);
     attached_ = target;
     gzmsg << "[cite_grasp] attached '" << (name != nullptr ? name->Data() : "?")
           << "'\n";
@@ -194,7 +228,10 @@ private:
 
   void Detach(gz::sim::EntityComponentManager & ecm)
   {
-    ecm.RemoveComponent<gz::sim::components::DetachableJoint>(attached_);
+    if (joint_entity_ != gz::sim::kNullEntity) {
+      ecm.RequestRemoveEntity(joint_entity_);
+      joint_entity_ = gz::sim::kNullEntity;
+    }
     gzmsg << "[cite_grasp] released\n";
     attached_ = gz::sim::kNullEntity;
   }
@@ -203,6 +240,7 @@ private:
   gz::sim::Entity attach_link_entity_{gz::sim::kNullEntity};
   gz::sim::Entity drive_joint_entity_{gz::sim::kNullEntity};
   gz::sim::Entity attached_{gz::sim::kNullEntity};
+  gz::sim::Entity joint_entity_{gz::sim::kNullEntity};
 
   std::string attach_link_;
   std::string drive_joint_;

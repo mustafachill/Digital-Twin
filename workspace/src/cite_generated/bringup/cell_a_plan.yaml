@@ -37,6 +37,13 @@ plan:
       parameters: package://cite_generated/control/cell_a_arm_1_controllers.yaml
       trajectory_action: /cite/cell_a/arm_1/arm_1_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_1/arm_1_gripper_controller/gripper_cmd
+      # The gripper's drive joint travels between these two values in its OWN
+      # units, and that stroke is max_width_m between the pads. The skill server
+      # maps a task-space width onto it; without the mapping a width in metres
+      # would be commanded as an angle.
+      gripper_open_position: 0.0
+      gripper_closed_position: 0.85
+      gripper_max_width_m: 0.085
       controllers:
         - {name: arm_1_joint_state_broadcaster, stage: 0}
         - {name: arm_1_gripper_controller, stage: 1}
@@ -70,6 +77,13 @@ plan:
       parameters: package://cite_generated/control/cell_a_arm_2_controllers.yaml
       trajectory_action: /cite/cell_a/arm_2/arm_2_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_2/arm_2_gripper_controller/gripper_cmd
+      # The gripper's drive joint travels between these two values in its OWN
+      # units, and that stroke is max_width_m between the pads. The skill server
+      # maps a task-space width onto it; without the mapping a width in metres
+      # would be commanded as an angle.
+      gripper_open_position: 0.0
+      gripper_closed_position: 0.85
+      gripper_max_width_m: 0.085
       controllers:
         - {name: arm_2_joint_state_broadcaster, stage: 0}
         - {name: arm_2_gripper_controller, stage: 1}
@@ -103,6 +117,13 @@ plan:
       parameters: package://cite_generated/control/cell_a_arm_3_controllers.yaml
       trajectory_action: /cite/cell_a/arm_3/arm_3_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_a/arm_3/arm_3_gripper_controller/gripper_cmd
+      # The gripper's drive joint travels between these two values in its OWN
+      # units, and that stroke is max_width_m between the pads. The skill server
+      # maps a task-space width onto it; without the mapping a width in metres
+      # would be commanded as an angle.
+      gripper_open_position: 0.0
+      gripper_closed_position: 0.85
+      gripper_max_width_m: 0.085
       controllers:
         - {name: arm_3_joint_state_broadcaster, stage: 0}
         - {name: arm_3_gripper_controller, stage: 1}

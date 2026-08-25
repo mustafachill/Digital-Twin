@@ -103,6 +103,18 @@ edit inside the checked-out dependency.
 - A stall is reported, not interpreted. Deciding whether a stall means "holding the object"
   or "closed on nothing" is `Grasp`'s job and needs a real width check, which is a genuine
   piece of Phase 1.C work rather than a free consequence.
+- **`GripperCommand.position` is in the joint's own units, not metres.** The controller
+  passes it straight through, and this gripper's `drive_joint` is *revolute*: 0 rad fully
+  open, 0.85 rad fully closed. A skill sending a width in metres would therefore command an
+  angle — `0.085` reads as nearly-open when it was meant as 85 mm — and nothing anywhere
+  reports it, because 0.085 is a perfectly valid joint position. Found on 2026-08-24, with
+  the visible symptom being a gripper that closed on nothing and a `Pick` that failed at the
+  stall check.
+  The `Grasp` action stays in task space, as this ADR intends; the mapping from a width to
+  the joint's units is declared in the L0 end-effector type and applied in the skill server.
+  It is linear across the stroke, which is an approximation for a linkage gripper — but a
+  stated approximation with its numbers in the model, rather than a unit confusion buried in
+  code.
 
 ### What we will have to revisit
 When a non-parallel end-effector arrives — the vacuum gripper the charter names as

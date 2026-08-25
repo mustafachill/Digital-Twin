@@ -60,8 +60,14 @@ not a control path** — which:
    when** both pads are in contact with the same graspable model **and** the gripper's
    `drive_joint` is commanded closed beyond a threshold.
 3. Detaches when the gripper is commanded open beyond a threshold.
-4. Publishes its attach/detach transitions as typed events, so a scenario can assert on
-   them rather than inferring from pose.
+4. Logs its attach and detach transitions.
+
+   **Not** typed ROS events, as an earlier draft of this record said it would. Nothing
+   consumes them yet, and the scenario asserts on something stronger: it reads the
+   work-piece's pose from the simulator and requires that it actually left the table. A
+   component reporting success proves only that the component thinks so. A typed event
+   belongs here the day L4 needs to react to a grasp it did not command — and not before,
+   because an interface with no consumer gets the wrong shape.
 
 **The critical property, stated so it is not eroded later: nothing above `ros2_control`
 knows this plugin exists.** The `Grasp` skill commands `GripperCommand` on
@@ -99,6 +105,14 @@ hardcoded in the plugin. The plugin is mechanism; which things exist is data (P5
 - Two mechanisms now exist for object contact — real friction for everything else,
   attachment for grasping — and someone will eventually be confused about which is acting.
   The plugin's events are what disambiguate it.
+- **The attachment link cannot be the tool centre point.** Converting URDF to SDF lumps
+  every link joined by a fixed joint into its parent, so `link_base`, `link_eef`,
+  `xarm_gripper_base_link` and `link_tcp` do not exist in the spawned model at all — only
+  links moved by a real joint survive. The plugin therefore attaches to a finger. Naming a
+  lumped link is a silent failure: the plugin logs "model has no link" once at start-up and
+  then never grasps anything, while the gripper still closes and still reports a stall.
+  Found on 2026-08-24, and the reason the link is declared in the model rather than assumed
+  by the plugin.
 
 ### What we will have to revisit
 When Phase 2 compares simulated and physical grasping under `VALIDATED` mode, this plugin

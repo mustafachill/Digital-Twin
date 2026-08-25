@@ -46,6 +46,13 @@ asset_type:
     drive_joint_suffix: drive_joint
     closed_threshold_rad: 0.3
     open_threshold_rad: 0.15
+    # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed), and
+    # that stroke is about 85 mm between the pads. GripperCommand.position is
+    # passed straight to the joint, so a skill sending metres would be sending
+    # radians — and 0.085 is a valid angle, so nothing would report the mistake.
+    open_position: 0.0
+    closed_position: 0.85
+    max_width_m: 0.085
 
   controllers:
     - suffix: gripper_controller

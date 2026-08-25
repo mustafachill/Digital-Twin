@@ -415,6 +415,9 @@ def _skills(plan: Plan) -> list:
                         "planning_group": manager.moveit.group,
                         "tip_link": manager.moveit.tip_link,
                         "gripper_action": manager.gripper_action or "",
+                        "gripper_open_position": manager.gripper_open_position,
+                        "gripper_closed_position": manager.gripper_closed_position,
+                        "gripper_max_width_m": manager.gripper_max_width_m,
                         "home_rad": list(manager.moveit.home_rad),
                         "use_sim_time": True,
                     }

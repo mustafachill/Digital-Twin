@@ -44,6 +44,9 @@ class _ManagerView:
     home_rad: tuple[float, ...]
     trajectory_action: str | None
     gripper_action: str | None
+    gripper_open_position: float | None
+    gripper_closed_position: float | None
+    gripper_max_width_m: float | None
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,16 @@ def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
         return None
     suffix = planning.tip_link_suffix if which == "tip" else kinematics.base_link_suffix
     return ids.link(asset.id, suffix)
+
+
+def _grasp(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | None:
+    """One value from the end effector's grasp specification, or None."""
+    if asset.instance.end_effector is None:
+        return None
+    effector = cell.end_effector_type(asset.instance.end_effector.type)
+    if effector is None or effector.grasp is None:
+        return None
+    return float(getattr(effector.grasp, field))
 
 
 def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
@@ -137,6 +150,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             home_rad=_home(asset),
             trajectory_action=_controller_action(asset, "joint_trajectory_controller"),
             gripper_action=_controller_action(asset, "gripper_controller"),
+            gripper_open_position=_grasp(cell, asset, "open_position"),
+            gripper_closed_position=_grasp(cell, asset, "closed_position"),
+            gripper_max_width_m=_grasp(cell, asset, "max_width_m"),
         )
         for asset in cell.assets
         if asset.controllers

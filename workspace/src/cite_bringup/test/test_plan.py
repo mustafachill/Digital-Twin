@@ -77,6 +77,9 @@ def test_stage_grouping_is_deterministic() -> None:
         moveit=None,
         trajectory_action=None,
         gripper_action=None,
+        gripper_open_position=0.0,
+        gripper_closed_position=0.85,
+        gripper_max_width_m=0.085,
     )
     assert manager.stages() == [(0, ("jsb",)), (1, ("a", "b"))]
 

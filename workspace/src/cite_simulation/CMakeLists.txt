@@ -13,6 +13,11 @@ find_package(gz-plugin REQUIRED)
 find_package(gz_math_vendor REQUIRED)
 find_package(gz-math REQUIRED)
 
+find_package(gz_transport_vendor REQUIRED)
+find_package(gz-transport REQUIRED)
+find_package(gz_msgs_vendor REQUIRED)
+find_package(gz-msgs REQUIRED)
+
 add_library(cite_grasp_attachment SHARED src/grasp_attachment.cpp)
 target_include_directories(cite_grasp_attachment PRIVATE include)
 target_link_libraries(cite_grasp_attachment
@@ -21,7 +26,17 @@ target_link_libraries(cite_grasp_attachment
   gz-math::core
 )
 
-install(TARGETS cite_grasp_attachment
+add_library(cite_conveyor SHARED src/conveyor.cpp)
+target_include_directories(cite_conveyor PRIVATE include)
+target_link_libraries(cite_conveyor
+  gz-sim::core
+  gz-plugin::register
+  gz-math::core
+  gz-transport::core
+  gz-msgs::core
+)
+
+install(TARGETS cite_grasp_attachment cite_conveyor
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin

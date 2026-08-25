@@ -15,6 +15,7 @@ sequence would be flaky and would be deleted by whoever is on call.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -128,27 +129,36 @@ class TestPickAndPlace(unittest.TestCase):
         """Ask the simulator where the work-piece is.
 
         Read from Gazebo rather than from anything the system under test
-        publishes: a component reporting success proves only that it thinks so.
+        publishes: a component reporting success proves only that it thinks so,
+        and the claim being tested is that an object physically moved.
+
+        `gz model -p` prints the pose as bracketed, SPACE-separated triples:
+
+            Model: [4]
+              - Name: workpiece
+              - Pose [ XYZ (m) ] [ RPY (rad) ]:
+                [-0.450000 0.000000 0.630000]
+                [0.000000 -0.000000 0.000000]
+
+        so the first numeric triple is the position and its third value is Z. The
+        header's `[ XYZ (m) ]` contains no numbers and therefore does not match.
         """
         result = subprocess.run(
-            [
-                "gz", "model", "--model", WORKPIECE, "--pose",
-            ],
+            ["gz", "model", "-m", WORKPIECE, "-p"],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        for line in result.stdout.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("[") or not stripped:
-                continue
-            parts = stripped.split()
-            if len(parts) >= 3:
-                try:
-                    return float(parts[2])
-                except ValueError:
-                    continue
-        return None
+        number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
+        triples = re.findall(
+            rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout
+        )
+        if not triples:
+            return None
+        try:
+            return float(triples[0][2])
+        except ValueError:
+            return None
 
     def test_the_behaviour_tree_picks_the_workpiece(self) -> None:
         # 1. Wait for the skill server: it is the last thing bring-up starts, so
@@ -181,9 +191,24 @@ class TestPickAndPlace(unittest.TestCase):
         )
         self.assertEqual(spawn.returncode, 0, spawn.stderr)
 
-        resting = self._spin_until(
-            lambda: self._workpiece_z(), 60.0, "the work-piece to settle"
-        )
+        try:
+            resting = self._spin_until(
+                lambda: self._workpiece_z(), 60.0, "the work-piece to settle"
+            )
+        except AssertionError as exc:
+            # A missing work-piece is a setup failure, not a result. Say which,
+            # with the evidence, rather than leaving the reader to guess whether
+            # the arm failed or the box was never there.
+            listing = subprocess.run(
+                ["gz", "model", "--list"], capture_output=True, text=True, timeout=30
+            )
+            raise AssertionError(
+                f"{exc}\n"
+                f"--- ros_gz_sim create stdout ---\n{spawn.stdout[-2000:]}\n"
+                f"--- ros_gz_sim create stderr ---\n{spawn.stderr[-2000:]}\n"
+                f"--- gz model --list (rc={listing.returncode}) ---\n"
+                f"{listing.stdout[-2000:]}\n{listing.stderr[-1000:]}"
+            ) from exc
 
         # 3. Run the behaviour tree. L4 calls L3 skills and nothing else.
         tree = (
@@ -199,6 +224,10 @@ class TestPickAndPlace(unittest.TestCase):
                 "-p", f"tree:={tree}",
                 "-p", f"asset:={ARM}",
                 "-p", f"pick_frame:={ZONE}__table_pick__surface",
+                # Where station_transfer_1 places, per the L0 topology: the first
+                # conveyor's infeed. The scenario names the frame, never a
+                # coordinate — that is the property the model exists to give.
+                "-p", f"place_frame:={ZONE}__conveyor_1__infeed",
                 "-p", "use_sim_time:=true",
             ],
             capture_output=True,

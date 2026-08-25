@@ -15,6 +15,7 @@
 // explicit that covering only the happy path is a review finding — a skill that
 // cannot be cancelled leaves L4 with no way to recover from anything.
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -28,10 +29,14 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 
 #include <cite_interfaces/action/grasp.hpp>
 #include <cite_interfaces/action/move_to.hpp>
 #include <cite_interfaces/action/pick.hpp>
+#include <cite_interfaces/action/place.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
 
 #include "cite_skills/approach.hpp"
@@ -42,6 +47,7 @@ namespace
 using cite_interfaces::action::Grasp;
 using cite_interfaces::action::MoveTo;
 using cite_interfaces::action::Pick;
+using cite_interfaces::action::Place;
 using cite_interfaces::msg::ResultCode;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
@@ -72,8 +78,15 @@ public:
     declare_parameter("home_rad", std::vector<double>{});
     declare_parameter("planning_time_s", 5.0);
     declare_parameter("planning_attempts", 10);
-    declare_parameter("gripper_open_m", 0.085);
     declare_parameter("gripper_max_effort_n", 60.0);
+    // The gripper's own units at each end of its travel, and the opening they
+    // correspond to. GripperCommand.position is passed straight to the joint, so
+    // for a revolute drive joint it is an ANGLE — a skill that sent a width in
+    // metres would command a nearly-closed gripper when it meant fully open, and
+    // nothing would report it because 0.085 is a perfectly valid angle.
+    declare_parameter("gripper_open_position", 0.0);
+    declare_parameter("gripper_closed_position", 0.85);
+    declare_parameter("gripper_max_width_m", 0.085);
   }
 
   /// Read parameters and build the MoveIt client. Returns false with a reason.
@@ -98,6 +111,17 @@ public:
           name);
         return false;
       }
+    }
+
+    gripper_open_position_ = get_parameter("gripper_open_position").as_double();
+    gripper_closed_position_ = get_parameter("gripper_closed_position").as_double();
+    gripper_max_width_ = get_parameter("gripper_max_width_m").as_double();
+    if (gripper_max_width_ <= 0.0) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "gripper_max_width_m must be positive; without it a task-space width "
+        "cannot be mapped onto the gripper's own units");
+      return false;
     }
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
@@ -180,6 +204,19 @@ public:
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Grasp>> handle) {
         std::thread{[this, handle] { execute_grasp(handle); }}.detach();
+      });
+
+    place_server_ = rclcpp_action::create_server<Place>(
+      self, "place",
+      [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Place::Goal>) {
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>>) {
+        move_group_->stop();
+        return rclcpp_action::CancelResponse::ACCEPT;
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>> handle) {
+        std::thread{[this, handle] { execute_place(handle); }}.detach();
       });
 
     pick_server_ = rclcpp_action::create_server<Pick>(
@@ -273,6 +310,7 @@ private:
       return;
     }
 
+    holding_ = result->holding;
     handle->succeed(result);
   }
 
@@ -307,17 +345,25 @@ private:
     report(Pick::Feedback::PHASE_PLANNING, 0.0);
     bool holding = false;
     auto outcome = command_gripper(
-      get_parameter("gripper_open_m").as_double(),
-      get_parameter("gripper_max_effort_n").as_double(), &holding);
+      gripper_max_width_, get_parameter("gripper_max_effort_n").as_double(), &holding);
     if (outcome.code != ResultCode::SUCCESS) {
       fail(outcome);
       return;
     }
 
     report(Pick::Feedback::PHASE_APPROACHING, 0.2);
-    auto approach = goal->object_pose;
+    bool adjusted = false;
+    const auto grasp = feasible_grasp(goal->object_pose, &adjusted);
+    if (adjusted) {
+      RCLCPP_INFO(
+        get_logger(),
+        "top-down grasp: yaw taken from the target's direction rather than the "
+        "request, because a 5-DOF arm cannot choose it freely");
+    }
+
+    auto approach = grasp;
     approach.pose = cite_skills::offset_along_tool_z(
-      goal->object_pose.pose, goal->approach_distance_m);
+      grasp.pose, goal->approach_distance_m);
     move_group_->setPoseTarget(approach, tip_link_);
     outcome = plan_and_execute(handle);
     if (outcome.code != ResultCode::SUCCESS) {
@@ -325,7 +371,7 @@ private:
       return;
     }
 
-    move_group_->setPoseTarget(goal->object_pose, tip_link_);
+    move_group_->setPoseTarget(grasp, tip_link_);
     outcome = plan_and_execute(handle);
     if (outcome.code != ResultCode::SUCCESS) {
       fail(outcome);
@@ -348,6 +394,7 @@ private:
       return;
     }
     result->holding = true;
+    holding_ = true;
 
     report(Pick::Feedback::PHASE_RETREATING, 0.8);
     auto retreat = result->grasp_pose;
@@ -368,8 +415,147 @@ private:
   }
 
   // ---------------------------------------------------------------------------
+  // Place — approach, release, retreat
+  // ---------------------------------------------------------------------------
+  void execute_place(const std::shared_ptr<rclcpp_action::ServerGoalHandle<Place>> handle)
+  {
+    const auto goal = handle->get_goal();
+    auto result = std::make_shared<Place::Result>();
+    const auto started = now();
+
+    auto feedback = std::make_shared<Place::Feedback>();
+    const auto report = [&](uint8_t phase, double fraction) {
+      feedback->phase = phase;
+      feedback->fraction_complete = fraction;
+      handle->publish_feedback(feedback);
+    };
+
+    const auto fail = [&](const ResultCode & code) {
+      result->result = code;
+      result->duration = now() - started;
+      if (code.code == ResultCode::CANCELLED) {
+        handle->canceled(result);
+      } else {
+        handle->abort(result);
+      }
+    };
+
+    // Miming a place with an empty gripper would leave the line believing a
+    // work-piece arrived somewhere it never did — and the failure would surface
+    // at the next station, which is much harder to attribute.
+    if (goal->require_holding && !holding_) {
+      fail(make_result(
+        ResultCode::PRECONDITION_FAILED,
+        "asked to place, but the gripper is not holding anything"));
+      return;
+    }
+
+    report(Place::Feedback::PHASE_PLANNING, 0.0);
+    bool adjusted = false;
+    const auto release = feasible_grasp(goal->target_pose, &adjusted);
+
+    auto approach = release;
+    approach.pose = cite_skills::offset_along_tool_z(
+      release.pose, goal->approach_distance_m);
+    move_group_->setPoseTarget(approach, tip_link_);
+    auto outcome = plan_and_execute(handle);
+    if (outcome.code != ResultCode::SUCCESS) {
+      fail(outcome);
+      return;
+    }
+
+    report(Place::Feedback::PHASE_APPROACHING, 0.4);
+    move_group_->setPoseTarget(release, tip_link_);
+    outcome = plan_and_execute(handle);
+    if (outcome.code != ResultCode::SUCCESS) {
+      fail(outcome);
+      return;
+    }
+    result->release_pose = current_pose();
+
+    report(Place::Feedback::PHASE_RELEASING, 0.7);
+    bool holding = false;
+    outcome = command_gripper(
+      gripper_max_width_, get_parameter("gripper_max_effort_n").as_double(), &holding);
+    if (outcome.code != ResultCode::SUCCESS) {
+      fail(outcome);
+      return;
+    }
+    holding_ = false;
+
+    report(Place::Feedback::PHASE_RETREATING, 0.9);
+    auto retreat = result->release_pose;
+    retreat.pose = cite_skills::offset_along_world_z(
+      result->release_pose.pose, goal->retreat_distance_m);
+    move_group_->setPoseTarget(retreat, tip_link_);
+    outcome = plan_and_execute(handle);
+    if (outcome.code != ResultCode::SUCCESS) {
+      fail(outcome);
+      return;
+    }
+
+    report(Place::Feedback::PHASE_RETREATING, 1.0);
+    result->result = make_result(ResultCode::SUCCESS);
+    result->duration = now() - started;
+    handle->succeed(result);
+  }
+
+  // ---------------------------------------------------------------------------
   // Shared helpers
   // ---------------------------------------------------------------------------
+  /// Make a top-down grasp pose that a 5-DOF arm can actually reach.
+  ///
+  /// An xArm 5 has five joints, so it cannot achieve an arbitrary 6-DOF pose:
+  /// with the tool pointing straight down, the rotation ABOUT that axis is not
+  /// free — it is fixed by where the target is relative to the base. Asking for
+  /// a particular yaw over-constrains the problem, and the planner correctly
+  /// reports that no collision-free path exists, which reads as a reachability
+  /// problem rather than as a degrees-of-freedom one.
+  ///
+  /// So when the caller asks for a top-down grasp, the yaw is not taken from the
+  /// request. It is computed from the target's direction in the planning frame,
+  /// whose origin is the arm's own base. Choosing the grasp orientation is L3's
+  /// job — the L3 document assigns "grasp strategy and approach/retreat
+  /// behaviour" to this layer — so this is the right place for it, and a caller
+  /// asking for a non-top-down grasp is left exactly as it asked.
+  geometry_msgs::msg::PoseStamped feasible_grasp(
+    const geometry_msgs::msg::PoseStamped & requested, bool * adjusted)
+  {
+    *adjusted = false;
+    geometry_msgs::msg::PoseStamped in_planning_frame;
+    try {
+      in_planning_frame = tf_buffer_->transform(
+        requested, move_group_->getPlanningFrame(), tf2::durationFromSec(5.0));
+    } catch (const std::exception & error) {
+      RCLCPP_WARN(
+        get_logger(), "could not transform the grasp pose into '%s': %s",
+        move_group_->getPlanningFrame().c_str(), error.what());
+      return requested;
+    }
+
+    // Is the requested tool axis pointing (roughly) down?
+    tf2::Quaternion requested_q(
+      in_planning_frame.pose.orientation.x, in_planning_frame.pose.orientation.y,
+      in_planning_frame.pose.orientation.z, in_planning_frame.pose.orientation.w);
+    requested_q.normalize();
+    const tf2::Matrix3x3 rotation(requested_q);
+    const tf2::Vector3 tool_z(rotation[0][2], rotation[1][2], rotation[2][2]);
+    constexpr double kDownTolerance = -0.9;  // cos(~155 deg): comfortably downward
+    if (tool_z.z() > kDownTolerance) {
+      return in_planning_frame;
+    }
+
+    const double yaw = std::atan2(
+      in_planning_frame.pose.position.y, in_planning_frame.pose.position.x);
+    tf2::Quaternion feasible;
+    // Roll by pi to point the tool down, then yaw to face the target radially.
+    feasible.setRPY(M_PI, 0.0, yaw);
+    feasible.normalize();
+    in_planning_frame.pose.orientation = tf2::toMsg(feasible);
+    *adjusted = true;
+    return in_planning_frame;
+  }
+
   template <typename Handle>
   ResultCode plan_and_execute(const Handle & handle)
   {
@@ -397,6 +583,19 @@ private:
     return make_result(ResultCode::SUCCESS);
   }
 
+  /// Task-space opening in metres to the gripper's own command units.
+  ///
+  /// Linear across the stroke. That is an approximation for a linkage gripper —
+  /// the true relation is not linear — but it is a stated approximation with the
+  /// numbers in the model, rather than a unit confusion in the code.
+  double gripper_position_for(double width_m) const
+  {
+    const double clamped = std::max(0.0, std::min(gripper_max_width_, width_m));
+    const double fraction = clamped / gripper_max_width_;
+    return gripper_closed_position_ +
+           (gripper_open_position_ - gripper_closed_position_) * fraction;
+  }
+
   ResultCode command_gripper(double width_m, double max_effort_n, bool * holding)
   {
     *holding = false;
@@ -411,7 +610,7 @@ private:
     }
 
     GripperCommand::Goal goal;
-    goal.command.position = width_m;
+    goal.command.position = gripper_position_for(width_m);
     goal.command.max_effort = max_effort_n;
 
     auto future = gripper_client_->async_send_goal(goal);
@@ -460,11 +659,21 @@ private:
   std::string gripper_action_;
   std::vector<double> home_;
 
+  //: Whether this arm believes it is holding a work-piece. Set by Pick and Grasp,
+  //: cleared by Place. It is the arm's own belief, not the line's record — L4
+  //: owns ownership (ADR-0024); this exists only so Place can refuse to mime one.
+  std::atomic<bool> holding_{false};
+
+  double gripper_open_position_{0.0};
+  double gripper_closed_position_{0.85};
+  double gripper_max_width_{0.085};
+
   std::shared_ptr<MoveGroupInterface> move_group_;
   rclcpp_action::Client<GripperCommand>::SharedPtr gripper_client_;
   rclcpp_action::Server<MoveTo>::SharedPtr move_to_server_;
   rclcpp_action::Server<Grasp>::SharedPtr grasp_server_;
   rclcpp_action::Server<Pick>::SharedPtr pick_server_;
+  rclcpp_action::Server<Place>::SharedPtr place_server_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };

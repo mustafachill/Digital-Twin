@@ -21,6 +21,7 @@
 
 #include <cite_interfaces/action/move_to.hpp>
 #include <cite_interfaces/action/pick.hpp>
+#include <cite_interfaces/action/place.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
 
 namespace
@@ -28,6 +29,7 @@ namespace
 
 using cite_interfaces::action::MoveTo;
 using cite_interfaces::action::Pick;
+using cite_interfaces::action::Place;
 using cite_interfaces::msg::ResultCode;
 
 /// Shared context every leaf needs. Passed in rather than looked up, so a leaf
@@ -140,7 +142,17 @@ public:
 
   static BT::PortsList providedPorts()
   {
-    return {BT::InputPort<std::string>("asset"), BT::InputPort<std::string>("frame")};
+    return {
+      BT::InputPort<std::string>("asset"),
+      BT::InputPort<std::string>("frame"),
+      // How far above the station's frame the work-piece is grasped. A stand-in
+      // for Detect, which is what tells the line where a work-piece actually is;
+      // until that skill exists, saying so with a port is more honest than
+      // burying the number in this file.
+      BT::InputPort<double>("grasp_height_m", 0.03, "grasp height above the frame"),
+      BT::InputPort<double>("approach_m", 0.10, "standoff before grasping"),
+      BT::InputPort<double>("retreat_m", 0.12, "lift after grasping"),
+    };
   }
 
   BT::NodeStatus tick() override
@@ -152,14 +164,66 @@ public:
     }
 
     Pick::Goal goal;
-    // The pose is a frame the station named in L0, resolved through TF. No
+    // The pose is a frame the station named in L0, resolved through TF. No world
     // coordinate is written here, which is what stopped v1's pick tables from
-    // diverging from the world they described.
+    // diverging from the cell they described.
     goal.object_pose.header.frame_id = frame.value();
-    goal.object_pose.pose.orientation.w = 1.0;
-    goal.approach_distance_m = 0.10;
-    goal.retreat_distance_m = 0.12;
+    goal.object_pose.pose.position.z = getInput<double>("grasp_height_m").value_or(0.03);
+
+    // Pointing DOWN — a half turn about X. This is not cosmetic: the skill stands
+    // off along the tool's own -Z, so with an identity orientation the approach
+    // pose would be *below* the table rather than above it, and the plan would
+    // fail with an inverse-kinematics error that says nothing about orientation.
+    goal.object_pose.pose.orientation.x = 1.0;
+    goal.object_pose.pose.orientation.y = 0.0;
+    goal.object_pose.pose.orientation.z = 0.0;
+    goal.object_pose.pose.orientation.w = 0.0;
+
+    goal.approach_distance_m = getInput<double>("approach_m").value_or(0.10);
+    goal.retreat_distance_m = getInput<double>("retreat_m").value_or(0.12);
     return send(skill_action(asset.value(), "pick"), goal);
+  }
+};
+
+class PlaceAt : public SkillNode<Place>
+{
+public:
+  using SkillNode::SkillNode;
+
+  static BT::PortsList providedPorts()
+  {
+    return {
+      BT::InputPort<std::string>("asset"),
+      BT::InputPort<std::string>("frame"),
+      BT::InputPort<double>("release_height_m", 0.04, "release height above the frame"),
+      BT::InputPort<double>("approach_m", 0.10, "standoff before releasing"),
+      BT::InputPort<double>("retreat_m", 0.12, "lift after releasing"),
+    };
+  }
+
+  BT::NodeStatus tick() override
+  {
+    const auto asset = getInput<std::string>("asset");
+    const auto frame = getInput<std::string>("frame");
+    if (!asset || !frame) {
+      return BT::NodeStatus::FAILURE;
+    }
+
+    Place::Goal goal;
+    goal.target_pose.header.frame_id = frame.value();
+    goal.target_pose.pose.position.z = getInput<double>("release_height_m").value_or(0.04);
+    // Pointing down, for the same reason Pick does: the skill stands off along
+    // the tool's own -Z, so an identity orientation would put the approach below
+    // the belt rather than above it.
+    goal.target_pose.pose.orientation.x = 1.0;
+    goal.target_pose.pose.orientation.w = 0.0;
+    goal.approach_distance_m = getInput<double>("approach_m").value_or(0.10);
+    goal.retreat_distance_m = getInput<double>("retreat_m").value_or(0.12);
+    // Refuse to mime a place with an empty gripper: the line would believe a
+    // work-piece arrived somewhere it never did, and the failure would surface
+    // at the next station instead.
+    goal.require_holding = true;
+    return send(skill_action(asset.value(), "place"), goal);
   }
 };
 
@@ -204,6 +268,7 @@ int main(int argc, char ** argv)
   node->declare_parameter("tree", "");
   node->declare_parameter("asset", "");
   node->declare_parameter("pick_frame", "");
+  node->declare_parameter("place_frame", "");
 
   Context context;
   context.node = node;
@@ -212,13 +277,14 @@ int main(int argc, char ** argv)
   const auto tree_path = node->get_parameter("tree").as_string();
   const auto asset = node->get_parameter("asset").as_string();
   const auto pick_frame = node->get_parameter("pick_frame").as_string();
+  const auto place_frame = node->get_parameter("place_frame").as_string();
 
-  if (tree_path.empty() || asset.empty() || pick_frame.empty()) {
+  if (tree_path.empty() || asset.empty() || pick_frame.empty() || place_frame.empty()) {
     RCLCPP_FATAL(
       node->get_logger(),
-      "the 'tree', 'asset' and 'pick_frame' parameters are all required. They come "
-      "from the generated topology; refusing to start rather than choosing a station "
-      "on this node's own initiative.");
+      "the 'tree', 'asset', 'pick_frame' and 'place_frame' parameters are all "
+      "required. They come from the generated topology; refusing to start rather "
+      "than choosing a station on this node's own initiative.");
     rclcpp::shutdown();
     return 1;
   }
@@ -226,11 +292,13 @@ int main(int argc, char ** argv)
   BT::BehaviorTreeFactory factory;
   factory.registerNodeType<MoveToHome>("MoveToHome", context);
   factory.registerNodeType<PickAt>("PickAt", context);
+  factory.registerNodeType<PlaceAt>("PlaceAt", context);
   factory.registerNodeType<ReportBlocked>("ReportBlocked", node);
 
   auto blackboard = BT::Blackboard::create();
   blackboard->set("asset", asset);
   blackboard->set("pick_frame", pick_frame);
+  blackboard->set("place_frame", place_frame);
 
   auto tree = factory.createTreeFromFile(tree_path, blackboard);
   RCLCPP_INFO(node->get_logger(), "running station cycle for %s", asset.c_str());

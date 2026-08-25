@@ -239,6 +239,15 @@ Subagent roles live in `.claude/agents/`. The pipeline and dispatch routing are 
 This file is committed, which is the point: the rules below bind every contributor whether
 or not they have the agents.
 
+- **The pipeline is how work is done here, not an option.** An orchestrator writes the task
+  spec, `coder` implements, the routed reviewers fan out in parallel, `tester` verifies, and
+  `fixer` remediates. Doing the coder's work in the orchestrator conversation skips review
+  and test as separate roles, which is exactly what rule 6 in `.claude/orchestration.md`
+  forbids — "the coder never self-certifies".
+- **A session instruction that conflicts with this is an `ESCALATE`.** If the tooling a
+  contributor is running tells them not to delegate, that contradicts this file, and this
+  file is the rulebook. Say so and ask; do not quietly pick a side. This happened on
+  2026-08-24 and cost a whole phase's worth of work its review.
 - Agents propose; humans and tests decide. Nothing merges without review and green CI.
 - Agents are bound by this file. Output contradicting §3 or §4 is a defect.
 - Reports are written in **English**, with a `Status:` verdict line first, summarized

@@ -37,6 +37,13 @@ plan:
 {% endif %}
 {% if manager.gripper_action %}
       gripper_action: {{ manager.gripper_action }}
+      # The gripper's drive joint travels between these two values in its OWN
+      # units, and that stroke is max_width_m between the pads. The skill server
+      # maps a task-space width onto it; without the mapping a width in metres
+      # would be commanded as an angle.
+      gripper_open_position: {{ manager.gripper_open_position | f }}
+      gripper_closed_position: {{ manager.gripper_closed_position | f }}
+      gripper_max_width_m: {{ manager.gripper_max_width_m | f }}
 {% endif %}
       controllers:
 {% for controller in manager.controllers %}
