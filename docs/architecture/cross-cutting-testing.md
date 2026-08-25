@@ -1,9 +1,12 @@
 # Testing strategy
 
-- **Status:** `PARTIAL` — the parts that exist are `./scripts/test`, `./scripts/scenario`,
-  and the two-stage CI workflow. **No test exists yet**, at any level: `tools/tests/`,
-  `tests/scenarios/`, and `workspace/src/` are all empty, so both scripts report SKIP and
-  the CI test step builds nothing. Everything below the status line is the design.
+- **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds 94
+  host tests, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The scenario
+  level has `bringup` and `pick_and_place`. Three gaps below are still open and are called
+  out where they occur: **scenario determinism is documented but not implemented**, ROS
+  package linters register nothing, and `pick_and_place` does not pass. Everything else
+  below the status line is design, not description.
 - **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md)
 
 ## Why this is a cross-cutting concern rather than a chore
@@ -34,10 +37,13 @@ Everything in `cite_tools` — schema validation, generators, geometry and inert
 is pure Python and must be unit-tested. No ROS runtime, no simulator, no waiting. These
 run on macOS.
 
-**Today `cite_tools` contains only `doclinks.py` and has no tests**, and `tools/tests/`
-does not exist — so `./scripts/test`, which runs the host suite only when that directory
-is present, runs nothing. The first module added under Phase 1.B creates the directory and
-the suite.
+`tools/tests/` exists and holds **94 tests** covering the schema loader, the generators,
+identifiers, units, and the geometric and referential validators. `./scripts/test` runs
+them, and `./scripts/test --host-only` runs them without Docker.
+
+Alongside them, `scripts/_selftest.sh` covers the **gate logic itself** — the lint coverage
+assertion, the manifest SHA validator, and the DDS domain derivation. Those checks had no
+tests of their own, and two of them were silently doing nothing for months as a result.
 
 ### Integration
 
@@ -53,9 +59,32 @@ by asserting that a message actually arrives.
 
 Full system, headless, in the container, driven by `./scripts/scenario <name>`.
 
-**Scenarios are deterministic.** A fixed physics seed (`CITE_PHYSICS_SEED`) so that a
-failure reproduces instead of being a coin flip. A non-deterministic scenario test is worse
-than no test: it trains people to re-run until green.
+**Each checkout gets its own DDS domain.** Everything used to default to
+`ROS_DOMAIN_ID=0`, so two cells running at once on one host discovered each other's nodes:
+a scenario run was measured at 421 s instead of 105 s because another workspace's
+`move_group` was in its graph. `scripts/_lib.sh` now derives a domain from the checkout
+path, which isolates concurrent runs while keeping `./scripts/enter` and `./scripts/sim`
+from the same checkout on the same domain, so a shell can still attach to the cell it
+launched. Export `ROS_DOMAIN_ID` to override it and join someone else's cell deliberately.
+`./scripts/doctor` reports the value in force.
+
+**Scenarios are not deterministic yet.** This section previously stated that they were.
+They are not, and the gap is load-bearing enough to state plainly:
+
+`./scripts/scenario` exports `CITE_PHYSICS_SEED`, and both scenarios read it into an
+attribute they never use again. It reaches nothing else — not Gazebo, not the generated
+world SDF, and not OMPL, which under [ADR-0006](../adr/0006-moveit2-motion-planning.md) is
+the stochastic component that decides whether a plan succeeds. Measured: `pick_and_place`
+run four times under an identical seed produced **two distinct failure modes**, each twice,
+both under domain isolation.
+
+The design intent stands and is what the seed exists for — a fixed seed so that a failure
+reproduces instead of being a coin flip, because a non-deterministic scenario test is worse
+than no test: it trains people to re-run until green. Closing it needs a consumer at each
+end: a seed in the generated world SDF, and an OMPL seed in the generated MoveIt
+configuration. Until both exist, a passing scenario is evidence about that run only, and
+[ADR-0023](../adr/0023-simulated-grasping-via-attachment.md) rests part of its argument on a premise
+the code does not yet provide.
 
 A scenario asserts on **outcomes and constraints**, never on exact trajectories. Sampling
 -based planners are stochastic ([ADR-0006](../adr/0006-moveit2-motion-planning.md)); a test
@@ -81,7 +110,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
 | Cycle completion | The line actually works |
 | Twin divergence within bound (Phase 2+) | P8 |
-| Scenario determinism | Same seed, same outcome |
+| Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above |
 
 ## What tests are not allowed to do
 
@@ -103,10 +132,21 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 ./scripts/validate-model          # L0 validation — runs anywhere
 ```
 
-CI runs a fast host-tooling stage first — `./scripts/lint` and `./scripts/validate-model`,
-in about a minute — then the container stage, which builds the image and runs
-`./scripts/build` and `./scripts/test`. The host stage does not currently run
-`./scripts/test`; add it when `tools/tests/` exists.
+CI runs a fast host-tooling stage first — `./scripts/lint`, `./scripts/test --host-only`
+and `./scripts/validate-model`, in about a minute — then the container stage, which builds
+the image and runs `./scripts/lint`, `./scripts/build`, `./scripts/test` and the scenarios.
+
+`./scripts/lint` runs in both stages on purpose, and does different work in each. The
+host-tooling runner has no ROS, so its ROS-package block **skips and says so**; only the
+container stage can run the C++, CMake and package linters. A green `./scripts/lint` on a
+laptop means the Python, YAML, shell and documentation checks passed — it says nothing
+about the C++.
+
+Two container-stage steps are marked `continue-on-error` and are **not** merge gates yet:
+the ROS package lint step, because no first-party package declares a linter set for
+`ament_lint_auto` to find, and `pick_and_place`, because it does not pass. Both run so the
+failure is visible; neither is allowed to report success. The conditions for promoting each
+to blocking are recorded next to it in `.github/workflows/ci.yml`.
 
 ## Failure modes
 

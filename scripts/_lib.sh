@@ -30,6 +30,114 @@ in_container() { [ -f /etc/cite-container ]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# -----------------------------------------------------------------------------
+# ROS_DOMAIN_ID — one DDS domain per checkout, not one for the whole machine.
+#
+# Everything used to default to domain 0. DDS discovery is multicast within a
+# domain, so two cells running at once on the same host discovered each other's
+# nodes: a scenario run took 421 s instead of 105 s because another workspace's
+# move_group was visible in its graph, and `ros2 node list` showed nodes nobody
+# had launched. That breaks parallel CI and makes any local result irreproducible
+# whenever two people — or two agents — work at the same time.
+#
+# The identifier is derived from the absolute path of the checkout, which gives
+# the two properties that matter at once:
+#
+#   isolation     two clones or worktrees never collide, without configuration
+#   attachability `./scripts/sim` and `./scripts/enter` from the *same* checkout
+#                 land on the same domain, so a shell can still see the cell it
+#                 just launched. A random per-run value would break that.
+#
+# The value is computed on the outermost invocation and inherited from there:
+# the container sees a different path (/workspace) and would otherwise derive a
+# different number, so `compose` hands the host's value across and the branch
+# below preserves anything already set. An explicit ROS_DOMAIN_ID in the
+# environment always wins.
+#
+# Range 1-101: 0 is the ecosystem-wide default this exists to get away from, and
+# on Linux domains above 101 collide with the ephemeral port range.
+# -----------------------------------------------------------------------------
+cite_domain_id() {
+    local key="${1:-$REPO_ROOT}" sum
+    # `cksum` is POSIX and identical on macOS and Linux; `md5sum` is neither.
+    sum="$(printf '%s' "$key" | cksum | awk '{print $1}')"
+    printf '%s' "$(( sum % 101 + 1 ))"
+}
+
+if [ -n "${ROS_DOMAIN_ID:-}" ]; then
+    # Preserved rather than overwritten, so a container that inherited a derived
+    # value does not report it as an explicit choice by the developer.
+    CITE_DOMAIN_SOURCE="${CITE_DOMAIN_SOURCE:-explicit}"
+else
+    ROS_DOMAIN_ID="$(cite_domain_id)"
+    CITE_DOMAIN_SOURCE="derived from this checkout"
+fi
+export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE
+
+# -----------------------------------------------------------------------------
+# assert_lint_coverage <selected> <finished> [package-with-no-lint-test...]
+#
+# The judgement at the heart of ./scripts/lint: did the linter run actually look
+# at anything? Separated from the colcon plumbing so it can be driven with
+# synthetic numbers by scripts/_selftest.sh — the states that matter here are
+# precisely the ones that are awkward to reproduce on demand.
+#
+# Returns 0 when every selected package was processed and registered at least one
+# linter. Otherwise prints a diagnosis on stdout and returns 1. "Nothing was
+# checked" is a failure, not a pass: the whole defect this replaces was a gate
+# that could not tell a clean result from an absent one.
+# -----------------------------------------------------------------------------
+assert_lint_coverage() {
+    local selected="$1" finished="$2"; shift 2
+    local -a without_linters=("$@")
+
+    if [ "$selected" -eq 0 ]; then
+        printf 'no first-party packages were selected, so nothing was linted'
+        return 1
+    fi
+    if [ "$finished" -lt "$selected" ]; then
+        printf 'colcon processed %s of %s selected package(s); the rest were skipped' \
+            "$finished" "$selected"
+        return 1
+    fi
+    if [ "${#without_linters[@]}" -gt 0 ]; then
+        printf '%s of %s package(s) register no lint test at all: %s' \
+            "${#without_linters[@]}" "$selected" "${without_linters[*]}"
+        return 1
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# unpinned_manifest_entries — vcs manifest entries not pinned to a commit SHA.
+#
+# Prints one "<repo>: <version>" line per offending entry; empty output means
+# every entry is pinned. This is the only mechanical guard on ADR-0008, so it
+# lives here once and is called by both ./scripts/doctor and the CI supply-chain
+# job. It used to be restated in both places as `grep -E '^\s+version:\s*[a-z]'`,
+# which is a starts-with-lowercase test rather than a SHA validator and was wrong
+# in both directions: a real 40-character SHA beginning with a-f was reported
+# unpinned, and a branch named `2.x` passed as pinned. The current entry passed
+# only because its SHA happens to begin with a digit.
+# -----------------------------------------------------------------------------
+unpinned_manifest_entries() {
+    local manifest="${1:-${REPO_ROOT}/external/cite.repos}"
+    [ -f "$manifest" ] || return 0
+    awk '
+        # A repository key: indented, ends the line with a colon and nothing else.
+        /^[[:space:]]+[^[:space:]#][^:]*:[[:space:]]*$/ {
+            entry = $1; sub(/:$/, "", entry); next
+        }
+        $1 == "version:" {
+            value = $2
+            gsub(/["\x27]/, "", value)           # strip quoting, if any
+            if (value !~ /^[0-9a-fA-F]{40}$/) {
+                print (entry == "" ? "?" : entry) ": " (value == "" ? "(empty)" : value)
+            }
+        }
+    ' "$manifest"
+}
+
 host_os() {
     case "$(uname -s)" in
         Linux)  echo linux ;;
@@ -157,6 +265,13 @@ exec_in_container() {
     for v in $(compgen -e 2>/dev/null | grep '^CITE_' || true); do
         env_args+=(-e "${v}=${!v}")
     done
+
+    # The DDS domain is decided once, by the outermost invocation, and carried in.
+    # `compose run` would pick it up through the compose file's ${ROS_DOMAIN_ID}
+    # substitution, but `compose exec` attaches to a container whose environment
+    # was fixed when it started — so passing it explicitly is what keeps a shell
+    # and the cell it attaches to on the same domain. See cite_domain_id above.
+    env_args+=(-e "ROS_DOMAIN_ID=${ROS_DOMAIN_ID}")
 
     # Captured rather than piped: `grep -q` exits on its first match and SIGPIPEs
     # the producer, which `set -o pipefail` then reports as a failed pipeline. Here

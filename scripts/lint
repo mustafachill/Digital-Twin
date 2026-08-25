@@ -50,22 +50,107 @@ else
     warn "shellcheck not installed — skipped"
 fi
 
+# -----------------------------------------------------------------------------
+# ROS package linters.
+#
+# A gate that cannot tell "clean" from "did not run" is worse than no gate: it
+# reports success while checking nothing, and every report built on it overstates
+# what was verified. This block used to do exactly that, in two compounding ways:
+#
+#   1. `--packages-skip-build-finished` skipped every already-built package — in
+#      practice all of them — so colcon printed "Summary: 0 packages finished"
+#      and this script printed "Lint clean". The flag is gone.
+#   2. Even with every package selected, ctest reports "No tests were found!!!"
+#      and exits 0, because the packages declare `ament_lint_auto` but no linter
+#      set for `ament_lint_auto_find_test_dependencies()` to discover. colcon does
+#      not treat an empty test set as an error, so this is asserted explicitly.
+#
+# Both conditions now fail the gate and name what is missing, rather than passing.
+# -----------------------------------------------------------------------------
+ros_lint() {
+    local -a packages=()
+    mapfile -t packages < <(first_party_packages)
+
+    local build="${REPO_ROOT}/workspace/build"
+    if [ ! -d "$build" ]; then
+        die "Lint gate broken: workspace/build does not exist, so no linter can run.
+  Run ./scripts/build first."
+    fi
+
+    # Scoped to our own packages: linting vcstool-imported vendor source reports
+    # their style choices, which we neither control nor should change.
+    local log rc=0
+    log="$(mktemp)"
+    if [ "${#packages[@]}" -gt 0 ]; then
+        (cd "${REPO_ROOT}/workspace" && colcon test \
+            --packages-select "${packages[@]}" \
+            --event-handlers console_direct+ \
+            --return-code-on-test-failure \
+            --ctest-args -R "lint") >"$log" 2>&1 || rc=$?
+        cat "$log"
+    fi
+
+    # A real linter failure is reported as such and outranks everything below —
+    # the coverage questions only make sense about a run that itself succeeded.
+    if [ "$rc" -ne 0 ]; then
+        rm -f "$log"
+        FAILED=1
+        return 0
+    fi
+
+    local finished
+    finished="$(sed -n 's/^Summary: \([0-9][0-9]*\) package.*/\1/p' "$log" | tail -1)"
+    finished="${finished:-0}"
+    rm -f "$log"
+
+    # Which packages registered no linter at all? Asked of ctest directly rather
+    # than inferred from colcon's prose, so the answer is per package and exact.
+    local pkg n
+    local -a without_linters=()
+    for pkg in "${packages[@]}"; do
+        if [ ! -f "${build}/${pkg}/CTestTestfile.cmake" ]; then
+            without_linters+=("${pkg}(not-built)")
+            continue
+        fi
+        n="$(ctest --test-dir "${build}/${pkg}" -N -R lint 2>/dev/null \
+             | sed -n 's/^Total Tests: //p' | tail -1 || true)"
+        [ "${n:-0}" -gt 0 ] || without_linters+=("$pkg")
+    done
+
+    local diagnosis
+    if ! diagnosis="$(assert_lint_coverage \
+            "${#packages[@]}" "$finished" ${without_linters[@]+"${without_linters[@]}"})"; then
+        die "Lint gate broken — ${diagnosis}.
+  A gate that cannot tell 'clean' from 'never ran' must not report success.
+  Every first-party package needs a linter set for ament_lint_auto to discover:
+    package.xml:    <test_depend>ament_lint_common</test_depend>
+    CMakeLists.txt: find_package(ament_lint_auto REQUIRED)
+                    ament_lint_auto_find_test_dependencies()
+  Declaring only <test_depend>ament_lint_auto</test_depend> registers zero linters."
+    fi
+}
+
+RAN_ROS_LINT=0
 if in_container || native_ros_available; then
     step "ROS packages"
-    mapfile -t OUR_PACKAGES < <(first_party_packages)
-    if [ "${#OUR_PACKAGES[@]}" -gt 0 ]; then
-        # Scoped to our own packages: linting vcstool-imported vendor source
-        # reports their style choices, which we neither control nor should change.
-        (cd "${REPO_ROOT}/workspace" && colcon test \
-            --packages-select "${OUR_PACKAGES[@]}" \
-            --packages-skip-build-finished \
-            --ctest-args -R "lint" 2>/dev/null) || FAILED=1
-    else
-        warn "no first-party packages in workspace/src yet — no ROS linters to run"
-    fi
+    ros_lint
+    RAN_ROS_LINT=1
+else
+    # Never skip this silently. A green ./scripts/lint on a laptop used to be
+    # indistinguishable from a green one in the container, and only the second
+    # has looked at a single line of C++.
+    step "ROS packages"
+    warn "SKIPPED — no ROS 2 environment on this host."
+    warn "  The Python, YAML, shell and documentation checks above did run."
+    warn "  The C++, CMake and package linters did NOT."
+    warn "  For the full gate: CITE_ENV=docker ./scripts/enter, then ./scripts/lint"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
     die "Lint failed"
 fi
-ok "Lint clean"
+if [ "$RAN_ROS_LINT" -eq 1 ]; then
+    ok "Lint clean"
+else
+    ok "Lint clean — host checks only; ROS package linters were not run"
+fi
