@@ -15,15 +15,14 @@ from cite_tools.generate import Artifact
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.render import environment
 
-#: Controller manager rate. The vendor ships 150 Hz for the xArm and there is no
-#: reason to diverge; a controller loop that cannot hold its rate is a
-#: performance finding, not a value to quietly lower.
-UPDATE_RATE_HZ = 150
-
 #: Controllers whose parameter is a single `joint`, not a `joints` list. Getting
 #: this wrong produces a controller that loads and then claims no interfaces,
 #: which presents as an arm that ignores commands.
 SINGLE_JOINT_TYPES = frozenset({"position_controllers/GripperActionController"})
+
+
+class MissingControlSpecError(Exception):
+    """A type declares controllers but no controller-manager configuration."""
 
 
 @dataclass(frozen=True)
@@ -65,6 +64,25 @@ def _controlled(cell: ResolvedCell) -> tuple[ResolvedAsset, ...]:
     return tuple(a for a in cell.assets if a.controllers)
 
 
+def _update_rate_hz(asset: ResolvedAsset) -> int:
+    """The controller-manager rate this asset's type declares.
+
+    Read from the model rather than held as a module constant. A rate is a fact
+    about a robot — the vendor ships one — and a constant here would apply one
+    arm's rate to every type the generator ever sees, which is the P5 inversion.
+    Missing is an error rather than a default: silently running a manager at a
+    rate nobody chose produces an arm that tracks badly for no visible reason.
+    """
+    control = asset.asset_type.control
+    if control is None:
+        raise MissingControlSpecError(
+            f"asset {asset.id!r} of type {asset.asset_type.id!r} declares controllers "
+            "but no `control:` section, so there is no update rate to run its "
+            "controller manager at. Add `control: {update_rate_hz: <hz>}` to the type."
+        )
+    return control.update_rate_hz
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     env = environment()
     template = env.get_template("control/controllers.yaml.j2")
@@ -74,7 +92,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             zone=cell.zone,
             arm=asset,
             namespace=asset.namespace,
-            update_rate=UPDATE_RATE_HZ,
+            update_rate=_update_rate_hz(asset),
             use_sim_time="true" if asset.instance.hardware.backend == "sim" else "false",
             controllers=[_view(c) for c in asset.controllers],
         )

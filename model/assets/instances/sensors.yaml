@@ -5,14 +5,32 @@ schema: cite/asset_instances/v1
 # Break-beam sensors just short of each belt's outfeed, placed relative to that
 # belt rather than in world coordinates — so moving a conveyor moves its sensor
 # with it, and the two cannot drift apart.
+#
+# Two things about the offset below are load-bearing rather than incidental.
+#
+# +Y, not the belt centreline. The outfeed is also a station's pick point, and a
+# housing standing on the centreline puts 120 mm of solid geometry inside the
+# gripper's descent. The belt is 0.400 m wide, so +0.250 clears its edge by
+# 30 mm and stands on the side away from the arms, which work from -Y.
+# `approach-obstruction` in cite_tools.validate.geometric now rejects the old
+# placement mechanically.
+#
+# +0.030 above the belt surface, not +0.080. A through beam has to pass BELOW
+# the top of the shortest work-piece it must detect, and 80 mm cleared the
+# scenario's 50 mm box entirely — a sensor that can never be broken, on a line
+# whose stations are supposed to act on detection rather than on elapsed time.
+# 30 mm is a floor rather than a fitted value: L0 does not describe work-piece
+# geometry yet (`Facility.workpiece_models` holds names and nothing else), so
+# there is no model fact to derive the right height from, and this is the
+# smallest offset that still clears the belt surface.
 assets:
   - id: beam_c1_out
     zone: cell_a
     type: break_beam
     pose:
       frame: conveyor_1/outfeed
-      # 50 mm back from the belt end, 80 mm above the belt surface.
-      xyz_m: [-0.050, 0.000, 0.080]
+      # 50 mm back from the belt end, beside the belt, 30 mm above its surface.
+      xyz_m: [-0.050, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:
       kind: sensor
@@ -25,7 +43,7 @@ assets:
     type: break_beam
     pose:
       frame: conveyor_2/outfeed
-      xyz_m: [-0.050, 0.000, 0.080]
+      xyz_m: [-0.050, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:
       kind: sensor
@@ -38,7 +56,7 @@ assets:
     type: break_beam
     pose:
       frame: conveyor_3/outfeed
-      xyz_m: [-0.050, 0.000, 0.080]
+      xyz_m: [-0.050, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:
       kind: sensor

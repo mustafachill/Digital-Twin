@@ -85,6 +85,14 @@ class Inertial(Strict):
     """
 
     mass_kg: Annotated[float, Field(gt=0.0)]
+    #: Centre of mass, relative to the CENTRE of the collision geometry — not to
+    #: the body's pose, which names the point it stands on. The two references
+    #: differ by half a height and the model used to disagree with itself about
+    #: which it meant: `validate.physical._com_inside_geometry` read it as
+    #: centre-relative while the scene template emitted it as pose-relative, so
+    #: `com_m: [0, 0, -0.25]` on a 0.6 m pedestal passed validation and placed
+    #: the mass below the floor. Everything now reads it as centre-relative, and
+    #: the tensor that accompanies it is centroidal.
     com_m: Triple = (0.0, 0.0, 0.0)
     ixx: Annotated[float, Field(gt=0.0)]
     iyy: Annotated[float, Field(gt=0.0)]
@@ -178,6 +186,18 @@ class HardwareBackend(Strict):
     instance_params: list[str] = Field(default_factory=list)
 
 
+class ControlSpec(Strict):
+    """How the `ros2_control` manager for this type is configured.
+
+    The update rate is a fact about the robot — the vendor ships one — and it
+    used to be a module constant in the generator, applied identically to every
+    type. P5 puts it here instead: code encodes how a controller manager is
+    configured, never which rate a particular arm runs at.
+    """
+
+    update_rate_hz: Annotated[int, Field(gt=0)]
+
+
 class ControllerSpec(Strict):
     """A controller a type needs, named by suffix and ordered by stage.
 
@@ -252,6 +272,11 @@ class PlanningSpec(Strict):
     kinematics_timeout_s: float = 0.05
     max_velocity_scaling: float = 0.5
     max_acceleration_scaling: float = 0.5
+    #: Joint acceleration ceiling in rad/s^2, applied at planning time. Required
+    #: with no default: a vendor description that carries no acceleration limit
+    #: leaves MoveIt's time parameterisation without one, and a default here
+    #: would silently apply one arm's ceiling to a different robot.
+    max_acceleration_rad_s2: Annotated[float, Field(gt=0.0)]
 
 
 class AssetType(Strict):
@@ -264,6 +289,7 @@ class AssetType(Strict):
     frames: list[NamedFrame] = Field(default_factory=list)
     description: DescriptionSpec
     hardware_backends: dict[Identifier, HardwareBackend] = Field(default_factory=dict)
+    control: ControlSpec | None = None
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
     grasp: GraspSpec | None = None

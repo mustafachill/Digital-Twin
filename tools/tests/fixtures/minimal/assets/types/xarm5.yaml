@@ -25,6 +25,8 @@ asset_type:
     real:
       ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
       instance_params: [robot_ip]
+  control:
+    update_rate_hz: 150
   controllers:
     - suffix: joint_state_broadcaster
       type: joint_state_broadcaster/JointStateBroadcaster

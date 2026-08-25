@@ -38,71 +38,11 @@ static_transforms:
   - -0.0
   - 1.570796327
 - parent: cite_world
-  child: cell_a__arm_1__base
-  xyz_m:
-  - 0.0
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
-  child: cell_a__arm_1__tcp
-  xyz_m:
-  - 0.0
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
-  child: cell_a__arm_2__base
-  xyz_m:
-  - 2.1
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
-  child: cell_a__arm_2__tcp
-  xyz_m:
-  - 2.1
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
-  child: cell_a__arm_3__base
-  xyz_m:
-  - 4.2
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
-  child: cell_a__arm_3__tcp
-  xyz_m:
-  - 4.2
-  - -0.35
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 1.570796327
-- parent: cite_world
   child: cell_a__beam_c1_out__beam
   xyz_m:
   - 1.6
-  - 0.0
-  - 0.68
+  - 0.25
+  - 0.63
   rpy_rad:
   - 0.0
   - -0.0
@@ -111,8 +51,8 @@ static_transforms:
   child: cell_a__beam_c2_out__beam
   xyz_m:
   - 3.7
-  - 0.0
-  - 0.68
+  - 0.25
+  - 0.63
   rpy_rad:
   - 0.0
   - -0.0
@@ -121,8 +61,8 @@ static_transforms:
   child: cell_a__beam_c3_out__beam
   xyz_m:
   - 5.8
-  - 0.0
-  - 0.68
+  - 0.25
+  - 0.63
   rpy_rad:
   - 0.0
   - -0.0
@@ -250,7 +190,7 @@ static_transforms:
 - parent: cite_world
   child: cell_a__table_accumulation__surface
   xyz_m:
-  - 6.15
+  - 6.2
   - 0.0
   - 0.6
   rpy_rad:
@@ -260,7 +200,7 @@ static_transforms:
 - parent: cite_world
   child: cell_a__table_pick__surface
   xyz_m:
-  - -0.45
+  - -0.475
   - 0.0
   - 0.6
   rpy_rad:

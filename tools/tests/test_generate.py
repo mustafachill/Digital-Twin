@@ -8,13 +8,19 @@ holds, so it is asserted rather than assumed.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
+import yaml
 
 from cite_tools import generate as gen
+from cite_tools.model import ids
+from cite_tools.model.geometry import Pose
 from cite_tools.model.loader import load
+from cite_tools.model.resolve import resolve
 
 
 def artifacts(path: Path) -> dict[str, str]:
@@ -236,3 +242,363 @@ class TestBindings:
         )
         with pytest.raises(BindingError, match="instance.prefxi"):
             artifacts(real_model)
+
+
+class TestOneCoordinatePerFrame:
+    """P1 across the two representations a frame can appear in.
+
+    An L0 frame reaches the running system twice: as a link in the scene
+    description, published by `robot_state_publisher`, and as a row in the static
+    transform table. Both are live. When they disagree the system does not fail —
+    it carries two answers for one name and hands out whichever the consumer
+    happened to ask for.
+
+    That is not hypothetical. The description generator subtracted half a body
+    height from every type frame, which would only have been right if the link
+    origin were the box centre; it is the foot. `pedestal_1_top` was published at
+    z = 0.300 while `cell_a__pedestal_1__top` was published at z = 0.600, 0.3 m
+    below where the arm is actually bolted, and nothing consumed the URDF-side
+    name yet — which is exactly what made it dangerous.
+    """
+
+    @staticmethod
+    def _urdf_world_poses(scene_xml: str) -> dict[str, Pose]:
+        """Every named-frame link in the scene, resolved into `cite_world`."""
+        root = ElementTree.fromstring(scene_xml)
+        joints = {}
+        for joint in root.findall("joint"):
+            origin = joint.find("origin")
+            xyz = tuple(float(v) for v in (origin.get("xyz") or "0 0 0").split())
+            rpy = tuple(float(v) for v in (origin.get("rpy") or "0 0 0").split())
+            parent = joint.find("parent").get("link")
+            child = joint.find("child").get("link")
+            joints[child] = (parent, Pose(xyz_m=xyz, rpy_rad=rpy))
+
+        poses: dict[str, Pose] = {}
+        for child, (parent, local) in joints.items():
+            # Walk to the root, composing parent-then-child. Frame links hang off
+            # a body's base_link, which hangs off cite_world.
+            pose = local
+            current = parent
+            while current in joints:
+                grandparent, up = joints[current]
+                pose = up.compose(pose)
+                current = grandparent
+            if current == ids.WORLD_FRAME:
+                poses[child] = pose
+        return poses
+
+    def test_every_frame_has_the_same_world_pose_in_both_representations(
+        self, real_model: Path
+    ) -> None:
+        model = load(real_model)
+        produced = artifacts(real_model)
+        table = yaml.safe_load(produced["frames/cell_a_static_tf.yaml"])
+        urdf = self._urdf_world_poses(produced["description/cell_a_scene.urdf.xacro"])
+
+        static = {
+            row["child"]: Pose(xyz_m=tuple(row["xyz_m"]), rpy_rad=tuple(row["rpy_rad"]))
+            for row in table["static_transforms"]
+        }
+
+        checked = 0
+        for asset in resolve(model, "cell_a").assets:
+            for named in asset.asset_type.frames:
+                link_name = ids.link(asset.id, named.id)
+                frame_name = ids.frame("cell_a", asset.id, named.id)
+                if named.link is not None:
+                    # Published by robot_state_publisher from a vendor
+                    # description. Neither generator may emit a second copy.
+                    assert link_name not in urdf, f"{link_name} duplicates a vendor link"
+                    assert frame_name not in static, f"{frame_name} duplicates a vendor link"
+                    continue
+                assert link_name in urdf, f"{link_name} is missing from the scene description"
+                assert frame_name in static, f"{frame_name} is missing from the static TF table"
+                assert urdf[link_name].approx_equal(static[frame_name], tol=1e-9), (
+                    f"{named.id} on {asset.id} resolves to "
+                    f"{urdf[link_name].xyz_m} as a URDF link and "
+                    f"{static[frame_name].xyz_m} as a static transform"
+                )
+                checked += 1
+        # A test that silently checked nothing would pass forever.
+        assert checked >= 8, f"only {checked} frames were compared"
+
+    def test_a_reintroduced_half_height_offset_is_caught(self, real_model: Path) -> None:
+        # The exact defect, re-injected: raise the pedestal's own frame without
+        # touching its body. The two representations must stop agreeing.
+        import yaml as _yaml
+
+        target = real_model / "assets/types/fixtures/pedestal_600.yaml"
+        document = _yaml.safe_load(target.read_text())
+        document["asset_type"]["frames"][0]["xyz_m"] = [0.0, 0.0, 0.3]
+        target.write_text(_yaml.safe_dump(document, sort_keys=False))
+
+        produced = artifacts(real_model)
+        urdf = self._urdf_world_poses(produced["description/cell_a_scene.urdf.xacro"])
+        table = yaml.safe_load(produced["frames/cell_a_static_tf.yaml"])
+        static = {
+            row["child"]: Pose(xyz_m=tuple(row["xyz_m"]), rpy_rad=tuple(row["rpy_rad"]))
+            for row in table["static_transforms"]
+        }
+        # Both representations must move together, so they still agree with each
+        # other — and both must show the new height rather than the old one.
+        assert urdf["pedestal_1_top"].approx_equal(static["cell_a__pedestal_1__top"])
+        assert round(urdf["pedestal_1_top"].xyz_m[2], 6) == 0.3
+
+
+class TestFramesOfVendorLinks:
+    """H2: `NamedFrame.link` is read, not merely documented."""
+
+    def test_a_link_backed_frame_is_not_published_as_a_static_transform(
+        self, real_model: Path
+    ) -> None:
+        # `tcp` on the xArm names `link_tcp`, which robot_state_publisher
+        # publishes at wherever forward kinematics puts it. Emitting it here as
+        # well produced a STATIC transform at the arm's mount — the canonical
+        # name for the tool centre point, answering with a constant.
+        table = yaml.safe_load(artifacts(real_model)["frames/cell_a_static_tf.yaml"])
+        children = {row["child"] for row in table["static_transforms"]}
+        assert "cell_a__arm_1__tcp" not in children
+        assert "cell_a__arm_1__base" not in children
+        # The mount is still there: nothing else ties the arm's own model to the
+        # facility, and without it TF has two disconnected trees.
+        assert "arm_1_mount" in children
+
+    def test_clearing_the_link_makes_the_frame_appear(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The complement, so the test above cannot pass by the rule never firing.
+        def mutate(document: dict) -> None:
+            for frame in document["asset_type"]["frames"]:
+                frame.pop("link", None)
+
+        edit_yaml(real_model / "assets/types/robots/xarm5.yaml", mutate)
+        table = yaml.safe_load(artifacts(real_model)["frames/cell_a_static_tf.yaml"])
+        children = {row["child"] for row in table["static_transforms"]}
+        assert "cell_a__arm_1__tcp" in children
+
+
+class TestMassIsWhereTheGeometryIs:
+    """M-07: a centroidal tensor declared at the body's foot is a lie."""
+
+    def test_the_inertial_origin_carries_the_same_half_height_as_the_geometry(
+        self, real_model: Path
+    ) -> None:
+        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        root = ElementTree.fromstring(scene)
+        checked = 0
+        for link in root.findall("link"):
+            inertial = link.find("inertial")
+            collision = link.find("collision")
+            if inertial is None or collision is None:
+                continue
+            mass_z = float((inertial.find("origin").get("xyz")).split()[2])
+            box_z = float((collision.find("origin").get("xyz")).split()[2])
+            assert mass_z == box_z, (
+                f"{link.get('name')} declares its mass at z={mass_z} while its "
+                f"collision box is centred at z={box_z}"
+            )
+            checked += 1
+        assert checked >= 4, f"only {checked} bodies were compared"
+
+    def test_a_centre_of_mass_offset_is_applied_from_the_box_centre(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # `com_m` is measured from the collision box centre, which is the same
+        # reference validate.physical uses. A pedestal whose mass sits 0.25 m low
+        # must land at z = 0.05 in the link frame, not at z = -0.25 below it.
+        edit_yaml(
+            real_model / "assets/types/fixtures/pedestal_600.yaml",
+            lambda d: d["asset_type"]["description"]["body"]["inertial"].__setitem__(
+                "com_m", [0.0, 0.0, -0.25]
+            ),
+        )
+        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        root = ElementTree.fromstring(scene)
+        links = root.findall("link")
+        link = next(e for e in links if e.get("name") == "pedestal_1_base_link")
+        z = float(link.find("inertial").find("origin").get("xyz").split()[2])
+        assert round(z, 9) == 0.05
+
+
+class TestEverythingIsAnchored:
+    """H3: nothing in the cell stands on the ground by friction alone."""
+
+    def test_the_scene_is_static(self, real_model: Path) -> None:
+        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        root = ElementTree.fromstring(scene)
+        statics = [
+            element.text
+            for gazebo in root.findall("gazebo")
+            for element in gazebo.findall("static")
+        ]
+        assert statics == ["true"], (
+            "the cell furniture lumps into one free rigid body without this; three "
+            "arms' reaction torques then slide it and the symptom reads as drift"
+        )
+
+    def test_every_arm_is_bolted_to_the_world(self, real_model: Path) -> None:
+        produced = artifacts(real_model)
+        for arm in ("arm_1", "arm_2", "arm_3"):
+            root = ElementTree.fromstring(produced[f"description/cell_a_{arm}.urdf.xacro"])
+            anchors = [
+                joint
+                for gazebo in root.findall("gazebo")
+                for joint in gazebo.findall("joint")
+                if joint.get("type") == "fixed"
+            ]
+            assert len(anchors) == 1, f"{arm} has {len(anchors)} world anchors"
+            assert anchors[0].find("parent").text == "world"
+            assert anchors[0].find("child").text == f"{arm}_mount"
+            # No pose: the spawn pose in the bring-up plan places the model, and
+            # a pose here would apply the same displacement twice.
+            assert anchors[0].find("pose") is None
+
+    def test_the_arm_anchor_is_invisible_to_robot_state_publisher(self, real_model: Path) -> None:
+        # The anchor lives inside <gazebo> precisely so TF never sees it. A URDF
+        # joint from a link named `world` would give arm_1_mount a second parent
+        # alongside the generated static transform table.
+        root = ElementTree.fromstring(artifacts(real_model)["description/cell_a_arm_1.urdf.xacro"])
+        assert root.findall("joint") == []
+        assert [link.get("name") for link in root.findall("link")] == ["arm_1_mount"]
+
+
+class TestPlanningSceneIsGenerated:
+    """M-08: the planner is told what the cell contains."""
+
+    def test_every_authored_body_becomes_a_collision_object(self, real_model: Path) -> None:
+        produced = artifacts(real_model)
+        scene = yaml.safe_load(produced["moveit/cell_a_planning_scene.yaml"])
+        objects = {o["id"]: o for o in scene["planning_scene"]["collision_objects"]}
+        expected = {
+            "pedestal_1",
+            "pedestal_2",
+            "pedestal_3",
+            "table_pick",
+            "table_accumulation",
+            "conveyor_1",
+            "conveyor_2",
+            "conveyor_3",
+            "beam_c1_out",
+            "beam_c2_out",
+            "beam_c3_out",
+        }
+        assert set(objects) == expected
+        # Arms are deliberately absent: an articulated robot frozen at a pose is
+        # confidently wrong wherever it actually is.
+        assert not any(o.startswith("arm_") for o in objects)
+
+    def test_a_collision_object_agrees_with_the_scene_description(self, real_model: Path) -> None:
+        # Same geometry, same place — the planner's cell and the simulator's cell
+        # come from one resolved body, so they cannot drift.
+        produced = artifacts(real_model)
+        scene = yaml.safe_load(produced["moveit/cell_a_planning_scene.yaml"])
+        table = next(
+            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "table_pick"
+        )
+        assert table["primitive"]["dimensions_m"] == [0.6, 0.6, 0.6]
+        # MoveIt primitive poses are CENTRES; the L0 pose is the foot.
+        assert table["pose"]["xyz_m"] == [-0.475, 0.0, 0.3]
+
+    def test_it_tracks_the_model(self, real_model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            real_model / "assets/instances/fixtures.yaml",
+            lambda d: d["assets"][3]["pose"].__setitem__("xyz_m", [-0.6, 0.0, 0.0]),
+        )
+        scene = yaml.safe_load(artifacts(real_model)["moveit/cell_a_planning_scene.yaml"])
+        table = next(
+            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "table_pick"
+        )
+        assert table["pose"]["xyz_m"][0] == -0.6
+
+
+class TestPhysicalConstantsComeFromTheModel:
+    """M-12: code encodes how, the model encodes which (P5)."""
+
+    def test_the_acceleration_ceiling_is_the_types_own(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("max_acceleration_rad_s2", 3.5),
+        )
+        limits = artifacts(real_model)["moveit/cell_a_arm_1_joint_limits.yaml"]
+        assert "max_acceleration: 3.5" in limits
+        assert "max_acceleration: 2.0" not in limits
+
+    def test_the_controller_manager_rate_is_the_types_own(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["control"].__setitem__("update_rate_hz", 250),
+        )
+        controllers = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        assert "update_rate: 250" in controllers
+
+    def test_a_type_with_controllers_and_no_rate_is_an_error_not_a_default(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        from cite_tools.generate.control import MissingControlSpecError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"].pop("control"),
+        )
+        with pytest.raises(MissingControlSpecError, match="update_rate_hz"):
+            artifacts(real_model)
+
+
+class TestTheDeterminismCheckCanSeeWhatItClaimsTo:
+    """R-17: the check has to run somewhere its own failure mode can occur.
+
+    `PYTHONHASHSEED` is fixed for the life of a process, so generating twice in
+    one interpreter cannot observe set-iteration order changing — which is the
+    single most likely way byte-identical output breaks. The check ran that way
+    and its docstring named a property it could not have detected.
+    """
+
+    def test_the_second_run_is_a_fresh_interpreter_under_a_different_seed(
+        self, real_model: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from cite_tools import cli
+
+        seen: dict[str, object] = {}
+        real_run = subprocess.run
+
+        def capture(command, **kwargs):  # type: ignore[no-untyped-def]
+            seen["command"] = command
+            seen["seed"] = kwargs["env"]["PYTHONHASHSEED"]
+            return real_run(command, **kwargs)
+
+        monkeypatch.setattr(cli.subprocess, "run", capture)
+        monkeypatch.setenv("PYTHONHASHSEED", "0")
+
+        produced = gen.generate(load(real_model))
+        assert cli._determinism_problems(real_model, produced) == []
+
+        assert seen["command"][0] == sys.executable, "regeneration must be a real interpreter"
+        assert seen["seed"] != "0", "the second run must not inherit this process's hash seed"
+
+    def test_a_difference_between_the_two_runs_is_reported(self, real_model: Path) -> None:
+        # Proves the comparison is against what the subprocess actually produced
+        # rather than against the list handed in.
+        from cite_tools import cli
+
+        produced = gen.generate(load(real_model))
+        tampered = [
+            gen.Artifact(a.path, a.content + "\n# tampered\n") if a.path == "MODEL_HASH" else a
+            for a in produced
+        ]
+        problems = cli._determinism_problems(real_model, tampered)
+        assert any("MODEL_HASH" in problem for problem in problems), problems
+
+    def test_a_failing_subprocess_is_reported_rather_than_raised(self, real_model: Path) -> None:
+        # A check that crashes on its own machinery tells nobody anything.
+        from cite_tools import cli
+
+        produced = gen.generate(load(real_model))
+        problems = cli._determinism_problems(real_model / "does_not_exist", produced)
+        assert problems and "subprocess" in problems[0]

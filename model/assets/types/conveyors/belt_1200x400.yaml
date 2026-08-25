@@ -13,6 +13,12 @@ asset_type:
   id: belt_1200x400
   category: conveyor
 
+  # All three frames lie on the belt's top face, 0.600 m up. An authored body's
+  # pose names the point it stands on, so the body below has to be 0.600 m TALL
+  # for these to describe the same object — a 0.100 m slab standing on the floor
+  # would put the declared work surface half a metre above the geometry, and a
+  # PlaceAt would release the work-piece into empty air. `frame-outside-geometry`
+  # in cite_tools.validate.geometric now rejects that arrangement mechanically.
   frames:
     - id: surface
       xyz_m: [0.000, 0.000, 0.600]
@@ -28,22 +34,36 @@ asset_type:
       # Here they happen to be the same primitive, which is fine — the point is
       # that reusing a dense visual mesh as collision geometry has to be a
       # visible choice, never an omission (L1).
+      #
+      # A real belt conveyor is a stand carrying a belt, so most of this box is
+      # air. The cost is stated rather than hidden: as a VISUAL it reads as a
+      # solid block, and as COLLISION it is conservative — the planner will
+      # refuse a path under the belt that a real gripper could take. Both are
+      # deliberate. A single primitive is what `Body` can express, and an
+      # optimistic collision hull is the failure that puts a gripper through a
+      # conveyor frame at run time.
       visual:
         kind: box
-        size_m: [1.200, 0.400, 0.100]
+        size_m: [1.200, 0.400, 0.600]
       collision:
         kind: box
-        size_m: [1.200, 0.400, 0.100]
+        size_m: [1.200, 0.400, 0.600]
       inertial:
         # A steel-framed belt of this size. Plausible rather than measured, and
-        # the physical validator checks it is at least self-consistent.
+        # the physical validator checks it is at least self-consistent. 45 kg
+        # over the 0.288 m^3 bounding box is 156 kg/m^3, which is what a mostly
+        # hollow frame should read as.
         mass_kg: 45.0
+        # Relative to the CENTRE of the collision box, which is the reference
+        # `Inertial.com_m` fixes and which the scene template and
+        # `validate.physical` both use. Zero here means the tensor below is
+        # centroidal, as every tensor in this model is.
         com_m: [0.0, 0.0, 0.0]
-        # Solid-box tensor for 1.2 x 0.4 x 0.1 m at 45 kg:
-        #   ixx = m/12 * (y^2 + z^2) = 45/12 * (0.16 + 0.01)  = 0.6375
-        #   iyy = m/12 * (x^2 + z^2) = 45/12 * (1.44 + 0.01)  = 5.4375
-        #   izz = m/12 * (x^2 + y^2) = 45/12 * (1.44 + 0.16)  = 6.0000
-        ixx: 0.6375
-        iyy: 5.4375
+        # Solid-box tensor for 1.2 x 0.4 x 0.6 m at 45 kg:
+        #   ixx = m/12 * (y^2 + z^2) = 45/12 * (0.16 + 0.36) = 1.95
+        #   iyy = m/12 * (x^2 + z^2) = 45/12 * (1.44 + 0.36) = 6.75
+        #   izz = m/12 * (x^2 + y^2) = 45/12 * (1.44 + 0.16) = 6.00
+        ixx: 1.9500
+        iyy: 6.7500
         izz: 6.0000
       material: conveyor_frame

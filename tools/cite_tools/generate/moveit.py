@@ -24,13 +24,6 @@ from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.render import environment
 
-#: Joint acceleration ceiling applied at planning time, rad/s^2. The vendor
-#: description carries velocity and effort limits but no acceleration limit, and
-#: MoveIt's time parameterisation needs one — without it, trajectories are
-#: generated that the controller cannot track, which presents as following error
-#: rather than as a missing limit.
-MAX_ACCELERATION_RAD_S2 = 2.0
-
 
 @dataclass(frozen=True)
 class _PlanningView:
@@ -105,7 +98,10 @@ def _view(asset: ResolvedAsset) -> _PlanningView | None:
         kinematics_timeout_s=planning.kinematics_timeout_s,
         max_velocity_scaling=planning.max_velocity_scaling,
         max_acceleration_scaling=planning.max_acceleration_scaling,
-        max_acceleration_rad_s2=MAX_ACCELERATION_RAD_S2,
+        # From the type, not from a constant here: an acceleration ceiling is a
+        # fact about a particular arm, and a module constant applied it
+        # identically to every type the generator would ever see (P5).
+        max_acceleration_rad_s2=planning.max_acceleration_rad_s2,
     )
 
 

@@ -8,6 +8,9 @@ to keep stable.
 
 from __future__ import annotations
 
+import hashlib
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -47,23 +50,73 @@ def generated_dir(model: Path) -> Path:
     return model.resolve().parent / "workspace" / "src" / gen.PACKAGE
 
 
-def _determinism_problems(facility_model: object, artifacts: list[gen.Artifact]) -> list[str]:
-    """Generate a second time and compare, byte for byte.
+#: Re-generation runs under a hash seed that differs from this process's. Any
+#: fixed value distinct from the parent's will do; the evidence is agreement
+#: across two different seeds, not the seeds themselves.
+_ALTERNATE_HASH_SEED = "1"
+_FALLBACK_HASH_SEED = "2"
+
+#: Executed inside the subprocess. Prints one `path<TAB>digest` line per artifact.
+_REGENERATE_SNIPPET = """
+import hashlib, sys
+from pathlib import Path
+from cite_tools import generate as gen
+from cite_tools.model.loader import load
+for artifact in gen.generate(load(Path(sys.argv[1]))):
+    digest = hashlib.sha256(artifact.content.encode()).hexdigest()
+    sys.stdout.write(artifact.path + chr(9) + digest + chr(10))
+"""
+
+
+def _determinism_problems(model: Path, artifacts: list[gen.Artifact]) -> list[str]:
+    """Generate again in a FRESH interpreter, under a different hash seed.
 
     ADR-0004 requires byte-identical output because the hand-edit check compares
     against a fresh run. Under non-determinism that check reports false positives
     and gets ignored, which silently disables the mechanism the architecture rests
     on — so the property is asserted on every validation rather than assumed.
+
+    The subprocess is the whole point, and this check used not to have one.
+    Generating twice inside one interpreter cannot see the failure mode named
+    above: `PYTHONHASHSEED` is fixed for the life of a process, so a generator
+    that iterated a set of strings would produce the same wrong order both times
+    and the check would pass. Only a second interpreter, seeded differently,
+    makes set iteration order differ — and set iteration order is the single most
+    likely way this property breaks.
     """
-    again = gen.generate(facility_model)  # type: ignore[arg-type]
-    first = {a.path: a.content for a in artifacts}
-    second = {a.path: a.content for a in again}
+    seed = _ALTERNATE_HASH_SEED
+    if os.environ.get("PYTHONHASHSEED") == seed:
+        seed = _FALLBACK_HASH_SEED
+
+    completed = subprocess.run(
+        [sys.executable, "-c", _REGENERATE_SNIPPET, str(model)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONHASHSEED": seed},
+        check=False,
+    )
+    if completed.returncode != 0:
+        return [
+            "the determinism check could not re-generate the model in a subprocess "
+            f"(exit {completed.returncode}): {completed.stderr.strip()[-500:]}"
+        ]
+
+    second: dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        path, _, digest = line.partition("\t")
+        second[path] = digest
+    first = {a.path: hashlib.sha256(a.content.encode()).hexdigest() for a in artifacts}
+
     problems: list[str] = []
-    if first.keys() != second.keys():
-        problems.append("the generator emitted a different set of files on two consecutive runs")
+    for path in sorted(set(first) ^ set(second)):
+        where = "this run only" if path in first else f"PYTHONHASHSEED={seed} only"
+        problems.append(f"{path}: emitted by {where} — the generator is not deterministic")
     for path in sorted(first.keys() & second.keys()):
         if first[path] != second[path]:
-            problems.append(f"{path}: generator is not deterministic — two runs differ")
+            problems.append(
+                f"{path}: differs between two runs under different hash seeds — "
+                "the generator is not deterministic"
+            )
     return problems
 
 
@@ -134,7 +187,7 @@ def validate(
     generated_problems: list[str] = []
     if not any(f.severity is Severity.ERROR for f in findings) and not schema_problems:
         artifacts = gen.generate(facility_model)
-        generated_problems = _determinism_problems(facility_model, artifacts)
+        generated_problems = _determinism_problems(model, artifacts)
         generated_problems += gen.differences(artifacts, generated_dir(model))
         for problem in generated_problems:
             err_console.print(f"[red]error[/red] [dim]generated[/dim] {problem}")

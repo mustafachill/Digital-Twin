@@ -11,8 +11,22 @@ schema: cite/asset_instances/v1
 # rather than implied, per P7.
 #
 # The line runs along +X. Every arm sits 0.35 m in front of the belt centreline
-# and reaches 0.45 m along ∓X, giving a 0.570 m working distance against a
+# and reaches 0.475 m along ∓X, giving a 0.590 m working distance against a
 # 0.700 m envelope.
+#
+# The tables are held clear of their neighbours rather than butted against them.
+# A table whose face exactly touches a pedestal validates today only because the
+# overlap test uses a strict inequality: one micrometre of Phase-2 registration
+# correction turns it into a penetration the physics engine resolves by flinging
+# both bodies apart. `insufficient-clearance` warns below
+# geometric.MIN_CLEARANCE_M, and these poses are chosen to sit above it:
+#
+#   table_pick          x ends   -0.175  |  pedestal_1 x starts -0.150  ->  25 mm
+#   table_accumulation  x starts  5.900  |  conveyor_3 x ends    5.850  ->  50 mm
+#
+# table_pick cannot move further out than this: its `surface` frame is
+# station_transfer_1's pick point, and at -0.475 arm_1 already reaches 84% of its
+# 0.700 m envelope. Buying more clearance here costs reach margin there.
 assets:
   # --- arm pedestals ---
   - id: pedestal_1
@@ -45,7 +59,7 @@ assets:
     type: work_table_600
     pose:
       frame: cite_world
-      xyz_m: [-0.450, 0.000, 0.000]
+      xyz_m: [-0.475, 0.000, 0.000]
     hardware: {backend: sim}
 
   - id: table_accumulation
@@ -53,5 +67,5 @@ assets:
     type: work_table_600
     pose:
       frame: cite_world
-      xyz_m: [6.150, 0.000, 0.000]
+      xyz_m: [6.200, 0.000, 0.000]
     hardware: {backend: sim}

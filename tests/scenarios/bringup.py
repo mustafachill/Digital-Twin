@@ -17,7 +17,6 @@ Assertions are on outcomes and constraints, never on exact trajectories.
 
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 
@@ -45,6 +44,13 @@ ARMS = ("arm_1", "arm_2", "arm_3")
 
 #: Wall-clock ceilings, not schedules. Nothing is sequenced by them; they exist so
 #: a hang fails the run with a diagnosis instead of blocking CI indefinitely.
+#:
+#: Their basis, because a bare number tells the next reader nothing: they were
+#: chosen against a Linux workstation running near real time. Measured real-time
+#: factor on the macOS development host is about 0.14 — `joint_states` arrives at
+#: roughly 21 Hz against a configured 150 Hz — so a timeout here is evidence of a
+#: slow machine at least as often as it is evidence of a hang. Raise them for a
+#: slower host rather than reading a timeout as a defect.
 BRING_UP_CEILING_S = 240.0
 DELIVERY_CEILING_S = 30.0
 TRAJECTORY_CEILING_S = 60.0
@@ -73,9 +79,14 @@ class TestCellBringUp(unittest.TestCase):
     def setUpClass(cls) -> None:
         rclpy.init()
         cls.node = Node("scenario_bringup")
-        # Scenarios are deterministic: the seed is fixed so a failure reproduces
-        # instead of being a coin flip.
-        cls.seed = os.environ.get("CITE_PHYSICS_SEED", "unset")
+        # No seed is read here. There was a `cls.seed` that nothing used, beside
+        # a comment claiming scenarios are deterministic — a claim this
+        # repository cannot currently support. `./scripts/scenario` exports
+        # CITE_PHYSICS_SEED and nothing consumes it: `gz sim` takes a seed as a
+        # command-line flag rather than an SDF element and `simulation.launch.py`
+        # passes none, and MoveIt exposes no way to seed OMPL's RNG at all. The
+        # script itself now says so on every run. Assertions below are on
+        # outcomes and constraints precisely because a plan cannot be reproduced.
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -83,13 +94,20 @@ class TestCellBringUp(unittest.TestCase):
         rclpy.shutdown()
 
     def _spin_until(self, predicate, ceiling_s: float, what: str):
-        """Spin until `predicate` returns something truthy, or fail saying what."""
+        """Spin until `predicate` returns something other than None, or fail.
+
+        `is not None`, not truthiness. A measurement of exactly 0.0 or an empty
+        but valid answer is a perfectly good result, and treating it as "not
+        ready yet" produces a timeout whose message points at the wrong thing.
+        Predicates that answer with a bool convert it at the call site, where the
+        meaning of False is obvious.
+        """
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
         result = predicate()
-        while not result and self.node.get_clock().now().nanoseconds < end:
+        while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
             result = predicate()
-        self.assertTrue(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
+        self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
         return result
 
     def test_every_controller_reaches_active(self) -> None:
@@ -98,7 +116,7 @@ class TestCellBringUp(unittest.TestCase):
             manager = f"/cite/{ZONE}/{arm}/controller_manager"
             client = self.node.create_client(ListControllers, f"{manager}/list_controllers")
             self._spin_until(
-                lambda c=client: c.wait_for_service(timeout_sec=0.5),
+                lambda c=client: c.wait_for_service(timeout_sec=0.5) or None,
                 BRING_UP_CEILING_S,
                 f"{manager} to appear",
             )
@@ -149,12 +167,41 @@ class TestCellBringUp(unittest.TestCase):
                 self.node.destroy_subscription(subscription)
 
     def test_no_joint_name_is_shared_between_arms(self) -> None:
-        """Two instances of one component type must never collide."""
-        seen: dict[str, str] = {}
+        """Two instances of one component type must never collide.
+
+        Read from the arms that are actually running. This test used to build the
+        joint names from a local tuple with f-strings and then assert that the
+        strings it had just built did not collide — it queried nothing, touched no
+        node, and could not fail. What it claimed to verify is real and important:
+        three instances of one component type share every vendor joint name, and
+        only the generated `<asset_id>_` prefix keeps them apart. If that prefix
+        were ever dropped, three controller managers would claim the same
+        eighteen joints and write to them every cycle.
+        """
+        owners: dict[str, str] = {}
         for arm in ARMS:
-            for joint in [f"{arm}_joint{n}" for n in range(1, 6)] + [f"{arm}_drive_joint"]:
-                self.assertNotIn(joint, seen, f"{joint} appears on both {seen.get(joint)} and {arm}")
-                seen[joint] = arm
+            received: list[JointState] = []
+            topic = f"/cite/{ZONE}/{arm}/joint_states"
+            subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
+            try:
+                self._spin_until(
+                    lambda r=received: r or None, DELIVERY_CEILING_S, f"a message on {topic}"
+                )
+                live = sorted(received[-1].name)
+                self.assertTrue(live, f"{topic} delivered a message naming no joints")
+                for joint in live:
+                    self.assertNotIn(
+                        joint,
+                        owners,
+                        f"{joint} is published by both {owners.get(joint)} and {arm}; "
+                        "the L0 asset-id prefix is what keeps two instances of one "
+                        "component type apart, and it is missing here",
+                    )
+                    owners[joint] = arm
+            finally:
+                self.node.destroy_subscription(subscription)
+        # Three five-axis arms with a gripper each: eighteen distinct names.
+        self.assertEqual(len(owners), 18, sorted(owners))
 
     def test_a_trajectory_executes(self) -> None:
         """The arm moves when commanded, through the action the skills will use."""
@@ -162,7 +209,9 @@ class TestCellBringUp(unittest.TestCase):
         action = f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/follow_joint_trajectory"
         client = ActionClient(self.node, FollowJointTrajectory, action)
         self._spin_until(
-            lambda: client.wait_for_server(timeout_sec=0.5), BRING_UP_CEILING_S, action
+            lambda: client.wait_for_server(timeout_sec=0.5) or None,
+            BRING_UP_CEILING_S,
+            action,
         )
 
         goal = FollowJointTrajectory.Goal()
@@ -246,7 +295,7 @@ class TestCellBringUp(unittest.TestCase):
         arm = ARMS[0]
         client = ActionClient(self.node, MoveTo, f"/cite/{ZONE}/{arm}/move_to")
         self._spin_until(
-            lambda: client.wait_for_server(timeout_sec=0.5),
+            lambda: client.wait_for_server(timeout_sec=0.5) or None,
             BRING_UP_CEILING_S,
             f"the {arm} skill server",
         )
@@ -281,15 +330,22 @@ class TestCleanShutdown(unittest.TestCase):
     assumed.
     """
 
-    #: move_group segfaults during its own teardown, after logging "Deleting
-    #: MoveItCpp", on SIGINT. Reproduced on every run here with MoveIt 2.12.4 on
-    #: Jazzy: the node has already stopped serving by then, it leaves no orphan,
-    #: and no configuration of ours changes it.
+    #: move_group does not exit cleanly, and the shape of that is NOT understood.
+    #: This exemption was written as though it were a characterised upstream bug
+    #: ("segfaults during its own teardown ... reproduced on every run"). Two
+    #: independent sets of runs since then contradict each other and that claim:
+    #: one saw all three move_group processes exit -11 with no SIGTERM
+    #: escalation, another saw -15 on six consecutive runs and no -11 at all.
+    #: Same code. Mutually exclusive outcomes point at one defect — an unmanaged
+    #: racing teardown whose visible form depends on machine speed — rather than
+    #: at a deterministic upstream segfault.
     #:
-    #: Tolerated for move_group ALONE, deliberately not by widening the allowable
-    #: codes for every process — a segfault in one of our own nodes must still
-    #: fail this test. Re-check on the next MoveIt release and delete this
-    #: exemption if it is fixed, rather than leaving it to cover something new.
+    #: The consequence for THIS test is that it is currently weak: tolerating
+    #: -11 for move_group means the process that most needs a shutdown assertion
+    #: is the one exempt from it. The exemption is left in place unchanged
+    #: because the underlying teardown defect is owned elsewhere; neither -11 nor
+    #: -15 should be read as the expected outcome, and this must be narrowed once
+    #: the teardown is managed rather than raced.
     UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:

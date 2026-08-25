@@ -45,6 +45,8 @@ class _BodyView:
     body: Body
     world_pose: Pose
     half_height: float
+    #: Where the mass sits, in the link's own frame. See `_body_view`.
+    inertial_origin_m: tuple[float, float, float]
     visual_xml: str
     collision_xml: str
     named_frames: tuple[_Frame, ...]
@@ -94,17 +96,40 @@ def _body_view(asset: ResolvedAsset) -> _BodyView:
 
     # An authored body's pose names the point it stands on — a pedestal's pose is
     # where its foot is, not its centre — because that is how someone measuring a
-    # room writes it down. The link origin therefore sits half a height up.
+    # room writes it down. The anchor joint therefore places `<asset>_base_link`
+    # at the foot, and the visual and collision origins sit half a height up.
     half_height = body.collision.size_m[2] / 2.0 if body.collision.kind == "box" else 0.0
 
+    # ONE convention, applied everywhere in this module. `base_link` is at the
+    # foot, so a type frame declared at z = 0.600 attaches at z = 0.600 and no
+    # half-height is subtracted. Subtracting one here — which this generator used
+    # to do — would only have been right if the link origin were the box centre,
+    # and it published `pedestal_1_top` 0.3 m below `cell_a__pedestal_1__top`:
+    # the same L0 frame, twice, 0.3 m apart, in two live representations (P1).
+    #
+    # A frame that names a `link` is skipped. That frame belongs to a description
+    # `robot_state_publisher` already publishes, and emitting a second copy of it
+    # is the same duplication in the other direction — see `generate.frames`,
+    # which applies the identical rule to the static transform table.
     frames = tuple(
         _Frame(
             name=ids.link(asset.id, f.id),
-            xyz_m=(f.xyz_m[0], f.xyz_m[1], f.xyz_m[2] - half_height),
+            xyz_m=f.xyz_m,
             rpy_rad=f.rpy_rad,
         )
         for f in sorted(asset.asset_type.frames, key=lambda f: f.id)
+        if f.link is None
     )
+
+    # The tensor in the model is centroidal and `com_m` is measured from the box
+    # CENTRE (see `schema.Inertial.com_m`), so the inertial origin has to carry
+    # the same half height the geometry does. Emitting `com_m` raw declared the
+    # mass at the foot, which stated a centroidal tensor about a point up to
+    # 0.3 m away from the mass and made 315 kg of furniture sit flat on the
+    # floor — more stable than reality, and hiding tipping rather than showing
+    # it.
+    com = body.inertial.com_m
+    inertial_origin_m = (com[0], com[1], com[2] + half_height)
 
     return _BodyView(
         id=asset.id,
@@ -113,6 +138,7 @@ def _body_view(asset: ResolvedAsset) -> _BodyView:
         body=body,
         world_pose=asset.world_pose,
         half_height=half_height,
+        inertial_origin_m=inertial_origin_m,
         visual_xml=_geometry_xml(body.visual),
         collision_xml=_geometry_xml(body.collision),
         named_frames=frames,
@@ -215,12 +241,23 @@ def _mount_link(asset: ResolvedAsset) -> str:
     return ids.link(asset.id, "mount")
 
 
-def generate(cell: ResolvedCell) -> list[Artifact]:
-    bodies = tuple(
+def body_views(cell: ResolvedCell) -> tuple[_BodyView, ...]:
+    """Every authored body in the cell, resolved.
+
+    Public because `generate.planning_scene` builds the planner's view of the
+    cell from exactly these objects. Two generators reading one function is what
+    stops the planner's idea of where a table is from drifting away from the
+    simulator's.
+    """
+    return tuple(
         _body_view(a)
         for a in cell.assets
         if a.asset_type.description.provider == "body" and a.asset_type.description.body
     )
+
+
+def generate(cell: ResolvedCell) -> list[Artifact]:
+    bodies = body_views(cell)
     arms = tuple(
         _arm_view(a, cell)
         for a in cell.assets
