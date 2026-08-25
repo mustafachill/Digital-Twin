@@ -34,7 +34,25 @@ install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
+
+  # Two linters in ament_lint_common are registered by hand rather than through
+  # ament_lint_auto, because their defaults contradict conventions this
+  # repository already follows and neither can be configured through the auto
+  # path. What they check is unchanged; only the two conflicting preferences are
+  # settled. Same block as cite_bringup and cite_facility carry, for the same
+  # reason. See .flake8 at the repository root for the flake8 half.
+  #
+  # pep257: the "ament" convention ignores D212 and therefore enforces D213 —
+  # "summary should start at the second line". D212 and D213 are mutually
+  # exclusive by construction, and every docstring in this repository puts the
+  # summary on the first line.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../../.flake8")
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D213)
 
   # Approach and retreat geometry is pure arithmetic, so it is tested without a
   # planner, a simulator, or any waiting. Pushing it down here is what keeps the
@@ -50,10 +68,21 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pose_goal test/test_pose_goal.cpp src/pose_goal.cpp)
   target_include_directories(test_pose_goal PRIVATE include)
 
-  # Gripper arithmetic: metres against the drive joint's own units, and what a
-  # `Pick` closes to when the goal leaves the width unset.
+  # Gripper arithmetic: metres against the drive joint's own units, where the pad
+  # face sits on the tool axis, and what a `Pick` closes to when the goal leaves
+  # the width unset.
   ament_add_gtest(test_gripper test/test_gripper.cpp src/gripper.cpp)
   target_include_directories(test_gripper PRIVATE include)
+
+  # Turning an object's pose into the tool pose that grasps it. The offset and
+  # the offset-along-the-tool-axis each have their own tests above; what this
+  # covers is their composition — the sign and the axis, both of which are free
+  # to be wrong in a way that reads as plausible and moves the arm 37 mm the
+  # wrong way in the cell.
+  ament_add_gtest(
+    test_grasp_pose test/test_grasp_pose.cpp src/approach.cpp src/gripper.cpp)
+  target_include_directories(test_grasp_pose PRIVATE include)
+  ament_target_dependencies(test_grasp_pose geometry_msgs tf2_geometry_msgs)
 
   # One arm, one goal. A concurrency invariant, tested as one — with threads,
   # not with a comment.

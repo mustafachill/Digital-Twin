@@ -244,36 +244,56 @@ class ControllerSpec(Strict):
 
 
 class GripperLinkage(Strict):
-    """The geometry that maps a parallel gripper's drive angle onto a pad opening.
+    """Where a parallel gripper's pads are, as a function of its drive angle.
 
-    ``opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
-                        + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))``
+    Two maps, one crank. Across the tool axis::
 
-    This is the single home of that relationship (P1). The L3 skill server
-    receives these four numbers through the generated bring-up plan and evaluates
-    the same closed form, so task-space widths mean the same thing in the model,
-    in the validator, and on the robot.
+        opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
+                          + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))
 
-    It is a closed form rather than a fit or a table because it is derivable: the
-    drive joint and the finger joint rotate about opposite axes by the same angle,
-    so their rotations cancel, the pad stays parallel, and its offset from the
-    centreline is plain trigonometry. A lookup table would be the same fact stored
-    at lower precision and with more places to drift.
+    and along it, how far PROXIMAL of the planning tip link the centre of the pad
+    face sits::
+
+        pad_plane_offset(q) = tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m
+                              - (finger_offset_y_m*sin(q)
+                                 + finger_offset_z_m*cos(q))
+
+    This is the single home of both relationships (P1). The L3 skill server
+    receives these seven numbers through the generated bring-up plan and
+    evaluates the same closed forms, so task-space widths and task-space *poses*
+    mean the same thing in the model, in the validator, and on the robot.
+
+    They are closed forms rather than fits or tables because they are derivable:
+    the drive joint and the finger joint rotate about opposite axes by the same
+    angle, so their rotations cancel, the pad face stays parallel to the tool
+    axis, and only its origin translates. The two maps are that one translation
+    resolved on two axes — which is also why they belong in one model rather than
+    two, since separating them would mean a second copy of the crank.
 
     Every field is a dimension in the robot's own description, which is what makes
     an audit possible: each can be checked against the vendor URDF or mesh rather
     than taken on trust.
     """
 
-    #: y of the drive joint's origin in the gripper base frame.
+    #: y and z of the drive joint's origin in the gripper base frame.
     drive_pivot_y_m: float
+    drive_pivot_z_m: float
     #: y and z of the driven finger joint's origin in the outer-knuckle frame —
-    #: together the crank whose rotation opens and closes the jaw.
+    #: together the crank whose rotation opens and closes the jaw, and slides the
+    #: pad face along the tool axis.
     finger_offset_y_m: float
     finger_offset_z_m: float
     #: How far the pad face lies inboard of the finger link's own origin. Taken
     #: from the collision mesh, because the URDF never states it.
     pad_inset_m: Annotated[float, Field(ge=0.0)]
+    #: Where the planning tip link sits on the tool axis, in the gripper base
+    #: frame. It is the FINGERTIP plane, not the gripping plane — which is the
+    #: whole reason the axial map has to exist.
+    tip_link_z_m: float
+    #: Centre of the pad face along the tool axis, in the finger link's own
+    #: frame. From the collision mesh, like ``pad_inset_m``: the URDF describes
+    #: where the finger is, never which part of it grips.
+    pad_face_centre_z_m: float
 
     @property
     def _pivot_m(self) -> float:
@@ -290,9 +310,34 @@ class GripperLinkage(Strict):
         """Where the crank starts, so that ``opening`` is a single cosine."""
         return math.atan2(self.finger_offset_z_m, self.finger_offset_y_m)
 
+    @property
+    def _axial_reach_m(self) -> float:
+        """The constant part of :meth:`pad_plane_offset_m`.
+
+        Derived, never declared, for the same reason ``max_width_m`` is: the
+        campaign that measured this quotes it as 0.0718988 m, and a declared copy
+        of a number three other fields already determine is a second place to be
+        wrong.
+        """
+        return self.tip_link_z_m - self.drive_pivot_z_m - self.pad_face_centre_z_m
+
     def opening_m(self, position: float) -> float:
         """The distance between the pads at drive-joint position ``position``."""
         return 2.0 * (self._pivot_m + self._crank_m * math.cos(position + self._phase_rad))
+
+    def pad_plane_offset_m(self, position: float) -> float:
+        """How far proximal of the tip link the pad face centre sits, in metres.
+
+        The same crank as :meth:`opening_m`, projected on the tool axis instead
+        of across it — hence a sine where that has a cosine.
+
+        A grasp happens at the pad face, so a caller that knows where an object
+        is has to move the tip link this far *past* it. Getting that wrong is not
+        a rounding error: 24.4 mm of it put 19.3 mm of a 37.5 mm pad face on a
+        50 mm work-piece, 15.35 mm off its centre of mass, and rotated the part
+        past 20 degrees in 12 of 20 measured trials.
+        """
+        return self._axial_reach_m - self._crank_m * math.sin(position + self._phase_rad)
 
     def position_for(self, width_m: float) -> float:
         """The drive-joint position that opens the pads to ``width_m``.

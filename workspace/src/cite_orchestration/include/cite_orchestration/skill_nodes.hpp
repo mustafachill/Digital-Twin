@@ -252,33 +252,54 @@ public:
       BT::InputPort<std::string>("frame"),
       BT::InputPort<std::string>("action", "the Pick action this station's arm serves"),
       BT::InputPort<std::string>("workpiece", "which work-piece this station handles"),
-      // How far above the station's frame the work-piece is grasped. A stand-in
-      // for Detect, which is what tells the line where a work-piece actually is;
-      // until that skill exists, saying so with a port is more honest than
-      // burying the number in this file.
-      BT::InputPort<double>("grasp_height_m", 0.03, "grasp height above the frame"),
+      // How far above the station's frame the work-piece's centre sits. A
+      // stand-in for Detect, which is what tells the line where a work-piece
+      // actually is; until that skill exists, saying so with a port is more
+      // honest than burying the number in this file.
+      //
+      // A WORK-PIECE FACT, and nothing else. This port used to be
+      // `grasp_height_m` at 0.030 — the height to put the TOOL at, which is a
+      // different question and one L4 has no business answering. The cell's
+      // reference work-piece is a 50 mm cube resting on the frame, so its centre
+      // is at 0.025; the extra 5.00 mm was this file guessing at the gripper's
+      // geometry, and guessing low. `Pick.Goal.object_pose` is "where the object
+      // is", the L3 skill server offsets it onto the pad plane using the end
+      // effector's own declared linkage, and the two questions are now asked in
+      // the two places that can answer them (P5, P9).
+      BT::InputPort<double>(
+        "workpiece_height_m", 0.025, "the work-piece's centre above the frame"),
       BT::InputPort<double>("approach_m", 0.10, "standoff before grasping"),
       BT::InputPort<double>("retreat_m", 0.12, "lift after grasping"),
       // The jaw width commanded on the part, and a stand-in in the same sense:
       // L0 records no work-piece geometry, so nothing can derive it yet.
       //
-      // The number is bounded above by the simulated grasp, and the bound is
-      // sharp enough to be worth writing down. The attachment plugin registers a
-      // grasp only once the drive joint passes its closed threshold, so the
-      // command has to drive the jaws PAST the part rather than up to it:
+      // WHERE THIS NUMBER COMES FROM. Against the WORK-PIECE, which is the only
+      // datum it has ever really been about: a parallel gripper evidences a grasp
+      // by failing to reach where it was sent (ADR-0022), so the command has to be
+      // narrower than the part. The scenario's part is a 50 mm cube, and 0.045
+      // leaves 5.00 mm of margin — against the ~2.11 mm that `gripper_is_holding`
+      // needs to tell a real grasp from the controller's own end-of-goal position
+      // bias. Wider than the part and the jaws arrive on target and learn nothing;
+      // much narrower and the jaws close through nothing at all.
       //
-      //     width < max_width x (1 - closed_threshold / closed_position)
-      //           = 0.085 x (1 - 0.30 / 0.85)
-      //           = 0.055 m
+      // WHAT USED TO BE WRITTEN HERE, because the correction is the point. The
+      // bound was derived from `closed_threshold / closed_position` — parameters
+      // of ADR-0023's contact-triggered attachment plugin. That put an L4
+      // orchestration file reasoning from the configuration of an L1 SIMULATION
+      // plugin, which is the boundary ADR-0023 was supposed to protect and the
+      // one thing that must never leak (P2): a number justified by how the
+      // simulator is built cannot be right on hardware except by accident. The
+      // plugin was removed and ADR-0023 superseded by ADR-0029; the value 0.045
+      // survives because the bound above is the real one and always was.
       //
-      // Anything wider leaves the gripper still travelling when it meets the
-      // part, so it never stalls, so nothing attaches — and the failure looks
-      // like a grasp that simply did not hold. 0.045 m sits below that ceiling
-      // and 5 mm inside the 50 mm part the scenario uses.
-      //
-      // Zero is NOT a safe default here: `Pick.Goal.grasp_width_m` documents 0
-      // as "use the object type's default", and the skill server used to map
-      // that to a fully closed gripper, which crushes the part.
+      // THE VALUE IS ALSO IN L0, as `default_grasp_width_m` on the end-effector
+      // type, and `Pick.Goal.grasp_width_m == 0` means "use that". Sending 0 from
+      // here is where this belongs and is deliberately NOT done yet: the
+      // generated bring-up plan carries the default, but the launch mechanism
+      // does not pass it to the skill server, so a 0 sent today resolves to no
+      // width at all and closes the gripper against its effort limit. Sending the
+      // number keeps the cell working; it is a duplicate until that delivery is
+      // fixed, and it is named as one here rather than left to be discovered.
       BT::InputPort<double>("grasp_width_m", 0.045, "commanded jaw width on the part"),
     };
   }
@@ -298,7 +319,8 @@ public:
     // coordinate is written here, which is what stopped v1's pick tables from
     // diverging from the cell they described.
     goal.object_pose.header.frame_id = frame.value();
-    goal.object_pose.pose.position.z = getInput<double>("grasp_height_m").value_or(0.03);
+    goal.object_pose.pose.position.z =
+      getInput<double>("workpiece_height_m").value_or(0.025);
 
     // Pointing DOWN — a half turn about X. This is not cosmetic: the skill stands
     // off along the tool's own -Z, so with an identity orientation the approach
@@ -330,7 +352,17 @@ public:
       BT::InputPort<std::string>("asset"),
       BT::InputPort<std::string>("frame"),
       BT::InputPort<std::string>("action", "the Place action this station's arm serves"),
-      BT::InputPort<double>("release_height_m", 0.04, "release height above the frame"),
+      // Where the WORK-PIECE's centre is left, above the station's frame — not
+      // where the tool goes. `Place.Goal.target_pose` is the object's target and
+      // the L3 skill server offsets it onto the pad plane, exactly as `Pick`
+      // does; this port names a height in the same terms the pick side does.
+      //
+      // 0.040 against a 50 mm part resting at 0.025 is a deliberate 15 mm drop:
+      // the arm lets go slightly above the surface rather than pressing the part
+      // into it, which is what it did while this number was read as a tool height
+      // and the pad plane was a stroke-dependent distance below it.
+      BT::InputPort<double>(
+        "release_height_m", 0.04, "the work-piece's centre at release, above the frame"),
       BT::InputPort<double>("approach_m", 0.10, "standoff before releasing"),
       BT::InputPort<double>("retreat_m", 0.12, "lift after releasing"),
     };

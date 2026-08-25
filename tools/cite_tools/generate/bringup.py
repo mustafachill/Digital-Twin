@@ -50,9 +50,12 @@ class _ManagerView:
     gripper_goal_tolerance_rad: float | None
     gripper_max_drive_rate_rad_s: float | None
     gripper_drive_pivot_y_m: float | None
+    gripper_drive_pivot_z_m: float | None
     gripper_finger_offset_y_m: float | None
     gripper_finger_offset_z_m: float | None
     gripper_pad_inset_m: float | None
+    gripper_tip_link_z_m: float | None
+    gripper_pad_face_centre_z_m: float | None
 
 
 @dataclass(frozen=True)
@@ -107,9 +110,9 @@ def _linkage(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | No
     """One dimension of the end effector's opening linkage, or None.
 
     Separate from :func:`_grasp` only because the value sits one level deeper.
-    The four dimensions travel together to L3, where the same closed form is
-    evaluated — the map itself is never transmitted, only the geometry it is
-    built from, so there is still exactly one statement of it (P1).
+    The seven dimensions travel together to L3, where the same closed forms are
+    evaluated — neither map is ever transmitted, only the geometry both are built
+    from, so there is still exactly one statement of each (P1).
     """
     if asset.instance.end_effector is None:
         return None
@@ -205,9 +208,12 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             ),
             gripper_max_drive_rate_rad_s=_grasp(cell, asset, "max_drive_rate_rad_s"),
             gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),
+            gripper_drive_pivot_z_m=_linkage(cell, asset, "drive_pivot_z_m"),
             gripper_finger_offset_y_m=_linkage(cell, asset, "finger_offset_y_m"),
             gripper_finger_offset_z_m=_linkage(cell, asset, "finger_offset_z_m"),
             gripper_pad_inset_m=_linkage(cell, asset, "pad_inset_m"),
+            gripper_tip_link_z_m=_linkage(cell, asset, "tip_link_z_m"),
+            gripper_pad_face_centre_z_m=_linkage(cell, asset, "pad_face_centre_z_m"),
         )
         for asset in cell.assets
         if asset.controllers

@@ -44,6 +44,16 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_skill_cancellation
     rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
   )
+
+  # What these leaves put in a goal, read from the far side of the action. A
+  # leaf's whole job is turning ports into one typed goal, so the goal IS its
+  # behaviour — and `PickAt` filled in a tool height where the action asks for
+  # where the object is, which nothing could see until this existed.
+  ament_add_gtest(test_skill_goals test/test_skill_goals.cpp)
+  target_include_directories(test_skill_goals PRIVATE include)
+  ament_target_dependencies(test_skill_goals
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  )
 endif()
 
 ament_package()

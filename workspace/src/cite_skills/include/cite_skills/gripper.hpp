@@ -1,3 +1,17 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // End-effector arithmetic: task-space widths against the gripper's own units.
 //
 // Separated from the skill server so the mapping is tested without a controller.
@@ -19,11 +33,16 @@ struct GripperTravel
   double open_position{0.0};
   double closed_position{0.85};
 
-  /// The four dimensions of the parallel linkage. See `gripper_width_for`.
+  /// The seven dimensions of the parallel linkage — four that open the jaws, and
+  /// three more that place the pad face on the tool axis. See
+  /// `gripper_width_for` and `gripper_pad_plane_offset_m`.
   double drive_pivot_y_m{0.035};
+  double drive_pivot_z_m{0.059098};
   double finger_offset_y_m{0.035465};
   double finger_offset_z_m{0.042039};
   double pad_inset_m{0.026};
+  double tip_link_z_m{0.172};
+  double pad_face_centre_z_m{0.041003};
 
   /// The gripper controller's own `goal_tolerance`, in drive-joint units. Not a
   /// property of the mechanism but of how the controller decides a goal is done,
@@ -65,6 +84,39 @@ double gripper_position_for(double width_m, const GripperTravel & travel);
 /// a second place, and when it was one it disagreed with the linkage.
 double gripper_max_width_m(const GripperTravel & travel);
 double gripper_min_width_m(const GripperTravel & travel);
+
+/// How far PROXIMAL of the planning tip link the centre of the pad face sits, at
+/// drive position `position`, in metres.
+///
+///     offset(q) = tip_link_z - drive_pivot_z - pad_face_centre_z
+///                 - (finger_offset_y*sin(q) + finger_offset_z*cos(q))
+///
+/// The same crank as `gripper_width_for`, projected along the tool axis instead
+/// of across it — hence a sine where that has a cosine. Both come from one
+/// translation of the finger link, so they cannot disagree.
+///
+/// ---------------------------------------------------------------------------
+/// WHY A SKILL MUST NOT PLAN AN OBJECT'S POSE TO THE TIP LINK.
+///
+/// `link_tcp`, which `planning.tip_link_suffix` names and which every skill here
+/// plans to, is the FINGERTIP plane. The pads grip with their faces, whose centre
+/// sits this far back up the tool axis. A `Pick` that sent `object_pose` straight
+/// to the planner therefore parked the pad face above the object by exactly this
+/// much, and the 40-trial interleaved campaign in
+/// `docs/measurements/2026-08-25-grasp-plane-offset/` measured what that costs:
+/// 19.3 mm of a 37.5 mm pad face engaged, the contact patch 15.35 mm off the
+/// part's centre of mass, and a couple that rotated the work-piece past 20
+/// degrees in 12 of 20 trials. Corrected, 0 of 20, p < 0.0001.
+///
+/// NOT A CONSTANT. It runs from 29.86 mm fully open to 18.58 mm at the 45 mm
+/// default grasp — 11.3 mm across the stroke. A deleted `grasp` frame in the L0
+/// model once declared a single 0.172 m for this and was wrong twice over: that
+/// is the fingertip, and no single number can be right at more than one width.
+/// ---------------------------------------------------------------------------
+///
+/// Planning-side and therefore identical on hardware (P2): it is arithmetic on
+/// the end effector's declared geometry, and reads nothing from the simulator.
+double gripper_pad_plane_offset_m(double position, const GripperTravel & travel);
 
 /// How much apparent width the controller's `goal_tolerance` is worth at
 /// `position`, in metres.
