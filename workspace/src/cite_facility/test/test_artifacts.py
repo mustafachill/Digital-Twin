@@ -22,7 +22,6 @@ laptop with no ROS, and lets the robot run with no model present.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from cite_facility import artifacts
@@ -138,8 +137,12 @@ def test_every_installed_program_is_executable() -> None:
     than as a missing executable — with no `ProcessExited` event, so no launch
     gate can catch it either. It cost a whole scenario run to find once.
     """
-    package = Path(artifacts.__file__).parent
-    cmake = (package.parent / "CMakeLists.txt").read_text()
+    # From this test's own path, not from `artifacts.__file__`: the module is
+    # imported through the symlink install, so its `__file__` points into
+    # site-packages where there is no CMakeLists.txt and no source tree.
+    package_root = Path(__file__).resolve().parent.parent
+    package = package_root / "cite_facility"
+    cmake = (package_root / "CMakeLists.txt").read_text()
     programs = [
         line.strip().replace("${PROJECT_NAME}/", "")
         for line in cmake.split("install(PROGRAMS", 1)[1].split("DESTINATION", 1)[0].splitlines()
@@ -149,7 +152,10 @@ def test_every_installed_program_is_executable() -> None:
     for name in programs:
         path = package / name
         assert path.is_file(), f"{name} is installed as a program but does not exist"
-        assert os.access(path, os.X_OK), (
+        # The mode bits, not `os.access`: on a Docker bind mount from macOS,
+        # `os.access(..., X_OK)` answers True for a file whose mode is 0o644, so
+        # a test written that way passes with the bit removed and proves nothing.
+        assert path.stat().st_mode & 0o111, (
             f"{name} is installed with install(PROGRAMS) but is not executable in "
             "the source tree, so the symlink install is not executable either"
         )
