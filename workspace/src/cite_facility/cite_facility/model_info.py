@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Publish which facility model this running system was generated from.
 
 L6 requires a recording to carry the model version: a bag recorded against
@@ -12,13 +26,12 @@ value immediately rather than waiting for a publication that never comes.
 
 from __future__ import annotations
 
-import rclpy
-from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
-
 from cite_facility.artifacts import ArtifactError, generated_dir, model_hash
 from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
+import rclpy
+from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 TOPIC = "/cite/facility/model_version"
 SERVICE = "/cite/facility/get_model_version"

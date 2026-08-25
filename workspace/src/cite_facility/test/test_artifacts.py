@@ -1,3 +1,17 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """The runtime side of the generated artifacts.
 
 The boundary these tests defend is easy to erode and expensive to lose: this
@@ -8,11 +22,11 @@ laptop with no ROS, and lets the robot run with no model present.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-import pytest
-
 from cite_facility import artifacts
+import pytest
 
 
 def test_the_generated_package_is_found() -> None:
@@ -73,9 +87,72 @@ def test_topology_loads_with_its_stations() -> None:
     assert topology["zone"] == "cell_a"
 
 
+def test_the_planning_scene_loads_with_the_cell_furniture() -> None:
+    """Every plan in this cell used to be computed against an empty world.
+
+    Not one collision object existed anywhere in the repository, and since every
+    pick and place point lies exactly on a surface, a plan through that surface
+    was the normal case rather than an exotic one.
+    """
+    frame_id, bodies = artifacts.planning_scene("cell_a")
+    assert frame_id == "cite_world"
+    ids = {body.object_id for body in bodies}
+    for expected in ("table_pick", "conveyor_1", "pedestal_1", "table_accumulation"):
+        assert expected in ids, expected
+    assert len(bodies) == len(ids), "a duplicated id would silently replace an object"
+
+
+def test_no_collision_object_stands_in_for_an_arm() -> None:
+    """Deliberately absent, and asserted so that it stays deliberate.
+
+    An articulated robot frozen at one pose is confidently wrong wherever it
+    actually is. Coordinating arms needs the live scene and is L4's problem; a
+    box where a robot used to be is worse than no box at all.
+    """
+    _, bodies = artifacts.planning_scene("cell_a")
+    assert not {b.object_id for b in bodies} & {"arm_1", "arm_2", "arm_3"}
+
+
+def test_every_collision_body_carries_a_frame_and_a_size() -> None:
+    _, bodies = artifacts.planning_scene("cell_a")
+    for body in bodies:
+        assert body.frame_id, body.object_id
+        assert body.primitive == "box", f"{body.object_id} is a {body.primitive}"
+        assert len(body.dimensions_m) == 3, body.object_id
+        assert all(d > 0.0 for d in body.dimensions_m), body.object_id
+        assert len(body.xyz_m) == 3 and len(body.rpy_rad) == 3, body.object_id
+
+
 def test_a_missing_artifact_says_how_to_produce_one() -> None:
     with pytest.raises(artifacts.ArtifactError, match="validate-model"):
         artifacts.read_yaml("nowhere/absent.yaml")
+
+
+def test_every_installed_program_is_executable() -> None:
+    """`install(PROGRAMS ...)` sets the executable bit; a symlink install does not.
+
+    The workspace is built with `colcon --symlink-install`, so what lands in
+    `lib/cite_facility/` is a symlink to the file in this tree and inherits its
+    mode. A node whose source file is not executable is installed unrunnable, and
+    launch reports it as `PermissionError` inside an asyncio traceback rather
+    than as a missing executable — with no `ProcessExited` event, so no launch
+    gate can catch it either. It cost a whole scenario run to find once.
+    """
+    package = Path(artifacts.__file__).parent
+    cmake = (package.parent / "CMakeLists.txt").read_text()
+    programs = [
+        line.strip().replace("${PROJECT_NAME}/", "")
+        for line in cmake.split("install(PROGRAMS", 1)[1].split("DESTINATION", 1)[0].splitlines()
+        if line.strip().endswith(".py")
+    ]
+    assert programs, "install(PROGRAMS ...) lists nothing"
+    for name in programs:
+        path = package / name
+        assert path.is_file(), f"{name} is installed as a program but does not exist"
+        assert os.access(path, os.X_OK), (
+            f"{name} is installed with install(PROGRAMS) but is not executable in "
+            "the source tree, so the symlink install is not executable either"
+        )
 
 
 def test_nothing_here_reads_the_model_directory() -> None:

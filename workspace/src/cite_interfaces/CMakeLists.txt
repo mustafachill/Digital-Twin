@@ -19,11 +19,14 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/DetectionEvent.msg
   msg/DivergenceMetrics.msg
   msg/LineState.msg
+  msg/LineTopology.msg
   msg/ModelVersion.msg
   msg/ResultCode.msg
   msg/RobotState.msg
   msg/SafetyState.msg
+  msg/StationEdge.msg
   msg/StationState.msg
+  msg/StationTopology.msg
   msg/TwinMode.msg
   srv/GetModelVersion.srv
   srv/SetMode.srv
@@ -61,12 +64,34 @@ install(
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+
+  # Two linters in ament_lint_common are registered by hand rather than through
+  # ament_lint_auto, because their defaults contradict conventions this
+  # repository already follows and neither can be configured through the auto
+  # path. What they check is unchanged; only the two conflicting preferences are
+  # settled. See .flake8 at the repository root for the flake8 half.
+  #
+  # pep257: the "ament" convention ignores D212 and therefore enforces D213 —
+  # "summary should start at the second line". D212 and D213 are mutually
+  # exclusive by construction, and every docstring in this repository puts the
+  # summary on the first line. Enforcing D213 would rewrite all of them to say
+  # the same thing differently.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../../.flake8")
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D213)
   # Asserts the C++ header, the Python module and docs/interfaces/qos-profiles.md
   # all state the same numbers. Two implementations of one table are kept honest
   # by a test because ROS 2 has two client libraries and there is no way to have
   # only one.
   ament_add_pytest_test(qos_consistency test/test_qos_consistency.py)
+  # The interface-contract baseline cross-cutting-testing.md requires: a
+  # breaking change to a .msg/.srv/.action fails here rather than in a consumer
+  # nobody thought about, months later, against a recording on disk.
+  ament_add_pytest_test(interface_contract test/test_interface_contract.py)
 endif()
 
 ament_package()

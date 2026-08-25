@@ -1,3 +1,17 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Bring the simulated cell up, event by event.
 
 There is not one `TimerAction` in this file, and there must never be. v1
@@ -18,6 +32,13 @@ exits non-zero on expiry. Its `--controller-manager-timeout` is a deadline, neve
 a schedule: no correct behaviour depends on its value, and expiry stops bring-up
 with a diagnosis instead of continuing into a degraded system.
 
+Every step that can fail stops the launch. That is the second half of P4 and the
+one that is easy to lose: an event-gated chain whose last link is ungated brings
+the system up half-built and reports success. `_gate` is applied to *every* link,
+including the last one, and every long-running process carries `_fatal_on_exit`
+so that a node dying mid-run tears the launch down instead of leaving a cell that
+answers some interfaces and not others.
+
 Everything specific to *this* cell — the world, the arms, their controllers, the
 order — comes from the generated plan. Adding a fourth arm changes that plan and
 not this file.
@@ -27,11 +48,18 @@ from __future__ import annotations
 
 import os
 
+from cite_bringup.plan import (
+    default_plan_path,
+    load,
+    Plan,
+    PlanError,
+    require_hardware_opt_in,
+)
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
-    EmitEvent,
     DeclareLaunchArgument,
+    EmitEvent,
     ExecuteProcess,
     LogInfo,
     OpaqueFunction,
@@ -40,16 +68,13 @@ from launch.actions import (
 )
 from launch.event_handlers import OnProcessExit
 from launch.events import matches_action
-from launch_ros.event_handlers import OnStateTransition
-from launch_ros.events.lifecycle import ChangeState
-from lifecycle_msgs.msg import Transition
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import LifecycleNode, Node
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
 from launch_ros.parameter_descriptions import ParameterValue
-
+from lifecycle_msgs.msg import Transition
 import yaml
-
-from cite_bringup.plan import Plan, PlanError, default_plan_path, load
 
 #: Deadline, not a schedule. Generous enough that a loaded machine still makes it,
 #: and short enough that a genuinely absent controller manager is reported rather
@@ -63,6 +88,23 @@ SPAWNER_DEADLINE_S = 120
 #: assumption cross-cutting-lifecycle.md says a loaded machine must catch.
 #: Raised to a real deadline; correctness still does not depend on the value.
 SWITCH_DEADLINE_S = 60
+
+#: How long launch lets a process finish its OWN shutdown before escalating to
+#: SIGTERM and then SIGKILL. launch's default is five seconds, which is an
+#: undocumented implicit deadline: a `move_group` still tearing down at five
+#: seconds was killed mid-teardown and reported `-15`, so the run recorded the
+#: truncation rather than whatever the process was actually doing. These are
+#: ceilings on a failure, not a schedule — nothing waits for them, and a process
+#: that exits immediately is not delayed by a millisecond.
+#:
+#: This does NOT order shutdown. launch broadcasts SIGINT to every process in one
+#: event dispatch, so a sim-time consumer and its clock source are still signalled
+#: together; see the note on shutdown ordering in the fix report and T-01.
+TEARDOWN_SIGTERM_S = "45"
+TEARDOWN_SIGKILL_S = "60"
+
+#: Where `./scripts/scenario` puts the seed it decides once per run.
+PHYSICS_SEED_ENV = "CITE_PHYSICS_SEED"
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -89,6 +131,15 @@ def _bring_up(context: LaunchContext) -> list:
 
     try:
         plan = load(default_plan_path(zone))
+        # The safety gate, at the ROS boundary rather than only at the shell one.
+        # `scripts/_lib.sh` refuses `./scripts/enter hardware` without the opt-in
+        # and guards nothing else; a plan naming a hardware backend reaches a
+        # physical arm through this launch by every other route. Refusing to
+        # start is not a divergence between the sim and real paths (P2) — what
+        # gets commanded is identical either way; it simply may not begin by
+        # accident (cross-cutting-safety.md).
+        require_hardware_opt_in(plan, os.environ)
+        seed = _seed(os.environ)
     except PlanError as exc:
         # Fail here, with the reason, rather than launching a partial system that
         # fails three layers later pointing nowhere near the cause.
@@ -109,27 +160,73 @@ def _bring_up(context: LaunchContext) -> list:
             os.path.join("/opt/ros", os.environ.get("ROS_DISTRO", "jazzy"), "lib"),
         ),
     ]
-    actions += _simulator(plan, headless=headless)
+    actions += _simulator(plan, headless=headless, seed=seed)
     actions += _scene(plan)
     actions += _arms(plan)
     actions += _facility(plan)
     controller_actions, last_spawner = _controllers(plan)
     actions += controller_actions
     actions += _motion_planning(plan)
-    # Skills come last, gated on the final controller spawner. That is the order
-    # cross-cutting-lifecycle.md fixes — controllers, then MoveIt, then skills —
-    # and it is a real dependency, not a preference: MoveGroupInterface needs a
-    # current robot state, which does not exist until a broadcaster is publishing.
+
+    # The cell's furniture into each arm's planning scene, then the skills. Both
+    # gated, and in that order: every pick and place point in this cell lies
+    # exactly on a surface, so a skill server that accepts a goal before the
+    # collision objects are in the scene plans through the table it is picking
+    # from. The loader exits when the scene has actually been applied, which is
+    # the completion event the gate needs (P4).
+    scene_actions, last_step = _planning_scene(plan, last_spawner)
+    actions += scene_actions
+
+    # Skills come last. That is the order cross-cutting-lifecycle.md fixes —
+    # controllers, then MoveIt, then skills — and it is a real dependency, not a
+    # preference: MoveGroupInterface needs a current robot state, which does not
+    # exist until a broadcaster is publishing.
     actions.append(
         RegisterEventHandler(
-            OnProcessExit(target_action=last_spawner, on_exit=_skills(plan))
+            OnProcessExit(
+                target_action=last_step,
+                on_exit=_gate(_skills(plan), "the skill servers"),
+            )
         )
     )
     return actions
 
 
-def _simulator(plan: Plan, *, headless: bool) -> list:
-    gz_args = ["-s", "-r", "-v", "2", str(plan.world)] if headless else ["-r", "-v", "2", str(plan.world)]
+def _seed(environ: dict) -> str | None:
+    """Read the seed `gz sim` is started with, if the caller supplied one.
+
+    What this buys, stated precisely because the previous absence of a consumer
+    was papered over with a claim that was not true: `gz sim --seed` calls
+    `gz::math::Rand::Seed`, which seeds sensor noise and the transport RNG. It
+    does **not** seed the physics solver, and it has nothing to do with OMPL,
+    which is the stochastic component that decides whether two runs of a scenario
+    produce the same trajectory. Passing it therefore does not make a scenario
+    reproducible and must not be described as doing so. Planning determinism is a
+    separate decision and arrives with a deterministic planner, not with this.
+
+    A malformed value is refused rather than ignored: silently dropping it would
+    leave a run that believes it is seeded and is not.
+    """
+    raw = environ.get(PHYSICS_SEED_ENV)
+    if raw is None or raw.strip() == "":
+        return None
+    try:
+        return str(int(raw))
+    except ValueError as exc:
+        # Shares the launch's single refusal path: the failure is the same shape
+        # — the run cannot start as configured — and it is reported the same way.
+        raise PlanError(
+            f"{PHYSICS_SEED_ENV}={raw!r} is not an integer. `gz sim --seed` takes "
+            "an integer; a run started with a value it will not accept is a run "
+            "whose seed is silently absent."
+        ) from exc
+
+
+def _simulator(plan: Plan, *, headless: bool, seed: str | None) -> list:
+    gz_args = ["-s", "-r", "-v", "2"] if headless else ["-r", "-v", "2"]
+    if seed is not None:
+        gz_args += ["--seed", seed]
+    gz_args.append(str(plan.world))
 
     simulator = ExecuteProcess(
         cmd=["gz", "sim", *gz_args],
@@ -177,6 +274,11 @@ def _scene(plan: Plan) -> list:
         name="spawn_scene",
         arguments=["-topic", "robot_description", "-name", f"{plan.zone}_scene"],
         output="screen",
+        # `create` exiting non-zero means the scene is not in the world. Every
+        # controller spawner after it would then wait out its full deadline on a
+        # controller manager that gz_ros2_control never created, and report a
+        # service timeout — which names the spawner rather than the spawn.
+        on_exit=_fatal_on_exit(f"spawning the {plan.zone} scene"),
     )
 
     return [publisher, spawn]
@@ -228,6 +330,7 @@ def _arms(plan: Plan) -> list:
                     "-R", str(roll), "-P", str(pitch), "-Y", str(yaw),
                 ],
                 output="screen",
+                on_exit=_fatal_on_exit(f"spawning {manager.asset}"),
             )
         )
     return actions
@@ -239,7 +342,10 @@ def _controllers(plan: Plan) -> tuple[list, Node]:
     The chain starts from `create` exiting — the moment the cell is genuinely in
     the world — and every subsequent step starts only when the one before it
     exits successfully. A non-zero exit anywhere stops the launch with a message
-    naming the step, rather than leaving a half-built system running.
+    naming the step, rather than leaving a half-built system running. Including
+    the last stage: what follows the final spawner is gated by the caller with
+    the same `_gate`, because an ungated last link is how a chain that reports
+    every intermediate failure still lets the one that matters through.
     """
     actions: list = []
     previous: object | None = None
@@ -280,7 +386,11 @@ def _controllers(plan: Plan) -> tuple[list, Node]:
                     RegisterEventHandler(
                         OnProcessExit(
                             target_action=previous,
-                            on_exit=_gate(spawner, manager.asset, stage),
+                            on_exit=_gate(
+                                [spawner],
+                                f"{manager.asset} stage {stage}",
+                                hint=_SPAWNER_HINT,
+                            ),
                         )
                     )
                 )
@@ -290,13 +400,71 @@ def _controllers(plan: Plan) -> tuple[list, Node]:
     return actions, previous
 
 
-def _managed(node: LifecycleNode) -> list:
+def _planning_scene(plan: Plan, previous: Node) -> tuple[list, Node]:
+    """Load the generated collision objects into each arm's planning scene.
+
+    Without this an arm's planning scene contains that arm and nothing else, and
+    every plan in the cell is computed against an empty world. That is not an
+    exotic failure here: every pick and place point lies exactly on a surface, so
+    a plan that dives through the surface is the normal case, and it surfaces as
+    a controller fault rather than as a missing obstacle.
+
+    One loader per arm, in that arm's namespace, chained rather than concurrent —
+    for the same reason the spawners are chained, and because each loader is a
+    single service call that completes in milliseconds once move_group answers.
+    A loader exits when the scene it was asked to apply is actually in place, so
+    its exit is a completion event and not an estimate.
+    """
+    actions: list = []
+    last: Node = previous
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        loader = Node(
+            package="cite_facility",
+            executable="planning_scene_loader.py",
+            name=f"load_planning_scene_{manager.asset}",
+            # In the arm's own namespace, so `apply_planning_scene` resolves to
+            # that arm's move_group without this file composing a service name.
+            namespace=manager.node.rsplit("/", 1)[0],
+            parameters=[{"zone": plan.zone, "use_sim_time": True}],
+            output="screen",
+        )
+        actions.append(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=last,
+                    on_exit=_gate(
+                        [loader],
+                        f"the planning scene for {manager.asset}",
+                        hint=_SPAWNER_HINT,
+                    ),
+                )
+            )
+        )
+        last = loader
+    return actions, last
+
+
+def _managed(node: LifecycleNode, name: str) -> list:
     """Drive a managed node through configure and activate, on its transitions.
 
     Not on a timer. `configure` is where a node reads and validates everything it
-    needs; if it cannot, it returns FAILURE and never reaches `inactive`, so the
-    activation below simply never fires and bring-up stops with the node's own
-    diagnosis rather than with a system that came up half-built.
+    needs; if it cannot, it returns FAILURE and never reaches `inactive`.
+
+    That last sentence used to be the whole story, and it was half of one: the
+    activation below indeed never fires, but nothing else was gated on these
+    nodes either, so bring-up carried on regardless. `frame_server.on_configure`
+    returning FAILURE produced a cell that came up fully with a disconnected TF
+    tree, and every subsequent skill goal failed with a lookup error naming
+    frames rather than the node that never published them. So each failing
+    transition is registered here and stops the launch with the node's own
+    diagnosis.
+
+    The success handler matches `configuring -> inactive` specifically rather
+    than any transition ending in `inactive`. A failed activation lands in
+    `inactive` too, and a handler matching only the goal state would answer it by
+    trying to activate again.
     """
     configure = EmitEvent(
         event=ChangeState(
@@ -307,6 +475,7 @@ def _managed(node: LifecycleNode) -> list:
     activate = RegisterEventHandler(
         OnStateTransition(
             target_lifecycle_node=node,
+            start_state="configuring",
             goal_state="inactive",
             entities=[
                 EmitEvent(
@@ -318,9 +487,35 @@ def _managed(node: LifecycleNode) -> list:
             ],
         )
     )
-    # The handler is registered before the transition is emitted, so a node that
+    refusals = [
+        _refuses(node, name, "configuring", "unconfigured", "on_configure returned FAILURE"),
+        _refuses(node, name, "configuring", "errorprocessing", "on_configure raised"),
+        _refuses(node, name, "activating", "inactive", "on_activate returned FAILURE"),
+        _refuses(node, name, "activating", "errorprocessing", "on_activate raised"),
+    ]
+    # The handlers are registered before the transition is emitted, so a node that
     # configures very quickly cannot reach `inactive` before anything is watching.
-    return [activate, node, configure]
+    return [activate, *refusals, node, configure]
+
+
+def _refuses(
+    node: LifecycleNode, name: str, start_state: str, goal_state: str, what: str
+) -> RegisterEventHandler:
+    """Stop the launch when a managed node fails a transition."""
+    message = (
+        f"BRING-UP FAILED: {name} could not reach `active` — {what} "
+        f"({start_state} -> {goal_state}). The node logged why, immediately above "
+        "this line. Nothing downstream of it is started, because a cell missing "
+        "one of these answers some interfaces and not others."
+    )
+    return RegisterEventHandler(
+        OnStateTransition(
+            target_lifecycle_node=node,
+            start_state=start_state,
+            goal_state=goal_state,
+            entities=[LogInfo(msg=message), Shutdown(reason=message)],
+        )
+    )
 
 
 def _facility(plan: Plan) -> list:
@@ -342,7 +537,8 @@ def _facility(plan: Plan) -> list:
                 parameters=[zone, {"use_sim_time": True}],
                 remappings=[("/tf_static", "/tf_static")],
                 output="screen",
-            )
+            ),
+            "frame_server",
         ),
         *_managed(
             LifecycleNode(
@@ -352,7 +548,8 @@ def _facility(plan: Plan) -> list:
                 namespace="/cite/facility",
                 parameters=[{"zones": [plan.zone]}, {"use_sim_time": True}],
                 output="screen",
-            )
+            ),
+            "model_info",
         ),
         *_managed(
             LifecycleNode(
@@ -362,7 +559,8 @@ def _facility(plan: Plan) -> list:
                 namespace="/cite/facility",
                 parameters=[zone, {"use_sim_time": True}],
                 output="screen",
-            )
+            ),
+            "topology_server",
         ),
     ]
 
@@ -424,6 +622,12 @@ def _skills(plan: Plan) -> list:
                 ],
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
                 output="screen",
+                # A skill server that dies takes its arm's skills with it and
+                # nothing else notices: the action server simply stops existing,
+                # and the next goal waits out its client's deadline.
+                on_exit=_fatal_on_exit(f"the {manager.asset} skill server"),
+                sigterm_timeout=TEARDOWN_SIGTERM_S,
+                sigkill_timeout=TEARDOWN_SIGKILL_S,
             )
         )
     return actions
@@ -497,6 +701,15 @@ def _motion_planning(plan: Plan) -> list:
                 # subscribe inside its namespace and never see the arm it plans for.
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
                 output="screen",
+                on_exit=_fatal_on_exit(f"move_group for {manager.asset}"),
+                # move_group tears down while the simulator that owns its clock is
+                # tearing down too, and launch's implicit five-second default was
+                # cutting that teardown short and recording the truncation. These
+                # ceilings stop the run from measuring launch's default instead of
+                # move_group's behaviour. They do not order the shutdown — see the
+                # note on TEARDOWN_SIGTERM_S.
+                sigterm_timeout=TEARDOWN_SIGTERM_S,
+                sigkill_timeout=TEARDOWN_SIGKILL_S,
             )
         )
     return actions
@@ -515,18 +728,49 @@ def _yaml_parameters(path, *, prefix: str | None = None) -> dict:
     return {prefix: document} if prefix else document
 
 
-def _gate(spawner: Node, asset: str, stage: int) -> callable:
-    """Continue to the next stage only if the previous one actually succeeded."""
+#: Appended to a gate's message when the step that failed waits on a service.
+_SPAWNER_HINT = (
+    "A timeout at this step usually means the node it waits on never appeared, or "
+    "that a controller's joint names do not match the description — run "
+    "./scripts/validate-model."
+)
+
+
+def _gate(entities: list, what: str, *, hint: str = "") -> callable:
+    """Continue to `entities` only if the step that just exited actually succeeded.
+
+    Applied to every link in the chain. An ungated final link is the failure this
+    exists to prevent: the intermediate stages reported their failures correctly
+    while the last one let a non-zero exit through, and the skill servers started
+    against a cell that had never finished coming up.
+    """
 
     def handler(event, context):  # noqa: ANN001, ARG001 - launch's callback shape
         if event.returncode == 0:
-            return [spawner]
+            return entities
         message = (
-            f"BRING-UP FAILED for {asset} before stage {stage}: the previous "
-            f"controller spawner exited {event.returncode}. A spawner timeout "
-            f"usually means the controller manager never appeared, or that a "
-            f"controller's joint names do not match the description — run "
-            f"./scripts/validate-model."
+            f"BRING-UP FAILED before {what}: the previous step exited "
+            f"{event.returncode}. {hint}".rstrip()
+        )
+        return [LogInfo(msg=message), Shutdown(reason=message)]
+
+    return handler
+
+
+def _fatal_on_exit(what: str) -> callable:
+    """Stop the launch when a process dies before the launch was shutting down.
+
+    The `context.is_shutdown` check is what makes this usable on a long-running
+    node: during a normal teardown every process exits, and reporting each of
+    them as a bring-up failure would bury the real reason the run ended.
+    """
+
+    def handler(event, context):  # noqa: ANN001 - launch's callback shape
+        if context.is_shutdown or event.returncode == 0:
+            return None
+        message = (
+            f"BRING-UP FAILED: {what} exited {event.returncode}. The cell is "
+            "stopped rather than left running without it."
         )
         return [LogInfo(msg=message), Shutdown(reason=message)]
 

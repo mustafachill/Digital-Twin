@@ -1,0 +1,250 @@
+msg/ConveyorState.msg
+  std_msgs/Header header
+  string asset_id
+  uint8 MODE_STOPPED=0
+  uint8 MODE_RUNNING=1
+  uint8 MODE_FAULTED=2
+  uint8 mode
+  float64 commanded_speed_mps
+  float64 measured_speed_mps
+  uint32 workpieces_on_belt
+msg/Detection.msg
+  string workpiece_id
+  string workpiece_type
+  geometry_msgs/PoseStamped pose
+  float64 confidence
+msg/DetectionEvent.msg
+  std_msgs/Header header
+  string asset_id
+  uint8 STATE_CLEAR=0
+  uint8 STATE_BLOCKED=1
+  uint8 state
+  uint8 previous_state
+  builtin_interfaces/Duration duration_in_previous_state
+  geometry_msgs/Point position
+  string workpiece_id
+msg/DivergenceMetrics.msg
+  std_msgs/Header header
+  string asset_id
+  bool valid
+  float64 joint_error_rms_rad
+  float64 joint_error_max_rad
+  float64 tcp_position_error_m
+  float64 tcp_orientation_error_rad
+  float64 cycle_time_deviation_s
+  float64 event_timing_deviation_s
+  string model_version
+msg/LineState.msg
+  std_msgs/Header header
+  string asset_id
+  uint8 STATE_STOPPED=0
+  uint8 STATE_RUNNING=1
+  uint8 STATE_PAUSED=2
+  uint8 STATE_BLOCKED=3
+  uint8 STATE_FAULTED=4
+  uint8 state
+  StationState[] stations
+  uint32 workpieces_completed
+  float64 cycle_time_s
+  float64 throughput_per_hour
+  string blocked_reason
+msg/LineTopology.msg
+  string TOPIC="/cite/line/topology"
+  std_msgs/Header header
+  string zone
+  string flow_id
+  StationTopology[] stations
+  StationEdge[] edges
+msg/ModelVersion.msg
+  std_msgs/Header header
+  string asset_id
+  string model_hash
+  string generator_version
+  string[] zones
+msg/ResultCode.msg
+  uint8 SUCCESS=0
+  uint8 PLANNING_FAILED=1
+  uint8 EXECUTION_FAILED=2
+  uint8 CANCELLED=3
+  uint8 SAFETY_BLOCKED=4
+  uint8 PRECONDITION_FAILED=5
+  uint8 TIMEOUT=6
+  uint8 HARDWARE_FAULT=7
+  uint8 NOT_IMPLEMENTED=8
+  uint8 UNREACHABLE=9
+  uint8 code
+  string detail
+msg/RobotState.msg
+  std_msgs/Header header
+  string asset_id
+  uint8 STATE_UNKNOWN=0
+  uint8 STATE_IDLE=1
+  uint8 STATE_MOVING=2
+  uint8 STATE_HOLDING=3
+  uint8 STATE_FAULTED=4
+  uint8 state
+  geometry_msgs/Pose tool_pose
+  float64[] joint_positions_rad
+  float64[] joint_velocities_rad_s
+  bool gripper_holding
+  string held_workpiece_id
+  string active_skill
+msg/SafetyState.msg
+  std_msgs/Header header
+  string asset_id
+  bool estop_active
+  bool limits_enforced
+  bool workspace_bounds_ok
+  bool keep_out_zones_ok
+  uint8 SOURCE_NONE=0
+  uint8 SOURCE_OPERATOR=1
+  uint8 SOURCE_WATCHDOG=2
+  uint8 SOURCE_LIMIT_VIOLATION=3
+  uint8 SOURCE_COLLISION=4
+  uint8 SOURCE_HARDWARE=5
+  uint8 estop_source
+  builtin_interfaces/Time estop_asserted_at
+  string detail
+msg/StationEdge.msg
+  string from_station_id
+  string to_station_id
+  string via_asset_id
+  uint32 buffer_capacity
+msg/StationState.msg
+  string station_id
+  string actor_asset_id
+  uint8 STATE_IDLE=0
+  uint8 STATE_WAITING=1
+  uint8 STATE_WORKING=2
+  uint8 STATE_BLOCKED=3
+  uint8 STATE_FAULTED=4
+  uint8 state
+  uint32 buffer_occupancy
+  uint32 buffer_capacity
+  string current_workpiece_id
+msg/StationTopology.msg
+  string id
+  uint8 TYPE_SOURCE=0
+  uint8 TYPE_SINK=1
+  uint8 TYPE_TRANSFER=2
+  uint8 type
+  string actor_asset_id
+  uint32 capacity
+  string pick_frame
+  string place_frame
+  string trigger_topic
+  uint8 TRIGGER_ON_CLEAR=0
+  uint8 TRIGGER_ON_BLOCKED=1
+  uint8 trigger_state
+  string[] upstream_ids
+  string[] downstream_ids
+msg/TwinMode.msg
+  uint8 MODE_SIM=0
+  uint8 MODE_REAL=1
+  uint8 MODE_SHADOW=2
+  uint8 MODE_VALIDATED=3
+  uint8 MODE_CLOSED_LOOP=4
+  std_msgs/Header header
+  string asset_id
+  uint8 mode
+  uint8 requested_mode
+  bool transition_in_progress
+  string reason
+srv/GetModelVersion.srv
+  ---
+  ModelVersion version
+srv/SetMode.srv
+  uint8 mode
+  string reason
+  bool force
+  ---
+  bool accepted
+  ResultCode result
+  uint8 current_mode
+action/Detect.action
+  string region_frame
+  geometry_msgs/Vector3 region_size_m
+  string workpiece_type
+  ---
+  ResultCode result
+  Detection[] detections
+  ---
+  uint32 detections_so_far
+action/Grasp.action
+  float64 width_m
+  float64 max_effort_n
+  bool expect_object
+  ---
+  ResultCode result
+  float64 reached_width_m
+  float64 measured_effort_n
+  bool holding
+  ---
+  float64 current_width_m
+  float64 current_effort_n
+action/MoveTo.action
+  geometry_msgs/PoseStamped target
+  string named_configuration
+  float64 velocity_scaling
+  float64 acceleration_scaling
+  bool cartesian_path
+  ---
+  ResultCode result
+  geometry_msgs/PoseStamped reached
+  float64 position_error_m
+  builtin_interfaces/Duration duration
+  ---
+  float64 fraction_complete
+  geometry_msgs/PoseStamped current
+  float64 distance_remaining_m
+action/Pick.action
+  geometry_msgs/PoseStamped object_pose
+  string workpiece_id
+  float64 approach_distance_m
+  float64 retreat_distance_m
+  float64 grasp_width_m
+  ---
+  ResultCode result
+  bool holding
+  geometry_msgs/PoseStamped grasp_pose
+  builtin_interfaces/Duration duration
+  ---
+  uint8 PHASE_PLANNING=0
+  uint8 PHASE_APPROACHING=1
+  uint8 PHASE_GRASPING=2
+  uint8 PHASE_RETREATING=3
+  uint8 phase
+  float64 fraction_complete
+action/Place.action
+  geometry_msgs/PoseStamped target_pose
+  float64 approach_distance_m
+  float64 retreat_distance_m
+  bool require_holding
+  ---
+  ResultCode result
+  geometry_msgs/PoseStamped release_pose
+  builtin_interfaces/Duration duration
+  ---
+  uint8 PHASE_PLANNING=0
+  uint8 PHASE_APPROACHING=1
+  uint8 PHASE_RELEASING=2
+  uint8 PHASE_RETREATING=3
+  uint8 phase
+  float64 fraction_complete
+action/Transfer.action
+  geometry_msgs/PoseStamped handoff_pose
+  string rendezvous_token
+  string workpiece_id
+  builtin_interfaces/Duration hold_timeout
+  ---
+  ResultCode result
+  bool still_holding
+  builtin_interfaces/Duration duration
+  ---
+  uint8 PHASE_PLANNING=0
+  uint8 PHASE_APPROACHING=1
+  uint8 PHASE_WAITING_FOR_PEER=2
+  uint8 PHASE_RELEASING=3
+  uint8 PHASE_RETREATING=4
+  uint8 phase
+  builtin_interfaces/Duration waited

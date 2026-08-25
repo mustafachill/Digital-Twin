@@ -20,10 +20,19 @@
   <depend>rclpy</depend>
   <depend>cite_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <!-- The planning-scene loader speaks MoveIt's collision-object contract. These
+       are message packages, not MoveIt itself: nothing here plans, and nothing
+       here links against move_group. -->
+  <depend>moveit_msgs</depend>
+  <depend>shape_msgs</depend>
   <depend>tf2_ros</depend>
   <exec_depend>cite_generated</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
 
   <export>

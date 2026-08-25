@@ -32,6 +32,10 @@
   <exec_depend>xacro</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
 
   <export>
