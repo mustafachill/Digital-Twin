@@ -221,7 +221,71 @@ asset_type:
         # stalled. NOT metres of travel, which is what this said until the width
         # map was corrected — `drive_joint` is revolute, and every quantity the
         # controller sees is in its units, not in task space.
-        stall_velocity_threshold: 0.001
+        #
+        # THE MECHANISM, because both bounds below fall out of it rather than
+        # being preferences. `GripperActionController::checkForSuccess` ends a
+        # goal in exactly two ways and in no others — ros2_controllers on Jazzy,
+        # `gripper_action_controller_impl.hpp:166-189`:
+        #
+        #     if      |error| < goal_tolerance          -> reached_goal, succeed
+        #     else if |velocity| > THIS THRESHOLD       -> last_movement_time = now
+        #     else if now - last_movement_time > stall_timeout -> stalled
+        #
+        # So this value has a floor and a ceiling, for two unrelated reasons. Too
+        # LOW and a joint creeping against a part still counts as moving:
+        # `last_movement_time` is reset every cycle, so the stall branch is
+        # unreachable — while the part holds |error| above `goal_tolerance`, so
+        # the success branch is unreachable too, and the goal has no way to end.
+        # Too HIGH and a joint that is genuinely travelling counts as stopped, so
+        # the stall timer runs during an ordinary approach.
+        #
+        # THE MEASURED WINDOW. These two are observations, not choices:
+        #
+        #   * Floor, ~0.025 rad/s — the fastest contact creep observed while the
+        #     drive joint pressed against a part (the range seen was 0.003-0.024
+        #     rad/s). Below this the joint never appears stalled.
+        #   * Ceiling, ~0.16 rad/s — in free air, and against a part narrower than
+        #     commanded, the joint is still travelling at 0.160 rad/s at the
+        #     instant |error| < `goal_tolerance`, and was never slower in the
+        #     preceding 0.4 s. That 0.4 s exceeds `stall_timeout` below, so a
+        #     threshold above 0.160 would not merely arm the timer — it would let
+        #     it expire and report a stall on a stroke that is not a grasp. With
+        #     `allow_stalling: true` that is returned to the caller as SUCCESS,
+        #     so the failure above the ceiling is a wrong answer, not a hang.
+        #
+        # THE CHOSEN VALUE is 0.05, and it is a choice rather than a measurement:
+        # any value strictly inside the window satisfies the mechanism. It clears
+        # the fastest observed creep by 2.1x and sits 3.2x below the slowest
+        # observed approach. Because the window is the fact and the number is a
+        # selection inside it, `tools/tests/test_gripper_stall_threshold.py`
+        # asserts the WINDOW — it fails for any value outside, not for any value
+        # other than this one.
+        #
+        # WHAT 0.001 DID, which is why this is a defect and not a tuning tweak.
+        # It sat 25x below the floor. The drive joint creeps against a part at
+        # 0.003-0.024 rad/s, permanently above 0.001, so `last_movement_time` was
+        # reset on every cycle and the gripper never stalled — and, held short by
+        # the part, it never reached goal either. Neither of the two terminating
+        # branches above can fire, so THE ACTION SIMPLY NEVER RETURNS. The caller
+        # does not observe a wrong answer, it observes a timeout, which is why
+        # this read as a fault in the layer above for so long.
+        #
+        # ON HARDWARE (P2, and Definition of Done item 5) this transfers as a
+        # DECLARED PROPERTY OF THE END EFFECTOR while its enforcement mechanism
+        # does not exist on that path — the same split that
+        # `external/patches/02-xarm_ros2-gripper-drive-rate-parameter.patch`
+        # records for the close rate, and stated here for the same reason.
+        # `xarm_gripper_macro.xacro:20` emits the gripper's <ros2_control> block
+        # only when the plugin is not `uf_robot_hardware/UFRobotSystemHardware`,
+        # so on the physical arm there is no `drive_joint` in `ros2_control` at
+        # all — hence no `GripperActionController`, and no parameter for it to
+        # read. The real gripper is driven through the SDK's service layer
+        # (`xarm_driver.cpp:594`, `set_gripper_speed`) in motor r/min over
+        # 1-5000, and UFACTORY publishes no conversion from r/min to jaw travel.
+        # Detecting a stall there is Phase 2 work against a different interface.
+        # Nothing here should be read as claiming the two paths detect a stall
+        # alike, because they do not.
+        stall_velocity_threshold: 0.05
         stall_timeout: 0.3
         max_effort: 60.0
         # Declared rather than left to GripperActionController's default, because

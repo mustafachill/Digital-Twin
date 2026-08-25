@@ -40,7 +40,7 @@
     goal_tolerance: 0.01
     max_effort: 60.0
     stall_timeout: 0.3
-    stall_velocity_threshold: 0.001
+    stall_velocity_threshold: 0.05
 
 /cite/cell_a/arm_1/arm_1_joint_trajectory_controller:
   ros__parameters:
