@@ -5,8 +5,8 @@
 | | |
 |---|---|
 | **Owner** | Center for Innovation, Technology and Entrepreneurship (CITE), Sam Houston State University |
-| **Document version** | 1.4 |
-| **Date** | 2026-08-24 |
+| **Document version** | 1.5 |
+| **Date** | 2026-08-25 |
 | **Status** | Active — this is the authoritative source of truth |
 
 ---
@@ -293,7 +293,14 @@ Digital-Twin/
 │
 ├── workspace/src/                ← The ROS 2 workspace               (Phase 1.B)
 │   ├── cite_interfaces/          ←   L3-L5: typed messages, services, actions
-│   ├── cite_facility/            ←   L0-L1: model loading, validation, generators
+│   ├── cite_facility/            ←   L0-L1 at runtime: serves the generated model
+│   │                                 version, the frame and namespace plan, and the
+│   │                                 process topology as a typed LineTopology; loads
+│   │                                 the generated planning scene into MoveIt
+│   ├── cite_generated/           ←   every artifact generated from L0: descriptions,
+│   │                                 world, controller config, MoveIt config, static
+│   │                                 frames, process topology, bring-up plan, planning
+│   │                                 scene. Committed, never hand-edited (ADR-0021)
 │   ├── cite_description/         ←   L1: robot and component descriptions
 │   ├── cite_hardware/            ←   L2: hardware interfaces, sim and real
 │   ├── cite_control/             ←   L2: controller configuration and bringup
@@ -349,6 +356,15 @@ Digital-Twin/
 └── legacy/                       ← Superseded v1. Reference only, never built.
                                     Deleted at the end of Phase 1.   (temporary)
 ```
+
+Two conventions in the tree above have their reasoning recorded rather than restated here:
+
+- **`cite_generated/` is committed, not built.** Generated artifacts live in git and are
+  verified against a fresh generator run, which is what makes hand-editing one detectable
+  rather than merely forbidden. See **ADR-0021**.
+- **QoS profiles are a library inside `cite_interfaces`, not a table each node copies.** An
+  incompatible publisher/subscriber pair connects silently and delivers nothing, so the
+  profiles are code with one definition rather than prose with many. See **ADR-0025**.
 
 ### 7.1 Naming and namespace convention
 
@@ -551,6 +567,7 @@ The project underwent an extended R&D period before this charter. That work prod
 
 | Version | Date | Change |
 |---|---|---|
+| 1.5 | 2026-08-25 | §7 brought back in line with the workspace. Added `cite_generated/`, which now exists and holds every artifact derived from L0 — descriptions, world, controller configuration, MoveIt configuration, static frames, process topology, bring-up plan and the planning scene. Corrected the description of `cite_facility/`, which had described something narrower than the package became: it is an L0–L1 **runtime** package that serves the generated model version, the frame and namespace plan and the process topology as a typed `LineTopology` message, and loads the generated planning scene into MoveIt — the generators themselves live in `tools/`, as the same tree already stated. Added pointers to ADR-0021 (generated artifacts are committed and verified against a fresh generator run) and ADR-0025 (the QoS profiles ship as a library inside `cite_interfaces`), because §7 is where a reader looks for the reasoning behind those two entries. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.4 | 2026-08-24 | Marked `.claude/` as local tooling that is not committed, in the §7 tree, §10.2 and the §11 documentation map. The agent configuration is excluded from the repository by decision; without the marker a reader would look for a directory a clone does not contain. Notes that the rules the agents enforce live in `CLAUDE.md`, which is committed, so the standards do not depend on the tooling. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.3 | 2026-08-24 | §7 repository structure brought back in line with the tree and given an explicit meaning: it describes the **target** structure, with markers for what does not yet exist (`model/`, `workspace/src/`, `hmi/`) and what is temporary (`legacy/`). Added `tools/`, `requirements/`, `docs/reference/`, `.devcontainer/`, `.github/` and `legacy/`; corrected the claim that `infra/` holds the devcontainer and CI, which live at the repository root because their tooling requires it. Removed `subagents/`, the portable upstream template library the active roles were adapted from — it was never tracked in git and is no longer present; the adapted roles in `.claude/agents/` are the only roster. §10.2 updated accordingly: the two roles deferred to Phase 4 will be written then rather than carried as dormant templates. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.2 | 2026-08-24 | Documentation tree written. Twin maturity levels renamed to align with the established literature: L1 `Mirror`→`Shadow`, L2 `Shadow`→`Validated`, with the corresponding L5 operating modes renamed to match (§2, §5). Architecture aligned with the ISO 23247 reference architecture (§2). The xArm Jazzy/Harmonic risk is closed following verification (§13). §11 documentation map expanded to the full tree and the status-marker convention introduced. No change to scope, layer architecture, technology baseline, or roadmap. |

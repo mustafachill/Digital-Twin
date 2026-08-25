@@ -2,7 +2,9 @@
 
 Runbooks: what to do, in order, and what you should see.
 
-- **Status:** `DESIGNED` — these describe procedures for a system that is not built yet.
+- **Status:** `PARTIAL` — [bring-up.md](bring-up.md) and [troubleshooting.md](troubleshooting.md)
+  describe a simulated cell that exists and commands that run. The other three describe
+  procedures for parts of the system that are not built.
   **No procedure here is valid for physical hardware until Phase 2.**
 
 | Runbook | For |

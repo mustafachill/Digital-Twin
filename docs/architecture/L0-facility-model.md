@@ -1,6 +1,13 @@
 # L0 — Facility model
 
-- **Status:** `DESIGNED` — schema and generators are Phase 1.B. `model/` is empty today.
+- **Status:** `BUILT` — `model/` describes the cell (1 zone, 6 types, 14 assets, 5 stations,
+  across 14 files) and the generators in `tools/cite_tools/generate/` emit every artifact in
+  the table below except the last two. All five validation levels run: `./scripts/validate-model`
+  exits 0, and that command includes the fresh-generator diff **and** a determinism check that
+  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 132
+  tests, all passing.
+  **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
+  (Phase 4) — the two rows whose consumers do not exist yet.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md)
 
 ## Responsibility

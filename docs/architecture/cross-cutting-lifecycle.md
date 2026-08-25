@@ -1,6 +1,14 @@
 # Lifecycle and bring-up
 
-- **Status:** `DESIGNED` — no nodes exist. The pattern is binding on all of them.
+- **Status:** `PARTIAL`.
+  **Built:** bring-up is event-driven. `cite_bringup/launch/simulation.launch.py` contains
+  **no `TimerAction` and no sleep**, and sequences on 7 registered event handlers — process
+  exit and service availability — with every deadline documented as a ceiling on a failure
+  rather than a schedule. The three `cite_facility` nodes (`frame_server`, `model_info`,
+  `topology_server`) are `LifecycleNode`s with real `on_configure`/`on_activate` work.
+  **Not built:** "every node that participates in bring-up is a managed node" is not true
+  today. `cite_skills`' skill server and `cite_orchestration`'s line coordinator are plain
+  `rclcpp::Node`s with no lifecycle interface. The pattern below remains binding on them.
 - **Related:** charter §4 (P4), [ADR-0009](../adr/0009-docker-primary-environment.md), [`../operations/bring-up.md`](../operations/bring-up.md)
 
 ## The problem this solves

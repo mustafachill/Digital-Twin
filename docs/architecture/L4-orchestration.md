@@ -1,6 +1,16 @@
 # L4 — Orchestration
 
-- **Status:** `DESIGNED` — no trees or coordinator exist. Phase 1.D.
+- **Status:** `PARTIAL`.
+  **Built:** `cite_orchestration/src/line_coordinator.cpp` on BehaviorTree.CPP v4, and one
+  tree — `trees/station_cycle.xml`, a single station's pick-then-place cycle with an
+  explicit recovery branch. Every leaf calls an L3 action; nothing here plans a trajectory.
+  **Not built:** handoff and `Transfer` ([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)),
+  parallel stations (the leaves are `SyncActionNode` and tick one station at a time), line
+  state publication, and Groot2 integration.
+  **Not proven:** the cycle does not complete — see [L3](L3-capabilities.md). The
+  sensor-driven line does not run: `cite_simulation`'s `break_beam.cpp` is in no CMake
+  target, and the conveyor plugin is built but instantiated by no generated artifact, so the
+  conveyor and beam topics `cell_a_plan.yaml` declares have no publisher.
 - **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [L3](L3-capabilities.md)
 
 ## Responsibility

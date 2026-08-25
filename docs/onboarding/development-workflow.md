@@ -2,7 +2,7 @@
 
 How work moves from an idea to a merged change.
 
-- **Related:** [`../../CLAUDE.md`](../../CLAUDE.md), [`../../.claude/orchestration.md`](../../.claude/orchestration.md), [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md)
+- **Related:** [`../../CLAUDE.md`](../../CLAUDE.md) §11, [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md)
 
 ## Before you write anything
 
@@ -56,9 +56,10 @@ what you already could have.
 
 ### Review
 
-Human review, plus the agent pipeline in
-[`../../.claude/orchestration.md`](../../.claude/orchestration.md). Which agents run
-depends on what the diff touches:
+Human review, plus the agent pipeline. `CLAUDE.md` §11 states the rules that bind every
+contributor here, with or without the agents; the pipeline's dispatch routing lives with
+the agent configuration, which is local tooling and is not committed, so a fresh clone
+will not contain it. Which agents run depends on what the diff touches:
 
 | Your diff touches | Also runs |
 |---|---|

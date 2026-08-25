@@ -4,14 +4,14 @@
 - **Date:** 2026-08-24
 - **Deciders:** Phase 1.C review fan-out (debugger measurement, architect and reviewer findings), remediated in `cite_skills`
 - **Related:** [ADR-0006](0006-moveit2-motion-planning.md), [ADR-0010](0010-typed-ros-interfaces.md), [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md), CLAUDE.md §3 (P2, P5, P9)
-- **See also:** a **pending** ADR on the planning *pipeline* — station-to-station motion moves to the Pilz Industrial Motion Planner, with OMPL retained as a fallback. That is a separate decision, taken separately, and this record does not depend on it. The two are easy to confuse and should be read together.
+- **See also:** [ADR-0027](0027-pilz-planning-pipeline.md) on the planning *pipeline* — station-to-station motion moves to the Pilz Industrial Motion Planner, with OMPL retained as a fallback. That is a separate decision, taken separately, and this record does not depend on it. The two are easy to confuse and should be read together.
 
 ## Context
 
 **This ADR is about how a motion goal is *specified*, not about which planner searches for
 the path.** The two are independent, and the distinction matters because a separate decision
-— to plan station-to-station motion with Pilz rather than OMPL — was taken at almost the same
-moment. A deterministic point-to-point planner handed a 6-DOF pose goal on a 5-DOF arm still
+— to plan station-to-station motion with Pilz rather than OMPL ([ADR-0027](0027-pilz-planning-pipeline.md))
+— was taken at almost the same moment. A deterministic point-to-point planner handed a 6-DOF pose goal on a 5-DOF arm still
 has to resolve that goal, and Pilz's PTP resolves it through IK exactly once, which is the
 behaviour measured at 8/8 below. Neither decision substitutes for the other.
 
@@ -194,7 +194,7 @@ reachable. It was never the constraint, and its comment must not be carried forw
 
 ### What we will have to revisit
 - **When the planning pipeline changes under it.** Station-to-station motion is moving to
-  Pilz (a separate, pending ADR). Pilz plans **point to point and fails on a collision
+  Pilz ([ADR-0027](0027-pilz-planning-pipeline.md)). Pilz plans **point to point and fails on a collision
   rather than routing around it**, so a joint-space goal that OMPL would have reached by an
   arc is either reachable in a straight joint interpolation or it is not. That interaction
   becomes visible the moment the planning scene stops being empty — a generated

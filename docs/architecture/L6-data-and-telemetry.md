@@ -1,6 +1,9 @@
 # L6 — Data and telemetry
 
-- **Status:** `DESIGNED` — nothing built. Phase 4, with recording used earlier as test evidence.
+- **Status:** `DESIGNED` — nothing built, and `cite_telemetry` does not exist. Phase 4,
+  with recording used earlier as test evidence. The state messages this layer would record
+  (`RobotState`, `LineState`, `ConveyorState`, `SafetyState`) are defined and frozen against
+  the contract baseline; no node publishes them.
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [L5](L5-twin-synchronization.md), [L7](L7-presentation.md)
 
 ## Responsibility

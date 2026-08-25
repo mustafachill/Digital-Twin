@@ -1,6 +1,17 @@
 # L1 — Description and assets
 
-- **Status:** `DESIGNED` — no descriptions or meshes exist yet. Asset policy and pipeline are defined in [`../../assets/README.md`](../../assets/README.md).
+- **Status:** `PARTIAL`.
+  **Built:** robot descriptions and the world SDF are generated from L0 into
+  `workspace/src/cite_generated/` and load in Gazebo Harmonic — asserted by
+  `./scripts/scenario bringup`. Inertial validation is implemented and tested
+  (`tools/cite_tools/validate/physical.py`).
+  **Not built:** no first-party meshes or materials exist — `assets/` holds only its README
+  and manifest — and the scan pipeline is Phase 3.
+  **Violated:** this layer's own first rule, below. Twelve links per arm collide against
+  their *visual* mesh, and the validator written to catch that cannot fire on a vendor
+  description. See [ADR-0028](../adr/0028-convex-hull-collision-meshes.md); the section
+  "Visual and collision geometry are always separate" states the rule, not the current state.
+- **Asset policy and pipeline:** [`../../assets/README.md`](../../assets/README.md)
 - **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md)
 
 ## Responsibility

@@ -1,6 +1,10 @@
 # L5 — Twin synchronization
 
-- **Status:** `DESIGNED` — nothing built. Phase 2.
+- **Status:** `DESIGNED` — no node implements any of this, and `cite_twin` does not exist.
+  Phase 2. The typed interfaces are in place and frozen against the contract baseline —
+  `TwinMode`, `SetMode`, `DivergenceMetrics`, `ModelVersion` — and every asset instance in
+  L0 carries a `registration` block, currently `unregistered` for all three arms. Nothing
+  consumes any of it.
 - **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
 
 ## Responsibility

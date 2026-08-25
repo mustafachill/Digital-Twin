@@ -25,22 +25,45 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 The project is in **Phase 1 of a rebuild**. The charter describes the target; the
 repository is partway there. Check before assuming.
 
-- **Environment foundation is in place** (Phase 1.A, first half): container image, the
-  `./scripts/*` contract, dependency manifests, CI, and the asset policy all exist and
-  work. Run `./scripts/doctor` to see the current state of any machine.
-- **The L0 model and its generators exist** (Phase 1.B). `model/` describes the three-arm
-  cell — six component types, fourteen instances, five stations — and
+- **Phase 1.A is closed.** Container image, the `./scripts/*` contract, dependency
+  manifests, CI, and the asset policy all exist and work. `external/cite.repos` pins
+  `xarm_ros2` to a commit SHA, after the branch was built and driven against our stack
+  rather than merely inspected — see the verification table in
+  [`docs/reference/toolchain.md`](docs/reference/toolchain.md). `./scripts/doctor` exits 0;
+  run it to see the state of any machine.
+- **The L0 model and its generators are built and proven** (Phase 1.B). `model/` describes
+  the three-arm cell — six component types, fourteen instances, five stations — and
   `workspace/src/cite_generated/` holds everything derived from it: descriptions, the
-  world, controller configuration, static frames, process topology and the bring-up plan.
-  That directory is **generated in its entirety and must never be hand-edited**;
-  `./scripts/validate-model` diffs it against a fresh generator run and fails on any
-  difference (ADR-0021).
-- **The simulated cell comes up** (Phase 1.C, in progress). `./scripts/sim --headless`
-  brings the scene and three arms into Gazebo Harmonic with nine controllers active, and
-  `./scripts/scenario bringup` asserts it. Still missing from 1.C: the `cite_facility`
-  runtime nodes, generated MoveIt configuration, the L3 skill servers, and the behaviour
-  tree. `cite_skills`, `cite_orchestration`, `cite_twin`, `cite_telemetry`, `cite_safety`,
-  `cite_description`, `cite_control`, `cite_hardware` and `cite_simulation` do not exist yet.
+  world, controller configuration, MoveIt configuration, the planning scene, static frames,
+  process topology and the bring-up plan. That directory is **generated in its entirety and
+  must never be hand-edited** (ADR-0021). `./scripts/validate-model` diffs it against a
+  fresh generator run *and* regenerates in a second interpreter under a different hash seed
+  to prove the output is byte-identical; it exits 0. `tools/tests/` holds 132 passing tests.
+- **Seven first-party packages exist**, and `workspace/src/external/` adds the twelve from
+  `xarm_ros2`. `./scripts/build` is a blocking CI step. The seven are `cite_interfaces`,
+  `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`, `cite_orchestration`
+  and `cite_simulation`. **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`,
+  `cite_control` and `cite_hardware` do not exist.**
+- **The simulated cell comes up, and that is the extent of what is proven.**
+  `./scripts/sim --headless` brings the scene and three arms into Gazebo Harmonic with nine
+  controllers active, one `move_group` and one skill server per arm, the generated planning
+  scene applied and read back, and the facility's model version, frames and topology served.
+  `./scripts/scenario bringup` asserts it and is a blocking CI gate, run twice per CI run.
+- **What does not work, stated plainly** (Phase 1.C, in progress):
+  - **The pick-and-place cycle does not complete, and no work-piece has ever been grasped.**
+    `./scripts/scenario pick_and_place` fails and runs in CI as `continue-on-error`.
+  - **The sensor-driven line does not run.** `cite_simulation/src/break_beam.cpp` is in no
+    CMake target, and the conveyor plugin is built but instantiated by no generated
+    artifact, so the conveyor and beam topics the bring-up plan declares have no publisher.
+  - **Four of the six L3 skills exist** — `MoveTo`, `Grasp`, `Pick`, `Place`. `Transfer` and
+    `Detect` are typed `.action` definitions with no server.
+  - **L4 runs one station.** One behaviour tree, ticked synchronously; no handoff.
+  - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` reaches `gz sim --seed`, which
+    seeds sensor noise and nothing else — not the physics solver, not the planner. See
+    `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
+    determinism.
+  - **Twelve links per arm use their visual mesh as collision geometry**, which §10 below
+    names as a defect class. Real-time factor on the development host is 0.14. See ADR-0028.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this
   model does not transfer to the building, and no report should imply that it does.
@@ -48,14 +71,11 @@ repository is partway there. Check before assuming.
   **not** a codebase to extend. Do not add features to it, fix its bugs, or treat its
   patterns as precedent. It is excluded from the build by living outside `workspace/`, and
   is deleted at the end of Phase 1. See `legacy/README.md` and charter §12.
-- **Phase 1.A is closed.** `external/cite.repos` pins `xarm_ros2` to a commit SHA, after
-  the branch was built and driven against our stack rather than merely inspected — see the
-  verification table in [`docs/reference/toolchain.md`](docs/reference/toolchain.md).
-  `./scripts/doctor` exits 0.
-- **The documentation is written.** `docs/` holds the layer architecture, ADRs for every
-  locked decision, interface conventions, operations runbooks, and the reference library.
-  Layer documents are marked `DESIGNED` — they are the contract the code must satisfy, not
-  a description of code that exists. Read the layer document before touching a layer.
+- **The documentation is written, and its status markers are now the thing to read.** Each
+  document in `docs/architecture/` and `docs/interfaces/` carries `DESIGNED`, `PARTIAL` or
+  `BUILT`, with the evidence named. `DESIGNED` means the contract the code must satisfy;
+  `PARTIAL` says which part is real and which is not. Read the layer document before
+  touching a layer, and read its status line before believing its body.
 
 State this honestly in reports. Never claim a capability exists because the charter
 describes it.
@@ -172,7 +192,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/validate-model` | L0 schema validation + generator dry-run. Runs anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name]` | Headless simulation-in-the-loop scenario; no argument lists them |
-| `./scripts/enter [dev\|gui\|hardware]` | Interactive shell in the container |
+| `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |
 

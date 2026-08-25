@@ -1,6 +1,19 @@
 # L2 — Control and hardware abstraction
 
-- **Status:** `DESIGNED` — no control packages exist yet. The physical hardware path is Phase 2.
+- **Status:** `PARTIAL`.
+  **Built:** one `ros2_control` controller manager per arm, hosted in Gazebo by
+  `gz_ros2_control`, with **9 controllers active across three arms** — asserted by
+  `./scripts/scenario bringup`. Controller configuration, MoveIt configuration and the
+  planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
+  the scene per arm and reads it back rather than trusting the service result.
+  **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
+  — see [cross-cutting-safety.md](cross-cutting-safety.md).
+  **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
+  instance in L0, and a plan naming a non-simulated backend is refused at the ROS boundary
+  unless `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`).
+  **Not held:** the configured rate. The model asks for 150 Hz; `joint_states` was measured
+  at roughly 21 Hz at a real-time factor of 0.14 (see
+  [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
 - **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility

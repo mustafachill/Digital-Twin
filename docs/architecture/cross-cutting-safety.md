@@ -1,6 +1,13 @@
 # Safety and interlocks
 
-- **Status:** `DESIGNED` — nothing built. Binding from the first line of Phase 2 code.
+- **Status:** `DESIGNED` — **the safety layer described here does not exist.** No node
+  enforces any row of the table below, and the enforcement point in the diagram is not in
+  the command path. Binding from the first line of Phase 2 code.
+  One rule it states *is* enforced today, and only one: nothing reaches a hardware backend
+  without a deliberate opt-in. `CITE_ALLOW_HARDWARE=1` is required by
+  `require_explicit_hardware_opt_in` in `scripts/_lib.sh` for `./scripts/enter hardware`,
+  and independently by `require_hardware_opt_in` in `cite_bringup/cite_bringup/plan.py` for
+  any bring-up plan naming a non-simulated backend. Both are covered by tests.
 - **Related:** [L2](L2-control-and-hal.md), [L5](L5-twin-synchronization.md), [`../operations/safety-procedures.md`](../operations/safety-procedures.md), [`../reference/standards.md`](../reference/standards.md)
 
 ## What this covers, and what it does not
