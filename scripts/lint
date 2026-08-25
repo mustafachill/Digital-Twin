@@ -8,7 +8,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 FAILED=0
 check() { "$@" || FAILED=1; }
 
-VENV="${REPO_ROOT}/.venv/bin"
+VENV="$(cite_venv_bin || echo "${REPO_ROOT}/.venv/bin")"
 
 step "Python (ruff)"
 if [ -x "${VENV}/ruff" ]; then

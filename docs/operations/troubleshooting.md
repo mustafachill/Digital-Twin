@@ -53,6 +53,63 @@ Start Docker Desktop, or `sudo systemctl start docker`.
 
 ## Build
 
+### `c++: fatal error: Killed signal terminated program cc1plus`
+
+The OOM killer, not a compiler bug and not a code error. A translation unit that includes
+generated ROS message headers routinely needs 2-3 GB, and the default one-worker-per-core
+parallelism multiplies that by the core count.
+
+`./scripts/build` derives its job count from **available memory** rather than from core
+count and reports the number it chose, so this should be rare. When it still happens:
+
+```bash
+CITE_BUILD_JOBS=1 ./scripts/build
+```
+
+and give Docker Desktop more memory (Settings → Resources). Building the full vendor
+`xarm_ros2` stack peaks near 6 GB in a single job, so a Docker VM below about 8 GB will be
+tight regardless of the job count.
+
+### `ModuleNotFoundError: No module named 'catkin_pkg'`
+
+An ament build is running under the host-agnostic tooling virtualenv instead of the system
+Python. The two environments are deliberately separate (`requirements/README.md`): ROS
+Python comes from apt, the tooling venv comes from pip, and the venv is kept **off** the
+`PATH` for exactly this reason.
+
+Check which interpreter is in front:
+
+```bash
+./scripts/enter dev
+command -v python3          # must be /usr/bin/python3, not /opt/cite-venv/bin/python3
+```
+
+If a previous build already cached the wrong interpreter, CMake will keep using it from
+`CMakeCache.txt` even after the `PATH` is fixed — so clean before retrying:
+
+```bash
+./scripts/clean && ./scripts/build
+```
+
+### The build fails on an apt package that bootstrap just installed
+
+Containers are ephemeral. `./scripts/build` and CI each run a fresh `docker run --rm`, so
+anything `rosdep install` puts in a container at run time is gone when that container
+exits. The image resolves `external/cite.repos`'s system dependencies at **image build**
+time for this reason.
+
+If you changed the manifest, rebuild the image:
+
+```bash
+./scripts/bootstrap
+```
+
+### A change to a script or the environment appears to have no effect
+
+`compose` mounts named volumes over `workspace/{build,install,log}`, so the copies of those
+directories you can see on the host are empty and deleting them changes nothing.
+`./scripts/clean` empties the volumes themselves; plain `rm -rf workspace/build` does not.
+
 ### Package not found after building
 
 The overlay is not sourced. Inside the container the entrypoint does it; outside:

@@ -1,0 +1,44 @@
+"""Float emission. Determinism (ADR-0004) depends entirely on this."""
+
+from __future__ import annotations
+
+import pytest
+
+from cite_tools.model import units
+
+
+class TestDeterminism:
+    def test_negative_zero_normalises(self) -> None:
+        assert units.fmt(-0.0) == units.fmt(0.0) == "0"
+
+    def test_near_zero_normalises(self) -> None:
+        # A yaw computed as a difference of equal angles can land here.
+        assert units.fmt(-1e-17) == "0"
+        assert units.fmt(1e-17) == "0"
+
+    def test_no_scientific_notation_for_realistic_magnitudes(self) -> None:
+        for value in (0.001, 0.05, 1.2, 1200.0, 6.15):
+            assert "e" not in units.fmt(value), value
+
+    def test_stable_across_repeated_calls(self) -> None:
+        value = 1.5707963267948966
+        assert len({units.fmt(value) for _ in range(100)}) == 1
+
+    def test_integral_values_lose_the_trailing_zero(self) -> None:
+        assert units.fmt(1200.0) == "1200"
+        assert units.fmt(2.0) == "2"
+
+
+class TestTriple:
+    def test_formats_as_urdf_expects(self) -> None:
+        assert units.fmt_triple([0.0, -0.0, 0.6]) == "0 0 0.6"
+
+    def test_rejects_wrong_length(self) -> None:
+        with pytest.raises(ValueError, match="exactly 3"):
+            units.fmt_triple([0.0, 1.0])
+
+
+class TestDisplayOnly:
+    def test_degrees_are_display_only(self) -> None:
+        # Present for `cite-model show`; must never appear in the model itself.
+        assert units.degrees_for_display(1.5707963267948966) == "90"

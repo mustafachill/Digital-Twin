@@ -58,11 +58,24 @@ separately reviewable:
 
 ```
 model/
-├── facility/     zones, coordinate frames, the survey origin
-├── assets/       asset instances: id, type, pose, zone, configuration
-├── topology/     process flow: stations, upstream/downstream, buffers
-└── schema/       JSON Schema definitions and the validator
+├── facility/         zones, coordinate frames, the survey origin
+├── assets/
+│   ├── types/        the component library: reusable type definitions
+│   └── instances/    asset instances: id, type, pose, zone, configuration
+├── topology/         process flow: stations, upstream/downstream, buffers
+└── schema/           JSON Schema definitions
 ```
+
+The component library sits inside `assets/` rather than in a directory of its own: a type
+and the instances that reference it version together, because changing a type's joint set
+and the controllers generated for its instances is one reviewable change. The library's
+*geometric* half — what a conveyor looks like and collides like — is L1's and lives in
+`assets/` at the repository root. See [ADR-0020](../adr/0020-facility-model-conventions.md)
+for the full convention, including units, axes and rotation representation.
+
+The validator itself lives in `tools/cite_tools`, not under `model/` — `model/` is data,
+and Python there would sit outside the lint and type-check path
+([ADR-0013](../adr/0013-host-agnostic-tooling.md)).
 
 An **asset instance** names a type from the component library and gives it an identity, a
 pose, and a zone. Adding a fourth arm is a new instance, not new code — this is what makes

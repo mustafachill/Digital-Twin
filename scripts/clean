@@ -14,6 +14,26 @@ step "Workspace artifacts"
 rm -rf "${REPO_ROOT}/workspace/build" "${REPO_ROOT}/workspace/install" "${REPO_ROOT}/workspace/log"
 ok "Removed workspace/{build,install,log}"
 
+# On a Docker host those three directories are empty: compose mounts named
+# volumes over them, so the real build output — including the CMake caches that
+# make a stale configuration stick — lives in the volumes and survives the rm
+# above. A clean that leaves the artifacts in place is worse than no clean,
+# because the next build reuses exactly the state the developer was trying to
+# discard. Emptying the volumes needs a container, since only a container can
+# see them.
+if ! in_container && have docker && [ "${ALL:-0}" -eq 0 ]; then
+    step "Container build volumes"
+    if compose run --rm --entrypoint sh dev -c \
+        'rm -rf /workspace/workspace/build/* /workspace/workspace/build/.??* \
+                /workspace/workspace/install/* /workspace/workspace/install/.??* \
+                /workspace/workspace/log/* /workspace/workspace/log/.??* 2>/dev/null; exit 0' \
+        >/dev/null 2>&1; then
+        ok "Emptied the cite-build, cite-install and cite-log volumes"
+    else
+        warn "Could not empty the container build volumes (is the image built?)"
+    fi
+fi
+
 if [ "$ALL" -eq 1 ]; then
     step "Python virtualenv"
     rm -rf "${REPO_ROOT}/.venv"

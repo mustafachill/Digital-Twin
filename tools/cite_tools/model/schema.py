@@ -1,0 +1,461 @@
+"""The single declaration of the L0 facility model's shape.
+
+Pydantic is authoritative here; the JSON Schema under ``model/schema/`` is a
+*generated export* of these classes (ADR-0021), not a second declaration. That is
+what keeps the shape from existing in two places, which is the failure this whole
+layer exists to prevent.
+
+The rule for what belongs here, and what does not:
+
+* Anything pydantic can declare on a field — type, enum, pattern, range,
+  required, extra-forbid — is declared here, so it survives the export and gives
+  editors inline validation.
+* Anything it cannot — referential integrity, geometry, inertia plausibility,
+  determinism — is **not** a schema constraint. It lives in ``cite_tools.validate``
+  and the exported JSON Schema never claims it.
+
+``extra="forbid"`` on every model is the single most important line in the file.
+It is what makes a mistyped key an error instead of a silent default — v1 read
+``conveyor`` while the file said ``conveyors``, the configuration fell back to
+defaults, and nothing anywhere reported it.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# `lower_snake_case`, no leading digit — naming-and-namespaces.md rule 4.
+Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$")]
+
+#: ``cite_world``, or ``<asset_id>/<frame_id>`` naming a frame on another asset.
+FrameRef = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?$")]
+
+Triple = tuple[float, float, float]
+
+
+class Strict(BaseModel):
+    """Base for every model: unknown keys are errors, instances are immutable."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+# --------------------------------------------------------------------------- #
+# Geometry
+# --------------------------------------------------------------------------- #
+class Pose(Strict):
+    """Where something is, relative to exactly one named frame.
+
+    There is one pose per asset instance. Task poses — where an arm picks, where
+    it places — are never written here; they are named frames on assets, which a
+    station references. That is what makes v1's duplicated-and-diverged
+    pick/place coordinates unrepresentable.
+    """
+
+    frame: FrameRef = "cite_world"
+    xyz_m: Triple = (0.0, 0.0, 0.0)
+    rpy_rad: Triple = (0.0, 0.0, 0.0)
+
+
+class NamedFrame(Strict):
+    """A reference frame a type offers, that instances can be placed against.
+
+    ``conveyor_1/outfeed`` resolves through one of these, so the coordinate of a
+    belt's end is written once — in the type — rather than at every station that
+    reaches for it.
+    """
+
+    id: Identifier
+    xyz_m: Triple = (0.0, 0.0, 0.0)
+    rpy_rad: Triple = (0.0, 0.0, 0.0)
+    link: str | None = Field(
+        default=None,
+        description="URDF link this frame is attached to, if the type has a description.",
+    )
+
+
+class Inertial(Strict):
+    """Mass properties. Validated, never trusted — see L1.
+
+    A wrong inertia tensor raises no error. The simulation runs and the physics
+    is wrong in a way that reads as a controller bug, which is why
+    ``cite_tools.validate.physical`` checks positive-definiteness and the
+    triangle inequality rather than assuming the author got it right.
+    """
+
+    mass_kg: Annotated[float, Field(gt=0.0)]
+    com_m: Triple = (0.0, 0.0, 0.0)
+    ixx: Annotated[float, Field(gt=0.0)]
+    iyy: Annotated[float, Field(gt=0.0)]
+    izz: Annotated[float, Field(gt=0.0)]
+    ixy: float = 0.0
+    ixz: float = 0.0
+    iyz: float = 0.0
+
+
+class BoxGeometry(Strict):
+    kind: Literal["box"] = "box"
+    size_m: Triple
+
+
+class CylinderGeometry(Strict):
+    kind: Literal["cylinder"] = "cylinder"
+    radius_m: Annotated[float, Field(gt=0.0)]
+    length_m: Annotated[float, Field(gt=0.0)]
+
+
+class MeshGeometry(Strict):
+    kind: Literal["mesh"] = "mesh"
+    uri: str = Field(description="package:// or file:// URI, declared in assets/manifest.yaml")
+    scale: Triple = (1.0, 1.0, 1.0)
+
+
+Geometry = Annotated[
+    BoxGeometry | CylinderGeometry | MeshGeometry,
+    Field(discriminator="kind"),
+]
+
+
+class Body(Strict):
+    """Geometry for a part we author ourselves — a conveyor, a table, a pedestal.
+
+    Visual and collision are separate fields with no default linking them,
+    deliberately. L1 calls reusing a dense visual mesh as collision geometry the
+    single most consequential mistake in that layer: it destroys real-time factor
+    and produces contact behaviour nobody can explain. Making them separate
+    required fields means doing it is a visible choice, not an omission.
+    """
+
+    visual: Geometry
+    collision: Geometry
+    inertial: Inertial
+    material: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Component library — the declarative half (L1 owns the geometric half)
+# --------------------------------------------------------------------------- #
+class Kinematics(Strict):
+    dof: Annotated[int, Field(ge=1, le=7)]
+    joint_suffixes: list[str] = Field(min_length=1)
+    base_link_suffix: str
+    tip_link_suffix: str
+    max_reach_m: Annotated[float, Field(gt=0.0)]
+
+
+class DescriptionSpec(Strict):
+    """How a type becomes geometry.
+
+    ``xacro_macro`` is how a vendor description is incorporated **without editing
+    it** — the open question L1 leaves for the component library. The generator's
+    entire knowledge of the vendor package is the argument names below, which are
+    model data. It never opens a vendor file and never patches one, so a vendor
+    upgrade that renames a parameter is a two-line model diff.
+    """
+
+    provider: Literal["xacro_macro", "body"]
+    package: str | None = None
+    file: str | None = None
+    macro: str | None = None
+    fixed_args: dict[str, str | bool | int | float] = Field(default_factory=dict)
+    bound_args: dict[str, str] = Field(
+        default_factory=dict,
+        description="macro parameter -> generator binding name; an unknown binding is an error",
+    )
+    body: Body | None = None
+
+
+class HardwareBackend(Strict):
+    """One selectable ``ros2_control`` backend for a type.
+
+    The plugin class string exists exactly once, here. That is what makes
+    'the only thing that differs is which plugin is loaded' (ADR-0005) true by
+    construction rather than by discipline.
+    """
+
+    ros2_control_plugin: str
+    instance_params: list[str] = Field(default_factory=list)
+
+
+class ControllerSpec(Strict):
+    """A controller a type needs, named by suffix and ordered by stage.
+
+    ``stage`` exists because a broadcaster must be active before the controllers
+    that depend on its state, and expressing that as data rather than as a sleep
+    is what P4 requires.
+    """
+
+    suffix: Identifier
+    type: str
+    joints: Literal["arm", "end_effector", "none"]
+    stage: Annotated[int, Field(ge=0)]
+    command_interfaces: list[str] = Field(default_factory=list)
+    state_interfaces: list[str] = Field(default_factory=list)
+    parameters: dict[str, str | bool | int | float] = Field(default_factory=dict)
+
+
+class PlanningSpec(Strict):
+    group: Identifier
+    tip_link_suffix: str
+
+
+class AssetType(Strict):
+    """A reusable definition, instantiated many times with different prefixes."""
+
+    id: Identifier
+    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture", "work_area"]
+    vendor: str | None = None
+    kinematics: Kinematics | None = None
+    frames: list[NamedFrame] = Field(default_factory=list)
+    description: DescriptionSpec
+    hardware_backends: dict[Identifier, HardwareBackend] = Field(default_factory=dict)
+    controllers: list[ControllerSpec] = Field(default_factory=list)
+    planning: PlanningSpec | None = None
+    graspable: bool = Field(
+        default=False,
+        description="May be attached by the simulated grasp plugin (ADR-0023).",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Instances
+# --------------------------------------------------------------------------- #
+class Registration(Strict):
+    """What calibration measured, kept apart from what was designed.
+
+    L5 writes here, never into ``pose``. Keeping them separate means a Phase 2
+    measurement can never destroy engineered intent, and ``git diff`` shows
+    exactly what calibration changed. ``correction`` is a **body-frame** delta
+    (ADR-0020), which is what a touch probe or an ICP fit naturally produces.
+    """
+
+    status: Literal["unregistered", "measured", "stale"] = "unregistered"
+    correction: Pose = Field(default_factory=Pose)
+    measured_at: str | None = None
+    method: Literal["survey", "tcp_touch_probe", "scan_icp"] | None = None
+    residual_rms_m: float | None = None
+    survey_reference: str | None = None
+
+
+class HardwareSelection(Strict):
+    """Which backend this instance loads. Required, with no default, on purpose.
+
+    A schema default here would let an instance become ``real`` because someone
+    omitted a key. `cross-cutting-safety.md` is explicit that a mode must never
+    be reachable by omission, and this is the field that decides whether a
+    command reaches a physical arm.
+    """
+
+    backend: Identifier
+    params: dict[str, str | bool | int | float] = Field(default_factory=dict)
+
+
+class EndEffectorSelection(Strict):
+    type: Identifier
+    vendor_integrated: bool = Field(
+        default=False,
+        description="True when the robot type's own description already builds it in.",
+    )
+
+
+class ConveyorConfiguration(Strict):
+    kind: Literal["conveyor"] = "conveyor"
+    installed_speed_mps: Annotated[float, Field(gt=0.0)]
+    direction: Literal["forward", "reverse"] = "forward"
+
+
+class BreakBeamConfiguration(Strict):
+    kind: Literal["sensor"] = "sensor"
+    beam_axis: Literal["x", "y", "z"]
+    beam_length_m: Annotated[float, Field(gt=0.0)]
+    idle_state: Literal["clear", "blocked"] = "clear"
+
+
+class WorkAreaConfiguration(Strict):
+    kind: Literal["work_area"] = "work_area"
+    size_m: Triple
+    role: Literal["source", "sink", "buffer"]
+
+
+class RobotConfiguration(Strict):
+    kind: Literal["robot"] = "robot"
+    home_rad: list[float] = Field(default_factory=list)
+
+
+class FixtureConfiguration(Strict):
+    kind: Literal["fixture"] = "fixture"
+
+
+Configuration = Annotated[
+    ConveyorConfiguration
+    | BreakBeamConfiguration
+    | WorkAreaConfiguration
+    | RobotConfiguration
+    | FixtureConfiguration,
+    Field(discriminator="kind"),
+]
+
+
+class AssetInstance(Strict):
+    """One physical thing that exists, with an identity, a pose and a zone."""
+
+    id: Identifier
+    zone: Identifier
+    type: Identifier
+    pose: Pose
+    hardware: HardwareSelection
+    end_effector: EndEffectorSelection | None = None
+    configuration: Configuration | None = None
+    registration: Registration = Field(default_factory=Registration)
+
+
+# --------------------------------------------------------------------------- #
+# Facility
+# --------------------------------------------------------------------------- #
+class SurveyOrigin(Strict):
+    status: Literal["provisional", "surveyed"] = "provisional"
+    marker_id: str | None = None
+    description: str | None = None
+
+
+class Facility(Strict):
+    id: Identifier
+    name: str
+    root_frame: Literal["cite_world"] = "cite_world"
+    units: Literal["si_m_rad_kg_s"] = Field(
+        default="si_m_rad_kg_s",
+        description=(
+            "Closed enum with one member. Its existence is a tripwire: adding a "
+            "second member requires an ADR, because ADR-0020 forbids a second "
+            "representation of any quantity."
+        ),
+    )
+    survey_origin: SurveyOrigin = Field(default_factory=SurveyOrigin)
+
+
+class ZoneBounds(Strict):
+    kind: Literal["aabb"] = "aabb"
+    frame: FrameRef = "cite_world"
+    min_m: Triple
+    max_m: Triple
+
+
+class Zone(Strict):
+    """A named region. Zones partition; they do not nest.
+
+    Nesting would change every name in the system, so `naming-and-namespaces.md`
+    rule 6 puts it behind an ADR.
+    """
+
+    id: Identifier
+    name: str
+    bounds: ZoneBounds
+
+
+# --------------------------------------------------------------------------- #
+# Topology
+# --------------------------------------------------------------------------- #
+class StationPoint(Strict):
+    asset: Identifier
+    frame: Identifier
+
+
+class StationTrigger(Strict):
+    sensor: Identifier
+    on: Literal["blocked", "clear"]
+
+
+class Station(Strict):
+    """A place in the process where work happens.
+
+    A station says what it is connected to, never what it does — behaviour is
+    L4's. The distinction is what keeps a layout change from being a code change.
+    """
+
+    id: Identifier
+    zone: Identifier
+    type: Literal["source_station", "transfer_station", "sink_station"]
+    actor: Identifier | None = None
+    assets: list[Identifier] = Field(default_factory=list)
+    pick_from: StationPoint | None = None
+    place_to: StationPoint | None = None
+    trigger: StationTrigger | None = None
+    capacity: Annotated[int, Field(ge=1)] = 1
+
+
+class FlowEdge(Strict):
+    """One directed link in the process flow.
+
+    An edge list, not per-station ``upstream``/``downstream`` fields: writing
+    both ends of a link is the same fact twice. The generator derives each
+    station's neighbours.
+    """
+
+    from_station: Identifier = Field(alias="from")
+    to_station: Identifier = Field(alias="to")
+    via: Identifier | None = None
+    buffer: Annotated[int, Field(ge=0)] = 0
+
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+
+class Flow(Strict):
+    id: Identifier
+    zone: Identifier
+    edges: list[FlowEdge] = Field(min_length=1)
+
+
+# --------------------------------------------------------------------------- #
+# Documents — one per file kind, dispatched on the `schema:` key
+# --------------------------------------------------------------------------- #
+class Document(Strict):
+    """Common head of every model file.
+
+    The loader dispatches on ``schema``, not on which directory the file was
+    found in, so a misfiled document is an error rather than a silent omission.
+    """
+
+    schema_: str = Field(alias="schema")
+
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+
+class FacilityDocument(Document):
+    schema_: Literal["cite/facility/v1"] = Field(alias="schema")
+    facility: Facility
+
+
+class ZonesDocument(Document):
+    schema_: Literal["cite/zones/v1"] = Field(alias="schema")
+    zones: list[Zone] = Field(min_length=1)
+
+
+class AssetTypeDocument(Document):
+    schema_: Literal["cite/asset_type/v1"] = Field(alias="schema")
+    asset_type: AssetType
+
+
+class AssetInstancesDocument(Document):
+    schema_: Literal["cite/asset_instances/v1"] = Field(alias="schema")
+    assets: list[AssetInstance] = Field(min_length=1)
+
+
+class StationsDocument(Document):
+    schema_: Literal["cite/stations/v1"] = Field(alias="schema")
+    stations: list[Station] = Field(min_length=1)
+
+
+class FlowDocument(Document):
+    schema_: Literal["cite/flow/v1"] = Field(alias="schema")
+    flow: Flow
+
+
+DOCUMENT_TYPES: dict[str, type[Document]] = {
+    "cite/facility/v1": FacilityDocument,
+    "cite/zones/v1": ZonesDocument,
+    "cite/asset_type/v1": AssetTypeDocument,
+    "cite/asset_instances/v1": AssetInstancesDocument,
+    "cite/stations/v1": StationsDocument,
+    "cite/flow/v1": FlowDocument,
+}

@@ -3,6 +3,7 @@
 #
 #   ./scripts/build
 #   ./scripts/build --packages-select cite_interfaces
+#   CITE_BUILD_JOBS=4 ./scripts/build     override the memory-derived job count
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -16,14 +17,79 @@ if [ ! -d src ] || [ -z "$(ls -A src 2>/dev/null)" ]; then
     exit 0
 fi
 
+# -----------------------------------------------------------------------------
+# Parallelism is derived from memory, not from core count.
+#
+# colcon defaults to one worker per core, and `make` inside each worker does the
+# same again. A C++ translation unit that includes generated ROS message headers
+# routinely needs 2-3 GB on its own, so on a machine with many cores and modest
+# RAM the default oversubscribes memory and the OOM killer takes gcc out. What
+# the developer sees is:
+#
+#     c++: fatal error: Killed signal terminated program cc1plus
+#
+# which names neither memory nor the machine, and reliably sends people looking
+# for a compiler bug. A build that succeeds only because the machine is large
+# enough is the same defect class as a bring-up that succeeds only because the
+# machine is fast enough (P4) — so the job count is computed, reported, and
+# overridable rather than assumed.
+# -----------------------------------------------------------------------------
+MEM_PER_JOB_MB=2500
+
+build_jobs() {
+    if [ -n "${CITE_BUILD_JOBS:-}" ]; then
+        printf '%s' "$CITE_BUILD_JOBS"
+        return
+    fi
+
+    local cores avail_kb by_mem
+    cores="$(nproc 2>/dev/null || echo 2)"
+    avail_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+
+    # No /proc/meminfo (a non-Linux native build): fall back to core count.
+    if [ "${avail_kb:-0}" -le 0 ]; then
+        printf '%s' "$cores"
+        return
+    fi
+
+    by_mem=$(( avail_kb / (MEM_PER_JOB_MB * 1024) ))
+    [ "$by_mem" -lt 1 ] && by_mem=1
+    if [ "$by_mem" -lt "$cores" ]; then printf '%s' "$by_mem"; else printf '%s' "$cores"; fi
+}
+
+JOBS="$(build_jobs)"
+CORES="$(nproc 2>/dev/null || echo '?')"
+if [ "$JOBS" != "$CORES" ] && [ -z "${CITE_BUILD_JOBS:-}" ]; then
+    info "Building with ${JOBS} job(s) — limited by available memory, not by the ${CORES} cores present."
+    info "Override with CITE_BUILD_JOBS=N, or give Docker more memory."
+else
+    info "Building with ${JOBS} job(s)."
+fi
+export MAKEFLAGS="-j${JOBS}"
+
 # legacy/ is excluded by living outside workspace/, not by a flag. Keeping the
 # build root narrow is what makes that exclusion structural rather than a
 # setting somebody can forget.
+set +e
 colcon build \
     --symlink-install \
+    --parallel-workers "$JOBS" \
     --event-handlers console_direct+ \
     --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     "$@"
+STATUS=$?
+set -e
+
+if [ "$STATUS" -ne 0 ]; then
+    # Turn the OOM killer's unhelpful message into the actual diagnosis.
+    if grep -rqs "Killed signal terminated program" "${REPO_ROOT}/workspace/log/latest_build" 2>/dev/null; then
+        warn "A compiler process was killed by the OOM killer, not by a code error."
+        warn "This build used ${JOBS} job(s) with a ${MEM_PER_JOB_MB} MB per-job budget."
+        warn "Retry with CITE_BUILD_JOBS=1, or raise Docker's memory limit."
+        warn "See docs/operations/troubleshooting.md."
+    fi
+    die "Build failed."
+fi
 
 ok "Build complete. Overlay: workspace/install/setup.bash"

@@ -93,7 +93,12 @@ setup_ros_workspace() {
     step "External sources (vcstool)"
     mkdir -p "${REPO_ROOT}/workspace/src/external"
     if have vcs; then
-        vcs import "${REPO_ROOT}/workspace/src" \
+        # --recursive is required, not optional: xarm_ros2 carries xarm_sdk/cxx as a
+        # git submodule, and without it that directory arrives empty and the build
+        # fails on xarm_sdk. Reproducibility is preserved because the submodule
+        # pointer is part of the parent's pinned commit, so a SHA pin on the parent
+        # fixes the submodule exactly (ADR-0008).
+        vcs import --recursive "${REPO_ROOT}/workspace/src" \
             < "${REPO_ROOT}/external/cite.repos" || warn "vcs import reported problems"
         ok "External repositories imported"
     else
@@ -123,6 +128,14 @@ setup_ros_workspace() {
 
     step "System dependencies (rosdep)"
     if have rosdep; then
+        # The image builds its apt layers with a cache mount, so /var/lib/apt/lists
+        # is empty in the final image. Without this refresh every `rosdep install`
+        # in a fresh container fails with "Unable to locate package" for packages
+        # that do exist — which reads as a missing dependency rather than a stale
+        # index, and sends people looking in the wrong place entirely.
+        if in_container; then
+            sudo apt-get update -qq || warn "apt-get update failed; rosdep may not resolve"
+        fi
         rosdep update --rosdistro "${ROS_DISTRO:-jazzy}" >/dev/null 2>&1 || true
         rosdep install --from-paths "${REPO_ROOT}/workspace/src" \
             --ignore-src -r -y --rosdistro "${ROS_DISTRO:-jazzy}" \

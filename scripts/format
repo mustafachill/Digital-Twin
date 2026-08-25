@@ -4,7 +4,7 @@
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
-VENV="${REPO_ROOT}/.venv/bin"
+VENV="$(cite_venv_bin || echo "${REPO_ROOT}/.venv/bin")"
 
 step "Python (ruff)"
 if [ -x "${VENV}/ruff" ]; then

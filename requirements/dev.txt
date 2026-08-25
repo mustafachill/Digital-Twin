@@ -4,6 +4,11 @@
 pytest==9.0.3               # 8.3.3 carried PYSEC-2026-1845 (6.8)
 pytest-cov==6.0.0
 
+# --- Type stubs ---
+# mypy runs in strict mode, and an untyped third-party import is an error there.
+# Stubs are development-only: they are never imported at run time.
+types-PyYAML==6.0.12.20240917
+
 # --- Lint and format ---
 ruff==0.7.4                 # Python lint + format
 mypy==1.13.0                # static typing for the tooling layer

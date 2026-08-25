@@ -97,12 +97,31 @@ it declares `gz_sim_vendor`, `sdformat_vendor`, `gz_ros2_control`, `ros_gz_sim`,
 
 We use the `jazzy` branch, declared in
 [`../../external/cite.repos`](../../external/cite.repos)
-([ADR-0008](../adr/0008-external-dependencies-via-vcstool.md)). **It is still pinned to the
-branch rather than to a commit SHA** — the one Phase 1.A gate still open, reported by
-`./scripts/doctor` and by the CI supply-chain job. Until it is pinned, two clones on
-different days can produce different code. For whoever closes that gate: `jazzy` was at
-`3dc2b5e8294758d96b54b15fa5920d581b7cbb3d` on 2026-08-24 (`git ls-remote`), which is a
-candidate to pin **after** a build is confirmed on Linux — not before.
+([ADR-0008](../adr/0008-external-dependencies-via-vcstool.md)). **Pinned to
+`3dc2b5e8294758d96b54b15fa5920d581b7cbb3d` (`jazzy` head, 2026-08-11) on 2026-08-24**,
+which closed the last Phase 1.A gate. The pin was made only after the build and a runtime
+check, not before:
+
+| Check | Result |
+|---|---|
+| `colcon build` of the whole manifest, in the container, arm64 | 12 packages, all succeed |
+| `xarm_device` expansion with `gz_ros2_control/GazeboSimSystem` | one root link, joints prefixed `arm_1_joint1..5`, `arm_1_drive_joint` |
+| Mesh URIs under that plugin | `file://` absolute, so no `GZ_SIM_RESOURCE_PATH` dependency |
+| Spawn into Gazebo Harmonic headless | 6 joints, 12 hardware interfaces present |
+| Controller activation | `joint_state_broadcaster`, `joint_trajectory_controller`, `GripperActionController` all active |
+| `FollowJointTrajectory` goal | executed to `SUCCEEDED`; shutdown left no orphans |
+
+Two things found during that verification are worth carrying forward:
+
+- **`xarm_ros2` has a git submodule**, `xarm_sdk/cxx`. `./scripts/bootstrap` uses
+  `vcs import --recursive` for this; without the flag the directory is empty and the build
+  fails on `xarm_sdk`. The pin above still fixes it exactly, because the submodule pointer
+  is part of the pinned commit.
+- **The gripper's mimic-joint coupling emits a Gazebo Classic plugin**
+  (`libgazebo_mimic_joint_plugin.so`) that cannot load under Harmonic, and this Harmonic
+  build's physics engine reports that it does not support mimic constraints either. The
+  URDF `<mimic>` tags are present, so `ros2_control` is what has to carry the coupling.
+  See [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md).
 
 Branches on the upstream repository, from `git ls-remote --heads` on 2026-08-24: `foxy`,
 `galactic`, `humble`, `humble_gz`, `jazzy`, `master`, `rolling`.

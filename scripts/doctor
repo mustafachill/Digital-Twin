@@ -71,9 +71,10 @@ else
 fi
 
 step "Host tooling"
-if [ -x "${REPO_ROOT}/.venv/bin/python" ]; then
-    report pass "virtualenv" ".venv"
-    if "${REPO_ROOT}/.venv/bin/python" -c "import cite_tools" 2>/dev/null; then
+CITE_PY="$(cite_python 2>/dev/null || true)"
+if [ -n "$CITE_PY" ] && [ -x "$CITE_PY" ]; then
+    report pass "virtualenv" "$(dirname "$(dirname "$CITE_PY")")"
+    if "$CITE_PY" -c "import cite_tools" 2>/dev/null; then
         report pass "cite_tools" "importable"
     else
         report fail "cite_tools" "not installed — run ./scripts/bootstrap --host-only"
@@ -107,7 +108,8 @@ if [ -d "$DOCS" ]; then
     # An index that drifts from the files is how a decision record becomes unfindable.
     # 0000 is the template, not a decision record — it is correctly absent from the index.
     adr_files=$(find "$DOCS/adr" -name '[0-9][0-9][0-9][0-9]-*.md' -not -name '0000-*' 2>/dev/null | wc -l | tr -d ' ')
-    adr_indexed=$(grep -cE '^\| \[[0-9]{4}\]' "$DOCS/adr/README.md" 2>/dev/null || echo 0)
+    adr_indexed=$(grep -cE '^\| \[[0-9]{4}\]' "$DOCS/adr/README.md" 2>/dev/null | head -1)
+    adr_indexed=${adr_indexed:-0}
     if [ "${adr_files:-0}" -eq "${adr_indexed:-0}" ] && [ "${adr_files:-0}" -gt 0 ]; then
         report pass "ADR index" "${adr_files} records, all indexed"
     else
@@ -142,7 +144,11 @@ else
 fi
 
 step "Reproducibility"
-UNPINNED=$(grep -cE '^\s+version:\s*[a-z]' "${REPO_ROOT}/external/cite.repos" 2>/dev/null || echo 0)
+# `grep -c` prints 0 AND exits non-zero when it matches nothing, so the usual
+# `|| echo 0` fallback appends a second line and the count becomes "0\n0" — which
+# `[` then rejects as not an integer. Take grep's output and normalise instead.
+UNPINNED=$(grep -cE '^\s+version:\s*[a-z]' "${REPO_ROOT}/external/cite.repos" 2>/dev/null | head -1)
+UNPINNED=${UNPINNED:-0}
 if [ "${UNPINNED:-0}" -gt 0 ]; then
     report fail "manifest pinning" "${UNPINNED} entry not pinned to a commit SHA (Phase 1.A gate)"
 else

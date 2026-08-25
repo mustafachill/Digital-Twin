@@ -9,8 +9,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 # Host tooling tests need no ROS, so run them wherever we already are.
 run_host_tests() {
-    local py="${REPO_ROOT}/.venv/bin/python"
-    [ -x "$py" ] || py="$(command -v python3 || true)"
+    local py
+    py="$(cite_python)" || true
     if [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ]; then
         step "Host tooling tests"
         "$py" -m pytest "${REPO_ROOT}/tools" -q

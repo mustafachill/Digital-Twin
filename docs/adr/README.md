@@ -69,3 +69,9 @@ that turned out wrong is more valuable than the record of one that turned out ri
 | [0017](0017-mcap-recording-format.md) | Record with rosbag2 and MCAP storage | Accepted |
 | [0018](0018-visualization-rviz-and-foxglove.md) | RViz 2 for debugging, Foxglove for shareable inspection | Accepted |
 | [0019](0019-language-split-cpp-python.md) | C++ for control paths, Python for orchestration and tooling | Accepted |
+| [0020](0020-facility-model-conventions.md) | Fix the facility model's units, axes, and file layout | Accepted |
+| [0021](0021-generated-artifacts-are-committed.md) | Commit generated artifacts, in one generated package | Accepted |
+| [0022](0022-gripper-as-ros2-control-controller.md) | Drive the gripper through `ros2_control`, not a separate action server | Accepted |
+| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Accepted |
+| [0024](0024-handoff-split-between-l3-and-l4.md) | Split handoff — L4 owns the negotiation, L3 owns the motion | Accepted |
+| [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |

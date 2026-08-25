@@ -42,6 +42,42 @@ native_ros_available() {
     [ -f "/opt/ros/${ROS_DISTRO:-jazzy}/setup.bash" ]
 }
 
+# -----------------------------------------------------------------------------
+# cite_venv_bin — absolute path to the bin/ of the Python tooling environment.
+#
+# There are two of them and picking the wrong one fails confusingly. The host
+# virtualenv lives at .venv/ inside the repository, which is bind-mounted into
+# the container — so inside the container `.venv/bin/python` *exists and is
+# executable* while being a macOS binary. Testing `-x` and taking the first hit,
+# which is what several scripts used to do, therefore selects a binary that
+# cannot run, and the error ("cannot execute binary file") names neither venv.
+#
+# Inside the container the container's own venv always wins. Outside it, the
+# repository venv does.
+# -----------------------------------------------------------------------------
+cite_venv_bin() {
+    local container_venv="${CITE_VENV:-/opt/cite-venv}"
+    if in_container && [ -x "${container_venv}/bin/python" ]; then
+        printf '%s' "${container_venv}/bin"
+        return 0
+    fi
+    if [ -x "${REPO_ROOT}/.venv/bin/python" ]; then
+        printf '%s' "${REPO_ROOT}/.venv/bin"
+        return 0
+    fi
+    if [ -x "${container_venv}/bin/python" ]; then
+        printf '%s' "${container_venv}/bin"
+        return 0
+    fi
+    return 1
+}
+
+cite_python() {
+    local bin
+    bin="$(cite_venv_bin)" || { command -v python3 || return 1; return 0; }
+    printf '%s/python' "$bin"
+}
+
 compose() {
     if have docker && docker compose version >/dev/null 2>&1; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \

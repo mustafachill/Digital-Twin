@@ -13,9 +13,16 @@ if [ -f /workspace/workspace/install/setup.bash ]; then
     source /workspace/workspace/install/setup.bash
 fi
 
-# Host-agnostic Python tooling.
-if [ -d "${CITE_VENV}" ]; then
-    export PATH="${CITE_VENV}/bin:${PATH}"
-fi
+# The host-agnostic Python tooling deliberately stays OFF the PATH.
+#
+# Putting ${CITE_VENV}/bin first makes its `python3` the default, and that
+# interpreter has none of the ROS Python packages — so every ament/colcon build
+# dies with "No module named 'catkin_pkg'", which reads as a broken ROS
+# installation rather than as a shadowed interpreter. The two environments are
+# separate on purpose (requirements/README.md): ROS Python comes from apt, the
+# tooling venv comes from pip, and neither may mask the other.
+#
+# Scripts that need the tooling resolve it explicitly through cite_venv_bin in
+# scripts/_lib.sh. CITE_VENV is exported by the image for them to find.
 
 exec "$@"

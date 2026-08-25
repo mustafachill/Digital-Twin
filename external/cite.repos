@@ -31,16 +31,26 @@ repositories:
   #   supported instead". (The Gazebo Classic link is in the `humble` branch README
   #   — do not read that one and conclude Harmonic is unsupported.) See ADR-0003.
   #
-  # !! STILL UNPINNED — PHASE 1.A GATE !!
-  #   `version` below is a branch, not a commit SHA, so two clones on different
-  #   days can produce different code. Before this manifest can be called
-  #   reproducible:
-  #     1. Build the branch on Linux and confirm it works against our stack.
-  #     2. Replace `version` with that commit's exact SHA.
-  #   The dependency-auditor and CI report this until then. That is correct
-  #   behaviour, not a false positive.
+  # PINNED 2026-08-24 — Phase 1.A gate CLOSED.
+  #   Verified against our stack before pinning, in the container image, on
+  #   arm64:
+  #     1. `colcon build` — 12 packages, all succeed.
+  #     2. The `xarm_device` macro expands with
+  #        ros2_control_plugin:=gz_ros2_control/GazeboSimSystem, add_gripper:=true,
+  #        create_attach_link:=false, producing exactly one root link and correctly
+  #        prefixed joints (arm_1_joint1..5, arm_1_drive_joint).
+  #     3. Spawned into Gazebo Harmonic headless: all six hardware interfaces
+  #        present, joint_state_broadcaster + joint_trajectory_controller +
+  #        gripper controller configured and activated, a FollowJointTrajectory
+  #        goal executed to SUCCEEDED, clean shutdown with no orphans.
+  #
+  #   Note that `xarm_ros2` carries `xarm_sdk/cxx` as a git submodule. `vcs
+  #   import --recursive` in ./scripts/bootstrap is what fetches it; without that
+  #   flag the directory arrives empty and the build fails on xarm_sdk.
+  #   Reproducibility is still exact, because the submodule pointer is part of
+  #   the pinned commit below.
   # ---------------------------------------------------------------------------
   external/xarm_ros2:
     type: git
     url: https://github.com/xArm-Developer/xarm_ros2.git
-    version: jazzy   # TODO(phase-1a): replace with a commit SHA
+    version: 3dc2b5e8294758d96b54b15fa5920d581b7cbb3d   # `jazzy` head, 2026-08-11

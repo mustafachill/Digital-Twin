@@ -10,6 +10,14 @@
 # =============================================================================
 
 ---
+# Without an explicit project name, compose derives one from this file's parent
+# directory — "docker" — which collides with every other project that keeps its
+# compose file in a docker/ directory. The visible symptom is an orphan-container
+# warning naming unrelated containers; the invisible one is that
+# `./scripts/clean --all` runs `compose down --volumes` against that shared
+# project and takes those containers and their volumes with it.
+name: cite-digital-twin
+
 x-common: &common
   build:
     context: ../..

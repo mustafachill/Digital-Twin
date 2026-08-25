@@ -41,8 +41,16 @@ Initial skill set:
 | `Pick` | Object pose, grasp hint | Holding / failed |
 | `Place` | Target pose | Released / failed |
 | `Transfer` | Peer identity, handoff pose | Transferred / failed |
-| `Actuate` | End-effector command | Actuated / failed |
+| `Grasp` | End-effector command | Actuated / failed |
 | `Detect` | Region of interest, object type | Detections with poses |
+
+`Grasp` is the end-effector actuation skill in general, not only closing a parallel
+gripper — a vacuum end-effector actuates through the same skill. This table named it
+`Actuate` until 2026-08-24; charter §5 and `CLAUDE.md` §5 both say `Grasp`, and the
+charter is authoritative over other documents by its own §0, so the name here was
+wrong. Corrected before `cite_interfaces` was written, since renaming an action after
+it has consumers is a breaking change ([interfaces/README.md](../interfaces/README.md)).
+
 
 ## Design
 

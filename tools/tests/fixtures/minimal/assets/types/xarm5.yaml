@@ -1,0 +1,36 @@
+---
+schema: cite/asset_type/v1
+asset_type:
+  id: xarm5
+  category: robot
+  vendor: ufactory
+  kinematics:
+    dof: 5
+    joint_suffixes: [joint1, joint2, joint3, joint4, joint5]
+    base_link_suffix: link_base
+    tip_link_suffix: link_eef
+    max_reach_m: 0.7
+  frames:
+    - {id: base, xyz_m: [0.0, 0.0, 0.0]}
+  description:
+    provider: xacro_macro
+    package: xarm_description
+    file: urdf/xarm_device_macro.xacro
+    macro: xarm_device
+    fixed_args: {robot_type: xarm, dof: 5}
+    bound_args: {prefix: instance.prefix}
+  hardware_backends:
+    sim:
+      ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+    real:
+      ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
+      instance_params: [robot_ip]
+  controllers:
+    - suffix: joint_state_broadcaster
+      type: joint_state_broadcaster/JointStateBroadcaster
+      joints: none
+      stage: 0
+    - suffix: joint_trajectory_controller
+      type: joint_trajectory_controller/JointTrajectoryController
+      joints: arm
+      stage: 1
