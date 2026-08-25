@@ -69,6 +69,14 @@ def joints_of(arm: str) -> set[str]:
     return {f"{arm}_{suffix}" for suffix in JOINT_SUFFIXES}
 
 
+#: How far a follower may sit from `drive_joint` and still count as tracking it.
+#: Generous next to the failure it exists to catch — an uncoupled follower rests
+#: near zero while the drive joint is most of a radian away — because its job is
+#: only to absorb the residual of gz_ros2_control's proportional mimic servo, not
+#: to measure it.
+TRACKING_TOLERANCE_RAD = 0.05
+
+
 #: Wall-clock ceilings, not schedules. Nothing is sequenced by them; they exist so
 #: a hang fails the run with a diagnosis instead of blocking CI indefinitely.
 #:
@@ -306,8 +314,29 @@ class TestCellBringUp(unittest.TestCase):
                 DELIVERY_CEILING_S,
                 f"a joint state after the gripper closed on {topic}",
             )
-            state = received[-1]
-            by_name = dict(zip(state.name, state.position, strict=True))
+
+            # Then wait for the followers to SETTLE before judging them. They are
+            # driven by a proportional velocity servo, so for a short while after
+            # the goal completes they are legitimately still catching up, and a
+            # state sampled in that window says nothing about whether the linkage
+            # is coupled. This is a wait on an observed condition with a ceiling,
+            # not a sleep: nothing here is sequenced by elapsed time (P4), and if
+            # the followers never converge the assertions below still run and fail
+            # with the numbers that prove it.
+            deadline = self.node.get_clock().now().nanoseconds + int(DELIVERY_CEILING_S * 1e9)
+            by_name: dict[str, float] = {}
+            while self.node.get_clock().now().nanoseconds < deadline:
+                rclpy.spin_once(self.node, timeout_sec=0.2)
+                by_name = dict(zip(received[-1].name, received[-1].position, strict=True))
+                leader = by_name.get(f"{arm}_{DRIVE_JOINT_SUFFIX}")
+                if leader is None:
+                    continue
+                if all(
+                    abs(by_name[f"{arm}_{suffix}"] - leader) <= TRACKING_TOLERANCE_RAD
+                    for suffix in FOLLOWER_JOINT_SUFFIXES
+                    if f"{arm}_{suffix}" in by_name
+                ):
+                    break
         finally:
             self.node.destroy_subscription(subscription)
 
@@ -320,22 +349,25 @@ class TestCellBringUp(unittest.TestCase):
             "about whether the linkage follows it",
         )
 
-        # Generous next to the failure it exists to catch. An uncoupled follower
-        # sits near zero while the drive joint is past 0.25 rad, so the gap is the
-        # better part of half a radian; this tolerance only has to absorb the lag
-        # of gz_ros2_control's proportional mimic servo.
         for suffix in FOLLOWER_JOINT_SUFFIXES:
             follower = by_name[f"{arm}_{suffix}"]
             self.assertAlmostEqual(
                 follower,
                 drive,
-                delta=0.05,
+                delta=TRACKING_TOLERANCE_RAD,
                 msg=(
-                    f"{arm}_{suffix} reads {follower:.4f} while "
-                    f"{arm}_{DRIVE_JOINT_SUFFIX} reads {drive:.4f}. The linkage is not "
-                    "coupled: the URDF <mimic> tags are reaching nothing, so only one "
-                    "finger is driven and the pads never close parallel. Check that "
-                    "external/patches/01-xarm_ros2-gripper-mimic-joints.patch applied"
+                    f"{arm}_{suffix} settled at {follower:.4f} while "
+                    f"{arm}_{DRIVE_JOINT_SUFFIX} is at {drive:.4f}, so the pads are not "
+                    "parallel and a grasp cannot be evidenced by a stall.\n"
+                    "  If EVERY follower sits near zero, the coupling is absent "
+                    "entirely — check that "
+                    "external/patches/01-xarm_ros2-gripper-mimic-joints.patch applied.\n"
+                    "  If only left_finger_joint is adrift, at its 0.85 limit, this is "
+                    "the known open defect: it is the one follower whose parent link is "
+                    "the child of the position-commanded drive joint, so it receives a "
+                    "step where the others receive a ramp, and gz_ros2_control's "
+                    "proportional mimic servo does not recover it. See the fix report "
+                    "for this branch"
                 ),
             )
 
