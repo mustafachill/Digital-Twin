@@ -61,6 +61,20 @@ plan:
       # margin means anything. Same number the controller is configured with.
       gripper_goal_tolerance_rad: {{ manager.gripper_goal_tolerance_rad | f }}
 {% endif %}
+{% if manager.gripper_max_drive_rate_rad_s is not none %}
+      # How fast the drive joint may travel, rad/s, in either direction. Carried
+      # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
+      # waits for a grasp has to know how long the stroke can legitimately take
+      # before a timeout means anything, and deriving that from a hardcoded guess
+      # would put the gripper's speed in a second place.
+      #
+      # It is also the value the Phase 2 hardware bring-up must convert. The
+      # physical gripper is not a `ros2_control` joint at all — `uf_robot_hardware`
+      # exports interfaces for joint1..5 only and drives the gripper through
+      # `xarm_api`'s service layer, whose speed argument is in motor r/min. The
+      # declaration transfers; the mechanism does not. See the fix report.
+      gripper_max_drive_rate_rad_s: {{ manager.gripper_max_drive_rate_rad_s | f }}
+{% endif %}
 {% if manager.gripper_default_grasp_width_m is not none %}
       # What a Pick closes to when its goal names no width. Narrower than the
       # work-piece on purpose: a parallel gripper evidences a grasp by failing to

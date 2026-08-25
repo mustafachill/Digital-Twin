@@ -86,6 +86,25 @@ asset_type:
     # never which"). A controller loop that cannot hold this rate is a
     # performance finding, not a value to quietly lower.
     update_rate_hz: 150
+    # Clamp every command against the joint's declared limits before writing it.
+    #
+    # This is a safety finding in its own right, not a detail of the gripper fix
+    # that motivated it. `ros2_control` defaults this to false, it had never been
+    # set, and the result was that NOTHING enforced any declared limit anywhere in
+    # this cell — not for the gripper and not for the five arm joints, on either
+    # path. The limits were all present and all inert: the vendor description
+    # declares position, velocity and effort limits for every joint,
+    # `cross-cutting-safety.md` requires limits enforced at planning *and* at
+    # execution, and the generated MoveIt `joint_limits.yaml` states outright that
+    # it is "the planning half, and the controller is the other". The other half
+    # was not running.
+    #
+    # What it costs: the limiter now also clamps the five arm joints, so a
+    # trajectory that asked for more than the description allows is followed as
+    # far as the description allows instead of overshooting. That is the intended
+    # behaviour, but it is a change to the arm's execution path and not only to
+    # the gripper's — measured rather than assumed, see the fix report.
+    enforce_command_limits: true
 
   controllers:
     # Stage 0 must be active before stage 1: the controllers below read the state

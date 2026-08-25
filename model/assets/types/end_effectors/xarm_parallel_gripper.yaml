@@ -71,6 +71,70 @@ asset_type:
     open_position: 0.0
     closed_position: 0.85
 
+    # HOW FAST THIS GRIPPER CLOSES, and why the number is what it is.
+    #
+    # PROVENANCE FIRST, because the whole argument turns on it (P7). This is NOT
+    # a manufacturer figure. UFACTORY publishes no jaw speed and no open-to-close
+    # time for this gripper. Searched and not found: the xArm Gripper User Manual
+    # V1.11.0 §5 "Technical Specifications" (which tabulates working range 0-84 mm,
+    # clamping force 30 N, weight 802 g, and has no speed row at all), the V2.2.0
+    # revision, ufactory.cc, docs.ufactory.cc, and distributor reproductions. The
+    # SDK's `set_gripper_speed()` does take a speed, but its unit is **r/min of
+    # the motor** over 1-5000, and UFACTORY publishes no conversion from r/min to
+    # jaw travel. So: a conservative engineering value, labelled as one.
+    #
+    #   Do NOT substitute the xArm Gripper G2's published 15-225 mm/s. That is a
+    #   different product with a different API (`set_gripper_g2_position`, which
+    #   takes mm and mm/s directly). The vendor description we invoke defaults to
+    #   `gripper_version:='G1'`, and the G2 branch in `xarm_gripper.urdf.xacro`
+    #   swaps meshes only — same kinematics, same joint limits. Attributing the
+    #   G2's specification to this gripper would be inventing a manufacturer
+    #   figure, which is the one thing worse than admitting there isn't one.
+    #
+    # WHAT IT HAS TO BE BELOW, which is the derivable part. `follower_max_rate_rad_s`
+    # is the followers' own limit; `follower_headroom_fraction` is
+    # 1 - max_drive_rate_rad_s / follower_max_rate_rad_s. See that property for
+    # why a mimic follower under Gazebo Harmonic spends its whole authority just
+    # keeping up. At the vendor's 2 rad/s for both, headroom is exactly zero, the
+    # servo is saturated for the entire stroke, and any perturbation is
+    # uncorrectable: one follower runs to its 0.85 limit and stays there, leaving
+    # a pad about 23 degrees out of position. That was the measured defect.
+    #
+    # WHY 1.0 AND NOT 1.5. Eleven candidates were measured, three reps each,
+    # round-robin interleaved, criteria fixed before any data. A narrower bound
+    # alone fails (nothing enforces it) and enforcement alone fails (it clamps to
+    # the unchanged 2 rad/s, so no headroom is gained); both together give a worst
+    # settled follower error of 0.0000 rad, 3 of 3, at 1.5 rad/s and at 1.0 rad/s
+    # alike. 1.5 is the measured sufficiency threshold, so 1.0 buys margin rather
+    # than function, and it costs 0.11 s on a 0.62 s close. It is chosen anyway,
+    # for two reasons:
+    #
+    #   * Headroom doubles, 25% -> 50%. The sufficiency threshold was measured on
+    #     an undisturbed stroke; the reason the limit exists is the disturbed one,
+    #     and 25% of a 2 rad/s actuator is not much correction authority to hold a
+    #     50 mm part against contact.
+    #   * It is the more truthful description of the hardware. Through the linkage
+    #     above, d(opening)/dq is 84.1 mm/rad fully open rising to 108.8 mm/rad
+    #     fully closed, so 1.0 rad/s is a jaw speed of roughly 84-109 mm/s. The
+    #     vendor's 2 rad/s is ~168-218 mm/s, and what the simulation actually did
+    #     before this — 0.85 rad in 0.23 s, i.e. 3.7 rad/s — is ~310-400 mm/s,
+    #     faster than any gripper UFACTORY sells, including the G2's 225 mm/s
+    #     maximum. A cross-check rather than a citation, but it points one way.
+    #
+    # Units are the drive joint's, not the jaw's, because that is what every
+    # consumer of this number sees: `<limit velocity>` is rad/s and the mimic
+    # servo works in rad/s. The metres are derived, never declared (P1).
+    max_drive_rate_rad_s: 1.0
+
+    # The followers' velocity limit as the VENDOR declares it — a fact about
+    # `xarm_gripper.urdf.xacro`, where all six joints carry
+    # `<limit lower="0" upper="0.85" effort="50" velocity="2"/>`. Restated here,
+    # not parsed, because L1 forbids ingesting a vendor description; see the field
+    # docstring. `cite_tools.validate.physical` checks the headroom this implies,
+    # so a vendor bump that changes the limit fails a test instead of quietly
+    # removing the margin above.
+    follower_max_rate_rad_s: 2.0
+
     # The pad opening, as a function of the drive joint. This is the ONLY place
     # that relationship is written (P1); the L3 skill server and
     # `cite_tools.validate.physical` both derive from these four numbers.

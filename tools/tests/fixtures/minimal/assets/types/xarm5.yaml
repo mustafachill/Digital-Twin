@@ -27,6 +27,10 @@ asset_type:
       instance_params: [robot_ip]
   control:
     update_rate_hz: 150
+    # Stated rather than defaulted, because the field is required. The fixture
+    # takes the same position the real robot type does: a declared limit that
+    # nothing enforces is documentation, not a limit.
+    enforce_command_limits: true
   controllers:
     - suffix: joint_state_broadcaster
       type: joint_state_broadcaster/JointStateBroadcaster
