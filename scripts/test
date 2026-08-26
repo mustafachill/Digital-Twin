@@ -117,6 +117,11 @@ if [ "${#OUR_PACKAGES[@]}" -eq 0 ]; then
     exit 0
 fi
 
+# A test result read out of a stale tree describes code nobody is looking at. Two
+# suites on this branch were believed red at base for hours on exactly that
+# evidence, and passed on a fresh build.
+assert_build_inputs_current "The test gate"
+
 info "Testing ${#OUR_PACKAGES[@]} first-party package(s): ${OUR_PACKAGES[*]}"
 colcon test \
     --packages-select "${OUR_PACKAGES[@]}" \

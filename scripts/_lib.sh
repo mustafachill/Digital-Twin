@@ -75,6 +75,185 @@ fi
 export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE
 
 # -----------------------------------------------------------------------------
+# COMPOSE_PROJECT_NAME — one set of Docker volumes per checkout, not one per host.
+#
+# The compose file pins `name: cite-digital-twin` and declares its volumes as
+# bare `cite-build`, `cite-install` and `cite-log`. Compose scopes a volume to
+# the project, so those become `cite-digital-twin_cite-build` and friends — ONE
+# set, shared by every checkout on the machine that does not override the project
+# name. On a host running several worktrees at once that is shared mutable state
+# between processes that do not know about each other, and it has produced all
+# of the following here:
+#
+#   * concurrent builds corrupting each other, surfacing as
+#     `failed to create symbolic link ... File exists`,
+#     `rosidl_cmake ... No such file or directory`, and packages that fail to
+#     configure with `CMAKE_C_COMPILER not set` — none of which name the cause;
+#   * one checkout running another checkout's binaries out of the shared install
+#     volume, so a test result described code nobody was looking at;
+#   * `./scripts/clean --all` destroying another agent's build mid-session,
+#     because `compose down --volumes` against the shared project takes the
+#     shared volumes with it.
+#
+# The last one is why this is derived rather than left to convention. Several
+# checkouts here had set COMPOSE_PROJECT_NAME by hand and were isolated; the ones
+# that had not were silently sharing. A convention that only protects the people
+# who remember it is not isolation, and the failure mode is invisible until it
+# has already cost somebody a session.
+#
+# Derived from the absolute path of the checkout, exactly as cite_domain_id is
+# and for the same two reasons:
+#
+#   isolation     two clones or worktrees never collide, without configuration
+#   attachability `./scripts/enter` attaches to the cell `./scripts/sim` started
+#                 from the SAME checkout, because the value is a pure function of
+#                 the path rather than of the run
+#
+# Path, not git metadata, deliberately: a `git worktree`'s `.git` is a file
+# pointing outside the directory compose bind-mounts as /workspace, which has
+# already broken `vcs import` once and had to be worked around with
+# GIT_CEILING_DIRECTORIES. Every worktree has a distinct absolute path, so the
+# path alone gives the property we need and needs nothing mounted to read it.
+#
+# The name carries the checkout's directory name as well as the hash so that
+# `docker volume ls` is legible when something does go wrong; the hash is what
+# makes it unique, and two directories with the same basename still differ.
+# -----------------------------------------------------------------------------
+cite_project_name() {
+    local key="${1:-$REPO_ROOT}" slug sum
+    # `cksum` is POSIX and identical on macOS and Linux; `md5sum` is neither.
+    sum="$(printf '%s' "$key" | cksum | awk '{print $1}')"
+    # Compose accepts [a-z0-9_-] only, and must not start with a dash. Lowercase,
+    # replace every other character, collapse runs, and trim the ends.
+    slug="$(printf '%s' "${key##*/}" \
+        | tr '[:upper:]' '[:lower:]' \
+        | tr -c 'a-z0-9' '-' \
+        | tr -s '-')"
+    slug="${slug#-}"
+    slug="${slug%-}"
+    slug="$(printf '%s' "$slug" | cut -c1-24)"
+    slug="${slug%-}"
+    [ -n "$slug" ] || slug="checkout"
+    printf 'cite-%s-%s' "$slug" "$sum"
+}
+
+if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
+    # An explicit choice always wins, and is reported as one rather than being
+    # mistaken for the derived value.
+    CITE_PROJECT_SOURCE="${CITE_PROJECT_SOURCE:-explicit}"
+else
+    COMPOSE_PROJECT_NAME="$(cite_project_name)"
+    CITE_PROJECT_SOURCE="derived from this checkout"
+fi
+export COMPOSE_PROJECT_NAME CITE_PROJECT_SOURCE
+
+# -----------------------------------------------------------------------------
+# Build freshness — a gate must not answer from artefacts older than the source.
+#
+# Namespacing the compose project stops one checkout reading ANOTHER checkout's
+# build. It does nothing about a checkout reading its OWN stale build, and that
+# is a distinct defect with the same shape: a confident wrong answer.
+#
+# It has now cost this branch twice.
+#
+#   * `./scripts/lint` reported that two packages "register no lint test at all"
+#     while both package.xml files on disk declared <test_depend>ament_lint_common
+#     </test_depend>. ament_lint_auto resolves its linter set at CONFIGURE time,
+#     so a build tree configured before that dependency was added has already
+#     baked in "zero linters" and no amount of re-running ctest changes it. After
+#     a rebuild the same command reported `Lint clean` across all seven packages.
+#   * The same staleness manufactured a "known-red at base" belief about two test
+#     suites, which four agents repeated and the orchestrator propagated for
+#     hours before a rebuild showed 129 tests passing.
+#
+# In both cases the source tree was correct, the command was correct, and the
+# answer was wrong. Nothing in the output pointed at the build directory.
+#
+# The fix is a content fingerprint of the inputs that decide CMake configuration
+# — every first-party package.xml and CMakeLists.txt — recorded in the build tree
+# when a build succeeds and checked by the gates that consume it. Content, not
+# timestamps: a mtime comparison is a timing heuristic and would be wrong across
+# a bind mount, a `git checkout` that rewinds mtimes, and a volume restored from
+# elsewhere (P4 applies to gates as much as to bring-up).
+#
+# Only package.xml and CMakeLists.txt are fingerprinted, deliberately. Changing a
+# .cpp does not alter the build CONFIGURATION, and colcon's own dependency
+# tracking rebuilds it correctly; a fingerprint over every source file would fire
+# on every edit and be disabled within a day. This fires on exactly the class of
+# change that colcon silently gets wrong.
+#
+# The stamp lives inside workspace/build, so it is scoped to the same volume as
+# the artefacts it describes and is destroyed with them. Note that on a Docker
+# host workspace/build is an empty directory until a container mounts the volume
+# over it, so these are only meaningful where the build actually lives.
+# -----------------------------------------------------------------------------
+cite_build_stamp_path() {
+    printf '%s' "${REPO_ROOT}/workspace/build/.cite-build-inputs"
+}
+
+cite_build_inputs_fingerprint() {
+    local src="${REPO_ROOT}/workspace/src" file relative
+    if [ ! -d "$src" ]; then
+        printf 'no-source'
+        return 0
+    fi
+    # `cksum < file` rather than `cksum file`: reading from stdin keeps the
+    # filename out of the checksum, so the fingerprint is identical on the host
+    # and in the container, where the same tree is /workspace rather than a home
+    # directory. Paths are recorded separately, relative, for the same reason —
+    # and they are recorded, so that ADDING or REMOVING a package is a change.
+    {
+        while IFS= read -r file; do
+            relative="${file#"$src"/}"
+            printf '%s %s\n' "$relative" "$(cksum < "$file" | awk '{print $1}')"
+        done < <(find "$src" -mindepth 2 \
+                     \( -name package.xml -o -name CMakeLists.txt \) \
+                     -not -path '*/external/*' 2>/dev/null | LC_ALL=C sort)
+    } | cksum | awk '{print $1}'
+}
+
+record_build_inputs() {
+    local stamp
+    stamp="$(cite_build_stamp_path)"
+    [ -d "$(dirname "$stamp")" ] || return 0
+    cite_build_inputs_fingerprint > "$stamp" 2>/dev/null || true
+}
+
+# assert_build_inputs_current <gate name>
+#
+# Fails closed. An unstamped build tree is not evidence of a fresh one — it is an
+# absent answer, and presenting one of those as clean is the defect this whole
+# block exists to stop. The one-time cost is a rebuild for anyone holding a
+# volume created before this check existed.
+assert_build_inputs_current() {
+    local gate="$1" stamp recorded current
+    stamp="$(cite_build_stamp_path)"
+
+    if [ ! -f "$stamp" ]; then
+        die "${gate} cannot trust this build tree: it carries no input fingerprint.
+  It was built before this check existed, or by something other than ./scripts/build.
+  A gate that reports on artefacts it cannot date is how this branch acquired a
+  'known-red at base' belief that survived four agents and was false.
+  Run ./scripts/build."
+    fi
+
+    recorded="$(cat "$stamp" 2>/dev/null || true)"
+    current="$(cite_build_inputs_fingerprint)"
+    if [ "$recorded" != "$current" ]; then
+        die "${gate} is looking at a STALE build tree, and would report a wrong answer.
+  A first-party package.xml or CMakeLists.txt has changed since this tree was built
+  (fingerprint ${recorded:-none} on disk, ${current} in the source).
+
+  This matters more than it sounds: ament_lint_auto resolves its linter set at
+  CMake CONFIGURE time, so a stale tree reports 'registers no lint test at all'
+  for a package whose package.xml declares ament_lint_common right now. The same
+  staleness reported two suites as failing that pass on a fresh build.
+
+  Run ./scripts/build."
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # assert_lint_coverage <selected> <finished> [package-with-no-lint-test...]
 #
 # The judgement at the heart of ./scripts/lint: did the linter run actually look
@@ -296,13 +475,20 @@ cite_python() {
     printf '%s/python' "$bin"
 }
 
+# Every compose invocation is scoped to this checkout's project with an explicit
+# `-p`, not left to the COMPOSE_PROJECT_NAME environment variable. Both would work
+# for `up` and `run`, but `-p` is the highest-precedence form and does not depend
+# on remembering how compose ranks the env var against the `name:` key in the
+# file. It is passed here, once, so that no caller can forget it — and `clean
+# --all`, which is the command that can destroy another checkout's work, gets the
+# scoping by construction rather than by its own care.
 compose() {
     if have docker && docker compose version >/dev/null 2>&1; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker compose -f "$COMPOSE_FILE" "$@"
+            docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
     elif have docker-compose; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker-compose -f "$COMPOSE_FILE" "$@"
+            docker-compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
     else
         die "Docker Compose not found. Install Docker Desktop (macOS) or docker-compose-plugin (Linux)."
     fi
@@ -387,9 +573,17 @@ exec_in_container() {
     # the producer, which `set -o pipefail` then reports as a failed pipeline. Here
     # the effect was silent — a running container was never reused, and every
     # command started a fresh one instead.
+    #
+    # Matched on the SERVICE name rather than on a container name. The container
+    # names used to be pinned in the compose file (`container_name: cite-dev`),
+    # which is a host-global identifier and so collided between checkouts exactly
+    # as the volumes did; they are derived from the project now. `--services`
+    # asks compose which services are up and is independent of how it chooses to
+    # name their containers, so this check cannot drift out of step with that
+    # naming again.
     local running
-    running="$(compose ps --status running 2>/dev/null || true)"
-    if grep -q "cite-${service}" <<<"$running"; then
+    running="$(compose ps --services --status running 2>/dev/null || true)"
+    if grep -qx "$service" <<<"$running"; then
         compose exec -T ${env_args[@]+"${env_args[@]}"} "$service" "$@"
     else
         compose run --rm ${env_args[@]+"${env_args[@]}"} "$service" "$@"

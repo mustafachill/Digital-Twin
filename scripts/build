@@ -92,4 +92,9 @@ if [ "$STATUS" -ne 0 ]; then
     die "Build failed."
 fi
 
+# Recorded only on success, and only here. This is what lets ./scripts/lint and
+# ./scripts/test tell "clean" from "answering out of a stale tree" — see the
+# build-freshness block in scripts/_lib.sh for the two incidents that cost.
+record_build_inputs
+
 ok "Build complete. Overlay: workspace/install/setup.bash"

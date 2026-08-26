@@ -513,8 +513,14 @@ class TestCleanShutdown(unittest.TestCase):
         Fatal glibc error: pthread_mutex_lock.c:450 (__pthread_mutex_lock_full):
         assertion failed: e != ESRCH || !robust
 
-    Observed once in 11 consecutive runs on an idle machine (2026-08-25). Two
-    things about it are worth writing down, because both were guessed wrongly
+    Observed exactly once, on 2026-08-25, and not again in 18 later runs made
+    against this checkout's own build volumes. The count is stated that way on
+    purpose: the run that produced it shared its Docker build volumes with other
+    checkouts, so its numbers cannot be compared with the isolated ones. One
+    occurrence with a fully characterised cause is a real defect; 0/18 afterwards
+    is not evidence that it is gone.
+
+    Two things about it are worth writing down, because both were guessed wrongly
     before being measured:
 
     * It is NOT a slow-machine artefact. The abort lands in the same millisecond
@@ -530,12 +536,27 @@ class TestCleanShutdown(unittest.TestCase):
       the move_group crash below — an unmanaged teardown — but in upstream code
       we do not own.
 
-    It is NOT exempted. The -11 allowance below already makes this assertion
-    weak for the one process that most needs it; adding -6 (and the -9 that a
-    contended machine once produced for `gz`) would leave an assertion that
-    cannot fail, which is worse than not having it. A run that fails here has
-    found something real, and the fix is a teardown coordinator in
-    `cite_bringup` or a lifecycle-managed bridge — not a wider allowlist.
+    SEPARATELY, and do not confuse the two: a SECOND family of bad exits shows up
+    under machine load — `move_group` truncated to -15 instead of completing its
+    -11 crash, and `skill_server` SIGKILLed at -9. In 18 runs these appeared
+    twice, and both times on the two slowest runs in the set (183 s and 239 s
+    against an 88-143 s norm). That is launch's SIGTERM-then-SIGKILL escalation
+    firing on a teardown too slow to finish inside its window. Duration predicts
+    it; the process identity does not. The `gz -9` on a 179 s run in the original
+    report is the same mechanism wearing a different name.
+
+    That distinction matters for what counts as a fix. The -6 is instantaneous
+    and no timeout can affect it. The -9/-15 family is the opposite — it is
+    entirely about the window — and the correct response is still NOT to widen
+    the window, because a teardown that only completes on a fast machine is the
+    timing dependence P4 exists to forbid, merely hidden.
+
+    NONE of them is exempted. The -11 allowance below already makes this
+    assertion weak for the one process that most needs it; adding -6, -9 and -15
+    would leave an assertion that cannot fail, which is worse than not having
+    it. A run that fails here has found something real, and the fix is a
+    teardown coordinator in `cite_bringup` or a lifecycle-managed bridge — not a
+    wider allowlist.
     """
 
     #: move_group segfaults in its own teardown. That is now measured rather than

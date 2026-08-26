@@ -197,6 +197,280 @@ expect_eq "an explicit ROS_DOMAIN_ID survives sourcing _lib.sh" \
                   _ "${REPO_ROOT}/scripts/_lib.sh")"
 
 # -----------------------------------------------------------------------------
+# cite_project_name — one set of Docker volumes per checkout, not one per host.
+#
+# Compose scopes named volumes to the project name. While that name was a single
+# fixed string, every checkout on this machine shared ONE cite-build, cite-install
+# and cite-log: concurrent builds corrupted each other, one checkout ran another's
+# binaries, and `clean --all` destroyed a worktree's build that was in progress.
+# The properties below are what stop that, so each is asserted rather than
+# assumed.
+# -----------------------------------------------------------------------------
+
+# Stability. `./scripts/enter` must attach to the cell `./scripts/sim` started
+# from the same checkout, which it cannot do if the name varies between calls.
+expect_eq "the same checkout always yields the same project name" \
+          "$(cite_project_name /a/b/c)" "$(cite_project_name /a/b/c)"
+
+# Isolation. This is the assertion that would have caught the original defect:
+# under a fixed name these two are equal.
+PROJECT_A="$(cite_project_name /home/dev/twin)"
+PROJECT_B="$(cite_project_name /home/dev/twin-review)"
+if [ "$PROJECT_A" != "$PROJECT_B" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s two checkouts get different project names\n' "$C_RED" "$C_RST" >&2
+fi
+
+# Worktrees are the common case on this host, and they differ only in their last
+# path segment — which is also the part the readable slug is built from, so a
+# derivation that used the basename alone would still collide.
+WT_A="$(cite_project_name /repo/.claude/worktrees/agent-aaaa)"
+WT_B="$(cite_project_name /repo/.claude/worktrees/agent-bbbb)"
+if [ "$WT_A" != "$WT_B" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s two sibling worktrees get different project names\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# Two checkouts may share a basename while living in different places. The hash
+# is what separates them; the slug alone does not.
+SAME_A="$(cite_project_name /home/alice/twin)"
+SAME_B="$(cite_project_name /home/bob/twin)"
+if [ "$SAME_A" != "$SAME_B" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s equal basenames in different parents still differ\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# Compose only accepts [a-z0-9_-], and rejects a name that does not start with a
+# letter or digit. A name it rejects fails every command, not just the volume
+# scoping, so the character set is checked over paths chosen to break it.
+for candidate in /a "/UPPER/Case Path" "/has.dots/and+plus" /trailing/dash- \
+                 /workspace "${REPO_ROOT}" "/a/very/long/checkout/name/that/keeps/going/on"; do
+    NAME="$(cite_project_name "$candidate")"
+    if printf '%s' "$NAME" | grep -Eq '^[a-z0-9][a-z0-9_-]*$'; then
+        SELFTEST_PASS=$((SELFTEST_PASS + 1))
+    else
+        SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+        printf '  %sFAIL%s project name for %s is compose-legal (got %s)\n' \
+               "$C_RED" "$C_RST" "$candidate" "$NAME" >&2
+    fi
+done
+
+# The fixed name that caused the incident must never be derivable again. Any
+# checkout returning it would be back to sharing the host-wide volume set.
+for candidate in /a /b "${REPO_ROOT}" /home/dev/cite-digital-twin; do
+    if [ "$(cite_project_name "$candidate")" != "cite-digital-twin" ]; then
+        SELFTEST_PASS=$((SELFTEST_PASS + 1))
+    else
+        SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+        printf '  %sFAIL%s %s must not derive the shared fallback project name\n' \
+               "$C_RED" "$C_RST" "$candidate" >&2
+    fi
+done
+
+# An explicit setting always wins, so a developer can deliberately join another
+# checkout's project — and is reported as explicit rather than as derived.
+expect_eq "an explicit COMPOSE_PROJECT_NAME survives sourcing _lib.sh" \
+          "chosen-by-hand" \
+          "$(COMPOSE_PROJECT_NAME=chosen-by-hand bash -c \
+              'source "$1"; printf "%s" "$COMPOSE_PROJECT_NAME"' \
+              _ "${REPO_ROOT}/scripts/_lib.sh")"
+
+# Every compose invocation must carry the project explicitly. `-p` is the
+# highest-precedence form; without it the scoping depends on an environment
+# variable reaching a subprocess, which is the kind of assumption that decays.
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+if grep -Eq -- '-p "\$COMPOSE_PROJECT_NAME"' "${REPO_ROOT}/scripts/_lib.sh"; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s compose() passes -p with the derived project name\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# container_name pins a host-global identifier and collides between checkouts
+# exactly as the volumes did. It must stay out of the compose file.
+if ! grep -q "container_name" "${REPO_ROOT}/infra/docker/docker-compose.yml"; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s docker-compose.yml pins no container_name\n' "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
+# scripts/lint — it must select linters by LABEL, not by name.
+#
+# ament registers every linter with the `linter` label. Their NAMES only sometimes
+# contain "lint": `ctest -R lint` matches cpplint, lint_cmake and xmllint, and
+# silently drops flake8, pep257, copyright, cppcheck and uncrustify. The gate ran
+# 3 of 8 linters per package while reporting "Lint clean", and five of them had
+# never run under it — a change passed this gate with flake8 and pep257 failing.
+#
+# Measured, not argued: on cite_skills, `ctest -N -L linter` lists 8 tests and
+# `ctest -N -R lint` lists 3. Across the seven packages the label selects 41.
+#
+# The same expression appears twice — the run and the coverage count — and they
+# must agree, or the check that asks "which packages registered no linter" counts
+# a different population than the one that ran. Both are asserted.
+# -----------------------------------------------------------------------------
+LINT_CODE="$(grep -vE '^[[:space:]]*#' "${REPO_ROOT}/scripts/lint" || true)"
+
+LINT_LABEL_USES="$(printf '%s' "$LINT_CODE" | grep -c -- '-L linter' || true)"
+if [ "${LINT_LABEL_USES:-0}" -ge 2 ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/lint selects linters by label in both places (found %s)\n' \
+           "$C_RED" "$C_RST" "${LINT_LABEL_USES:-0}" >&2
+fi
+
+# The name filter must not come back. It is the specific expression that made a
+# blocking gate enforce three eighths of itself.
+if ! printf '%s' "$LINT_CODE" | grep -Eq -- '-R "?lint"?'; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/lint no longer selects linters by name (-R lint)\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
+# cite_build_inputs_fingerprint — a gate must not answer from a stale build tree.
+#
+# The namespace stops one checkout reading another's artefacts. This is the other
+# half: a checkout reading its OWN. It reported "registers no lint test at all"
+# for packages whose package.xml declared ament_lint_common, and reported two
+# suites red that pass on a fresh build.
+# -----------------------------------------------------------------------------
+
+# Deterministic, or the gates fire at random and get switched off.
+expect_eq "the fingerprint is stable across calls" \
+          "$(cite_build_inputs_fingerprint)" "$(cite_build_inputs_fingerprint)"
+
+# Path-independent: the build happens in the container, where this tree is
+# /workspace, and the check may run from either side of that boundary. A
+# fingerprint that embedded absolute paths would report every build as stale.
+SELFTEST_TMP="$(mktemp -d)"
+mkdir -p "${SELFTEST_TMP}/a/workspace/src/pkg" "${SELFTEST_TMP}/b/workspace/src/pkg"
+printf '<package><name>pkg</name></package>\n' \
+    > "${SELFTEST_TMP}/a/workspace/src/pkg/package.xml"
+printf '<package><name>pkg</name></package>\n' \
+    > "${SELFTEST_TMP}/b/workspace/src/pkg/package.xml"
+FP_A="$(REPO_ROOT="${SELFTEST_TMP}/a" cite_build_inputs_fingerprint)"
+FP_B="$(REPO_ROOT="${SELFTEST_TMP}/b" cite_build_inputs_fingerprint)"
+expect_eq "the same content under a different path fingerprints the same" \
+          "$FP_A" "$FP_B"
+
+# A changed package.xml must change the fingerprint. This is the exact edit that
+# caused the incident: adding a test dependency that ament_lint_auto resolves at
+# configure time, which a stale tree cannot see.
+printf '<package><name>pkg</name><test_depend>ament_lint_common</test_depend></package>\n' \
+    > "${SELFTEST_TMP}/b/workspace/src/pkg/package.xml"
+FP_B2="$(REPO_ROOT="${SELFTEST_TMP}/b" cite_build_inputs_fingerprint)"
+if [ "$FP_A" != "$FP_B2" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s adding a test_depend changes the build fingerprint\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# A changed CMakeLists.txt must change it too — find_package/ament_lint_auto calls
+# live there and are equally configure-time.
+printf 'project(pkg)\n' > "${SELFTEST_TMP}/a/workspace/src/pkg/CMakeLists.txt"
+FP_A2="$(REPO_ROOT="${SELFTEST_TMP}/a" cite_build_inputs_fingerprint)"
+if [ "$FP_A" != "$FP_A2" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s adding a CMakeLists.txt changes the build fingerprint\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# Adding a whole package must change it: "no linters registered" is a per-package
+# answer, so a package appearing or disappearing is a configuration change.
+mkdir -p "${SELFTEST_TMP}/a/workspace/src/pkg2"
+printf '<package><name>pkg2</name></package>\n' \
+    > "${SELFTEST_TMP}/a/workspace/src/pkg2/package.xml"
+FP_A3="$(REPO_ROOT="${SELFTEST_TMP}/a" cite_build_inputs_fingerprint)"
+if [ "$FP_A2" != "$FP_A3" ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s adding a package changes the build fingerprint\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# Vendor source is imported by vcstool at arbitrary revisions and is not ours to
+# lint; including it would make the fingerprint churn for reasons unrelated to
+# the gates it guards.
+mkdir -p "${SELFTEST_TMP}/a/workspace/src/external/vendor"
+printf '<package><name>vendor</name></package>\n' \
+    > "${SELFTEST_TMP}/a/workspace/src/external/vendor/package.xml"
+expect_eq "vendor source under external/ is excluded from the fingerprint" \
+          "$FP_A3" "$(REPO_ROOT="${SELFTEST_TMP}/a" cite_build_inputs_fingerprint)"
+
+rm -rf "$SELFTEST_TMP"
+
+# The gates must actually consult it. A fingerprint nothing checks is decoration.
+for gate in lint test; do
+    if grep -q "assert_build_inputs_current" "${REPO_ROOT}/scripts/${gate}"; then
+        SELFTEST_PASS=$((SELFTEST_PASS + 1))
+    else
+        SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+        printf '  %sFAIL%s scripts/%s checks the build fingerprint\n' \
+               "$C_RED" "$C_RST" "$gate" >&2
+    fi
+done
+
+if grep -q "record_build_inputs" "${REPO_ROOT}/scripts/build"; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/build records the build fingerprint\n' "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
+# scripts/format — it may only run the reformatter the lint gate checks.
+#
+# `clang-format -i` with no .clang-format in the repository applies LLVM style
+# while the gate checks ament_uncrustify, so running ./scripts/format rewrote
+# ~1300 lines of packages that passed the linter before it ran.
+# -----------------------------------------------------------------------------
+# Two refinements, both learned by getting this wrong. Comment lines are stripped
+# first, because the script explains at length why it does NOT use clang-format
+# and a naive grep matches that explanation and reports the very defect it is
+# describing. And the match is on clang-format in COMMAND position rather than
+# anywhere on the line, because the script also names it inside a warning that
+# tells the reader not to reach for it. What is forbidden is running it.
+#
+# Captured rather than piped into `grep -q`, which exits on its first match and
+# SIGPIPEs the producer under `set -o pipefail`.
+FORMAT_CODE="$(grep -vE '^[[:space:]]*#' "${REPO_ROOT}/scripts/format" || true)"
+if ! printf '%s' "$FORMAT_CODE" | grep -Eq '(^|[|;]|&&)[[:space:]]*clang-format'; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/format does not reformat C++ with clang-format\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+if printf '%s' "$FORMAT_CODE" | grep -q "ament_uncrustify --reformat"; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/format reformats C++ with the linter own tool\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
 # python_trees — T-08. The linter and the host suite must walk the scenarios.
 #
 # The defect being pinned: both ./scripts/lint and ./scripts/test named `tools`

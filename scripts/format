@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 # Apply formatting in place. `lint` checks; this fixes.
+#
+# The rule this script has to obey: it may only ever run the reformatter that
+# belongs to the linter `./scripts/lint` runs. When the two disagree, running
+# `format` breaks the gate, and it does so across the whole tree at once, so the
+# damage does not look like a formatting problem — it looks like the branch
+# spontaneously failing lint.
+#
+# That is not hypothetical. This script used to run `clang-format -i` over every
+# first-party C++ file. There is no .clang-format in the repository, so that
+# applied clang-format's LLVM default style, while the gate checks
+# `ament_uncrustify` with ROS 2's style. Running `./scripts/format` rewrote
+# ~1300 lines across cite_interfaces, cite_simulation and cite_orchestration —
+# packages that passed the linter before it ran and would not have after.
+#
+# So C++ goes through `ament_uncrustify --reformat` below: the linter's own
+# reformatter, which cannot disagree with the linter by construction (P1). If a
+# future style needs clang-format, it needs a .clang-format AND the gate switched
+# to ament_clang_format in the same change, never one without the other.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -8,18 +26,49 @@ VENV="$(cite_venv_bin || echo "${REPO_ROOT}/.venv/bin")"
 
 step "Python (ruff)"
 if [ -x "${VENV}/ruff" ]; then
-    "${VENV}/ruff" format "${REPO_ROOT}/tools"
-    "${VENV}/ruff" check --fix "${REPO_ROOT}/tools"
-    ok "Python formatted"
+    # python_trees, not a hand-written list. `lint` walks exactly these, and when
+    # the two lists were written out separately they drifted: this script
+    # formatted only tools/ while the gate checked tools/ AND tests/, so a
+    # formatting violation under tests/ could not be fixed by running the tool
+    # whose entire job is to fix formatting violations.
+    mapfile -t PY_TREES < <(python_trees)
+    if [ ${#PY_TREES[@]} -gt 0 ]; then
+        "${VENV}/ruff" format "${PY_TREES[@]}"
+        "${VENV}/ruff" check --fix "${PY_TREES[@]}"
+        ok "Python formatted"
+    else
+        warn "No Python trees found."
+    fi
 else
     warn "ruff not installed — run ./scripts/bootstrap --host-only"
 fi
 
-if have clang-format; then
-    step "C++ (clang-format)"
-    find "${REPO_ROOT}/workspace/src" -maxdepth 6 \
-        \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) \
-        -not -path '*/external/*' -print0 2>/dev/null \
-        | xargs -0 -r clang-format -i
-    ok "C++ formatted"
+step "C++ (ament_uncrustify)"
+# ament_uncrustify ships with ROS, so it exists in the container and generally
+# not on the host. Skipping quietly when it is absent is what would let the two
+# formatters drift apart again unnoticed, so the absence is reported with the
+# command that does the job rather than passed over.
+if have ament_uncrustify; then
+    CPP_DIRS=()
+    for pkg in $(first_party_packages); do
+        for sub in src include test; do
+            [ -d "${REPO_ROOT}/workspace/src/${pkg}/${sub}" ] \
+                && CPP_DIRS+=("${REPO_ROOT}/workspace/src/${pkg}/${sub}")
+        done
+    done
+
+    if [ ${#CPP_DIRS[@]} -eq 0 ]; then
+        warn "No first-party C++ directories found."
+    else
+        # --reformat rewrites in place. A non-zero exit here means files were
+        # changed, not that something went wrong, so it is not fatal.
+        ament_uncrustify --reformat "${CPP_DIRS[@]}" >/dev/null 2>&1 || true
+        ok "C++ formatted with the linter's own reformatter"
+    fi
+else
+    warn "ament_uncrustify not found — C++ was NOT formatted."
+    warn "  It lives in the container, which is where the lint gate runs it:"
+    warn "      ./scripts/enter dev ./scripts/format"
+    warn "  Do NOT reach for clang-format instead: with no .clang-format in this"
+    warn "  repository it applies LLVM style and breaks the uncrustify gate."
 fi
