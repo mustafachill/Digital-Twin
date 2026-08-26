@@ -157,14 +157,27 @@ DROP_MARGIN_M = WORKPIECE_SIZE / 2.0
 
 #: How often the work-piece's pose is sampled while the line runs.
 #:
-#: Fast, and that is the point. A previous scenario sampled at 4 s and missed
-#: every event it was written to observe: a part crossing a 0.040 m beam at
-#: 0.150 m/s is inside it for 0.27 s of simulated time. Nothing here has to catch
-#: a beam crossing — the beams publish `DetectionEvent`s and this subscribes to
-#: them — but the *measured* milestones are transient in the same way, because a
-#: piece placed on a running belt is carried off the frame it was placed at, and a
-#: sampler slower than that reports a line that never delivered.
-SAMPLE_PERIOD_S = 0.25
+#: Chosen against the dwell time of the shortest thing sampled here, because the
+#: opposite mistake is on record: a scenario that sampled at 4 s missed every
+#: event it was written to observe, a part crossing a 0.040 m beam at 0.150 m/s
+#: being inside it for 0.27 s of simulated time.
+#:
+#: Nothing here samples for an event that short. The beam crossings arrive as
+#: `DetectionEvent`s on a keep-all subscription, which cannot miss one; what is
+#: sampled is where the piece IS, and the briefest of those is `on_link` — a
+#: 1.200 m belt at 0.150 m/s, so 8 s of simulated time, plus the margin at each
+#: end. At the development host's measured real-time factor of 0.14 that is about
+#: 57 s of wall clock and over a hundred samples; on a host running at 1.0 it is
+#: still sixteen. Both are far from a coin toss, which is what the number has to
+#: buy.
+#:
+#: Not faster, and that is measured too: each sample is a `gz model -p`, which is
+#: a process and a transport node per sample. At 0.25 s the simulator started
+#: logging `NodeShared::RecvSrvRequest() error sending response: Host unreachable`
+#: — responses arriving after the requester had exited — so some samples were
+#: being paid for and thrown away. Sampling faster than the thing being measured
+#: buys nothing and costs the measurement.
+SAMPLE_PERIOD_S = 0.5
 
 #: How many containment breaches are quoted in full before the rest are counted.
 #: A piece lying on the floor breaches on every sample, and quoting all of them
