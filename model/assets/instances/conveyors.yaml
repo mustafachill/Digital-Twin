@@ -4,11 +4,13 @@ schema: cite/asset_instances/v1
 
 # Three 1.2 m belts, centred between consecutive arms. Each belt's infeed and
 # outfeed resolve through the type's frames, so no station ever writes a belt-end
-# coordinate:
+# coordinate. Those frames are transfer points inset 0.050 m from the belt's
+# ends, not the ends themselves — see the type for the measurements behind the
+# inset — so the belt spans and the transfer points are different numbers:
 #
-#   conveyor_1  centre 1.050  ->  infeed 0.450   outfeed 1.650
-#   conveyor_2  centre 3.150  ->  infeed 2.550   outfeed 3.750
-#   conveyor_3  centre 5.250  ->  infeed 4.650   outfeed 5.850
+#   conveyor_1  centre 1.050  ->  belt 0.450..1.650  infeed 0.500  outfeed 1.600
+#   conveyor_2  centre 3.150  ->  belt 2.550..3.750  infeed 2.600  outfeed 3.700
+#   conveyor_3  centre 5.250  ->  belt 4.650..5.850  infeed 4.700  outfeed 5.800
 assets:
   - id: conveyor_1
     zone: cell_a

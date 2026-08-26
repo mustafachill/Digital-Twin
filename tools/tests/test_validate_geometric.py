@@ -208,6 +208,109 @@ class TestFramesAndTheirGeometry:
         assert "frame-outside-geometry" not in geometric_rules(real_model)
 
 
+class TestSupportMargin:
+    """The rule that would have caught the belt end, and did not exist to.
+
+    `cell_a__conveyor_1__infeed` lay exactly on the leading-edge plane of the
+    belt's collision box. Every rule above passed it — the frame IS on its own
+    geometry, the point IS inside the envelope, the corridor above it IS clear —
+    and every work-piece released there was set down with half of it over the
+    void, tipped about the edge and fell 0.600 m to the floor. `pick_and_place`
+    failed 0 of 18 while the model validated cleanly every time.
+    """
+
+    BELT = "assets/types/conveyors/belt_1200x400.yaml"
+
+    def _set_inset(self, model: Path, edit_yaml: Callable, inset: float) -> None:
+        """Move both transfer frames `inset` metres in from the belt's ends."""
+
+        def mutate(document: dict) -> None:
+            frames = {f["id"]: f for f in document["asset_type"]["frames"]}
+            frames["infeed"]["xyz_m"] = [-0.600 + inset, 0.0, 0.600]
+            frames["outfeed"]["xyz_m"] = [0.600 - inset, 0.0, 0.600]
+
+        edit_yaml(model / self.BELT, mutate)
+
+    def test_a_point_on_the_supporting_edge_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Exactly the committed defect: transfer frames back on the belt's own
+        # ends, inset 0.000. This is the case the shipped rules all passed.
+        self._set_inset(real_model, edit_yaml, 0.000)
+        assert "insufficient-support-margin" in geometric_rules(real_model)
+
+    def test_the_frame_rule_alone_does_not_see_it(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The reason a second rule had to exist rather than the first being
+        # tightened. `frame-outside-geometry` asks whether a frame is OUTSIDE its
+        # body, with strict comparisons, so a frame lying exactly on a boundary
+        # face is inside and passes — which is correct for a work surface and
+        # useless for a work point.
+        self._set_inset(real_model, edit_yaml, 0.000)
+        assert "frame-outside-geometry" not in geometric_rules(real_model)
+
+    def test_bare_footprint_support_is_still_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Half a work-piece of margin is neutral stability, not a fix.
+
+        At an inset of exactly 0.025 m a 50 mm cube is just fully supported: its
+        edge is flush with the belt's, its centre of mass projects onto the
+        BOUNDARY of its support polygon, and any error towards the edge tips it.
+        A probe released there did stay on the belt — which is exactly why a rule
+        that stopped at the physical minimum would license it.
+        """
+        self._set_inset(real_model, edit_yaml, 0.025)
+        assert "insufficient-support-margin" in geometric_rules(real_model)
+
+    def test_the_shipped_inset_is_accepted(self, real_model: Path) -> None:
+        assert "insufficient-support-margin" not in geometric_rules(real_model)
+
+    def test_the_shipped_inset_costs_no_reach_margin(self, real_model: Path) -> None:
+        # The other half of the fix, and the half that is easy to lose. Buying
+        # support margin costs working distance, and at the original 0.350 m
+        # standoff a 0.050 m inset put all five transfer points at 87.2% of the
+        # envelope — over COMFORTABLE_REACH_FRACTION. The standoff was reduced to
+        # pay for it, and this fails if either half is reverted alone.
+        assert "reach-margin" not in geometric_rules(real_model, Severity.WARNING)
+
+    def test_a_point_at_the_centre_of_its_surface_is_not_reported(self, real_model: Path) -> None:
+        # `work_table_600.surface` sits at the centre of its top face — 0.300 m
+        # of margin — and never showed this failure. Same generator, opposite
+        # support margin, and the rule must not fire on the good case.
+        model = load(real_model)
+        cell = resolve(model, "cell_a")
+        station = next(s for s in cell.stations if s.id == "station_transfer_1")
+        assert station.pick_from == ("table_pick", "surface")
+        assert "insufficient-support-margin" not in geometric_rules(real_model)
+
+    def test_a_facility_with_no_workpiece_is_not_judged(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The margin is derived from the work-piece. With none declared there is
+        # no bound, and reporting one anyway would mean inventing the part.
+        self._set_inset(real_model, edit_yaml, 0.000)
+        edit_yaml(
+            real_model / "facility/facility.yaml",
+            lambda d: d["facility"].__setitem__("workpiece_models", []),
+        )
+        assert "insufficient-support-margin" not in geometric_rules(real_model)
+
+    def test_a_wider_workpiece_needs_more_margin(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The bound follows the part rather than being a constant: widen the cube
+        # to 100 mm and the shipped 0.050 m inset is no longer enough for it.
+        edit_yaml(
+            real_model / "assets/types/workpieces/workpiece.yaml",
+            lambda d: d["asset_type"]["description"]["body"]["collision"].__setitem__(
+                "size_m", [0.100, 0.100, 0.100]
+            ),
+        )
+        assert "insufficient-support-margin" in geometric_rules(real_model)
+
+
 class TestApproachCorridors:
     """The reach check asks whether the arm can get there. This asks what is in the way."""
 
@@ -315,18 +418,76 @@ class TestDefaultGraspWidth:
         self._set(real_model, edit_yaml, default_grasp_width_m=0.095)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
-    def test_a_width_the_gripper_can_reach_is_not_faulted(
+    def test_a_width_inside_the_stroke_but_wider_than_the_part_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        """The complement of the case above, and the reason it is stated.
+        """The gap that used to be documented instead of checked.
 
-        65 mm is inside the stroke. It is a poor default against the cell's 50 mm
-        work-piece — it would close on air and never stall — but that is a bound
-        this rule cannot see, because L0 records no work-piece geometry. The test
-        says so out loud so that the gap is documented rather than implied by an
-        absence.
+        65 mm is inside the gripper's stroke, so the weak bound accepts it. It is
+        also 15 mm WIDER than the cell's 50 mm cube, so the pads never touch the
+        part, the joint reaches its command, the controller reports `reached_goal`
+        and every layer above believes a grasp happened. This test used to assert
+        that the validator let it through — with a docstring explaining that L0
+        recorded no work-piece geometry, so the bound could not be derived. L0
+        records it now, and the assertion is inverted.
         """
         self._set(real_model, edit_yaml, default_grasp_width_m=0.065)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_a_width_equal_to_the_part_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # ADR-0022's whole mechanism: a parallel gripper evidences a grasp by
+        # failing to reach where it was sent. Commanded exactly the part's width,
+        # it arrives on target and the skill learns nothing.
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.050)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_a_margin_below_the_controller_bias_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Narrower than the part is necessary and not sufficient.
+
+        48 mm leaves 2.00 mm against the 50 mm cube. `GripperActionController`
+        ends a goal as soon as `|error| < goal_tolerance`, so the width it reports
+        is systematically wider than commanded even in free air, and
+        `cite_skills::gripper_is_holding` demands twice that bias — 2.14 mm here —
+        before calling anything a grasp. A real grasp inside that band is
+        indistinguishable from closing on air.
+        """
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.048)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_the_bound_follows_the_declared_tolerance(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """It is derived, not a millimetre count someone wrote down.
+
+        Loosen the controller's `goal_tolerance` fourfold and the discrimination
+        threshold widens with it, so the 45 mm default that passes at 0.01 rad
+        stops passing. That is the property that keeps this ceiling and the L3
+        predicate from drifting apart — both read the same declared number.
+        """
+
+        def mutate(document: dict) -> None:
+            for controller in document["asset_type"]["controllers"]:
+                if controller["joints"] == "end_effector":
+                    controller["parameters"]["goal_tolerance"] = 0.04
+
+        edit_yaml(real_model / self.EFFECTOR, mutate)
+        assert "default-grasp-width-never-closes" in physical_rules(real_model)
+
+    def test_a_facility_with_no_workpiece_falls_back_to_the_weak_bound(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Stated rather than left to an absence: with no work-piece declared
+        # there is no part width, so only the gripper's own opening is checked.
+        # The rule reports what it can derive and does not invent the rest.
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.065)
+        edit_yaml(
+            real_model / "facility/facility.yaml",
+            lambda d: d["facility"].__setitem__("workpiece_models", []),
+        )
         assert "default-grasp-width-never-closes" not in physical_rules(real_model)
 
     def test_the_bound_sits_where_the_linkage_puts_it(self, real_model: Path) -> None:

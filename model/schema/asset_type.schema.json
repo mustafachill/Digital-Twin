@@ -10,7 +10,8 @@
             "end_effector",
             "conveyor",
             "sensor",
-            "fixture"
+            "fixture",
+            "workpiece"
           ],
           "title": "Category",
           "type": "string"

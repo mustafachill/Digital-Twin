@@ -19,13 +19,52 @@ asset_type:
   # would put the declared work surface half a metre above the geometry, and a
   # PlaceAt would release the work-piece into empty air. `frame-outside-geometry`
   # in cite_tools.validate.geometric now rejects that arrangement mechanically.
+  #
+  # WHAT `infeed` AND `outfeed` ARE, and why they are not at ±0.600.
+  #
+  # They are TRANSFER POINTS near the two ends of the belt, not the geometric
+  # ends. The distinction cost this project a whole scenario. At ±0.600 they lay
+  # exactly on the leading- and trailing-edge planes of the collision box below,
+  # which is arithmetically correct and physically useless: a 50 mm cube released
+  # on that plane has its centre of mass projecting onto the *boundary* of its
+  # support polygon, i.e. it is neutrally stable. It tipped about the edge and
+  # fell 0.600 m to the floor, landing at z = 0.025 with a 90-degree pitch, and
+  # `./scripts/scenario pick_and_place` failed 0 of 18 deterministically while
+  # every layer reported success — the release itself worked.
+  #
+  # Four probe cubes dropped from the same release height with no arm involved
+  # isolate it to the frame and nothing else:
+  #
+  #   release x 0.450 (the old infeed, inset 0.000)  ->  floor, z = 0.025, 90 deg
+  #   release x 0.475 (inset 0.025)                  ->  belt,  z = 0.625, upright
+  #   release x 0.500 (inset 0.050)                  ->  belt,  upright
+  #   release x 1.050 (belt centre)                  ->  belt,  upright
+  #
+  # `work_table_600.surface` never showed this because it sits at the CENTRE of
+  # its top face — 0.300 m of margin. Same generator, opposite support margin.
+  #
+  # THE INSET IS 0.050 m, chosen on measurement rather than on preference:
+  #
+  #   * 0.025 m is the bare physical requirement — half a 50 mm cube, so the
+  #     footprint is just fully supported. It is the NEUTRAL case, with the
+  #     part's face flush with the belt end and nothing left over for the
+  #     millimetre-scale error a real release has. Not a fix.
+  #   * 0.050 m doubles it: 25 mm of margin past the tipping boundary, about 13x
+  #     the 1.9 mm the L3 release pose was measured accurate to, and 5 mm above
+  #     the 45 mm floor `insufficient-support-margin` derives from the work-piece
+  #     itself (half the part, plus geometric.SUPPORT_CLEARANCE_M).
+  #
+  # It costs reach — 0.5701 m -> 0.6103 m at every transfer station — and that is
+  # 87.2% of the xArm's 0.700 m envelope, over the 85% comfort threshold. The
+  # standoff in assets/instances/fixtures.yaml was reduced from 0.350 m to
+  # 0.300 m to pay for it, which returns every station to 83.3%. See that file.
   frames:
     - id: surface
       xyz_m: [0.000, 0.000, 0.600]
     - id: infeed
-      xyz_m: [-0.600, 0.000, 0.600]
+      xyz_m: [-0.550, 0.000, 0.600]
     - id: outfeed
-      xyz_m: [0.600, 0.000, 0.600]
+      xyz_m: [0.550, 0.000, 0.600]
 
   description:
     provider: body

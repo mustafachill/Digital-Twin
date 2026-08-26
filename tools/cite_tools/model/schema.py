@@ -141,6 +141,33 @@ class Body(Strict):
     inertial: Inertial
     material: str | None = None
 
+    @property
+    def horizontal_extents_m(self) -> tuple[float, float] | None:
+        """The smallest and largest horizontal extent of the collision geometry.
+
+        Derived, never declared, because both numbers are already in ``size_m``
+        and a declared copy would be a second place to be wrong (P1). Two rules
+        need opposite ends of this pair and neither may invent it:
+
+        * the widest horizontal extent is what a work-piece needs supported
+          underneath it, so it sets the margin a place point must keep from the
+          edge of the body it places onto (``insufficient-support-margin``);
+        * the narrowest is the width a parallel gripper closes across, so it
+          bounds ``default_grasp_width_m`` (``default-grasp-width-never-closes``).
+
+        ``None`` for a mesh. Its extents live in a file L1 owns and this layer
+        deliberately does not read, and returning ``None`` says the rules above
+        do not cover it rather than pretending they do.
+        """
+        geometry = self.collision
+        if geometry.kind == "box":
+            x, y, _ = geometry.size_m
+            return (min(x, y), max(x, y))
+        if geometry.kind == "cylinder":
+            diameter = 2.0 * geometry.radius_m
+            return (diameter, diameter)
+        return None
+
 
 # --------------------------------------------------------------------------- #
 # Component library — the declarative half (L1 owns the geometric half)
@@ -514,7 +541,16 @@ class AssetType(Strict):
     """A reusable definition, instantiated many times with different prefixes."""
 
     id: Identifier
-    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture"]
+    #: ``workpiece`` is the only member that describes something the facility
+    #: *processes* rather than something it is built from, and it is here rather
+    #: than in a document kind of its own because a work-piece needs exactly what
+    #: every other authored body needs — extents, mass, an inertia tensor — and a
+    #: parallel declaration would be a second `Body` to keep in step.
+    #:
+    #: A work-piece type is never instantiated as an `AssetInstance`: it has no
+    #: fixed pose, because where it is is the process's business and not the
+    #: layout's. `Facility.workpiece_models` names the ones this facility handles.
+    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture", "workpiece"]
     vendor: str | None = None
     kinematics: Kinematics | None = None
     frames: list[NamedFrame] = Field(default_factory=list)
@@ -574,13 +610,16 @@ class ConveyorConfiguration(Strict):
     #: How far above the belt's working surface a part still counts as resting
     #: on it, and is therefore carried.
     #:
-    #: An engineering floor, not a derived value, and the same floor the beam
-    #: heights are: L0 describes no work-piece geometry — `Facility.workpiece_models`
-    #: holds names and nothing else — so there is no model fact to compute the
-    #: right headroom from. 0.100 m clears the 50 mm box the scenario uses while
-    #: staying well below the 0.12 m an arm retreats to after a pick, so a part
-    #: that has been lifted is released rather than fought over. It becomes
-    #: derivable the day a work-piece carries a height.
+    #: An engineering floor, and still a declared one. 0.100 m clears the 50 mm
+    #: cube while staying well below the 0.12 m an arm retreats to after a pick,
+    #: so a part that has been lifted is released rather than fought over.
+    #:
+    #: It used to say it *could* not be derived, because L0 recorded no
+    #: work-piece geometry. That is no longer true — `Facility.workpiece_models`
+    #: resolves to types with extents now — so the honest statement is narrower:
+    #: the datum exists and this value has not yet been rewritten against it.
+    #: Doing so is a behaviour change to the belt plugin's carry volume and wants
+    #: its own measurement, not a side effect of the change that made it possible.
     carry_height_m: Annotated[float, Field(gt=0.0)] = 0.100
 
 
@@ -651,14 +690,22 @@ class Facility(Strict):
         ),
     )
     survey_origin: SurveyOrigin = Field(default_factory=SurveyOrigin)
-    #: Model names a gripper in this facility may pick up.
+    #: Which work-piece types this facility handles, by type id.
     #:
-    #: The minimal answer to L0's open question "does the model describe products
-    #: and work-pieces, or only equipment?". Not a work-piece *type* with
-    #: attributes — only the names, because that is all anything needs today and
-    #: inventing the rest before a consumer exists is how a schema acquires
-    #: fields nobody reads. A gripper that attached to whatever it touched would
-    #: pick up the table.
+    #: L0's open question — "does the model describe products and work-pieces, or
+    #: only equipment?" — used to be answered here with bare names and nothing
+    #: else, on the grounds that no consumer needed more. Two consumers then
+    #: appeared and both were blocked by the gap, which is what changed the
+    #: answer: the support-margin rule cannot say how much belt a part needs
+    #: underneath it without knowing how wide the part is, and the grasp-width
+    #: ceiling cannot say "narrower than the part" without knowing the part.
+    #:
+    #: So these are references into the component library now, resolved to an
+    #: `AssetType` of category ``workpiece``, and the geometry lives there —
+    #: once, in the same `Body` every other authored object uses. The names still
+    #: reach the simulator as Gazebo model names (the belt carries what this
+    #: lists, and the beam watches it), which is why the type id and the spawned
+    #: model name have to be the same string.
     workpiece_models: list[Identifier] = Field(default_factory=list)
 
 

@@ -28,6 +28,7 @@ _CATEGORY_CONFIG_KIND: dict[str, str | None] = {
     "sensor": "sensor",
     "fixture": None,
     "end_effector": None,
+    "workpiece": None,
 }
 
 
@@ -41,6 +42,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _hardware_backends_exist(model)
     findings += _configuration_matches_category(model)
     findings += _stations_reference_real_things(model)
+    findings += _workpiece_models_exist(model)
     findings += _flow_is_consistent(model)
     return findings
 
@@ -330,6 +332,45 @@ def _stations_reference_real_things(model: FacilityModel) -> list[Finding]:
                     "station-without-actor",
                     f"stations.{station.id}.actor",
                     "a transfer station must name the asset that does the work",
+                )
+            )
+    return findings
+
+
+def _workpiece_models_exist(model: FacilityModel) -> list[Finding]:
+    """A work-piece the facility handles, with no type behind it.
+
+    The name alone is not harmless. It reaches the generated world as the belt's
+    ``<carry>`` list and the beam's ``<watch>`` list, so a misspelling produces a
+    belt that carries nothing and a sensor that sees nothing, with no error
+    anywhere — and it is now also the datum two validation rules size themselves
+    from, which silently lose their bound when it does not resolve.
+    """
+    findings: list[Finding] = []
+    by_id = {t.id: t for t in model.types}
+    for name in model.facility.workpiece_models:
+        asset_type = by_id.get(name)
+        if asset_type is None:
+            available = sorted(t.id for t in model.types if t.category == "workpiece")
+            findings.append(
+                error(
+                    "unknown-type",
+                    f"facility.workpiece_models.{name}",
+                    f"no component library entry named {name!r}",
+                    f"Declared work-piece types: {', '.join(available) or '(none)'}. "
+                    "The name reaches the simulator as a Gazebo model name, so an "
+                    "unresolved one gives a belt that carries nothing and a beam that "
+                    "watches nothing, without an error.",
+                )
+            )
+        elif asset_type.category != "workpiece":
+            findings.append(
+                error(
+                    "workpiece-is-not-a-workpiece",
+                    f"facility.workpiece_models.{name}",
+                    f"names type {name!r}, which is a {asset_type.category}",
+                    "Only a type of category 'workpiece' may be listed here. Listing a "
+                    "fixture would tell the belt to carry the table.",
                 )
             )
     return findings

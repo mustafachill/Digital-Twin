@@ -2,9 +2,11 @@
 # yaml-language-server: $schema=../../schema/asset_instances.schema.json
 schema: cite/asset_instances/v1
 
-# Break-beam sensors just short of each belt's outfeed, placed relative to that
-# belt rather than in world coordinates — so moving a conveyor moves its sensor
-# with it, and the two cannot drift apart.
+# Break-beam sensors just short of each belt's outfeed transfer point, placed
+# relative to that belt rather than in world coordinates — so moving a conveyor,
+# or moving the transfer point on its type, moves the sensor with it and the two
+# cannot drift apart. That anchoring is what made the 0.050 m outfeed inset a
+# one-line change here: nothing in this file needed touching for it.
 #
 # Two things about the offset below are load-bearing rather than incidental.
 #
@@ -19,17 +21,21 @@ schema: cite/asset_instances/v1
 # the top of the shortest work-piece it must detect, and 80 mm cleared the
 # scenario's 50 mm box entirely — a sensor that can never be broken, on a line
 # whose stations are supposed to act on detection rather than on elapsed time.
-# 30 mm is a floor rather than a fitted value: L0 does not describe work-piece
-# geometry yet (`Facility.workpiece_models` holds names and nothing else), so
-# there is no model fact to derive the right height from, and this is the
-# smallest offset that still clears the belt surface.
+# 30 mm is a floor rather than a fitted value: it is the smallest offset that
+# still clears the belt surface, so it is below the top of any part the line can
+# carry. This comment used to say the right height could not be derived because
+# L0 recorded no work-piece geometry; that is no longer true — the cube's 50 mm
+# height is declared in assets/types/workpieces/workpiece.yaml — so the honest
+# statement is that a floor is still the right choice here, since it holds for
+# every part rather than for the shortest one currently declared.
 assets:
   - id: beam_c1_out
     zone: cell_a
     type: break_beam
     pose:
       frame: conveyor_1/outfeed
-      # 50 mm back from the belt end, beside the belt, 30 mm above its surface.
+      # 50 mm upstream of the outfeed transfer point — so 100 mm back from the
+      # belt's physical end — beside the belt, 30 mm above its surface.
       xyz_m: [-0.050, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:

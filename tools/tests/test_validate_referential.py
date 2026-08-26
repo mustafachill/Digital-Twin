@@ -129,3 +129,28 @@ def test_station_in_the_zone_that_no_edge_touches(minimal_model: Path, edit_yaml
         ),
     )
     assert "unreachable-station" in rules(minimal_model)
+
+
+def test_a_workpiece_name_with_no_type_behind_it(real_model: Path, edit_yaml: Callable) -> None:
+    # The name is not decoration: it reaches the generated world as the belt's
+    # <carry> list and the beam's <watch> list, so a misspelling gives a belt
+    # that carries nothing and a sensor that sees nothing, with no error
+    # anywhere. It is also the datum two validation rules size themselves from.
+    edit_yaml(
+        real_model / "facility/facility.yaml",
+        lambda d: d["facility"].__setitem__("workpiece_models", ["workpeice"]),
+    )
+    assert "unknown-type" in rules(real_model)
+
+
+def test_a_workpiece_naming_a_fixture(real_model: Path, edit_yaml: Callable) -> None:
+    # Listing a fixture here would tell the belt to carry the table.
+    edit_yaml(
+        real_model / "facility/facility.yaml",
+        lambda d: d["facility"].__setitem__("workpiece_models", ["work_table_600"]),
+    )
+    assert "workpiece-is-not-a-workpiece" in rules(real_model)
+
+
+def test_the_real_model_resolves_its_workpieces(real_model: Path) -> None:
+    assert rules(real_model) == set()

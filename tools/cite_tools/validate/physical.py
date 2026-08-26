@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 
 from cite_tools.model.loader import FacilityModel
-from cite_tools.model.schema import AssetType, Body, Inertial
+from cite_tools.model.schema import AssetType, Body, GraspSpec, Inertial
 from cite_tools.validate import Finding, error, warning
 
 #: Plausible bulk densities in kg/m^3. Below balsa or above lead means either the
@@ -45,9 +45,10 @@ MIN_MEASURED_FOLLOWER_HEADROOM = 0.25
 def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
     seen_tensors: dict[tuple[float, ...], list[str]] = {}
+    narrowest_workpiece = _narrowest_workpiece_width_m(model)
 
     for asset_type in model.types:
-        findings += _default_grasp_width_can_close(asset_type)
+        findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
         findings += _followers_can_still_correct(asset_type)
 
         body = asset_type.description.body
@@ -203,35 +204,120 @@ def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[F
     return []
 
 
-def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
-    """A default grasp width the gripper cannot even open to is not a default.
+def _narrowest_workpiece_width_m(model: FacilityModel) -> float | None:
+    """The narrowest thing a gripper in this facility has to close on.
 
-    WHAT THIS BOUND USED TO BE, because the change matters and a silent
-    relaxation would be worse than the rule. It was
-    ``opening(closed_threshold_rad)`` — 60.92 mm on this gripper — and its whole
-    justification was ADR-0023's attachment plugin: a width above it left the
-    drive joint short of the threshold the plugin watched, so the plugin never
-    fired. That plugin is gone (see `GraspSpec`), and with it the only meaning
-    ``closed_threshold_rad`` ever had. A bound derived from a threshold that
-    nothing thresholds is an arbitrary number wearing a derivation, so it is not
-    kept.
+    Narrowest rather than widest, because a default grasp width has to stall on
+    *every* part the line handles and the narrowest is the one it comes closest
+    to missing. Measured across the horizontal footprint: a part rests on a
+    surface in a known attitude and a parallel gripper closes across it.
 
-    WHAT SURVIVES is the bound the old rule's own docstring said it subsumed: the
-    pads cannot open wider than the linkage opens them, so a default above
-    ``max_width_m`` commands a width this gripper cannot reach at either end of
-    its travel. That is still an ERROR and still not a matter of degree. It is
-    derived through the end effector's own linkage — the same map the skill
-    server uses, read from the same place (P1) — so the day the linkage changes,
-    the bound moves with it.
+    ``None`` when no work-piece has known extents — none declared, or a mesh part
+    whose geometry L1 owns — so that the rule below falls back to the bound it
+    can still derive instead of inventing one.
+    """
+    by_id = {t.id: t for t in model.types}
+    widths = [
+        extents[0]
+        for name in model.facility.workpiece_models
+        if (asset_type := by_id.get(name)) is not None
+        and asset_type.category == "workpiece"
+        and (body := asset_type.description.body) is not None
+        and (extents := body.horizontal_extents_m) is not None
+    ]
+    return min(widths) if widths else None
 
-    WHAT THIS RULE NO LONGER CHECKS, stated rather than left to be discovered.
-    The bound that actually matters for a friction grasp is "narrower than the
-    part", because that is what makes the pads stop short of the command and the
-    controller report the stall ADR-0022 reads as holding. This rule cannot check
-    it: L0 describes no work-piece geometry — `Facility.workpiece_models` holds
-    names and nothing else — so there is no part width to compare against. The
-    day L0 gains work-piece dimensions, that is the check to add here, and it is
-    strictly tighter than this one.
+
+def _gripper_goal_tolerance(asset_type: AssetType) -> float | None:
+    """The gripper controller's own ``goal_tolerance``, in drive-joint units.
+
+    Read from the controller that will actually be loaded rather than restated
+    here: it is the same number L3 sizes its grasp discrimination from, and a
+    second copy would be a second place to be wrong (P1).
+    """
+    for controller in asset_type.controllers:
+        if controller.joints != "end_effector":
+            continue
+        value = controller.parameters.get("goal_tolerance")
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        return float(value)
+    return None
+
+
+def _grasp_discrimination_margin_m(
+    asset_type: AssetType, grasp: GraspSpec, width_m: float
+) -> float | None:
+    """What ``2 * goal_tolerance`` of drive travel is worth in width at ``width_m``.
+
+    Not a constant, which is why it is computed rather than declared:
+    ``d(opening)/dq`` runs from 84.1 mm/rad fully open to 108.8 mm/rad fully
+    closed on this gripper, so one tolerance buys different widths at different
+    commands. Evaluating it at the commanded width is what makes the bound follow
+    the linkage rather than a snapshot of it.
+
+    The factor of two is `cite_skills::gripper_is_holding`'s, not a new choice:
+    one tolerance is the largest end-of-goal bias the controller can produce, and
+    doubling it separates a real stall from that bias with margin on both sides.
+    Deriving it here from the same declared tolerance keeps the validator's
+    ceiling and the skill's predicate from drifting apart.
+
+    ``None`` when the end effector declares no gripper controller, because then
+    there is no tolerance to clear and no honest bound to state.
+    """
+    tolerance = _gripper_goal_tolerance(asset_type)
+    if tolerance is None or tolerance <= 0.0:
+        return None
+    towards_closed = 1.0 if grasp.closed_position >= grasp.open_position else -1.0
+    position = grasp.linkage.position_for(width_m)
+    biased = position + towards_closed * 2.0 * tolerance
+    return abs(grasp.linkage.opening_m(position) - grasp.linkage.opening_m(biased))
+
+
+def _default_grasp_width_can_close(
+    asset_type: AssetType, narrowest_workpiece_m: float | None
+) -> list[Finding]:
+    """A default grasp width that cannot evidence a grasp is not a default.
+
+    TWO BOUNDS, and why there are two rather than one.
+
+    The WEAK bound is the gripper's own opening. The pads cannot open wider than
+    the linkage opens them, so a default above ``max_width_m`` — 88.93 mm here —
+    names a width this gripper cannot reach at either end of its travel. It is
+    derived through the end effector's own linkage, the same map the skill server
+    uses and read from the same place (P1).
+
+    The STRONG bound is "narrower than the part, by enough to tell". A parallel
+    gripper evidences a grasp by *failing* to reach where it was sent: the pads
+    meet the part, the drive joint stops short, and the controller reports a
+    stall (ADR-0022). Commanding the part's own width lets the gripper arrive
+    exactly on target and teaches the skill nothing.
+
+    HOW MUCH NARROWER is not a preference either, and it is the part that used to
+    be uncheckable. `GripperActionController` ends a goal the instant
+    ``|error| < goal_tolerance``, so the position it reports is systematically
+    short of the command — which reads back through the linkage as *phantom
+    width* that was never between the pads. `cite_skills::gripper_is_holding`
+    therefore demands a width margin of twice that tolerance before it will call
+    anything a grasp. A default whose margin against the narrowest part falls
+    below the same threshold produces real grasps that L3 cannot tell from free
+    air, so the threshold is computed from the two declared facts that set it —
+    the linkage and the controller's own tolerance — rather than written as a
+    millimetre count.
+
+    THIS CEILING WAS DELIBERATELY LOOSENED ONCE, from 60.92 mm to 88.93 mm, and
+    the loosening is now paid back rather than merely recorded. 60.92 mm was
+    ``opening(closed_threshold_rad)``, justified entirely by ADR-0023's
+    attachment plugin; that plugin is gone, and a bound derived from a threshold
+    nothing thresholds is an arbitrary number wearing a derivation. The note left
+    in its place named the missing part dimensions as the blocker. L0 records
+    them now (`model/assets/types/workpieces/`), so the promised check exists and
+    is strictly tighter than either predecessor: 47.86 mm on this gripper against
+    this facility's 50 mm cube.
+
+    WHAT IS STILL NOT COVERED, said rather than left to be discovered: a facility
+    that declares no work-piece, or one whose parts are meshes, falls back to the
+    weak bound alone.
     """
     grasp = asset_type.grasp
     if grasp is None or grasp.default_grasp_width_m is None:
@@ -249,14 +335,14 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
             )
         ]
 
-    ceiling = grasp.max_width_m
-    if grasp.default_grasp_width_m > ceiling:
+    default = grasp.default_grasp_width_m
+    if default > grasp.max_width_m:
         return [
             error(
                 "default-grasp-width-never-closes",
                 where,
-                f"{grasp.default_grasp_width_m} m is wider than the pads open; the "
-                f"linkage reaches {ceiling:.4f} m at open_position "
+                f"{default} m is wider than the pads open; the "
+                f"linkage reaches {grasp.max_width_m:.4f} m at open_position "
                 f"({grasp.open_position}), so this width is not commandable at all",
                 "Lower default_grasp_width_m below the gripper's own opening. A width "
                 "above it is saturated by the linkage, so the gripper is commanded to "
@@ -264,7 +350,33 @@ def _default_grasp_width_can_close(asset_type: AssetType) -> list[Finding]:
             )
         ]
 
-    return []
+    if narrowest_workpiece_m is None:
+        return []
+    discrimination = _grasp_discrimination_margin_m(asset_type, grasp, default)
+    if discrimination is None:
+        return []
+
+    margin = narrowest_workpiece_m - default
+    if margin >= discrimination:
+        return []
+
+    return [
+        error(
+            "default-grasp-width-never-closes",
+            where,
+            f"{default} m leaves {margin * 1000.0:.2f} mm against the narrowest "
+            f"work-piece this facility handles ({narrowest_workpiece_m * 1000.0:.1f} mm), "
+            f"below the {discrimination * 1000.0:.2f} mm a stall has to exceed to be "
+            "distinguishable from closing on air",
+            f"Lower default_grasp_width_m to at most "
+            f"{(narrowest_workpiece_m - discrimination) * 1000.0:.2f} mm. The controller "
+            "ends a goal as soon as |error| < goal_tolerance, so the width it reports is "
+            "systematically wider than commanded even with nothing between the pads, and "
+            "cite_skills::gripper_is_holding demands twice that bias before it calls "
+            "anything a grasp. Below this margin a real grasp reads as free air and the "
+            "skill reports a part it is not holding.",
+        )
+    ]
 
 
 def _no_copied_placeholder_tensors(

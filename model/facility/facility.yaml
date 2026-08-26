@@ -16,10 +16,16 @@ facility:
   # exists, every coordinate in this model is engineered intent rather than a
   # measurement of the building, and status says so rather than implying
   # otherwise (P7).
-  # What a gripper in this facility may pick up. Only names: L0 describes
-  # equipment, and giving work-pieces attributes before anything reads them
-  # would be inventing schema. A gripper that attached to whatever it touched
-  # would pick up the table (ADR-0023).
+  # What this facility processes, by component-library type id. A gripper that
+  # attached to whatever it touched would pick up the table (ADR-0023), so the
+  # set is closed and stated here.
+  #
+  # These used to be bare names with no type behind them, because nothing needed
+  # a work-piece's dimensions. Two rules now do — the support margin a place
+  # point must keep from the edge it places onto, and the "narrower than the
+  # part" ceiling on a default grasp width — so each entry resolves to an
+  # `asset_type` of category `workpiece` and the geometry lives there, once.
+  # See model/assets/types/workpieces/workpiece.yaml.
   workpiece_models:
     - workpiece
 
