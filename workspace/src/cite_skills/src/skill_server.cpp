@@ -30,11 +30,16 @@
 // random draws from inside its tolerance, and on an arm with fewer than six
 // degrees of freedom almost every draw is unreachable.
 //
-// One arm executes one skill at a time. Four action servers share one
+// One arm executes one skill at a time. Five action servers share one
 // MoveGroupInterface, which is not thread-safe and whose target, start state and
 // scaling factors are per-object; a second goal accepted while one is in flight
 // can plan to the target the first just installed, and the arm executes it. A
 // second goal is therefore rejected rather than queued.
+//
+// `Detect` is the sixth skill and is deliberately NOT here. It commands no
+// motion, needs neither the planner nor the gripper, and belongs to a zone's
+// sensors rather than to one arm — three arms each serving it would be three
+// views of one belt. It lives in `detection_server.cpp`.
 //
 // Every skill implements the full action contract, cancellation included. L3 is
 // explicit that covering only the happy path is a review finding — a skill that
@@ -68,6 +73,7 @@
 #include <cite_interfaces/action/move_to.hpp>
 #include <cite_interfaces/action/pick.hpp>
 #include <cite_interfaces/action/place.hpp>
+#include <cite_interfaces/action/transfer.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
 
 #include "cite_skills/approach.hpp"
@@ -82,6 +88,7 @@ using cite_interfaces::action::Grasp;
 using cite_interfaces::action::MoveTo;
 using cite_interfaces::action::Pick;
 using cite_interfaces::action::Place;
+using cite_interfaces::action::Transfer;
 using cite_interfaces::msg::ResultCode;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
@@ -196,6 +203,15 @@ public:
     declare_parameter("current_state_timeout_s", 5.0);
     declare_parameter("tf_timeout_s", 5.0);
     declare_parameter("feedback_period_s", 0.1);
+    // How far the tool backs out along its own axis once a `Transfer` has let go.
+    //
+    // A parameter rather than a goal field because `Transfer.action` has no
+    // retreat distance in it and this change does not widen the contract (P3).
+    // `Pick` and `Place` take theirs from the goal, so this is the one motion
+    // distance in this node that is configuration rather than a caller's choice;
+    // it is stated here so that it is at least stated once, and the bring-up plan
+    // can override it the day L0 has an opinion about it.
+    declare_parameter("transfer_retreat_distance_m", 0.10);
   }
 
   ~SkillServer() override
@@ -421,6 +437,18 @@ public:
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Pick>> handle) {
         start([this, handle] {execute_pick(handle);});
+      });
+
+    transfer_server_ = rclcpp_action::create_server<Transfer>(
+      self, "transfer",
+      [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const Transfer::Goal>) {
+        return claim(uuid, "transfer");
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Transfer>> handle) {
+        return cancel(handle);
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<Transfer>> handle) {
+        start([this, handle] {execute_transfer(handle);});
       });
 
     RCLCPP_INFO(get_logger(), "skills for %s are accepting goals", asset_id_.c_str());
@@ -962,6 +990,237 @@ private:
   }
 
   // ---------------------------------------------------------------------------
+  // Transfer — carry a held work-piece to a handoff pose, let go, back out
+  //
+  // Half of a handoff, and deliberately only half (ADR-0024). L4 owns ownership:
+  // it holds the single owner of each work-piece, performs the two-party
+  // confirmation, and arbitrates the shared volume. This owns the motion for one
+  // robot, takes an opaque token rather than a peer's identity, and never learns
+  // whether anything is on the other side. A skill never talks to another skill.
+  //
+  // ## What this skill assumes about how the part is held, which is a real
+  // ## assumption and not a formality
+  //
+  // A handoff needs to know how a part is held, not only that it is. In this cell
+  // that is not knowable. Under friction grasping (ADR-0029) the work-piece
+  // rotates between the jaws about the pad-to-pad axis while the pads themselves
+  // turn 0.14 degrees. Correcting the grasp-plane offset removed every rotation
+  // above 20 degrees — 12/20 trials became 0/20 — but a residual of up to
+  // **18.71 degrees**, median 7.97, survives it and is a recorded open sim/real
+  // divergence. See `docs/measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md`
+  // and ADR-0029's "what we will have to revisit", which names this skill.
+  //
+  // `Transfer` is built anyway, and this is the reasoning, so that whoever finds
+  // this later can judge it rather than re-derive it:
+  //
+  // 1. **It claims nothing it cannot measure.** `Transfer.Result` carries a code,
+  //    `still_holding` and a duration — no achieved pose, no error term. There is
+  //    no field here that a residual would make into a false number, which is
+  //    exactly the trap `MoveTo.position_error_m` fell into when it shipped a
+  //    permanent 0.0.
+  // 2. **The position half is known.** Where the part sits along the tool axis
+  //    comes from the drive angle the jaws actually stopped at, the same
+  //    mechanism `Place` already uses, and the campaign measured the pad centre
+  //    0.2 mm from the part's centre of mass with the full face engaged.
+  // 3. **The unknown is orientation about the pad-to-pad axis, and it matters
+  //    only to whatever re-acquires the part** — a receiving `Pick`, or a
+  //    fixture. It does not affect this skill's own motion.
+  //
+  // **So the standing assumption is: the work-piece is symmetric about the
+  // pad-to-pad axis over the residual, or it is delivered onto a fixture that
+  // re-datums it.** The cell's reference part is a 50 mm cube, which is symmetric
+  // under 90-degree rotations about that axis and therefore tolerates 18.71
+  // degrees only in the sense that no orientation is being relied upon. The day a
+  // non-symmetric part arrives — anything keyed, polarised, or needing to be
+  // presented a particular way up — **this assumption is false and this skill
+  // will deliver it wrong by up to 18.71 degrees without reporting anything.**
+  // That is stated in the result's `detail` on every success, because a caveat
+  // nobody reads is a caveat that does not exist.
+  //
+  // The gap is not closed here. L3's own document requires whoever writes this to
+  // "close this gap first or state plainly that they have not", and this states
+  // plainly that it has not.
+  // ---------------------------------------------------------------------------
+
+  //: The residual rotation a friction grasp leaves in the work-piece's
+  //: orientation about the pad-to-pad axis, in degrees. The maximum over the
+  //: 20-trial corrected condition, not the median, because it is the bound that a
+  //: consumer would have to tolerate.
+  static constexpr double kHeldOrientationResidualDeg = 18.71;
+
+  void execute_transfer(const std::shared_ptr<rclcpp_action::ServerGoalHandle<Transfer>> handle)
+  {
+    const auto goal = handle->get_goal();
+    auto result = std::make_shared<Transfer::Result>();
+    const auto started = now();
+
+    const auto report = [&](uint8_t phase) {
+        auto feedback = std::make_shared<Transfer::Feedback>();
+        feedback->phase = phase;
+        feedback->waited = now() - started;
+        report_feedback(handle, feedback);
+      };
+
+    const auto finish = [&](const ResultCode & outcome) {
+        result->result = outcome;
+        // Read at every exit rather than set on the success path, so that a
+        // cancel, a planning failure and a refusal all report the truth about who
+        // has the work-piece. `still_holding` is the field L4 chooses a recovery
+        // from: wrong here, the line either abandons a part it still holds or
+        // goes looking for one it let go of.
+        result->still_holding = holding_.load();
+        result->duration = now() - started;
+        terminate(handle, result, outcome);
+      };
+
+    // An unnegotiated handoff is refused. The token is opaque to this layer —
+    // nothing here reads it, matches it, or expires it, which is ADR-0024's whole
+    // point — but its ABSENCE is meaningful: L4 issues one for every handoff it
+    // has negotiated, so an empty token is a caller that skipped the two-party
+    // confirmation. Releasing a work-piece into a rendezvous nobody agreed to is
+    // how a part ends up on the floor between two arms.
+    if (goal->rendezvous_token.empty()) {
+      finish(make_result(
+        ResultCode::PRECONDITION_FAILED,
+        "no rendezvous token: a handoff is negotiated by L4 (ADR-0024) and this skill "
+        "will not release a work-piece into a rendezvous that was never confirmed"));
+      return;
+    }
+
+    // Carrying nothing to a handoff pose and opening the jaws is a handoff the
+    // line believes happened. `Place` refuses the same way and for the same
+    // reason: the failure would otherwise surface at the receiving station, which
+    // is much harder to attribute.
+    if (!holding_.load()) {
+      finish(make_result(
+        ResultCode::PRECONDITION_FAILED,
+        "asked to transfer work-piece '" + goal->workpiece_id +
+          "', but this arm is not holding anything"));
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // The peer-release wait, and why it is refused rather than faked
+    //
+    // ADR-0024 has this skill "signal ready, hold position until released, then
+    // retreat", and `hold_timeout` is contracted to expire with the piece still
+    // held. Both need L4 to tell this arm that the peer has taken the part.
+    //
+    // **There is no typed channel for that signal.** `cite_interfaces` has six
+    // actions, fourteen messages and two services, and none of them carries a
+    // rendezvous release; `LineState` and `StationState` publish ownership
+    // nowhere. Inventing one is not this change's to make — the interface package
+    // is reviewed before its consumers (ADR-0010) — and improvising an untyped
+    // one would be P3 twice over.
+    //
+    // So a caller asking for the hold is told, in a code it can branch on, that
+    // the path is unbuilt. It is told BEFORE the arm moves: parking a loaded arm
+    // at a rendezvous it can never complete is a worse failure than refusing.
+    //
+    // What is NOT done here is a bounded wait that expires and reports TIMEOUT.
+    // That is the contract's own defined outcome and it would look completely
+    // correct — a handoff that waited and was not met — while nothing was ever
+    // listening. That is v1's handoff exactly: it published to a topic nothing
+    // subscribed to and every transaction timed out forever, with no test able to
+    // notice. A TIMEOUT here would be the same lie with a passing test beside it.
+    // -------------------------------------------------------------------------
+    const rclcpp::Duration hold_timeout(goal->hold_timeout);
+    if (hold_timeout > rclcpp::Duration(0, 0)) {
+      report(Transfer::Feedback::PHASE_WAITING_FOR_PEER);
+      finish(make_result(
+        ResultCode::NOT_IMPLEMENTED,
+        "a hold_timeout of " + std::to_string(hold_timeout.seconds()) +
+          " s asks this arm to hold at the handoff pose until a peer takes the "
+          "work-piece, and no typed channel exists for L4 to signal that release "
+          "(ADR-0024). The arm has not moved and is still holding. Send "
+          "hold_timeout = 0 for a conveyor-mediated transfer, where the two-party "
+          "confirmation has already happened before this goal was sent"));
+      return;
+    }
+
+    apply_scaling(0.0, 0.0);
+    const double max_effort = get_parameter("gripper_max_effort_n").as_double();
+
+    report(Transfer::Feedback::PHASE_PLANNING);
+    geometry_msgs::msg::PoseStamped handoff;
+    const auto resolved = to_planning_frame(goal->handoff_pose, &handoff);
+    if (resolved.code != ResultCode::SUCCESS) {
+      finish(resolved);
+      return;
+    }
+    // `handoff_pose` is where the WORK-PIECE should be presented, not where the
+    // tip link should go — the same reading `Pick` and `Place` give their poses,
+    // and it has to be the same one, because the receiving robot runs `Pick` at
+    // this very pose (ADR-0024). If one side of a handoff meant the object and
+    // the other meant the fingertip plane, the two would miss each other by the
+    // pad-plane offset — 18.6 mm at the cell's grasp width — and the part would
+    // be handed to a gripper closing above it.
+    //
+    // Evaluated at the angle the jaws are actually at, which here is known: the
+    // part stopped the stroke during the pick and `held_drive_position_` recorded
+    // where. Same as `Place`, and it leaves no residual in position.
+    const double pad_offset_m =
+      cite_skills::gripper_pad_plane_offset_m(held_drive_position_.load(), travel_);
+    handoff.pose = cite_skills::offset_along_tool_z(handoff.pose, -pad_offset_m);
+
+    report(Transfer::Feedback::PHASE_APPROACHING);
+    auto outcome = move_to_pose(handoff, handle, {});
+    if (outcome.code != ResultCode::SUCCESS) {
+      // Still holding, and `finish` reports it. A failed approach leaves
+      // ownership exactly where it was, which is what lets L4 retry.
+      finish(outcome);
+      return;
+    }
+    const auto release_pose = current_pose();
+
+    report(Transfer::Feedback::PHASE_RELEASING);
+    const auto gripper =
+      command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort, handle);
+    if (gripper.result.code != ResultCode::SUCCESS) {
+      // The jaws did not open, so the part is still between them. Reported as
+      // held rather than as transferred: L4's recovery for a stuck gripper and
+      // its recovery for a completed handoff are opposites.
+      finish(gripper.result);
+      return;
+    }
+    holding_.store(false);
+
+    report(Transfer::Feedback::PHASE_RETREATING);
+    // Backed out along the tool's own axis, not lifted in world Z as `Pick` and
+    // `Place` retreat. The hazard is different and so is the safe direction:
+    // after a pick the danger is the surface the part was resting on, which is
+    // below, but after a handoff the danger is the peer and the work-piece it now
+    // holds, which are along the tool axis. Lifting straight up out of a
+    // rendezvous drags the jaws through the space the receiving gripper is in.
+    auto retreat = release_pose;
+    retreat.pose = cite_skills::offset_along_tool_z(
+      release_pose.pose, get_parameter("transfer_retreat_distance_m").as_double());
+    outcome = move_to_pose(retreat, handle, {});
+    if (outcome.code != ResultCode::SUCCESS) {
+      // The part is transferred either way — the jaws are open and it is not this
+      // arm's any more. A failed retreat is an arm parked in the rendezvous, not
+      // a failed handoff, and `still_holding` false is what tells L4 which.
+      finish(outcome);
+      return;
+    }
+
+    // The caveat rides on the success, where a reader will actually meet it.
+    // `detail` is for people and nothing may parse it, which is exactly right
+    // for a bound that is real, unmeasured per-goal, and not expressible in any
+    // field this contract has.
+    std::ostringstream note;
+    note.setf(std::ios::fixed);
+    note.precision(2);
+    note << "transferred work-piece '" << goal->workpiece_id
+         << "'. Position is corrected for the grasp plane; ORIENTATION IS NOT KNOWN — a "
+      "friction grasp leaves up to " << kHeldOrientationResidualDeg
+         << " degrees of unmeasured rotation about the pad-to-pad axis (ADR-0029). This "
+      "is sound only for a part symmetric over that residual, or one delivered onto a "
+      "fixture that re-datums it";
+    finish(make_result(ResultCode::SUCCESS, note.str()));
+  }
+
+  // ---------------------------------------------------------------------------
   // Motion
   // ---------------------------------------------------------------------------
   using ProgressFn = std::function<void(double)>;
@@ -1390,6 +1649,7 @@ private:
   rclcpp_action::Server<Grasp>::SharedPtr grasp_server_;
   rclcpp_action::Server<Pick>::SharedPtr pick_server_;
   rclcpp_action::Server<Place>::SharedPtr place_server_;
+  rclcpp_action::Server<Transfer>::SharedPtr transfer_server_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };

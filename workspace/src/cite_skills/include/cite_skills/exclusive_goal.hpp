@@ -14,7 +14,7 @@
 
 // One arm, one goal at a time.
 //
-// Four action servers share one `MoveGroupInterface`, one gripper and one
+// Five action servers share one `MoveGroupInterface`, one gripper and one
 // physical arm. `MoveGroupInterface` is not thread-safe and its target, start
 // state and scaling factors are per-object, so two goals in flight means one
 // goal can plan to the target the other just installed — and the arm executes

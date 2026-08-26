@@ -43,7 +43,8 @@ import time
 import unittest
 
 from ament_index_python.packages import get_package_share_directory
-from cite_interfaces.action import Grasp, MoveTo
+from builtin_interfaces.msg import Duration
+from cite_interfaces.action import Grasp, MoveTo, Transfer
 from cite_interfaces.msg import ResultCode
 from control_msgs.action import GripperCommand
 from geometry_msgs.msg import PoseStamped
@@ -229,6 +230,15 @@ class Harness(RclpyNode):
         self.callbacks = ReentrantCallbackGroup()
         self.gripper_running = threading.Event()
         self.gripper_cancelled = threading.Event()
+        #: Whether the fake gripper stalls on a part instead of hanging.
+        #:
+        #: Both behaviours are needed and neither can serve for the other. A
+        #: gripper that never finishes is what makes cancellation observable; a
+        #: gripper that stalls short of its command with `reached_goal` false is
+        #: the only way `holding_` becomes true in this rig, and `Transfer`
+        #: refuses to run without it — as it should, since transferring nothing
+        #: is a handoff the line believes happened.
+        self.gripper_stalls_on_a_part = False
 
         self.states = self.create_publisher(JointState, f"{NAMESPACE}/joint_states", 10)
         self.create_timer(0.05, self._publish_state, callback_group=self.callbacks)
@@ -237,7 +247,7 @@ class Harness(RclpyNode):
             self,
             GripperCommand,
             GRIPPER_ACTION,
-            execute_callback=self._hold_until_cancelled,
+            execute_callback=self._serve_gripper,
             goal_callback=lambda _goal: GoalResponse.ACCEPT,
             cancel_callback=lambda _goal: CancelResponse.ACCEPT,
             callback_group=self.callbacks,
@@ -246,6 +256,8 @@ class Harness(RclpyNode):
                                   callback_group=self.callbacks)
         self.move_to = ActionClient(self, MoveTo, f"{NAMESPACE}/move_to",
                                     callback_group=self.callbacks)
+        self.transfer = ActionClient(self, Transfer, f"{NAMESPACE}/transfer",
+                                     callback_group=self.callbacks)
 
     def _publish_state(self) -> None:
         message = JointState()
@@ -254,13 +266,58 @@ class Harness(RclpyNode):
         message.position = self.positions
         self.states.publish(message)
 
-    def _hold_until_cancelled(self, goal_handle):
+    def _serve_gripper(self, goal_handle):
         self.gripper_running.set()
+        if self.gripper_stalls_on_a_part:
+            return self._stall_on_a_part(goal_handle)
         while not goal_handle.is_cancel_requested:
             time.sleep(0.05)
         self.gripper_cancelled.set()
         goal_handle.canceled()
         return GripperCommand.Result()
+
+    def _stall_on_a_part(self, goal_handle):
+        """Finish the way a gripper closing onto a work-piece finishes.
+
+        `cite_skills::gripper_is_holding` asks three questions and all three have
+        to be answered for a grasp to count: the joint stalled, it did NOT reach
+        its goal, and it stopped further open than commanded by more than the
+        controller's own end-of-goal bias. Reporting a stall alone would be the
+        defect ADR-0022 fixed — `stalled` says the joint stopped short, never why.
+
+        Half of the commanded stroke is comfortably wide of that margin when the
+        command is a full close, which is what the transfer tests send.
+        """
+        result = GripperCommand.Result()
+        result.position = goal_handle.request.command.position / 2.0
+        result.effort = goal_handle.request.command.max_effort
+        result.stalled = True
+        result.reached_goal = False
+        goal_handle.succeed()
+        return result
+
+    def hold_a_workpiece(self) -> None:
+        """Close the gripper onto an imaginary part, so `holding_` becomes true.
+
+        `Transfer` will not run without it, and that refusal is itself one of the
+        things under test — so this has to actually establish the state rather
+        than be asserted around.
+        """
+        self.gripper_stalls_on_a_part = True
+        goal = Grasp.Goal()
+        # A full close. The fake gripper stalls at half the commanded drive
+        # position, which is far wider than the width this asked for — a part.
+        goal.width_m = 0.0
+        goal.max_effort_n = 10.0
+        goal.expect_object = True
+        handle = self.wait(self.grasp.send_goal_async(goal), GOAL_CEILING_S)
+        assert handle is not None and handle.accepted, "the grasp was not accepted"
+        wrapped = self.wait(handle.get_result_async(), GOAL_CEILING_S)
+        assert wrapped is not None, "the grasp never reported a result"
+        assert wrapped.result.holding, (
+            f"the rig failed to establish a held work-piece: "
+            f"{wrapped.result.result.code} {wrapped.result.result.detail}"
+        )
 
     @staticmethod
     def wait(future, timeout: float):
@@ -388,6 +445,163 @@ class TestSkillContract(unittest.TestCase):
             ResultCode.EXECUTION_FAILED,
             f"expected the plan to run and fail for want of a controller, got "
             f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
+        )
+
+    # -------------------------------------------------------------------------
+    # Transfer — half of a handoff, and only half (ADR-0024)
+    # -------------------------------------------------------------------------
+
+    def _handoff_pose(self) -> PoseStamped:
+        """Return a reachable rendezvous, in the arm's own base frame."""
+        yaw = math.atan2(REACHABLE_XYZ[1], REACHABLE_XYZ[0])
+        pose = PoseStamped()
+        pose.header.frame_id = self.harness.moveit["base_link"]
+        (pose.pose.position.x,
+         pose.pose.position.y,
+         pose.pose.position.z) = REACHABLE_XYZ
+        pose.pose.orientation.x = math.cos(yaw / 2.0)
+        pose.pose.orientation.y = math.sin(yaw / 2.0)
+        pose.pose.orientation.z = 0.0
+        pose.pose.orientation.w = 0.0
+        return pose
+
+    def test_4_a_transfer_without_a_rendezvous_token_is_refused(self) -> None:
+        # The token is opaque to L3 and nothing here reads it — but its absence
+        # means L4 never negotiated the handoff, and opening the jaws into a
+        # rendezvous nobody confirmed is how a part ends up on the floor.
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = ""
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the transfer never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"an untokened transfer returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+
+    def test_5_a_transfer_carrying_nothing_is_refused(self) -> None:
+        # Nothing has been picked up at this point in the sequence. Miming the
+        # handoff would leave the line believing a work-piece moved, and the
+        # failure would surface at the receiving station instead of here.
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-1"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"a transfer with an empty gripper returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertFalse(
+            wrapped.result.still_holding,
+            "an arm holding nothing must not report still_holding",
+        )
+
+    def test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out(self) -> None:
+        """A hold this arm cannot complete is refused before it moves.
+
+        `hold_timeout` asks the arm to wait at the rendezvous until L4 says the
+        peer has taken the part, and no typed channel carries that signal. The
+        tempting answer is the contract's own TIMEOUT, which would look entirely
+        correct — a handoff that waited and was not met — while nothing was ever
+        listening. That is v1's handoff exactly, and no test could see it. So the
+        unbuilt path says it is unbuilt, in a code L4 can branch on.
+        """
+        self.harness.hold_a_workpiece()
+
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-2"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=30, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.NOT_IMPLEMENTED,
+            f"a two-party hold returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        # The refusal happens before the arm moves and before the jaws open, so
+        # the work-piece is exactly where it was. L4 chooses its recovery from
+        # this field; wrong here, the line abandons a part the arm still has.
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a refused hold must leave the work-piece with the upstream arm",
+        )
+        # Returned well inside the 30 s it was asked to wait, which is what
+        # separates "refused" from "waited and expired".
+        self.assertLess(
+            wrapped.result.duration.sec, 30,
+            "the refusal must not have spent the hold_timeout waiting",
+        )
+
+    def test_7_a_transfer_is_cancellable_while_it_is_still_moving(self) -> None:
+        """Cancelling a transfer leaves the work-piece where it was.
+
+        The half that matters is not that the goal ends — it is that it ends
+        BEFORE the jaws open. A cancelled handoff that had already let go would
+        put a part in a rendezvous with no owner on either side.
+        """
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-3"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+
+        approaching = threading.Event()
+
+        def watch(feedback) -> None:
+            if feedback.feedback.phase >= Transfer.Feedback.PHASE_APPROACHING:
+                approaching.set()
+
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal, feedback_callback=watch),
+            GOAL_CEILING_S,
+        )
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        # Synchronised on the skill's own feedback rather than on a sleep: the
+        # cancel has to arrive while the arm is planning or executing, and
+        # guessing how long planning takes is the timing assumption P4 forbids.
+        self.assertTrue(
+            approaching.wait(GOAL_CEILING_S),
+            "the transfer never reported that it had begun approaching",
+        )
+        self.harness.wait(handle.cancel_goal_async(), GOAL_CEILING_S)
+
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the cancelled transfer never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.CANCELLED,
+            f"a cancelled transfer reported {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a transfer cancelled before the release must still report the "
+            "work-piece as held",
         )
 
 

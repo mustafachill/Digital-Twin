@@ -28,6 +28,12 @@
   <depend>moveit_ros_planning_interface</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
+  <!-- For `std_msgs/Bool` only, and only as the type `ros_gz_bridge` produces
+       from the break beam's `gz.msgs.Boolean`. It carries a sensor's raw level —
+       one boolean, which is exactly what a through-beam measures — and not
+       structured data; the typed contract is the `DetectionEvent` this package
+       publishes from it. -->
+  <depend>std_msgs</depend>
 
   <!-- ament_lint_auto discovers linters through the test dependencies declared
        here. With only ament_lint_auto declared it discovers NONE, ctest reports
@@ -46,6 +52,9 @@
   <test_depend>robot_state_publisher</test_depend>
   <test_depend>rclpy</test_depend>
   <test_depend>sensor_msgs</test_depend>
+  <!-- The detection test republishes the beams' generated static transforms,
+       because there is no cite_bringup in that rig to do it. -->
+  <test_depend>tf2_ros</test_depend>
   <test_depend>xacro</test_depend>
   <test_depend>python3-yaml</test_depend>
 
