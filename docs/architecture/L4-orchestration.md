@@ -23,6 +23,13 @@
   string, and a plan carrying refusals is not `usable()`
   ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). Today's
   topology has no such edge, so nothing is refused in practice.
+  **The refusal stands and the reasoning behind it was corrected on 2026-08-26**: read that
+  ADR's correction section before touching the gate or the string it emits. The residual it
+  names is a roll between the pads rather than a yaw, nothing re-observes the part on any
+  edge, and what makes the *permitted* conveyor edge safe is the receiving gripper closing
+  on a free part — which is exactly what a direct handoff denies. The refusal string and the
+  comment above the gate still carry the pre-correction reasoning; that is a code change, not
+  a documentation one.
   **What the L4 tests prove, and what they do not.** **No arm moves in any of them.** The
   action servers are fakes that succeed because they are told to. What is proven is
   **sequence, ownership and recovery mapping** — not motion, not reachability, and not that

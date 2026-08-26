@@ -14,10 +14,19 @@ inspection of code.
 |---|---|---|
 | [`2026-08-25-friction-grasp/`](2026-08-25-friction-grasp/results.md) | Is a friction grasp in `cell_a` repeatable enough to build a scenario on? | Repeatable in **position**, not in **orientation**. 84 trials. Decided [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). |
 | [`2026-08-25-grasp-plane-offset/`](2026-08-25-grasp-plane-offset/ANALYSIS.md) | Does the grasp-plane offset cause the twist? | It causes the **high mode** and not the rest. Rotations above 20°: 12/20 uncorrected, 0/20 corrected. Up to 18.7° survives correction. |
+| [`2026-08-26-conveyor-yaw-transfer/`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md) | What yaw does a work-piece carry when it reaches a downstream outfeed, and can the gripper pick it? | The belt changes the yaw by **nothing** (36 trials), and the pick succeeds anyway — 23/23 up to 30° — because **the jaws square the part up as they close**. 74 trials. Corrected [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md). |
 
 Read the second alongside the first: it corrects two of the first campaign's published
 readings, and the corrections are listed in its own *Corrections to the friction campaign*
 section.
+
+Read the third alongside both. It is the campaign a decision record was corrected on: it
+did not change what ADR-0031 decided, and it replaced the whole of the reason. It also
+proposes a reinterpretation of the two earlier campaigns' `twist_max_deg`, which a
+re-analysis of their own raw data on 2026-08-26 does **not** support — both its own
+*Correction* section and the note in
+[`2026-08-25-grasp-plane-offset/ANALYSIS.md`](2026-08-25-grasp-plane-offset/ANALYSIS.md)
+carry that, and neither disturbs the verdicts.
 
 ## What a campaign directory contains
 

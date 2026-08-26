@@ -86,6 +86,12 @@ Transport replaces a physical interaction with a deterministic one, and it flatt
   would slip, tumble, jam against a neighbour or fail to be driven at all is carried
   smoothly here. No claim about belt handling, accumulation pressure or singulation can
   rest on this package.
+  **This is now measured rather than argued from the source.** A ride down `conveyor_1`
+  changes a part's yaw by nothing at all, at every starting angle from square to 45° and in
+  both belt modes — 36 trials, with a negative control that discriminates. A belt here does not
+  re-seat, square up or disturb what it carries; it translates it. The campaign is
+  [`docs/measurements/2026-08-26-conveyor-yaw-transfer/`](../../../docs/measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md)
+  and its numbers stay there.
 * **Detection** is a point test on the work-piece's model origin, not an intersection with
   its body. A beam therefore reports a part whose *centre* crosses its volume: with the
   cell's 0.030 m mounting offset and 0.040 m beam width, that is a part between 20 mm and
@@ -97,9 +103,13 @@ P8 applies: any claim about transport reliability needs a measurement against ha
 and this package cannot provide one. Grasping is no longer in this list because no plugin
 assists it — but the same caution applies for a different reason. The friction grasp is
 measured *in simulation only*, and it is repeatable in **position** and not in
-**orientation**: the part rotates between the jaws. The physics timestep changes how often
-the large rotations occur, so a change to `max_step_size` moves grasp quality and has to be
-re-measured rather than assumed. Both campaigns are in
+**orientation**: the part rolls between the jaws, about the pad-to-pad axis. The physics
+timestep changes how often the large rotations occur, so a change to `max_step_size` moves
+grasp quality and has to be re-measured rather than assumed. A third campaign adds the
+counterpart about yaw: jaws closing on a part that is **yawed** rotate it into alignment, so
+a part is carried square and released with a residual. That squaring-up is a rigid-body
+contact result with no friction declared on the pads, and it is the largest sim/real
+divergence risk currently on the books. The campaigns are in
 [`docs/measurements/`](../../../docs/measurements/README.md); their numbers live there.
 Nothing here evidences how any of it behaves on the physical arm.
 

@@ -113,7 +113,7 @@ not rewritten either.
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted |
 | [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26) |
 | [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed |
-| [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted |
+| [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
-| [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted |
+| [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |
 | [0032](0032-index-the-belt.md) | Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff` | Accepted |
