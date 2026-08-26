@@ -878,6 +878,24 @@ def _line_parameters(plan: Plan) -> dict | None:
         # One server for the zone, so every station is given the same action.
         # That is one name read once, not one name in three places.
         "detect_actions": [detect for _ in served],
+        # The belts, in the same parallel-array shape and for the same reason
+        # (ADR-0032). L4 owns the belt setpoint: it stops the belt a station picks
+        # from when that station's beam fires, and runs it again when the station
+        # completes its handoff. Which belt that is comes from the topology's
+        # `via_asset_id`, so only the drive — where to send the setpoint, and what
+        # the drive is installed to run at — has to arrive here.
+        #
+        # EVERY belt is passed, not only the indexed ones. Which of them index is
+        # a property of the flow that the coordinator derives; deciding it here
+        # would put that rule in a second place, and a belt that feeds a sink still
+        # has to be started by somebody.
+        #
+        # `installed_speed_mps` is passed through from the plan rather than
+        # recomputed, so the speed a belt runs at exists once, in
+        # `model/assets/instances/conveyors.yaml` (P1).
+        "conveyor_assets": [conveyor.asset for conveyor in plan.conveyors],
+        "conveyor_command_topics": [conveyor.command_topic for conveyor in plan.conveyors],
+        "conveyor_speeds_mps": [conveyor.installed_speed_mps for conveyor in plan.conveyors],
         "use_sim_time": True,
     }
 

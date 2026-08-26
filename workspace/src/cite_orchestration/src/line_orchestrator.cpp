@@ -70,6 +70,7 @@
 #include <cite_interfaces/qos.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
+#include "cite_orchestration/conveyor_index.hpp"
 #include "cite_orchestration/line_maintenance.hpp"
 #include "cite_orchestration/line_nodes.hpp"
 #include "cite_orchestration/line_plan.hpp"
@@ -83,6 +84,9 @@ using cite_interfaces::msg::LineState;
 using cite_interfaces::msg::LineTopology;
 using cite_interfaces::msg::StationState;
 using cite_orchestration::Context;
+using cite_orchestration::ConveyorDrive;
+using cite_orchestration::ConveyorDrivesByAsset;
+using cite_orchestration::ConveyorIndex;
 using cite_orchestration::HandoffLedger;
 using cite_orchestration::LineContext;
 using cite_orchestration::LineMaintenance;
@@ -171,6 +175,63 @@ bool read_skill_actions(
   return true;
 }
 
+/// Read the per-belt drives, in the same parallel-array shape as the skills.
+///
+/// OPTIONAL AS A SET, REQUIRED PER BELT. A zone whose flow names no conveyor
+/// needs none of these, so an empty set is not an error here — but a belt the
+/// TOPOLOGY names and this table does not is refused below, where the plan says
+/// which belts the line actually indexes. Accepting the gap silently would give a
+/// line that stops a belt it cannot start, or never stops one at all: the
+/// "publishing to a topic nobody consumes" failure, with a work-piece on the
+/// floor at the end of it.
+///
+/// Every value is L0's. `command_topic` and `installed_speed_mps` are resolved by
+/// the generator into `cell_a_plan.yaml` from
+/// `model/assets/instances/conveyors.yaml`, and are passed through rather than
+/// recomputed, so the speed the belt runs at exists in exactly one place (P1).
+bool read_conveyor_drives(
+  const rclcpp::Node::SharedPtr & node, ConveyorDrivesByAsset & drives, std::string & complaint)
+{
+  const std::vector<std::string> empty;
+  const std::vector<double> no_speeds;
+  node->declare_parameter("conveyor_assets", empty);
+  node->declare_parameter("conveyor_command_topics", empty);
+  node->declare_parameter("conveyor_speeds_mps", no_speeds);
+
+  const auto assets = node->get_parameter("conveyor_assets").as_string_array();
+  const auto topics = node->get_parameter("conveyor_command_topics").as_string_array();
+  const auto speeds = node->get_parameter("conveyor_speeds_mps").as_double_array();
+
+  if (topics.size() != assets.size() || speeds.size() != assets.size()) {
+    complaint =
+      "conveyor_command_topics has " + std::to_string(topics.size()) +
+      " entries and conveyor_speeds_mps has " + std::to_string(speeds.size()) +
+      ", against " + std::to_string(assets.size()) +
+      " in conveyor_assets; they are read in parallel and must line up";
+    return false;
+  }
+  for (std::size_t index = 0; index < assets.size(); ++index) {
+    if (topics[index].empty()) {
+      complaint = "conveyor '" + assets[index] + "' was given no command topic";
+      return false;
+    }
+    if (!(speeds[index] > 0.0)) {
+      // A belt declared at zero would be indexed to a standstill and then
+      // "restarted" to a standstill, which is a stalled line reported as a
+      // running one.
+      complaint = "conveyor '" + assets[index] +
+        "' was given an installed speed of " + std::to_string(speeds[index]) +
+        " m/s; a belt that cannot run cannot be indexed";
+      return false;
+    }
+    ConveyorDrive drive;
+    drive.command_topic = topics[index];
+    drive.installed_speed_mps = speeds[index];
+    drives[assets[index]] = drive;
+  }
+  return true;
+}
+
 /// Waits for the latched topology, and says so when it does not arrive.
 ///
 /// AN EVENT, WITH A FAILURE DEADLINE. It does not sleep for a guessed duration
@@ -255,6 +316,10 @@ int main(int argc, char ** argv)
   std::string complaint;
   const bool actions_ok = read_skill_actions(node, actions, complaint);
 
+  ConveyorDrivesByAsset drives;
+  std::string drive_complaint;
+  const bool drives_ok = read_conveyor_drives(node, drives, drive_complaint);
+
   if (!missing.empty()) {
     std::string names;
     for (const auto & name : missing) {
@@ -271,6 +336,11 @@ int main(int argc, char ** argv)
   }
   if (!actions_ok) {
     RCLCPP_FATAL(node->get_logger(), "%s", complaint.c_str());
+    rclcpp::shutdown();
+    return 1;
+  }
+  if (!drives_ok) {
+    RCLCPP_FATAL(node->get_logger(), "%s", drive_complaint.c_str());
     rclcpp::shutdown();
     return 1;
   }
@@ -304,7 +374,32 @@ int main(int argc, char ** argv)
         zone.c_str(), topology.zone.c_str());
       status = 1;
     } else {
-      const LinePlan plan = cite_orchestration::plan_line(topology);
+      LinePlan plan = cite_orchestration::plan_line(topology);
+
+      // THE BELTS THIS LINE INDEXES (ADR-0032), checked against the drives it was
+      // given. A belt is indexed when it is the inbound carrier of a station WITH
+      // A ROBOT ACTOR — which is exactly what `plan.stations` contains, so the
+      // actor condition needs no test of its own here. `station_accumulation` is
+      // a sink: it has a trigger and no actor, so its belt is declared, started,
+      // and never stopped. A rule keyed on the trigger alone would stop it for
+      // ever.
+      //
+      // A refusal rather than a warning, and collected alongside the plan's own
+      // so that one report names everything wrong at once. A line that indexed a
+      // belt it could not command would stop that belt on the first work-piece
+      // and never start it again — a stall that looks, from every topic this node
+      // publishes, exactly like a line waiting for work.
+      for (const auto & station : plan.stations) {
+        if (!station.inbound_via_asset_id.empty() &&
+          drives.count(station.inbound_via_asset_id) == 0)
+        {
+          plan.refusals.push_back(
+            "station '" + station.id + "' picks from belt '" + station.inbound_via_asset_id +
+            "', and no `conveyor_assets` entry declares a drive for it. The belt would be "
+            "stopped on this station's trigger and never started again");
+        }
+      }
+
       if (!plan.usable()) {
         RCLCPP_FATAL(
           node->get_logger(),
@@ -318,6 +413,7 @@ int main(int argc, char ** argv)
         line.ledger = std::make_shared<HandoffLedger>();
         line.arbiter = std::make_shared<ResourceArbiter>();
         line.triggers = std::make_shared<TriggerWatch>(node);
+        line.conveyors = std::make_shared<ConveyorIndex>(node, drives);
         line.stations = std::make_shared<std::map<std::string, StationRuntime>>();
         line.handoff_timeout = rclcpp::Duration::from_seconds(
           node->get_parameter("handoff_timeout_s").as_double());
@@ -332,6 +428,13 @@ int main(int argc, char ** argv)
           runtime.capacity = station.capacity;
           runtime.state = StationState::STATE_WAITING;
           (*line.stations)[station.id] = runtime;
+          // The stop half of indexing, bound to the sensor edge rather than to a
+          // point in this station's cycle — see `conveyor_index.hpp` for why the
+          // two halves are not symmetrical. Nothing here is a station name or a
+          // belt name: both come out of the plan, which came out of L0.
+          line.conveyors->index_on(
+            station.trigger_topic, station.trigger_detection_state,
+            station.inbound_via_asset_id);
         }
 
         const auto tree_xml = cite_orchestration::line_tree_xml(plan, actions);
@@ -368,6 +471,7 @@ int main(int argc, char ** argv)
             "AwaitHandoffConfirmed", line);
           factory.registerNodeType<cite_orchestration::CompleteHandoff>(
             "CompleteHandoff", line);
+          factory.registerNodeType<cite_orchestration::ResumeBelt>("ResumeBelt", line);
           factory.registerNodeType<cite_orchestration::SetStationState>(
             "SetStationState", line);
           factory.registerNodeType<cite_orchestration::RecoverFromFailure>(
@@ -389,6 +493,32 @@ int main(int argc, char ** argv)
 
           auto tree = factory.createTree("Line");
           LineMaintenance maintenance(line, plan, line_state_topic);
+
+          // START THE PLANT. Every belt the model declares goes to its installed
+          // speed, once, before the first tick — the indexed ones will be stopped
+          // again by the first work-piece that reaches their beam, and the ones
+          // that feed a sink simply run.
+          //
+          // AFTER the tree has been built, deliberately. Everything that can
+          // refuse to run this line has refused by here, so a coordinator that
+          // exits does not leave three belts moving with nothing supervising
+          // them. The cost is a window between the sensor subscriptions above and
+          // this line in which an edge would stop a belt that is then started
+          // here; it is the length of a tree construction, and at start-up there
+          // is no work-piece on a belt to produce that edge.
+          //
+          // This is where the belt setpoint acquires an owner. Until ADR-0032
+          // nothing in the running system commanded a conveyor, and
+          // `tests/scenarios/continuous_line.py::_start_the_belts` supplied one,
+          // reporting itself as a gap rather than a boundary.
+          //
+          // ONE PUBLICATION, NOT A LOOP. The COMMAND profile is reliable, so a
+          // subscriber that is already connected receives it; the bridge has been
+          // up since long before the topology arrived, which is what this line
+          // has just spent up to `topology_deadline_s` waiting for. A repeated
+          // send would be covering a discovery race that this ordering has
+          // already closed.
+          line.conveyors->run_all();
 
           const auto tick_period = std::chrono::milliseconds(
             node->get_parameter("tick_period_ms").as_int());

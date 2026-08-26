@@ -54,6 +54,7 @@
 #include <cite_interfaces/qos.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
+#include "cite_orchestration/conveyor_index.hpp"
 #include "cite_orchestration/handoff_ledger.hpp"
 #include "cite_orchestration/recovery_policy.hpp"
 #include "cite_orchestration/resource_arbiter.hpp"
@@ -175,6 +176,11 @@ struct LineContext
   std::shared_ptr<ResourceArbiter> arbiter;
   std::shared_ptr<TriggerWatch> triggers;
   std::shared_ptr<std::map<std::string, StationRuntime>> stations;
+  //: Who owns the belt setpoints (ADR-0032). One copy for the zone, for the same
+  //: reason there is one arbiter: two things commanding one belt is two answers
+  //: to a question that must have one. Null when the zone has no conveyor, which
+  //: `ResumeBelt` reads as "nothing to resume" rather than as an error.
+  std::shared_ptr<ConveyorIndex> conveyors;
 
   //: How long a handoff may sit unconfirmed or unfinished. A FAILURE deadline
   //: with a defined outcome (ADR-0024 rule 3), never a schedule.
@@ -470,6 +476,20 @@ private:
 /// after the station that put it there has moved on. The number of claimants is
 /// therefore the number of pieces the link is carrying, and the capacity is the
 /// model's own `buffer_capacity`.
+///
+/// WHAT THAT CAPACITY NOW MEANS ON AN INDEXED LINK, because it is not what it
+/// reads as. ADR-0032 stops a belt on the trigger of the station it feeds, and a
+/// stopped belt stops EVERY piece on it — so the effective concurrency of a
+/// belt-mediated link is 1, whatever the edge declares. `model/topology/flow.yaml`
+/// declares `buffer: 4` on both belt edges and that number remains a true
+/// statement of how many pieces the belt could physically hold; it has stopped
+/// being a statement of how many can be in flight. This node grants slots against
+/// the declared number, which is deliberately unchanged: the arbiter's job is to
+/// stop the upstream station promising room the link has not got, and the link
+/// has still got it. What it does not do is make those pieces move.
+///
+/// The accumulation edge's `buffer: 12` is unaffected, because `conveyor_3` feeds
+/// a sink, has no actor to run it again, and therefore does not index.
 class ClaimBufferSlot : public BT::StatefulActionNode
 {
 public:
@@ -687,6 +707,88 @@ public:
     const std::string station = station_id();
     line_.station(station).current_workpiece_id.clear();
     line_.station(station).consecutive_failures = 0;
+    return BT::NodeStatus::SUCCESS;
+  }
+};
+
+/// Let the belt this station picks from run again (ADR-0032).
+///
+/// The second half of indexing. The first half — stopping the belt on this
+/// station's trigger — is not a leaf, because a leaf only acts when the station's
+/// cycle reaches it and a piece can arrive at the beam at any point in that
+/// cycle; `conveyor_index.hpp` records that reasoning at length. The restart has
+/// no such problem: it is a statement about THIS station's cycle, so it is made
+/// where it becomes true and is read off the XML.
+///
+/// WHY HERE AND NOT AT `PickAt`, WHICH ADR-0032 LEFT OPEN. The piece is off the
+/// inbound belt as soon as `PickAt` succeeds, and the tree releases the inbound
+/// buffer claim there for exactly that reason — so restarting there would recover
+/// most of the throughput indexing costs. It is deliberately not done, on three
+/// grounds:
+///
+///   * The belt would run for the rest of this station's cycle — a `ClaimBufferSlot`,
+///     a two-party handoff negotiation, a `PlaceAt` and a `MoveToHome`, tens of
+///     seconds of it. A piece released onto that belt by the upstream station
+///     starts its run 1.05 m from the beam, which is 7 s at the declared speed.
+///     It would reach the beam and be stopped there — correctly, because the stop
+///     is not a leaf — but it would then sit blocking the beam through a cycle it
+///     could have spent moving. Restarting earlier buys throughput only while the
+///     belt is empty, which is the case the throughput does not matter in.
+///   * `ReleaseClaim` at `PickAt` is bookkeeping, not motion. It answers "may the
+///     upstream station put another piece on this link", and ADR-0032 records
+///     that an indexed link's effective concurrency is 1 whatever
+///     `buffer_capacity` declares — so the permission it grants is one the
+///     stopped belt does not honour anyway. Reading it as evidence that the belt
+///     should move is reading a different question's answer.
+///   * `CompleteHandoff` is the point at which this station is accountable for
+///     nothing on that belt: ownership has moved and the piece is on the OUTBOUND
+///     link. Before it, a failure still unwinds to this station holding the piece
+///     (ADR-0024 rule 1), and unwinding is simpler when the belt has not moved.
+///
+/// So the open question ADR-0032 recorded is closed in favour of what the record
+/// already named, and the reasons it did not carry are the three above.
+///
+/// NOT ON THE RECOVERY PATH, DELIBERATELY. A station that fails mid-cycle leaves
+/// its belt stopped. If it failed before picking, the piece is still at the beam
+/// and running the belt would carry it off the end — a work-piece silently on the
+/// floor, against a stalled line that says so. ADR-0032 accepts a stall as the
+/// failure mode; this is where that choice is made.
+class ResumeBelt : public LineNode
+{
+public:
+  using LineNode::LineNode;
+
+  static BT::PortsList providedPorts()
+  {
+    return {
+      BT::InputPort<std::string>(
+        "belt", "the conveyor this station picks from; empty when nothing carries work to it"),
+    };
+  }
+
+  BT::NodeStatus tick() override
+  {
+    const std::string belt = getInput<std::string>("belt").value_or("");
+    if (belt.empty()) {
+      // A station fed by a table indexes nothing. Not an error, and not a branch
+      // anybody wrote: the port is either empty or it is not.
+      return BT::NodeStatus::SUCCESS;
+    }
+    if (!line_.conveyors) {
+      RCLCPP_ERROR(
+        logger(),
+        "station is supposed to index belt '%s' and this line has no conveyor drives at all. "
+        "They arrive as parameters resolved from L0; a line that indexes a belt it cannot "
+        "command would stop it once and never start it again",
+        belt.c_str());
+      return BT::NodeStatus::FAILURE;
+    }
+    if (!line_.conveyors->run(belt)) {
+      RCLCPP_ERROR(
+        logger(), "no drive was declared for belt '%s', so it cannot be run again",
+        belt.c_str());
+      return BT::NodeStatus::FAILURE;
+    }
     return BT::NodeStatus::SUCCESS;
   }
 };

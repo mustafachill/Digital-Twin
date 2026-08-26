@@ -24,6 +24,11 @@
   <depend>behaviortree_cpp</depend>
   <depend>cite_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <!-- The belt command topic. A scalar setpoint in m/s, which is what the bridge
+       already carries in each direction; `cite_interfaces/ConveyorState` is the
+       typed contract for a belt REPORTING itself and is published by nothing at
+       this commit (ADR-0032). -->
+  <depend>std_msgs</depend>
   <depend>tf2_ros</depend>
 
   <exec_depend>cite_generated</exec_depend>

@@ -660,6 +660,47 @@ def test_the_line_coordinator_gets_its_action_names_from_the_plan(
     assert Path(parameters["station_tree"]).exists(), parameters["station_tree"]
 
 
+def test_the_line_coordinator_is_given_every_belt_drive_from_the_plan(
+    module: ModuleType,
+) -> None:
+    """L4 owns the belt setpoint (ADR-0032), so it has to be given every drive.
+
+    The same parallel-array shape as the skills, and for the same reason. What
+    matters here is that the three arrays line up and that the speed is the plan's
+    own `installed_speed_mps` rather than a number written into this launch file —
+    the belt runs at the speed `model/assets/instances/conveyors.yaml` declares,
+    in one place (P1).
+
+    EVERY belt, not only the indexed ones. Which belts index is derived from the
+    flow by the coordinator; deciding it here would put that rule in a second
+    place, and a belt feeding a sink still has to be started by somebody.
+    """
+    plan = _plan()
+    parameters = module._line_parameters(plan)
+    assert parameters is not None
+
+    assert plan.conveyors, "the generated plan declares no conveyor to command"
+    assert parameters["conveyor_assets"] == [c.asset for c in plan.conveyors]
+    assert parameters["conveyor_command_topics"] == [c.command_topic for c in plan.conveyors]
+    assert parameters["conveyor_speeds_mps"] == [c.installed_speed_mps for c in plan.conveyors]
+
+    lengths = {
+        len(parameters["conveyor_assets"]),
+        len(parameters["conveyor_command_topics"]),
+        len(parameters["conveyor_speeds_mps"]),
+    }
+    assert len(lengths) == 1, f"the conveyor arrays do not line up: {lengths}"
+
+    # The command topic is the one the bridge carries ROS->Gazebo. A setpoint sent
+    # anywhere else is published to a topic nobody consumes, which is a silent
+    # no-op and a belt that never moves.
+    bridged, _ = module._bridge_topics(plan)
+    for topic in parameters["conveyor_command_topics"]:
+        assert any(topic in argument for argument in bridged), topic
+    for speed in parameters["conveyor_speeds_mps"]:
+        assert speed > 0.0, "a belt that cannot run cannot be indexed"
+
+
 def test_the_line_state_topic_comes_off_the_message(module: ModuleType) -> None:
     """`LineState` now carries its own topic name, the way `LineTopology` does.
 
