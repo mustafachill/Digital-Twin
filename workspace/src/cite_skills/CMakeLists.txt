@@ -15,6 +15,7 @@ find_package(moveit_core REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_executable(skill_server
   src/skill_server.cpp
@@ -28,7 +29,20 @@ ament_target_dependencies(skill_server
   moveit_core moveit_ros_planning_interface tf2_ros tf2_geometry_msgs
 )
 
-install(TARGETS skill_server DESTINATION lib/${PROJECT_NAME})
+# `Detect` is a separate executable, and deliberately: it commands no motion, so
+# it needs neither MoveIt nor the gripper, and its sensors belong to a zone's
+# conveyor rather than to any one arm. Linking it into skill_server would give
+# every arm its own view of the same belt.
+add_executable(detection_server
+  src/detection_server.cpp
+  src/detection.cpp
+)
+target_include_directories(detection_server PRIVATE include)
+ament_target_dependencies(detection_server
+  rclcpp rclcpp_action cite_interfaces geometry_msgs std_msgs tf2_ros
+)
+
+install(TARGETS skill_server detection_server DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
 if(BUILD_TESTING)
@@ -89,12 +103,27 @@ if(BUILD_TESTING)
   ament_add_gtest(test_exclusive_goal test/test_exclusive_goal.cpp)
   target_include_directories(test_exclusive_goal PRIVATE include)
 
+  # Turning a level into an event. The break beam publishes state and
+  # republishes it periodically, so the edge is made by the consumer — and the
+  # rule for it is a state machine over samples, testable with no bridge, no
+  # simulator and no waiting. The first-sample case is the one that matters: a
+  # work-piece already in the beam must not be reported as an arrival nobody saw.
+  ament_add_gtest(test_detection test/test_detection.cpp src/detection.cpp)
+  target_include_directories(test_detection PRIVATE include)
+
   # The parts of the action contract that only a running server can show:
   # goal exclusion, a cancel that reaches the gripper, and a reachable pose that
   # is planned to rather than refused. move_group, no simulator, no controllers —
   # so it runs headlessly in CI and still exercises the real binary.
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_skill_contract.py TIMEOUT 400)
+
+  # `Detect` against a running server, with a plain ROS publisher standing in for
+  # the bridged beam. No simulator and no bridge — the bridge does not exist yet,
+  # which is stated in the test's own docstring rather than implied by a green
+  # result. Cancellation is tested where the skill actually blocks: inside its
+  # bounded wait for a sensor that has not reported.
+  add_launch_test(test/test_detection_contract.py TIMEOUT 300)
 endif()
 
 ament_package()
