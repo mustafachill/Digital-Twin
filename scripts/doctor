@@ -8,7 +8,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 set +e   # a doctor reports problems, it does not exit on the first one
 
-PASS=0; FAIL=0; SKIP=0
+PASS=0; FAIL=0; SKIP=0; WARN=0
 # `A && B || C` is not if-then-else — C also runs when A succeeds and B fails.
 # These helpers keep the report lines short without that trap.
 check_have() {   # check_have <command> <label> [detail-command]
@@ -27,6 +27,13 @@ report() {
         pass) printf '  %s✓%s %-34s %s\n' "$C_GRN" "$C_RST" "$2" "${3:-}"; PASS=$((PASS+1)) ;;
         fail) printf '  %s✗%s %-34s %s\n' "$C_RED" "$C_RST" "$2" "${3:-}"; FAIL=$((FAIL+1)) ;;
         skip) printf '  %s-%s %-34s %s\n' "$C_DIM" "$C_RST" "$2" "${3:-}"; SKIP=$((SKIP+1)) ;;
+        # Something is wrong on this HOST but not necessarily in this checkout —
+        # the case that prompted this is a shared Docker volume another worktree
+        # created. Reporting it as `fail` would block the person who did not
+        # cause it; reporting it as `skip` would file a live defect under
+        # "expected at the current phase". It is neither, so it is its own state
+        # and is counted separately without changing the exit code.
+        warn) printf '  %s!%s %-34s %s\n' "$C_YEL" "$C_RST" "$2" "${3:-}"; WARN=$((WARN+1)) ;;
     esac
 }
 
@@ -82,6 +89,62 @@ else
     report pass "ROS_DOMAIN_ID" "${ROS_DOMAIN_ID} (${CITE_DOMAIN_SOURCE})"
 fi
 report pass "RMW implementation" "${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp (default)}"
+
+step "Container isolation"
+# The other half of the same problem the DDS domain solves, and the one that was
+# missed for longer. Compose scopes named volumes to the project, so a single
+# fixed project name gave every checkout on this host ONE set of build, install
+# and log volumes. Concurrent builds corrupted each other through them, one
+# checkout ran another's binaries, and `./scripts/clean --all` destroyed a
+# worktree's build that was still in progress. Derived per checkout now — see
+# cite_project_name in scripts/_lib.sh.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+    report fail "compose project" "unset — this checkout would share the host's volumes"
+else
+    report pass "compose project" "${COMPOSE_PROJECT_NAME} (${CITE_PROJECT_SOURCE})"
+fi
+
+if have docker; then
+    # The shared set, by its real name. `cite-digital-twin` is the fallback
+    # project in the compose file, so any checkout that reaches compose without
+    # the derived `-p` lands there — and every such checkout shares one build,
+    # install and log volume with every other. Matched on the project prefix
+    # rather than on a bare `cite-build`, because compose always prefixes a named
+    # volume with its project and the bare form never actually appears.
+    #
+    # Reported, never removed, and never a failure: these volumes may be another
+    # worktree's live build. Destroying them is precisely the accident this
+    # mechanism exists to prevent, and it is not this checkout's call to make.
+    SHARED="$(docker volume ls --quiet 2>/dev/null \
+        | grep -Ec '^cite-digital-twin_cite-(build|install|log)$' || true)"
+    if [ "${SHARED:-0}" -gt 0 ]; then
+        report warn "shared volumes" \
+            "${SHARED} × cite-digital-twin_cite-* — a checkout is not isolated"
+    else
+        report pass "shared volumes" "none"
+    fi
+fi
+
+# Build freshness is only answerable where the build actually lives. On a Docker
+# host workspace/build is an empty directory with a named volume mounted over it
+# inside the container, so checking from the host would report "no build" about a
+# perfectly good one. Reported as skipped there rather than guessed.
+if in_container || native_ros_available; then
+    step "Build freshness"
+    BUILD_STAMP="$(cite_build_stamp_path)"
+    if [ ! -d "${REPO_ROOT}/workspace/build" ] \
+       || [ -z "$(ls -A "${REPO_ROOT}/workspace/build" 2>/dev/null)" ]; then
+        report skip "build tree" "absent — run ./scripts/build"
+    elif [ ! -f "$BUILD_STAMP" ]; then
+        report fail "build fingerprint" \
+            "missing — built before this check existed; rebuild to make gates trustworthy"
+    elif [ "$(cat "$BUILD_STAMP" 2>/dev/null)" = "$(cite_build_inputs_fingerprint)" ]; then
+        report pass "build fingerprint" "matches the source tree"
+    else
+        report fail "build fingerprint" \
+            "STALE — a package.xml or CMakeLists.txt changed since the build; gates will lie"
+    fi
+fi
 
 step "Host tooling"
 CITE_PY="$(cite_python 2>/dev/null || true)"
@@ -248,7 +311,11 @@ else
 fi
 
 step "Summary"
-printf '  %d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+printf '  %d passed, %d failed, %d skipped' "$PASS" "$FAIL" "$SKIP"
+if [ "$WARN" -gt 0 ]; then
+    printf ', %d warned' "$WARN"
+fi
+printf '\n'
 if [ "$FAIL" -gt 0 ]; then
     printf '\n  %sSome checks failed.%s Skipped items are expected at the current phase;\n' "$C_YEL" "$C_RST"
     printf '  failures are not. See CLAUDE.md §2 for what should exist today.\n'

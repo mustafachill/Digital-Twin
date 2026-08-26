@@ -90,6 +90,13 @@ ros_lint() {
   Run ./scripts/build first."
     fi
 
+    # Before asking ctest anything. This gate's whole output is a claim about
+    # which linters a package registers, and that is decided at CMake configure
+    # time — so against a stale tree it reports the linter set of an older
+    # package.xml with complete confidence. That exact false negative is what
+    # made two correctly-configured packages look broken here.
+    assert_build_inputs_current "The lint gate"
+
     # Scoped to our own packages: linting vcstool-imported vendor source reports
     # their style choices, which we neither control nor should change.
     local log rc=0

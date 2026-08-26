@@ -92,7 +92,17 @@ jobs:
       # Verified before flipping, not assumed: ./scripts/lint reports
       # "Lint clean" across all 7 packages in the container. The first attempt at
       # that check reported 2 packages registering no linters and was wrong - the
-      # build volume was stale. Rebuild before trusting a lint result here.
+      # build volume was stale.
+      #
+      # "Rebuild before trusting a lint result here" used to be the whole defence,
+      # and a note in a workflow file is not a defence. ./scripts/lint now refuses
+      # to answer at all unless the build tree carries a fingerprint matching the
+      # first-party package.xml and CMakeLists.txt files on disk, so a stale tree
+      # produces a diagnosis naming the build directory instead of a confident
+      # wrong linter set. See the build-freshness block in scripts/_lib.sh.
+      #
+      # The Build step above always precedes this one, which is what keeps that
+      # check satisfied in CI. Do not reorder them.
       - name: Lint ROS packages
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace \
