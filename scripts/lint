@@ -99,6 +99,17 @@ ros_lint() {
 
     # Scoped to our own packages: linting vcstool-imported vendor source reports
     # their style choices, which we neither control nor should change.
+    #
+    # Selected by LABEL (-L linter), not by name (-R lint). ament registers every
+    # linter with the `linter` label, and the names are only sometimes spelled
+    # with "lint" in them. `-R lint` matched cpplint, lint_cmake and xmllint and
+    # silently dropped flake8, pep257, copyright, cppcheck and uncrustify — so
+    # this gate ran three of eight linters per package while reporting "Lint
+    # clean", and five of them had never executed under it at all. An agent's
+    # change passed here with flake8 and pep257 genuinely failing.
+    #
+    # Verified rather than reasoned about: `ctest -N -L linter` on cite_skills
+    # lists 8 tests, `ctest -N -R lint` lists 3.
     local log rc=0
     log="$(mktemp)"
     if [ "${#packages[@]}" -gt 0 ]; then
@@ -106,7 +117,7 @@ ros_lint() {
             --packages-select "${packages[@]}" \
             --event-handlers console_direct+ \
             --return-code-on-test-failure \
-            --ctest-args -R "lint") >"$log" 2>&1 || rc=$?
+            --ctest-args -L linter) >"$log" 2>&1 || rc=$?
         cat "$log"
     fi
 
@@ -125,6 +136,11 @@ ros_lint() {
 
     # Which packages registered no linter at all? Asked of ctest directly rather
     # than inferred from colcon's prose, so the answer is per package and exact.
+    #
+    # Same label selector as the run above, and it has to stay the same: when this
+    # counted `-R lint` while the run used `-R lint` too, the coverage check was
+    # counting the wrong population — a package registering only flake8 and pep257
+    # would have been reported as registering no linter at all.
     local pkg n
     local -a without_linters=()
     for pkg in "${packages[@]}"; do
@@ -132,7 +148,7 @@ ros_lint() {
             without_linters+=("${pkg}(not-built)")
             continue
         fi
-        n="$(ctest --test-dir "${build}/${pkg}" -N -R lint 2>/dev/null \
+        n="$(ctest --test-dir "${build}/${pkg}" -N -L linter 2>/dev/null \
              | sed -n 's/^Total Tests: //p' | tail -1 || true)"
         [ "${n:-0}" -gt 0 ] || without_linters+=("$pkg")
     done

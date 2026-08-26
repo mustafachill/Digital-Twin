@@ -305,6 +305,43 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# scripts/lint — it must select linters by LABEL, not by name.
+#
+# ament registers every linter with the `linter` label. Their NAMES only sometimes
+# contain "lint": `ctest -R lint` matches cpplint, lint_cmake and xmllint, and
+# silently drops flake8, pep257, copyright, cppcheck and uncrustify. The gate ran
+# 3 of 8 linters per package while reporting "Lint clean", and five of them had
+# never run under it — a change passed this gate with flake8 and pep257 failing.
+#
+# Measured, not argued: on cite_skills, `ctest -N -L linter` lists 8 tests and
+# `ctest -N -R lint` lists 3. Across the seven packages the label selects 41.
+#
+# The same expression appears twice — the run and the coverage count — and they
+# must agree, or the check that asks "which packages registered no linter" counts
+# a different population than the one that ran. Both are asserted.
+# -----------------------------------------------------------------------------
+LINT_CODE="$(grep -vE '^[[:space:]]*#' "${REPO_ROOT}/scripts/lint" || true)"
+
+LINT_LABEL_USES="$(printf '%s' "$LINT_CODE" | grep -c -- '-L linter' || true)"
+if [ "${LINT_LABEL_USES:-0}" -ge 2 ]; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/lint selects linters by label in both places (found %s)\n' \
+           "$C_RED" "$C_RST" "${LINT_LABEL_USES:-0}" >&2
+fi
+
+# The name filter must not come back. It is the specific expression that made a
+# blocking gate enforce three eighths of itself.
+if ! printf '%s' "$LINT_CODE" | grep -Eq -- '-R "?lint"?'; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s scripts/lint no longer selects linters by name (-R lint)\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
 # cite_build_inputs_fingerprint — a gate must not answer from a stale build tree.
 #
 # The namespace stops one checkout reading another's artefacts. This is the other

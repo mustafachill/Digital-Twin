@@ -94,6 +94,15 @@ jobs:
       # that check reported 2 packages registering no linters and was wrong - the
       # build volume was stale.
       #
+      # What "Lint clean" covers is now worth stating, because it used to be much
+      # weaker than it read. ./scripts/lint selected linters with `-R "lint"`, a
+      # NAME filter, which matched cpplint, lint_cmake and xmllint and silently
+      # dropped flake8, pep257, copyright, cppcheck and uncrustify. The gate ran
+      # 3 of 8 linters per package. It selects by the `linter` LABEL now, which is
+      # what ament actually sets: 41 linter tests across the 7 packages, all
+      # passing. The promotion above was right in outcome and under-justified in
+      # its reasoning; this is the justification it should have had.
+      #
       # "Rebuild before trusting a lint result here" used to be the whole defence,
       # and a note in a workflow file is not a defence. ./scripts/lint now refuses
       # to answer at all unless the build tree carries a fingerprint matching the
