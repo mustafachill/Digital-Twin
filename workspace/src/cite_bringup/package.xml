@@ -19,6 +19,7 @@
   <exec_depend>cite_generated</exec_depend>
   <exec_depend>cite_facility</exec_depend>
   <exec_depend>cite_skills</exec_depend>
+  <exec_depend>cite_orchestration</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>cite_interfaces</exec_depend>
@@ -37,6 +38,7 @@
        nothing. -->
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>cite_interfaces</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

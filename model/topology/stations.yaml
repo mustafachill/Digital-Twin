@@ -48,3 +48,12 @@ stations:
     type: sink_station
     assets: [table_accumulation]
     capacity: 12
+    # The sink watches the last belt's outfeed beam. Without it, an arrival at
+    # the accumulation table is an INFERENCE — the line counted a piece when the
+    # upstream robot let go of it, which is a statement about a gripper and not
+    # about the table. `beam_c3_out` was declared here and used by nothing, so
+    # the one asset that could have observed the arrival was watching nobody.
+    #
+    # A sink has no actor, so this is not what starts work: nothing at a sink
+    # acts. It is what makes the arrival observed rather than assumed.
+    trigger: {sensor: beam_c3_out, state: blocked}

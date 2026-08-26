@@ -88,6 +88,50 @@ class MoveItConfig:
 
 
 @dataclass(frozen=True)
+class SkillActions:
+    """The action names one arm's L3 skill server advertises.
+
+    Generated, never assembled. Every one of these is `/cite/<zone>/<asset>/...`,
+    and an asset name written into a launch file or a parameter by hand is a
+    second place that name is made — the failure CLAUDE.md §8 names.
+    """
+
+    move_to: str
+    pick: str
+    place: str
+    grasp: str
+    transfer: str
+
+
+#: Every gripper key the plan carries, under the exact name the skill server
+#: declares it.
+#:
+#: One list, because the two names are the same name. `cite_bringup` used to
+#: pass four of these by hand, one of which (`gripper_max_width_m`) exists in
+#: neither the plan nor the server's declared parameters and was therefore
+#: silently dropped, while `gripper_default_grasp_width_m`, the two rate and
+#: tolerance keys and all seven linkage dimensions never arrived at all. The node
+#: ran on its compiled defaults, which happen to equal the L0 values — so it
+#: worked, and it worked only because two copies agreed. Reading the plan through
+#: this list keeps the number of statements at one: a key here reaches L3
+#: verbatim, and a key that reaches L3 came from the model.
+GRIPPER_KEYS = (
+    "gripper_open_position",
+    "gripper_closed_position",
+    "gripper_default_grasp_width_m",
+    "gripper_goal_tolerance_rad",
+    "gripper_max_drive_rate_rad_s",
+    "gripper_drive_pivot_y_m",
+    "gripper_drive_pivot_z_m",
+    "gripper_finger_offset_y_m",
+    "gripper_finger_offset_z_m",
+    "gripper_pad_inset_m",
+    "gripper_tip_link_z_m",
+    "gripper_pad_face_centre_z_m",
+)
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -102,9 +146,12 @@ class ControllerManager:
     moveit: MoveItConfig | None
     trajectory_action: str | None
     gripper_action: str | None
-    gripper_open_position: float
-    gripper_closed_position: float
-    gripper_max_width_m: float
+    skills: SkillActions | None
+    #: Keyed by the names in `GRIPPER_KEYS`, which are the skill server's own
+    #: parameter names. Held as a mapping rather than as a dozen fields so that
+    #: delivering them cannot drift from declaring them: the launch file passes
+    #: this dictionary through, and a key it does not know about is impossible.
+    gripper: Mapping[str, float]
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Group the controllers by stage, in ascending order.
@@ -130,10 +177,34 @@ class Conveyor:
 
 @dataclass(frozen=True)
 class Sensor:
+    """One break beam: where its level arrives, and where its events go.
+
+    `level_topic` and `detection_topic` are two interfaces, not two names for
+    one. The level is a state the beam republishes periodically; the event is
+    the edge L3 makes from it, and the process topology already gives
+    `detection_topic` to a station as a `DetectionEvent` trigger. Bridging the
+    raw `std_msgs/Bool` onto that name would put a second publisher of a second
+    type on the topic the line acts on.
+    """
+
     asset: str
     detection_topic: str
+    level_topic: str
+    frame_id: str
     beam_axis: str
     beam_length_m: float
+
+
+@dataclass(frozen=True)
+class Detection:
+    """Where the zone's single detection server runs, and what it advertises.
+
+    One per zone. A break beam watches a belt rather than a robot, so three
+    servers would give the question "did the piece pass beam 2" three answers.
+    """
+
+    namespace: str
+    detect_action: str
 
 
 @dataclass(frozen=True)
@@ -146,6 +217,10 @@ class Plan:
     controller_managers: tuple[ControllerManager, ...]
     conveyors: tuple[Conveyor, ...]
     sensors: tuple[Sensor, ...]
+    #: `None` when the zone declares no sensors, which is a real state and not a
+    #: fault: a cell with no beams has nothing for a detection server to watch,
+    #: and starting one would advertise `detect` over an empty sensor table.
+    detection: Detection | None
 
 
 def resolve_uri(uri: str) -> Path:
@@ -227,6 +302,8 @@ def load(path: Path) -> Plan:
         Sensor(
             asset=_require(entry, "asset", f"sensor {index}"),
             detection_topic=_require(entry, "detection_topic", f"sensor {index}"),
+            level_topic=_require(entry, "level_topic", f"sensor {index}"),
+            frame_id=_require(entry, "frame_id", f"sensor {index}"),
             beam_axis=_require(entry, "beam_axis", f"sensor {index}"),
             beam_length_m=_number(
                 _require(entry, "beam_length_m", f"sensor {index}"),
@@ -237,6 +314,24 @@ def load(path: Path) -> Plan:
         for index, entry in enumerate(_sequence(plan, "sensors"))
     )
 
+    for sensor in sensors:
+        if sensor.level_topic == sensor.detection_topic:
+            raise PlanError(
+                f"sensor {sensor.asset!r} names one topic for both its raw level and its "
+                f"typed events ({sensor.detection_topic}). The bridge would publish a "
+                "std_msgs/Bool on the topic a station subscribes to for DetectionEvent, "
+                "and the two would fight over it."
+            )
+
+    detection = _detection(_optional(plan, "detection"))
+    if sensors and detection is None:
+        raise PlanError(
+            f"zone {_require(plan, 'zone', 'plan')!r} declares {len(sensors)} sensor(s) and "
+            "no `detection:` block, so nothing says where the server that turns their "
+            "levels into typed events runs. The beams would be bridged into ROS and "
+            "read by nobody."
+        )
+
     return Plan(
         zone=_require(plan, "zone", "plan"),
         world=resolve_uri(_require(plan, "world", "plan")),
@@ -246,6 +341,16 @@ def load(path: Path) -> Plan:
         controller_managers=managers,
         conveyors=conveyors,
         sensors=sensors,
+        detection=detection,
+    )
+
+
+def _detection(entry: object | None) -> Detection | None:
+    if entry is None:
+        return None
+    return Detection(
+        namespace=_require(entry, "namespace", "detection"),
+        detect_action=_require(entry, "detect_action", "detection"),
     )
 
 
@@ -316,16 +421,44 @@ def _manager(entry: object, index: int) -> ControllerManager:
         moveit=_moveit(_optional(entry, "moveit"), where),
         trajectory_action=_optional(entry, "trajectory_action"),
         gripper_action=_optional(entry, "gripper_action"),
-        gripper_open_position=_number(
-            _optional(entry, "gripper_open_position", 0.0), "gripper_open_position", where
-        ),
-        gripper_closed_position=_number(
-            _optional(entry, "gripper_closed_position", 0.0), "gripper_closed_position", where
-        ),
-        gripper_max_width_m=_number(
-            _optional(entry, "gripper_max_width_m", 0.0), "gripper_max_width_m", where
-        ),
+        skills=_skills(_optional(entry, "skills"), where),
+        gripper=_gripper(entry, where),
     )
+
+
+def _skills(entry: object | None, where: str) -> SkillActions | None:
+    """Read the arm's L3 action names, or None when the plan declares none.
+
+    None is a real state: a plan may describe an asset with controllers and no
+    planning group, and `cite_bringup` starts no skill server for it. What must
+    never happen is a launch file inventing the names instead, which is why
+    there is no default here.
+    """
+    if entry is None:
+        return None
+    where = f"{where}, skills"
+    return SkillActions(
+        **{name: _require(entry, name, where) for name in ("move_to", "pick", "place",
+                                                           "grasp", "transfer")}
+    )
+
+
+def _gripper(entry: object, where: str) -> Mapping[str, float]:
+    """Every gripper value the plan carries for this arm, under L3's own names.
+
+    A key the plan omits is omitted here rather than defaulted to zero. That is
+    the whole point: the skill server declares its own defaults and says why, and
+    a zero manufactured here would override them with a number the model never
+    stated — which is exactly how `gripper_max_width_m` came to be delivered
+    while eleven real values were not.
+    """
+    if not isinstance(entry, dict):
+        raise PlanError(f"{where}: expected a mapping, got {_kind(entry)}")
+    return {
+        key: _number(entry[key], key, where)
+        for key in GRIPPER_KEYS
+        if entry.get(key) is not None
+    }
 
 
 def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
