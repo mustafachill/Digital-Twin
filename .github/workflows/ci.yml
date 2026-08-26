@@ -239,11 +239,132 @@ jobs:
       # has to land on the belt rather than at its leading edge. That belongs to
       # the skill/orchestration path, and until it lands this step earns its keep
       # by running on every push and showing the failure rather than hiding it.
+      #
+      # THE 0/18 ABOVE IS NO LONGER CURRENT, and the fix it asks for has landed.
+      # Everything above this line was measured at 800cf5c/31f6f8d, which precede
+      # b2be77f — the commit that moved the belt transfer frames 0.050 m inboard so
+      # that a released cube is no longer neutrally stable on the belt's end plane.
+      # It is left standing rather than rewritten because the analysis is still how
+      # the failure was found, and a number in this file has already been wrong once
+      # by being supplied rather than measured.
+      #
+      # Re-measured on 2026-08-26 in an isolated worktree against its own build:
+      # ONE run, cycle OK in 100.6 s and teardown OK. CLAUDE.md §2 records 5 of 5
+      # for this commit from a separate measurement. One run here plus a count taken
+      # elsewhere is not a promotion case — condition 1 above, reproducibility, is
+      # still unmet under ADR-0027, and the step's own history is the argument for
+      # not promoting on a small green sample. What has changed is that the reason
+      # is now reproducibility alone and no longer "it fails every time".
       - name: Simulation-in-the-loop scenario — pick_and_place (advisory)
         continue-on-error: true
         run: |
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/scenario pick_and_place
+
+      # Phase 1.D's acceptance claim rests on continuous_line — N work-pieces enter
+      # at the pick area and arrive at accumulation, sensor-triggered, with no
+      # intervention — and until this step nothing ran it. That is the same gap the
+      # block above opens with: a claim no job exercises is not evidence.
+      #
+      # ADVISORY, and NOT because it is flaky. It fails identically every time and
+      # the failure is understood. Measured on 2026-08-26, four runs in one isolated
+      # worktree against its own build and its own volumes:
+      #
+      #   cycle test     0/4. Every run stops at the FIRST of the nine milestones
+      #                  the generated topology defines. The work-piece is fed onto
+      #                  the pick table at (-0.475, 0.000, 0.625) and is still there,
+      #                  unmoved to the millimetre, ~700 samples and 420 s later. No
+      #                  beam ever reports. station_transfer_1 sits at StationState 2
+      #                  (WORKING) with occupancy 0/1 while stations 2 and 3 stay at
+      #                  1 (WAITING) — arm_1 has claimed its reach and is waiting on
+      #                  something that cannot arrive. Run duration 442-459 s, which
+      #                  is the 420 s milestone ceiling plus bring-up.
+      #   teardown test  3/4. Reported separately from the cycle on purpose: the two
+      #                  answer different questions and one has been used to explain
+      #                  the other before. The single failure is NOT the
+      #                  duration-correlated -9/-15 family bringup.py characterises
+      #                  — the failing run was not the slowest — and it is not
+      #                  move_group. It is ours, and it is described below.
+      #
+      # WHAT THE LINE IS WAITING ON, probed against the running cell rather than
+      # inferred from the code:
+      #
+      #     ros2 action send_goal /cite/cell_a/detection/detect \
+      #       cite_interfaces/action/Detect \
+      #       "{region_frame: 'cell_a__table_pick__surface', \
+      #         region_size_m: {x: 0.3, y: 0.3, z: 0.3}, workpiece_type: ''}"
+      #     -> SUCCEEDED, detections: [], detail: "no sensor in this zone lies inside
+      #        the requested region, so nothing is observed there"
+      #
+      # This zone detects with break beams; all three stand at a conveyor outfeed and
+      # none covers table_pick. line_tree.hpp sets require_immediate=0 for a station
+      # with no trigger, so DetectAt reads an empty result as "the line is idle" and
+      # re-sends for ever rather than failing — right for a source-fed station, and
+      # unreachable here because no sensor in the zone can ever answer for that
+      # frame. The coordinator confirms where it was stuck on its own way out:
+      #
+      #     /cite/cell_a/detection/detect did not answer a blanket cancellation;
+      #     a goal it accepted without telling us may still be executing
+      #
+      # THE TEARDOWN FAILURE, which is a defect of ours and is NOT exempted. On the
+      # one failing run line_orchestrator exited -6 in the same dispatch as the
+      # SIGINT, with no escalation, printing:
+      #
+      #     terminate called after throwing an instance of
+      #       'rclcpp_action::exceptions::UnknownGoalHandleError'
+      #       what():  Goal handle is not known to this client.
+      #
+      # SkillNode::abandon() in cite_orchestration calls async_cancel_goal(handle_)
+      # on halt; rclcpp_action throws that exception when the goal has already
+      # terminated and the client has dropped the handle, and nothing catches it, so
+      # it reaches std::terminate on the tick thread. DetectAt's poll loop makes it
+      # likely here because its goals complete in milliseconds, but the path is every
+      # halt — recovery and preemption included, not just shutdown. The other three
+      # runs took cancel_all() instead, which does not throw and instead logs the
+      # blanket-cancellation warning quoted above, which is why this is 1 in 4 and
+      # not 4 in 4. Widening the -11 exemption to cover it would hide a live
+      # cancellation bug behind a teardown allowance; the fix is a guard in
+      # skill_nodes.hpp.
+      #
+      # TWO MORE BLOCKERS STAND BEHIND THE FIRST. Read from the code and the
+      # generated model and NOT observed, because the line stops before reaching
+      # either — recorded so that closing blocker one is not mistaken for closing the
+      # line:
+      #
+      #   * A detection reports where the BEAM is, not where the part is.
+      #     detection_server.cpp fills Detection.pose with the sensor's own transform
+      #     in the region frame, and cell_a_static_tf.yaml puts
+      #     cell_a__beam_c1_out__beam at (1.550, 0.250, 0.630) against
+      #     cell_a__conveyor_1__outfeed at (1.600, 0.000, 0.600) — 0.250 m off the
+      #     belt centreline, which is where the housing must stand to keep out of the
+      #     gripper's descent. PickAt sends that pose straight through as
+      #     object_pose, so a station picking at a detected pose reaches beside the
+      #     belt rather than at the part.
+      #   * Nothing in the running system commands a conveyor. line_orchestrator
+      #     plans, arbitrates, tracks custody and calls skills, and commands no belt,
+      #     while conveyors.yaml says the runtime setpoint is L4's decision. The
+      #     scenario therefore supplies it, and says so. It also cannot be the whole
+      #     answer: at 0.150 m/s a piece passes beam_c1_out 0.050 m before the pick
+      #     point and leaves the belt 0.100 m after it — 0.33 s and 0.67 s of
+      #     simulated time — which no plan-and-execute cycle beats, so the belt has
+      #     to be gated by the line and today nothing gates it.
+      #
+      # PROMOTION CONDITIONS. All four, and none is a tolerance change:
+      #   1. station_transfer_1's pick point is observable — either the model gives
+      #      the infeed something to observe with, or L4 stops gating a source-fed
+      #      station's cycle on Detect. Today the line cannot start.
+      #   2. A detection carries the work-piece's pose rather than the sensor's, so
+      #      that a station picks where the part is.
+      #   3. The belt setpoint has an owner at L4, and the line gates the belt on the
+      #      beam rather than running it open-loop.
+      #   4. It passes repeatedly rather than once, cycle AND teardown. Scenarios here
+      #      are not reproducible (ADR-0027), so a single green run promotes nothing —
+      #      that is the trap the block above was measured into and had to retract.
+      - name: Simulation-in-the-loop scenario — continuous_line (advisory)
+        continue-on-error: true
+        run: |
+          docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
+            cite-digital-twin:dev ./scripts/scenario continuous_line
 
       - name: Upload test results
         if: always()
