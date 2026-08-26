@@ -82,15 +82,18 @@ jobs:
       # without this step the project has no C++ linting in CI whatsoever, which
       # is how ~630 lines of new C++ reached this branch unlinted (T-04).
       #
-      # NOT BLOCKING YET, deliberately. ./scripts/lint now fails when it is about
-      # to check nothing, and it currently is: every first-party package declares
-      # <test_depend>ament_lint_auto</test_depend> without a linter set, so
-      # ament_lint_auto_find_test_dependencies() registers zero linters and ctest
-      # reports "No tests were found!!!". Fixing that means editing package.xml and
-      # CMakeLists.txt in each package. Flip continue-on-error to false in the same
-      # change that adds <test_depend>ament_lint_common</test_depend> to them.
-      - name: Lint ROS packages (expected failing — see T-04)
-        continue-on-error: true
+      # BLOCKING as of this change. The condition this step recorded for its own
+      # promotion has been met: every first-party package now declares
+      # <test_depend>ament_lint_common</test_depend>, so ament_lint_auto discovers
+      # a real linter set instead of none. cite_generated is generated, so its
+      # declaration lives in tools/cite_tools/templates/package/ and never in the
+      # artifact (ADR-0021).
+      #
+      # Verified before flipping, not assumed: ./scripts/lint reports
+      # "Lint clean" across all 7 packages in the container. The first attempt at
+      # that check reported 2 packages registering no linters and was wrong - the
+      # build volume was stale. Rebuild before trusting a lint result here.
+      - name: Lint ROS packages
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/lint
