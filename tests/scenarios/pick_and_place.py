@@ -78,14 +78,42 @@ LIFTED_M = 0.05
 #: placement precision — which is L5's business and needs a metric, not a test.
 PLACE_TOLERANCE_M = 0.10
 
+#: How far the work-piece's resting height may differ from the belt surface and
+#: still count as placed.
+#:
+#: This exists because the horizontal check alone cannot see the failure it most
+#: needs to see. At the baseline taken before the attachment plugin was removed
+#: the work-piece finished at z = 1.201 m — still welded to a finger, half a
+#: metre in the air, directly over the infeed — and the scenario passed, because
+#: x and y were the only things measured. A part dangling above the target is
+#: indistinguishable from a placed part unless height is asserted, and so is a
+#: part that fell off the belt onto the floor: both keep their x and y.
+#:
+#: The check is therefore two-sided, against `place_z + WORKPIECE_SIZE / 2` —
+#: resolved from TF at run time like every other coordinate here, never written
+#: as a constant. The layout has moved twice on this branch; a hardcoded 0.625
+#: would already be wrong once.
+#:
+#: The bound is set by the widest legitimate resting pose rather than by taste.
+#: The cube is released from `release_height_m` (0.04 m above the frame, so about
+#: 0.01 m of free fall) and may settle on a corner instead of a face, which lifts
+#: its centre by 0.025 x (sqrt(3) - 1) = 0.018 m. 0.05 m clears that worst case
+#: with margin while still being an order of magnitude below the 0.576 m error
+#: the welded-to-the-gripper baseline showed.
+PLACE_HEIGHT_TOLERANCE_M = 0.05
+
 #: How often the work-piece's height is sampled while the cycle runs.
 SAMPLE_PERIOD_S = 2.0
 
 #: The seed `./scripts/scenario` exports. It is recorded in the failure report
 #: below so that a report names the conditions it was produced under — NOT
-#: because it makes the run reproducible. It does not, because nothing consumes
-#: it: `gz sim` takes a seed as a command-line flag rather than an SDF element
-#: and `simulation.launch.py` passes none, and MoveIt exposes no way to seed
+#: because it makes the run reproducible.
+#:
+#: It does not, and the reason is narrower than it used to be. This comment once
+#: said "nothing consumes it ... `simulation.launch.py` passes none"; that is now
+#: stale, because the launch file does pass it to `gz sim --seed`. But `--seed`
+#: calls `gz::math::Rand::Seed`, which covers sensor noise and the transport RNG
+#: and neither the physics solver nor the planner. MoveIt exposes no way to seed
 #: OMPL's RNG at all — `libmoveit_ompl_interface` contains no reference to it,
 #: and MoveIt is apt-installed rather than pinned in `external/cite.repos`, so
 #: there is no patch hook either. Sampling-based planning here is therefore
@@ -383,8 +411,9 @@ class TestPickAndPlace(unittest.TestCase):
         self.assertIsNotNone(final, "the work-piece disappeared from the simulator")
 
         context = (
-            f"seed={self.seed} (exported, consumed by nothing — see SEED_VARIABLE; "
-            "this run is not reproducible)\n"
+            f"seed={self.seed} (reaches `gz sim --seed` only, which does not seed "
+            "the physics solver or OMPL — see SEED_VARIABLE; this run is not "
+            "reproducible)\n"
             f"pick frame {PICK_FRAME} at {pick}\n"
             f"place frame {PLACE_FRAME} at {place}\n"
             f"resting={resting}, highest z={highest:.3f}, final={final}\n"
@@ -408,6 +437,25 @@ class TestPickAndPlace(unittest.TestCase):
             PLACE_TOLERANCE_M,
             f"the work-piece was lifted but did not arrive at {PLACE_FRAME}; it is "
             f"{horizontal:.3f} m away in the horizontal plane.\n" + context,
+        )
+
+        # Horizontal arrival is not placement. A part still held in the gripper
+        # directly above the infeed satisfies the check above, and that is not a
+        # hypothetical: it is what the pre-ADR-0029 baseline actually did. So
+        # assert the part is resting on the belt, at the height the surface frame
+        # puts it — one half-cube above `place`, resolved from TF, not written
+        # here. Two-sided on purpose: too high means still carried, too low means
+        # it went over the edge, and both keep the x and y that just passed.
+        expected_z = place[2] + WORKPIECE_SIZE / 2.0
+        vertical = abs(final[2] - expected_z)
+        self.assertLess(
+            vertical,
+            PLACE_HEIGHT_TOLERANCE_M,
+            f"the work-piece arrived over {PLACE_FRAME} but is not resting on it; "
+            f"its centre is at z={final[2]:.3f} m against an expected "
+            f"{expected_z:.3f} m ({vertical:.3f} m away). Higher than expected "
+            "means it was never released; lower means it did not stay on the "
+            "belt.\n" + context,
         )
 
     def _run_cycle(
@@ -460,9 +508,15 @@ class TestPickAndPlace(unittest.TestCase):
 
 @launch_testing.post_shutdown_test()
 class TestCleanShutdown(unittest.TestCase):
-    #: See the same exemption in `bringup.py` for why this is weak and why it is
-    #: nonetheless left unchanged: move_group's teardown is raced rather than
-    #: managed, and neither -11 nor -15 is the expected outcome.
+    #: See the same exemption in `bringup.py` for the measurement behind this and
+    #: for why it is weak: move_group segfaults inside its own destructor —
+    #: SIGSEGV in `rclcpp::CallbackGroup::~CallbackGroup` from `MoveItCpp::
+    #: ~MoveItCpp` — which a raised `sigterm_timeout` isolated at -11 on 3/3 runs
+    #: with no SIGTERM escalation. It is upstream, not a race of ours.
+    #:
+    #: Kept exactly this wide: one signal, one process name. Widening it to cover
+    #: whatever else a contended machine happens to produce would finish turning
+    #: this assertion into one that cannot fail.
     UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
