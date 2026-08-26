@@ -111,6 +111,16 @@ if(BUILD_TESTING)
   ament_add_gtest(test_detection test/test_detection.cpp src/detection.cpp)
   target_include_directories(test_detection PRIVATE include)
 
+  # What a `Detection` says about position when the sensor that made it cannot
+  # say anything about position. A through-beam reports occupancy, so the pose
+  # field has no honest value and is marked unset rather than filled with the
+  # sensor's own mounting pose — which for `beam_c1_out` stands 0.250 m off the
+  # belt centreline from the pick point. The marking is what a consumer branches
+  # on, so it is tested as a rule rather than only through the running server.
+  ament_add_gtest(test_observation test/test_observation.cpp)
+  target_include_directories(test_observation PRIVATE include)
+  ament_target_dependencies(test_observation geometry_msgs)
+
   # The parts of the action contract that only a running server can show:
   # goal exclusion, a cancel that reaches the gripper, and a reachable pose that
   # is planned to rather than refused. move_group, no simulator, no controllers —

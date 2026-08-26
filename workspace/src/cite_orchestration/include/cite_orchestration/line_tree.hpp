@@ -178,11 +178,20 @@ inline LineTree line_tree_xml(
       "outbound_location",
       station.outbound_via_asset_id.empty() ?
       station.downstream_id : station.outbound_via_asset_id);
-    // Whether an empty Detect result is a fault or an idle line. A station with a
-    // sensor has been TOLD a part is there, so finding none is a disagreement
-    // worth reporting; a station fed from a source has been told nothing, so
-    // finding none means there is no work yet. Both come from the topology.
-    body += detail::attribute("require_immediate", station.trigger_topic.empty() ? "0" : "1");
+    // NO `require_immediate` HERE ANY MORE, and its absence is the fix.
+    //
+    // It used to be `station.trigger_topic.empty() ? "0" : "1"`, and that
+    // conditional was the Critical hang. `DetectAt` read a "0" as licence to
+    // treat an empty result as an idle line and look again — for ever, because
+    // `Detect` returns exactly that answer for a region no sensor is watching and
+    // has no code that separates it from a region it watches and finds empty. So
+    // `station_transfer_1`, the one acting station the model gave no sensor,
+    // reported itself WORKING with occupancy 0/1 and never acted.
+    //
+    // The port is gone from the leaf, so an empty detection is now always a
+    // reported failure and there is no attribute here that could ask for anything
+    // else. Waiting for work is `AwaitTrigger`'s, from the sensor the topology
+    // names — and `station_transfer_1` now has one (`beam_pick`).
     body += detail::attribute("admits_work", station.upstream_is_source ? "1" : "0");
     body += detail::attribute("inbound_buffer", station.inbound_buffer);
     body += detail::attribute("outbound_buffer", station.outbound_buffer);

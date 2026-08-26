@@ -16,7 +16,8 @@ find_package(tf2_ros REQUIRED)
 add_executable(line_coordinator src/line_coordinator.cpp)
 target_include_directories(line_coordinator PRIVATE include)
 ament_target_dependencies(line_coordinator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  tf2_ros
 )
 
 # The line. One subtree per station, instantiated from the L0 topology; the
@@ -25,7 +26,8 @@ ament_target_dependencies(line_coordinator
 add_executable(line_orchestrator src/line_orchestrator.cpp)
 target_include_directories(line_orchestrator PRIVATE include)
 ament_target_dependencies(line_orchestrator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  tf2_ros
 )
 
 install(TARGETS line_coordinator line_orchestrator DESTINATION lib/${PROJECT_NAME})
@@ -41,9 +43,43 @@ install(DIRECTORY trees DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+
+  # Two linters in ament_lint_common are registered by hand rather than through
+  # ament_lint_auto, because their defaults contradict conventions this
+  # repository already follows and neither can be configured through the auto
+  # path. What they check is unchanged; only the two conflicting preferences are
+  # settled. The same block as cite_skills, cite_bringup and cite_facility carry,
+  # for the same reason — this package needed it as soon as it gained its first
+  # Python test. See .flake8 at the repository root for the flake8 half.
+  #
+  # pep257: the "ament" convention ignores D212 and therefore enforces D213 —
+  # "summary should start at the second line". D212 and D213 are mutually
+  # exclusive by construction, and every docstring in this repository puts the
+  # summary on the first line.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
 
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../../.flake8")
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D213)
+
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+
+  # The one number in this package that has to agree with the CELL, pinned
+  # against the generated artifacts rather than against a copy of them.
+  #
+  # `DetectAt` asks `Detect` for a region about the station's pick frame, and the
+  # extent it asked for was smaller than the distance the model puts every break
+  # beam at — so no station could ever see its own sensor, and `Detect` answered
+  # SUCCESS with an empty list every time. Nothing caught it: `cite_skills`'s
+  # contract tests send a 100 m region on purpose, and `pick_and_place` never
+  # calls `Detect` at all. This runs in milliseconds and reads the value out of
+  # the header, so neither the layout nor the constant can move without it saying
+  # so.
+  ament_add_pytest_test(test_detection_region test/test_detection_region.py
+    ENV CITE_SKILL_NODES_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/cite_orchestration/skill_nodes.hpp)
 
   # Driven against a real action server, in-process. The defect under test is
   # what a leaf does to a SERVER when it gives up, so a mock would test the wrong

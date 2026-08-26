@@ -90,18 +90,31 @@ struct FakeArm::Servers
     detect(
       node, FakeArm::prefix(asset) + "/detect",
       [](Detect::Result & result) {
-        // One detection, with a FULL POSE. This is the observation that makes a
-        // grasp orientation-safe: a station that picks at a detected pose has
-        // measured the part's yaw, and one that picks at a frame has assumed it.
-        // A grasp holds a position and not an orientation (ADR-0029), so the
-        // difference is the whole reason `DetectAt` sits in front of `PickAt`.
+        // One detection, carrying NO POSE — which is what the only detector this
+        // project has actually reports.
+        //
+        // It used to return a full pose, with a comment calling it "the
+        // observation that makes a grasp orientation-safe". No detector ever
+        // produced one. The zone detects with break beams; a through-beam knows
+        // that something crossed it and nothing about where along the beam, and
+        // `detection_server` now says so by marking the pose unobserved. A
+        // fixture that returned a pose the real server cannot was testing a
+        // branch the line never takes and leaving the branch it always takes
+        // uncovered — so `PickAt`'s fall back to the station's L0 frame, which is
+        // the whole of how the line picks today, was exercised by nothing.
+        //
+        // LEFT DEFAULT-CONSTRUCTED rather than filled with the NaN pattern
+        // `cite_skills::mark_pose_unobserved` writes. Calling that would tie this
+        // fixture to the convention it is imitating, which is what a fixture
+        // should do — but `cite_skills` exports no include directory, so nothing
+        // outside it can call the function. A default `PoseStamped` has an empty
+        // frame_id, which is what every consumer tests first and what the real
+        // server also produces, so the branch under test is the same one. The
+        // stronger case — a frame set over NaN components — needs that export and
+        // is reported rather than hand-rolled here.
         cite_interfaces::msg::Detection seen;
         seen.workpiece_id = "detector_calls_it_this";
         seen.workpiece_type = "cube";
-        seen.pose.header.frame_id = "observed_frame";
-        seen.pose.pose.position.z = 0.025;
-        seen.pose.pose.orientation.x = 1.0;
-        seen.pose.pose.orientation.w = 0.0;
         seen.confidence = 1.0;
         result.detections.push_back(seen);
       })

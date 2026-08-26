@@ -130,6 +130,40 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
+  <!-- beam_pick — break_beam -->
+  <link name="beam_pick_base_link">
+    <inertial>
+      <!-- The body's pose names the point it stands on, so the mass sits half a
+           height above the link origin. `com_m` is measured from the box centre
+           and the tensor beside it is centroidal; declaring both at the foot
+           states a centroidal tensor about a point up to 0.3 m from the mass. -->
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <mass value="0.25"/>
+      <inertia ixx="0.00033333" ixy="0"
+               ixz="0" iyy="0.00033333"
+               iyz="0" izz="6.667e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry><box size="0.04 0.04 0.12"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry><box size="0.04 0.04 0.12"/></geometry>
+    </collision>
+  </link>
+  <joint name="beam_pick_anchor" type="fixed">
+    <parent link="cite_world"/>
+    <child link="beam_pick_base_link"/>
+    <origin xyz="-0.475 0.25 0.63" rpy="0 0 0"/>
+  </joint>
+  <link name="beam_pick_beam"/>
+  <joint name="beam_pick_beam_fixed" type="fixed">
+    <parent link="beam_pick_base_link"/>
+    <child link="beam_pick_beam"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
   <!-- conveyor_1 — belt_1200x400 -->
   <link name="conveyor_1_base_link">
     <inertial>

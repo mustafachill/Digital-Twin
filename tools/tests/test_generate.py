@@ -470,19 +470,19 @@ class TestPlanningSceneIsGenerated:
         produced = artifacts(real_model)
         scene = yaml.safe_load(produced["moveit/cell_a_planning_scene.yaml"])
         objects = {o["id"]: o for o in scene["planning_scene"]["collision_objects"]}
+        # DERIVED FROM THE MODEL, not listed again here. The list that used to be
+        # written out was a second copy of the cell's inventory, and adding
+        # `beam_pick` to L0 failed this test for saying so — a test that has to be
+        # edited whenever the model gains an asset is testing the editor, not the
+        # generator. What the generator promises is that every AUTHORED body
+        # becomes a collision object, which is what the name says and what this
+        # now asserts.
         expected = {
-            "pedestal_1",
-            "pedestal_2",
-            "pedestal_3",
-            "table_pick",
-            "table_accumulation",
-            "conveyor_1",
-            "conveyor_2",
-            "conveyor_3",
-            "beam_c1_out",
-            "beam_c2_out",
-            "beam_c3_out",
+            asset.id
+            for asset in resolve(load(real_model), "cell_a").assets
+            if asset.asset_type.description.body is not None
         }
+        assert expected, "no authored body was found, so this test asserted nothing"
         assert set(objects) == expected
         # Arms are deliberately absent: an articulated robot frozen at a pose is
         # confidently wrong wherever it actually is.

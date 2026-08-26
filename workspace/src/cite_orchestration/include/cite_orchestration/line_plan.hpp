@@ -345,12 +345,46 @@ inline LinePlan plan_line(const cite_interfaces::msg::LineTopology & topology)
     // and that residual is a recorded open divergence in ADR-0029. So after a
     // Pick, the line does not know the part's yaw about the tool axis.
     //
-    // A CONVEYOR-MEDIATED handoff does not care. The upstream robot lets go of
-    // the part onto the belt before the downstream robot touches it, and the
-    // downstream station re-observes it with `Detect`, whose `Detection.pose` is
-    // a full pose. The uncertainty is measured away rather than assumed away, and
-    // the ownership protocol in `handoff_ledger.hpp` never needed an orientation
-    // in the first place.
+    // A CONVEYOR-MEDIATED handoff IS PERMITTED AND THE REASON RECORDED HERE FOR
+    // PERMITTING IT DOES NOT HOLD. Escalated, not resolved: the behaviour below
+    // is unchanged, and what follows is what is actually known.
+    //
+    // What this said was: "the downstream station re-observes it with `Detect`,
+    // whose `Detection.pose` is a full pose. The uncertainty is measured away
+    // rather than assumed away." `Detect` reports no pose. This zone detects with
+    // break beams, a through-beam reports occupancy and knows nothing about
+    // position or yaw, and `Detection.pose` is now explicitly unobserved
+    // (`cite_skills/observation.hpp`). Nothing re-observes the part between the
+    // two grippers.
+    //
+    // It was never true. Before that change `Detection.pose` carried the beam
+    // housing's static transform, whose rotation is a constant rpy (0,0,0) — so
+    // the 18.7° residual was being "measured away" by a hard-coded identity,
+    // which is the assumption this gate exists to refuse, wearing the costume of
+    // a measurement.
+    //
+    // NOR DOES THE BELT RE-SEAT IT, which is the obvious physical replacement and
+    // was checked rather than assumed. `belt_1200x400` declares one box body and
+    // no rail, fence or funnel, and `cite_simulation/src/conveyor.cpp` carries a
+    // part by writing `LinearVelocityCmd` — a pure translation that cannot rotate
+    // what it moves. A part released onto the belt at some yaw arrives at the
+    // outfeed at that same yaw.
+    //
+    // So the conveyor path faces the geometry the direct path is refused for: the
+    // receiving jaws close on a part whose yaw is unknown to ±18.7°. The
+    // difference between the two paths is who is holding the part at the time,
+    // which is not the difference the refusal turns on.
+    //
+    // WHY THIS IS NOT SILENTLY TIGHTENED INTO A REFUSAL. Refusing conveyor edges
+    // would refuse every edge in today's model and stop the line, and the
+    // permission traces to ADR-0031's and ADR-0024's reasoning. Correcting a
+    // locked decision is not a fixer's call, so this is reported for a human
+    // (CLAUDE.md §11). What would settle it is a measurement that does not exist
+    // yet: the yaw a part actually carries at a downstream outfeed, against the
+    // width the jaws are commanded to.
+    //
+    // The ownership protocol in `handoff_ledger.hpp` never needed an orientation
+    // in the first place, and that half is unaffected.
     //
     // A DIRECT arm-to-arm handoff does care, and cannot be built today. The
     // receiver picks at the rendezvous pose while the giver is still holding the
