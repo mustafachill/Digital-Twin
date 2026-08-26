@@ -32,13 +32,14 @@ repository is partway there. Check before assuming.
   [`docs/reference/toolchain.md`](docs/reference/toolchain.md). `./scripts/doctor` exits 0;
   run it to see the state of any machine.
 - **The L0 model and its generators are built and proven** (Phase 1.B). `model/` describes
-  the three-arm cell — six component types, fourteen instances, five stations — and
+  the three-arm cell — seven asset types, fourteen instances, five stations; the seventh
+  type is the reference work-piece, which has no instances on purpose (ADR-0030) — and
   `workspace/src/cite_generated/` holds everything derived from it: descriptions, the
   world, controller configuration, MoveIt configuration, the planning scene, static frames,
   process topology and the bring-up plan. That directory is **generated in its entirety and
   must never be hand-edited** (ADR-0021). `./scripts/validate-model` diffs it against a
   fresh generator run *and* regenerates in a second interpreter under a different hash seed
-  to prove the output is byte-identical; it exits 0. `tools/tests/` passes — 183 tests at
+  to prove the output is byte-identical; it exits 0. `tools/tests/` passes — 204 tests at
   this commit.
 - **Seven first-party packages exist**, and `workspace/src/external/` adds the twelve from
   `xarm_ros2`. `./scripts/build` is a blocking CI step. The seven are `cite_interfaces`,
@@ -54,16 +55,35 @@ repository is partway there. Check before assuming.
   removed the contact-triggered attachment plugin, so nothing on the simulation side
   assists a grasp: the pads close on the part, stall on it, and the controller reports
   `stalled=true, reached_goal=false -> holding` — the evidence ADR-0022 shaped the gripper
-  path around. The cycle passed **8/8** at a reached width of 49.2–49.9 mm; that campaign is
-  recorded in the message of commit `39931d1`, which is the only place it is written down.
-  The 84-trial measurement the decision rests on is
+  path around.
+  **The cycle passed 5 of 5** in the measurement taken for this commit, at a reached width
+  of 48.9–49.9 mm, every run reporting a genuine friction stall. That is five runs in one
+  isolated, freshly built tree on one machine on 2026-08-26. Two earlier independent sets
+  (5 runs and 6 runs) are *reported* to have passed likewise; they are not re-verified
+  here. This is not a campaign with pre-registered thresholds and it is not a claim about
+  any other machine.
+  The 84-trial measurement the grasp decision rests on is
   [`docs/measurements/2026-08-25-friction-grasp/`](docs/measurements/2026-08-25-friction-grasp/results.md).
-  **Do not read that as a green scenario.** In the same campaign the *scenario verdict* was
-  6/8: two runs failed the post-cycle teardown check — `parameter_bridge` exiting -6, `gz`
-  exiting -9 — after the cycle itself had passed. No exemption was added for either, the
-  cause is not established, and one baseline run is not evidence that they are
-  pre-existing. `./scripts/scenario pick_and_place` runs in CI as `continue-on-error` at
-  this commit.
+  **This became true only recently, and the reason matters more than the number.** The
+  belt's `infeed`/`outfeed` frames sat exactly on its collision box's end planes, so a
+  released 50 mm cube was neutrally stable, tipped, and fell — the cycle failed **0 of 18**.
+  `Pick` was never affected because the table's surface frame sits at the **centre** of its
+  top face. The frames moved 50 mm inboard, the arm standoff 0.350 → 0.300 m, and L0 gained
+  the work-piece geometry that makes the rule expressible at all
+  ([ADR-0030](docs/adr/0030-facility-model-describes-the-workpiece.md)).
+  **Read the history before trusting a pass count.** An earlier version of this bullet said
+  the cycle passed 8/8. It did not. Those runs executed another worktree's binaries through
+  shared Docker volumes, and the number reached this file because it was supplied rather
+  than measured. Each checkout is now isolated and `lint`/`test` refuse to answer from a
+  stale build tree — **measure it yourself anyway.**
+  **Do not read any of this as a green scenario.** In the 5 runs above the *scenario
+  verdict* was **4 of 5**: one run passed the cycle and then failed the post-cycle teardown
+  check. Across the failures seen so far the exiting process has been `parameter_bridge`
+  (-6), `gz` (-9) and `topology_server.py` (1) — three different processes, so **process
+  identity does not predict it**. Duration looks like it might: in the 5 runs above the
+  failing run was the slowest, at 108.8 s against 85.5–104.4 s for the four that passed.
+  One failure is not a trend. The cause is not established and no exemption has been added.
+  `./scripts/scenario pick_and_place` runs in CI as `continue-on-error` at this commit.
 - **What does not work, stated plainly** (Phase 1.C, in progress):
   - **The three-arm sensor-driven line does not run.** The belt and beam plugins now build
     and are instantiated by the generated world, publishing on **Gazebo transport** under
@@ -74,13 +94,20 @@ repository is partway there. Check before assuming.
     jaws. Correcting the grasp-plane offset took rotations above 20° from 60% to 0% of
     trials (20 per condition, interleaved, p < 0.0001) and left a residual of up to 18.7° —
     [`docs/measurements/2026-08-25-grasp-plane-offset/`](docs/measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
-    **That correction is not in the tree:** `PickAt` still defaults `grasp_height_m` to
-    0.03 m in `cite_orchestration/include/cite_orchestration/skill_nodes.hpp`, which is the
-    *uncorrected* condition the published trials ran under. Per ADR-0029, a scenario may assert where a part ends up and
-    **may not assert how it is held**.
-  - **Four of the six L3 skills exist** — `MoveTo`, `Grasp`, `Pick`, `Place`. `Transfer` and
-    `Detect` are typed `.action` definitions with no server.
-  - **L4 runs one station.** One behaviour tree, ticked synchronously; no handoff.
+    **The correction is now in the tree**, in the place the campaign said it belonged: L0's
+    end-effector `linkage` block declares the seven vendor dimensions and the L3 skill
+    server derives the offset from them, so `PickAt` carries a work-piece fact
+    (`workpiece_height_m`) and no gripper geometry. **The 18.7° residual remains**, and per
+    ADR-0029 a scenario may assert where a part ends up and **may not assert how it is
+    held**. It is also why L4 refuses a direct arm-to-arm handoff (ADR-0031).
+  - **All six L3 skills have a server, and two have never been run against the simulator.**
+    `Detect` (`cite_skills/src/detection_server.cpp`) is built and installed, and no launch
+    graph starts it. `Transfer` has a server and no caller.
+  - **L4 builds the line from the topology, and no arm moves in any of its tests.**
+    `line_orchestrator` derives one subtree per station from `LineTopology`, and owns
+    handoff, recovery and `LineState`. Its tests use fake action servers that succeed
+    because they are told to: what is proven is **sequence and ownership**, not motion. The
+    three-arm line has never been run end to end and **no continuous-line scenario exists**.
   - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` reaches `gz sim --seed`, which
     seeds sensor noise and nothing else — not the physics solver, not the planner. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about

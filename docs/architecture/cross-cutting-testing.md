@@ -1,7 +1,7 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **183**
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **204**
   host tests, all passing, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The
   contract level is populated: 22 interface definitions are frozen against a stored baseline.
   The scenario level has `bringup`, which is a blocking CI gate run twice per run, and
@@ -40,9 +40,10 @@ Everything in `cite_tools` — schema validation, generators, geometry and inert
 is pure Python and must be unit-tested. No ROS runtime, no simulator, no waiting. These
 run on macOS.
 
-`tools/tests/` exists and holds **183 tests**, all passing, covering the schema loader, the
-generators, identifiers, units, and the geometric and referential validators. `./scripts/test`
-runs them, and `./scripts/test --host-only` runs them without Docker.
+`tools/tests/` covers the schema loader, the generators, identifiers, units, geometry, the
+gripper linkage, close rate and stall threshold, and the geometric and referential
+validators. `./scripts/test` runs them, and `./scripts/test --host-only` runs them without
+Docker. The count is in the status line above and is deliberately not repeated here (P1).
 
 Alongside them, `scripts/_selftest.sh` covers the **gate logic itself** — the lint coverage
 assertion, the manifest SHA validator, and the DDS domain derivation. Those checks had no

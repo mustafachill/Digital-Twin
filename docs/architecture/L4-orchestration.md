@@ -1,25 +1,39 @@
 # L4 — Orchestration
 
 - **Status:** `PARTIAL`.
-  **Built:** `cite_orchestration/src/line_coordinator.cpp` on BehaviorTree.CPP v4, and one
-  tree — `trees/station_cycle.xml`, a single station's pick-then-place cycle with an
-  explicit recovery branch. Every leaf calls an L3 action; nothing here plans a trajectory.
-  **Not built:** handoff and `Transfer` ([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)),
-  parallel stations (the leaves are `SyncActionNode` and tick one station at a time), line
-  state publication, and Groot2 integration.
-  **Proven, narrowly:** the tree drives one arm through a full pick-and-place cycle — see
-  [L3](L3-capabilities.md) for the evidence and for what the scenario around it does *not*
-  yet establish.
-  **Not proven:** the **three-arm sensor-driven line does not run.** The belt and beam
-  plugins build and the generated world instantiates one per asset, but they publish on
-  **Gazebo transport**; `cite_bringup` starts a `ros_gz_bridge` for `/clock` only, so the
-  topics `cell_a_plan.yaml` declares have no ROS publisher — and `line_coordinator.cpp`
-  subscribes to none of them in any case. Phase 1.D.
-  **Carrying a leak:** `PickAt` in `include/cite_orchestration/skill_nodes.hpp` defaults
-  `grasp_height_m` to 0.03 m, written into the file in two places, so an L4 node decides a
-  piece of end-effector geometry that belongs in L0 — see [L0](L0-facility-model.md) and
-  [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [L3](L3-capabilities.md)
+  **Built:** two executables on BehaviorTree.CPP v4.
+  `src/line_coordinator.cpp` runs one station from `trees/station_cycle.xml` — a
+  pick-then-place cycle with an explicit recovery branch — and is what
+  `./scripts/scenario pick_and_place` drives.
+  `src/line_orchestrator.cpp` **builds the line from the L0 topology**: it subscribes to
+  `LineTopology` on the LATCHED profile, derives flow order from the edges by topological
+  sort, and generates a root tree with one subtree of `trees/line_station.xml` per station.
+  No source file names a station or counts them.
+  Also built: the ADR-0024 L4 half — rendezvous tokens and two-party confirmation in
+  `handoff_ledger.hpp`, with `workpiece_registry.hpp` making single ownership structural
+  rather than protocol-dependent; `recovery_policy.hpp`, mapping every `ResultCode`
+  constant to a response — `RETRY_SAME`, `RETRY_DIFFERENTLY`, `ESCALATE` or `STOP_LINE` for
+  the nine failure codes, `NONE` for success — with retries bounded by a per-station budget
+  and an unknown code escalating rather than defaulting to retry; `resource_arbiter.hpp`;
+  and `LineState` publication from `line_maintenance.hpp`.
+  Every leaf calls an L3 action; nothing here plans a trajectory.
+  **Not built:** parallel stations — stations tick one at a time — and Groot2 integration.
+  **Refused, deliberately:** a direct arm-to-arm handoff. `line_plan.hpp` rejects such an
+  edge at plan time, with the 18.7° residual-rotation measurement named in the refusal
+  string, and a plan carrying refusals is not `usable()`
+  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). Today's
+  topology has no such edge, so nothing is refused in practice.
+  **What the L4 tests prove, and what they do not.** **No arm moves in any of them.** The
+  action servers are fakes that succeed because they are told to. What is proven is
+  **sequence, ownership and recovery mapping** — not motion, not reachability, and not that
+  the line works.
+  **Not proven:** the **three-arm sensor-driven line has never been run end to end.** The
+  belt and beam plugins build and the generated world instantiates one per asset, but they
+  publish on **Gazebo transport**; `cite_bringup` starts a `ros_gz_bridge` for `/clock`
+  only, so the topics `cell_a_plan.yaml` declares have no ROS publisher. No launch graph
+  starts `line_orchestrator` or the `Detect` server, and **no continuous-line scenario
+  exists**. Phase 1.D.
+- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 

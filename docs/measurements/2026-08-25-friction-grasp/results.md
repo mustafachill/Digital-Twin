@@ -160,13 +160,14 @@ collected rather than by re-running until the definition suited.
    Restated as a slip bound: the part is held to the release if it never moves more than
    25 mm — half its width — relative to the pad. Discovered on the smoke run, before any
    measurement block.
-2. **`flung` was measured over the whole trial and was measuring the conveyor.** Five of the
-   first twenty trials tripped `v_max > 1 m/s`. All five did so *after* the release, at
-   3.3 m/s, ending at `z = 0.025` — a 50 mm cube resting on the ground plane. That is the
-   belt carrying a correctly placed part off its far end and the part falling to the floor.
-   Read as flings, it would have reported friction grasping as 75% reliable for a reason
-   with nothing to do with friction. `flung` is now evaluated over the carry window alone,
-   and `place_err` is measured at the release rather than at the end of the recording.
+2. **`flung` was measured over the whole trial and was measuring something after the
+   release.** Five of the first twenty trials tripped `v_max > 1 m/s`. All five did so
+   *after* the release, at 3.3 m/s, ending at `z = 0.025` — a 50 mm cube resting on the
+   ground plane. Read as flings, it would have reported friction grasping as 75% reliable
+   for a reason with nothing to do with friction. `flung` is now evaluated over the carry
+   window alone, and `place_err` is measured at the release rather than at the end of the
+   recording. **Both re-definitions stand; the reason first given for them was wrong — see
+   the correction below.**
 3. **`twist_max_deg` was added after the smoke run**, which showed the part rotating tens of
    degrees between jaws that themselves barely moved — a mode the pre-registered
    translation metric reports as a few millimetres. Its 5° threshold was therefore chosen
@@ -174,6 +175,41 @@ collected rather than by re-running until the definition suited.
    reported so that the conclusion does not rest on where the line was drawn, and at
    0.3°–34.3° against the 0.48°–0.85° seen at `max_step_size = 0.002` it is not a
    marginal call.
+
+## Correction, 2026-08-26 — what the parts on the floor actually were
+
+Deviation 2 above, and the docstring of `harness/recompute.py`, explained the trials ending
+at `z = 0.025` as "the belt carrying a correctly placed part off its far end". **That
+explanation is wrong.** The parts left the belt at the **near** end, where they were set
+down, and were carried nowhere.
+
+The evidence is in this directory's own `raw/pose_samples.tar.gz`. This campaign placed at
+`cell_a__conveyor_1__infeed`, which at the time sat at x = 0.450 — exactly the leading-edge
+plane of the belt's collision box. In `mu2p0` trial 3 and `plugin_off` trial 6, the two
+checked here, the work-piece leaves belt height at x = 0.395 and x = 0.402 and never
+exceeds x = 0.451. The belt's far end is at x = 1.650. A part carried off the far end would
+have travelled 1.2 m first; these travelled backwards off the edge they were released on.
+
+`raw/all_trials_recomputed.csv` puts the scale at **22 of 84 trials** ending at
+`final_z = 0.025`, against 52 ending at 0.625 on the belt.
+
+What was really happening is the defect [ADR-0030](../../adr/0030-facility-model-describes-the-workpiece.md)
+was written for: a 50 mm cube released on that plane has its centre of mass over the
+*boundary* of its support polygon and is neutrally stable, so it tips about the edge and
+falls 0.600 m. The frames have since moved 50 mm inboard and the model validator now
+rejects the arrangement.
+
+**What this changes, and what it does not.** Both re-definitions in deviation 2 remain
+correct, and more clearly so: post-release behaviour is an artefact of the support, not of
+the grasp, however the part left the belt. This campaign's conclusions are all drawn from
+the **carry window** — slip, twist, stall, `pick_reported_holding` — and none of them
+touches what happened after the release, so the headline results are unaffected. What was
+wrong was the prose, and it was wrong in the direction that hides a defect: an anomaly
+present in 22 of 84 trials was explained away as normal belt behaviour instead of
+investigated, and the same defect then cost `./scripts/scenario pick_and_place` 18
+consecutive runs before it was diagnosed from a different direction. This section exists
+because a published campaign that is right about its question can still be wrong in its
+margins, and the margins are where the next defect hides.
 
 ## Threats to validity, stated rather than assumed
 
