@@ -17,17 +17,31 @@ schema: cite/asset_instances/v1
 # `approach-obstruction` in cite_tools.validate.geometric now rejects the old
 # placement mechanically.
 #
-# +0.030 above the belt surface, not +0.080. A through beam has to pass BELOW
-# the top of the shortest work-piece it must detect, and 80 mm cleared the
-# scenario's 50 mm box entirely — a sensor that can never be broken, on a line
-# whose stations are supposed to act on detection rather than on elapsed time.
-# 30 mm is a floor rather than a fitted value: it is the smallest offset that
-# still clears the belt surface, so it is below the top of any part the line can
-# carry. This comment used to say the right height could not be derived because
-# L0 recorded no work-piece geometry; that is no longer true — the cube's 50 mm
-# height is declared in assets/types/workpieces/workpiece.yaml — so the honest
-# statement is that a floor is still the right choice here, since it holds for
-# every part rather than for the shortest one currently declared.
+# +0.030 above the belt surface, not +0.080, and STILL AUTHORED. Deriving it from
+# work-piece geometry was considered once L0 gained some, and rejected on what
+# the simulated beam actually measures.
+#
+# The plugin's beam test is a point test on the work-piece's model ORIGIN, not an
+# intersection with its body. With `beam_width_m` 0.040 the sensor therefore
+# reports a part whose centre lies within 0.020 m of this offset — a window of
+# part-centre heights 0.010 m to 0.050 m above the belt. A part at rest has its
+# centre half its own height up, so this sensor detects a part between 20 mm and
+# 100 mm tall, and the 50 mm cube sits at 25 mm, in the middle of that window.
+#
+# There is no work-piece dimension to derive that from. A height fitted to the
+# shortest declared part would centre the window on that part and start losing
+# taller ones; the value that covers the widest range of parts is the smallest
+# one that still clears the belt surface, which is what 30 mm is. What this
+# comment used to claim — that a floor works "for any part" because a beam has to
+# pass below the top of what it detects — describes a real through beam and not
+# this one: a part taller than 100 mm passes over the window and is missed. That
+# is a limitation of the point test, not of this number, and it is recorded in
+# workspace/src/cite_simulation/README.md rather than papered over here.
+#
+# 80 mm, for the record, put the window at part-centre heights 0.060 to 0.100 m
+# and cleared the 50 mm cube entirely — a sensor that could never be broken, on a
+# line whose stations are supposed to act on detection rather than on elapsed
+# time.
 assets:
   - id: beam_c1_out
     zone: cell_a

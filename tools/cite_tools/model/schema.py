@@ -168,6 +168,27 @@ class Body(Strict):
             return (diameter, diameter)
         return None
 
+    @property
+    def vertical_extent_m(self) -> float | None:
+        """How tall the collision geometry is.
+
+        The other half of the pair above, and derived for the same reason: it is
+        already in ``size_m``. One rule needs it — the belt's carry volume, which
+        is how far above the working surface a part still counts as resting on
+        it. That is a fact about the part, not about the belt, so the world
+        generator reads it from here instead of the conveyor declaring a height
+        of its own (P1).
+
+        ``None`` for a mesh, exactly as above: its extents live in a file L1
+        owns, and saying so is better than guessing.
+        """
+        geometry = self.collision
+        if geometry.kind == "box":
+            return geometry.size_m[2]
+        if geometry.kind == "cylinder":
+            return geometry.length_m
+        return None
+
 
 # --------------------------------------------------------------------------- #
 # Component library — the declarative half (L1 owns the geometric half)
@@ -607,20 +628,18 @@ class ConveyorConfiguration(Strict):
     kind: Literal["conveyor"] = "conveyor"
     installed_speed_mps: Annotated[float, Field(gt=0.0)]
     direction: Literal["forward", "reverse"] = "forward"
-    #: How far above the belt's working surface a part still counts as resting
-    #: on it, and is therefore carried.
-    #:
-    #: An engineering floor, and still a declared one. 0.100 m clears the 50 mm
-    #: cube while staying well below the 0.12 m an arm retreats to after a pick,
-    #: so a part that has been lifted is released rather than fought over.
-    #:
-    #: It used to say it *could* not be derived, because L0 recorded no
-    #: work-piece geometry. That is no longer true — `Facility.workpiece_models`
-    #: resolves to types with extents now — so the honest statement is narrower:
-    #: the datum exists and this value has not yet been rewritten against it.
-    #: Doing so is a behaviour change to the belt plugin's carry volume and wants
-    #: its own measurement, not a side effect of the change that made it possible.
-    carry_height_m: Annotated[float, Field(gt=0.0)] = 0.100
+
+    # No `carry_height_m`. It used to be declared here, defaulting to 0.100 m,
+    # with a comment saying the value could not be derived because L0 recorded no
+    # work-piece geometry — and then a narrower one saying the datum had arrived
+    # but the number had not been rewritten against it.
+    #
+    # It has been. How far above a belt's surface a part still counts as resting
+    # on it is a fact about the PART, not about the belt: it is the part's own
+    # height. `cite_tools.generate.world` now derives it from the tallest type in
+    # `Facility.workpiece_models`, the same way it already reads the belt's
+    # footprint from the belt's collision box rather than letting an instance
+    # restate it (P1).
 
 
 class BreakBeamConfiguration(Strict):

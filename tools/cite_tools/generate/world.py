@@ -137,12 +137,62 @@ def _pose6(asset_pose) -> tuple[float, ...]:
     return (*asset_pose.xyz_m, *asset_pose.rpy_rad)
 
 
+def _carry_height_m(cell: ResolvedCell) -> float:
+    """How far above a belt's surface a part still counts as resting on it.
+
+    The tallest work-piece the facility handles, and that is a derivation rather
+    than a convention.
+
+    A part sitting on the belt has its origin half its own height above the
+    surface, so a volume one part-height tall holds the tallest declared part
+    dead centre, with half a part-height of margin below it and half above. A
+    part that has been lifted higher than its own height is unambiguously off the
+    belt — it is clear of the surface by more than it is tall — so that is where
+    the belt lets go, and a gripper retreating from a pick takes it away without
+    the two fighting over it.
+
+    It used to be declared on the conveyor instead, at 0.100 m, because L0
+    recorded no work-piece geometry to derive it from. It does now, and the
+    number this produces for cell_a is 0.050 m — so the old value held a 50 mm
+    cube until it had been lifted 75 mm, three times as far as it needed to be.
+    Reading it from the part is the same rule ``_footprint`` follows for the
+    belt: a size that is already stated once is never stated again (P1).
+
+    A facility with belts and no work-piece geometry gets a sentence rather than
+    a default. Such a belt already transports nothing — the ``<carry>`` list is
+    built from the same names — and silently emitting some plausible height would
+    hide that behind a plugin that looked configured.
+    """
+    heights = [
+        extent
+        for asset_type in cell.workpiece_types
+        if (body := asset_type.description.body) is not None
+        and (extent := body.vertical_extent_m) is not None
+    ]
+    if not heights:
+        raise WorldError(
+            f"zone {cell.zone!r} has conveyors, but no work-piece type behind "
+            "facility.workpiece_models declares collision geometry with a height. A belt's "
+            "carry volume is how far above its surface a part still counts as resting on "
+            "it, which is the part's own height, so it is derived rather than declared. "
+            "Give the facility a work-piece type with box or cylinder collision geometry."
+        )
+    return max(heights)
+
+
 def _conveyors(cell: ResolvedCell) -> tuple[_ConveyorView, ...]:
     views: list[_ConveyorView] = []
+    #: Resolved once for the cell rather than per belt: it is a property of what
+    #: the facility carries, and three belts cannot be allowed to disagree.
+    #: Deferred until a belt actually exists, so a cell with no conveyors is not
+    #: asked for work-piece geometry it has no use for.
+    carry_height_m: float | None = None
     for asset in cell.of_category("conveyor"):
         configuration = asset.instance.configuration
         if configuration is None or configuration.kind != "conveyor":
             continue
+        if carry_height_m is None:
+            carry_height_m = _carry_height_m(cell)
         surface = asset.frames.get(CONVEYOR_SURFACE_FRAME)
         if surface is None:
             raise WorldError(
@@ -157,7 +207,7 @@ def _conveyors(cell: ResolvedCell) -> tuple[_ConveyorView, ...]:
                 surface_pose=_pose6(surface),
                 length_m=length_m,
                 width_m=width_m,
-                carry_height_m=configuration.carry_height_m,
+                carry_height_m=carry_height_m,
                 direction=configuration.direction,
                 installed_speed_mps=configuration.installed_speed_mps,
                 # The same call the bring-up plan makes, so the name the plugin

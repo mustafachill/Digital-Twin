@@ -42,6 +42,14 @@ Nothing here is instantiated by hand. `tools/cite_tools/generate/world.py` emits
 carries, which belt runs how fast, how long a beam is, and every topic name come from
 `model/`. No link name, model name or topic is written in C++.
 
+Two of those values are *derived* rather than declared, because they are already stated
+somewhere else and a second copy is a second place to be wrong (P1): a belt's footprint is
+read from the belt type's own collision box, and its carry height — how far above the
+surface a part still counts as resting on it — is the height of the tallest type in
+`facility.workpiece_models`, since that is a fact about the part rather than about the belt.
+A part at rest sits half its own height up, so the volume holds it centrally and lets go
+once it has been lifted higher than it is tall.
+
 To change what the aids do, edit `model/` and run `./scripts/validate-model --write`.
 
 ## Interfaces
@@ -73,9 +81,17 @@ ros2 run ros_gz_bridge parameter_bridge \
 Transport replaces a physical interaction with a deterministic one, and it flatters us.
 
 * **Transport** is kinematic, not frictional: a part inside a belt's carry volume is
-  commanded along the belt. A part that would slip, tumble, jam against a neighbour or
-  fail to be driven at all is carried smoothly here. No claim about belt handling,
-  accumulation pressure or singulation can rest on this package.
+  commanded along the belt, and handed back to physics the moment it leaves — it keeps the
+  speed the belt gave it and coasts, which is what leaving a belt looks like. A part that
+  would slip, tumble, jam against a neighbour or fail to be driven at all is carried
+  smoothly here. No claim about belt handling, accumulation pressure or singulation can
+  rest on this package.
+* **Detection** is a point test on the work-piece's model origin, not an intersection with
+  its body. A beam therefore reports a part whose *centre* crosses its volume: with the
+  cell's 0.030 m mounting offset and 0.040 m beam width, that is a part between 20 mm and
+  100 mm tall. A real through beam is broken by anything that crosses it at any height, so
+  a part outside that range would be detected on hardware and missed here. The line's one
+  declared work-piece is a 50 mm cube, in the middle of the range.
 
 P8 applies: any claim about transport reliability needs a measurement against hardware,
 and this package cannot provide one. Grasping is no longer in this list because no plugin
@@ -93,13 +109,26 @@ Nothing here evidences how any of it behaves on the physical arm.
 |---|---|
 | a grasp never holds | the commanded width is not narrower than the part, so the pads never stall — a grasp is evidenced by *failing* to reach the command |
 | a belt reports state but carries nothing | nobody commanded it; an uncommanded belt is inert by design |
-| a belt carries nothing while commanded | the part is not in the carry volume, or its model name is not in `facility.workpiece_models` |
-| a beam never trips | the part's model name is not watched, or the beam does not reach across the belt |
+| a belt carries nothing while commanded | the part is not in the carry volume, or its model name is not in `facility.workpiece_models`. The belt matches on the **Gazebo model name**: a part spawned as `box` or `cube` is invisible to a belt that carries `workpiece`, and the belt reports the commanded speed either way |
+| a beam never trips | the part's model name is not watched, the beam does not reach across the belt, or the part's centre passes outside the beam's height window — see the fidelity note above |
+| a part that left a belt will not fall, will not be pushed, and cannot be lifted | fixed: the belt used to leave a velocity command on every part it had touched, and Gazebo re-applies it — as zero — every step forever. `test_conveyor_carry` locks this down |
 | a part is grasped off a *running* belt and it fights the gripper | the belt commands the velocity of any free body in its carry volume, and a friction-held part is still a free body. Stop the belt before picking from it — which is what a real line does |
 | nothing loads at all | `GZ_SIM_SYSTEM_PLUGIN_PATH` does not include this package's `lib` — the environment hook in `hooks/` sets it |
 
 ## Tests
 
-`./scripts/test --packages-select cite_simulation`. The decision rules — whether a part is
-on a belt, whether a beam is broken — are pure and are unit-tested without a simulator,
-which is where every defect found in review actually lived. The generator side is covered by `tools/tests/test_generate_world.py`.
+`./scripts/test --packages-select cite_simulation`. Two levels, because the defects live at
+both:
+
+* `test_zone_rules` — the decision rules, without a simulator. Whether a part is on a belt
+  and whether a beam is broken are pure geometry.
+* `test_conveyor_carry` — the belt with a part on it and physics running, through
+  `gz::sim::TestFixture`: in-process, headless, and stepped a counted number of 1 ms steps
+  rather than run for a wall-clock duration. It commands the belt, measures how far the
+  part travelled, watches the beam break as the part passes, stops the belt, and then
+  carries the part off the end and asserts that it *falls*. That last assertion is the one
+  that matters: until it existed, nothing at any level commanded a belt and then looked at
+  a part, and a belt that never let go of what it carried passed every test in the
+  repository.
+
+The generator side is covered by `tools/tests/test_generate_world.py`.

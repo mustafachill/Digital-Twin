@@ -36,7 +36,7 @@
       <surface_pose>1.05 0 0.6 0 0 0</surface_pose>
       <belt_length_m>1.2</belt_length_m>
       <belt_width_m>0.4</belt_width_m>
-      <carry_height_m>0.1</carry_height_m>
+      <carry_height_m>0.05</carry_height_m>
       <direction>forward</direction>
       <installed_speed_mps>0.15</installed_speed_mps>
       <command_topic>/cite/cell_a/conveyor_1/command</command_topic>
@@ -60,7 +60,7 @@
       <surface_pose>3.15 0 0.6 0 0 0</surface_pose>
       <belt_length_m>1.2</belt_length_m>
       <belt_width_m>0.4</belt_width_m>
-      <carry_height_m>0.1</carry_height_m>
+      <carry_height_m>0.05</carry_height_m>
       <direction>forward</direction>
       <installed_speed_mps>0.15</installed_speed_mps>
       <command_topic>/cite/cell_a/conveyor_2/command</command_topic>
@@ -84,7 +84,7 @@
       <surface_pose>5.25 0 0.6 0 0 0</surface_pose>
       <belt_length_m>1.2</belt_length_m>
       <belt_width_m>0.4</belt_width_m>
-      <carry_height_m>0.1</carry_height_m>
+      <carry_height_m>0.05</carry_height_m>
       <direction>forward</direction>
       <installed_speed_mps>0.15</installed_speed_mps>
       <command_topic>/cite/cell_a/conveyor_3/command</command_topic>

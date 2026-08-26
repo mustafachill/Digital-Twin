@@ -132,12 +132,6 @@
     "ConveyorConfiguration": {
       "additionalProperties": false,
       "properties": {
-        "carry_height_m": {
-          "default": 0.1,
-          "exclusiveMinimum": 0.0,
-          "title": "Carry Height M",
-          "type": "number"
-        },
         "direction": {
           "default": "forward",
           "enum": [
