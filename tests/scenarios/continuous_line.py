@@ -171,12 +171,20 @@ DROP_MARGIN_M = WORKPIECE_SIZE / 2.0
 #: still sixteen. Both are far from a coin toss, which is what the number has to
 #: buy.
 #:
-#: Not faster, and that is measured too: each sample is a `gz model -p`, which is
-#: a process and a transport node per sample. At 0.25 s the simulator started
-#: logging `NodeShared::RecvSrvRequest() error sending response: Host unreachable`
-#: — responses arriving after the requester had exited — so some samples were
-#: being paid for and thrown away. Sampling faster than the thing being measured
-#: buys nothing and costs the measurement.
+#: Not faster, because each sample is a `gz model -p` — a process and a transport
+#: node per sample — and there is nothing left to buy above the dwell times above.
+#:
+#: A CORRECTION, because the first version of this comment was wrong in a way
+#: worth keeping visible. It said the simulator "started logging"
+#: `NodeShared::RecvSrvRequest() error sending response: Host unreachable` at
+#: 0.25 s, and blamed the rate. Measured across the change: 24 of 699 samples at
+#: 0.25 s and 25 of 721 at 0.5 s — the same ~3.4% either way. The losses are a
+#: property of spawning a short-lived transport node per sample, where the
+#: response can arrive after the requester has exited, and they are not
+#: rate-driven. So the rate change is justified by the dwell-time arithmetic
+#: alone, and this instrument drops about one sample in thirty at any rate. That
+#: is immaterial against the hundred-plus samples each measured milestone gets,
+#: and it is recorded rather than left to be rediscovered.
 SAMPLE_PERIOD_S = 0.5
 
 #: How many containment breaches are quoted in full before the rest are counted.
