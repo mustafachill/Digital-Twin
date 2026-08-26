@@ -666,6 +666,56 @@ TEST(LinePlanTest, ASourceFeedingATransferStationIsNotADirectHandoff)
   EXPECT_TRUE(plan.usable()) << (plan.refusals.empty() ? "" : plan.refusals.front());
 }
 
+TEST(LinePlanTest, EachStationIndexesTheBeltItPicksFromAndNotTheOneItPlacesOnto)
+{
+  // ADR-0032. The belt a station stops is the `via_asset_id` of its INBOUND edge:
+  // the one work arrives on. Stopping the outbound belt instead would freeze the
+  // link the station is about to place onto, which is the same rule applied one
+  // station too far along and looks identical until the line runs.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable()) << (plan.refusals.empty() ? "" : plan.refusals.front());
+  ASSERT_EQ(plan.stations.size(), 3u);
+
+  EXPECT_EQ(plan.stations[0].id, "station_transfer_1");
+  EXPECT_TRUE(plan.stations[0].inbound_via_asset_id.empty())
+    << "the station fed from a table indexes a belt that does not carry to it";
+  EXPECT_EQ(plan.stations[0].outbound_via_asset_id, "conveyor_1");
+
+  EXPECT_EQ(plan.stations[1].id, "station_transfer_2");
+  EXPECT_EQ(plan.stations[1].inbound_via_asset_id, "conveyor_1");
+  EXPECT_EQ(plan.stations[2].inbound_via_asset_id, "conveyor_2");
+
+  // `conveyor_3` carries into `station_accumulation`, which is a sink: a trigger
+  // and no actor, so it has no `CompleteHandoff` to run the belt again on. It
+  // must appear as no station's indexed belt at all, or it is stopped for ever.
+  for (const auto & entry : plan.stations) {
+    EXPECT_NE(entry.inbound_via_asset_id, "conveyor_3")
+      << "station '" << entry.id << "' would index the belt that feeds the sink";
+  }
+}
+
+TEST(LinePlanTest, AStationFedByABeltWithNoTriggerIsRefused)
+{
+  // Nothing would ever stop that belt, so the work-piece rides past the pick
+  // point in under a second. Before ADR-0032 that was the line's behaviour and
+  // nothing said so; now it is refused at plan time, before anything moves.
+  LineTopology topology = cell_a_shaped();
+  for (auto & entry : topology.stations) {
+    if (entry.id == "station_transfer_2") {
+      entry.trigger_topic.clear();
+    }
+  }
+
+  const LinePlan plan = cite_orchestration::plan_line(topology);
+  EXPECT_FALSE(plan.usable());
+  ASSERT_FALSE(plan.refusals.empty());
+  bool named = false;
+  for (const auto & refusal : plan.refusals) {
+    named = named || refusal.find("conveyor_1") != std::string::npos;
+  }
+  EXPECT_TRUE(named) << "the refusal does not name the belt that would never stop";
+}
+
 // ---------------------------------------------------------------------------
 // Plan to tree.
 // ---------------------------------------------------------------------------
@@ -695,6 +745,32 @@ TEST(LineTreeTest, OneSubtreePerStationAndNoStationNamedInCode)
   EXPECT_NE(tree.xml.find("outbound_location=\"conveyor_1\""), std::string::npos);
   // The last station hands to a sink over conveyor_3.
   EXPECT_NE(tree.xml.find("outbound_location=\"conveyor_3\""), std::string::npos);
+}
+
+TEST(LineTreeTest, EachSubtreeIsToldWhichBeltItsStationIndexes)
+{
+  // The station subtree names no asset; the belt it resumes arrives as a static
+  // remap generated from the topology, exactly as its frames and its actor do.
+  // If this ever has to be written by hand, the model has stopped being the
+  // single source of truth.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty()) << tree.refusals.front();
+
+  const std::size_t first = tree.xml.find("station=\"station_transfer_1\"");
+  ASSERT_NE(first, std::string::npos);
+  const std::string fed_by_a_table = tree.xml.substr(first, tree.xml.find("/>", first) - first);
+  EXPECT_NE(fed_by_a_table.find("inbound_belt=\"\""), std::string::npos)
+    << "the station that picks off a table was given a belt to resume";
+
+  const std::size_t second = tree.xml.find("station=\"station_transfer_2\"");
+  ASSERT_NE(second, std::string::npos);
+  const std::string fed_by_a_belt = tree.xml.substr(second, tree.xml.find("/>", second) - second);
+  EXPECT_NE(fed_by_a_belt.find("inbound_belt=\"conveyor_1\""), std::string::npos);
+  // It PLACES onto conveyor_2 and must not index that one: freezing the outbound
+  // link is the same rule applied one station too far along.
+  EXPECT_EQ(fed_by_a_belt.find("inbound_belt=\"conveyor_2\""), std::string::npos);
 }
 
 TEST(LineTreeTest, WorkEntersTheLineOnlyWhereTheModelSaysItDoes)

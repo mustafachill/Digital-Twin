@@ -96,6 +96,30 @@
           <CompleteHandoff station="{station}" token="{token}"
                            location="{outbound_location}" />
 
+          <!-- The belt this station picks from runs again (ADR-0032).
+
+               It was stopped when this station's trigger fired, so that the
+               piece stood still at the pick point instead of riding past it: the
+               beam is 0.050 m upstream of that point and the piece leaves the
+               belt's carry volume 0.100 m past it, which is under a second at
+               belt speed against a cycle of roughly two minutes.
+
+               STOPPING IT IS NOT A LEAF, and its absence here is deliberate
+               rather than an omission. A leaf acts when this station's cycle
+               reaches it; a work-piece reaches the beam whenever it reaches the
+               beam, including while this station is still placing the previous
+               one. So the stop is bound to the sensor edge itself, in
+               `conveyor_index.hpp`, which is where the reasoning is written down.
+               ADR-0032 names the two ends separately for this reason: "a
+               DetectionEvent transition in, an ADR-0024 protocol leaf out".
+
+               HERE rather than at `PickAt`, which ADR-0032 left open: see
+               `ResumeBelt` in `line_nodes.hpp` for the three reasons. Not in the
+               recovery branch below either — a station that failed may not have
+               picked, and running a belt with a piece still on it puts that piece
+               on the floor. -->
+          <ResumeBelt    belt="{inbound_belt}" />
+
           <ReleaseClaim  resource="{pick_frame}"  claimant="{station}" />
           <ReleaseClaim  resource="{place_frame}" claimant="{station}" />
 

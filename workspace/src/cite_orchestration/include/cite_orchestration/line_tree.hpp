@@ -178,6 +178,12 @@ inline LineTree line_tree_xml(
       "outbound_location",
       station.outbound_via_asset_id.empty() ?
       station.downstream_id : station.outbound_via_asset_id);
+    // The belt this station INDEXES (ADR-0032) — the one work arrives on, which
+    // stops on this station's trigger and runs again when this station completes
+    // its handoff. Empty when nothing carries work to this station, and
+    // `ResumeBelt` reads an empty port as "this station indexes no belt" rather
+    // than as an error: `station_transfer_1` picks off a table.
+    body += detail::attribute("inbound_belt", station.inbound_via_asset_id);
     // NO `require_immediate` HERE ANY MORE, and its absence is the fix.
     //
     // It used to be `station.trigger_topic.empty() ? "0" : "1"`, and that

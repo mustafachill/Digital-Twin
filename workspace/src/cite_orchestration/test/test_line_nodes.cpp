@@ -55,6 +55,7 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/float64.hpp>
 
 #include <cite_interfaces/msg/detection_event.hpp>
 #include <cite_interfaces/msg/line_topology.hpp>
@@ -81,6 +82,9 @@ using cite_interfaces::msg::ResultCode;
 using cite_interfaces::msg::StationEdge;
 using cite_interfaces::msg::StationTopology;
 using cite_orchestration::Context;
+using cite_orchestration::ConveyorDrive;
+using cite_orchestration::ConveyorDrivesByAsset;
+using cite_orchestration::ConveyorIndex;
 using cite_orchestration::HandoffLedger;
 using cite_orchestration::LineContext;
 using cite_orchestration::LineMaintenance;
@@ -98,6 +102,11 @@ using namespace std::chrono_literals;
 //: is outside `/cite/` where no generated name can ever land.
 constexpr char kBeam[] = "/line_nodes_test/beam/detection";
 constexpr char kStateTopic[] = "/line_nodes_test/line/state";
+//: The belt `station_two` picks from, and the speed its drive is installed at.
+//: Both are what the model would supply; the test reads the setpoint back off the
+//: topic rather than comparing a constant against itself.
+constexpr char kBeltCommand[] = "/line_nodes_test/conveyor_fixture/command";
+constexpr double kBeltSpeed = 0.15;
 
 StationTopology station(
   const std::string & id, uint8_t type, const std::string & actor = "",
@@ -178,6 +187,14 @@ protected:
     arm_one_ = std::make_unique<FakeArm>(node_, "arm_1");
     arm_two_ = std::make_unique<FakeArm>(node_, "arm_2");
     beam_ = node_->create_publisher<DetectionEvent>(kBeam, cite::qos::event());
+    // The belt setpoint, read from the outside. This is the only place the rest
+    // of the system can see what L4 decided a belt should do.
+    belt_ = node_->create_subscription<std_msgs::msg::Float64>(
+      kBeltCommand, cite::qos::command(),
+      [this](std_msgs::msg::Float64::SharedPtr message) {
+        const std::lock_guard<std::mutex> lock(belt_mutex_);
+        belt_setpoints_.push_back(message->data);
+      });
 
     executor_.add_node(node_);
     spinner_ = std::thread([this]() {executor_.spin();});
@@ -194,6 +211,13 @@ protected:
     line_.handoff_timeout = rclcpp::Duration::from_seconds(30.0);
     line_.retry_budget = 1;
 
+    // The belt indexing, wired exactly as `line_orchestrator` wires it: the
+    // drives arrive as data, and which station stops which belt is derived from
+    // the plan rather than named here.
+    ConveyorDrivesByAsset drives;
+    drives["conveyor_fixture"] = ConveyorDrive{kBeltCommand, kBeltSpeed};
+    line_.conveyors = std::make_shared<ConveyorIndex>(node_, drives);
+
     for (const auto & resource : plan_.resources) {
       line_.arbiter->declare_resource(resource.name, resource.capacity);
     }
@@ -201,6 +225,8 @@ protected:
       StationRuntime runtime;
       runtime.capacity = entry.capacity;
       (*line_.stations)[entry.id] = runtime;
+      line_.conveyors->index_on(
+        entry.trigger_topic, entry.trigger_detection_state, entry.inbound_via_asset_id);
     }
 
     Context context;
@@ -226,6 +252,7 @@ protected:
     factory.registerNodeType<cite_orchestration::AwaitHandoffConfirmed>(
       "AwaitHandoffConfirmed", line_);
     factory.registerNodeType<cite_orchestration::CompleteHandoff>("CompleteHandoff", line_);
+    factory.registerNodeType<cite_orchestration::ResumeBelt>("ResumeBelt", line_);
     factory.registerNodeType<cite_orchestration::SetStationState>("SetStationState", line_);
     factory.registerNodeType<cite_orchestration::RecoverFromFailure>(
       "RecoverFromFailure", line_);
@@ -339,10 +366,40 @@ protected:
     beam_->publish(event);
   }
 
+  /// Every setpoint the line has commanded the belt to, in order.
+  std::vector<double> belt_setpoints() const
+  {
+    const std::lock_guard<std::mutex> lock(belt_mutex_);
+    return belt_setpoints_;
+  }
+
+  /// Has the belt been stopped and then run again, in that order?
+  ///
+  /// The ORDER is the assertion. A belt that stops and never runs again is a
+  /// stalled line; one that runs again before it was stopped is a belt nothing
+  /// indexed. Expressed as a predicate so `run_until` can wait for it rather than
+  /// the test reading the setpoints at whatever instant the loop happened to
+  /// leave — the publish and its delivery are on different threads.
+  bool belt_stopped_then_ran() const
+  {
+    bool stopped = false;
+    for (const double setpoint : belt_setpoints()) {
+      if (setpoint == 0.0) {
+        stopped = true;
+      } else if (stopped && setpoint == kBeltSpeed) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   rclcpp::Node::SharedPtr node_;
   std::unique_ptr<FakeArm> arm_one_;
   std::unique_ptr<FakeArm> arm_two_;
   rclcpp::Publisher<DetectionEvent>::SharedPtr beam_;
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr belt_;
+  mutable std::mutex belt_mutex_;
+  std::vector<double> belt_setpoints_;
   rclcpp::executors::MultiThreadedExecutor executor_;
   std::thread spinner_;
   LinePlan plan_;
@@ -487,6 +544,55 @@ TEST_F(RunningLine, TheLineKeepsRunningAndCountsMoreThanOnePiece)
   EXPECT_GT(ticks_with_more_than_one_piece_, 0)
     << "the line never had two work-pieces in it at once, so nothing was pipelined and "
        "the buffer arbitration was never exercised";
+}
+
+TEST_F(RunningLine, TheBeltStopsOnTheSensorEdgeAndRunsAgainOnTheCompletedHandoff)
+{
+  // ADR-0032, end to end through the tree that ships.
+  //
+  // This is the composed half: the logic tests prove that an edge stops a belt
+  // and that `run()` sends the declared speed, and this proves the two are wired
+  // to the right events in the real station subtree. The order is the whole
+  // assertion — a belt that stops and never runs again is a stalled line, and one
+  // that runs again before the handoff completes is the race indexing exists to
+  // remove.
+  conveyor_running_ = true;
+  ASSERT_TRUE(run_until([this] {return belt_stopped_then_ran();}, 12000))
+    << "the belt was commanded " << belt_setpoints().size() << " time(s) and never went "
+    << "stopped-then-running. " << line_.registry->completed()
+    << " work-piece(s) completed, so what failed is the indexing and not the line";
+
+  const auto setpoints = belt_setpoints();
+  ASSERT_FALSE(setpoints.empty())
+    << "nothing commanded the belt. Before ADR-0032 the setpoint had no owner in the "
+       "running system and a scenario supplied it";
+
+  EXPECT_DOUBLE_EQ(setpoints.front(), 0.0)
+    << "the first thing the line did to this belt was not stop it, so a station could "
+       "have picked from a belt that was still moving";
+
+  // And the speed it went back to is the one the drive is installed at, not one
+  // the code chose. Read off the topic, so a second copy of the number would show
+  // up here as a mismatch rather than agreeing with itself.
+  for (const double setpoint : setpoints) {
+    EXPECT_TRUE(setpoint == 0.0 || setpoint == kBeltSpeed)
+      << "the belt was commanded to " << setpoint
+      << " m/s, which is neither a standstill nor its installed speed";
+  }
+}
+
+TEST_F(RunningLine, TheStationFedFromTheSourceIndexesNoBelt)
+{
+  // `station_one` picks off the source, which nothing carries to. Its
+  // `inbound_belt` port is empty and `ResumeBelt` must read that as "nothing to
+  // resume" rather than as a failure — otherwise the first station's cycle fails
+  // every time and the line never starts.
+  ASSERT_EQ(plan_.stations.front().id, "station_one");
+  EXPECT_TRUE(plan_.stations.front().inbound_via_asset_id.empty());
+
+  ASSERT_TRUE(run_until([this] {return arm_one_->place_goals() >= 1;}))
+    << "the first station never completed a cycle, so an empty belt port was treated "
+       "as an error";
 }
 
 int main(int argc, char ** argv)

@@ -83,6 +83,18 @@ struct StationPlan
   //: or empty when nothing carries it. It is where the piece physically IS
   //: between the two stations, which is a different question from who owns it.
   std::string outbound_via_asset_id;
+  //: The asset that carries a work-piece TO this station, derived the same way
+  //: from the inbound edge. It is the belt this station INDEXES (ADR-0032): the
+  //: one that stops when this station's trigger fires and runs again when this
+  //: station completes its handoff.
+  //:
+  //: Empty for a station fed by something that does not carry — `station_transfer_1`
+  //: is fed from a table, so it indexes nothing and the port it is remapped into
+  //: is empty rather than special-cased. The rule is keyed on a station WITH AN
+  //: ACTOR, which is what this struct describes: a sink has a trigger and no
+  //: actor, so its inbound belt appears in no `StationPlan` and therefore never
+  //: indexes. A rule keyed on the trigger alone would stop that belt for ever.
+  std::string inbound_via_asset_id;
   //: True when the downstream station is a sink — the end of the line, with no
   //: actor to confirm a handoff. See `line_orchestrator.cpp` for who confirms
   //: on its behalf and why that is not a bypass of the two-party rule.
@@ -334,6 +346,24 @@ inline LinePlan plan_line(const cite_interfaces::msg::LineTopology & topology)
     entry.upstream_is_source = by_id.at(entry.upstream_id).type == StationTopology::TYPE_SOURCE;
     entry.downstream_is_sink = by_id.at(entry.downstream_id).type == StationTopology::TYPE_SINK;
     entry.inbound_buffer = buffer_key(entry.upstream_id, id);
+
+    // THE BELT THIS STATION INDEXES (ADR-0032), derived from the inbound edge
+    // exactly as the outbound carrier is derived below. Nothing is named here:
+    // which belt a station stops is a consequence of the topology, so a fourth
+    // arm and a fourth belt change `model/` and nothing else.
+    const auto inbound = edge_by_key.find(entry.inbound_buffer);
+    if (inbound != edge_by_key.end()) {
+      entry.inbound_via_asset_id = inbound->second.via_asset_id;
+      if (!entry.inbound_via_asset_id.empty() && entry.trigger_topic.empty()) {
+        plan.refusals.push_back(
+          "transfer station '" + id + "' is fed by belt '" + entry.inbound_via_asset_id +
+          "' and has no trigger, so nothing would ever stop that belt. A station picks from "
+          "a belt only because it was indexed to a standstill on this station's own sensor "
+          "edge (ADR-0032); without one the work-piece rides past the pick point in under a "
+          "second and off the end of the belt");
+      }
+    }
+
     entry.outbound_buffer = buffer_key(id, entry.downstream_id);
 
     // ---------------------------------------------------------------------
