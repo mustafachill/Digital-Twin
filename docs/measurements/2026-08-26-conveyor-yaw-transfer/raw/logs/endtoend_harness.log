@@ -1,0 +1,40 @@
+pick  cell_a__table_pick__surface at (-0.475, 0.0, 0.6)
+place cell_a__conveyor_1__infeed at (0.5, 0.0, 0.6)
+waiting for the whole stack to be up and matched...
+stack ready
+
+=== trial 1/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.11543958018192768, "yaw_at_read_deg": 0.11543956351410145, "delta_yaw_deg": -1.666782623033214e-08, "yaw_rate_at_read_deg_s": 1.18177701254818e-09, "presented_at_read_mm": 50.10063846987257, "note": ""}
+
+=== trial 2/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.16092732852470126, "yaw_at_read_deg": 0.16092731263633198, "delta_yaw_deg": -1.5888369286898296e-08, "yaw_rate_at_read_deg_s": -1.1556028509860432e-09, "presented_at_read_mm": 50.14023816707624, "note": ""}
+
+=== trial 3/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.8280785534469715, "yaw_at_read_deg": 0.8280785362329368, "delta_yaw_deg": -1.7214034642165643e-08, "yaw_rate_at_read_deg_s": -1.1805773008795968e-09, "presented_at_read_mm": 50.7173877686881, "note": ""}
+
+=== trial 4/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 10.615174069834316, "yaw_at_read_deg": 10.615174052014396, "delta_yaw_deg": -1.78199197620188e-08, "yaw_rate_at_read_deg_s": -1.2487276873252504e-09, "presented_at_read_mm": 58.35491297488467, "note": ""}
+
+=== trial 5/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.40400636490649333, "yaw_at_read_deg": 0.4040063479869218, "delta_yaw_deg": -1.6919571521611942e-08, "yaw_rate_at_read_deg_s": 1.1958144225399791e-09, "presented_at_read_mm": 50.35131613217889, "note": ""}
+
+=== trial 6/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.8338124041745766, "yaw_at_read_deg": 0.833812387911891, "delta_yaw_deg": -1.626268553156507e-08, "yaw_rate_at_read_deg_s": -1.1765582896277995e-09, "presented_at_read_mm": 50.72231840679508, "note": ""}
+
+=== trial 7/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.29096918479655187, "yaw_at_read_deg": 0.2909691677444499, "delta_yaw_deg": -1.7052101952685916e-08, "yaw_rate_at_read_deg_s": -1.2015813246679942e-09, "presented_at_read_mm": 50.253272663867676, "note": ""}
+
+=== trial 8/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.1466982077496084, "yaw_at_read_deg": 0.146698191905287, "delta_yaw_deg": -1.5844321410440898e-08, "yaw_rate_at_read_deg_s": -1.191580887771046e-09, "presented_at_read_mm": 50.127854296083235, "note": ""}
+
+=== trial 9/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 0.593780291714225, "yaw_at_read_deg": 0.593780274658954, "delta_yaw_deg": -1.7055270973287406e-08, "yaw_rate_at_read_deg_s": -1.1942622675134456e-09, "presented_at_read_mm": 50.51547677780586, "note": ""}
+
+=== trial 10/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 3.029817723969927, "yaw_at_read_deg": 3.0298177070653765, "delta_yaw_deg": -1.6904550648177974e-08, "yaw_rate_at_read_deg_s": -1.1855017135133717e-09, "presented_at_read_mm": 52.5728908038414, "note": ""}
+
+=== trial 11/12  mode=running ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 2.4372799887198755, "yaw_at_read_deg": 2.4372799710843367, "delta_yaw_deg": -1.763553880707036e-08, "yaw_rate_at_read_deg_s": -1.2363007686436106e-09, "presented_at_read_mm": 52.081055209551856, "note": ""}
+
+=== trial 12/12  mode=indexed ===
+   {"ok": true, "pick_succeeded": true, "carried": true, "yaw_deposited_deg": 1.6583109226537402, "yaw_at_read_deg": 1.6583109060530035, "delta_yaw_deg": -1.660073678522167e-08, "yaw_rate_at_read_deg_s": -1.1869090339819395e-09, "presented_at_read_mm": 51.426006281700666, "note": ""}

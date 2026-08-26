@@ -1,0 +1,74 @@
+recording from /world/cell_a/dynamic_pose/info
+cell ready: sim clock 1.22 s, 39 entities in the pose feed
+== trial 1/36: yaw 0.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1053106311578607, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 0.0, "delta_yaw_deg": 0.0, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 2/36: yaw 5.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1033272338684286, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.000000004968243, "delta_yaw_deg": -1.7966328869079007e-08, "yaw_rate_at_read_deg_s": -1.247839490426988e-09, "note": ""}
+== trial 3/36: yaw 10.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1031870967153181, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.99999997011102, "delta_yaw_deg": -1.8462316120348987e-08, "yaw_rate_at_read_deg_s": -1.246836755996074e-09, "note": ""}
+== trial 4/36: yaw 18.7 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1016449837255868, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.69999997451498, "delta_yaw_deg": -1.844109931425919e-08, "yaw_rate_at_read_deg_s": -1.2136931190704533e-09, "note": ""}
+== trial 5/36: yaw 30.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1020656621949385, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.000000007611945, "delta_yaw_deg": -1.5403841757688497e-08, "yaw_rate_at_read_deg_s": -1.0281843403891775e-09, "note": ""}
+== trial 6/36: yaw 45.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1030471013048793, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 7/36: yaw 0.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0537144248679056, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 1.4210854715202004e-14, "delta_yaw_deg": 1.4210854715202004e-14, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 8/36: yaw 5.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0538365963929672, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.000000005718036, "delta_yaw_deg": -1.721653575259552e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 9/36: yaw 10.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.052574855733634, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.999999970902863, "delta_yaw_deg": -1.7670473084763216e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 10/36: yaw 18.7 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0550985424778745, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.6999999752624, "delta_yaw_deg": -1.769367941051314e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 11/36: yaw 30.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0529956153428652, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.000000008262617, "delta_yaw_deg": -1.4753169352843543e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 12/36: yaw 45.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0525750514141754, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 13/36: yaw 0.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1039086294166007, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 0.0, "delta_yaw_deg": 0.0, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 14/36: yaw 5.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1041684345054052, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.000000004937974, "delta_yaw_deg": -1.7996597989622387e-08, "yaw_rate_at_read_deg_s": -1.2236560970839783e-09, "note": ""}
+== trial 15/36: yaw 10.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1029066964882728, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.99999997011102, "delta_yaw_deg": -1.8462316120348987e-08, "yaw_rate_at_read_deg_s": -1.261749888244014e-09, "note": ""}
+== trial 16/36: yaw 18.7 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1040283858376685, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.699999974505516, "delta_yaw_deg": -1.8450563743499515e-08, "yaw_rate_at_read_deg_s": -1.258288228265016e-09, "note": ""}
+== trial 17/36: yaw 30.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.103327463399706, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.000000007594195, "delta_yaw_deg": -1.5421591115227784e-08, "yaw_rate_at_read_deg_s": -1.0171865619691478e-09, "note": ""}
+== trial 18/36: yaw 45.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1043089025521469, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 19/36: yaw 0.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.052312424827553, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 0.0, "delta_yaw_deg": 0.0, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 20/36: yaw 5.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0556591977730834, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.000000005687767, "delta_yaw_deg": -1.72468048731389e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 21/36: yaw 10.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.053836656755338, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.999999970881447, "delta_yaw_deg": -1.7691888842819026e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 22/36: yaw 18.7 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0538367413597136, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.699999975283703, "delta_yaw_deg": -1.7672377339295053e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 23/36: yaw 30.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0521544145396868, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.00000000827444, "delta_yaw_deg": -1.4741345921720495e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 24/36: yaw 45.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0542574530771986, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 25/36: yaw 0.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.103768430563296, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 0.0, "delta_yaw_deg": 0.0, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 26/36: yaw 5.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1034674339745913, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.0000000049426205, "delta_yaw_deg": -1.7991951040130516e-08, "yaw_rate_at_read_deg_s": -1.2234188368789246e-09, "note": ""}
+== trial 27/36: yaw 10.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1020654958071368, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.999999970108632, "delta_yaw_deg": -1.846470354394114e-08, "yaw_rate_at_read_deg_s": -1.2334274709333063e-09, "note": ""}
+== trial 28/36: yaw 18.7 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.103187185092228, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.699999974491334, "delta_yaw_deg": -1.8464746176505287e-08, "yaw_rate_at_read_deg_s": -1.2403447735925588e-09, "note": ""}
+== trial 29/36: yaw 30.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1040284640690214, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.00000000760997, "delta_yaw_deg": -1.540581706649391e-08, "yaw_rate_at_read_deg_s": -1.0557717663080495e-09, "note": ""}
+== trial 30/36: yaw 45.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.1034677017206351, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 31/36: yaw 0.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0528732248436985, "yaw_settled_deg": 0.0, "yaw_at_read_deg": 0.0, "delta_yaw_deg": 0.0, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 32/36: yaw 5.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.053275795968316, "yaw_settled_deg": 5.000000022934572, "yaw_at_read_deg": 5.000000005727344, "delta_yaw_deg": -1.720722764275706e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 33/36: yaw 10.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0539768568688608, "yaw_settled_deg": 9.999999988573336, "yaw_at_read_deg": 9.999999970879074, "delta_yaw_deg": -1.7694262055556464e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 34/36: yaw 18.7 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0556593429748349, "yaw_settled_deg": 18.69999999295608, "yaw_at_read_deg": 18.699999975252936, "delta_yaw_deg": -1.7703143839753466e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 35/36: yaw 30.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.052434814807413, "yaw_settled_deg": 30.000000023015787, "yaw_at_read_deg": 30.000000008270504, "delta_yaw_deg": -1.4745282328476605e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}
+== trial 36/36: yaw 45.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0546780534929545, "yaw_settled_deg": 44.9999999772279, "yaw_at_read_deg": 44.999999977221734, "delta_yaw_deg": -6.16751094639767e-12, "yaw_rate_at_read_deg_s": 0.0, "note": ""}

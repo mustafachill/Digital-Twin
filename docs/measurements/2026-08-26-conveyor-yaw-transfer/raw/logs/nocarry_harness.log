@@ -1,0 +1,8 @@
+recording from /world/cell_a/dynamic_pose/info
+cell ready: sim clock 1.07 s, 39 entities in the pose feed
+== trial 1/3: yaw 20.0 deg, running ==
+   {"ok": false, "carried": null, "travelled_m": 0.0, "yaw_settled_deg": 19.999999977146672, "yaw_at_read_deg": null, "delta_yaw_deg": null, "yaw_rate_at_read_deg_s": null, "note": "never reached the outfeed"}
+== trial 2/3: yaw 20.0 deg, running ==
+   {"ok": false, "carried": null, "travelled_m": 0.0, "yaw_settled_deg": 19.999999977146672, "yaw_at_read_deg": null, "delta_yaw_deg": null, "yaw_rate_at_read_deg_s": null, "note": "never reached the outfeed"}
+== trial 3/3: yaw 20.0 deg, running ==
+   {"ok": false, "carried": null, "travelled_m": 0.0, "yaw_settled_deg": 19.999999977146672, "yaw_at_read_deg": null, "delta_yaw_deg": null, "yaw_rate_at_read_deg_s": null, "note": "never reached the outfeed"}

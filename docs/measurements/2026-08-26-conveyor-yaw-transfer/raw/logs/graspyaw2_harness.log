@@ -1,0 +1,121 @@
+[yaw] commanded grasp height 0.0250 m (object centre above the frame, as PickAt sends today)
+[yaw] interleaving spawn yaws [0.0, 5.0, 10.0, 15.0, 20.0, 30.0] degrees
+pick frame  cell_a__table_pick__surface at (-0.475, 0.0, 0.6)
+place frame cell_a__conveyor_1__infeed at (0.5, 0.0, 0.6)
+waiting for the whole stack to be up and matched...
+stack ready
+recording from /world/cell_a/dynamic_pose/info
+arm model arm_1 world position (0.0, -0.3, 0.6)
+
+=== trial 1/18  model=probe_part_graspyaw2_001 ===
+  [yaw] trial 1: spawn yaw 0.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  [diag] pose feed carries 41 entities; matching: ['arm_1_left_finger', 'arm_1_right_finger', 'arm_2_left_finger', 'arm_2_right_finger', 'arm_3_left_finger', 'arm_3_right_finger', 'probe_part_graspyaw2_001']
+  [diag] arm world pose p=(0.0, -0.3, 0.6) q=(0.0, 0.0, 0.7071067823197225, 0.7071067800533724)
+  [diag] pad composed into world: (0.011980888727979089, 0.19977174916438323, 1.143550869655526) (gz model -m arm_1 -p said (0.0, -0.3, 0.6))
+  {"trial": 1, "label": "graspyaw2", "model": "probe_part_graspyaw2_001", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 55.7, "t_grasp_sim": 59.473000000000006, "t_release_sim": 73.586, "q_at_stall_rad": 0.4089972830850219, "note": "", "z_rest": 0.624999, "z_max": 0.7450622573200097, "lift_m": 0.12006325732000978, "n_samples_wp": 3479, "n_samples_pad": 3479, "v_max_mps": 0.3308225125157258, "carry_samples": 1446, "carry_duration_s": 14.106000000000002, "lifted_during_carry": true, "z_min_during_carry": 0.6249920203917716, "twist_max_deg": 8.217672036311615, "twist_final_deg": 7.999935008025749, "pad_distance_drift_mm_max": 1.107603233044543, "slip_max_mm": 2.7653192776513436, "slip_final_mm": 2.6357279558943962, "slip_rate_mm_per_s": 0.1969644522398717, "held_through_transport": true, "pad_separation_mm_min": 100.53927282780369, "pad_separation_mm_max": 101.86037549814546, "pad_separation_mm_mean": 101.45840604007753, "place_err_m": 0.005130458381702187}
+
+=== trial 2/18  model=probe_part_graspyaw2_002 ===
+  [yaw] trial 2: spawn yaw 5.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 2, "label": "graspyaw2", "model": "probe_part_graspyaw2_002", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 46.5, "t_grasp_sim": 109.73100000000001, "t_release_sim": 122.99100000000001, "q_at_stall_rad": 0.41162941346068044, "note": "", "z_rest": 0.624999, "z_max": 0.7452433525827163, "lift_m": 0.12024435258271637, "n_samples_wp": 2959, "n_samples_pad": 2959, "v_max_mps": 0.32663413881222264, "carry_samples": 1315, "carry_duration_s": 13.25099999999999, "lifted_during_carry": true, "z_min_during_carry": 0.6250581367658328, "twist_max_deg": 6.206793949144319, "twist_final_deg": 3.908461298399544, "pad_distance_drift_mm_max": 2.0125214745737168, "slip_max_mm": 2.5938518931763754, "slip_final_mm": 2.5938518931763754, "slip_rate_mm_per_s": 0.10173171666961599, "held_through_transport": true, "pad_separation_mm_min": 100.9717038775635, "pad_separation_mm_max": 101.94589941646223, "pad_separation_mm_mean": 101.5675416148659, "place_err_m": 0.0024380359091741555}
+
+=== trial 3/18  model=probe_part_graspyaw2_003 ===
+  [yaw] trial 3: spawn yaw 10.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 3, "label": "graspyaw2", "model": "probe_part_graspyaw2_003", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 47.0, "t_grasp_sim": 158.441, "t_release_sim": 172.30800000000002, "q_at_stall_rad": 0.41539232817700655, "note": "", "z_rest": 0.624999, "z_max": 0.7449243925181579, "lift_m": 0.11992539251815793, "n_samples_wp": 2992, "n_samples_pad": 2992, "v_max_mps": 0.32085311272590694, "carry_samples": 1356, "carry_duration_s": 13.859999999999985, "lifted_during_carry": true, "z_min_during_carry": 0.6249988485438469, "twist_max_deg": 8.18538837022196, "twist_final_deg": 8.113656612096715, "pad_distance_drift_mm_max": 0.7901035508089933, "slip_max_mm": 2.454541360939407, "slip_final_mm": 2.3697168598645035, "slip_rate_mm_per_s": 0.1816893368494344, "held_through_transport": true, "pad_separation_mm_min": 101.06130279903529, "pad_separation_mm_max": 101.9640370364887, "pad_separation_mm_mean": 101.60554160680375, "place_err_m": 0.005986646599542211}
+
+=== trial 4/18  model=probe_part_graspyaw2_004 ===
+  [yaw] trial 4: spawn yaw 15.00 deg
+  settled at (-0.475, 0.0, 0.624999)
+  {"trial": 4, "label": "graspyaw2", "model": "probe_part_graspyaw2_004", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 44.2, "t_grasp_sim": 207.24300000000002, "t_release_sim": 221.01100000000002, "q_at_stall_rad": 0.4115561972046972, "note": "", "z_rest": 0.624999, "z_max": 0.7442950756962462, "lift_m": 0.11929607569624623, "n_samples_wp": 2829, "n_samples_pad": 2829, "v_max_mps": 0.30908097529992806, "carry_samples": 1331, "carry_duration_s": 13.756999999999977, "lifted_during_carry": true, "z_min_during_carry": 0.6250563155307824, "twist_max_deg": 2.9234523281922606, "twist_final_deg": 2.917743376876683, "pad_distance_drift_mm_max": 1.3880190077818924, "slip_max_mm": 2.1050889536523636, "slip_final_mm": 1.9713875664351226, "slip_rate_mm_per_s": 0.1511729949031028, "held_through_transport": true, "pad_separation_mm_min": 101.23464730157124, "pad_separation_mm_max": 101.92044002780281, "pad_separation_mm_mean": 101.58052997817937, "place_err_m": 0.0024379946095452287}
+
+=== trial 5/18  model=probe_part_graspyaw2_005 ===
+  [yaw] trial 5: spawn yaw 20.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 5, "label": "graspyaw2", "model": "probe_part_graspyaw2_005", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 45.0, "t_grasp_sim": 256.51500000000004, "t_release_sim": 270.129, "q_at_stall_rad": 0.40688779422623633, "note": "", "z_rest": 0.624999, "z_max": 0.745925676679596, "lift_m": 0.120926676679596, "n_samples_wp": 2880, "n_samples_pad": 2880, "v_max_mps": 0.276410746011509, "carry_samples": 1322, "carry_duration_s": 13.612000000000023, "lifted_during_carry": true, "z_min_during_carry": 0.6249913558655906, "twist_max_deg": 12.314655520597672, "twist_final_deg": 9.88320366688228, "pad_distance_drift_mm_max": 0.6855442513834902, "slip_max_mm": 3.7348292309035416, "slip_final_mm": 2.7742470202005505, "slip_rate_mm_per_s": 0.24617111427430105, "held_through_transport": true, "pad_separation_mm_min": 101.0331439986707, "pad_separation_mm_max": 101.98995345251146, "pad_separation_mm_mean": 101.59531160705988, "place_err_m": 0.007745940828930592}
+
+=== trial 6/18  model=probe_part_graspyaw2_006 ===
+  [yaw] trial 6: spawn yaw 30.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 6, "label": "graspyaw2", "model": "probe_part_graspyaw2_006", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 44.0, "t_grasp_sim": 303.60900000000004, "t_release_sim": 317.548, "q_at_stall_rad": 0.4054163982374301, "note": "", "z_rest": 0.624999, "z_max": 0.7449397668242891, "lift_m": 0.11994076682428911, "n_samples_wp": 2813, "n_samples_pad": 2813, "v_max_mps": 0.20943965262239686, "carry_samples": 1335, "carry_duration_s": 13.93100000000004, "lifted_during_carry": true, "z_min_during_carry": 0.6249958360432897, "twist_max_deg": 4.931132649060786, "twist_final_deg": 4.749274046311786, "pad_distance_drift_mm_max": 1.3491644363642905, "slip_max_mm": 3.0442334687529597, "slip_final_mm": 3.0398709364252605, "slip_rate_mm_per_s": 0.1880967731447069, "held_through_transport": true, "pad_separation_mm_min": 101.00529248821096, "pad_separation_mm_max": 102.01987756113544, "pad_separation_mm_mean": 101.57632781637984, "place_err_m": 0.005586447258103412}
+
+=== trial 7/18  model=probe_part_graspyaw2_007 ===
+  [yaw] trial 7: spawn yaw 0.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 7, "label": "graspyaw2", "model": "probe_part_graspyaw2_007", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 47.1, "t_grasp_sim": 352.959, "t_release_sim": 367.24100000000004, "q_at_stall_rad": 0.4070586624454264, "note": "", "z_rest": 0.624999, "z_max": 0.7448063517539296, "lift_m": 0.11980735175392965, "n_samples_wp": 2991, "n_samples_pad": 2991, "v_max_mps": 0.27731542230689155, "carry_samples": 1405, "carry_duration_s": 14.275000000000034, "lifted_during_carry": true, "z_min_during_carry": 0.6249921241522852, "twist_max_deg": 12.719444816413306, "twist_final_deg": 9.957538352053353, "pad_distance_drift_mm_max": 1.8970478054370972, "slip_max_mm": 2.9271487741605324, "slip_final_mm": 2.9271487741605324, "slip_rate_mm_per_s": 0.10413307697218949, "held_through_transport": true, "pad_separation_mm_min": 100.94507777027985, "pad_separation_mm_max": 102.00937787481398, "pad_separation_mm_mean": 101.57138977903618, "place_err_m": 0.004682631502634022}
+
+=== trial 8/18  model=probe_part_graspyaw2_008 ===
+  [yaw] trial 8: spawn yaw 5.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 8, "label": "graspyaw2", "model": "probe_part_graspyaw2_008", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 45.0, "t_grasp_sim": 402.94100000000003, "t_release_sim": 416.437, "q_at_stall_rad": 0.4067060066691875, "note": "", "z_rest": 0.624999, "z_max": 0.7440635443272235, "lift_m": 0.11906454432722358, "n_samples_wp": 2876, "n_samples_pad": 2876, "v_max_mps": 0.3097752777397194, "carry_samples": 1322, "carry_duration_s": 13.48599999999999, "lifted_during_carry": true, "z_min_during_carry": 0.6249969494458435, "twist_max_deg": 2.1382048166497296, "twist_final_deg": 1.8660929171765264, "pad_distance_drift_mm_max": 1.7325964751620688, "slip_max_mm": 2.8668822146665525, "slip_final_mm": 2.864114491189485, "slip_rate_mm_per_s": 0.2118112380497406, "held_through_transport": true, "pad_separation_mm_min": 101.0335263163998, "pad_separation_mm_max": 102.03029441146036, "pad_separation_mm_mean": 101.61953986711737, "place_err_m": 0.0029894931122025027}
+
+=== trial 9/18  model=probe_part_graspyaw2_009 ===
+  [yaw] trial 9: spawn yaw 10.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 9, "label": "graspyaw2", "model": "probe_part_graspyaw2_009", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 45.5, "t_grasp_sim": 451.071, "t_release_sim": 465.15900000000005, "q_at_stall_rad": 0.40761675854558443, "note": "", "z_rest": 0.624999, "z_max": 0.74423708006452, "lift_m": 0.11923808006452008, "n_samples_wp": 2901, "n_samples_pad": 2901, "v_max_mps": 0.38162158749537706, "carry_samples": 1368, "carry_duration_s": 14.077999999999975, "lifted_during_carry": true, "z_min_during_carry": 0.6249469374241083, "twist_max_deg": 0.9965969887753805, "twist_final_deg": 0.5246089517426954, "pad_distance_drift_mm_max": 1.6587982734751563, "slip_max_mm": 2.364748772318606, "slip_final_mm": 2.364748772318606, "slip_rate_mm_per_s": 0.17633584753420717, "held_through_transport": true, "pad_separation_mm_min": 101.2143700015805, "pad_separation_mm_max": 102.01674828643728, "pad_separation_mm_mean": 101.63190800052047, "place_err_m": 0.0007628584611217982}
+
+=== trial 10/18  model=probe_part_graspyaw2_010 ===
+  [yaw] trial 10: spawn yaw 15.00 deg
+  settled at (-0.475, 0.0, 0.624999)
+  {"trial": 10, "label": "graspyaw2", "model": "probe_part_graspyaw2_010", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 49.6, "t_grasp_sim": 499.802, "t_release_sim": 513.513, "q_at_stall_rad": 0.40709830627423843, "note": "", "z_rest": 0.624999, "z_max": 0.7446007267398441, "lift_m": 0.11960172673984415, "n_samples_wp": 3121, "n_samples_pad": 3121, "v_max_mps": 0.31175178766801626, "carry_samples": 1497, "carry_duration_s": 13.703000000000031, "lifted_during_carry": true, "z_min_during_carry": 0.6249967458012569, "twist_max_deg": 1.385593090133277, "twist_final_deg": 1.0128974356286224, "pad_distance_drift_mm_max": 1.7177663597457666, "slip_max_mm": 2.548817594440382, "slip_final_mm": 2.5363764415111936, "slip_rate_mm_per_s": 0.20014678716801196, "held_through_transport": true, "pad_separation_mm_min": 101.02618237635467, "pad_separation_mm_max": 101.94493390849857, "pad_separation_mm_mean": 101.56210295329095, "place_err_m": 0.0021700229977139095}
+
+=== trial 11/18  model=probe_part_graspyaw2_011 ===
+  [yaw] trial 11: spawn yaw 20.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 11, "label": "graspyaw2", "model": "probe_part_graspyaw2_011", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 56.1, "t_grasp_sim": 545.061, "t_release_sim": 558.9300000000001, "q_at_stall_rad": 0.40777885973091565, "note": "", "z_rest": 0.624999, "z_max": 0.7446504385434377, "lift_m": 0.11965143854343774, "n_samples_wp": 3454, "n_samples_pad": 3454, "v_max_mps": 0.3791948347510111, "carry_samples": 1602, "carry_duration_s": 13.855000000000018, "lifted_during_carry": true, "z_min_during_carry": 0.6249967080417854, "twist_max_deg": 4.228291583245455, "twist_final_deg": 2.9225439054680487, "pad_distance_drift_mm_max": 1.5454939520616762, "slip_max_mm": 2.5946936982704303, "slip_final_mm": 2.5946936982704303, "slip_rate_mm_per_s": 0.16507846786422273, "held_through_transport": true, "pad_separation_mm_min": 100.8592596176044, "pad_separation_mm_max": 101.95945413832793, "pad_separation_mm_mean": 101.49777418471763, "place_err_m": 0.003933686473759868}
+
+=== trial 12/18  model=probe_part_graspyaw2_012 ===
+  [yaw] trial 12: spawn yaw 30.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 12, "label": "graspyaw2", "model": "probe_part_graspyaw2_012", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 74.2, "t_grasp_sim": 593.087, "t_release_sim": 607.764, "q_at_stall_rad": 0.40595109847790894, "note": "", "z_rest": 0.624999, "z_max": 0.7436546062940781, "lift_m": 0.11865560629407812, "n_samples_wp": 4356, "n_samples_pad": 4356, "v_max_mps": 0.413906358934462, "carry_samples": 2272, "carry_duration_s": 14.676000000000045, "lifted_during_carry": true, "z_min_during_carry": 0.624996298278903, "twist_max_deg": 5.3993879342206, "twist_final_deg": 3.4016898652390686, "pad_distance_drift_mm_max": 1.083002745024828, "slip_max_mm": 3.4972559406944588, "slip_final_mm": 3.489914209279482, "slip_rate_mm_per_s": 0.22112887160020003, "held_through_transport": true, "pad_separation_mm_min": 100.86726092564541, "pad_separation_mm_max": 102.01641743195135, "pad_separation_mm_mean": 101.58840098076395, "place_err_m": 0.009545217815121068}
+
+=== trial 13/18  model=probe_part_graspyaw2_013 ===
+  [yaw] trial 13: spawn yaw 0.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 13, "label": "graspyaw2", "model": "probe_part_graspyaw2_013", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 61.7, "t_grasp_sim": 639.4150000000001, "t_release_sim": 652.668, "q_at_stall_rad": 0.4138687587854648, "note": "", "z_rest": 0.624999, "z_max": 0.7444179531034283, "lift_m": 0.11941895310342832, "n_samples_wp": 3739, "n_samples_pad": 3739, "v_max_mps": 0.3195396403601923, "carry_samples": 1526, "carry_duration_s": 13.250999999999976, "lifted_during_carry": true, "z_min_during_carry": 0.6249983950954109, "twist_max_deg": 4.770257446975251, "twist_final_deg": 4.7696414778674585, "pad_distance_drift_mm_max": 1.857117704333504, "slip_max_mm": 3.094161911488172, "slip_final_mm": 2.2500123817595603, "slip_rate_mm_per_s": 0.23902394008622233, "held_through_transport": true, "pad_separation_mm_min": 100.635238219002, "pad_separation_mm_max": 102.02524651508926, "pad_separation_mm_mean": 101.49255030549597, "place_err_m": 0.003241443863189012}
+
+=== trial 14/18  model=probe_part_graspyaw2_014 ===
+  [yaw] trial 14: spawn yaw 5.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 14, "label": "graspyaw2", "model": "probe_part_graspyaw2_014", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 43.9, "t_grasp_sim": 686.0, "t_release_sim": 700.3670000000001, "q_at_stall_rad": 0.4080475387916001, "note": "", "z_rest": 0.624999, "z_max": 0.7447306058248114, "lift_m": 0.11973160582481146, "n_samples_wp": 2812, "n_samples_pad": 2812, "v_max_mps": 0.2944010256441881, "carry_samples": 1382, "carry_duration_s": 14.365999999999985, "lifted_during_carry": true, "z_min_during_carry": 0.6249975755715387, "twist_max_deg": 15.30555625473222, "twist_final_deg": 15.286391954661568, "pad_distance_drift_mm_max": 0.7746803619977527, "slip_max_mm": 4.697207562698814, "slip_final_mm": 3.6992099400299763, "slip_rate_mm_per_s": 0.40346059310142074, "held_through_transport": true, "pad_separation_mm_min": 100.58120195560481, "pad_separation_mm_max": 101.94773240709165, "pad_separation_mm_mean": 101.2003321681399, "place_err_m": 0.010250054484798352}
+
+=== trial 15/18  model=probe_part_graspyaw2_015 ===
+  [yaw] trial 15: spawn yaw 10.00 deg
+  settled at (-0.475, -0.0, 0.624999)
+  {"trial": 15, "label": "graspyaw2", "model": "probe_part_graspyaw2_015", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 43.8, "t_grasp_sim": 733.623, "t_release_sim": 747.4480000000001, "q_at_stall_rad": 0.40646157556465845, "note": "", "z_rest": 0.624999, "z_max": 0.7462688114748074, "lift_m": 0.12126981147480742, "n_samples_wp": 2802, "n_samples_pad": 2802, "v_max_mps": 0.2684916422172218, "carry_samples": 1341, "carry_duration_s": 13.812000000000012, "lifted_during_carry": true, "z_min_during_carry": 0.6249912147025573, "twist_max_deg": 25.190508584252196, "twist_final_deg": 25.14423736816555, "pad_distance_drift_mm_max": 1.8216353542319013, "slip_max_mm": 4.033584206848629, "slip_final_mm": 2.472606927217806, "slip_rate_mm_per_s": 0.1356610618755794, "held_through_transport": true, "pad_separation_mm_min": 101.08621523122683, "pad_separation_mm_max": 102.02251770410683, "pad_separation_mm_mean": 101.65635095266549, "place_err_m": 0.014069338056111224}
+
+=== trial 16/18  model=probe_part_graspyaw2_016 ===
+  [yaw] trial 16: spawn yaw 15.00 deg
+  settled at (-0.475, 0.0, 0.624999)
+  {"trial": 16, "label": "graspyaw2", "model": "probe_part_graspyaw2_016", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 48.2, "t_grasp_sim": 785.283, "t_release_sim": 798.801, "q_at_stall_rad": 0.41515240612554305, "note": "", "z_rest": 0.624999, "z_max": 0.7444949263653663, "lift_m": 0.11949592636536632, "n_samples_wp": 3049, "n_samples_pad": 3049, "v_max_mps": 0.3510799834495136, "carry_samples": 1340, "carry_duration_s": 13.51400000000001, "lifted_during_carry": true, "z_min_during_carry": 0.62499446818146, "twist_max_deg": 1.8836367484902201, "twist_final_deg": 1.7137398704833582, "pad_distance_drift_mm_max": 1.640756192366041, "slip_max_mm": 2.2972448170914683, "slip_final_mm": 2.2972448170914683, "slip_rate_mm_per_s": 0.19193530965022834, "held_through_transport": true, "pad_separation_mm_min": 100.75103251942282, "pad_separation_mm_max": 101.87003646744724, "pad_separation_mm_mean": 101.40028991486564, "place_err_m": 0.0024192553775550176}
+
+=== trial 17/18  model=probe_part_graspyaw2_017 ===
+  [yaw] trial 17: spawn yaw 20.00 deg
+Traceback (most recent call last):
+  File "/workspace/docs/measurements/2026-08-26-conveyor-yaw-transfer/harness/yaw_grasp_block.py", line 120, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/workspace/docs/measurements/2026-08-26-conveyor-yaw-transfer/harness/yaw_grasp_block.py", line 99, in main
+    rc = mg.main()
+         ^^^^^^^^^
+  File "/workspace/docs/measurements/2026-08-25-friction-grasp/harness/measure_grasp.py", line 700, in main
+    created = spawn(args.world, name, spawn_xyz, args.mu)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/docs/measurements/2026-08-26-conveyor-yaw-transfer/harness/yaw_grasp_block.py", line 86, in spawn
+    return subprocess.run(
+           ^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['ros2', 'run', 'ros_gz_sim', 'create', '-file', '/tmp/probe_part_graspyaw2_017.sdf', '-name', 'probe_part_graspyaw2_017', '-x', '-0.475', '-y', '0.0', '-z', '0.63', '-Y', '0.349065850']' timed out after 180 seconds
+Exception in thread Thread-1 (spin):
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
