@@ -4,6 +4,11 @@
   declares a Pilz pipeline today: `cite_generated/moveit/cell_a_arm_*_ompl_planning.yaml`
   lists `planning_pipelines: [ompl]` and nothing else. This record is the decision; the
   configuration and the scenario evidence follow it (P7).
+  One supporting claim in this record — the size and composition of the planning scene — is
+  now wrong and is corrected below; **nothing that was decided is withdrawn**, and the
+  argument the claim supports is strengthened rather than weakened by the correction. See
+  the section "Correction — 2026-08-26: the planning scene carries 12 objects, not 11",
+  immediately after this block.
 - **Date:** 2026-08-25
 - **Deciders:** Project owner, on the determinism findings from the Phase 1.C review wave
 - **Related:** [ADR-0006](0006-moveit2-motion-planning.md) (MoveIt 2 — this decision sits
@@ -11,6 +16,39 @@
   (goal *specification*; complementary, see below), [ADR-0004](0004-facility-model-single-source-of-truth.md),
   [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md), charter §4 (P4, P8)
+
+## Correction — 2026-08-26: the planning scene carries 12 objects, not 11
+
+**What was written.** In *What this costs us*, this record states that
+`cite_generated/moveit/cell_a_planning_scene.yaml` carries **11** collision objects, and
+enumerates them as "three break beams, three conveyors, three pedestals, two tables".
+
+**What is true.** It carries **12**, and the enumeration is wrong in one term: there are
+**four** break beams, not three. Counted on 2026-08-26 against the generated file at commit
+`7f2d8f9` — twelve `- id:` entries under `collision_objects`, grouping by the `type` field
+as four `break_beam`, three `belt_1200x400`, three `pedestal_600`, two `work_table_600`.
+
+**Why it changed.** `station_transfer_1` is fed from outside the cell and had nothing to
+observe, so its cycle fell through `AwaitTrigger` and came to rest polling `Detect` against
+a region no sensor was in. `beam_pick` was added to `model/assets/instances/sensors.yaml`
+to let the line start, and — because the planning scene is generated from the same resolved
+bodies as everything else (ADR-0004) — it appeared in the scene without anyone editing the
+scene. The count in this record was written against the model as it stood on 2026-08-25 and
+was not re-derived afterwards.
+
+**What survives, unchanged.** The decision, and the argument this figure supports. The
+point being made is that a planner which fails rather than searches is acutely sensitive to
+the scene being **complete**, and an extra sensor housing standing in an arm's approach is
+exactly the kind of object that argument is about. A larger scene makes that cost larger,
+not smaller.
+
+**How the error survived.** It was a count of a generated artifact, written by hand into
+prose. `./scripts/validate-model` proves the generated tree matches its generator; nothing
+proves a sentence in a document matches the generated tree, and no test can fail when an
+asset is added to L0 and a number in an ADR is not re-read. The transferable lesson is the
+narrower one: **do not state the cardinality of a generated collection in prose.** Name the
+file and let the reader count, or state the count with the date and commit it was counted
+at — which is what the correction above does.
 
 ## Context
 
@@ -189,6 +227,7 @@ ADR-0026 does not settle the pipeline.** Read both.
   every plan in the system was computed against a world containing only the arm. The scene
   is now populated — `cite_generated/moveit/cell_a_planning_scene.yaml` carries **11**
   collision objects (three break beams, three conveyors, three pedestals, two tables), and
+  **[Corrected 2026-08-26 — see the Correction section above.]**
   `cite_facility/planning_scene_loader.py` applies them per arm and reads them back rather
   than trusting `ApplyPlanningScene`'s success. **A planner that fails rather than searches
   is far more sensitive to that scene being right**, and to it being complete: an object
