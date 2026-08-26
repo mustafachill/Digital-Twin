@@ -132,37 +132,66 @@ jobs:
       # outside workspace/ so colcon test does not collect it either. A claim no job
       # exercises is not evidence.
       #
-      # STILL NOT BLOCKING, and the reason has changed, so the old conditions below
-      # were re-checked one at a time rather than carried forward. The headline
-      # claim that prompted the re-check — "the cycle now passes 8/8" — did not
-      # survive measurement: 11 consecutive runs on an otherwise idle machine gave
-      # 10 cycle passes and 1 cycle failure. It is closer than it was, and it is
-      # not a gate yet.
+      # STILL NOT BLOCKING, and the honest reason is now much simpler than it was:
+      # the cycle does not pass. Not "passes 8/8", not "10/11" — 0 out of 18.
       #
-      # Measured on 2026-08-25, 11 runs, one build, nothing else on the machine
-      # (the earlier 8-run sample was taken while a second container and an
-      # unrelated service stack were competing for 7.6 GB, and two of its findings
-      # do not survive on a quiet host):
+      # RETRACTION, because a wrong number in this file is worse than none. An
+      # earlier version of this comment recorded "10/11 cycle passes on an
+      # otherwise idle machine". That measurement was invalid and the reason is
+      # instructive: every checkout on this host shared one set of Docker build
+      # volumes, so those runs executed binaries built by a different worktree
+      # from a different commit. The command was right, the machine was quiet, and
+      # the answer described code nobody was looking at. Volumes are namespaced
+      # per checkout now (cite_project_name in scripts/_lib.sh) and the gates
+      # refuse to run against a build tree that does not match the source, so this
+      # class of number cannot be produced silently again.
       #
-      #   cycle test          10/11 pass. The one failure is real, not a test
-      #                       artefact: the part was placed 0.119 m short of the
-      #                       infeed and ended on the floor at z=0.025 rather than
-      #                       on the belt at 0.625. That is a placement-accuracy
-      #                       defect in the skill/grasp path, not in this workflow.
-      #   clean-shutdown test 10/11 pass. The one failure is the /clock bridge
-      #                       aborting inside its own SIGINT handler; it is
-      #                       characterised next to the assertion that catches it,
-      #                       in tests/scenarios/bringup.py, and is deliberately
-      #                       NOT exempted.
-      #   move_group -11      33/33 process exits, every run, all three arms.
-      #                       Consistent with the upstream MoveIt destructor
-      #                       segfault, and already exempted in the scenario.
-      #   gz -9               0/11. The single -9 in the contended sample was on a
-      #                       179 s run against an 84-123 s norm here; on this
-      #                       evidence it was launch's SIGKILL escalation firing on
-      #                       a machine too loaded for gz to finish inside its
-      #                       10 s/15 s window, not a defect of its own. Not
-      #                       reproduced, and NOT therefore declared absent.
+      # Re-measured after that fix, 18 runs over two commits, own build, own
+      # volumes:
+      #
+      #   cycle test          0/18 pass. Every failure is the same physical
+      #                       outcome: the work-piece is picked (it reaches
+      #                       z≈0.745 from a 0.625 rest), carried, and released
+      #                       short of the belt's leading edge, ending on the
+      #                       FLOOR at z=0.025 instead of on the belt at 0.625.
+      #                       Final x ranged 0.285-0.422 against a place frame at
+      #                       0.450. The infeed frame sits exactly on the belt's
+      #                       leading edge, so any undershoot at all drops the part
+      #                       off the front. This is a placement-accuracy defect in
+      #                       the skill/grasp path, not in this workflow.
+      #   caught by height    2 of the 4 failures analysed in detail were inside
+      #                       the 0.10 m horizontal tolerance and were caught ONLY
+      #                       by the height assertion added alongside this comment.
+      #                       Before that assertion existed those two runs reported
+      #                       success with the work-piece lying on the floor, which
+      #                       is precisely the baseline this scenario was found in.
+      #   clean-shutdown test 16/18 pass.
+      #   move_group -11      present in all 18 runs, all three arms. The upstream
+      #                       MoveIt destructor segfault, already exempted.
+      #   -9 / -15 family     2/18, and both were the two SLOWEST runs in the set:
+      #                       183 s and 239 s against an 88-143 s norm. Both show
+      #                       the same signature — move_group truncated to -15
+      #                       instead of completing its -11 crash, and skill_server
+      #                       SIGKILLed at -9. That is launch's SIGTERM/SIGKILL
+      #                       escalation firing on a run too slow to finish
+      #                       teardown inside its window, i.e. machine contention,
+      #                       not an independent defect. Duration predicts it. The
+      #                       original report's `gz -9` on a 179 s run is the same
+      #                       mechanism on a different process.
+      #   parameter_bridge -6 0/18 here; observed exactly once, earlier, on the
+      #                       contended shared-volume setup. NOT declared absent on
+      #                       that evidence — one occurrence with a fully
+      #                       characterised cause is still a real defect. It is a
+      #                       glibc robust-mutex abort inside the bridge's own
+      #                       SIGINT handler, lands in the same millisecond as the
+      #                       signal, and is therefore NOT slowness: no timeout
+      #                       could change it. Characterised next to the assertion
+      #                       that catches it in tests/scenarios/bringup.py, and
+      #                       deliberately NOT exempted.
+      #
+      # None of these teardown signals is exempted beyond the single pre-existing
+      # move_group -11 allowance. Widening that list would turn the one assertion
+      # covering shutdown into one that cannot fail.
       #
       # The three conditions recorded here previously, each re-checked:
       #
@@ -174,11 +203,15 @@ jobs:
       #      OMPL and is apt-installed rather than pinned in external/cite.repos,
       #      so there is no patch point either (ADR-0027). Planning here stays
       #      genuinely non-deterministic. What this condition was protecting
-      #      against is a flaky hard gate, and that has to be answered with a
-      #      measured pass rate instead of with a seed. 10/11 is not it.
-      #   2. "The grasp/skill failure in cite_skills is closed." MET. The arm
-      #      grasps by friction since the attachment plugin was removed (ADR-0029),
-      #      and the work-piece is lifted in every one of the 11 runs.
+      #      against is a flaky hard gate; that question is moot while the pass
+      #      rate is zero.
+      #   2. "The grasp/skill failure in cite_skills is closed." PARTLY. The arm
+      #      does grasp by friction since the attachment plugin was removed
+      #      (ADR-0029) and lifts the work-piece in all 18 runs — that half is
+      #      real. But the cycle still does not deliver: the release point misses
+      #      the belt. The condition was written when "grasp" was the whole
+      #      problem, and closing it moved the failure downstream rather than
+      #      removing it.
       #   3. "cell_a_plan.yaml's declared topics exist at runtime (T-06)." The two
       #      blockers this condition named are gone: break_beam.cpp is in a
       #      CMakeLists target now, and the conveyor plugin is instantiated three
@@ -186,14 +219,17 @@ jobs:
       #      as ROS topics — both plugins speak Gazebo transport and only /clock is
       #      bridged — but the guess attached to this condition, that the step "may
       #      well fail on that alone", is measured false: this scenario never
-      #      subscribes to them and passes without them. It is a real gap, tracked
-      #      elsewhere, and it is not what is holding this gate up.
+      #      subscribes to them and fails for an unrelated reason.
       #
-      # So: no promotion, and deliberately no half-promotion either. Gating the
-      # cycle test alone while leaving the shutdown check advisory was considered
-      # and rejected — at 10/11 the cycle is the flakier half, so that split would
-      # buy a red main branch roughly one run in eleven and call it a gate. The
-      # honest blocker is placement accuracy, and it belongs to the skill path.
+      # So: no promotion. There is nothing subtle left in that call — a step that
+      # fails every time is not a candidate for a gate, and the earlier debate
+      # about which half to gate was conducted over a number that turned out to be
+      # measuring another checkout's build.
+      #
+      # What WOULD make this promotable is one fix, not three: the release point
+      # has to land on the belt rather than at its leading edge. That belongs to
+      # the skill/orchestration path, and until it lands this step earns its keep
+      # by running on every push and showing the failure rather than hiding it.
       - name: Simulation-in-the-loop scenario — pick_and_place (advisory)
         continue-on-error: true
         run: |
