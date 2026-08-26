@@ -128,6 +128,24 @@ class TestGeometryComesFromTheModel:
         assert float(value(plugin, "belt_length_m")) == pytest.approx(size[0])
         assert float(value(plugin, "belt_width_m")) == pytest.approx(size[1])
 
+    def test_the_carry_height_is_the_tallest_workpiece(self, cell) -> None:
+        # How far above the surface a part still counts as resting on the belt is
+        # a fact about the part, not about the belt. A part at rest sits half its
+        # own height up, so a volume one part-height tall holds it dead centre and
+        # releases it once it has been lifted higher than it is tall.
+        #
+        # This used to be declared on the conveyor at 0.100 m, which held a 50 mm
+        # cube until it had been lifted 75 mm.
+        tallest = max(
+            asset_type.description.body.vertical_extent_m for asset_type in cell.workpiece_types
+        )
+        for plugin in plugins(world_xml(cell), "cite_conveyor"):
+            assert float(value(plugin, "carry_height_m")) == pytest.approx(tallest)
+
+    def test_every_belt_agrees_about_what_it_can_carry(self, cell) -> None:
+        heights = {value(p, "carry_height_m") for p in plugins(world_xml(cell), "cite_conveyor")}
+        assert len(heights) == 1
+
     def test_the_beam_crosses_the_belt_rather_than_being_centred_on_its_housing(self, cell) -> None:
         # beam_c1_out stands 250 mm to the side of a 400 mm belt and declares a
         # 500 mm beam. Centred on the housing that spans y in [0.000, 0.500] —
@@ -159,4 +177,13 @@ class TestTheGeneratorRefusesRatherThanGuesses:
         belt = cell.asset("conveyor_1")
         object.__setattr__(belt, "frames", {})
         with pytest.raises(world.WorldError, match="surface"):
+            world.generate(cell)
+
+    def test_belts_with_no_workpiece_geometry_behind_them_are_an_error(self, cell) -> None:
+        # A guessed carry height is the worst outcome available here: the plugin
+        # loads, advertises its topics, acknowledges every command and carries
+        # nothing, which is precisely the invisible failure this belt was written
+        # instead of adopting one that could not report state.
+        object.__setattr__(cell, "workpiece_models", ())
+        with pytest.raises(world.WorldError, match="carry volume"):
             world.generate(cell)

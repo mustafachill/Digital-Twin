@@ -58,6 +58,19 @@
 // optimisation: an idle belt must be inert, because a plugin that nudged parts
 // around while no one had asked for a belt to run would be a source of motion
 // nobody could attribute.
+//
+// LETTING GO IS PART OF CARRYING, and forgetting it cost this belt everything
+// the paragraph above promises. `Link::SetLinearVelocity` writes a
+// `LinearVelocityCmd` component; Physics consumes it every step and then zeroes
+// its VALUE, but never removes the COMPONENT. A part carried once therefore
+// stayed under a standing command of zero for the rest of the run: it could not
+// fall, could not be pushed and could not be lifted, and — because a body held
+// at zero velocity looks exactly like a body at rest — the only visible symptom
+// was a part that left the end of the belt and sank at about 12 mm/s instead of
+// falling. So a belt must remove that component from anything it stops
+// carrying, on the step it stops. Released with the component gone, the part
+// keeps the velocity physics last gave it and coasts off the end, which is what
+// leaving a belt looks like.
 
 #include <algorithm>
 #include <cmath>
@@ -70,6 +83,7 @@
 #include <gz/sim/System.hh>
 #include <gz/sim/Util.hh>
 #include <gz/sim/components/CanonicalLink.hh>
+#include <gz/sim/components/LinearVelocityCmd.hh>
 #include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Name.hh>
 #include <gz/sim/components/ParentEntity.hh>
@@ -169,21 +183,34 @@ public:
       commanded = commanded_speed_;
     }
 
+    // Both halves, every step and in this order. A belt that only ever drove
+    // would leave a standing velocity command on every part it had touched; a
+    // belt commanded to zero drives nothing, and must still let go of whatever
+    // it was holding.
+    std::unordered_set<gz::sim::Entity> driving;
     if (commanded != 0.0) {
-      Carry(ecm, commanded * travel_sign_);
+      driving = Carry(ecm, commanded * travel_sign_);
     }
+    Release(ecm, driving);
+    driving_ = std::move(driving);
+
     PublishState(info, commanded);
   }
 
 private:
   /// Command every carried model inside the belt's volume along the belt.
-  void Carry(gz::sim::EntityComponentManager & ecm, double signed_speed)
+  ///
+  /// Returns the links it commanded, which is what `Release` needs to know which
+  /// of the previous step's links have left.
+  std::unordered_set<gz::sim::Entity> Carry(
+    gz::sim::EntityComponentManager & ecm, double signed_speed)
   {
     // The carry volume sits ON the belt surface and extends upward only, so its
     // centre is half a carry height above the frame rather than on it.
     const gz::math::Vector3d centre(0.0, 0.0, carry_height_ / 2.0);
     const gz::math::Vector3d half(belt_length_ / 2.0, belt_width_ / 2.0, carry_height_ / 2.0);
 
+    std::unordered_set<gz::sim::Entity> driving;
     ecm.Each<gz::sim::components::Model, gz::sim::components::Name>(
       [&](const gz::sim::Entity & entity, const gz::sim::components::Model *,
       const gz::sim::components::Name * name) -> bool {
@@ -195,18 +222,46 @@ private:
         {
           return true;
         }
-        Drive(ecm, entity, signed_speed);
+        const auto link = Drive(ecm, entity, signed_speed);
+        if (link != gz::sim::kNullEntity) {
+          driving.insert(link);
+        }
         return true;
       });
+    return driving;
   }
 
-  /// Drive one model's canonical link along the belt.
-  void Drive(
+  /// Stop commanding every link this belt drove last step and is not driving
+  /// now, by removing the command outright.
+  ///
+  /// Zeroing it would not do. Physics zeroes the value itself after every step
+  /// and then re-applies it, which is precisely the standing zero-velocity
+  /// command that pinned released parts in mid-air. Only removing the component
+  /// hands the body back to physics.
+  ///
+  /// Velocity checks stay enabled. They were switched on to read the part's
+  /// vertical speed, they are read-only, and turning them off would remove
+  /// components regardless of who else asked for them.
+  void Release(
+    gz::sim::EntityComponentManager & ecm,
+    const std::unordered_set<gz::sim::Entity> & driving)
+  {
+    for (const auto link : driving_) {
+      if (driving.count(link) != 0 || !ecm.HasEntity(link)) {
+        continue;
+      }
+      ecm.RemoveComponent<gz::sim::components::LinearVelocityCmd>(link);
+    }
+  }
+
+  /// Drive one model's canonical link along the belt, and report which link that
+  /// was.
+  gz::sim::Entity Drive(
     gz::sim::EntityComponentManager & ecm, gz::sim::Entity model, double signed_speed)
   {
     const auto link_entity = CanonicalLinkOf(ecm, model);
     if (link_entity == gz::sim::kNullEntity) {
-      return;
+      return gz::sim::kNullEntity;
     }
     gz::sim::Link link(link_entity);
 
@@ -227,6 +282,7 @@ private:
     // that has rotated on the belt would otherwise be driven off at an angle.
     const auto link_pose = gz::sim::worldPose(link_entity, ecm);
     link.SetLinearVelocity(ecm, link_pose.Rot().Inverse().RotateVector(world_velocity));
+    return link_entity;
   }
 
   static gz::sim::Entity CanonicalLinkOf(
@@ -315,6 +371,11 @@ private:
 
   std::mutex mutex_;
   double commanded_speed_{0.0};
+
+  //: The links this belt commanded on the previous step. Kept so that a part
+  //: which has left the carry volume — or a belt which has been stopped — can be
+  //: handed back to physics rather than left under a standing command.
+  std::unordered_set<gz::sim::Entity> driving_;
 
   bool published_{false};
   double last_published_speed_{0.0};
