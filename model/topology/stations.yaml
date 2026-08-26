@@ -22,8 +22,14 @@ stations:
     assets: [arm_1, pedestal_1]
     pick_from: {asset: table_pick, frame: surface}
     place_to: {asset: conveyor_1, frame: infeed}
-    # No trigger: the infeed is fed externally, so L4 starts this station rather
-    # than a sensor doing it.
+    # The infeed is fed from outside the cell, and this is what tells the station
+    # a part has arrived. It used to have no trigger, on the reasoning that L4
+    # would start the station instead — but nothing tells L4 either, and the
+    # station's cycle came to rest polling `Detect` against a region no sensor
+    # was in. A station that acts observes; see `beam_pick` in
+    # assets/instances/sensors.yaml for the placement and the alternative that
+    # was rejected.
+    trigger: {sensor: beam_pick, state: blocked}
 
   - id: station_transfer_2
     zone: cell_a

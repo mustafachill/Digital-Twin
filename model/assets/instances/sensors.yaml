@@ -43,6 +43,53 @@ schema: cite/asset_instances/v1
 # line whose stations are supposed to act on detection rather than on elapsed
 # time.
 assets:
+  # The infeed's own presence sensor.
+  #
+  # WHY IT EXISTS. `station_transfer_1` is fed from outside the cell, and until
+  # this beam it was the one acting station in the line with nothing to observe.
+  # Its cycle fell through `AwaitTrigger` — no topic, so no wait — and came to
+  # rest in `DetectAt`, which polls for ever when a station has no trigger. The
+  # measured symptom was a station reporting WORKING with occupancy 0/1 while a
+  # `Detect` on `table_pick/surface` answered "no sensor in this zone lies inside
+  # the requested region". A station that acts must observe; this is what it
+  # observes with.
+  #
+  # WHY NOT SIMPLY STOP GATING THE STATION. The alternative was to let a
+  # source-fed station pick without observing, on the ground that it was told
+  # about the part rather than seeing it. Nothing tells it: the only thing that
+  # would then bound its cycle is the pick failing, so an empty table would send
+  # the arm down to check and burn the station's retry budget doing it. A robot
+  # busy-wait is a worse answer than a sensor, and `break_beam.yaml` states the
+  # rule this line is built on — a station acts because a work-piece was
+  # detected, never because a duration elapsed.
+  #
+  # THE OFFSET IS THE SAME +0.250 AS EVERY OTHER BEAM, and for the same two
+  # reasons. It stands on the side away from the arms, which work from -Y — every
+  # pedestal is at y = -0.300. And it clears the gripper's descent: the approach
+  # corridor `cite_tools.validate.geometric` enforces is 0.100 m of half-width
+  # about the pick point, so a 0.040 m housing has to stand further out than
+  # 0.120 m or `approach-obstruction` rejects it. The table is 0.600 m square, so
+  # 0.250 m leaves the housing 0.030 m inside its own edge, exactly as 0.250 m on
+  # a 0.400 m belt leaves 0.030 m of belt edge to spare.
+  #
+  # The height is the belts' 0.030 m for the reason given at length below: the
+  # plugin's beam test is a point test on the work-piece ORIGIN, and 0.030 m puts
+  # the window at part-centre heights 0.010 m to 0.050 m above the surface, which
+  # is where a part between 20 mm and 100 mm tall rests. Nothing about that
+  # reasoning is specific to a belt.
+  - id: beam_pick
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: table_pick/surface
+      xyz_m: [0.000, 0.250, 0.030]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear
+
   - id: beam_c1_out
     zone: cell_a
     type: break_beam

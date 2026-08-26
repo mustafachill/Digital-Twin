@@ -374,6 +374,14 @@ plan:
       frame_id: cell_a__beam_c3_out__beam
       beam_axis: y
       beam_length_m: 0.5
+    - asset: beam_pick
+      detection_topic: /cite/cell_a/beam_pick/detection
+      level_topic: /cite/cell_a/beam_pick/detection_level
+      # The frame a detection from this beam is reported in, published by the
+      # generated static TF table.
+      frame_id: cell_a__beam_pick__beam
+      beam_axis: y
+      beam_length_m: 0.5
 
   # L3 detection for the whole zone: one server for every beam, because a beam
   # watches a belt rather than a robot.

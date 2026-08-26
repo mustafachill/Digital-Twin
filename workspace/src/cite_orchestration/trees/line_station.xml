@@ -71,7 +71,6 @@
                left in it (ADR-0029) — the alternative is assuming the part is
                square to its frame, which it is not once it has been handled. -->
           <DetectAt      asset="{asset}" action="{detect_action}" frame="{pick_frame}"
-                         require_immediate="{require_immediate}"
                          pose="{detected_pose}" workpiece="{detected_workpiece}" />
 
           <TakeCustody   station="{station}" admits_work="{admits_work}"

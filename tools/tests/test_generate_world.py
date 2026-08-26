@@ -53,8 +53,15 @@ class TestEveryAidIsInstantiated:
         assert len(plugins(root, "cite_conveyor")) == len(cell.of_category("conveyor")) == 3
 
     def test_one_beam_plugin_per_sensor(self, cell) -> None:
+        # The property is the PAIRING, not the number. The trailing `== 3` that
+        # used to be here was a second statement of how many beams the cell has,
+        # and adding `beam_pick` to the model broke a test that had nothing to say
+        # about it — which is exactly the "a value in two places" this repository
+        # refuses. The count now comes from the model, once.
         root = world_xml(cell)
-        assert len(plugins(root, "cite_break_beam")) == len(cell.of_category("sensor")) == 3
+        sensors = cell.of_category("sensor")
+        assert sensors, "the cell declares no sensor, so this test asserted nothing"
+        assert len(plugins(root, "cite_break_beam")) == len(sensors)
 
     def test_the_world_still_loads_the_systems_the_cell_depends_on(self, cell) -> None:
         # Contact reporting is in this set although nothing reads it today: it

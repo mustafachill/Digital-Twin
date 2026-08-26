@@ -57,6 +57,15 @@ planning_scene:
       pose:
         xyz_m: [5.75, 0.25, 0.69]
         rpy_rad: [0.0, 0.0, 0.0]
+    - id: beam_pick
+      type: break_beam
+      frame_id: cite_world
+      primitive:
+        type: box
+        dimensions_m: [0.04, 0.04, 0.12]
+      pose:
+        xyz_m: [-0.475, 0.25, 0.69]
+        rpy_rad: [0.0, 0.0, 0.0]
     - id: conveyor_1
       type: belt_1200x400
       frame_id: cite_world

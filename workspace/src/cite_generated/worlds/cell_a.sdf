@@ -162,6 +162,29 @@
       <watch>workpiece</watch>
     </plugin>
 
+    <!-- beam_pick — a through-beam presence sensor.
+
+         A world system for the same reason the belts are: its housing is lumped
+         into the scene's single link, so there is no beam_pick model to
+         attach to and its pose has to arrive as data. It is resolved from the
+         same L0 placement that positions the housing, so the beam and the thing
+         it is drawn as cannot end up in different places.
+
+         beam_pose is where the HOUSING stands. beam_offset_m is how far past it,
+         along the beam axis, the middle of the beam lies — because a through
+         beam is emitted from its housing and crosses what it watches, rather
+         than being centred on it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>-0.475 0.25 0.63 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.04</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/cite/cell_a/beam_pick/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <diffuse>0.8 0.8 0.8 1</diffuse>

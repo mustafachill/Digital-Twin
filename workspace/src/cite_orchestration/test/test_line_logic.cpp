@@ -118,6 +118,13 @@ LineTopology cell_a_shaped()
   topology.stations.back().capacity = 6;
   topology.stations.push_back(
     station("station_transfer_1", StationTopology::TYPE_TRANSFER, "arm_1", "pick_1", "place_1"));
+  // The infeed station has a sensor of its own. It did not, and that was the
+  // Critical defect: it fell through the wait for work and came to rest polling
+  // `Detect` against a region no sensor was in. `beam_pick` in
+  // `model/assets/instances/sensors.yaml` is what it observes with now, and this
+  // fixture mirrors the model rather than the shape that hung.
+  topology.stations.back().trigger_topic = "/fixture/beam_pick/detection";
+  topology.stations.back().trigger_state = StationTopology::TRIGGER_ON_BLOCKED;
   topology.stations.push_back(
     station("station_transfer_2", StationTopology::TYPE_TRANSFER, "arm_2", "pick_2", "place_2"));
   topology.stations.back().trigger_topic = "/fixture/beam_c1_out/detection";
@@ -592,8 +599,15 @@ TEST(LinePlanTest, TheTriggerStateIsTranslatedRatherThanCopied)
   // contracts that happen to carry the same numbers today. The plan must emit the
   // one the subscriber compares against.
   EXPECT_EQ(plan.stations[1].trigger_detection_state, DetectionEvent::STATE_BLOCKED);
-  EXPECT_EQ(plan.stations[0].trigger_topic, "")
-    << "the first station has no sensor and is sequenced by its source";
+  EXPECT_EQ(plan.stations[0].trigger_detection_state, DetectionEvent::STATE_BLOCKED)
+    << "the infeed station's own sensor was not translated; it is fed from outside the "
+       "cell and a beam is the only thing that tells it a part has arrived";
+  for (const auto & entry : plan.stations) {
+    EXPECT_FALSE(entry.trigger_topic.empty())
+      << "station '" << entry.id << "' acts and observes nothing. A station with no "
+      "trigger falls through AwaitTrigger and comes to rest in DetectAt, which is "
+      "how the line hung before `beam_pick` was added to the model";
+  }
 }
 
 TEST(LinePlanTest, ACycleIsRefusedRatherThanRunInSomeOrder)
@@ -683,27 +697,50 @@ TEST(LineTreeTest, OneSubtreePerStationAndNoStationNamedInCode)
   EXPECT_NE(tree.xml.find("outbound_location=\"conveyor_3\""), std::string::npos);
 }
 
-TEST(LineTreeTest, AStationWithNoSensorAdmitsWorkAndDoesNotDemandAnImmediateDetection)
+TEST(LineTreeTest, WorkEntersTheLineOnlyWhereTheModelSaysItDoes)
 {
   const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
   ASSERT_TRUE(plan.usable());
   const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
   ASSERT_TRUE(tree.refusals.empty());
 
-  // Station 1 is fed by the source: it has no sensor, so an empty Detect result
-  // means the line is idle rather than faulted, and it admits what it finds.
+  // Station 1 is fed by the source, so it admits what arrives; every station
+  // after it is handed its work and must refuse to adopt anything else.
   const std::size_t first = tree.xml.find("station=\"station_transfer_1\"");
   ASSERT_NE(first, std::string::npos);
-  const std::size_t end_of_first = tree.xml.find("/>", first);
-  const std::string element = tree.xml.substr(first, end_of_first - first);
+  const std::string element = tree.xml.substr(first, tree.xml.find("/>", first) - first);
   EXPECT_NE(element.find("admits_work=\"1\""), std::string::npos);
-  EXPECT_NE(element.find("require_immediate=\"0\""), std::string::npos);
 
   const std::size_t second = tree.xml.find("station=\"station_transfer_2\"");
   ASSERT_NE(second, std::string::npos);
   const std::string later = tree.xml.substr(second, tree.xml.find("/>", second) - second);
   EXPECT_NE(later.find("admits_work=\"0\""), std::string::npos);
-  EXPECT_NE(later.find("require_immediate=\"1\""), std::string::npos);
+}
+
+TEST(LineTreeTest, NoStationIsEverToldToTreatAnEmptyDetectionAsAnIdleLine)
+{
+  // THE CRITICAL DEFECT, LOCKED OUT AT THE POINT IT WAS GENERATED.
+  //
+  // `line_tree_xml` used to emit `require_immediate="0"` for a station with no
+  // trigger, which told `DetectAt` that an empty result meant the line was idle
+  // and to look again. `Detect` answers an UNOBSERVED region with the same
+  // SUCCESS and the same empty list as an observed empty one, so that station
+  // re-sent for ever: measured as `station_transfer_1` at WORKING with occupancy
+  // 0/1 while the whole line waited behind it.
+  //
+  // The attribute is gone and so is the port it fed. This asserts the absence,
+  // because the defect was an attribute being PRESENT with a particular value —
+  // a test that only checked for `"1"` would pass again the day somebody
+  // reintroduced the conditional.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty());
+
+  EXPECT_EQ(tree.xml.find("require_immediate"), std::string::npos)
+    << "the generated tree still carries a require_immediate attribute. An empty "
+       "detection is always a reported failure now; waiting for work is AwaitTrigger's "
+       "job, from the sensor the topology names";
 }
 
 TEST(LineTreeTest, AMissingActionNameIsRefusedRatherThanComposed)

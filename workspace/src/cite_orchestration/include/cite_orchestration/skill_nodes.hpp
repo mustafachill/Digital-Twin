@@ -54,6 +54,7 @@
 #include <utility>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/exceptions.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
 #include <cite_interfaces/action/detect.hpp>
@@ -240,7 +241,7 @@ protected:
   /// runs on another thread: this is the tick thread, not a callback.
   void halt_goal()
   {
-    if (handle_) {
+    if (goal_is_outstanding()) {
       abandon();
     } else if (client_ && !waiting_for_server_) {
       cancel_all();
@@ -248,6 +249,28 @@ protected:
     handle_.reset();
     result_.reset();
     waiting_for_server_ = false;
+  }
+
+  /// Whether this node is holding a goal it has not yet seen the end of.
+  bool goal_is_outstanding() const {return static_cast<bool>(handle_);}
+
+  /// Whether the goal this node is holding has already reached a terminal state.
+  ///
+  /// A ready result future and a handle the client has forgotten are THE SAME
+  /// FACT. `rclcpp_action::Client::make_result_aware` installs a response
+  /// callback that does `goal_handle->set_result(...)` and then
+  /// `goal_handles_.erase(...)`, in that order — so by the time this returns true
+  /// the client either has already dropped the handle or is about to, and every
+  /// `Client` method that takes a handle answers with
+  /// `UnknownGoalHandleError` from then on.
+  ///
+  /// It is a RACE and not a state. The result can arrive between this check and
+  /// the next line, which is why `abandon` catches as well as asks: this is the
+  /// common path, the catch is the correctness.
+  bool goal_already_ended() const
+  {
+    return result_future_.valid() &&
+           result_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
   }
 
   Context context_;
@@ -315,34 +338,74 @@ private:
   /// Both waits are deadlines, and expiry is reported rather than ignored: a
   /// server that will not acknowledge a cancellation is a fault worth naming,
   /// and the arm may genuinely still be moving.
+  ///
+  /// A GOAL THAT HAS ALREADY ENDED IS NOT AN ERROR HERE. It is this function's
+  /// own post-condition, arriving early. `async_cancel_goal` and
+  /// `async_get_result` both throw `UnknownGoalHandleError` for a handle the
+  /// client has forgotten, and the client forgets a handle the instant the result
+  /// response lands — which is on the executor's thread, not this one. So the
+  /// window is: the last `poll` found the result future not ready, the result
+  /// arrived, and then a halt reached this leaf. Nothing caught the throw and it
+  /// crossed the tick thread's stack into `std::terminate`:
+  ///
+  ///     terminate called after throwing an instance of
+  ///       'rclcpp_action::exceptions::UnknownGoalHandleError'
+  ///       Goal handle is not known to this client
+  ///
+  /// It was measured on 1 run in 4 of the continuous-line scenario, and it is
+  /// reachable on EVERY halt — a sibling station failing, a preemption, a
+  /// recovery branch starting — not only at shutdown. That is what made it worth
+  /// more than a teardown note: the tree halts a leaf in order to RECOVER from
+  /// something, so a crash here is a crash on the path that has to work when
+  /// something else has already gone wrong.
   void abandon()
   {
-    auto cancel_future = client_->async_cancel_goal(handle_);
-    if (cancel_future.wait_for(context_.cancel_deadline) != std::future_status::ready) {
-      RCLCPP_ERROR(
+    if (goal_already_ended()) {
+      RCLCPP_INFO(
         context_.node->get_logger(),
-        "%s did not answer the cancellation; the abandoned goal may still be executing",
+        "%s: the abandoned goal had already ended, so there was nothing to cancel",
         action_name_.c_str());
       return;
     }
+    try {
+      auto cancel_future = client_->async_cancel_goal(handle_);
+      if (cancel_future.wait_for(context_.cancel_deadline) != std::future_status::ready) {
+        RCLCPP_ERROR(
+          context_.node->get_logger(),
+          "%s did not answer the cancellation; the abandoned goal may still be executing",
+          action_name_.c_str());
+        return;
+      }
 
-    // Then wait for the goal to actually END. Acknowledgement means the server
-    // accepted the request, not that the arm has stopped; sending the recovery
-    // branch's next goal before then races exactly the motion this cancellation
-    // exists to stop.
-    if (!result_future_.valid()) {
-      result_future_ = client_->async_get_result(handle_);
-    }
-    if (result_future_.wait_for(context_.cancel_deadline) != std::future_status::ready) {
-      RCLCPP_ERROR(
+      // Then wait for the goal to actually END. Acknowledgement means the server
+      // accepted the request, not that the arm has stopped; sending the recovery
+      // branch's next goal before then races exactly the motion this cancellation
+      // exists to stop.
+      if (!result_future_.valid()) {
+        result_future_ = client_->async_get_result(handle_);
+      }
+      if (result_future_.wait_for(context_.cancel_deadline) != std::future_status::ready) {
+        RCLCPP_ERROR(
+          context_.node->get_logger(),
+          "%s acknowledged the cancellation but the goal has not ended; the arm may "
+          "still be moving",
+          action_name_.c_str());
+        return;
+      }
+      RCLCPP_INFO(
+        context_.node->get_logger(), "%s: abandoned goal cancelled", action_name_.c_str());
+    } catch (const rclcpp_action::exceptions::UnknownGoalHandleError &) {
+      // The goal ended between the check above and one of the calls in the block.
+      // The arm is not moving under a goal nobody is holding — which is the whole
+      // property the giving-up rule exists to establish — so this is the good
+      // outcome, and it is said out loud rather than swallowed, because a leaf
+      // that reports this often is a leaf whose deadline is tuned wrong.
+      RCLCPP_INFO(
         context_.node->get_logger(),
-        "%s acknowledged the cancellation but the goal has not ended; the arm may "
-        "still be moving",
+        "%s: the goal reached a terminal state while it was being abandoned, so the "
+        "client had already forgotten the handle and there was nothing left to cancel",
         action_name_.c_str());
-      return;
     }
-    RCLCPP_INFO(
-      context_.node->get_logger(), "%s: abandoned goal cancelled", action_name_.c_str());
   }
 
   /// Cancel every goal on one action, for the case where no handle was received.
@@ -623,23 +686,38 @@ public:
       BT::InputPort<std::string>("frame", "the TF frame the search region is centred on"),
       BT::InputPort<std::string>(
         "workpiece_type", "", "empty matches any type, as the action documents"),
-      // The region searched, about the station's frame. A stand-in with a stated
-      // reason: L0 declares no detection region for a station, so nothing can
-      // derive it. 0.30 m about a pick frame covers the surface a work-piece is
-      // put down on without reaching the next station. Reported as a gap rather
-      // than left to be found.
-      BT::InputPort<double>("region_m", 0.30, "axis-aligned extent of the search region"),
-      // Whether an empty result is a failure.
+      // The region searched, about the station's frame. Still a stand-in with a
+      // stated reason — L0 declares no detection region for a station, so nothing
+      // here can derive it, and that gap is reported rather than left to be found.
       //
-      // A station with a sensor trigger has already been TOLD something is
-      // there, so `Detect` finding nothing means the two disagree, and that is a
-      // fault worth reporting — PRECONDITION_FAILED, which the recovery policy
-      // answers by re-observing. A station fed from a source has been told
-      // nothing, so an empty result means the line is idle, and idling is not a
-      // failure: it keeps looking. Which of the two a station is comes from the
-      // topology, not from a mode set here.
-      BT::InputPort<bool>(
-        "require_immediate", true, "true when a sensor has already said a part is there"),
+      // IT WAS 0.30 m AND NO SENSOR IN THIS CELL COULD EVER FALL INSIDE IT. The
+      // extent is measured ABOUT the frame, so 0.30 m is a half-extent of 0.15 m
+      // (`cite_skills::inside_region`), and every break beam in the zone stands
+      // 0.250 m off its station's pick frame in y. So every `Detect` this leaf
+      // sent came back SUCCESS with an empty list and the detail "no sensor in
+      // this zone lies inside the requested region" — which is not a report that
+      // the region is empty, and `Detect.action` carries no code that separates
+      // the two. A station with a trigger read that as a disagreement with its own
+      // sensor and failed; a station without one read it as an idle line and
+      // polled for ever. Both were the same wrong number.
+      //
+      // WHY 0.60 AND NOT A LARGER OR SMALLER ONE. The lower bound is forced by
+      // geometry that is not ours to move: a beam housing must clear the gripper's
+      // descent, and `cite_tools.validate.geometric` enforces that mechanically as
+      // a corridor of 0.100 m half-width about the pick point, which a 0.040 m
+      // housing can only stand outside of at more than 0.120 m. The cell's beams
+      // stand at 0.250 m, off the edge of a 0.400 m belt and a 0.600 m table. So
+      // the half-extent has to exceed 0.250 m, and 0.60 m gives 0.300 m — 0.050 m
+      // of margin on the placement rather than an exact tie with it.
+      //
+      // The upper bound is the next beam along, which is 2.025 m from the nearest
+      // pick frame, so anything up to about 4 m would still select exactly one
+      // sensor per station. 0.60 is a long way inside that, and
+      // `test/test_detection_region.py` pins BOTH bounds against the GENERATED
+      // frames, reading this number out of this line rather than restating it — so
+      // a layout that moves a beam out of reach of it fails a unit test in
+      // milliseconds instead of a scenario in seven minutes.
+      BT::InputPort<double>("region_m", 0.60, "axis-aligned extent of the search region"),
       BT::OutputPort<geometry_msgs::msg::PoseStamped>("pose", "where the part was observed"),
       BT::OutputPort<std::string>("workpiece", "what the detector called it; may be empty"),
     };
@@ -669,19 +747,33 @@ public:
 
     const auto & detections = result()->result->detections;
     if (detections.empty()) {
-      if (getInput<bool>("require_immediate").value_or(true)) {
-        RCLCPP_WARN(
-          context_.node->get_logger(),
-          "a sensor said a work-piece was at %s and Detect found none", frame_.c_str());
-        config().blackboard->set(
-          kLastResultCode, static_cast<int>(ResultCode::PRECONDITION_FAILED));
-        return BT::NodeStatus::FAILURE;
-      }
-      // Nothing there yet. Not a failure: a line with no work to do is idle, and
-      // reporting idleness as a fault would put every station into recovery the
-      // moment the last part left. Look again — the re-send interval is the
-      // tree's tick period, which is a poll on a sensor and not a schedule.
-      return send_search();
+      // ALWAYS A FAILURE, AND THIS LEAF NO LONGER LOOKS AGAIN.
+      //
+      // It used to, when a `require_immediate="0"` port said the station had no
+      // sensor and an empty result therefore meant an idle line. That branch was
+      // the Critical hang: `Detect` answers an unobserved region and an empty one
+      // with the same SUCCESS and the same empty list — its own detail says "this
+      // is not a report that the region is empty" — and `Detect.action` carries
+      // no code separating them. So a station polling for work against a region
+      // no sensor was in re-sent for ever, reported itself WORKING with occupancy
+      // 0/1, and the line never started. Measured on `station_transfer_1`.
+      //
+      // Waiting for work is `AwaitTrigger`'s job and it does it from a sensor the
+      // topology names. This leaf's job is to say WHERE the part is, and a leaf
+      // that cannot see one has failed at that — loudly, in a bounded time, with
+      // a code the recovery policy branches on. The port is gone rather than
+      // defaulted, so the polling path cannot be re-entered by setting an
+      // attribute: it does not exist.
+      RCLCPP_WARN(
+        context_.node->get_logger(),
+        "Detect observed nothing at %s. Either there is no work-piece there, or no "
+        "sensor in this zone lies inside the region searched about that frame — the "
+        "action reports both the same way, so the search region and the model's sensor "
+        "placement are the first two things to check",
+        frame_.c_str());
+      config().blackboard->set(
+        kLastResultCode, static_cast<int>(ResultCode::PRECONDITION_FAILED));
+      return BT::NodeStatus::FAILURE;
     }
 
     // The first detection, which is the only one a capacity-1 station can act
@@ -700,7 +792,7 @@ private:
   {
     Detect::Goal goal;
     goal.region_frame = frame_;
-    const double extent = getInput<double>("region_m").value_or(0.30);
+    const double extent = getInput<double>("region_m").value_or(0.60);
     goal.region_size_m.x = extent;
     goal.region_size_m.y = extent;
     goal.region_size_m.z = extent;

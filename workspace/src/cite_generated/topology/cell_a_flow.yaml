@@ -32,6 +32,9 @@ topology:
       capacity: 1
       pick_frame: cell_a__table_pick__surface
       place_frame: cell_a__conveyor_1__infeed
+      trigger:
+        topic: /cite/cell_a/beam_pick/detection
+        state: blocked
       upstream: [station_infeed]
       downstream: [station_transfer_2]
     - id: station_transfer_2

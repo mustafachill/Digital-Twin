@@ -68,6 +68,16 @@ static_transforms:
   - -0.0
   - 0.0
 - parent: cite_world
+  child: cell_a__beam_pick__beam
+  xyz_m:
+  - -0.475
+  - 0.25
+  - 0.63
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 0.0
+- parent: cite_world
   child: cell_a__conveyor_1__infeed
   xyz_m:
   - 0.5
