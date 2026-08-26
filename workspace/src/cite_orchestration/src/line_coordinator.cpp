@@ -30,9 +30,26 @@
 // compose `/cite/<zone>/<asset>/<skill>` from a format string of its own. What
 // remains unfinished is stated in the report rather than here: nothing generated
 // yet declares these names, so whoever launches this node still writes them.
+//
+// ONE STATION, ON PURPOSE. The line lives in `line_orchestrator.cpp`, which
+// instantiates a subtree per station from the L0 topology. This executable runs
+// ONE station's tree from parameters and exits when it finishes, which is what
+// makes a station — and, once `Transfer` has a server, a handoff — drivable in
+// isolation with no second arm and no topology server present. ADR-0024 requires
+// exactly that isolation, and `tests/scenarios/pick_and_place.py` is what
+// currently uses it. The two share every mechanism through the headers; folding
+// them into one entry point belongs with the continuous-line scenario, which
+// does not exist yet.
+//
+// THE NODE IS SPUN HERE, NOT IN A LEAF. The leaves became `StatefulActionNode`s
+// when the line gained parallel stations: they send a goal, return RUNNING, and
+// poll without spinning anything. So something has to spin, and it is the
+// executor thread below. Without it every leaf sits at RUNNING for ever, which
+// looks exactly like a skill server taking a long time.
 
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
@@ -90,6 +107,12 @@ int main(int argc, char ** argv)
     return 1;
   }
 
+  // Spun on its own thread. The tree is ticked on this one; no leaf spins, and
+  // no leaf blocks except on the cancellation path.
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(node);
+  std::thread spinner([&executor]() {executor.spin();});
+
   Context context;
   context.node = node;
 
@@ -116,6 +139,15 @@ int main(int argc, char ** argv)
     node->get_logger(), "station cycle finished: %s",
     status == BT::NodeStatus::SUCCESS ? "SUCCESS" : "FAILURE");
 
+  // Halt before shutting down. A tree that finished has nothing running, but a
+  // tree that was interrupted does, and an arm left moving under a goal nobody is
+  // holding is the defect the cancellation discipline exists to prevent.
+  tree.haltTree();
+
+  executor.cancel();
+  if (spinner.joinable()) {
+    spinner.join();
+  }
   rclcpp::shutdown();
   return status == BT::NodeStatus::SUCCESS ? 0 : 1;
 }

@@ -19,7 +19,16 @@ ament_target_dependencies(line_coordinator
   rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
 )
 
-install(TARGETS line_coordinator DESTINATION lib/${PROJECT_NAME})
+# The line. One subtree per station, instantiated from the L0 topology; the
+# coordinator above runs one station in isolation, which is what ADR-0024 needs
+# for a handoff to be testable with one arm.
+add_executable(line_orchestrator src/line_orchestrator.cpp)
+target_include_directories(line_orchestrator PRIVATE include)
+ament_target_dependencies(line_orchestrator
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
+)
+
+install(TARGETS line_coordinator line_orchestrator DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY trees DESTINATION share/${PROJECT_NAME})
 
 # No `install(DIRECTORY include/ ...)`. This package exports no headers; the one
@@ -54,6 +63,40 @@ if(BUILD_TESTING)
   ament_target_dependencies(test_skill_goals
     rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
   )
+
+  # The rules the line is made of — single ownership, the two-party handoff and
+  # its timeout, buffer and reach arbitration, the recovery policy, and the
+  # translation from an L0 topology into a plan and a tree. Pure logic, so it is
+  # provable without standing up a cell, which is exactly what ADR-0024 means by
+  # a handoff being testable in isolation.
+  ament_add_gtest(test_line_logic test/test_line_logic.cpp)
+  target_include_directories(test_line_logic PRIVATE include)
+  ament_target_dependencies(test_line_logic
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  )
+
+  # The same rules, composed: a real behaviour tree with real in-process action
+  # servers and a real sensor publisher, driving two stations through a handoff.
+  # The logic tests prove each rule; this proves the tree wires them together,
+  # which is the half that a unit test building its own expected values cannot
+  # reach.
+  ament_add_gtest(test_line_nodes test/test_line_nodes.cpp test/fake_arm.cpp TIMEOUT 180)
+  target_include_directories(test_line_nodes PRIVATE include test)
+  ament_target_dependencies(test_line_nodes
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  )
+  # The station subtree under test is the one that ships, read from the source
+  # tree rather than copied: a test that carried its own copy would keep passing
+  # after the shipped tree changed.
+  target_compile_definitions(test_line_nodes PRIVATE
+    CITE_STATION_TREE="${CMAKE_CURRENT_SOURCE_DIR}/trees/line_station.xml")
+  # No debug info for this one. It instantiates the client and server templates
+  # for three action types alongside BehaviorTree.CPP, and with `-g` the single
+  # translation unit exceeds the 2500 MB per-job budget ./scripts/build derives —
+  # the OOM killer takes cc1plus out and reports a "fatal error" that names
+  # neither memory nor this file. A test binary's debug info is not what anybody
+  # is debugging.
+  target_compile_options(test_line_nodes PRIVATE -g0)
 endif()
 
 ament_package()

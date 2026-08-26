@@ -24,6 +24,13 @@
 // Driven against a real action server rather than a mock. The failure was in
 // what this node does to a SERVER, so a test that stubbed the server away would
 // be testing the wrong side of the boundary.
+//
+// The leaf is now a `BT::StatefulActionNode` — it had to become one for three
+// stations to tick under a Parallel — so this test ticks it until it settles and
+// spins the client node on its own thread. The property under test is unchanged
+// and is the whole reason the conversion was done carefully: a leaf that gives
+// up must still cancel the goal it gives up on, and must not return before that
+// goal has reached a terminal state.
 
 #include <atomic>
 #include <chrono>
@@ -135,6 +142,24 @@ BT::NodeConfig config_with(const std::string & action)
   return config;
 }
 
+
+/// Tick a leaf until it stops being RUNNING.
+///
+/// The leaves became `StatefulActionNode`s when the line gained parallel
+/// stations: they send a goal, return RUNNING, and poll without spinning
+/// anything. So a test drives them the way a tree does — by ticking — and
+/// something else spins the node. The wait below is a POLL PERIOD on an
+/// asynchronous result, not a guess at how long anything takes.
+BT::NodeStatus tick_until_settled(BT::TreeNode & leaf)
+{
+  BT::NodeStatus status = leaf.executeTick();
+  while (status == BT::NodeStatus::RUNNING) {
+    std::this_thread::sleep_for(5ms);
+    status = leaf.executeTick();
+  }
+  return status;
+}
+
 Context short_deadline_context(const rclcpp::Node::SharedPtr & node)
 {
   Context context;
@@ -154,8 +179,23 @@ protected:
   void SetUp() override
   {
     client_node_ = std::make_shared<rclcpp::Node>("skill_cancellation_test");
+    // Somebody has to spin, and it is deliberately not the leaf. A leaf that
+    // spun the node could not run beside a sibling station doing the same.
+    executor_.add_node(client_node_);
+    spinner_ = std::thread([this]() {executor_.spin();});
   }
+
+  void TearDown() override
+  {
+    executor_.cancel();
+    if (spinner_.joinable()) {
+      spinner_.join();
+    }
+  }
+
   rclcpp::Node::SharedPtr client_node_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spinner_;
 };
 
 TEST_F(SkillCancellation, a_leaf_that_hits_its_deadline_cancels_the_goal_it_abandons)
@@ -163,7 +203,7 @@ TEST_F(SkillCancellation, a_leaf_that_hits_its_deadline_cancels_the_goal_it_aban
   NeverFinishingServer server;
 
   MoveToHome leaf("MoveToHome", config_with(kAction), short_deadline_context(client_node_));
-  const auto status = leaf.tick();
+  const auto status = tick_until_settled(leaf);
 
   EXPECT_EQ(status, BT::NodeStatus::FAILURE);
   EXPECT_EQ(server.accepted(), 1) << "the server never saw the goal, so nothing was tested";
@@ -182,14 +222,14 @@ TEST_F(SkillCancellation, the_recovery_branchs_next_goal_is_accepted_after_a_dea
   NeverFinishingServer server;
 
   MoveToHome first("MoveToHome", config_with(kAction), short_deadline_context(client_node_));
-  ASSERT_EQ(first.tick(), BT::NodeStatus::FAILURE);
+  ASSERT_EQ(tick_until_settled(first), BT::NodeStatus::FAILURE);
 
   auto client = rclcpp_action::create_client<MoveTo>(client_node_, kAction);
   ASSERT_TRUE(client->wait_for_action_server(10s));
   auto goal_future = client->async_send_goal(MoveTo::Goal{});
-  ASSERT_EQ(
-    rclcpp::spin_until_future_complete(client_node_, goal_future, 10s),
-    rclcpp::FutureReturnCode::SUCCESS);
+  // Waited on rather than spun for: this node already has an executor spinning
+  // it, and spinning a node twice is not allowed.
+  ASSERT_EQ(goal_future.wait_for(10s), std::future_status::ready);
   EXPECT_TRUE(goal_future.get()) << "the recovery goal was rejected; the arm is still "
     "held by the goal the previous leaf abandoned";
 
@@ -202,7 +242,7 @@ TEST_F(SkillCancellation, a_leaf_with_no_action_name_fails_without_calling_anyth
   // invent one — the defect being kept out is this node composing
   // "/cite/<zone>/<asset>/<skill>" from a format string of its own.
   MoveToHome leaf("MoveToHome", config_with(""), short_deadline_context(client_node_));
-  EXPECT_EQ(leaf.tick(), BT::NodeStatus::FAILURE);
+  EXPECT_EQ(tick_until_settled(leaf), BT::NodeStatus::FAILURE);
 }
 
 int main(int argc, char ** argv)
