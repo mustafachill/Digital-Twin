@@ -34,6 +34,7 @@ and would go stale silently the first time the model changed.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import threading
 import time
@@ -429,20 +430,86 @@ class TestDetectionContract(unittest.TestCase):
             "exactly one beam was blocked",
         )
         detection = wrapped.result.detections[0]
-        self.assertEqual(detection.pose.header.frame_id, self.world)
         self.assertEqual(
             detection.workpiece_id, "",
             "a break beam cannot identify what it saw",
         )
         self.assertEqual(detection.workpiece_type, "")
+        # Confidence in the DETECTION — that the volume is occupied. That much is
+        # ground truth on both paths: a geometric test in simulation, a threshold
+        # on a photodiode in the cell.
         self.assertEqual(detection.confidence, 1.0)
-        # The pose reported is the SENSOR's, which is the only position a
-        # through-beam carries — and it must be where the model puts it.
+
+    def test_5b_a_break_beam_detection_carries_no_pose(self) -> None:
+        """Occupancy is reported; position is not, because it is not measured.
+
+        THE DEFECT THIS LOCKS OUT. `Detection.pose` used to be filled with the
+        SENSOR's placement in the region frame — a measured fact about where the
+        beam is, in a field documented as where the OBJECT is. `PickAt` passes an
+        observed pose straight through as `object_pose`, so a station would have
+        reached for the housing.
+
+        The two are not close: for `beam_c1_out` the housing and the belt's
+        outfeed — the pick point — differ by 0.250 m across the belt, 0.050 m
+        along it and 0.030 m up. That magnitude is quoted here for scale only;
+        what the assertion below compares against is read from the generated
+        frames, so it stays true if the beam moves.
+        """
+        blocked = self.harness.sensors[1]["asset"]
+        goal = Detect.Goal()
+        goal.region_frame = self.world
+        goal.region_size_m = _region()
+        handle = self.harness.send(goal)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(wrapped.result.result.code, ResultCode.SUCCESS)
+        self.assertEqual(len(wrapped.result.detections), 1)
+        pose = wrapped.result.detections[0].pose
+
+        # The semantic marker, and the one `PickAt` already branches on: an empty
+        # frame is what makes it fall back to the station's own L0 pick frame
+        # instead of driving to whatever numbers arrived.
+        self.assertEqual(
+            pose.header.frame_id, "",
+            "a break beam has no pose to report, so it must name no frame for one",
+        )
+        self.assertEqual(pose.header.stamp.sec, 0)
+        self.assertEqual(pose.header.stamp.nanosec, 0)
+
+        # And the numbers cannot be planned to by a consumer that ignores the
+        # frame. Zeroes would not do this: (0, 0, 0) is a real place in whatever
+        # frame gets stamped on later.
+        for axis in ("x", "y", "z"):
+            self.assertTrue(
+                math.isnan(getattr(pose.pose.position, axis)),
+                f"position.{axis} is {getattr(pose.pose.position, axis)}, which reads "
+                f"as a measurement the beam never made",
+            )
+        for axis in ("x", "y", "z", "w"):
+            self.assertTrue(
+                math.isnan(getattr(pose.pose.orientation, axis)),
+                "an identity rotation would claim the part is square to the frame, "
+                "which is the assumption ADR-0029 records as unsafe after a grasp",
+            )
+
+        # Explicitly NOT the sensor's placement — the regression, stated as the
+        # measurement it is. The offset is read from the generated model so that
+        # it stays true if the beam moves.
         child = _beam_frame(blocked, self.harness.frames)
         _parent, xyz, _rpy = self.harness.frames[child]
-        self.assertAlmostEqual(detection.pose.pose.position.x, xyz[0], places=3)
-        self.assertAlmostEqual(detection.pose.pose.position.y, xyz[1], places=3)
-        self.assertAlmostEqual(detection.pose.pose.position.z, xyz[2], places=3)
+        self.assertFalse(
+            (pose.pose.position.x, pose.pose.position.y, pose.pose.position.z)
+            == tuple(xyz),
+            "the detection reports the sensor's own mounting pose again",
+        )
+
+        # The caller is told, rather than left to notice. A `Detect` that answers
+        # "yes, something is there" and silently declines the follow-up question
+        # is a half-answer that gets acted on as a whole one.
+        self.assertIn(
+            "occupancy only", wrapped.result.result.detail,
+            "a detection with no pose must say so where the caller can read it",
+        )
 
     def test_6_a_region_that_excludes_every_beam_detects_nothing(self) -> None:
         # A beam is still blocked from the previous test; the region is what
