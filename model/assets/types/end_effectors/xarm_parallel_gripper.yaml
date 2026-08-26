@@ -235,18 +235,31 @@ asset_type:
     # is why no work-piece was ever grasped. The value did not need recomputing;
     # the map that read it did.
     #
-    # `cite_tools.validate.physical` still enforces a ceiling, but only the
-    # gripper's own 88.93 mm opening: the tighter 60.92 mm ceiling it used to
-    # apply was derived from `closed_threshold_rad` and died with the plugin. The
-    # bound that actually matters — narrower than the part — cannot be machine-
-    # checked while L0 records no work-piece geometry, so it is enforced by the
-    # reasoning above and by the scenario, not by the validator.
+    # `cite_tools.validate.physical` NOW ENFORCES THE BOUND THAT MATTERS. This
+    # block used to end by saying it could not: the 60.92 mm ceiling died with
+    # ADR-0023's attachment plugin, the 88.93 mm one that replaced it is only the
+    # gripper's own opening, and "narrower than the part" was unenforceable while
+    # L0 recorded no work-piece geometry. L0 records it now
+    # (assets/types/workpieces/workpiece.yaml), so the ceiling is derived from
+    # the part and the controller together:
+    #
+    #   narrowest work-piece                       50.00 mm
+    #   less 2 x goal_tolerance, in width           2.14 mm
+    #   ceiling                                    47.86 mm
+    #
+    # The subtracted term is not padding. `GripperActionController` ends a goal
+    # as soon as |error| < goal_tolerance, so the width it reports is
+    # systematically wider than commanded even in free air, and
+    # `cite_skills::gripper_is_holding` demands twice that bias before it calls
+    # anything a grasp. A default inside that band produces real grasps L3 cannot
+    # tell from closing on air. 45 mm leaves 5.00 mm — 2.3x the threshold.
     #
     # Honest about its home (P7): this is a property of an end effector *paired
-    # with a work-piece*, and it sits on the end-effector type because the model
-    # has no work-piece types yet. The day a second work-piece size exists, this
-    # value moves to the work-piece and the goal carries it; the end-effector
-    # keeps only the stroke. Until then it is written once, here.
+    # with a work-piece*, and it still sits on the end-effector type. The day a
+    # second work-piece size exists, this value moves to the work-piece and the
+    # goal carries it; the end-effector keeps only the stroke. Until then it is
+    # written once, here, and the validator checks it against the part rather
+    # than against a comment.
     default_grasp_width_m: 0.045
 
   controllers:

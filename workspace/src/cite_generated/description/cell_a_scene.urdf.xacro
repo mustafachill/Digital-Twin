@@ -53,7 +53,7 @@
   <joint name="beam_c1_out_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="beam_c1_out_base_link"/>
-    <origin xyz="1.6 0.25 0.63" rpy="0 0 0"/>
+    <origin xyz="1.55 0.25 0.63" rpy="0 0 0"/>
   </joint>
   <link name="beam_c1_out_beam"/>
   <joint name="beam_c1_out_beam_fixed" type="fixed">
@@ -87,7 +87,7 @@
   <joint name="beam_c2_out_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="beam_c2_out_base_link"/>
-    <origin xyz="3.7 0.25 0.63" rpy="0 0 0"/>
+    <origin xyz="3.65 0.25 0.63" rpy="0 0 0"/>
   </joint>
   <link name="beam_c2_out_beam"/>
   <joint name="beam_c2_out_beam_fixed" type="fixed">
@@ -121,7 +121,7 @@
   <joint name="beam_c3_out_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="beam_c3_out_base_link"/>
-    <origin xyz="5.8 0.25 0.63" rpy="0 0 0"/>
+    <origin xyz="5.75 0.25 0.63" rpy="0 0 0"/>
   </joint>
   <link name="beam_c3_out_beam"/>
   <joint name="beam_c3_out_beam_fixed" type="fixed">
@@ -161,13 +161,13 @@
   <joint name="conveyor_1_infeed_fixed" type="fixed">
     <parent link="conveyor_1_base_link"/>
     <child link="conveyor_1_infeed"/>
-    <origin xyz="-0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_1_outfeed"/>
   <joint name="conveyor_1_outfeed_fixed" type="fixed">
     <parent link="conveyor_1_base_link"/>
     <child link="conveyor_1_outfeed"/>
-    <origin xyz="0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_1_surface"/>
   <joint name="conveyor_1_surface_fixed" type="fixed">
@@ -207,13 +207,13 @@
   <joint name="conveyor_2_infeed_fixed" type="fixed">
     <parent link="conveyor_2_base_link"/>
     <child link="conveyor_2_infeed"/>
-    <origin xyz="-0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_2_outfeed"/>
   <joint name="conveyor_2_outfeed_fixed" type="fixed">
     <parent link="conveyor_2_base_link"/>
     <child link="conveyor_2_outfeed"/>
-    <origin xyz="0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_2_surface"/>
   <joint name="conveyor_2_surface_fixed" type="fixed">
@@ -253,13 +253,13 @@
   <joint name="conveyor_3_infeed_fixed" type="fixed">
     <parent link="conveyor_3_base_link"/>
     <child link="conveyor_3_infeed"/>
-    <origin xyz="-0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_3_outfeed"/>
   <joint name="conveyor_3_outfeed_fixed" type="fixed">
     <parent link="conveyor_3_base_link"/>
     <child link="conveyor_3_outfeed"/>
-    <origin xyz="0.6 0 0.6" rpy="0 0 0"/>
+    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="conveyor_3_surface"/>
   <joint name="conveyor_3_surface_fixed" type="fixed">
@@ -293,7 +293,7 @@
   <joint name="pedestal_1_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="pedestal_1_base_link"/>
-    <origin xyz="0 -0.35 0" rpy="0 0 0"/>
+    <origin xyz="0 -0.3 0" rpy="0 0 0"/>
   </joint>
   <link name="pedestal_1_top"/>
   <joint name="pedestal_1_top_fixed" type="fixed">
@@ -327,7 +327,7 @@
   <joint name="pedestal_2_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="pedestal_2_base_link"/>
-    <origin xyz="2.1 -0.35 0" rpy="0 0 0"/>
+    <origin xyz="2.1 -0.3 0" rpy="0 0 0"/>
   </joint>
   <link name="pedestal_2_top"/>
   <joint name="pedestal_2_top_fixed" type="fixed">
@@ -361,7 +361,7 @@
   <joint name="pedestal_3_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="pedestal_3_base_link"/>
-    <origin xyz="4.2 -0.35 0" rpy="0 0 0"/>
+    <origin xyz="4.2 -0.3 0" rpy="0 0 0"/>
   </joint>
   <link name="pedestal_3_top"/>
   <joint name="pedestal_3_top_fixed" type="fixed">

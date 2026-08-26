@@ -106,7 +106,7 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>1.6 0.25 0.63 0 0 0</beam_pose>
+      <beam_pose>1.55 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
       <beam_width_m>0.04</beam_width_m>
@@ -129,7 +129,7 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>3.7 0.25 0.63 0 0 0</beam_pose>
+      <beam_pose>3.65 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
       <beam_width_m>0.04</beam_width_m>
@@ -152,7 +152,7 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>5.8 0.25 0.63 0 0 0</beam_pose>
+      <beam_pose>5.75 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
       <beam_width_m>0.04</beam_width_m>

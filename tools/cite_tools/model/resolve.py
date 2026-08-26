@@ -112,6 +112,28 @@ class ResolvedCell:
             None,
         )
 
+    @property
+    def workpiece_types(self) -> tuple[AssetType, ...]:
+        """The types named by ``workpiece_models``, resolved to their geometry.
+
+        ``workpiece_models`` carries names because a name is what the simulator
+        matches on. A rule that needs to know how wide a part is needs the type
+        behind the name, and resolving it here rather than at each call site
+        keeps the two rules that do from each writing their own lookup.
+
+        A name with no type behind it is dropped rather than raised on:
+        ``referential`` reports it as ``unknown-type`` and runs first, so by the
+        time a generator or a geometric rule sees this the model has been
+        checked. Dropping it means a rule sized from work-piece geometry reports
+        nothing rather than a wrong bound.
+        """
+        by_id = {t.id: t for t in self.unplaced_types}
+        return tuple(
+            asset_type
+            for name in self.workpiece_models
+            if (asset_type := by_id.get(name)) is not None and asset_type.category == "workpiece"
+        )
+
     def asset(self, asset_id: str) -> ResolvedAsset | None:
         return next((a for a in self.assets if a.id == asset_id), None)
 

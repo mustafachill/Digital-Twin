@@ -30,6 +30,26 @@ COMFORTABLE_REACH_FRACTION = 0.85
 #: a measured layout cannot turn a designed gap into a penetration.
 MIN_CLEARANCE_M = 0.020
 
+#: Metres of support that must remain beyond the far edge of a work-piece once it
+#: has been set down on a pick or place point.
+#:
+#: The bare physical requirement is that the footprint be wholly supported, which
+#: is a margin of half the work-piece's widest horizontal extent and no more.
+#: That bound is *neutral*, not safe: at exactly half a footprint the part's edge
+#: is flush with the body's, its centre of mass projects onto the boundary of its
+#: support polygon, and any error towards the edge tips it. This constant is the
+#: designed air beyond that boundary, and it is sized against the errors that
+#: exist rather than by taste — the measured release pose is accurate to about
+#: 1.9 mm, and a Phase-2 registration correction is millimetre-scale, so 20 mm is
+#: roughly ten times either.
+#:
+#: It is deliberately NOT `MIN_CLEARANCE_M`, which happens to hold the same
+#: number today. That one is the gap between two bodies that must never touch;
+#: this one is overlap between a body and one that is meant to rest on it. Two
+#: facts that agree by coincidence, and tying them together would let a change to
+#: either move the other silently.
+SUPPORT_CLEARANCE_M = 0.020
+
 #: Half-width and height of the corridor a gripper needs above a pick or place
 #: point. The xArm parallel gripper opens to 85 mm, so 100 mm each side covers
 #: the pads plus the knuckles, and 250 mm of height covers approach and retreat.
@@ -46,6 +66,7 @@ def check(cell: ResolvedCell) -> list[Finding]:
     findings += _frames_lie_on_their_own_geometry(cell)
     findings += _no_overlapping_bodies(cell)
     findings += _stations_are_reachable(cell)
+    findings += _station_points_support_the_workpiece(cell)
     findings += _approach_corridors_are_clear(cell)
     findings += _sensors_sit_on_what_they_watch(cell)
     return findings
@@ -246,6 +267,95 @@ def _stations_are_reachable(cell: ResolvedCell) -> list[Finding]:
                         "the edge of the envelope the arm's conditioning is poor.",
                     )
                 )
+    return findings
+
+
+def _widest_workpiece_footprint_m(cell: ResolvedCell) -> float | None:
+    """The largest horizontal extent of anything this facility handles.
+
+    The widest rather than the average, because a margin has to hold for every
+    part on the line, and `None` when no work-piece has known extents — a mesh
+    part, or a facility that declares none — so that the rule below reports
+    nothing rather than a bound it made up.
+    """
+    extents = [
+        body.horizontal_extents_m[1]
+        for asset_type in cell.workpiece_types
+        if (body := asset_type.description.body) is not None
+        and body.horizontal_extents_m is not None
+    ]
+    return max(extents) if extents else None
+
+
+def _station_points_support_the_workpiece(cell: ResolvedCell) -> list[Finding]:
+    """A pick or place point too close to the edge of the thing it stands on.
+
+    THE FAILURE THIS EXISTS FOR, because it is not the one anybody expected.
+    `cell_a__conveyor_1__infeed` lay exactly on the belt's leading-edge plane —
+    the belt's collision box began at x = 0.450 and so did the frame. Every rule
+    above passed it: the frame *is* on its own geometry, the point *is* inside
+    the arm's envelope, the corridor above it *is* clear. And every work-piece
+    `PlaceAt` released there was set down with half of it over the void, its
+    centre of mass projecting exactly onto the boundary of its support polygon.
+    It tipped about the edge and fell 0.600 m to the floor, landing at z = 0.025
+    with a 90-degree pitch. `pick_and_place` failed 0 of 18, deterministically,
+    and the model validated cleanly every time.
+
+    `_frames_lie_on_their_own_geometry` could not see it and was not written to:
+    it asks whether a frame is outside its body, using strict comparisons, so a
+    frame lying exactly on a boundary face is inside and passes. Being on the
+    boundary is right for a work *surface* and wrong for a work *point*, and the
+    difference is a margin — which needs a work-piece width, which L0 did not
+    record until `model/assets/types/workpieces/` existed.
+
+    WHAT IT DOES NOT COVER, stated rather than left to be discovered. Only points
+    a station names. `conveyor_3/outfeed` is the end of the line and no station
+    picks from it, so nothing here checks it — but it is the same type frame as
+    the two that are checked, so it moves with them. And only bodies we author:
+    a vendor description's extents live in files L1 owns.
+    """
+    footprint = _widest_workpiece_footprint_m(cell)
+    if footprint is None:
+        return []
+    required = footprint / 2.0 + SUPPORT_CLEARANCE_M
+
+    findings: list[Finding] = []
+    for station in cell.stations:
+        for label, point, owner in (
+            ("pick_from", station.pick_pose, station.pick_from),
+            ("place_to", station.place_pose, station.place_to),
+        ):
+            if point is None or owner is None:
+                continue
+            asset = cell.asset(owner[0])
+            if asset is None:
+                continue
+            box = _bounding_box(asset)
+            if box is None:
+                continue
+            margin = min(
+                min(point.xyz_m[axis] - box.min_m[axis], box.max_m[axis] - point.xyz_m[axis])
+                for axis in (0, 1)
+            )
+            if margin >= required:
+                continue
+            findings.append(
+                error(
+                    "insufficient-support-margin",
+                    f"stations.{station.id}.{label}",
+                    f"is {margin * 1000.0:.1f} mm from the edge of {asset.id!r}, which "
+                    f"cannot support a {footprint * 1000.0:.0f} mm work-piece "
+                    f"({required * 1000.0:.1f} mm needed)",
+                    f"The point resolves through frame {owner[1]!r} on type "
+                    f"{asset.asset_type.id!r}; move it there, not here, or every asset of "
+                    "that type keeps the fault. A part set down with its centre of mass "
+                    "over the boundary of its support polygon is neutrally stable: it "
+                    "tips about the edge and falls, and no layer above reports anything, "
+                    f"because the release itself succeeded. {required * 1000.0:.1f} mm is "
+                    f"half the work-piece ({footprint / 2.0 * 1000.0:.1f} mm) plus "
+                    f"{SUPPORT_CLEARANCE_M * 1000.0:.0f} mm of designed margin.",
+                )
+            )
     return findings
 
 

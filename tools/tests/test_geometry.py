@@ -56,8 +56,11 @@ class TestComposition:
         assert b.compose(a).approx_equal(Pose(xyz_m=(1.0, 1.0, 0.0), rpy_rad=(0.0, 0.0, HALF_PI)))
 
     def test_arm_on_a_pedestal(self) -> None:
-        # The engineered layout: pedestal at y = -0.35, 0.6 m tall, arm on top
-        # yawed to face +y. The arm base must land at (0, -0.35, 0.6).
+        # The shape of the engineered layout: a 0.6 m pedestal standing off the
+        # belt centreline, arm on its top frame yawed to face +y. The numbers are
+        # this test's own — the cell's standoff is a model value and asserting it
+        # here would put it in a second place — but the composition is the one
+        # every arm in the cell is placed by.
         pedestal_top = Pose(xyz_m=(0.0, -0.35, 0.6))
         arm = Pose(rpy_rad=(0.0, 0.0, HALF_PI))
         placed = pedestal_top.compose(arm)
