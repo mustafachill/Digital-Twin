@@ -1,6 +1,11 @@
 # ADR-0029: Rest simulated grasping on friction, and remove the attachment plugin
 
-- **Status:** Accepted — **decided, and the removal is not yet in the tree.** Written before
+- **Status:** Accepted (corrected 2026-08-26) — the decision stands and the open debt it
+  records stands. Two supporting claims about *why* the part turns are false and are marked
+  where they stand; nothing that was decided is withdrawn. See the section
+  "Correction — 2026-08-26: what the twist was attributed to, and what it is not", immediately
+  after this block.
+  **Decided, and the removal is not yet in the tree.** Written before
   the implementation, as CLAUDE.md §12 requires. At the time of writing
   `workspace/src/cite_simulation/src/grasp_attachment.cpp` still exists and every generated
   arm description still carries its `<plugin>` block. Read the tree, not this line, for what
@@ -18,6 +23,58 @@
   [L2](../architecture/L2-control-and-hal.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md)
 - **Evidence:** [`docs/measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+
+## Correction — 2026-08-26: what the twist was attributed to, and what it is not
+
+The decision stands, and so does the open debt this record opens: **a grasp here holds a
+position and not an orientation, and no scenario may assert how a part is held.** What is
+wrong is two explanations of *why* the part turns, and one thing a later campaign might be
+read as withdrawing and does not.
+
+**What was written.** That grasping is "timestep-sensitive by a factor of 24.5", and that
+"within a single configuration the twist ranges 1.4°–30.1°, **set by which plan the unseeded
+planner happens to return**".
+
+**What is true**, from
+[`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md),
+which published its own *Corrections to the friction campaign* section the day after this
+record was written:
+
+- **Twist is bimodal, not a continuum.** A trial turns either 22–33° or under 5°, and the
+  timestep sets **how often the high mode is entered**, not how far the part turns. The
+  medians quoted below are real; "a factor of 24.5" describes a probability moving, and
+  reads here as a magnitude scaling. The consequence this record draws from it — finer
+  timestep, worse grasp, so re-measure after any `max_step_size` change — is unaffected.
+- **The spread is not the unseeded planner's.** Measured against the pad's driven
+  trajectory, which is upstream of the grasp, the carry path varies by 0.13% in length and
+  1.9% in peak speed across trials, and twist correlates with it at ρ = +0.10. The apparent
+  correlation with the *work-piece's* acceleration is circular, because the twisting is
+  itself relative motion and lands in its own second derivative.
+
+**What the conveyor campaign does not change.**
+[`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md)
+finds that a gripper closing on a **yawed** part squares it up, and suggests the published
+`twist_max_deg` was largely measuring that alignment rather than a disturbance. That reading
+does not reach the two published campaigns, and the reason is the axis. Re-analysed on
+2026-08-26 with the friction campaign's own `harness/axis_check.py` maths over all 72 carries
+in the `step0p001`, `step0p0005`, `paired` and `paired2` blocks: the net carry rotation lies
+along the **pad-to-pad axis** (|cos| ≥ 0.9776 in every trial), its component about the world
+vertical never exceeds 0.49°, and the part's yaw about the world vertical never leaves
+0.00–0.84° in any carry. Those campaigns spawned the work-piece square to a station frame at
+zero yaw, so there was no yaw to remove. **This record's own description — rotation about the
+pad-to-pad axis, up to 34.3° — is confirmed rather than corrected. The debt is a roll between
+the pads.** Naming its axis is the useful part, because a roll and a yaw do not cost the same
+thing downstream: see [ADR-0031](0031-refuse-direct-handoff-without-orientation-certainty.md),
+whose correction is where an angle without an axis was put into a trigonometric argument.
+
+**How the error survived.** Both wrong attributions were published as corrections *inside
+another campaign's write-up*, on the day after this record was written, and nothing links a
+corrected campaign claim back to the records that quote it. `./scripts/doctor` checks that
+every ADR is indexed and every ADR link resolves; no check exists, and none easily could,
+for "an ADR repeats a sentence a later campaign withdrew". The transferable habit is the one
+this project already applies to generated collections: **when a record quotes another
+document's finding, quote it with its date and its source, and re-read the source before
+relying on the sentence again.**
 
 ## Context
 
@@ -55,6 +112,9 @@ Four findings decide it.
    the grasp** — so refining physics for fidelity makes this worse, and coarsening it for
    real-time factor ([ADR-0028](0028-convex-hull-collision-meshes.md), Phase 3) makes the
    simulator flatter you.
+   **[Corrected 2026-08-26 — see the Correction section above: the factor of 24.5 is the
+   probability of entering the high mode moving, not a magnitude scaling. The medians, the
+   axis and the conclusion drawn from them stand.]**
 3. **Two of ADR-0023's stated premises did not survive.** The friction coefficient is not the
    controlling variable and is not even monotonic across a 4× range; and "the solver's
    iteration count" is not a parameter this stack exposes — the dartsim engine plugin in
@@ -170,6 +230,9 @@ than rediscovered.
 the twist ranges 1.4°–30.1°, set by which plan the unseeded planner happens to return.** A
 cube going onto a belt does not care, which is why a position-only scenario passes while this
 happens.
+**[Corrected 2026-08-26 — see the Correction section above: the spread is not attributable to
+the unseeded planner, and the rotation is a roll about the pad-to-pad axis. The debt itself is
+unchanged.]**
 
 Two pieces of work will care.
 

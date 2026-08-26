@@ -132,6 +132,46 @@ Occasionally data is legitimately open-ended — arbitrary diagnostic key-values
 is a typed key-value array in the style of `diagnostic_msgs`, **not** a JSON blob in a
 string. The container stays typed even when the contents vary.
 
+## A field a sensor cannot fill says so
+
+A message declares the shape of an answer; it does not promise that every sensor can give
+one. `Detection` carries a `geometry_msgs/PoseStamped pose`, and the only pose sensor in
+`cell_a` is a through-beam, which reports **occupancy**. It knows something crossed it, not
+where along the beam and not how it is turned.
+
+`PoseStamped` has no absent state, so absence has to be spelled out. The convention is
+written once, in `cite_skills/include/cite_skills/observation.hpp`, as a writer
+(`mark_pose_unobserved`) and the matching reader (`pose_is_observed`) side by side:
+
+- **`header.frame_id` empty** — the semantic marker, and the field to test. `tf2` refuses an
+  empty frame rather than resolving it, and `cite_orchestration`'s `PickAt` already reads it
+  as "no observation, fall back to the station frame".
+- **`header.stamp` zero** — stamping it would date an observation nobody made.
+- **every position and orientation component `NaN`** — the guard against a consumer that
+  ignores the frame and reads the numbers. NaN fails loudly in TF and in IK; zeroes and an
+  identity rotation are a perfectly real pose in whatever frame is later attached, and
+  identity in particular asserts "square to the frame", which is the assumption
+  [ADR-0029](../adr/0029-simulated-grasping-by-friction.md) records as unsafe after a grasp.
+
+**This is not "the pose is uncertain".** A beam constrains the axes across it and leaves the
+third unconstrained along its whole length, and `Detection` has no covariance and no field
+separating a measured axis from an inferred one. Reporting a constrained pose without the
+shape of its uncertainty puts a number that *looks* measured back into the field, which is
+the defect the convention replaces — see the correction in
+[ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), where a
+decision was justified by a pose that was only ever the sensor's own mounting transform.
+
+A consumer that needs the uncertainty needs new fields in `cite_interfaces`, not a
+convention improvised at the call site.
+
+**One gap, stated because it is the kind that drifts.** `pose_is_observed` is the test a
+consumer should make, and no consumer can call it: `cite_skills` declares no
+`ament_export_*`, so its installed headers reach no other package. `cite_orchestration`'s
+`PickAt` therefore tests `header.frame_id.empty()` directly, which catches every unobserved
+pose the detector actually produces and would *not* catch a pose that carried a frame and
+NaN components. The predicate is deliberately not restated there; the note in
+`skill_nodes.hpp` says so.
+
 ## Documenting an interface
 
 Every `.msg`, `.srv`, and `.action` carries comments explaining what each field means, its

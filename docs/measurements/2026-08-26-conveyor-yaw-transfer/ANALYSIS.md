@@ -133,6 +133,9 @@ the L3 server since (`skill_server.cpp` now offsets onto the pad plane from the 
 effector's declared linkage), which is exactly the change that took rotations above 20 deg
 from 12/20 to 0/20. **The larger of the two figures is the one a decision should use**, and
 nothing here supersedes ADR-0029.
+**[Corrected 2026-08-26 — see "Correction, 2026-08-26" below: the two figures are not the
+same quantity, ADR-0029's being a roll about the pad-to-pad axis rather than a yaw. Using
+the larger remains the conservative choice and the verdict is unaffected.]**
 
 ### H4 — where does the grasp boundary fall? (Arm C, 23 trials)
 
@@ -202,6 +205,9 @@ friction campaign's `twist_max_deg` — up to 34.3 deg, "the work-piece rotates 
 jaws" — is this rotation seen through a metric that could not tell alignment from
 disturbance. In this campaign `twist_max_deg` tracks the spawn yaw (0.77 deg at 0, 20.15 at
 10, 16.71 at 20): it is largely the part *coming into* alignment, not being knocked out of it.
+**[Corrected 2026-08-26 — see "Correction, 2026-08-26" below. The first sentence does not
+hold: the published campaigns fed the cell square, and their rotation is about a different
+axis. The rest of this paragraph is this campaign's own data and stands.]**
 
 **It also means the gripper does not deliver a square part.** The part is carried square and
 released with a residual — 0.02 to 5.86 deg across Arm C, 0.11 to 10.62 across Arm D. The
@@ -271,6 +277,68 @@ Arm C, and that is stated above rather than smoothed over.
    `criteria.md` before any trial ran, with the reason: the L3 server now applies the
    pad-plane offset itself, so 0.030 would stack the harness's old pre-compensation on the
    server's new one.
+
+## Correction, 2026-08-26 — the published campaigns were not measuring this
+
+Written after publication, in the documentation pass that corrected
+[ADR-0031](../../adr/0031-refuse-direct-handoff-without-orientation-certainty.md) from this
+campaign. Nothing above it is rewritten and **no verdict changes**; the two sentences that
+reach into the earlier campaigns are marked where they stand.
+
+**What was written.** That the squaring-up "is what the published campaigns were already
+measuring without naming it", and that the friction campaign's `twist_max_deg` of up to
+34.3 deg is this alignment rotation seen through a metric that could not tell alignment from
+disturbance.
+
+**What is true.** The metric genuinely cannot tell the two apart — that half is right, and it
+is why this campaign measures yaw about the world vertical instead. But the published
+campaigns were not measuring alignment, for two reasons that are checkable in their own
+directories:
+
+1. **They fed the cell square.** `measure_grasp.spawn` calls `ros_gz_sim create` with `-x -y
+   -z` and no orientation, so the work-piece is spawned axis-aligned; `table_pick/surface`
+   carries `rpy_rad [0, 0, 0]` in `cite_generated/frames/cell_a_static_tf.yaml`, and the jaws
+   close along world ±Y onto a face. There was no yaw to remove — the same condition as this
+   campaign's own 0 deg cell, which twists 0.77 deg.
+2. **Their rotation is about the wrong axis to be an alignment.** Re-analysed on 2026-08-26
+   with this repository's own `2026-08-25-friction-grasp/harness/axis_check.py` maths, over all
+   72 carries in the `step0p001`, `step0p0005`, `paired` and `paired2` blocks: the net carry
+   rotation lies along the **pad-to-pad axis**, which is horizontal, at |cos| >= 0.9776 in
+   every trial; its component about the world vertical never exceeds **0.49 deg**; and the
+   part's folded yaw about the world vertical never leaves **0.00–0.84 deg** anywhere in any
+   carry. The trial that produced the published 18.71 deg is a roll of 18.71 deg about that
+   horizontal axis with a vertical component of 0.01 deg. Squaring-up is a rotation about the
+   **vertical**; these are rolls between the pads.
+
+   *Method, so that this can be checked rather than trusted.* `axis_check.py` cannot be
+   imported on a host without ROS — it pulls in `measure_grasp`, which imports `rclpy` — so
+   its arithmetic was re-implemented and run against the committed `*_samples.csv` and
+   `*_trials.json` in the two campaign directories, with `arm_1`'s model pose taken from
+   `axis_check.py` unchanged. For each trial: the net carry rotation is
+   `quat_inv(q_first) · q_last` over the carry window, its axis compared with the
+   left-pad-to-right-pad vector in the world; the folded yaw is the ZYX yaw of the
+   work-piece quaternion reduced by the cube's 4-fold symmetry, taken at every sample in the
+   carry. **This is a re-analysis of published data, not a new campaign**, and it registered
+   no thresholds in advance.
+
+**What this changes here.** Nothing in the four arms, the verdict, or the post-hoc mechanism:
+every one of those is measured on this campaign's own trials, which *were* spawned yawed. What
+it removes is a claim about somebody else's data.
+
+**One knock-on, in H5.** That section compares this campaign's deposited yaw against
+ADR-0029's 18.7 deg and recommends "the larger of the two figures is the one a decision should
+use". The two are not the same quantity — one is a yaw about the vertical, the other a roll
+about the pad-to-pad axis — so they should not be compared as though they were. The
+recommendation is nonetheless the conservative one and the verdict is unaffected: 18.7 is the
+larger number, and theta_arrive sits inside the tested range at either figure.
+
+**How the error survived.** It was an inference across campaigns, drawn from a magnitude
+without its axis, and it was drawn in the direction that made a new mechanism explain more
+than it had been measured to explain. `twist_max_deg` is a scalar; the axis was established
+once in the friction campaign and lives in one sentence of its prose; and a scalar travels
+between documents far more easily than the condition that gives it meaning. The general
+lesson is the one this campaign already states about its own metric — **an angle without an
+axis is not a measurement of anything** — applied to the campaign that quoted it.
 
 ## Threats to validity
 

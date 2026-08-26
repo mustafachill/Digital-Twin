@@ -15,7 +15,8 @@
   keys on), [ADR-0027](0027-pilz-planning-pipeline.md),
   [ADR-0028](0028-convex-hull-collision-meshes.md),
   [ADR-0031](0031-refuse-direct-handoff-without-orientation-certainty.md) (untouched by
-  this, and itself unresolved — see the costs below),
+  this, and itself unresolved — see the costs below; **as of 2026-08-26 it is resolved and
+  corrected**, and the update in that cost bullet says how),
   [L1](../architecture/L1-description-and-assets.md),
   [L4](../architecture/L4-orchestration.md), charter §4 (P2, P4, P8)
 
@@ -189,6 +190,15 @@ needs no second mechanism.
   permission survives is **reported as running and is not in the tree at this commit**
   — *[unverified]*. Indexing solves timing. **A reader must not come away thinking it
   solves orientation.**
+  **[Update 2026-08-26 — that campaign has since landed, at
+  [`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md),
+  and the `[unverified]` marker above is resolved rather than corrected. Every claim in this
+  bullet is upheld: nothing re-observes the part, and the belt transfers a yaw unchanged.
+  ADR-0031's permission survives on a different ground — the receiving gripper — and its
+  record is corrected accordingly. This bullet's warning is also now measured directly:
+  paired within trial, the median difference between a yaw read in motion and one read after
+  the belt stops is 0.0000° at permutation p = 0.7417. **Indexing changes the orientation
+  answer by nothing.**]**
 - **Nothing asserts any of this yet.** No scenario checks that a belt stops on a trigger or
   restarts on a handoff, and until one does, this decision is a decision and not a
   capability (P6, P7).

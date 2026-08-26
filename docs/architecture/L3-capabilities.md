@@ -64,7 +64,14 @@ Initial skill set:
 | `Place` | Target pose | Released / failed |
 | `Transfer` | Handoff pose, rendezvous token, work-piece id, hold timeout | Transferred / failed, and whether the part is still held |
 | `Grasp` | End-effector command | Actuated / failed |
-| `Detect` | Region of interest, object type | Detections with poses |
+| `Detect` | Region of interest, object type | Detections, each with a pose **where the sensor can give one** |
+
+**No sensor in `cell_a` can give one today.** The zone detects with through-beams, which
+report occupancy, so `detection_server.cpp` marks `Detection.pose` unobserved rather than
+filling it with the beam's own mounting transform — the convention is in
+[`../interfaces/README.md`](../interfaces/README.md), and the cost of having got this wrong
+is in [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)'s
+correction.
 
 `Grasp` is the end-effector actuation skill in general, not only closing a parallel
 gripper — a vacuum end-effector actuates through the same skill. This table named it
@@ -116,12 +123,21 @@ That is now the whole mechanism. There is no simulation-side attachment
 paths — which is the point, and is why nothing in this layer branches on simulation.
 
 **What the mechanism does not give is orientation.** A friction grasp in this cell is
-repeatable in position and not in orientation: the part rotates between the jaws while the
-pads themselves barely move. The two campaigns behind that statement are
-[`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+repeatable in position and not in orientation: the part **rolls** between the jaws, about the
+pad-to-pad axis, while the pads themselves barely move. The three campaigns behind that
+statement are
+[`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md),
+[`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md)
 and
-[`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md);
+[`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md);
 their figures are not restated here (P1).
+
+**Yaw is the one component the closure does control**, and in the direction that helps: jaws
+closing on a part that is turned about the vertical rotate it into alignment, so the part is
+carried square and released with a residual. That is a measured result about *this
+simulator's* rigid-body contact, with no friction declared on the pads, and the third
+campaign flags it as the largest sim/real divergence on its books. It is not a licence to
+assert orientation — the restriction below is unchanged.
 
 The standing restriction from ADR-0029 binds this layer:
 
@@ -134,9 +150,19 @@ it differently.
 **A direct arm-to-arm `Transfer` needs to know how a part is held, not only that it is**
 ([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)). It is therefore **refused at
 plan time** rather than attempted
-([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). A
-conveyor-mediated handoff is unaffected: the part is released before the receiver touches
-it, and `Detect` re-measures the pose.
+([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)).
+
+A conveyor-mediated handoff is permitted, and **not** because anything re-observes the part:
+`Detect` returns no pose, because the only pose sensor in the cell is a through-beam and
+`cite_skills::mark_pose_unobserved` says so explicitly. It is permitted because the part is
+free when the **receiving** gripper closes on it, and closing on a yawed part squares it up —
+measured in
+[`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md),
+which is the authority for the numbers. **The
+same mechanism is what a direct handoff denies**, because a part clamped by the giving
+gripper cannot rotate into alignment with the receiving one, so the refusal is unaffected. The
+squaring-up is a rigid-body result with no friction declared on the pads; Phase 2 has to
+re-measure it before anything is built on it.
 
 **The continuous line of Phase 1.D** accumulates orientation error across stations, and
 that gap is open. Whoever writes it closes the gap first or states plainly that they have
@@ -171,6 +197,9 @@ restartable, and it stops L3 from quietly becoming a second orchestrator.
   at plan time because nothing re-observes the part between two grippers, and names the
   observation as the blocker. What provides it — a camera at the rendezvous, or a `Detect`
   that returns a full pose there — is undecided, and the only pose sensor in the model
-  today is a through-beam that reports occupancy.
+  today is a through-beam that reports occupancy. Nothing re-observes the part on a
+  conveyor-mediated edge either; what makes that case work is the receiving gripper, and
+  **a direct handoff has never been measured at all**. It needs its own experiment before
+  the gate is touched.
 - **Force-controlled skills.** Insertion and compliant placement need force feedback and a
   different control mode. Not scheduled, but the skill interface should not preclude it.
