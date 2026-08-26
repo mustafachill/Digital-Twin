@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<!-- One station's place in a running line.
+
+     THIS FILE IS WRITTEN ONCE AND SAYS WHAT A STATION DOES. How many stations
+     there are, what each is called, which arm serves it, what it is connected to
+     and which sensor tells it a part has arrived are DATA — they arrive as static
+     remaps on the `<SubTree>` element that instantiates this tree, generated from
+     the L0 topology by `line_tree.hpp`. Nothing below names a station, an asset,
+     a frame, a topic or an action. If it ever does, the model has stopped being
+     the single source of truth (P1, P5).
+
+     Every name below is a blackboard reference. Neither this file nor the
+     coordinator writes an asset name or an action name: they arrive as
+     parameters, because names are generated from the L0 model and no asset name
+     is written by hand twice (CLAUDE.md §8).
+
+     A subtree's blackboard is its own in BT.CPP v4, so `{workpiece}`, `{token}`
+     and `{detected_pose}` below are private to this station by construction.
+     "Blackboard used as a global store — untraceable coupling between subtrees"
+     is a named L4 failure mode, and this is what keeps it out.
+
+     WHAT IS AND IS NOT L4's. Every motion leaf is an L3 skill called as a ROS 2
+     action. Nothing here plans a trajectory or commands a controller — that
+     separation is what lets an arm be swapped without touching orchestration
+     (P9). The handoff is split the same way (ADR-0024): the four protocol leaves
+     below negotiate ownership, and the physical motion is `PlaceAt` — or, for a
+     direct arm-to-arm handoff, `TransferTo`, which `line_plan.hpp` currently
+     refuses to instantiate because a grasp does not hold an orientation.
+
+     ORDER MATTERS IN TWO PLACES, and both are protocol rather than convenience:
+
+       * `OfferHandoff` → `AwaitHandoffConfirmed` → `PlaceAt` → `CompleteHandoff`.
+         Nothing physical happens until both parties have confirmed (rule 2), and
+         ownership moves only after the robot has let go (rule 1). A handoff that
+         fails anywhere before `CompleteHandoff` leaves the work-piece with this
+         station, because nothing touched the registry — which is what makes the
+         timeout an outcome rather than an ambiguity (rule 3).
+
+       * `ClaimBufferSlot` before `OfferHandoff`. A station that offered a piece
+         it has nowhere to put would be promising room it has not got.
+-->
+<root BTCPP_format="4">
+
+  <BehaviorTree ID="LineStation">
+    <Repeat num_cycles="-1">
+      <Fallback name="cycle_with_recovery">
+
+        <Sequence name="nominal">
+
+          <!-- Idle: waiting for work, and saying yes to work being offered.
+               Both at once, because a station confirms a handoff while it is
+               free rather than while it is busy — a station that could only
+               confirm between cycles would stall the line behind its own.
+               `AcceptOffers` never returns SUCCESS; the Parallel ends when the
+               wait does, and halting it is how it stops. -->
+          <Parallel name="idle" success_count="1" failure_count="1">
+            <AwaitTrigger  station="{station}" topic="{trigger_topic}" state="{trigger_state}"
+                           sensed_workpiece="{sensed_workpiece}" />
+            <AcceptOffers  station="{station}" />
+          </Parallel>
+
+          <SetStationState station="{station}" state="2" />
+
+          <!-- Both frames at once, in a canonical order. Claiming them one at a
+               time is the circular wait two stations deadlock on. -->
+          <ClaimReach    station="{station}" pick_frame="{pick_frame}"
+                         place_frame="{place_frame}" />
+
+          <!-- Where the part actually is, including its yaw. This is the leaf
+               that makes the grasp safe against the rotation a previous gripper
+               left in it (ADR-0029) — the alternative is assuming the part is
+               square to its frame, which it is not once it has been handled. -->
+          <DetectAt      asset="{asset}" action="{detect_action}" frame="{pick_frame}"
+                         require_immediate="{require_immediate}"
+                         pose="{detected_pose}" workpiece="{detected_workpiece}" />
+
+          <TakeCustody   station="{station}" admits_work="{admits_work}"
+                         workpiece="{workpiece}" />
+
+          <PickAt        asset="{asset}" action="{pick_action}" frame="{pick_frame}"
+                         pose="{detected_pose}" workpiece="{workpiece}" />
+
+          <!-- The piece is off the link it arrived on, so its slot is free for
+               the station upstream. Released here rather than at the end of the
+               cycle: an upstream station waiting on a full belt should be
+               released by the pick, not by this arm finishing its placement. -->
+          <ReleaseClaim  resource="{inbound_buffer}" claimant="{workpiece}" />
+
+          <ClaimBufferSlot buffer="{outbound_buffer}" workpiece="{workpiece}" />
+
+          <OfferHandoff  station="{station}" downstream="{downstream}"
+                         workpiece="{workpiece}" token="{token}" />
+          <AwaitHandoffConfirmed token="{token}" />
+
+          <PlaceAt       asset="{asset}" action="{place_action}" frame="{place_frame}" />
+
+          <CompleteHandoff station="{station}" token="{token}"
+                           location="{outbound_location}" />
+
+          <ReleaseClaim  resource="{pick_frame}"  claimant="{station}" />
+          <ReleaseClaim  resource="{place_frame}" claimant="{station}" />
+
+          <MoveToHome    asset="{asset}" action="{move_to_action}" />
+          <SetStationState station="{station}" state="0" />
+
+        </Sequence>
+
+        <!-- Recovery is expressed, not implied.
+
+             Returning home first is deliberate: a station that failed mid-cycle
+             may have left the arm somewhere the next attempt would collide with.
+
+             It only works because a leaf that gives up cancels the goal it
+             abandons — see `SkillNode`. Without that, `MoveToHome` here is sent
+             to a server still executing the goal that just failed, and the skill
+             server rejects it: the recovery branch would fail every time, for a
+             reason that appears nowhere in this file.
+
+             `RecoverFromFailure` decides from the structured `ResultCode`, never
+             from text. SUCCESS means try again and the Repeat above does exactly
+             that; FAILURE means a person is needed, and it propagates to the line
+             tree, which halts every other station and so cancels their goals. -->
+        <Sequence name="recover">
+          <MoveToHome           asset="{asset}" action="{move_to_action}" />
+          <ReleaseStationClaims station="{station}" />
+          <RecoverFromFailure   station="{station}" workpiece="{workpiece}"
+                                token="{token}" />
+        </Sequence>
+
+      </Fallback>
+    </Repeat>
+  </BehaviorTree>
+</root>

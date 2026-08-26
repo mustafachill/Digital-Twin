@@ -137,6 +137,24 @@ BT::NodeConfig ports(const std::string & action)
   return config;
 }
 
+
+/// Tick a leaf until it stops being RUNNING.
+///
+/// The leaves became `StatefulActionNode`s when the line gained parallel
+/// stations: they send a goal, return RUNNING, and poll without spinning
+/// anything. So a test drives them the way a tree does — by ticking — and
+/// something else spins the node. The wait below is a POLL PERIOD on an
+/// asynchronous result, not a guess at how long anything takes.
+BT::NodeStatus tick_until_settled(BT::TreeNode & leaf)
+{
+  BT::NodeStatus status = leaf.executeTick();
+  while (status == BT::NodeStatus::RUNNING) {
+    std::this_thread::sleep_for(5ms);
+    status = leaf.executeTick();
+  }
+  return status;
+}
+
 Context context_for(const rclcpp::Node::SharedPtr & node)
 {
   Context context;
@@ -154,15 +172,28 @@ protected:
   void SetUp() override
   {
     client_node_ = std::make_shared<rclcpp::Node>("skill_goals_test");
+    executor_.add_node(client_node_);
+    spinner_ = std::thread([this]() {executor_.spin();});
   }
+
+  void TearDown() override
+  {
+    executor_.cancel();
+    if (spinner_.joinable()) {
+      spinner_.join();
+    }
+  }
+
   rclcpp::Node::SharedPtr client_node_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spinner_;
 };
 
 TEST_F(SkillGoals, PickSendsTheWorkpiecesOwnHeightNotAToolHeight)
 {
   RecordingServer<Pick> server(kPickAction);
   PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
-  ASSERT_EQ(leaf.tick(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
@@ -185,7 +216,7 @@ TEST_F(SkillGoals, PickPointsTheToolDown)
   // orientation.
   RecordingServer<Pick> server(kPickAction);
   PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
-  ASSERT_EQ(leaf.tick(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value());
@@ -202,7 +233,7 @@ TEST_F(SkillGoals, PickCommandsAWidthNarrowerThanTheWorkpiece)
   // layer violation that happened to produce the same number.
   RecordingServer<Pick> server(kPickAction);
   PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
-  ASSERT_EQ(leaf.tick(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value());
@@ -221,7 +252,7 @@ TEST_F(SkillGoals, PlaceSendsTheWorkpiecesTargetNotAToolTarget)
   // side. 0.040 against a part resting at 0.025 is a deliberate 15 mm drop.
   RecordingServer<Place> server(kPlaceAction);
   PlaceAt leaf("PlaceAt", ports(kPlaceAction), context_for(client_node_));
-  ASSERT_EQ(leaf.tick(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
@@ -234,7 +265,7 @@ TEST_F(SkillGoals, PlaceRefusesToMimeAPlaceWithAnEmptyGripper)
 {
   RecordingServer<Place> server(kPlaceAction);
   PlaceAt leaf("PlaceAt", ports(kPlaceAction), context_for(client_node_));
-  ASSERT_EQ(leaf.tick(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value());
