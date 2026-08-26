@@ -53,7 +53,7 @@
   <joint name="beam_c1_out_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="beam_c1_out_base_link"/>
-    <origin xyz="1.55 0.25 0.63" rpy="0 0 0"/>
+    <origin xyz="1.627 0.25 0.63" rpy="0 0 0"/>
   </joint>
   <link name="beam_c1_out_beam"/>
   <joint name="beam_c1_out_beam_fixed" type="fixed">
@@ -87,7 +87,7 @@
   <joint name="beam_c2_out_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="beam_c2_out_base_link"/>
-    <origin xyz="3.65 0.25 0.63" rpy="0 0 0"/>
+    <origin xyz="3.727 0.25 0.63" rpy="0 0 0"/>
   </joint>
   <link name="beam_c2_out_beam"/>
   <joint name="beam_c2_out_beam_fixed" type="fixed">

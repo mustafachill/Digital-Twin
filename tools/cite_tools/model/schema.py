@@ -646,16 +646,58 @@ class BreakBeamConfiguration(Strict):
     kind: Literal["sensor"] = "sensor"
     beam_axis: Literal["x", "y", "z"]
     beam_length_m: Annotated[float, Field(gt=0.0)]
-    #: How thick the beam is across its axis.
+    #: How thick the beam is across its axis: the width of the emitted spot.
     #:
-    #: A real through beam is a few millimetres. This is deliberately wider, so
-    #: that a work-piece travelling at belt speed cannot cross the beam between
-    #: two physics steps and go unnoticed: at the installed 0.150 m/s and a 1 ms
-    #: step a part advances 0.15 mm, so 40 mm is roughly 260 steps of margin.
+    #: 4 mm is a lensed through-beam aperture, which is what these sensors are.
     #: It lives here rather than as a plugin default because it decides whether a
     #: sensor can detect anything at all, and code must never be where that is
     #: decided (P5).
-    beam_width_m: Annotated[float, Field(gt=0.0)] = 0.040
+    #:
+    #: IT USED TO BE 40 mm and that was an anti-tunnelling inflation, not a
+    #: measurement: the plugin tested the work-piece's model ORIGIN against the
+    #: beam's volume, so the beam had to be wide enough that a part could not
+    #: step across it between two physics frames. The plugin now tests the beam
+    #: against the part's BODY, which is occluded for the whole length of the
+    #: part — 54 mm at the declared cube, or about 360 steps at 0.150 m/s and a
+    #: 1 ms step, against the roughly 260 the inflation used to buy. The margin
+    #: went up when the inflation came out.
+    #:
+    #: Taking it out mattered for more than tidiness. Half this number is the
+    #: distance before the beam's centre at which a part first breaks it, and
+    #: ``indexes_workpiece`` below derives a mounting position from exactly that.
+    #: At 40 mm the derivation would have carried 20 mm of simulator artefact
+    #: into L0 geometry, and the physical cell would have parked its parts 20 mm
+    #: from where this model says they park (P2).
+    beam_width_m: Annotated[float, Field(gt=0.0)] = 0.004
+
+    #: Whether this beam indexes the conveyor it is mounted on.
+    #:
+    #: A beam that indexes is one an indexing belt stops on: the part runs until
+    #: its leading edge breaks the beam, the belt stops, and the part is left
+    #: standing at the point a robot picks from. Setting this true says that the
+    #: frame this sensor is mounted against IS that point, and hands the beam's
+    #: position along the belt to the generator.
+    #:
+    #: WHY THE POSITION IS DERIVED AND NOT WRITTEN DOWN. A through beam breaks on
+    #: a leading edge, so a part comes to rest with its centre half a part-length
+    #: short of the beam. Where the beam has to be mounted is therefore a fact
+    #: about the PART, in exactly the way ``carry_height_m`` above turned out to
+    #: be: pick point, plus half the work-piece, plus half the beam's own width.
+    #: Writing that as a coordinate would fix it to one part size and let it rot
+    #: silently the day the facility handles another — which is the failure this
+    #: field exists to make impossible, not merely to document.
+    #:
+    #: This is also why the along-travel component of an indexing beam's pose
+    #: must be zero: the pose says which point the beam indexes to, and the
+    #: offset from it is not an authored number. ``beam-indexes-off-frame`` in
+    #: cite_tools.validate.geometric refuses a second, fitted copy.
+    #:
+    #: False for a beam that only observes. ``beam_pick`` watches a table that
+    #: nothing indexes, and ``beam_c3_out`` reports arrivals at a sink with no
+    #: actor, so neither stops a belt and neither has a pick point to stand off
+    #: from.
+    indexes_workpiece: bool = False
+
     idle_state: Literal["clear", "blocked"] = "clear"
 
 

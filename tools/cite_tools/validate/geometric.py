@@ -69,6 +69,8 @@ def check(cell: ResolvedCell) -> list[Finding]:
     findings += _station_points_support_the_workpiece(cell)
     findings += _approach_corridors_are_clear(cell)
     findings += _sensors_sit_on_what_they_watch(cell)
+    findings += _beams_can_see_the_workpiece(cell)
+    findings += _indexing_beams_stop_at_a_pick_point(cell)
     return findings
 
 
@@ -437,6 +439,240 @@ def _sensors_sit_on_what_they_watch(cell: ResolvedCell) -> list[Finding]:
                     "frame on that conveyor instead.",
                 )
             )
+    return findings
+
+
+def _shortest_workpiece_m(cell: ResolvedCell) -> float | None:
+    """The height of the shortest part this facility handles.
+
+    The shortest rather than the tallest, because the rule below asks what a beam
+    can still see, and the part that walks under a beam is the short one.
+    """
+    heights = [
+        extent
+        for asset_type in cell.workpiece_types
+        if (body := asset_type.description.body) is not None
+        and (extent := body.vertical_extent_m) is not None
+    ]
+    return min(heights) if heights else None
+
+
+def _beams_can_see_the_workpiece(cell: ResolvedCell) -> list[Finding]:
+    """A beam mounted higher than the part it is supposed to detect.
+
+    THE FAILURE THIS EXISTS FOR. A through beam is broken by a body that reaches
+    its line, so a beam standing above the top of every part on the line can
+    never be broken at all — and a line whose stations act on detection then
+    simply never acts. It is the quietest failure in the cell: the model
+    validates, the world loads, the belt runs, and a station waits for ever.
+
+    It has happened. An 80 mm mounting height above the belt was tried against a
+    50 mm cube, and the sensor could not be broken by anything the facility
+    declared. It was caught by running the line, which is the expensive way.
+
+    The height is measured against the frame the sensor is mounted on, which is
+    the working surface a part rests on, so it is directly comparable with the
+    part's own height. Only sensors anchored to another asset are checked: a beam
+    placed in world coordinates has no surface to be a height above, and
+    ``unanchored-sensor`` already reports that.
+
+    Half the beam's own width counts, because a beam is thick: a part whose top
+    reaches the lower edge of the spot breaks it. That is the same edge the
+    plugin tests and the same one a real sensor responds to.
+    """
+    shortest = _shortest_workpiece_m(cell)
+    if shortest is None:
+        return []
+
+    findings: list[Finding] = []
+    for asset in cell.of_category("sensor"):
+        configuration = asset.instance.configuration
+        if configuration is None or configuration.kind != "sensor":
+            continue
+        if asset.parent_asset is None:
+            continue
+        height = asset.instance.pose.xyz_m[2]
+        reach = height - configuration.beam_width_m / 2.0
+        if reach <= shortest:
+            continue
+        findings.append(
+            error(
+                "beam-cannot-see-workpiece",
+                f"assets.{asset.id}.pose.xyz_m",
+                f"stands {height * 1000.0:.0f} mm above {asset.parent_frame!r}, which is "
+                f"higher than the shortest declared work-piece is tall "
+                f"({shortest * 1000.0:.0f} mm)",
+                "A through beam is broken by a body that reaches its line, so this one "
+                "can never be broken by anything the facility handles: the part passes "
+                "underneath it. Nothing reports that at run time — the belt runs, the "
+                "model validates, and the station that waits for this beam waits for "
+                "ever. Mount it below the top of the shortest part.",
+            )
+        )
+    return findings
+
+
+def _cannot_index(cell: ResolvedCell, asset: ResolvedAsset) -> str | None:
+    """Why an indexing beam's stand-off could not be derived, or ``None``.
+
+    These are the conditions ``cite_tools.model.resolve.index_offset_m`` gives up
+    on. They are read here from the resolved cell rather than shared with it,
+    because the resolver needs only to know THAT it cannot derive a number and
+    this needs to say WHY — and the two run against different views of the model.
+    """
+    if asset.parent_asset is None:
+        return "it is placed in world coordinates rather than against a belt"
+    belt = cell.asset(asset.parent_asset)
+    if belt is None or belt.asset_type.category != "conveyor":
+        category = "nothing" if belt is None else repr(belt.asset_type.category)
+        return f"it is mounted on {asset.parent_asset!r}, which is {category} and not a conveyor"
+    drive = belt.instance.configuration
+    if drive is None or drive.kind != "conveyor":
+        return f"{asset.parent_asset!r} declares no conveyor configuration, so it has no direction"
+    if not cell.workpiece_types:
+        return "facility.workpiece_models names no work-piece type"
+    measurable = [
+        asset_type
+        for asset_type in cell.workpiece_types
+        if (body := asset_type.description.body) is not None
+        and body.horizontal_extents_m is not None
+    ]
+    if not measurable:
+        return "no declared work-piece has collision geometry with a horizontal extent"
+    return None
+
+
+def _indexing_beams_stop_at_a_pick_point(cell: ResolvedCell) -> list[Finding]:
+    """A beam that indexes a belt, but cannot leave the part where it is wanted.
+
+    WHY THIS IS A RULE AND NOT A COMMENT. A beam declared ``indexes_workpiece``
+    is claiming to stop a moving part at a station's pick point, and that claim
+    is pure geometry: the resolver derives the mounting stand-off from the part's
+    length, so the only ways it can be wrong are ways this can read directly. The
+    alternative to reading them here is the way the defect was actually found —
+    four runs of ``continuous_line``, ten minutes each, ending in a gripper that
+    closed on air 69 mm from the part. One second against ten minutes, for the
+    same information.
+
+    Three things have to hold, and each has its own code because the repairs are
+    different:
+
+    * ``beam-indexes-off-frame`` — the along-belt component of the authored pose
+      must be zero. This is the guard against the repair everyone reaches for
+      first: sliding the beam by hand until the scenario passes. A fitted offset
+      here would sit next to a derived one and silently win, and the number it
+      would be fitted to is a property of this simulator rather than of the cell.
+    * ``beam-indexes-no-pick-point`` — the frame it is mounted on must be one a
+      station actually picks from. A belt indexed to a point no arm reaches for
+      stops parts somewhere nobody collects them.
+    * ``beam-off-its-belt`` — the derived position must still be over the belt.
+      The stand-off pushes the housing downstream by half a part-length, so a
+      long enough part walks the beam off the end of the conveyor, where it can
+      never be broken and the belt never stops.
+    * ``beam-cannot-index`` — the stand-off must be derivable at all. It is not
+      if the beam is mounted on something that is not a driven belt, or if no
+      declared work-piece has readable extents to take half a length from.
+      ``cite_tools.model.resolve.index_offset_m`` contributes nothing in those
+      cases rather than raising, because resolution runs before validation and a
+      traceback there would suppress every finding in this module — including
+      this one. So this is the rule that has to say it.
+
+    ``beam-off-its-belt`` measures along world x, because it compares against
+    ``_bounding_box``, which is axis-aligned. Every belt in this cell runs along
+    x, so it is exact here; a belt yawed by a right angle would need the
+    comparison taken along its own travel axis, and that is worth doing when such
+    a belt appears. The restriction is the same one ``_bounding_box`` already
+    carries, so this rule is no less general than the box it is built on.
+
+    What is deliberately NOT checked: whether several work-piece types of
+    DIFFERENT lengths all park within some tolerance of the pick point. They
+    cannot all park exactly, on hardware either, and the bound on how far off is
+    acceptable is a gripper property this rule would have to invent. Inventing it
+    is how the constants this project has had to re-derive got here. The facility
+    declares one work-piece today; when it declares two, that rule is worth
+    writing against a measured grasp tolerance rather than a guessed one.
+    """
+    pick_points = {station.pick_from for station in cell.stations if station.pick_from is not None}
+
+    findings: list[Finding] = []
+    for asset in cell.of_category("sensor"):
+        configuration = asset.instance.configuration
+        if configuration is None or configuration.kind != "sensor":
+            continue
+        if not configuration.indexes_workpiece:
+            continue
+
+        authored_along_belt = asset.instance.pose.xyz_m[0]
+        if authored_along_belt != 0.0:
+            findings.append(
+                error(
+                    "beam-indexes-off-frame",
+                    f"assets.{asset.id}.pose.xyz_m",
+                    f"is offset {authored_along_belt * 1000.0:.0f} mm along the belt while "
+                    "declaring indexes_workpiece",
+                    "An indexing beam's position along the belt is derived from the "
+                    "work-piece's length by cite_tools.model.resolve.index_offset_m, so "
+                    "this pose says only WHICH point the part must stop on. An authored "
+                    "offset here is a second, fitted copy of a derived number: it stops "
+                    "being right the day the facility handles a different part, and "
+                    "nothing reports it. Set it to zero.",
+                )
+            )
+
+        reason = _cannot_index(cell, asset)
+        if reason is not None:
+            findings.append(
+                error(
+                    "beam-cannot-index",
+                    f"assets.{asset.id}.configuration.indexes_workpiece",
+                    f"is declared, but the stand-off cannot be derived: {reason}",
+                    "An indexing beam is mounted half a work-piece downstream of the point "
+                    "it stops parts on, and that half-length has to come from somewhere. "
+                    "With nothing to derive it from the beam resolves onto the pick point "
+                    "itself, where a part breaks it half a part-length early and the belt "
+                    "stops short. Declare the missing geometry, or drop "
+                    "indexes_workpiece — a beam that only observes needs neither.",
+                )
+            )
+            continue
+
+        if asset.parent_asset is None or asset.parent_frame is None:
+            continue
+        if (asset.parent_asset, asset.parent_frame) not in pick_points:
+            findings.append(
+                error(
+                    "beam-indexes-no-pick-point",
+                    f"assets.{asset.id}.pose.frame",
+                    f"indexes to {asset.parent_asset}/{asset.parent_frame}, which no "
+                    "station picks from",
+                    "Indexing means stopping a part where it will be collected. A belt "
+                    "stopped on a point no station reaches for leaves parts standing "
+                    "somewhere nobody comes, and the line blocks behind them. Either "
+                    "mount the beam against the frame a station picks from, or drop "
+                    "indexes_workpiece — a beam that only observes needs neither.",
+                )
+            )
+
+        belt = cell.asset(asset.parent_asset)
+        box = None if belt is None else _bounding_box(belt)
+        if box is None:
+            continue
+        along = asset.world_pose.xyz_m[0]
+        if box.min_m[0] <= along <= box.max_m[0]:
+            continue
+        findings.append(
+            error(
+                "beam-off-its-belt",
+                f"assets.{asset.id}.pose.frame",
+                f"resolves to x = {along:.3f} m, which is off the ends of "
+                f"{belt.id!r} (x {box.min_m[0]:.3f} to {box.max_m[0]:.3f} m)",  # type: ignore[union-attr]
+                "The derived stand-off puts an indexing beam half a work-piece "
+                "downstream of the point it indexes to, so a long part walks it past "
+                "the end of the conveyor. There it is never broken, the belt is never "
+                "stopped, and parts run off the end. Move the pick point further from "
+                "the belt's end, or index a shorter part.",
+            )
+        )
     return findings
 
 

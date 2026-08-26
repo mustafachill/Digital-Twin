@@ -157,6 +157,108 @@ def _joint_names(
     return (ids.joint(asset.id, "drive_joint"),)
 
 
+def index_offset_m(model: FacilityModel, asset: AssetInstance) -> float:
+    """How far past its mounting frame an indexing beam stands, along the belt.
+
+    THE NUMBER THIS REPLACED. ``beam_c1_out`` used to be authored 0.050 m
+    *upstream* of ``conveyor_1/outfeed``, which is the point
+    ``station_transfer_2`` picks from. Measured, the belt stopped with the cube
+    parked at x = 1.531 against a pick point at 1.600 — 0.069 m short — and
+    ``arm_2`` closed on air at ``commanded 45.0 mm, reached 46.0 mm,
+    stalled=false``, four runs out of four.
+
+    That 0.069 m was the point test's error, not this offset's, and correcting
+    the plugin made the shortfall WORSE rather than better: a beam that breaks on
+    a leading edge trips half a part-length sooner, so the same -0.050 mounting
+    would have parked the part at 1.523, 0.077 m short. Getting the physics right
+    is what created the need for this function.
+
+    The tempting repair, twice refused before this and refused here, was to slide
+    the beam until the scenario passed. A real through beam breaks on the leading
+    edge too, so an offset fitted against the old point test would have been
+    compensation for a simulator artefact, and the physical cell would have
+    parked its parts about 25 mm elsewhere (P2).
+
+    WHAT IT IS INSTEAD. A part travelling towards a beam breaks it when its
+    leading edge reaches the near side of the beam, so at the moment of the break
+    the part's centre is half a part-length plus half a beam-width short of the
+    beam's centreline. Mount the beam that far PAST the point the part must stop
+    on and the two cancel: the part comes to rest with its centre on the pick
+    point. That is also how a photo-eye is set on a physical indexing line — you
+    put it where the leading edge of a correctly placed part will be — so the
+    same arithmetic describes both cells, which is the property that matters.
+
+    Every term is read from the model. The part's length is the widest horizontal
+    extent of the work-pieces the facility declares, the beam's width is the
+    sensor's own, and the direction is the belt's. Nothing here is authored, so
+    nothing here can disagree with the part (P1).
+
+    THE WIDEST, not the narrowest or the mean: a part longer than assumed breaks
+    the beam early and parks short, which is the failure above, so the
+    conservative reading is the largest one. A facility declaring parts of
+    several different lengths cannot index them all to one point with one beam —
+    on hardware either — and this picks the reading that fails safe rather than
+    the one that fails silently. How far off the shorter parts then park is not
+    yet checked, deliberately: the bound is a grasp tolerance, and
+    ``_indexing_beams_stop_at_a_pick_point`` in ``cite_tools.validate.geometric``
+    records why it is better left unwritten than guessed.
+
+    Zero for every asset that is not an indexing beam, so the pose resolution
+    below is unchanged for all of them.
+
+    ZERO ALSO WHEN IT CANNOT BE DERIVED — a beam mounted on something that is not
+    a driven belt, or a facility that declares no work-piece geometry — rather
+    than raising. Resolution runs before validation, so raising here would
+    replace every geometric finding with a traceback: the one report that could
+    name the problem is the one that would not run. ``beam-cannot-index`` in
+    ``cite_tools.validate.geometric`` reports each of these cases against the
+    same conditions, and nothing is generated from a model that fails it.
+    """
+    configuration = asset.configuration
+    if configuration is None or configuration.kind != "sensor":
+        return 0.0
+    if not configuration.indexes_workpiece:
+        return 0.0
+    if asset.pose.frame == ids.WORLD_FRAME:
+        return 0.0
+
+    parent = model.asset(asset.pose.frame.split("/", 1)[0])
+    parent_type = None if parent is None else model.asset_type(parent.type)
+    if parent is None or parent_type is None or parent_type.category != "conveyor":
+        return 0.0
+
+    drive = parent.configuration
+    if drive is None or drive.kind != "conveyor":
+        return 0.0
+    # A belt's own +x is its forward direction; the frames the sensor is mounted
+    # against share the belt's axes, so the stand-off is a signed offset along
+    # local x and needs no world-frame rotation.
+    travel = 1.0 if drive.direction == "forward" else -1.0
+
+    length = _longest_workpiece_m(model)
+    if length is None:
+        return 0.0
+    return travel * (length / 2.0 + configuration.beam_width_m / 2.0)
+
+
+def _longest_workpiece_m(model: FacilityModel) -> float | None:
+    """The largest horizontal extent of anything this facility handles.
+
+    ``None`` when no declared work-piece has readable extents — a mesh part, or a
+    facility that declares none — so the caller refuses rather than inventing a
+    length.
+    """
+    extents = [
+        body.horizontal_extents_m[1]
+        for name in model.facility.workpiece_models
+        if (asset_type := model.asset_type(name)) is not None
+        and asset_type.category == "workpiece"
+        and (body := asset_type.description.body) is not None
+        and body.horizontal_extents_m is not None
+    ]
+    return max(extents) if extents else None
+
+
 def _resolve_world_pose(model: FacilityModel, asset_id: str, seen: tuple[str, ...] = ()) -> Pose:
     if asset_id in seen:
         raise ResolveError(f"placement cycle through {asset_id!r}")
@@ -164,7 +266,18 @@ def _resolve_world_pose(model: FacilityModel, asset_id: str, seen: tuple[str, ..
     if asset is None:
         raise ResolveError(f"no asset named {asset_id!r}")
 
-    local = Pose(xyz_m=asset.pose.xyz_m, rpy_rad=asset.pose.rpy_rad)
+    # The derived stand-off is folded into the LOCAL pose, before the parent
+    # frame is applied, so it runs along the belt whatever direction the belt
+    # faces in the world — and so that one world pose feeds the housing's
+    # description, the beam plugin and every geometric rule alike. Computing it
+    # in the world generator instead would have let the drawn housing and the
+    # beam it emits describe different places, which is the mis-modelling the
+    # plugin's own header warns about.
+    local_xyz = asset.pose.xyz_m
+    offset = index_offset_m(model, asset)
+    if offset != 0.0:
+        local_xyz = (local_xyz[0] + offset, local_xyz[1], local_xyz[2])
+    local = Pose(xyz_m=local_xyz, rpy_rad=asset.pose.rpy_rad)
     # Calibration is applied here and only here, as a body-frame post-multiply
     # (ADR-0020), so a Phase 2 measurement changes every derived artifact at once
     # instead of being applied ad hoc at runtime.
