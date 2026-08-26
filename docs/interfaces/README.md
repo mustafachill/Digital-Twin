@@ -5,8 +5,10 @@
   `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
   build rather than surfacing at runtime. The conventions below are what that package does,
   not what it intends to do.
-  Two of the six actions — `Transfer` and `Detect` — are defined and have no server. That is
-  an [L3](../architecture/L3-capabilities.md) gap, not an interface gap.
+  All six actions now have a server. `Detect` and `Transfer` have servers that no launch
+  graph starts and no shipped tree calls, which is an
+  [L3](../architecture/L3-capabilities.md) and [L4](../architecture/L4-orchestration.md)
+  gap, not an interface gap — see those documents for what has and has not been run.
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a

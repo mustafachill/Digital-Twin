@@ -32,16 +32,23 @@ upward dependency is an architectural defect and an `ESCALATE`, not a code-revie
 
 ## The layers
 
+The `Status` column below is a copy of each document's own `**Status:**` marker and nothing
+more. **The marker in the document is the source of truth**; if the two disagree, this table
+is the one that is wrong.
+
 | Layer | Document | Owns | Status |
 |---|---|---|---|
-| L0 | [Facility model](L0-facility-model.md) | The single source of truth, and generation from it | `DESIGNED` |
-| L1 | [Description and assets](L1-description-and-assets.md) | Geometry, kinematics, meshes, generated worlds | `DESIGNED` |
-| L2 | [Control and HAL](L2-control-and-hal.md) | `ros2_control`, controllers, MoveIt 2, hardware interfaces | `DESIGNED` |
-| L3 | [Capabilities](L3-capabilities.md) | Robot-agnostic skills as actions | `DESIGNED` |
-| L4 | [Orchestration](L4-orchestration.md) | Behaviour trees, line coordination, handoff | `DESIGNED` |
+| L0 | [Facility model](L0-facility-model.md) | The single source of truth, and generation from it | `BUILT` |
+| L1 | [Description and assets](L1-description-and-assets.md) | Geometry, kinematics, meshes, generated worlds | `PARTIAL` |
+| L2 | [Control and HAL](L2-control-and-hal.md) | `ros2_control`, controllers, MoveIt 2, hardware interfaces | `PARTIAL` |
+| L3 | [Capabilities](L3-capabilities.md) | Robot-agnostic skills as actions | `PARTIAL` |
+| L4 | [Orchestration](L4-orchestration.md) | Behaviour trees, line coordination, handoff | `PARTIAL` |
 | L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, mirroring, divergence, calibration | `DESIGNED` |
 | L6 | [Data and telemetry](L6-data-and-telemetry.md) | Telemetry schema, recording, historian, replay | `DESIGNED` |
 | L7 | [Presentation](L7-presentation.md) | Operator HMI, remote access | `DESIGNED` |
+
+`DESIGNED` means the contract the code must satisfy, with nothing built. `PARTIAL` says
+which part is real; read the document's status block, which names it. `BUILT` means tested.
 
 ## Cross-cutting
 

@@ -1,19 +1,26 @@
 # L3 — Capabilities (skills)
 
-- **Status:** `PARTIAL` — **four of the six skills below have a server.**
-  **Built:** `MoveTo`, `Grasp`, `Pick` and `Place` are action servers in
-  `cite_skills/src/skill_server.cpp`. `MoveTo` to the `home` configuration is asserted by
-  `./scripts/scenario bringup`.
+- **Status:** `PARTIAL` — **all six skills below now have a server; two of them have never
+  been run against the simulator.**
+  **Built:** `MoveTo`, `Grasp`, `Pick`, `Place` and `Transfer` are action servers in
+  `cite_skills/src/skill_server.cpp`; `Detect` is a server in
+  `cite_skills/src/detection_server.cpp`, kept out of the per-arm node because it commands
+  no motion and belongs to a zone's sensors rather than to one arm.
+  `MoveTo` to the `home` configuration is asserted by `./scripts/scenario bringup`.
   `Pick` and `Place` complete a cycle on one arm: the pads close on a 50 mm work-piece,
-  stall on it, and friction carries it — the cycle passed 8/8 in the campaign recorded in
-  the message of commit `39931d1`, which is the only place that campaign is written down.
-  **Not built:** `Transfer` and `Detect`. Both have `.action` definitions in
-  `cite_interfaces` and no implementation anywhere.
+  stall on it, and friction carries it — see the status block in
+  [CLAUDE.md §2](../../CLAUDE.md) for the current measured pass count, which is not
+  restated here (P1).
+  **Built but never brought up:** `detection_server` is compiled and installed, and
+  `cite_bringup/launch/simulation.launch.py` starts one `skill_server` per arm and nothing
+  else. No launch graph starts it, and the belt and beam topics it would read are on Gazebo
+  transport with no ROS bridge, so `Detect` has not run against the simulator at all.
+  `Transfer` has a server and no caller: today's L0 topology is conveyor-mediated and
+  [L4](L4-orchestration.md) refuses a direct arm-to-arm edge at plan time
+  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)).
   **Not proven:** `./scripts/scenario pick_and_place` is not a green gate. It runs in CI as
-  `continue-on-error` at this commit, and in the same campaign the *scenario verdict* was
-  6/8 — two runs failed the post-cycle teardown check after the cycle had passed, cause
-  unknown. `MoveTo.Goal.cartesian_path` returns `NOT_IMPLEMENTED`
-  ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
+  `continue-on-error` at this commit. `MoveTo.Goal.cartesian_path` returns
+  `NOT_IMPLEMENTED` ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
   **Not assertable:** how a part is oriented in the jaws — see "A grasp is evidenced by a
   stall" below.
 - **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [`../interfaces/README.md`](../interfaces/README.md)
@@ -55,7 +62,7 @@ Initial skill set:
 | `MoveTo` | Target pose or named configuration | Reached / failed, with reason |
 | `Pick` | Object pose, grasp hint | Holding / failed |
 | `Place` | Target pose | Released / failed |
-| `Transfer` | Peer identity, handoff pose | Transferred / failed |
+| `Transfer` | Handoff pose, rendezvous token, work-piece id, hold timeout | Transferred / failed, and whether the part is still held |
 | `Grasp` | End-effector command | Actuated / failed |
 | `Detect` | Region of interest, object type | Detections with poses |
 
@@ -121,11 +128,19 @@ The standing restriction from ADR-0029 binds this layer:
 > A scenario may assert **where** a part ends up. No scenario may assert **how** a part is
 > oriented in the jaws.
 
-Two pieces of unwritten work inherit that restriction rather than work around it.
-`Transfer` — a two-party handoff — needs to know how a part is held, not only that it is
-([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)). So does the continuous line
-of Phase 1.D, which accumulates orientation error across stations. Whoever writes either
-one closes this gap first or states plainly that they have not.
+Two pieces of work inherit that restriction rather than work around it, and each has taken
+it differently.
+
+**A direct arm-to-arm `Transfer` needs to know how a part is held, not only that it is**
+([ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md)). It is therefore **refused at
+plan time** rather than attempted
+([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). A
+conveyor-mediated handoff is unaffected: the part is released before the receiver touches
+it, and `Detect` re-measures the pose.
+
+**The continuous line of Phase 1.D** accumulates orientation error across stations, and
+that gap is open. Whoever writes it closes the gap first or states plainly that they have
+not.
 
 ### Skills are stateless between goals
 
@@ -151,8 +166,11 @@ restartable, and it stops L3 from quietly becoming a second orchestrator.
 - **Grasp representation.** Whether a grasp pose is supplied by the caller, computed by the
   skill, or looked up per object type. Affects whether perception is a `Detect` skill or
   something richer.
-- **Where handoff logic lives.** `Transfer` as an L3 skill assumes two arms can negotiate
-  through it. It may instead belong at L4 as a coordinated pair of `Place` and `Pick`. This
-  needs deciding before Phase 1.D and is the most consequential open question in this layer.
+- **How a direct arm-to-arm handoff will ever observe orientation.**
+  [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md) refuses one
+  at plan time because nothing re-observes the part between two grippers, and names the
+  observation as the blocker. What provides it — a camera at the rendezvous, or a `Detect`
+  that returns a full pose there — is undecided, and the only pose sensor in the model
+  today is a through-beam that reports occupancy.
 - **Force-controlled skills.** Insertion and compliant placement need force feedback and a
   different control mode. Not scheduled, but the skill interface should not preclude it.
