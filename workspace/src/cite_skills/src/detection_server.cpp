@@ -50,7 +50,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -72,6 +71,7 @@
 
 #include "cite_skills/detection.hpp"
 #include "cite_skills/exclusive_goal.hpp"
+#include "cite_skills/observation.hpp"
 
 namespace
 {
@@ -522,7 +522,6 @@ private:
           goal->region_size_m.z))
       {
         in_region.push_back(sensor);
-        placements_[sensor->asset_id] = where;
       }
     }
 
@@ -561,28 +560,34 @@ private:
       }
 
       Detection detection;
-      // Both left empty, and both for the same reason `DetectionEvent` leaves
-      // `workpiece_id` empty: a break beam observes occupancy, not identity.
+      // All three left unset, and all three for the same reason `DetectionEvent`
+      // leaves `workpiece_id` empty: a break beam observes occupancy, and
+      // occupancy is the whole of what it observes.
       detection.workpiece_id = "";
       detection.workpiece_type = "";
-      // The SENSOR's pose, not the work-piece's, which is the only position a
-      // through-beam carries. Reported in full — orientation included — because
-      // it is a measured fact about where the beam is, whereas an identity
-      // orientation would be a zero standing in for an observation that was never
-      // made. What is known is "something is in this beam's volume"; where in it,
-      // and how turned, are not.
-      detection.pose.header.stamp = now();
-      detection.pose.header.frame_id = goal->region_frame;
-      const auto & where = placements_.at(sensor->asset_id);
-      detection.pose.pose.position.x = where.transform.translation.x;
-      detection.pose.pose.position.y = where.transform.translation.y;
-      detection.pose.pose.position.z = where.transform.translation.z;
-      detection.pose.pose.orientation = where.transform.rotation;
+      // POSITION IS THE THIRD THING IT CANNOT REPORT, and the one that used to be
+      // filled in anyway — with the sensor's own placement in the region frame.
+      // That is a measured fact about where the BEAM is, and `Detection.pose` is
+      // documented as where the OBJECT is, so it answered a question nobody
+      // asked with a number that looked like an answer to the one they did. For
+      // `beam_c1_out` the two differ by 0.250 m across the belt, 0.050 m along it
+      // and 0.030 m up: a station picking at it would reach for the housing
+      // rather than for the work-piece.
+      //
+      // What the beam knows is that something is inside its volume. Where inside
+      // — and how turned — it does not know, in simulation or on hardware, so
+      // there is no pose to report and none is reported. See
+      // `cite_skills/observation.hpp` for how absence is spelled and why it is
+      // spelled more than once.
+      cite_skills::mark_pose_unobserved(detection.pose);
       // Ground truth, which is what this scale is for: in simulation the beam is
       // a geometric test against the world's own state, and a physical
-      // through-beam is a threshold on a photodiode. Neither is an estimate. The
-      // confidence is in the DETECTION — that the volume is occupied — and not in
-      // the pose, which is the sensor's own and is documented as such above.
+      // through-beam is a threshold on a photodiode. Neither is an estimate.
+      //
+      // It is confidence in the DETECTION — that the volume is occupied — and
+      // there is nothing else here for it to be confidence in, now that the pose
+      // is not claimed. Reading it as confidence in a position is the misreading
+      // the unset pose above exists to make impossible.
       detection.confidence = 1.0;
 
       result->detections.push_back(detection);
@@ -597,7 +602,23 @@ private:
       }
     }
 
-    finish(make_result(ResultCode::SUCCESS));
+    // Said out loud on the SUCCESS path, for the same reason the empty-region
+    // case above says its piece: the caller cannot tell an unset pose from one it
+    // simply forgot to read, and a `Detect` that answers "yes, something is
+    // there" while silently declining the follow-up question is exactly the kind
+    // of half-answer that gets acted on as a whole one.
+    finish(
+      make_result(
+        ResultCode::SUCCESS,
+        found == 0 ?
+        "" :
+        "occupancy only: these detections carry NO pose. A through-beam reports that "
+        "its volume is occupied; it does not report where in that volume the "
+        "work-piece lies, and it reports nothing at all about how the work-piece is "
+        "turned. Detection.pose is therefore left unset — empty frame_id, NaN "
+        "position — rather than filled with the sensor's own mounting pose, which is "
+        "a fact about the beam and not about the part. Resolve the pick point from "
+        "the station's own frame in L0"));
   }
 
   /// Wait for every sensor in the region to have reported at least once.
@@ -655,11 +676,6 @@ private:
   //: Guards each sensor's edge detector, which the subscription callbacks write
   //: and the goal thread reads.
   std::mutex sensors_mutex_;
-  //: Where each in-region sensor was found, for the goal currently in flight.
-  //: Safe without a lock because only the single goal thread touches it, and the
-  //: gate admits one goal at a time.
-  std::map<std::string, geometry_msgs::msg::TransformStamped> placements_;
-
   cite_skills::ExclusiveGoal<rclcpp_action::GoalUUID> gate_;
   std::mutex worker_mutex_;
   std::thread worker_;
