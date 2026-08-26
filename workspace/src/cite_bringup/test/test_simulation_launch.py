@@ -31,7 +31,7 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
-from cite_bringup.plan import HARDWARE_OPT_IN_ENV, resolve_uri
+from cite_bringup.plan import HARDWARE_OPT_IN_ENV, load, resolve_uri
 from launch import LaunchContext
 from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
@@ -71,7 +71,14 @@ def context() -> LaunchContext:
     ctx = LaunchContext()
     ctx.launch_configurations["zone"] = "cell_a"
     ctx.launch_configurations["headless"] = "true"
+    ctx.launch_configurations["line"] = "false"
     return ctx
+
+
+@pytest.fixture()
+def line_context(context: LaunchContext) -> LaunchContext:
+    context.launch_configurations["line"] = "true"
+    return context
 
 
 class _Exited:
@@ -429,3 +436,302 @@ def test_the_planning_scene_is_loaded_before_the_skills(
     assert order.index("skill") > max(
         index for index, kind in enumerate(order) if kind == "loader"
     ), "a skill server can start before the planning scene is loaded"
+
+
+# --- The Gazebo/ROS bridge: nine names, none of them written here -------------
+#
+# `launch_ros` normalises a node's parameters and keeps its arguments private, so
+# these read the pure functions the launch file builds them from rather than
+# reaching into launch's internals — and then assert the node that carries them
+# is actually in the description.
+
+
+def _plan():
+    return load(Path(resolve_uri(GENERATED_PLAN)))
+
+
+def _nodes(actions: list, executable: str, context: LaunchContext) -> list:
+    """Every Node with this executable, including ones behind a process gate."""
+    found = [a for a in actions if getattr(a, "node_executable", None) == executable]
+    for action in actions:
+        if not isinstance(action, RegisterEventHandler):
+            continue
+        handler = action.event_handler
+        if not isinstance(handler, OnProcessExit):
+            continue
+        for entity in handler.handle(_Exited(returncode=0), context) or []:
+            if getattr(entity, "node_executable", None) == executable:
+                found.append(entity)
+    return found
+
+
+def _namespace(node, context: LaunchContext) -> str:
+    """Return the namespace a node will actually be launched into.
+
+    `launch_ros` resolves a node's namespace only when the action executes, so it
+    has to be asked to. Reading the constructor argument instead would test what
+    this file passed rather than where the node lands, and those differ the
+    moment a substitution is involved.
+    """
+    node._perform_substitutions(context)
+    return node.expanded_node_namespace
+
+
+def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
+    """The blocker this work exists for.
+
+    The belt and beam plugins were built, instantiated by the generated world and
+    publishing on the Gazebo transport under exactly these names — and
+    `cite_bringup` bridged `/clock` and nothing else. Nine declared interfaces had
+    no ROS endpoint at all, so the bring-up plan advertised a system the running
+    one did not provide.
+    """
+    plan = _plan()
+    arguments, _ = module._bridge_topics(plan)
+
+    assert module.CLOCK_BRIDGE in arguments
+    for conveyor in plan.conveyors:
+        assert (
+            f"{conveyor.command_topic}@std_msgs/msg/Float64]gz.msgs.Double" in arguments
+        ), conveyor.asset
+        assert (
+            f"{conveyor.state_topic}@std_msgs/msg/Float64[gz.msgs.Double" in arguments
+        ), conveyor.asset
+    for sensor in plan.sensors:
+        assert (
+            f"{sensor.detection_topic}@std_msgs/msg/Bool[gz.msgs.Boolean" in arguments
+        ), sensor.asset
+
+    expected = 1 + 2 * len(plan.conveyors) + len(plan.sensors)
+    assert len(arguments) == expected, (
+        f"the bridge carries {len(arguments)} topics against {expected} in the plan; "
+        "a name was written here rather than taken from the model"
+    )
+
+
+def test_the_bridge_directions_are_not_interchangeable(module: ModuleType) -> None:
+    """A command bridged the wrong way fails at both ends with no error at either.
+
+    `]` is ROS to Gazebo and `[` is Gazebo to ROS. Reversed, a belt command
+    becomes a ROS publisher nothing reads and a Gazebo subscriber nothing writes.
+    """
+    plan = _plan()
+    arguments, _ = module._bridge_topics(plan)
+
+    commands = [a for a in arguments if "/command@" in a]
+    assert len(commands) == len(plan.conveyors)
+    assert all("]" in a and "[" not in a for a in commands)
+
+    inbound = [a for a in arguments if "/state@" in a or "/detection@" in a]
+    assert len(inbound) == len(plan.conveyors) + len(plan.sensors)
+    assert all("[" in a and "]" not in a for a in inbound)
+
+
+def test_the_bridged_level_never_lands_on_the_event_topic(module: ModuleType) -> None:
+    """The collision the whole naming split exists to prevent.
+
+    `cell_a_flow.yaml` gives `/cite/<zone>/<asset>/detection` to L4 as a typed
+    `DetectionEvent` trigger, and the `Detect` server publishes its events there.
+    A bridge that put a `std_msgs/Bool` on the same name would give one topic two
+    publishers of two types, and both would look healthy in `ros2 topic info`.
+    """
+    plan = _plan()
+    arguments, remappings = module._bridge_topics(plan)
+    remapped = dict(remappings)
+
+    assert len(remapped) == len(plan.sensors)
+    for sensor in plan.sensors:
+        assert remapped.get(sensor.detection_topic) == sensor.level_topic, (
+            f"{sensor.asset}: the raw level would be published on "
+            f"{sensor.detection_topic}, which is the typed event topic"
+        )
+    # The bridge argument still names the GAZEBO topic, because that is what the
+    # plugin advertises. Only the ROS end moves.
+    assert not any(sensor.level_topic in a for a in arguments for sensor in plan.sensors)
+
+
+def test_one_bridge_process_carries_them_all(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """Two would mean two publishers on /clock, and a cell with two clocks."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    bridges = _nodes(module._bring_up(context), "parameter_bridge", context)
+    assert len(bridges) == 1
+
+
+# --- L3 detection is started, and it is one server for the zone ---------------
+
+
+def test_the_detection_server_is_started_with_every_beam(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """Built, installed, tested — and started by no launch graph until now."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    plan = _plan()
+
+    servers = _nodes(module._bring_up(context), "detection_server", context)
+    assert len(servers) == 1, "one detection server per zone, not one per arm"
+    assert plan.detection is not None
+    assert _namespace(servers[0], context) == plan.detection.namespace
+
+    parameters = module._detection_parameters(plan)
+    assert parameters["zone"] == plan.zone
+    assert parameters["sensors"] == [s.asset for s in plan.sensors]
+    assert parameters["use_sim_time"] is True
+    for sensor in plan.sensors:
+        assert parameters[f"sensor.{sensor.asset}.state_topic"] == sensor.level_topic
+        assert parameters[f"sensor.{sensor.asset}.event_topic"] == sensor.detection_topic
+        assert parameters[f"sensor.{sensor.asset}.frame_id"] == sensor.frame_id
+
+
+def test_the_detection_server_reads_the_level_and_publishes_the_event(
+    module: ModuleType,
+) -> None:
+    """Reversing the two gives a node that subscribes to its own output.
+
+    It would start, log that it is watching every beam, and never see a sample.
+    """
+    plan = _plan()
+    parameters = module._detection_parameters(plan)
+    for sensor in plan.sensors:
+        assert (
+            parameters[f"sensor.{sensor.asset}.state_topic"]
+            != parameters[f"sensor.{sensor.asset}.event_topic"]
+        )
+        # And the level side is the one the bridge writes to.
+        _, remappings = module._bridge_topics(plan)
+        assert (sensor.detection_topic, sensor.level_topic) in remappings
+
+
+# --- L4 is startable, and off by default -------------------------------------
+
+
+def test_the_line_coordinator_is_off_unless_asked_for(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """A running coordinator holds all three arms.
+
+    A skill server admits one goal at a time per arm, so anything else driving an
+    arm directly — a scenario, an operator, a diagnostic — would have its goals
+    refused by a server that is busy working.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    assert not _nodes(module._bring_up(context), "line_orchestrator", context)
+
+
+def test_the_line_coordinator_gets_its_action_names_from_the_plan(
+    module: ModuleType, line_context: LaunchContext, monkeypatch
+) -> None:
+    """Parallel arrays, lined up by asset, every value generated by `ids.py`.
+
+    The shape is `line_orchestrator`'s and is deliberate: a mismatched length is
+    refused at start-up with both lengths named. What has changed is that the
+    names are no longer assembled by whoever launches the node — that put
+    `/cite/<zone>/<asset>/pick` in a second place, outside `ids.py` and outside
+    every test that covers it.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    coordinators = _nodes(module._bring_up(line_context), "line_orchestrator", line_context)
+    assert len(coordinators) == 1, "one coordinator per zone"
+
+    plan = _plan()
+    parameters = module._line_parameters(plan)
+    assert parameters is not None
+
+    served = [m for m in plan.controller_managers if m.skills is not None]
+    assert served
+    assert parameters["skill_assets"] == [m.asset for m in served]
+    assert parameters["zone"] == plan.zone
+    assert parameters["use_sim_time"] is True
+    for key, attribute in (
+        ("move_to_actions", "move_to"),
+        ("pick_actions", "pick"),
+        ("place_actions", "place"),
+        ("transfer_actions", "transfer"),
+    ):
+        assert parameters[key] == [getattr(m.skills, attribute) for m in served], key
+        assert len(parameters[key]) == len(parameters["skill_assets"])
+
+    # One detection server for the zone, so every station is given the same
+    # action: one name read once, not one name in three places.
+    assert plan.detection is not None
+    assert parameters["detect_actions"] == [plan.detection.detect_action] * len(served)
+
+    assert Path(parameters["station_tree"]).exists(), parameters["station_tree"]
+
+
+def test_the_line_state_topic_comes_off_the_message(module: ModuleType) -> None:
+    """`LineState` now carries its own topic name, the way `LineTopology` does.
+
+    Without the constant the name has to be supplied to the publisher and written
+    again in every subscriber, which is a value in two places and is not
+    discoverable with `ros2 interface show`.
+    """
+    from cite_interfaces.msg import LineState
+
+    parameters = module._line_parameters(_plan())
+    assert parameters is not None
+    assert parameters["line_state_topic"] == LineState.TOPIC
+    assert LineState.TOPIC == "/cite/line/state"
+
+
+def test_the_line_coordinator_starts_behind_the_same_gate_as_the_skills(
+    module: ModuleType, line_context: LaunchContext, monkeypatch
+) -> None:
+    """It calls those skills, so it may not start on a cell that never finished.
+
+    Reachable only through a process-exit gate, which is what makes a failed
+    planning-scene load stop it rather than let it drive an arm against a
+    planning scene that holds nothing but the arm.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(line_context)
+    assert not [
+        a for a in actions if getattr(a, "node_executable", None) == "line_orchestrator"
+    ], "the coordinator is started ungated, before anything it needs exists"
+    assert _nodes(actions, "line_orchestrator", line_context)
+
+
+# --- The gripper values the plan states are the ones L3 receives ---------------
+
+
+def test_every_gripper_value_in_the_plan_reaches_the_skill_server(
+    module: ModuleType,
+) -> None:
+    """A P1 defect wearing a disguise.
+
+    Four keys were delivered by hand. One of them, `gripper_max_width_m`, exists
+    in neither the plan nor the server's declared parameters, so it was accepted
+    and dropped. The other eleven values the plan carries — the default grasp
+    width, the goal tolerance, the drive rate and the seven linkage dimensions —
+    never arrived at all, and the node ran on compiled defaults that happen to
+    equal the L0 values. It worked only for as long as the two copies agreed.
+    """
+    plan = _plan()
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        delivered = module._skill_parameters(plan, manager)
+
+        assert manager.gripper, manager.asset
+        for key, value in manager.gripper.items():
+            assert delivered[key] == value, f"{manager.asset}: {key}"
+        assert "gripper_max_width_m" not in delivered, (
+            "a parameter the skill server does not declare is accepted and dropped, "
+            "which reads as delivered and is not"
+        )
+        assert delivered["asset_id"] == manager.asset
+        assert delivered["use_sim_time"] is True
+
+
+def test_the_skill_servers_are_given_those_parameters(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """The pure function above is only worth testing if the nodes use it."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    servers = _nodes(module._bring_up(context), "skill_server", context)
+    assert len(servers) == 3
+    namespaces = {_namespace(node, context) for node in servers}
+    assert namespaces == {
+        m.node.rsplit("/", 1)[0] for m in _plan().controller_managers
+    }

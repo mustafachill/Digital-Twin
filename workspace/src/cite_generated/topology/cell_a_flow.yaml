@@ -15,6 +15,9 @@ topology:
       type: sink_station
       actor: null
       capacity: 12
+      trigger:
+        topic: /cite/cell_a/beam_c3_out/detection
+        state: blocked
       upstream: [station_transfer_3]
       downstream: []
     - id: station_infeed

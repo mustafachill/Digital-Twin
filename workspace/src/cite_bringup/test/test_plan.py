@@ -27,6 +27,7 @@ from pathlib import Path
 from cite_bringup.plan import (
     ControllerManager,
     ControllerRef,
+    GRIPPER_KEYS,
     HARDWARE_OPT_IN_ENV,
     HardwareNotPermittedError,
     load,
@@ -116,9 +117,8 @@ def test_stage_grouping_is_deterministic() -> None:
         moveit=None,
         trajectory_action=None,
         gripper_action=None,
-        gripper_open_position=0.0,
-        gripper_closed_position=0.85,
-        gripper_max_width_m=0.085,
+        skills=None,
+        gripper={},
     )
     assert manager.stages() == [(0, ("jsb",)), (1, ("a", "b"))]
 
@@ -294,3 +294,129 @@ def test_an_unknown_backend_is_refused_rather_than_allowed(tmp_path: Path) -> No
     plan = load(_written(tmp_path, _with_backend(_document(), "mock_components")))
     with pytest.raises(HardwareNotPermittedError):
         require_hardware_opt_in(plan, {})
+
+
+# --- The simulation-fidelity aids: two topics per beam, not two names for one --
+
+
+def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
+    """A beam has two interfaces and they must not collide.
+
+    `detection_topic` is already spoken for: `cell_a_flow.yaml` gives it to a
+    station as a `DetectionEvent` trigger and `StationTopology.msg` documents it
+    as one. Bridging the raw `std_msgs/Bool` level onto that name would put two
+    publishers of two types on the topic the line acts on.
+    """
+    plan = load(_generated())
+    assert plan.sensors, "the generated plan declares no sensors at all"
+    for sensor in plan.sensors:
+        assert sensor.detection_topic != sensor.level_topic, sensor.asset
+        assert sensor.asset in sensor.detection_topic
+        assert sensor.asset in sensor.level_topic
+        assert sensor.frame_id.startswith(f"{plan.zone}__{sensor.asset}__"), (
+            "a beam's detections are reported in a frame the generated static TF "
+            "table publishes; this one names a frame from nowhere"
+        )
+
+
+def test_a_beam_whose_two_topics_are_one_name_is_refused(tmp_path: Path) -> None:
+    """Refused when the plan says it, not discovered when the line stalls.
+
+    The two would connect, both publish, and `ros2 topic echo` would show a
+    stream of deserialisation errors naming neither publisher.
+    """
+    document = _document()
+    sensor = document["plan"]["sensors"][0]
+    sensor["level_topic"] = sensor["detection_topic"]
+    with pytest.raises(PlanError, match="fight over it"):
+        load(_written(tmp_path, document))
+
+
+def test_sensors_without_a_detection_block_are_refused(tmp_path: Path) -> None:
+    """Beams bridged into ROS and read by nobody is a silent half-system."""
+    document = _document()
+    del document["plan"]["detection"]
+    with pytest.raises(PlanError, match="turns their levels into typed events"):
+        load(_written(tmp_path, document))
+
+
+def test_the_detection_server_is_zone_scoped() -> None:
+    plan = load(_generated())
+    assert plan.detection is not None
+    assert plan.detection.namespace == f"/cite/{plan.zone}/detection"
+    assert plan.detection.detect_action == f"{plan.detection.namespace}/detect"
+    # Not an arm's namespace: one server watches every belt in the zone, and
+    # three would give the same question three answers.
+    for manager in plan.controller_managers:
+        assert manager.asset not in plan.detection.namespace
+
+
+# --- The skill actions L4 calls come from the model ---------------------------
+
+
+def test_every_planned_arm_declares_its_skill_actions() -> None:
+    """The names used to be assembled by whoever launched the coordinator.
+
+    That is an asset name written a second time, outside `ids.py` and outside
+    every test that covers it — which is exactly what CLAUDE.md §8 forbids.
+    """
+    plan = load(_generated())
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        assert manager.skills is not None, manager.asset
+        prefix = f"/cite/{plan.zone}/{manager.asset}/"
+        for skill in ("move_to", "pick", "place", "grasp", "transfer"):
+            name = getattr(manager.skills, skill)
+            assert name == f"{prefix}{skill}", (name, skill)
+
+
+def test_a_partial_skills_block_is_refused(tmp_path: Path) -> None:
+    """Half a skill table is worse than none: the missing one fails at goal time."""
+    document = _document()
+    del document["plan"]["controller_managers"][0]["skills"]["pick"]
+    with pytest.raises(PlanError, match="missing required key 'pick'"):
+        load(_written(tmp_path, document))
+
+
+# --- The gripper values reach L3 because the plan carries them ----------------
+
+
+def test_every_gripper_key_the_plan_states_is_read() -> None:
+    """The P1 defect that worked because two copies agreed.
+
+    `cite_bringup` delivered four keys, one of which — `gripper_max_width_m` —
+    exists in neither the plan nor the skill server's declared parameters and was
+    therefore accepted and dropped. Meanwhile the default grasp width, the goal
+    tolerance, the drive rate and all seven linkage dimensions never arrived, and
+    the node ran on compiled defaults that happen to equal the L0 values.
+    """
+    plan = load(_generated())
+    document = _document()
+    for manager, entry in zip(
+        plan.controller_managers, document["plan"]["controller_managers"]
+    ):
+        if manager.gripper_action is None:
+            continue
+        stated = {key for key in GRIPPER_KEYS if entry.get(key) is not None}
+        assert stated == set(manager.gripper), (
+            f"{manager.asset}: the plan states {sorted(stated)} and the reader "
+            f"produced {sorted(manager.gripper)}"
+        )
+        assert stated, f"{manager.asset} has a gripper action and no gripper values"
+        for key in stated:
+            assert manager.gripper[key] == pytest.approx(float(entry[key])), key
+
+
+def test_a_gripper_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path) -> None:
+    """Omission must not become a value.
+
+    A zero manufactured here would be passed as a parameter and would override
+    the skill server's own declared default with a number the model never stated
+    — silently, and in the direction of a gripper that thinks it is fully open.
+    """
+    document = _document()
+    del document["plan"]["controller_managers"][0]["gripper_default_grasp_width_m"]
+    plan = load(_written(tmp_path, document))
+    assert "gripper_default_grasp_width_m" not in plan.controller_managers[0].gripper
+    assert "gripper_open_position" in plan.controller_managers[0].gripper

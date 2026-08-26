@@ -54,7 +54,9 @@ from cite_bringup.plan import (
     Plan,
     PlanError,
     require_hardware_opt_in,
+    resolve_uri,
 )
+from cite_interfaces.msg import LineState
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
@@ -106,6 +108,13 @@ TEARDOWN_SIGKILL_S = "60"
 #: Where `./scripts/scenario` puts the seed it decides once per run.
 PHYSICS_SEED_ENV = "CITE_PHYSICS_SEED"
 
+#: The hand-written subtree that says what ONE station does. How many stations
+#: there are, what each is called and which arm serves it are generated from the
+#: L0 topology by L4 itself. This is mechanism belonging to `cite_orchestration`
+#: rather than a fact about the facility, which is why it is named here and not
+#: carried in the plan.
+STATION_TREE_URI = "package://cite_orchestration/trees/line_station.xml"
+
 
 def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
@@ -120,6 +129,16 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="cell_a",
                 description="Which zone of the facility model to bring up.",
             ),
+            DeclareLaunchArgument(
+                "line",
+                default_value="false",
+                description=(
+                    "Start the L4 line coordinator, which drives every station in the "
+                    "zone. Off by default: it takes exclusive hold of each arm's skills, "
+                    "so a scenario or an operator driving one arm directly would find "
+                    "their goals refused by a server already serving the line."
+                ),
+            ),
             OpaqueFunction(function=_bring_up),
         ]
     )
@@ -128,6 +147,7 @@ def generate_launch_description() -> LaunchDescription:
 def _bring_up(context: LaunchContext) -> list:
     zone = LaunchConfiguration("zone").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() in ("true", "1")
+    line = LaunchConfiguration("line").perform(context).lower() in ("true", "1")
 
     try:
         plan = load(default_plan_path(zone))
@@ -177,15 +197,27 @@ def _bring_up(context: LaunchContext) -> list:
     scene_actions, last_step = _planning_scene(plan, last_spawner)
     actions += scene_actions
 
+    # The zone's detection server comes up with the facility nodes rather than
+    # after the arms: it commands no motion, needs neither the planner nor a
+    # controller, and the sooner it is subscribed the sooner a beam that is
+    # already blocked is known. It refuses to start if the plan does not name
+    # every sensor's topics and frame, and that refusal stops bring-up.
+    actions += _detection(plan)
+
     # Skills come last. That is the order cross-cutting-lifecycle.md fixes —
     # controllers, then MoveIt, then skills — and it is a real dependency, not a
     # preference: MoveGroupInterface needs a current robot state, which does not
-    # exist until a broadcaster is publishing.
+    # exist until a broadcaster is publishing. The line coordinator rides the
+    # same gate: it calls those skills, so it may not start on a cell whose
+    # planning scene never loaded.
     actions.append(
         RegisterEventHandler(
             OnProcessExit(
                 target_action=last_step,
-                on_exit=_gate(_skills(plan), "the skill servers"),
+                on_exit=_gate(
+                    _skills(plan) + (_line(plan) if line else []),
+                    "the skill servers",
+                ),
             )
         )
     )
@@ -239,15 +271,111 @@ def _simulator(plan: Plan, *, headless: bool, seed: str | None) -> list:
         sigkill_timeout="15",
     )
 
-    clock = Node(
+    return [simulator, _bridge(plan)]
+
+
+#: `/clock` from Gazebo into ROS. The one bridged name that is not in the plan,
+#: because it is not a fact about the facility: every zone has exactly one clock
+#: and it is called this in ROS 2 by convention.
+CLOCK_BRIDGE = "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock"
+
+#: One bridged topic, in `parameter_bridge`'s own argument grammar.
+#:
+#:   `@` … `[`   Gazebo to ROS
+#:   `@` … `]`   ROS to Gazebo
+#:
+#: The direction is half of the contract and is easy to lose: a belt command
+#: bridged the wrong way produces a ROS publisher nothing reads and a Gazebo
+#: subscriber nothing writes, with no error at either end.
+GZ_TO_ROS = "{topic}@{ros_type}[{gz_type}"
+ROS_TO_GZ = "{topic}@{ros_type}]{gz_type}"
+
+
+def _bridge(plan: Plan) -> Node:
+    """Carry the simulation-fidelity aids across the Gazebo/ROS boundary.
+
+    The belts and the beams are Gazebo system plugins. They publish and subscribe
+    on the Gazebo transport, under the names the generated plan declares — and
+    until this existed, `cite_bringup` bridged `/clock` and nothing else, so all
+    nine of those names had no ROS endpoint at all. The bring-up plan advertised
+    interfaces the running system did not provide, and the sensor-driven line
+    could not be driven by its sensors.
+
+    Every name comes from the plan. Nine hand-written entries would be nine
+    places an asset name is written a second time, which CLAUDE.md §8 forbids and
+    which this repository has already had to correct in four separate files.
+
+    ## The one remapping, and why it is not optional
+
+    A beam's level and a beam's events are two different interfaces. The plugin
+    publishes a `gz.msgs.Boolean` level; L3 turns that into a typed
+    `DetectionEvent`, and the process topology already gives `detection_topic` to
+    a station as the `DetectionEvent` trigger it subscribes to. Bridging the raw
+    boolean onto that same ROS name would put two publishers of two types on one
+    topic and let them fight over it. So the bridge keeps the plugin's name on
+    the Gazebo side — it has to, that is what the plugin advertises — and lands
+    it in ROS under the plan's `level_topic`. `parameter_bridge` names both ends
+    from one argument, so the ROS end is moved with a remapping, which rclcpp
+    applies when the publisher is created.
+
+    ## QoS
+
+    `parameter_bridge` publishes RELIABLE/VOLATILE. Every consumer in this
+    repository reads these on the SENSOR or COMMAND profile, and a best-effort
+    reader matches a reliable writer while the reverse silently does not — see
+    `cite_interfaces/qos.hpp` and `docs/interfaces/qos-profiles.md`.
+    """
+    arguments, remappings = _bridge_topics(plan)
+    return Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
-        name="clock_bridge",
-        arguments=["/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock"],
+        name="gz_bridge",
+        arguments=list(arguments),
+        remappings=list(remappings),
         output="screen",
     )
 
-    return [simulator, clock]
+
+def _bridge_topics(plan: Plan) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """List what the bridge carries, and where each name lands in ROS.
+
+    Split out of the `Node` so that it can be read back. `launch_ros` normalises
+    a node's parameters and hides its arguments behind a private attribute, so a
+    test that reached into the action would be testing launch's internals rather
+    than this file's decisions — and these decisions are exactly the ones a
+    silent failure hides: a direction reversed, a name misspelled, a level landed
+    on the topic the line acts on.
+    """
+    arguments: list[str] = [CLOCK_BRIDGE]
+    remappings: list[tuple[str, str]] = []
+
+    for conveyor in plan.conveyors:
+        arguments.append(
+            ROS_TO_GZ.format(
+                topic=conveyor.command_topic,
+                ros_type="std_msgs/msg/Float64",
+                gz_type="gz.msgs.Double",
+            )
+        )
+        arguments.append(
+            GZ_TO_ROS.format(
+                topic=conveyor.state_topic,
+                ros_type="std_msgs/msg/Float64",
+                gz_type="gz.msgs.Double",
+            )
+        )
+
+    for sensor in plan.sensors:
+        arguments.append(
+            GZ_TO_ROS.format(
+                topic=sensor.detection_topic,
+                ros_type="std_msgs/msg/Bool",
+                gz_type="gz.msgs.Boolean",
+            )
+        )
+        remappings.append((sensor.detection_topic, sensor.level_topic))
+
+    return tuple(arguments), tuple(remappings)
 
 
 def _scene(plan: Plan) -> list:
@@ -607,18 +735,7 @@ def _skills(plan: Plan) -> list:
                     _yaml_parameters(
                         manager.moveit.joint_limits, prefix="robot_description_planning"
                     ),
-                    {
-                        "asset_id": manager.asset,
-                        "zone": plan.zone,
-                        "planning_group": manager.moveit.group,
-                        "tip_link": manager.moveit.tip_link,
-                        "gripper_action": manager.gripper_action or "",
-                        "gripper_open_position": manager.gripper_open_position,
-                        "gripper_closed_position": manager.gripper_closed_position,
-                        "gripper_max_width_m": manager.gripper_max_width_m,
-                        "home_rad": list(manager.moveit.home_rad),
-                        "use_sim_time": True,
-                    }
+                    _skill_parameters(plan, manager),
                 ],
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
                 output="screen",
@@ -631,6 +748,166 @@ def _skills(plan: Plan) -> list:
             )
         )
     return actions
+
+
+def _detection(plan: Plan) -> list:
+    """Start the zone's one L3 detection server, turning levels into typed events.
+
+    One per zone, in a zone-scope namespace of its own, because a break beam
+    watches a belt and not a robot: three servers, one per arm, would give the
+    question "did the piece pass beam 2" three answers.
+
+    Nothing here composes a name. The server is given, per sensor, the ROS topic
+    the bridge lands the raw level on, the topic its typed `DetectionEvent`s go
+    to — which is the name the process topology already gives a station as its
+    trigger — and the frame the generated static TF table publishes the beam at.
+    It refuses to start if any of the three is missing, rather than watching a
+    topic nothing writes to and reporting an empty belt forever.
+    """
+    if plan.detection is None or not plan.sensors:
+        return []
+
+    return [
+        Node(
+            package="cite_skills",
+            executable="detection_server",
+            name="detection_server",
+            namespace=plan.detection.namespace,
+            parameters=[_detection_parameters(plan)],
+            # It resolves a beam's frame against the facility's static tree,
+            # which is published globally. Without these it would look inside its
+            # own namespace and find nothing.
+            remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+            output="screen",
+            # A detection server that dies takes the line's only sight with it,
+            # and nothing else notices: the stations simply stop being triggered
+            # and wait for a work-piece that already arrived.
+            on_exit=_fatal_on_exit("the detection server"),
+            sigterm_timeout=TEARDOWN_SIGTERM_S,
+            sigkill_timeout=TEARDOWN_SIGKILL_S,
+        )
+    ]
+
+
+def _detection_parameters(plan: Plan) -> dict:
+    """Every sensor's two topics and its frame, keyed as the server declares them.
+
+    Split out of the `Node` for the same reason `_bridge_topics` is: what matters
+    here is which name goes to which key, and getting that pair wrong produces a
+    node that starts happily and watches a topic nobody writes to.
+    """
+    parameters: dict = {
+        "zone": plan.zone,
+        "sensors": [sensor.asset for sensor in plan.sensors],
+        "use_sim_time": True,
+    }
+    for sensor in plan.sensors:
+        # The RAW level in, the TYPED event out. Reversing these gives a server
+        # that subscribes to its own output and publishes onto the bridge.
+        parameters[f"sensor.{sensor.asset}.state_topic"] = sensor.level_topic
+        parameters[f"sensor.{sensor.asset}.event_topic"] = sensor.detection_topic
+        parameters[f"sensor.{sensor.asset}.frame_id"] = sensor.frame_id
+    return parameters
+
+
+def _line(plan: Plan) -> list:
+    """Start the L4 coordinator that runs every station in the zone.
+
+    Off unless asked for, and that is a real constraint rather than caution: a
+    skill server admits one goal at a time per arm, so a running coordinator
+    holds all three arms and any other client — a scenario, an operator, a
+    diagnostic — has its goals refused by a server that is busy working.
+
+    Every action name it calls comes from the plan, as parallel arrays lined up
+    by asset. The shape is `line_orchestrator`'s: a mismatched length is refused
+    at start-up with both lengths named, and every value is discoverable with
+    `ros2 param get` before anything moves. What has changed is where the names
+    come from — they used to be assembled by whoever launched the node, which put
+    `/cite/<zone>/<asset>/pick` in a second place, outside the reach of `ids.py`
+    and of every test that covers it.
+
+    `Detect` is the exception, deliberately: there is one server for the zone, so
+    every asset is given the same action name. That is not one name in two
+    places; it is one name, read once, offered to each station that may ask.
+    """
+    parameters = _line_parameters(plan)
+    if parameters is None:
+        return []
+
+    return [
+        Node(
+            package="cite_orchestration",
+            executable="line_orchestrator",
+            name="line_orchestrator",
+            namespace="/cite/line",
+            parameters=[parameters],
+            remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+            output="screen",
+            on_exit=_fatal_on_exit("the line coordinator"),
+            sigterm_timeout=TEARDOWN_SIGTERM_S,
+            sigkill_timeout=TEARDOWN_SIGKILL_S,
+        )
+    ]
+
+
+def _line_parameters(plan: Plan) -> dict | None:
+    """Build the coordinator's parameters, or None when the zone has nothing to run.
+
+    None rather than a partial table: a zone with no arm that plans has no
+    station an actor can serve, and a coordinator started against it would refuse
+    at start-up with an empty `skill_assets` — which is a correct refusal
+    reported at the wrong layer.
+    """
+    served = [m for m in plan.controller_managers if m.skills is not None]
+    if not served or plan.detection is None:
+        return None
+
+    detect = plan.detection.detect_action
+    return {
+        "zone": plan.zone,
+        "station_tree": str(resolve_uri(STATION_TREE_URI)),
+        # Read off the message rather than written here. `LineState` carries the
+        # name as a constant for exactly this reason: a topic written in a
+        # publisher and again in every subscriber is a value in two places.
+        "line_state_topic": LineState.TOPIC,
+        "skill_assets": [m.asset for m in served],
+        "move_to_actions": [m.skills.move_to for m in served],
+        "pick_actions": [m.skills.pick for m in served],
+        "place_actions": [m.skills.place for m in served],
+        "transfer_actions": [m.skills.transfer for m in served],
+        # One server for the zone, so every station is given the same action.
+        # That is one name read once, not one name in three places.
+        "detect_actions": [detect for _ in served],
+        "use_sim_time": True,
+    }
+
+
+def _skill_parameters(plan: Plan, manager) -> dict:
+    """Everything one skill server is told about its arm, all of it from L0.
+
+    The gripper half used to be four keys written out by hand, and one of those
+    four — `gripper_max_width_m` — exists in neither the plan nor the server's
+    declared parameters, so it was accepted and dropped. Meanwhile the default
+    grasp width, the goal tolerance, the drive rate and all seven linkage
+    dimensions never arrived at all, and the node ran on compiled defaults that
+    happen to equal the L0 values. It worked, and it worked only for as long as
+    the two copies agreed — which is what a P1 violation looks like from the
+    outside right up until it does not.
+
+    They arrive here as whatever the plan states, under the plan's own keys,
+    which are the server's own keys. There is no list to keep in step.
+    """
+    assert manager.moveit is not None, "a skill server is started only for a planned arm"
+    return {
+        "asset_id": manager.asset,
+        "zone": plan.zone,
+        "planning_group": manager.moveit.group,
+        "tip_link": manager.moveit.tip_link,
+        "gripper_action": manager.gripper_action or "",
+        "home_rad": list(manager.moveit.home_rad),
+        "use_sim_time": True,
+        **manager.gripper,
+    }
 
 
 def _motion_planning(plan: Plan) -> list:
