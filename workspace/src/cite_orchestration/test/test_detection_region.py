@@ -57,7 +57,21 @@ GENERATED = Path(get_package_share_directory("cite_generated"))
 #: Where the value under test is written. Supplied by CMake rather than composed
 #: from a relative path, because a test that walked `../../` out of its own
 #: source tree would pass or fail on where it was invoked from.
-SKILL_NODES_HEADER = Path(os.environ["CITE_SKILL_NODES_HEADER"])
+#:
+#: Read where it is USED rather than at import, so a missing variable is a named
+#: failure in one test instead of a bare `KeyError` during collection that looks
+#: like a broken file.
+HEADER_VARIABLE = "CITE_SKILL_NODES_HEADER"
+
+
+def skill_nodes_header() -> Path:
+    """Return the header the region default is written in."""
+    configured = os.environ.get(HEADER_VARIABLE)
+    assert configured, (
+        f"{HEADER_VARIABLE} is unset. CMakeLists.txt sets it for this test, so run it "
+        "through ./scripts/test rather than invoking pytest on this file directly"
+    )
+    return Path(configured)
 
 
 def _read(path: Path) -> dict:
@@ -72,10 +86,11 @@ def region_extent_m() -> float:
     would keep passing after the leaf changed — which is the failure mode this
     repository keeps finding, not a hypothetical.
     """
-    text = SKILL_NODES_HEADER.read_text()
+    header = skill_nodes_header()
+    text = header.read_text()
     match = re.search(r'InputPort<double>\(\s*"region_m",\s*([0-9.]+)', text)
     assert match, (
-        f"no `region_m` default could be found in {SKILL_NODES_HEADER}. This test pins "
+        f"no `region_m` default could be found in {header}. This test pins "
         "that number against the generated layout; if the port has been renamed or the "
         "region now arrives from the model, this test should be rewritten to read it "
         "from wherever it now lives rather than deleted"

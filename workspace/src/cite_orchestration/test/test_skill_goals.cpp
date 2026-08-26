@@ -30,6 +30,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -206,6 +207,70 @@ TEST_F(SkillGoals, PickSendsTheWorkpiecesOwnHeightNotAToolHeight)
   // twice.
   EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
   EXPECT_EQ(goal->object_pose.header.frame_id, kFrame);
+}
+
+TEST_F(SkillGoals, PickFallsBackToTheStationFrameWhenTheDetectionCarriesNoObservation)
+{
+  // THE PATH THE LINE ACTUALLY TAKES, and until now nothing exercised it.
+  //
+  // Every detector this project has is a break beam. A through-beam reports
+  // occupancy and knows nothing about position, so `Detection.pose` comes back
+  // marked unobserved and `PickAt` must reach for the station's L0 frame instead.
+  //
+  // Default-constructed, which is what an unobserved detection decodes to on this
+  // side: `cite_skills::mark_pose_unobserved` clears the frame_id, and an empty
+  // frame_id is what `PickAt` tests. NOT built by calling that function, because
+  // `cite_skills` exports no include directory and nothing outside it can — see
+  // the note on the guard in `skill_nodes.hpp`. The case this therefore does NOT
+  // cover is a frame set over NaN components, which today's guard would pass
+  // through to the planner.
+  geometry_msgs::msg::PoseStamped unobserved;
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", unobserved);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+  EXPECT_EQ(goal->object_pose.header.frame_id, kFrame)
+    << "an unobserved detection was passed through as the object's pose; the arm would "
+       "be sent to wherever that pose happens to decode to";
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.x));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.y));
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
+}
+
+TEST_F(SkillGoals, PickUsesADetectionThatIsActuallyObserved)
+{
+  // The other half, so the hardening above cannot quietly become "ignore every
+  // detection". No detector in Phase 1 produces this, and the contract is what
+  // the day one arrives depends on.
+  geometry_msgs::msg::PoseStamped observed;
+  observed.header.frame_id = "observed_frame";
+  observed.pose.position.x = 0.11;
+  observed.pose.position.y = 0.22;
+  observed.pose.position.z = 0.33;
+  observed.pose.orientation.x = 1.0;
+  observed.pose.orientation.w = 0.0;
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", observed);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_EQ(goal->object_pose.header.frame_id, "observed_frame");
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.y, 0.22)
+    << "a real observation was discarded in favour of the station's frame, which throws "
+       "away the only thing that can know where the part actually is";
 }
 
 TEST_F(SkillGoals, PickPointsTheToolDown)

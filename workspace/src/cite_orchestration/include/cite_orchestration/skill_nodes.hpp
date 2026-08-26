@@ -498,20 +498,30 @@ public:
       BT::InputPort<std::string>("frame"),
       BT::InputPort<std::string>("action", "the Pick action this station's arm serves"),
       BT::InputPort<std::string>("workpiece", "which work-piece this station handles"),
-      // Where the work-piece actually is, as `DetectAt` observed it.
+      // Where the work-piece actually is, when something can say.
       //
-      // THIS PORT IS WHAT MAKES A GRASP ORIENTATION-SAFE, and its absence is
-      // what makes one a guess. A grasp holds a position and not an
-      // orientation: the part rotates between the jaws by up to 18.7 degrees
-      // even after the grasp-plane correction (ADR-0029,
-      // docs/measurements/2026-08-25-grasp-plane-offset/). A station that picks
-      // at a FRAME assumes the part is square to that frame; a station that
-      // picks at a DETECTED POSE has measured it. The line uses the pose. The
-      // frame fallback below survives for `trees/station_cycle.xml`, which
-      // drives one arm in isolation with no `Detect` server in the graph — and
-      // it carries the assumption that the part is square to its frame, which
-      // is true of a part placed by hand at the start of a scenario and is not
-      // true of one that has just been through a gripper.
+      // THIS PORT IS EMPTY IN THIS CELL, AND THE FALLBACK IS THE NORMAL PATH.
+      // It used to say that this port is what makes a grasp orientation-safe,
+      // and that "the line uses the pose". Neither is true of any detector that
+      // exists: the zone detects with break beams, a through-beam reports
+      // occupancy and not position, and `Detect` now says so by leaving
+      // `Detection.pose` explicitly unobserved rather than returning the
+      // housing's placement. Before that, this port carried the beam's own pose
+      // — for `station_transfer_1` that is 0.7267 m from arm_1 against a 0.700 m
+      // envelope, so the pick failed with "inverse kinematics found no solution
+      // from any of 8 seeds" and never reached a grasp at all.
+      //
+      // So the frame fallback below is what the line runs on today, and it
+      // carries the assumption the fallback has always carried: that the part is
+      // square to its frame. That is true of a part fed onto the pick table from
+      // outside the cell and NOT true of one that has just been through a
+      // gripper — up to 18.7 degrees of residual survives a grasp (ADR-0029,
+      // docs/measurements/2026-08-25-grasp-plane-offset/). Nothing in Phase 1
+      // measures that residual away; see the note on the orientation gate in
+      // `line_plan.hpp`, which is escalated rather than resolved here.
+      //
+      // The port stays because the contract is right and a detector that can
+      // answer will arrive. What is removed is the claim that one already has.
       BT::InputPort<geometry_msgs::msg::PoseStamped>(
         "pose", "where the work-piece was observed to be; falls back to `frame` when unset"),
       // How far above the station's frame the work-piece's centre sits, for the
@@ -563,6 +573,20 @@ public:
 
     Pick::Goal goal;
     const auto observed = getInput<geometry_msgs::msg::PoseStamped>("pose");
+    // THE RIGHT TEST IS `cite_skills::pose_is_observed`, AND IT CANNOT BE CALLED
+    // FROM HERE YET. `cite_skills/observation.hpp` holds the rule for reading the
+    // unobserved convention beside the rule for writing it, which is what stops
+    // the two drifting apart, and depending on L3 from L4 is downward and
+    // therefore legal (CLAUDE.md §5). But `cite_skills` declares no
+    // `ament_export_include_directories` — no `ament_export_*` at all — so its
+    // installed headers reach no other package, and this is the first would-be
+    // consumer. Reported rather than worked around by restating the predicate
+    // here, differently, which is the drift the L3 header exists to prevent.
+    //
+    // What the frame_id test below covers: `mark_pose_unobserved` clears the
+    // frame_id, so every unobserved pose the real detector produces is caught.
+    // What it does not: a pose with a frame set and NaN components, which this
+    // would pass through to the planner as an object pose.
     if (observed && !observed->header.frame_id.empty()) {
       // Measured, not assumed. Position AND orientation come from the
       // observation, which is the only thing that can know the part's yaw.
@@ -666,13 +690,26 @@ public:
   void onHalted() override {halt_goal();}
 };
 
-/// Find the work-piece this station is about to handle, and where it is.
+/// Confirm a work-piece is where this station is about to reach, before it does.
 ///
-/// This is the leaf that answers the orientation question. `Detection.pose` is a
-/// full `PoseStamped`, so what comes out of here carries the part's yaw as
-/// observed rather than as assumed — which is what makes a conveyor-mediated
-/// handoff safe against the residual rotation between the jaws that ADR-0029
-/// records as an open divergence.
+/// IT DOES NOT ANSWER THE ORIENTATION QUESTION, and it used to say it did:
+/// "`Detection.pose` is a full `PoseStamped`, so what comes out of here carries
+/// the part's yaw as observed rather than as assumed — which is what makes a
+/// conveyor-mediated handoff safe against the residual rotation between the
+/// jaws". That was false for every detector that exists. This zone detects with
+/// break beams; a through-beam knows that something crossed it and nothing about
+/// where along the beam, still less about its yaw. `Detect` now says so, leaving
+/// `Detection.pose` explicitly unobserved (`cite_skills/observation.hpp`), and
+/// this leaf passes that on unchanged.
+///
+/// So what this leaf is actually for is the OTHER half of its name: the station's
+/// sensor said a part arrived, and this confirms the part is still there before
+/// an arm is sent for it. An empty result is a disagreement between the trigger
+/// and the detector, and it is reported as one.
+///
+/// The orientation question is therefore open, not answered, and what depends on
+/// it is the orientation gate in `line_plan.hpp` — see the note there, which is
+/// escalated rather than settled in a comment.
 class DetectAt : public SkillNode<Detect>
 {
 public:
@@ -780,6 +817,16 @@ public:
     // on. A station that could see two parts at once needs a choice policy, and
     // there is none — so it takes the one it was triggered for and the rest are
     // seen again on the next cycle.
+    //
+    // WRITTEN UNCONDITIONALLY, INCLUDING WHEN IT CARRIES NO OBSERVATION. A break
+    // beam's detection is unobserved by construction, and it would be tempting to
+    // skip the write rather than put a NaN pose on the blackboard. That is the
+    // wrong way round: this subtree repeats for as long as the line runs, so
+    // skipping the write leaves the PREVIOUS cycle's pose in `{detected_pose}` and
+    // `PickAt` reaches for where the last part was. An unobserved pose is refused
+    // by `pose_is_observed` and routes the pick to the station's L0 frame; a stale
+    // one is accepted and is wrong. Writing what was observed, every time, is what
+    // keeps a blackboard a record rather than a cache.
     setOutput("pose", detections.front().pose);
     setOutput("workpiece", detections.front().workpiece_id);
     return BT::NodeStatus::SUCCESS;

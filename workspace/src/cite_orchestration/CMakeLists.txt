@@ -16,7 +16,8 @@ find_package(tf2_ros REQUIRED)
 add_executable(line_coordinator src/line_coordinator.cpp)
 target_include_directories(line_coordinator PRIVATE include)
 ament_target_dependencies(line_coordinator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  tf2_ros
 )
 
 # The line. One subtree per station, instantiated from the L0 topology; the
@@ -25,7 +26,8 @@ ament_target_dependencies(line_coordinator
 add_executable(line_orchestrator src/line_orchestrator.cpp)
 target_include_directories(line_orchestrator PRIVATE include)
 ament_target_dependencies(line_orchestrator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs tf2_ros
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+  tf2_ros
 )
 
 install(TARGETS line_coordinator line_orchestrator DESTINATION lib/${PROJECT_NAME})
