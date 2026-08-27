@@ -344,10 +344,10 @@ def test_the_seed_reaches_the_simulator(
 ) -> None:
     """`gz sim --seed` is a command-line flag; SDFormat has no seed element.
 
-    What it buys is narrow and must not be overstated: it seeds `gz::math::Rand`
-    — sensor noise and the transport RNG — and not the physics solver, and it has
-    nothing to do with OMPL. This asserts the value arrives, not that a scenario
-    is reproducible.
+    This asserts that the value reaches the command line, and nothing beyond it.
+    It is not a reproducibility test and must not be cited as one: the physics
+    solver is seeded by nothing. ADR-0027 § "What `CITE_PHYSICS_SEED` does and
+    does not buy" is the one place that states the rest; do not restate it here.
     """
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     monkeypatch.setenv(module.PHYSICS_SEED_ENV, "20260824")

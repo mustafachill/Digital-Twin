@@ -10,6 +10,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 PY="$(cite_python)" || true
 [ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
 
+# Before anything reads the model. This script's whole output is a verdict about
+# THIS checkout's model, produced by whichever generator the interpreter happens
+# to resolve — and in a worktree without its own virtualenv that is another
+# checkout's. See require_local_cite_tools in scripts/_lib.sh.
+require_local_cite_tools "$PY" "The model validator"
+
 if [ ! -d "${REPO_ROOT}/model" ] || [ -z "$(ls -A "${REPO_ROOT}/model" 2>/dev/null)" ]; then
     warn "SKIP — the L0 facility model does not exist yet."
     warn "It is created in Phase 1.B. See CLAUDE.md §2."

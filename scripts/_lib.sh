@@ -661,6 +661,103 @@ cite_python() {
     printf '%s/python' "$bin"
 }
 
+# -----------------------------------------------------------------------------
+# cite_tools resolution — which checkout's tooling is about to run?
+#
+# `cite_tools` is installed editable, so the interpreter resolves it through a
+# path recorded at install time, and that path names the checkout that ran
+# bootstrap. In a git worktree with no virtualenv of its own, `cite_python` falls
+# back to whatever `python3` is on PATH — routinely the MAIN checkout's venv —
+# and every script below then runs MAIN's generator, linter or test suite against
+# THIS worktree's model and sources.
+#
+# It fails quietly in both directions. A model-validator run reported nine
+# "unknown key" errors against a branch whose model was valid, because the errors
+# came from an older schema in another tree; the same mechanism reports a broken
+# model as valid whenever the foreign tree is the older one. This is the
+# shared-Docker-volume contamination CLAUDE.md §2 records, wearing a different
+# hat and worse: there is no build artifact left behind to notice.
+#
+# The check is a refusal, not a correction. Prepending PYTHONPATH does work
+# against the finder setuptools installs today — it is appended to sys.meta_path,
+# so the ordinary path finder still outranks it — but that ordering is an
+# implementation detail of the install mode. A fix resting on it would restore
+# exactly the silent-in-both-directions failure the moment the mode changed.
+# Refusing names both paths and costs one idempotent command to clear.
+# -----------------------------------------------------------------------------
+
+# The directory this checkout's cite_tools must come from, symlinks resolved.
+cite_tools_expected_dir() {
+    local tools
+    tools="$(cd "${REPO_ROOT}/tools" 2>/dev/null && pwd -P)" || return 1
+    printf '%s/cite_tools' "$tools"
+}
+
+# Where <interpreter> would import cite_tools from, symlinks resolved. Asked with
+# find_spec rather than `import cite_tools`, so a foreign package is never
+# executed in order to discover that it is foreign.
+cite_tools_found_dir() {  # cite_tools_found_dir <interpreter>
+    "$1" -c '
+import importlib.util, os, sys
+try:
+    spec = importlib.util.find_spec("cite_tools")
+except Exception:
+    sys.exit(1)
+if spec is None or not spec.origin:
+    sys.exit(1)
+print(os.path.realpath(os.path.dirname(spec.origin)))
+' 2>/dev/null
+}
+
+# -----------------------------------------------------------------------------
+# assert_cite_tools_local <expected-dir> <found-dir>
+#
+# The decision, split from the interpreter so that it is testable without one.
+# Prints a diagnosis and returns non-zero when the two disagree.
+# -----------------------------------------------------------------------------
+assert_cite_tools_local() {
+    local expected="$1" found="$2"
+    if [ -z "$expected" ]; then
+        printf 'this checkout has no tools/ directory to resolve cite_tools from'
+        return 1
+    fi
+    if [ -z "$found" ]; then
+        printf 'cite_tools is not importable'
+        return 1
+    fi
+    if [ "$expected" != "$found" ]; then
+        printf 'cite_tools resolves to %s but this checkout is %s' "$found" "$expected"
+        return 1
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# require_local_cite_tools <interpreter> <what>
+#
+# Dies when <interpreter> would import another checkout's cite_tools. Absence is
+# deliberately NOT handled here: every caller already reports it in its own
+# terms, and this returns success for that case so those messages survive.
+# -----------------------------------------------------------------------------
+require_local_cite_tools() {
+    local py="$1" what="$2"
+    local expected found
+    expected="$(cite_tools_expected_dir || true)"
+    found="$(cite_tools_found_dir "$py" || true)"
+
+    [ -n "$found" ] || return 0  # not installed — the caller says so, in its words
+
+    if ! assert_cite_tools_local "$expected" "$found" >/dev/null; then
+        die "${what} would run another checkout's cite_tools.
+  this checkout:  ${expected:-<no tools/ directory>}
+  would import:   ${found}
+  interpreter:    ${py}
+  Refusing rather than guessing: foreign tooling reports errors this tree does
+  not have, and calls this tree valid when it is not.
+  Fix it for this checkout, once:  ./scripts/bootstrap --host-only"
+    fi
+}
+
 # Every compose invocation is scoped to this checkout's project with an explicit
 # `-p`, not left to the COMPOSE_PROJECT_NAME environment variable. Both would work
 # for `up` and `run`, but `-p` is the highest-precedence form and does not depend

@@ -7,9 +7,9 @@ deliberately hard to pass by accident: the assertion is that the work-piece
 *left the table and arrived where the topology says it should*, measured from
 the simulator, not that any component reported success.
 
-Assertions are on outcomes and constraints, never on trajectories. Planning is
-sampling-based and therefore stochastic (ADR-0006); a test that pinned a joint
-sequence would be flaky and would be deleted by whoever is on call.
+Assertions are on outcomes and constraints, never on trajectories. A test that
+pinned a joint sequence would be flaky and would be deleted by whoever is on
+call: a run is not reproducible (see `SEED_VARIABLE` below and ADR-0027).
 
 Every coordinate this scenario uses is resolved from TF at run time, from the
 frames the L0 model generates. Nothing here writes a pick or place coordinate of
@@ -107,18 +107,14 @@ SAMPLE_PERIOD_S = 2.0
 
 #: The seed `./scripts/scenario` exports. It is recorded in the failure report
 #: below so that a report names the conditions it was produced under — NOT
-#: because it makes the run reproducible.
+#: because it makes the run reproducible. It does not: the physics solver is
+#: seeded by nothing, so no assertion in this file may depend on reproducing a
+#: particular plan or a particular contact.
 #:
-#: It does not, and the reason is narrower than it used to be. This comment once
-#: said "nothing consumes it ... `simulation.launch.py` passes none"; that is now
-#: stale, because the launch file does pass it to `gz sim --seed`. But `--seed`
-#: calls `gz::math::Rand::Seed`, which covers sensor noise and the transport RNG
-#: and neither the physics solver nor the planner. MoveIt exposes no way to seed
-#: OMPL's RNG at all — `libmoveit_ompl_interface` contains no reference to it,
-#: and MoveIt is apt-installed rather than pinned in `external/cite.repos`, so
-#: there is no patch hook either. Sampling-based planning here is therefore
-#: genuinely non-deterministic, and no assertion in this file may depend on
-#: reproducing a particular plan. `./scripts/scenario` states this on every run.
+#: What the seed does and does not buy is stated once, in ADR-0027 § "What
+#: `CITE_PHYSICS_SEED` does and does not buy", and `./scripts/scenario` says it
+#: on every run. Do not restate the argument here — it was restated in seven
+#: places and the copies drifted, which is why this is a pointer.
 SEED_VARIABLE = "CITE_PHYSICS_SEED"
 
 
@@ -411,9 +407,8 @@ class TestPickAndPlace(unittest.TestCase):
         self.assertIsNotNone(final, "the work-piece disappeared from the simulator")
 
         context = (
-            f"seed={self.seed} (reaches `gz sim --seed` only, which does not seed "
-            "the physics solver or OMPL — see SEED_VARIABLE; this run is not "
-            "reproducible)\n"
+            f"seed={self.seed} (a condition this run was produced under, not a "
+            "reproducibility claim — see SEED_VARIABLE and ADR-0027)\n"
             f"pick frame {PICK_FRAME} at {pick}\n"
             f"place frame {PLACE_FRAME} at {place}\n"
             f"resting={resting}, highest z={highest:.3f}, final={final}\n"

@@ -48,6 +48,15 @@ run_host_tests() {
     py="$(cite_python)" || true
     [ -n "$py" ] && [ -d "${REPO_ROOT}/tools/tests" ] || return 0
 
+    # tools/tests is not a package and there is no conftest above it, so pytest
+    # prepends tools/tests to sys.path and NOT tools/ — `import cite_tools` in
+    # the suite therefore resolves through site-packages exactly as this check
+    # asks. Verified rather than assumed: in a worktree with no virtualenv the
+    # suite imported /Users/.../Digital-Twin/tools/cite_tools while the tests
+    # themselves came from the worktree, so the result graded another checkout's
+    # code. See require_local_cite_tools in scripts/_lib.sh.
+    require_local_cite_tools "$py" "The host tooling test suite"
+
     # tests/ as well as tools/, because the scenario guards live there and were
     # collected by nothing. `tests/scenarios/guards/` checks that every scenario
     # module loads the way `launch_test` actually loads it — by path, never

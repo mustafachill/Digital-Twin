@@ -768,6 +768,95 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# assert_cite_tools_local / cite_tools_found_dir — the gate that stops a checkout
+# running another checkout's tooling.
+#
+# The reported failure, in the paths it actually had: a worktree with no
+# virtualenv of its own falls back to the main checkout's `python3`, whose
+# editable install of cite_tools points at the main checkout's tools/. The model
+# validator then applied MAIN's schema to the WORKTREE's model and reported nine
+# "unknown key" errors against a model that was valid. The same mechanism reports
+# a broken model as valid whenever the foreign tree is the older one, so this
+# must fail closed in both directions.
+# -----------------------------------------------------------------------------
+CHECKOUT_TOOLS="/repo/tools/cite_tools"
+WORKTREE_TOOLS="/repo/.claude/worktrees/agent-x/tools/cite_tools"
+
+expect_ok   "the checkout's own cite_tools is accepted" \
+            assert_cite_tools_local "$CHECKOUT_TOOLS" "$CHECKOUT_TOOLS"
+
+# The reported case, in both directions. Neither tree is privileged: whichever
+# one is running, importing the other's code is the defect.
+expect_fail "a worktree resolving the main checkout's cite_tools is refused" \
+            assert_cite_tools_local "$WORKTREE_TOOLS" "$CHECKOUT_TOOLS"
+expect_fail "the main checkout resolving a worktree's cite_tools is refused" \
+            assert_cite_tools_local "$CHECKOUT_TOOLS" "$WORKTREE_TOOLS"
+
+# Two checkouts whose paths differ by one character are still two checkouts. A
+# comparison on basenames, or on anything shorter than the whole path, calls
+# these equal — and they are the two trees a person is most likely to have open.
+expect_fail "checkouts differing only in the last path element are not a match" \
+            assert_cite_tools_local "/repo/twin-2/tools/cite_tools" \
+                                    "/repo/twin/tools/cite_tools"
+
+# Both absence states are refusals rather than passes, because "cannot tell" and
+# "correct" must never produce the same answer.
+expect_fail "cite_tools that is not importable at all is refused, not assumed local" \
+            assert_cite_tools_local "$CHECKOUT_TOOLS" ""
+expect_fail "a checkout with no tools/ directory is refused" \
+            assert_cite_tools_local "" "$CHECKOUT_TOOLS"
+
+# The other half: the reported path must be what the interpreter would ACTUALLY
+# import, not a guess assembled from REPO_ROOT. Driven with a decoy package on
+# PYTHONPATH, which is how a wrong tree gets resolved in the first place.
+if have python3; then
+    DECOY="$(mktemp -d)"
+    trap 'rm -rf "${FIXTURE}" "${JUNIT_TMP}" "${DECOY}" "${DECOY}.link"' EXIT
+    mkdir -p "${DECOY}/cite_tools"
+    : > "${DECOY}/cite_tools/__init__.py"
+
+    expect_eq "cite_tools_found_dir reports where the interpreter would import from" \
+              "$(cd "$DECOY" && pwd -P)/cite_tools" \
+              "$(PYTHONPATH="$DECOY" cite_tools_found_dir python3)"
+
+    # THE PROPERTY THE COMPARISON RESTS ON. Both sides are resolved through
+    # symlinks before they are compared, so one checkout reached by two paths is
+    # one checkout. macOS makes this immediate — /tmp is a symlink to /private/tmp
+    # and `mktemp -d` hands back the former — and without it this gate refuses a
+    # correctly bootstrapped checkout and names two paths that are the same
+    # directory, which is the most confusing failure it could produce.
+    ln -s "$DECOY" "${DECOY}.link"
+    expect_eq "the same tree reached through a symlink resolves to one path" \
+              "$(PYTHONPATH="$DECOY" cite_tools_found_dir python3)" \
+              "$(PYTHONPATH="${DECOY}.link" cite_tools_found_dir python3)"
+
+    # `die` exits, so the guard is called in a subshell — otherwise a passing
+    # test would terminate this file and the run would look complete.
+    guard_under_pythonpath() {  # guard_under_pythonpath <pythonpath>
+        ( PYTHONPATH="$1" require_local_cite_tools python3 "The self-test" )
+    }
+
+    expect_fail "require_local_cite_tools refuses a foreign cite_tools" \
+                guard_under_pythonpath "$DECOY"
+    expect_ok   "require_local_cite_tools accepts this checkout's own cite_tools" \
+                guard_under_pythonpath "${REPO_ROOT}/tools"
+
+    # Absence is the caller's message to give, not this one's: every script that
+    # imports cite_tools already reports "not installed" in its own words, and
+    # replacing those with this gate's wording would lose the remedy they name.
+    # Driven with an interpreter that resolves nothing, rather than by unsetting
+    # PYTHONPATH — the ambient editable install would still answer and this would
+    # be testing the mismatch case again under a different name.
+    printf '#!/bin/sh\nexit 1\n' > "${DECOY}/resolves-nothing"
+    chmod +x "${DECOY}/resolves-nothing"
+    expect_ok   "an absent cite_tools is left to the caller's own report" \
+                require_local_cite_tools "${DECOY}/resolves-nothing" "The self-test"
+else
+    printf '  %s!%s python3 absent — the interpreter half of the cite_tools gate did not run\n' \
+           "$C_YEL" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"

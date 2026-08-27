@@ -92,6 +92,10 @@ if(BUILD_TESTING)
   # breaking change to a .msg/.srv/.action fails here rather than in a consumer
   # nobody thought about, months later, against a recording on disk.
   ament_add_pytest_test(interface_contract test/test_interface_contract.py)
+  # The baseline above strips comments on purpose, so it cannot see a field
+  # documented against the wrong limit. This covers that gap for the one field
+  # family where the units are not implied by the name.
+  ament_add_pytest_test(scaling_basis test/test_scaling_basis.py)
 endif()
 
 ament_package()

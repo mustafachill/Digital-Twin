@@ -227,14 +227,14 @@ def _bring_up(context: LaunchContext) -> list:
 def _seed(environ: dict) -> str | None:
     """Read the seed `gz sim` is started with, if the caller supplied one.
 
-    What this buys, stated precisely because the previous absence of a consumer
-    was papered over with a claim that was not true: `gz sim --seed` calls
-    `gz::math::Rand::Seed`, which seeds sensor noise and the transport RNG. It
-    does **not** seed the physics solver, and it has nothing to do with OMPL,
-    which is the stochastic component that decides whether two runs of a scenario
-    produce the same trajectory. Passing it therefore does not make a scenario
-    reproducible and must not be described as doing so. Planning determinism is a
-    separate decision and arrives with a deterministic planner, not with this.
+    Passing it does not make a scenario reproducible and must not be described as
+    doing so: the physics solver is seeded by nothing, here or anywhere else.
+
+    What the flag does and does not buy is stated once, in ADR-0027 § "What
+    `CITE_PHYSICS_SEED` does and does not buy". Do not restate the argument here.
+    It was restated in seven places and the copies drifted — this one still said
+    planning determinism "arrives with a deterministic planner, not with this",
+    in the future tense, after ADR-0027 had already landed one.
 
     A malformed value is refused rather than ignored: silently dropping it would
     leave a run that believes it is seeded and is not.
