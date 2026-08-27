@@ -118,14 +118,12 @@ class TestCellBringUp(unittest.TestCase):
         cls.node = Node("scenario_bringup")
         # No seed is read here. There was a `cls.seed` that nothing used, beside
         # a comment claiming scenarios are deterministic — a claim this
-        # repository cannot currently support. `./scripts/scenario` exports
-        # CITE_PHYSICS_SEED and `simulation.launch.py` does now pass it to
-        # `gz sim --seed`; an earlier version of this comment said it "passes
-        # none", which is stale. It buys less than it sounds like: `--seed` seeds
-        # `gz::math::Rand`, so sensor noise and the transport RNG, and neither the
-        # physics solver nor OMPL — and MoveIt exposes no way to seed OMPL's RNG
-        # at all. The script says so on every run. Assertions below are on
-        # outcomes and constraints precisely because a plan cannot be reproduced.
+        # repository cannot currently support, because the physics solver is
+        # seeded by nothing. What `CITE_PHYSICS_SEED` does and does not buy is
+        # stated once, in ADR-0027 § "What `CITE_PHYSICS_SEED` does and does not
+        # buy", and `./scripts/scenario` says it on every run; do not restate it
+        # here. Assertions below are on outcomes and constraints precisely
+        # because a run cannot be reproduced.
 
     @classmethod
     def tearDownClass(cls) -> None:

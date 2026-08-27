@@ -17,10 +17,9 @@ something else:
     without every beam on the way reporting it was not carried by the line the
     topology describes.
 
-Assertions are on outcomes and constraints, never on trajectories. Planning is
-sampling-based and stochastic (ADR-0006) and `./scripts/scenario` warns on every
-run that the physics seed reaches `gz sim --seed` only, which buys neither solver
-determinism nor a reproducible plan. So what is asserted is: every piece reached
+Assertions are on outcomes and constraints, never on trajectories, because a run
+is not reproducible — see `SEED_VARIABLE` below and ADR-0027, and the warning
+`./scripts/scenario` prints on every run. So what is asserted is: every piece reached
 every milestone the topology defines, the piece never left the cell's working
 volume, no station ever reported a fault, and all of it inside a wall-clock
 ceiling.
@@ -197,10 +196,10 @@ SAMPLE_PERIOD_S = 0.5
 BREACHES_REPORTED = 3
 
 #: The seed `./scripts/scenario` exports, recorded so that a report names the
-#: conditions it was produced under. It does NOT make the run reproducible:
-#: `gz sim --seed` calls `gz::math::Rand::Seed`, which covers sensor noise and the
-#: transport RNG and neither the physics solver nor OMPL. See
-#: `pick_and_place.SEED_VARIABLE`, ADR-0006 and ADR-0027.
+#: conditions it was produced under. It does NOT make the run reproducible: the
+#: physics solver is seeded by nothing. What it does and does not buy is stated
+#: once, in ADR-0027 § "What `CITE_PHYSICS_SEED` does and does not buy"; do not
+#: restate the argument here.
 SEED_VARIABLE = "CITE_PHYSICS_SEED"
 
 
@@ -980,8 +979,8 @@ class TestContinuousLine(unittest.TestCase):
     def _context(self, ladder: tuple[Milestone, ...], journeys: list[Journey]) -> str:
         """Everything a reader needs in order to say where the line stopped."""
         lines = [
-            f"seed={self.seed} (reaches `gz sim --seed` only, which seeds neither the "
-            "physics solver nor OMPL — this run is not reproducible)",
+            f"seed={self.seed} (a condition this run was produced under, not a "
+            "reproducibility claim — see SEED_VARIABLE and ADR-0027)",
             f"work-piece model '{self.workpiece}' in world '{self.world}'",
             f"the ladder the generated topology defines, {len(ladder)} milestone(s):",
         ]

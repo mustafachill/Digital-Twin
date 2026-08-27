@@ -104,11 +104,12 @@ busy working.
 | `CITE_PHYSICS_SEED` | passed to `gz sim --seed`; a malformed value is refused, not ignored |
 
 **`CITE_PHYSICS_SEED` does not make a scenario reproducible, and must not be described as
-doing so.** `gz sim --seed` seeds sensor noise and the transport RNG. It does not seed the
-physics solver, and it has nothing to do with OMPL, which is the stochastic component that
-decides whether two runs produce the same trajectory. See
-[`cross-cutting-testing.md`](../../../docs/architecture/cross-cutting-testing.md) and
-[ADR-0027](../../../docs/adr/0027-pilz-planning-pipeline.md).
+doing so.** The physics solver is seeded by nothing. What the flag does and does not buy is
+stated once, in [ADR-0027](../../../docs/adr/0027-pilz-planning-pipeline.md) § "What
+`CITE_PHYSICS_SEED` does and does not buy" — read it there rather than restating it here,
+which is how seven copies of that argument drifted apart.
+[`cross-cutting-testing.md`](../../../docs/architecture/cross-cutting-testing.md) records
+what a scenario may therefore assert.
 
 ## The hardware gate
 
