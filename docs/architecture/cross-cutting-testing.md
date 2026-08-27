@@ -1,14 +1,17 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **204**
-  host tests, all passing, plus shell self-tests for the gate logic in `scripts/_lib.sh`. The
-  contract level is populated: 22 interface definitions are frozen against a stored baseline.
-  The scenario level has `bringup`, which is a blocking CI gate run twice per run, and
-  `pick_and_place`, which is not — it runs as `continue-on-error` at this commit. Three gaps
-  below are still open and are called out where they occur: **scenarios are not
-  deterministic**, ROS package linters register nothing, and `pick_and_place` is not yet a
-  gate. Everything else below the status line is design, not description.
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **215**
+  host tests at this commit, counted by collection, plus shell self-tests for the gate logic
+  in `scripts/_lib.sh`. The contract level is populated: 22 interface definitions are frozen
+  against a stored baseline.
+  The scenario level has three: `bringup`, a blocking CI gate run twice per run;
+  `pick_and_place`; and `continuous_line`, which drives the whole three-arm line. **The
+  latter two run as `continue-on-error`** and are therefore evidence, not gates — a scenario
+  that cannot fail the build cannot hold a claim up. Three gaps below are still open and are
+  called out where they occur: **scenarios are not deterministic**, ROS package linters
+  register nothing, and neither of the two cycle scenarios is yet a gate. Everything else
+  below the status line is design, not description.
 - **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md),
   [`../measurements/README.md`](../measurements/README.md)
 
@@ -110,8 +113,8 @@ compare two configurations *given* that it is not.
 
 **Some of what this cell does is bimodal, not continuous.** The grasp twist is the worked
 example: a trial lands in a high state or a low one, and the physics timestep changes how
-often the high state is entered rather than moving a magnitude. Both campaigns in
-[`../measurements/`](../measurements/README.md) turn on this, and the second one had to
+often the high state is entered rather than moving a magnitude. The two **grasp** campaigns
+in [`../measurements/`](../measurements/README.md) turn on this, and the second one had to
 withdraw a published "×24.5 median scaling" from the first because of it.
 
 Two rules come out of that, and they apply to any comparison run against this cell.
@@ -153,7 +156,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes, the three-arm sensor-driven line does not run, and `pick_and_place` is not yet a merge gate. See [L3](L3-capabilities.md) and [L4](L4-orchestration.md) |
+| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes and the three-arm line has now been reported completing its milestone ladder, but neither scenario is a merge gate, both are reported from runs rather than from a campaign, and the line has not carried every piece in every run. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
 | Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
@@ -187,16 +190,22 @@ container stage can run the C++, CMake and package linters. A green `./scripts/l
 laptop means the Python, YAML, shell and documentation checks passed — it says nothing
 about the C++.
 
-Two container-stage steps are marked `continue-on-error` and are **not** merge gates yet:
+Three container-stage steps are marked `continue-on-error` and are **not** merge gates yet:
 the ROS package lint step, because no first-party package declares a linter set for
-`ament_lint_auto` to find, and `pick_and_place`. Both run so the failure is visible; neither
-is allowed to report success. The conditions for promoting each to blocking are recorded
-next to it in `.github/workflows/ci.yml`.
+`ament_lint_auto` to find, and both cycle scenarios — `pick_and_place` and
+`continuous_line`. All three run so the failure is visible; none is allowed to report
+success. The conditions for promoting each to blocking are recorded next to it in
+`.github/workflows/ci.yml`.
 
-`pick_and_place`'s cycle now completes (see [L3](L3-capabilities.md)); what still stands
-between it and a merge gate is that **it is not reproducible** and that its own teardown has
-failed after a passing cycle. Promoting it before that is understood would install exactly
-the flaky gate the failure-mode table below warns about.
+Both cycles now complete (see [L3](L3-capabilities.md) and [L4](L4-orchestration.md)). What
+still stands between either and a merge gate is that **they are not reproducible**, that
+`pick_and_place`'s own teardown check has failed after a passing cycle on several occasions
+— on four distinct processes so far, so process identity does not predict it — and that
+`continuous_line` has not carried every piece in every run. Promoting either before that is
+understood would install exactly the flaky gate the failure-mode table below warns about.
+
+**`continuous_line`'s promotion conditions in `.github/workflows/ci.yml` predate the line
+completing and have not been revised** — read them as history until they are.
 
 ## Failure modes
 

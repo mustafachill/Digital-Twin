@@ -60,10 +60,15 @@ same severity as a broken test. Reviewers check this.
 - **English only**, without exception (P10).
 - **Ground every claim in code**, a test, a published measurement, or a cited source. Mark
   anything else `unverified` rather than stating it plainly.
-- **A claim about physical behaviour needs a measurement, not an argument.** Two ADRs here
-  have had to be corrected because a plausible sentence about physics was written down as a
-  fact and relied upon. Cite [`measurements/`](measurements/README.md) or say that nothing
-  has been run.
+- **A claim about physical behaviour needs a measurement, not an argument.** Five ADRs
+  carry a correction section at this commit — a sixth, since superseded, carries one too —
+  because a plausible sentence about physics was written down as a fact and relied upon.
+  Cite [`measurements/`](measurements/README.md) or say that nothing has been run.
+- **Carry a quantity's units *and its axis* wherever you carry its magnitude.** A published
+  18.7° residual travelled through this repository detached from the axis it was measured
+  about, was read as a yaw when it is a roll, and reached an ADR's arithmetic where only a
+  yaw belongs. A scalar moves between documents far more easily than the condition that
+  gives it meaning — see the table in [`measurements/`](measurements/README.md).
 - **Prefer deleting a stale sentence to hedging it.** Stale documentation is more
   dangerous than missing documentation, because it is trusted.
 - **Never duplicate.** Link instead. A value that exists in two places will diverge (P1),

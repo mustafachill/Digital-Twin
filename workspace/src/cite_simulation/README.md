@@ -62,19 +62,26 @@ Gazebo transport, below the ROS boundary. `<zone>` and `<asset_id>` come from th
 | `/cite/<zone>/<asset_id>/state` | `gz.msgs.Double` (m/s) | out of the belt, commanded speed |
 | `/cite/<zone>/<asset_id>/detection` | `gz.msgs.Boolean` | out of the beam, true when broken |
 
-**The ROS side of these names does not exist yet.** `cite_bringup` starts no
-`ros_gz_bridge` for them, so `ros2 topic list` does not show them even though
-`cell_a_plan.yaml` declares them. `simulation.launch.py` starts exactly one
-`ros_gz_bridge`, for `/clock`, and nothing in `cite_orchestration` subscribes to these
-topics in any case — that, not a missing plugin, is why the sensor-driven line does not run.
-Bridging them by hand is one command:
+**These names now have a ROS side, and it is generated rather than written.**
+`simulation.launch.py::_bridge_topics` runs one `ros_gz_bridge parameter_bridge` process
+carrying `/clock` plus **every aid topic the plan declares** — a command ROS→Gazebo and a
+state Gazebo→ROS per conveyor, and a detection Gazebo→ROS per sensor. In `cell_a` that is
+three belts and four beams, so ten aid topics. Not one of the names is written in the launch
+file; they are read from `cell_a_plan.yaml`, which is generated from L0. Bridging them by
+hand is no longer necessary and would put a second publisher on a live topic.
 
-```
-ros2 run ros_gz_bridge parameter_bridge \
-  "/cite/cell_a/conveyor_1/command@std_msgs/msg/Float64]gz.msgs.Double" \
-  "/cite/cell_a/conveyor_1/state@std_msgs/msg/Float64[gz.msgs.Double" \
-  "/cite/cell_a/beam_c1_out/detection@std_msgs/msg/Bool[gz.msgs.Boolean"
-```
+**A beam's level and a beam's events are two different interfaces, and the bridge keeps them
+apart.** The plugin's `gz.msgs.Boolean` lands in ROS on the plan's `level_topic`
+(`…/detection_level`), applied as a remapping — the Gazebo side of the argument has to stay
+the name the plugin advertises. The plan's `detection_topic` (`…/detection`) is left for the
+typed `DetectionEvent` that `cite_skills`' detection server publishes from that level, which
+is the name a station's trigger subscribes to. Landing the raw boolean on it would give one
+topic two publishers of two types.
+
+**Something reads them.** `cite_skills/src/detection_server.cpp` subscribes to every
+`level_topic` and turns it into `DetectionEvent`; in `cite_orchestration`, `TriggerWatch`
+starts a station on that event and `conveyor_index.hpp` stops the belt on it and commands
+every belt's setpoint ([ADR-0032](../../../docs/adr/0032-index-the-belt.md)).
 
 ## Fidelity costs, stated rather than hidden
 
@@ -132,7 +139,7 @@ Nothing here evidences how any of it behaves on the physical arm.
 | a grasp never holds | the commanded width is not narrower than the part, so the pads never stall — a grasp is evidenced by *failing* to reach the command |
 | a belt reports state but carries nothing | nobody commanded it; an uncommanded belt is inert by design |
 | a belt carries nothing while commanded | the part is not in the carry volume, or its model name is not in `facility.workpiece_models`. The belt matches on the **Gazebo model name**: a part spawned as `box` or `cube` is invisible to a belt that carries `workpiece`, and the belt reports the commanded speed either way |
-| a beam never trips | the part's model name is not watched, the beam does not reach across the belt, or the part's centre passes outside the beam's height window — see the fidelity note above |
+| a beam never trips | the part's model name is not watched, the beam does not reach across the belt, the part is shorter than the beam's mounting height and passes under it, or the part has no collision geometry for the segment to intersect — see the fidelity note above |
 | a part that left a belt will not fall, will not be pushed, and cannot be lifted | fixed: the belt used to leave a velocity command on every part it had touched, and Gazebo re-applies it — as zero — every step forever. `test_conveyor_carry` locks this down |
 | a part is grasped off a *running* belt and it fights the gripper | the belt commands the velocity of any free body in its carry volume, and a friction-held part is still a free body. Stop the belt before picking from it — which is what a real line does |
 | nothing loads at all | `GZ_SIM_SYSTEM_PLUGIN_PATH` does not include this package's `lib` — the environment hook in `hooks/` sets it |

@@ -17,30 +17,40 @@
   and an unknown code escalating rather than defaulting to retry; `resource_arbiter.hpp`;
   and `LineState` publication from `line_maintenance.hpp`.
   Every leaf calls an L3 action; nothing here plans a trajectory.
-  **Not built:** parallel stations — stations tick one at a time — and Groot2 integration.
+  **Also built: L4 owns the belt setpoint** ([ADR-0032](../adr/0032-index-the-belt.md)).
+  `conveyor_index.hpp` commands every belt at bring-up, stops the one feeding a station on
+  that station's `DetectionEvent` transition, and `ResumeBelt` in `line_nodes.hpp` restarts
+  it on `CompleteHandoff`. The stop is bound to the sensor edge rather than to a tree leaf,
+  because a piece reaches the beam whenever it reaches the beam. Nothing sleeps and nothing
+  branches on being in simulation. Which belt is never named here: it is the `via_asset_id`
+  of the inbound edge of a station with a robot actor.
   **Refused, deliberately:** a direct arm-to-arm handoff. `line_plan.hpp` rejects such an
-  edge at plan time, with the 18.7° residual-rotation measurement named in the refusal
-  string, and a plan carrying refusals is not `usable()`
+  edge at plan time and a plan carrying refusals is not `usable()`
   ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). Today's
   topology has no such edge, so nothing is refused in practice.
   **The refusal stands and the reasoning behind it was corrected on 2026-08-26**: read that
-  ADR's correction section before touching the gate or the string it emits. The residual it
-  names is a roll between the pads rather than a yaw, nothing re-observes the part on any
-  edge, and what makes the *permitted* conveyor edge safe is the receiving gripper closing
-  on a free part — which is exactly what a direct handoff denies. The refusal string and the
-  comment above the gate still carry the pre-correction reasoning; that is a code change, not
-  a documentation one.
+  ADR's correction section before touching the gate or the string it emits. The residual the
+  refusal string names is a **roll about the pad-to-pad axis, not a yaw**, so it cannot enter
+  a presented-width calculation; nothing re-observes the part on any edge; and what makes the
+  *permitted* conveyor edge safe is the receiving gripper closing on a free part — which is
+  exactly what a direct handoff denies. The refusal string and the comment above the gate
+  still carry the pre-correction reasoning; that is a code change, not a documentation one.
   **What the L4 tests prove, and what they do not.** **No arm moves in any of them.** The
   action servers are fakes that succeed because they are told to. What is proven is
   **sequence, ownership and recovery mapping** — not motion, not reachability, and not that
   the line works.
-  **Not proven:** the **three-arm sensor-driven line has never been run end to end.** The
-  belt and beam plugins build and the generated world instantiates one per asset, but they
-  publish on **Gazebo transport**; `cite_bringup` starts a `ros_gz_bridge` for `/clock`
-  only, so the topics `cell_a_plan.yaml` declares have no ROS publisher. No launch graph
-  starts `line_orchestrator` or the `Detect` server, and **no continuous-line scenario
-  exists**. Phase 1.D.
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [L3](L3-capabilities.md)
+  **Motion is evidenced only by the scenario.** `./scripts/scenario continuous_line` now
+  drives the whole line — the aid topics are bridged, `line_orchestrator` and the `Detect`
+  server are started by `simulation.launch.py` (the coordinator behind `line:=true`), and
+  the reported milestone ladder is full. That is reported from runs rather than from a
+  campaign, and it runs in CI as `continue-on-error`; the count, its qualifications and what
+  still stalls are in the status block in [CLAUDE.md §2](../../CLAUDE.md) and are not
+  restated here (P1).
+  **Not built:** parallel stations — stations tick one at a time — Groot2 integration, and
+  any confirmation that a belt did what it was told: nothing publishes `ConveyorState`, so a
+  belt that fails to stop or fails to restart is a stalled or a spilling line that L4 would
+  not notice. The bridge carries a bare `std_msgs/Float64` each way.
+- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 
