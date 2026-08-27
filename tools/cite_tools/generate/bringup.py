@@ -57,6 +57,11 @@ class _ManagerView:
     gripper_closed_position: float | None
     gripper_default_grasp_width_m: float | None
     gripper_goal_tolerance_rad: float | None
+    #: The ARM trajectory controller's goal tolerance, from the same L0
+    #: `constraints:` block that configures the controller (ADR-0036). Delivered
+    #: to L3 because ADR-0037 classifies a failed execution against the plan's
+    #: endpoints and must use the arm's own threshold rather than a copy of it.
+    arm_goal_tolerance_rad: float | None
     gripper_max_drive_rate_rad_s: float | None
     gripper_drive_pivot_y_m: float | None
     gripper_drive_pivot_z_m: float | None
@@ -218,6 +223,27 @@ def _controller_parameter(asset: ResolvedAsset, suffix: str, key: str) -> float 
     return None
 
 
+def _trajectory_constraint(asset: ResolvedAsset, suffix: str, field: str) -> float | None:
+    """One field of one controller's `constraints:` block, or None if it has none.
+
+    The `constraints:` counterpart of `_controller_parameter` above, and it exists
+    for the same reason: ADR-0036 declares the arm's tolerances once in L0, the
+    control generator renders them into the controller's own configuration, and
+    ADR-0037's classification in L3 has to judge against the SAME number. Reading
+    it here is what keeps the count of places that number is stated at one (P1).
+
+    `constraints` is carried on the resolved controller rather than flattened into
+    `parameters` because its per-joint expansion needs the resolved joint list —
+    see `ResolvedController.constraints`.
+    """
+    name = ids.controller(asset.id, suffix)
+    for controller in asset.controllers:
+        if controller.name == name and controller.constraints is not None:
+            value = getattr(controller.constraints, field, None)
+            return None if value is None else float(value)
+    return None
+
+
 def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
     """The full action name a controller exposes, built once by ids.py.
 
@@ -352,6 +378,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_default_grasp_width_m=_grasp(cell, asset, "default_grasp_width_m"),
             gripper_goal_tolerance_rad=_controller_parameter(
                 asset, "gripper_controller", "goal_tolerance"
+            ),
+            arm_goal_tolerance_rad=_trajectory_constraint(
+                asset, "joint_trajectory_controller", "goal_tolerance_rad"
             ),
             gripper_max_drive_rate_rad_s=_grasp(cell, asset, "max_drive_rate_rad_s"),
             gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),

@@ -74,6 +74,13 @@ plan:
       # short of the command, and that bias has to be exceeded before a width
       # margin means anything. Same number the controller is configured with.
       gripper_goal_tolerance_rad: 0.01
+      # The arm trajectory controller's own goal tolerance, delivered to L3 for
+      # the same reason the gripper's is: ADR-0037 classifies a failed execution
+      # by comparing the arm's joint state against the plan's first and last
+      # points, and the threshold that comparison uses has to be the one the
+      # controller itself checks against. Same number the controller is
+      # configured with, from the same L0 `constraints:` block (ADR-0036).
+      arm_goal_tolerance_rad: 0.01
       # How fast the drive joint may travel, rad/s, in either direction. Carried
       # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
       # waits for a grasp has to know how long the stroke can legitimately take
@@ -188,6 +195,13 @@ plan:
       # short of the command, and that bias has to be exceeded before a width
       # margin means anything. Same number the controller is configured with.
       gripper_goal_tolerance_rad: 0.01
+      # The arm trajectory controller's own goal tolerance, delivered to L3 for
+      # the same reason the gripper's is: ADR-0037 classifies a failed execution
+      # by comparing the arm's joint state against the plan's first and last
+      # points, and the threshold that comparison uses has to be the one the
+      # controller itself checks against. Same number the controller is
+      # configured with, from the same L0 `constraints:` block (ADR-0036).
+      arm_goal_tolerance_rad: 0.01
       # How fast the drive joint may travel, rad/s, in either direction. Carried
       # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
       # waits for a grasp has to know how long the stroke can legitimately take
@@ -302,6 +316,13 @@ plan:
       # short of the command, and that bias has to be exceeded before a width
       # margin means anything. Same number the controller is configured with.
       gripper_goal_tolerance_rad: 0.01
+      # The arm trajectory controller's own goal tolerance, delivered to L3 for
+      # the same reason the gripper's is: ADR-0037 classifies a failed execution
+      # by comparing the arm's joint state against the plan's first and last
+      # points, and the threshold that comparison uses has to be the one the
+      # controller itself checks against. Same number the controller is
+      # configured with, from the same L0 `constraints:` block (ADR-0036).
+      arm_goal_tolerance_rad: 0.01
       # How fast the drive joint may travel, rad/s, in either direction. Carried
       # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
       # waits for a grasp has to know how long the stroke can legitimately take

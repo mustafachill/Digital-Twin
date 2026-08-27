@@ -931,6 +931,7 @@ def _skill_parameters(plan: Plan, manager) -> dict:
         "cartesian_planner_ids": list(manager.moveit.cartesian_planner_ids),
         "use_sim_time": True,
         **manager.gripper,
+        **manager.arm,
     }
 
 

@@ -1,0 +1,76 @@
+# Clear one station's BLOCKED state, and do nothing else (ADR-0037).
+#
+# RESET IS NOT START. Clearing the block returns the station to STATE_WAITING —
+# awaiting its own trigger — and that is the whole effect. This service must
+# never plan, never send a MoveTo goal, never drive the arm home and never resume
+# a belt. If the arm has to be cleared out of the way before the station can work
+# again, that is a separate, deliberate operator action taken at reduced speed
+# with a person present.
+#
+# Two reasons, and the second is the one that is usually forgotten. The first is
+# the principle: a reset that commands motion is a restart, and an unattended
+# restart after an undiagnosed fault re-runs whatever caused it. The second is
+# diagnostic, and it is the reason Universal Robots' own Product Alert gives —
+# "automatic acknowledgement and reset of protective stops masks faults that will
+# lead to a failure condition". A reset that silently re-drives the arm destroys
+# the evidence of why it stopped.
+#
+# NONE OF THIS IS A PROTECTIVE MEASURE and it must not be described as one. It
+# removes an automatic resumption. What stops an arm remains the vendor
+# controller's torque limiting and physical guarding (charter §3.2).
+#
+# SERVICE below is the ONE place this name is written, for the same reason
+# `LineState.TOPIC` is: otherwise the name is supplied to the server as a
+# parameter and repeated in every client, which is a value in two places (P1) and
+# is not discoverable with `ros2 interface show` (P3).
+
+string SERVICE="/cite/line/reset_station"
+
+# Which station to reset, by the id the L0 topology gives it. One station per
+# call, never "all": STATE_BLOCKED is per-station, and a caller who has to name
+# the station has to know which one they are clearing.
+string station_id
+
+---
+
+# Whether the station was reset. False means nothing changed, at all.
+bool accepted
+
+# Why, and it is a CODE rather than a bare false — the caller must be able to
+# tell "there was nothing to reset" from "this station is faulted and you may
+# not", because those want opposite next actions from an operator.
+#
+#   SUCCESS             the station was blocked and is now WAITING
+#   PRECONDITION_FAILED there was nothing to reset: the station is unknown to
+#                       this line, or it is IDLE, WAITING or WORKING
+#   HARDWARE_FAULT      refused. This station is FAULTED, or some other station
+#                       is, and one faulted station is a faulted line. A cell in
+#                       that state is not commandable, so resuming one station of
+#                       it would be resuming a cell that cannot be commanded.
+#                       Clearing STATE_FAULTED is deliberately out of scope: it
+#                       needs a decision about what evidence makes a cell
+#                       commandable again, and that belongs with the safety layer
+#                       that does not exist yet.
+ResultCode result
+
+# The station's state after this call, accepted or not — a StationState.STATE_*
+# value. STATE_IDLE when the station is not one this line knows about.
+uint8 station_state
+
+# The blocked reason this call cleared, echoed back because THIS IS THE ONLY
+# PLACE IT SURVIVES.
+#
+# `LineState` cannot carry it afterwards: that message is published on the STATE
+# profile — reliable but VOLATILE — and says of itself that it is "a periodic
+# report of the present, not a record", so a person reading it after the fact
+# gets the next message and not the last one. `StationState` has no reason field
+# at all, and `LineState.blocked_reason` is a single line-level string that
+# carries only the FIRST blocked station's reason — so with two stations blocked,
+# one reason is already unpublished today.
+#
+# The operator who reset is holding this reply, which is the one place a volatile
+# topic cannot lose it. The server also logs it at WARN or above, so the record
+# survives in the process log whether or not anyone was subscribed.
+#
+# Empty when `accepted` is false.
+string cleared_reason

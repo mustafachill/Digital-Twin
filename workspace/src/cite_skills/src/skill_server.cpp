@@ -80,6 +80,7 @@
 #include "cite_skills/approach.hpp"
 #include "cite_skills/exclusive_goal.hpp"
 #include "cite_skills/gripper.hpp"
+#include "cite_skills/motion_end.hpp"
 #include "cite_skills/pose_goal.hpp"
 
 namespace
@@ -230,6 +231,22 @@ public:
     // needs it to size the margin that separates a real grasp from the position
     // bias the controller's own end-of-goal test produces.
     declare_parameter("gripper_goal_tolerance_rad", 0.01);
+    // The ARM trajectory controller's own goal tolerance, carried here from the
+    // same L0 `constraints:` block that configures the controller (ADR-0036).
+    //
+    // ADR-0037 classifies a failed execution by comparing the arm against the
+    // plan's first and last points, and this is the threshold that comparison
+    // uses. It is the arm's own number and not a second opinion about it (P1):
+    // the generator reads it off the resolved controller parameters, exactly as
+    // `gripper_goal_tolerance_rad` above is read, so the value the controller
+    // checks against and the value L3 classifies with cannot drift apart.
+    //
+    // A "start tolerance" is deliberately NOT a separate number. There is no L0
+    // declaration for one, and inventing a constant here would put a threshold in
+    // a place the model cannot reach — so both endpoint comparisons use the arm's
+    // goal tolerance. That the two ends are judged by one threshold is a decision,
+    // recorded in `cite_skills/motion_end.hpp`.
+    declare_parameter("arm_goal_tolerance_rad", 0.01);
     // The drive joint's installed maximum rate, carried here under the name the
     // generated bring-up plan uses for it.
     //
@@ -331,6 +348,15 @@ public:
         "gripper_goal_tolerance_rad must be positive; it is what sizes the margin "
         "separating a real grasp from the controller's own end-of-goal position bias, "
         "and at zero every close in free air reports as holding");
+      return false;
+    }
+    arm_goal_tolerance_rad_ = get_parameter("arm_goal_tolerance_rad").as_double();
+    if (arm_goal_tolerance_rad_ <= 0.0) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "arm_goal_tolerance_rad must be positive; it is what separates an arm that never "
+        "moved, and an arm that arrived, from one stopped part-way along an aborted "
+        "trajectory (ADR-0037), and at zero every abort classifies as MOTION_INTERRUPTED");
       return false;
     }
     default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
@@ -1629,31 +1655,121 @@ private:
       return make_result(ResultCode::CANCELLED, "cancelled during execution");
     }
     if (executed != moveit::core::MoveItErrorCode::SUCCESS) {
-      // MoveIt's own code, carried through. "The controller did not complete the
-      // trajectory" covers a controller that refused the goal, one that timed
-      // out, and one that finished outside tolerance, and telling them apart
-      // from the text alone cost a whole investigation.
-      //
-      // Since ADR-0036 it covers one more case, and that case does not belong
-      // with the others: a `PATH_TOLERANCE_VIOLATED` abort, which means a joint
-      // was physically held. L4 answers `EXECUTION_FAILED` with RETRY_SAME, so a
-      // stalled arm is replanned and driven home unattended — see the long note
-      // on that branch in `cite_orchestration/recovery_policy.hpp`.
-      //
-      // IT CANNOT BE SPLIT HERE, and this is the place a reader will try. The
-      // value below is a `moveit_msgs/MoveItErrorCodes`, and the controller's own
-      // code never reaches it: `moveit_simple_controller_manager` funnels every
-      // abort through `ExecutionStatus::ABORTED`, which move_group reports as
-      // `CONTROL_FAILED` whether the arm was held, the goal was malformed, or the
-      // trajectory's header was stale. Reading a distinction out of `executed.val`
-      // would be inventing one. `detail` below is prose and nothing may parse it
-      // (`ResultCode.msg`), so it is not a channel either.
-      return make_result(
-        ResultCode::EXECUTION_FAILED,
-        "the controller did not complete the planned trajectory (MoveIt error code " +
-          std::to_string(executed.val) + ")");
+      return classify_execution_failure(plan, executed);
     }
     return make_result(ResultCode::SUCCESS);
+  }
+
+  /// Turn a failed `execute()` into a code L4 can act on (ADR-0037).
+  ///
+  /// TWO AXES, AND THE NAMED ONE WINS. They are genuinely orthogonal, and
+  /// ADR-0037 requires the implementation to state which takes precedence rather
+  /// than leaving it to whichever branch happened to be written first:
+  ///
+  ///   * MoveIt's error code says WHY the motion ended, for the two values that
+  ///     survive its funnels intact — TIMED_OUT and PREEMPTED.
+  ///   * The world-state test below says WHETHER THE ARM MOVED, and is the only
+  ///     axis available for everything else.
+  ///
+  /// The named code wins, and the reason is definitional rather than a
+  /// tie-break: `MOTION_INTERRUPTED` is defined as "why it stopped is NOT
+  /// ESTABLISHED". Where MoveIt names the reason it HAS been established, so
+  /// that code's own definition excludes the case. Classifying a timeout as an
+  /// interruption would be a report that we cannot tell why the arm stopped,
+  /// issued at the one moment we can.
+  ///
+  /// A TIMED_OUT or PREEMPTED arm may well be standing mid-path, and that is
+  /// accepted rather than overlooked: `TIMEOUT` and `CANCELLED` carry their own
+  /// policy rows in `recovery_policy.hpp`, decided in the knowledge that the stop
+  /// was MoveIt's own doing rather than the world's.
+  ///
+  /// ADR-0037 CORRECTS THIS FILE'S PREVIOUS NOTE, which said that "reading a
+  /// distinction out of `executed.val` would be inventing one". That holds for
+  /// ABORTED, which arrives as CONTROL_FAILED alongside everything else. It is
+  /// false for these two: they are distinct values in that same field, set at
+  /// distinct sites, and passed through the capability rather than collapsed by
+  /// it.
+  ResultCode classify_execution_failure(
+    const MoveGroupInterface::Plan & plan, const moveit::core::MoveItErrorCode & executed)
+  {
+    if (executed.val == moveit_msgs::msg::MoveItErrorCodes::TIMED_OUT) {
+      // `TrajectoryExecutionManager` stopped the controller because it overran
+      // the trajectory's own expected duration. MoveIt knows this because MoveIt
+      // wrote the duration.
+      return make_result(
+        ResultCode::TIMEOUT,
+        "MoveIt stopped the trajectory because the controller overran its expected duration");
+    }
+    if (executed.val == moveit_msgs::msg::MoveItErrorCodes::PREEMPTED) {
+      // `TrajectoryExecutionManager::stopExecution()` was called. The decision to
+      // stop was taken somewhere that knew why, and re-deciding it here would
+      // override it — the same reasoning `recovery_policy.hpp` gives CANCELLED.
+      return make_result(
+        ResultCode::CANCELLED, "trajectory execution was preempted before it finished");
+    }
+
+    // Everything else arrives as CONTROL_FAILED carrying no usable reason. Ask
+    // the arm where it is instead — see `cite_skills/motion_end.hpp` for why that
+    // is the better question rather than merely the available one.
+    const auto & points = plan.trajectory.joint_trajectory.points;
+    const auto & names = plan.trajectory.joint_trajectory.joint_names;
+    std::vector<double> current;
+    std::vector<double> start;
+    std::vector<double> goal;
+    if (points.size() >= 2 && !names.empty() &&
+      points.front().positions.size() == names.size() &&
+      points.back().positions.size() == names.size())
+    {
+      // Read BY NAME. The planning group's variable order and the trajectory's
+      // `joint_names` order are not required to agree, and comparing joint 1
+      // against joint 3 would produce a confidently wrong answer rather than no
+      // answer at all.
+      const auto state = move_group_->getCurrentState(current_state_timeout_s_);
+      if (state && state->getRobotModel()) {
+        for (std::size_t i = 0; i < names.size(); ++i) {
+          if (!state->getRobotModel()->hasJointModel(names[i])) {
+            current.clear();
+            break;
+          }
+          current.push_back(state->getVariablePosition(names[i]));
+          start.push_back(points.front().positions[i]);
+          goal.push_back(points.back().positions[i]);
+        }
+      }
+    }
+
+    const std::string moveit_code = " (MoveIt error code " + std::to_string(executed.val) + ")";
+    switch (cite_skills::classify_motion_end(current, start, goal, arm_goal_tolerance_rad_)) {
+      case cite_skills::MotionEnd::AT_START:
+        return make_result(
+          ResultCode::EXECUTION_FAILED,
+          "the commanded trajectory did not take effect: the arm is still within its goal "
+          "tolerance of the trajectory's first point" + moveit_code);
+
+      case cite_skills::MotionEnd::AT_GOAL:
+        return make_result(
+          ResultCode::EXECUTION_FAILED,
+          "the arm reached the trajectory's last point, but the controller did not report the "
+          "goal met" + moveit_code);
+
+      case cite_skills::MotionEnd::PART_WAY:
+        return make_result(
+          ResultCode::MOTION_INTERRUPTED,
+          "the arm stopped part-way along the commanded trajectory and is holding position; it "
+          "is neither at the start nor at the goal, and nothing on this stack reports why" +
+          moveit_code);
+
+      case cite_skills::MotionEnd::UNKNOWN:
+      default:
+        // Where the arm ended up could not be established. That is not evidence
+        // that it is somewhere harmless, so it does not get the reassuring
+        // answer: an arm whose position cannot be read is exactly the arm that
+        // nothing should replan around unattended.
+        return make_result(
+          ResultCode::MOTION_INTERRUPTED,
+          "the controller did not complete the planned trajectory, and where the arm ended up "
+          "could not be established from its joint state" + moveit_code);
+    }
   }
 
   void apply_scaling(double velocity, double acceleration)
@@ -1911,6 +2027,9 @@ private:
 
   int ik_seeds_{8};
   double current_state_timeout_s_{5.0};
+  //: The arm trajectory controller's goal tolerance, in radians, from L0 via the
+  //: generated bring-up plan. Read by `classify_execution_failure` only.
+  double arm_goal_tolerance_rad_{0.01};
   double tf_timeout_s_{5.0};
   std::chrono::duration<double> feedback_period_{0.1};
   double default_velocity_scaling_{1.0};

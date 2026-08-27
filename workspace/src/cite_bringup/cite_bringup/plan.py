@@ -143,6 +143,18 @@ GRIPPER_KEYS = (
     "gripper_pad_face_centre_z_m",
 )
 
+#: Every ARM key the plan carries, under the exact name the skill server declares
+#: it. Same mechanism as `GRIPPER_KEYS`, kept as a separate tuple because these
+#: describe the arm's trajectory controller and not the end-effector, and one
+#: tuple named for the gripper carrying an arm's tolerance is how a name stops
+#: meaning anything.
+#:
+#: `arm_goal_tolerance_rad` is the L0 `constraints:` block's goal tolerance
+#: (ADR-0036), delivered to L3 because ADR-0037 classifies a failed execution by
+#: comparing the arm against the plan's endpoints and must use the same threshold
+#: the controller itself checks against rather than a second copy of it (P1).
+ARM_KEYS = ("arm_goal_tolerance_rad",)
+
 
 @dataclass(frozen=True)
 class ControllerManager:
@@ -165,6 +177,9 @@ class ControllerManager:
     #: delivering them cannot drift from declaring them: the launch file passes
     #: this dictionary through, and a key it does not know about is impossible.
     gripper: Mapping[str, float]
+    #: Keyed by the names in `ARM_KEYS`, delivered by the same route and for the
+    #: same reason as `gripper` above.
+    arm: Mapping[str, float]
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Group the controllers by stage, in ascending order.
@@ -435,7 +450,8 @@ def _manager(entry: object, index: int) -> ControllerManager:
         trajectory_action=_optional(entry, "trajectory_action"),
         gripper_action=_optional(entry, "gripper_action"),
         skills=_skills(_optional(entry, "skills"), where),
-        gripper=_gripper(entry, where),
+        gripper=_named_numbers(entry, GRIPPER_KEYS, where),
+        arm=_named_numbers(entry, ARM_KEYS, where),
     )
 
 
@@ -456,8 +472,10 @@ def _skills(entry: object | None, where: str) -> SkillActions | None:
     )
 
 
-def _gripper(entry: object, where: str) -> Mapping[str, float]:
-    """Every gripper value the plan carries for this arm, under L3's own names.
+def _named_numbers(
+    entry: object, keys: tuple[str, ...], where: str
+) -> Mapping[str, float]:
+    """The values the plan carries for `keys`, under L3's own parameter names.
 
     A key the plan omits is omitted here rather than defaulted to zero. That is
     the whole point: the skill server declares its own defaults and says why, and
@@ -469,7 +487,7 @@ def _gripper(entry: object, where: str) -> Mapping[str, float]:
         raise PlanError(f"{where}: expected a mapping, got {_kind(entry)}")
     return {
         key: _number(entry[key], key, where)
-        for key in GRIPPER_KEYS
+        for key in keys
         if entry.get(key) is not None
     }
 

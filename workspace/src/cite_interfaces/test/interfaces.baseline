@@ -73,6 +73,7 @@ msg/ResultCode.msg
   uint8 HARDWARE_FAULT=7
   uint8 NOT_IMPLEMENTED=8
   uint8 UNREACHABLE=9
+  uint8 MOTION_INTERRUPTED=10
   uint8 code
   string detail
 msg/RobotState.msg
@@ -154,6 +155,14 @@ msg/TwinMode.msg
 srv/GetModelVersion.srv
   ---
   ModelVersion version
+srv/ResetStation.srv
+  string SERVICE="/cite/line/reset_station"
+  string station_id
+  ---
+  bool accepted
+  ResultCode result
+  uint8 station_state
+  string cleared_reason
 srv/SetMode.srv
   uint8 mode
   string reason

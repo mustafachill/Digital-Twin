@@ -76,6 +76,15 @@ plan:
       # margin means anything. Same number the controller is configured with.
       gripper_goal_tolerance_rad: {{ manager.gripper_goal_tolerance_rad | f }}
 {% endif %}
+{% if manager.arm_goal_tolerance_rad is not none %}
+      # The arm trajectory controller's own goal tolerance, delivered to L3 for
+      # the same reason the gripper's is: ADR-0037 classifies a failed execution
+      # by comparing the arm's joint state against the plan's first and last
+      # points, and the threshold that comparison uses has to be the one the
+      # controller itself checks against. Same number the controller is
+      # configured with, from the same L0 `constraints:` block (ADR-0036).
+      arm_goal_tolerance_rad: {{ manager.arm_goal_tolerance_rad | f }}
+{% endif %}
 {% if manager.gripper_max_drive_rate_rad_s is not none %}
       # How fast the drive joint may travel, rad/s, in either direction. Carried
       # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
