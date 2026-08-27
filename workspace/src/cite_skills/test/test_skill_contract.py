@@ -127,8 +127,8 @@ def _joints(manager: dict) -> list:
     return names
 
 
-def _yaml_parameters(path: Path, prefix: str) -> dict:
-    return {prefix: _read(path)}
+def _yaml_parameters(document: dict, prefix: str) -> dict:
+    return {prefix: document}
 
 
 @pytest.mark.launch_test
@@ -143,12 +143,21 @@ def generate_test_description() -> LaunchDescription:
         Command(["xacro ", str(_resolve(moveit["srdf"]))]), value_type=str
     )
     kinematics = _yaml_parameters(
-        _resolve(moveit["kinematics"]), "robot_description_kinematics"
+        _read(_resolve(moveit["kinematics"])), "robot_description_kinematics"
     )
+    # Both limit files land in one parameter namespace, exactly as
+    # `cite_bringup` loads them: MoveIt reads the joint half itself and Pilz
+    # reads the Cartesian half from `robot_description_planning.cartesian_limits`
+    # (ADR-0027), and its parameter listener declares those four keys without
+    # defaults — a missing one takes move_group down at start-up.
     planning = _yaml_parameters(
-        _resolve(moveit["joint_limits"]), "robot_description_planning"
+        {
+            **_read(_resolve(moveit["joint_limits"])),
+            **_read(_resolve(moveit["cartesian_limits"])),
+        },
+        "robot_description_planning",
     )
-    ompl = _read(_resolve(moveit["ompl"]))
+    pipelines = _read(_resolve(moveit["planning_pipelines"]))
     controllers = _read(_resolve(moveit["controllers"]))
 
     return LaunchDescription(
@@ -175,7 +184,7 @@ def generate_test_description() -> LaunchDescription:
                     },
                     kinematics,
                     planning,
-                    ompl,
+                    pipelines,
                     controllers,
                 ],
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
@@ -200,6 +209,15 @@ def generate_test_description() -> LaunchDescription:
                         "tip_link": moveit["tip_link"],
                         "gripper_action": GRIPPER_ACTION,
                         "home_rad": list(moveit["home_rad"]),
+                        # The planner the server asks for, from the plan rather
+                        # than restated here (ADR-0027). Without these the
+                        # server says nothing about a pipeline and move_group
+                        # applies the file's own default — which would make this
+                        # rig prove something the running cell does not do.
+                        "default_pipeline": moveit["default_pipeline"],
+                        "default_planner_id": moveit["default_planner_id"],
+                        "fallback_pipeline": moveit["fallback_pipeline"],
+                        "fallback_planner_id": moveit["fallback_planner_id"] or "",
                         "use_sim_time": False,
                     },
                 ],

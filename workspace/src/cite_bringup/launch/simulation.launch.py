@@ -732,9 +732,7 @@ def _skills(plan: Plan) -> list:
                     _yaml_parameters(
                         manager.moveit.kinematics, prefix="robot_description_kinematics"
                     ),
-                    _yaml_parameters(
-                        manager.moveit.joint_limits, prefix="robot_description_planning"
-                    ),
+                    _planning_limits(manager.moveit),
                     _skill_parameters(plan, manager),
                 ],
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
@@ -923,6 +921,13 @@ def _skill_parameters(plan: Plan, manager) -> dict:
         "tip_link": manager.moveit.tip_link,
         "gripper_action": manager.gripper_action or "",
         "home_rad": list(manager.moveit.home_rad),
+        # ADR-0027, and under the plan's own keys for the same reason the gripper
+        # values are: the server declares these names, so a key here reaches it
+        # verbatim and there is no list to keep in step.
+        "default_pipeline": manager.moveit.default_pipeline,
+        "default_planner_id": manager.moveit.default_planner_id,
+        "fallback_pipeline": manager.moveit.fallback_pipeline,
+        "fallback_planner_id": manager.moveit.fallback_planner_id,
         "use_sim_time": True,
         **manager.gripper,
     }
@@ -959,7 +964,7 @@ def _motion_planning(plan: Plan) -> list:
                 "publish_robot_description_semantic": True,
             },
             _yaml_parameters(moveit.kinematics, prefix="robot_description_kinematics"),
-            _yaml_parameters(moveit.joint_limits, prefix="robot_description_planning"),
+            _planning_limits(moveit),
             # Loaded as dictionaries rather than passed as --params-file. A ROS
             # parameter FILE must be shaped `<node>: ros__parameters: ...`; these
             # generated files hold the content without that wrapper, because the
@@ -967,7 +972,7 @@ def _motion_planning(plan: Plan) -> list:
             # facility. Passing them as files fails at rcl with "Sequences can
             # only be values and not keys in params", which points at the YAML
             # rather than at the missing wrapper.
-            _yaml_parameters(moveit.ompl),
+            _yaml_parameters(moveit.planning_pipelines),
             _yaml_parameters(moveit.controllers),
             {
                 # No depth sensor feeds this cell yet, so the octomap monitor
@@ -1008,6 +1013,22 @@ def _motion_planning(plan: Plan) -> list:
             )
         )
     return actions
+
+
+def _planning_limits(moveit) -> dict:
+    """Load the joint and Cartesian limits into one MoveIt parameter namespace.
+
+    Both files land under `robot_description_planning`, because that is where
+    MoveIt looks for each: the joint half through its own limit loading, and the
+    Cartesian half through Pilz's `cartesian_limits` parameter listener, whose
+    prefix is that namespace and nothing else (ADR-0027). They are merged into a
+    single dictionary rather than passed as two entries so that the file this
+    node is configured from is one value, not two that a launch-time merge has to
+    be trusted to combine.
+    """
+    document = yaml.safe_load(moveit.joint_limits.read_text()) or {}
+    document.update(yaml.safe_load(moveit.cartesian_limits.read_text()) or {})
+    return {"robot_description_planning": document}
 
 
 def _yaml_parameters(path, *, prefix: str | None = None) -> dict:

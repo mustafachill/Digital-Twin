@@ -82,9 +82,18 @@ class MoveItConfig:
     home_rad: tuple[float, ...]
     srdf: Path
     kinematics: Path
-    ompl: Path
+    planning_pipelines: Path
     joint_limits: Path
+    cartesian_limits: Path
     controllers: Path
+    #: Which pipeline the skill server asks first, and what a refusal falls back
+    #: to (ADR-0027). Carried here rather than compiled into the server, and
+    #: under the server's own parameter names, so that no list anywhere maps one
+    #: to the other and goes stale.
+    default_pipeline: str
+    default_planner_id: str
+    fallback_pipeline: str
+    fallback_planner_id: str
 
 
 @dataclass(frozen=True)
@@ -475,9 +484,17 @@ def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
         ),
         srdf=resolve_uri(_require(entry, "srdf", where)),
         kinematics=resolve_uri(_require(entry, "kinematics", where)),
-        ompl=resolve_uri(_require(entry, "ompl", where)),
+        planning_pipelines=resolve_uri(_require(entry, "planning_pipelines", where)),
         joint_limits=resolve_uri(_require(entry, "joint_limits", where)),
+        cartesian_limits=resolve_uri(_require(entry, "cartesian_limits", where)),
         controllers=resolve_uri(_require(entry, "controllers", where)),
+        default_pipeline=str(_require(entry, "default_pipeline", where)),
+        default_planner_id=str(_require(entry, "default_planner_id", where)),
+        fallback_pipeline=str(_require(entry, "fallback_pipeline", where)),
+        # The only one of the four that may legitimately be empty: an empty
+        # planner id means "whatever that pipeline defaults to", so it is read
+        # with a default rather than required, and `_require` would reject it.
+        fallback_planner_id=str(_optional(entry, "fallback_planner_id") or ""),
     )
 
 

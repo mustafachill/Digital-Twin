@@ -158,6 +158,14 @@ if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_skill_contract.py TIMEOUT 400)
 
+  # What the generated MoveIt configuration is worth to a running move_group
+  # (ADR-0027). Separate from the contract test above because it asks about the
+  # PLANNER rather than about the skill: whether both pipelines loaded, whether
+  # the default one can actually produce a trajectory — which is where a missing
+  # deceleration limit shows up, and nowhere earlier — and whether the same
+  # request produces the same trajectory twice. No skill server, no controllers.
+  add_launch_test(test/test_planning_pipeline.py TIMEOUT 400)
+
   # Whether another package can reach this one's headers at all. Every test above
   # gets at them through `target_include_directories(... PRIVATE include)` on the
   # SOURCE tree, which is the one path a consumer does not have — so all of them

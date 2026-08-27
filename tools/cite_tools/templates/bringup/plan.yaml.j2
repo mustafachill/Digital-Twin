@@ -127,9 +127,18 @@ plan:
         home_rad: [{{ manager.home_rad | map('m') | join(', ') }}]
         srdf: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}.srdf.xacro
         kinematics: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_kinematics.yaml
-        ompl: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_ompl_planning.yaml
+        planning_pipelines: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_planning_pipelines.yaml
         joint_limits: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_joint_limits.yaml
+        cartesian_limits: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_cartesian_limits.yaml
         controllers: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_moveit_controllers.yaml
+        # Which pipeline the L3 skill server asks first, and what it falls back
+        # to when that one refuses (ADR-0027). Here rather than compiled into the
+        # server: a planner choice is a claim about this arm, and the server's
+        # own parameter names are these names, so nothing maps one to the other.
+        default_pipeline: {{ manager.default_pipeline }}
+        default_planner_id: {{ manager.default_planner_id }}
+        fallback_pipeline: {{ manager.fallback_pipeline }}
+        fallback_planner_id: "{{ manager.fallback_planner_id }}"
 {% endif %}
 {% endfor %}
 

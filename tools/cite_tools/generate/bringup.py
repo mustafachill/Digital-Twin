@@ -41,6 +41,10 @@ class _ManagerView:
     planning_group: str | None
     planning_tip_link: str | None
     planning_base_link: str | None
+    default_pipeline: str | None
+    default_planner_id: str | None
+    fallback_pipeline: str | None
+    fallback_planner_id: str | None
     home_rad: tuple[float, ...]
     trajectory_action: str | None
     gripper_action: str | None
@@ -112,6 +116,19 @@ class _DetectionView:
 def _planning_group(asset: ResolvedAsset) -> str | None:
     planning = asset.asset_type.planning
     return ids.controller(asset.id, planning.group_suffix) if planning else None
+
+
+def _planning_field(asset: ResolvedAsset, field: str) -> str | None:
+    """One string from the type's planning specification, or None.
+
+    Read through rather than restated. The planner an arm is asked for first, and
+    the one a refusal falls back to, are declared once in L0 (ADR-0027) and reach
+    the L3 skill server through this plan under the parameter names the server
+    itself declares — so there is no list of keys anywhere that can go stale
+    against the server, which is the failure the gripper parameters shipped.
+    """
+    planning = asset.asset_type.planning
+    return getattr(planning, field) if planning else None
 
 
 def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
@@ -295,6 +312,10 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             planning_group=_planning_group(asset),
             planning_tip_link=_planning_link(asset, "tip"),
             planning_base_link=_planning_link(asset, "base"),
+            default_pipeline=_planning_field(asset, "default_pipeline"),
+            default_planner_id=_planning_field(asset, "default_planner_id"),
+            fallback_pipeline=_planning_field(asset, "fallback_pipeline"),
+            fallback_planner_id=_planning_field(asset, "fallback_planner_id"),
             home_rad=_home(asset),
             trajectory_action=_controller_action(asset, "joint_trajectory_controller"),
             gripper_action=_controller_action(asset, "gripper_controller"),

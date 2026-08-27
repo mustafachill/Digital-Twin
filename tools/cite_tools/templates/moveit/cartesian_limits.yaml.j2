@@ -1,0 +1,23 @@
+---
+{{ hash_banner() }}
+#
+# What a planner that interpolates in TASK space is allowed to ask for. The file
+# beside this one bounds the joints; this one bounds the tool point, and the two
+# are different quantities rather than two views of one (ADR-0027).
+#
+# Only Pilz reads these, and only its LIN and CIRC generators do — PTP plans in
+# joint space and never consults them. They are loaded regardless, because
+# `pilz_industrial_motion_planner::CartesianLimit` is constructed when the
+# pipeline initialises: the four keys are declared without defaults, and a
+# missing one is an uncaught `rclcpp::ParameterUninitializedException` that takes
+# move_group down at start-up rather than a planner that declines a LIN request.
+#
+# MoveIt reads them from `robot_description_planning.cartesian_limits.*`; the
+# prefix is applied by whoever loads this file, because it is a MoveIt convention
+# and not a fact about the facility. The deceleration sign is MoveIt's too, and
+# is applied here for the same reason the joint one is.
+cartesian_limits:
+  max_trans_vel: {{ arm.max_cartesian_velocity_m_s | f }}
+  max_trans_acc: {{ arm.max_cartesian_acceleration_m_s2 | f }}
+  max_trans_dec: {{ -arm.max_cartesian_deceleration_m_s2 | f }}
+  max_rot_vel: {{ arm.max_cartesian_rotational_velocity_rad_s | f }}

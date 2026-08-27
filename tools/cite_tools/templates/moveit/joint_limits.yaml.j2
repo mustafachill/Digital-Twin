@@ -18,9 +18,20 @@ default_acceleration_scaling_factor: {{ arm.max_acceleration_scaling | f }}
 # limit, and MoveIt's time parameterisation needs one. Without it the planner
 # emits trajectories the controller cannot track, which presents as following
 # error rather than as a missing limit.
+#
+# Deceleration is the second exception and it arrived with ADR-0027. Pilz's
+# trapezoidal profile brakes on its own ceiling rather than on the acceleration
+# one, and refuses to build a PTP generator for a group whose joints do not all
+# declare one: "deceleration limit not set for group <name>". It raises that at
+# PLAN time, not at load time, so the pipeline starts cleanly and then fails
+# every request — which reads as the planner rejecting the motion rather than as
+# a missing number. MoveIt's convention is that the value is negative; the model
+# states a magnitude, and the sign is applied here, where MoveIt is the consumer.
 joint_limits:
 {% for joint in arm.joints %}
   {{ joint }}:
     has_acceleration_limits: true
     max_acceleration: {{ arm.max_acceleration_rad_s2 | f }}
+    has_deceleration_limits: true
+    max_deceleration: {{ -arm.max_deceleration_rad_s2 | f }}
 {% endfor %}

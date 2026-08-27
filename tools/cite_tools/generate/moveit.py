@@ -24,6 +24,19 @@ from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.render import environment
 
+#: The MoveIt pipelines this generator knows how to configure.
+#:
+#: A pipeline is a plugin class plus an adapter chain, which is a fact about
+#: MoveIt rather than about the facility — so *what* a pipeline is made of lives
+#: here, in code, and *which* one plans lives in the model (P5, ADR-0027). Naming
+#: one that is not in this set is an error rather than a file that generates
+#: cleanly and leaves move_group dying with "Exception while loading planner".
+PIPELINES = ("pilz_industrial_motion_planner", "ompl")
+
+
+class UnknownPipelineError(ValueError):
+    """The model named a planning pipeline the generator cannot configure."""
+
 
 @dataclass(frozen=True)
 class _PlanningView:
@@ -43,6 +56,15 @@ class _PlanningView:
     max_velocity_scaling: float
     max_acceleration_scaling: float
     max_acceleration_rad_s2: float
+    max_deceleration_rad_s2: float
+    default_pipeline: str
+    default_planner_id: str
+    fallback_pipeline: str
+    fallback_planner_id: str
+    max_cartesian_velocity_m_s: float
+    max_cartesian_acceleration_m_s2: float
+    max_cartesian_deceleration_m_s2: float
+    max_cartesian_rotational_velocity_rad_s: float
 
 
 def _view(asset: ResolvedAsset) -> _PlanningView | None:
@@ -52,6 +74,16 @@ def _view(asset: ResolvedAsset) -> _PlanningView | None:
         return None
     if not (planning.srdf_package and planning.srdf_file and planning.srdf_macro):
         return None
+
+    for role, pipeline in (
+        ("default_pipeline", planning.default_pipeline),
+        ("fallback_pipeline", planning.fallback_pipeline),
+    ):
+        if pipeline not in PIPELINES:
+            raise UnknownPipelineError(
+                f"{asset.asset_type.id}.planning.{role} is {pipeline!r}, which this "
+                f"generator cannot configure. Known pipelines: {', '.join(PIPELINES)}."
+            )
 
     joints = tuple(ids.joint(asset.id, s) for s in kinematics.joint_suffixes)
 
@@ -102,6 +134,15 @@ def _view(asset: ResolvedAsset) -> _PlanningView | None:
         # fact about a particular arm, and a module constant applied it
         # identically to every type the generator would ever see (P5).
         max_acceleration_rad_s2=planning.max_acceleration_rad_s2,
+        max_deceleration_rad_s2=planning.max_deceleration_rad_s2,
+        default_pipeline=planning.default_pipeline,
+        default_planner_id=planning.default_planner_id,
+        fallback_pipeline=planning.fallback_pipeline,
+        fallback_planner_id=planning.fallback_planner_id,
+        max_cartesian_velocity_m_s=planning.max_cartesian_velocity_m_s,
+        max_cartesian_acceleration_m_s2=planning.max_cartesian_acceleration_m_s2,
+        max_cartesian_deceleration_m_s2=planning.max_cartesian_deceleration_m_s2,
+        max_cartesian_rotational_velocity_rad_s=(planning.max_cartesian_rotational_velocity_rad_s),
     )
 
 
@@ -117,8 +158,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
         for suffix, template in (
             (".srdf.xacro", "moveit/srdf.xacro.j2"),
             ("_kinematics.yaml", "moveit/kinematics.yaml.j2"),
-            ("_ompl_planning.yaml", "moveit/ompl_planning.yaml.j2"),
+            ("_planning_pipelines.yaml", "moveit/planning_pipelines.yaml.j2"),
             ("_joint_limits.yaml", "moveit/joint_limits.yaml.j2"),
+            ("_cartesian_limits.yaml", "moveit/cartesian_limits.yaml.j2"),
             ("_moveit_controllers.yaml", "moveit/moveit_controllers.yaml.j2"),
         ):
             artifacts.append(

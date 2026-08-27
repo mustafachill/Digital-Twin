@@ -25,7 +25,7 @@ from __future__ import annotations
 import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # `lower_snake_case`, no leading digit — naming-and-namespaces.md rule 4.
 Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$")]
@@ -556,6 +556,65 @@ class PlanningSpec(Strict):
     #: leaves MoveIt's time parameterisation without one, and a default here
     #: would silently apply one arm's ceiling to a different robot.
     max_acceleration_rad_s2: Annotated[float, Field(gt=0.0)]
+    #: Joint deceleration ceiling in rad/s^2, as a MAGNITUDE. Pilz's trapezoidal
+    #: profile treats braking separately from accelerating and refuses to build a
+    #: PTP generator for a group whose joints do not all declare one — the error
+    #: is "deceleration limit not set for group", raised at plan time rather than
+    #: at load time, so a pipeline that started cleanly still fails every request
+    #: (ADR-0027). MoveIt's own convention is that the value is negative; the
+    #: sign is applied where MoveIt is the consumer, not stated here, because a
+    #: braking ceiling is a magnitude in every other part of this model.
+    max_deceleration_rad_s2: Annotated[float, Field(gt=0.0)]
+
+    #: Which MoveIt pipeline plans by default, and which one a refusal falls back
+    #: to (ADR-0027). Both are data rather than constants in the generator: a
+    #: trajectory generator that fails instead of searching is a choice about
+    #: THIS arm's motions, and an arm whose limits Pilz cannot satisfy has to be
+    #: able to say so in the model rather than in code (P1, P5).
+    #:
+    #: The generator knows what each named pipeline is made of — its plugin class
+    #: and its adapter chain — and rejects a name it does not know. That is the
+    #: P5 split: the model chooses which pipeline plans, the generator encodes how
+    #: a pipeline is configured.
+    default_pipeline: str
+    #: Pilz has no default planner and refuses a request with an empty planner id
+    #: ("No ContextLoader for planner_id ''"), so this is stated rather than left
+    #: to the pipeline.
+    default_planner_id: str
+    fallback_pipeline: str
+    #: Empty means "whatever that pipeline is configured to default to". For the
+    #: generated OMPL block that is its single planner configuration, which is
+    #: exactly the planner every motion in this cell used before ADR-0027 — so
+    #: the fallback path is the behaviour this cell already had, unchanged.
+    fallback_planner_id: str = ""
+
+    #: Cartesian ceilings for the pipelines that interpolate a path in task space
+    #: rather than in joint space — Pilz LIN and CIRC read all four and cannot be
+    #: constructed without them. They are ceilings we choose for this arm, not
+    #: vendor figures: the tool-point speed an xArm 5 can reach is a consequence
+    #: of its joint limits and its pose, and a single number for it only exists
+    #: because a planner needs one.
+    max_cartesian_velocity_m_s: Annotated[float, Field(gt=0.0)]
+    max_cartesian_acceleration_m_s2: Annotated[float, Field(gt=0.0)]
+    #: A magnitude, negated at emission for the same reason as the joint value.
+    max_cartesian_deceleration_m_s2: Annotated[float, Field(gt=0.0)]
+    max_cartesian_rotational_velocity_rad_s: Annotated[float, Field(gt=0.0)]
+
+    @model_validator(mode="after")
+    def _pipelines_differ(self) -> PlanningSpec:
+        """A fallback that is the default is not a fallback.
+
+        It would also emit the same pipeline name twice in `planning_pipelines`,
+        which move_group loads without complaint and which makes the generated
+        file read as though two pipelines were configured when one is.
+        """
+        if self.default_pipeline == self.fallback_pipeline:
+            raise ValueError(
+                f"default_pipeline and fallback_pipeline are both "
+                f"{self.default_pipeline!r}; a refusal would fall back to the "
+                f"planner that refused"
+            )
+        return self
 
 
 class AssetType(Strict):

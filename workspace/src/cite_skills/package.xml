@@ -58,6 +58,11 @@
   <test_depend>robot_state_publisher</test_depend>
   <test_depend>rclpy</test_depend>
   <test_depend>sensor_msgs</test_depend>
+  <!-- The planning-pipeline launch test speaks to move_group's own services
+       (`query_planner_interface`, `plan_kinematic_path`) rather than through
+       MoveGroupInterface, because the question is what move_group loaded and
+       what it answers — not what a client made of it. -->
+  <test_depend>moveit_msgs</test_depend>
   <!-- The detection test republishes the beams' generated static transforms,
        because there is no cite_bringup in that rig to do it. -->
   <test_depend>tf2_ros</test_depend>

@@ -1,0 +1,83 @@
+---
+{{ hash_banner() }}
+#
+# Which planners move_group loads for this arm, and which one plans by default
+# (ADR-0027). Both pipelines are always configured; the model decides which one
+# is asked first and which one a refusal falls back to.
+#
+# Pilz is a trajectory GENERATOR, not a search. PTP integrates a trapezoidal
+# profile over the joint limits in the file beside this one, so the same request
+# produces the same trajectory and a failure can be bisected instead of re-run
+# until it goes green. What it costs is that it fails on a collision rather than
+# routing around one: its only collision call during generation is a self-collision
+# check, so a straight path through a table is refused, not detoured. That is what
+# the OMPL fallback is for, and it is also why the planning scene being complete
+# matters more under this configuration than it did under the last one.
+#
+# Sampling-based planning is stochastic (ADR-0006), and it is still reachable
+# through the fallback. A scenario therefore asserts on outcomes and constraints,
+# never on an exact joint sequence — a test that pins a trajectory will be flaky
+# and will be deleted by whoever is on call. That holds under Pilz too: a
+# deterministic planner makes the same request produce the same answer, it does
+# not make the request the same.
+#
+# The nesting matters. MoveIt looks for a planner under its pipeline's name; with
+# these keys at the top level it falls back to looking in the node's own namespace
+# and dies with "Planning plugin name is empty or not defined in namespace
+# 'move_group'", which names the node rather than the missing pipeline.
+planning_pipelines:
+  - pilz_industrial_motion_planner
+  - ompl
+default_planning_pipeline: {{ arm.default_pipeline }}
+
+pilz_industrial_motion_planner:
+  planning_plugins:
+    - pilz_industrial_motion_planner/CommandPlanner
+  # No `request_adapters` key, and its ABSENCE is what declares the empty chain
+  # rather than an empty list. Two reasons, and the second is the load-bearing
+  # one. Pilz wants no request adapters: the ones that matter to a sampling
+  # planner — resolving constraint frames, defaulting the workspace, nudging a
+  # start state back inside its bounds — either do not apply to a generator that
+  # reads joint constraints directly, or duplicate a check Pilz performs and
+  # reports in its own words. And `request_adapters: []` cannot be written at
+  # all: a ROS parameter takes its type from its value, an empty sequence has
+  # none, and launch refuses the whole file with "Expected 'value' to be one of
+  # [float, int, str, bool, bytes], but got '()'" — an error that names a tuple
+  # and not the key it came from. Omitting the key leaves the pipeline's own
+  # default, which is the empty chain this wants.
+  response_adapters:
+    # This one is load-bearing HERE in a way it is not under OMPL, and it is the
+    # reason the list is not empty. Pilz does not search the scene, so nothing in
+    # the generator refuses a straight line through a table; ValidateSolution
+    # checks the finished trajectory against the planning scene and marks it
+    # invalid, which is what turns a colliding Pilz path into a refusal the skill
+    # server can fall back on rather than a trajectory it executes.
+    - default_planning_response_adapters/ValidateSolution
+    - default_planning_response_adapters/DisplayMotionPath
+  # No AddTimeOptimalParameterization. Pilz emits a timed trajectory — the
+  # trapezoidal profile IS the output — and re-parameterising it would discard
+  # the timing the limits produced and put a different one in its place.
+
+ompl:
+  planning_plugins:
+    - ompl_interface/OMPLPlanner
+  request_adapters:
+    - default_planning_request_adapters/ResolveConstraintFrames
+    - default_planning_request_adapters/ValidateWorkspaceBounds
+    - default_planning_request_adapters/CheckStartStateBounds
+    - default_planning_request_adapters/CheckStartStateCollision
+  response_adapters:
+    - default_planning_response_adapters/AddTimeOptimalParameterization
+    - default_planning_response_adapters/ValidateSolution
+    - default_planning_response_adapters/DisplayMotionPath
+
+  planner_configs:
+    RRTConnectkConfigDefault:
+      type: geometric::RRTConnect
+      range: {{ 0.0 | f }}
+
+  {{ arm.group }}:
+    planner_configs:
+      - RRTConnectkConfigDefault
+    projection_evaluator: joints({{ arm.joints[0] }},{{ arm.joints[1] }})
+    longest_valid_segment_fraction: {{ 0.005 | f }}

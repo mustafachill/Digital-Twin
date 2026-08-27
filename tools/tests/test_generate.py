@@ -526,6 +526,50 @@ class TestPhysicalConstantsComeFromTheModel:
         assert "max_acceleration: 3.5" in limits
         assert "max_acceleration: 2.0" not in limits
 
+    def test_the_deceleration_ceiling_is_the_types_own(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Pilz brakes on its own ceiling rather than on the acceleration one
+        # (ADR-0027), so this is a second physical fact about the arm and not a
+        # restatement of the first. MoveIt's sign convention is applied by the
+        # template; the model states a magnitude.
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("max_deceleration_rad_s2", 3.5),
+        )
+        limits = artifacts(real_model)["moveit/cell_a_arm_1_joint_limits.yaml"]
+        assert "has_deceleration_limits: true" in limits
+        assert "max_deceleration: -3.5" in limits
+        assert "max_deceleration: -2.0" not in limits
+
+    def test_the_cartesian_ceilings_are_the_types_own(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The four values Pilz's LIN and CIRC generators read. They are ceilings
+        # for a particular arm, so a constant in generate/moveit.py would apply
+        # one arm's task-space limits to every type the generator ever sees (P5).
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].update(
+                {
+                    "max_cartesian_velocity_m_s": 0.11,
+                    "max_cartesian_acceleration_m_s2": 0.22,
+                    "max_cartesian_deceleration_m_s2": 0.33,
+                    "max_cartesian_rotational_velocity_rad_s": 0.44,
+                }
+            ),
+        )
+        limits = yaml.safe_load(artifacts(real_model)["moveit/cell_a_arm_1_cartesian_limits.yaml"])[
+            "cartesian_limits"
+        ]
+        assert limits == {
+            "max_trans_vel": 0.11,
+            "max_trans_acc": 0.22,
+            # Negative, which is MoveIt's convention and not the model's.
+            "max_trans_dec": -0.33,
+            "max_rot_vel": 0.44,
+        }
+
     def test_the_controller_manager_rate_is_the_types_own(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
@@ -546,6 +590,112 @@ class TestPhysicalConstantsComeFromTheModel:
             lambda d: d["asset_type"].pop("control"),
         )
         with pytest.raises(MissingControlSpecError, match="update_rate_hz"):
+            artifacts(real_model)
+
+
+class TestThePlannerChoiceIsData:
+    """ADR-0027: which pipeline plans is model data, not a constant in code.
+
+    The split these tests pin down is P5's. The MODEL chooses which pipeline
+    plans and which one a refusal falls back to; the GENERATOR knows what a
+    pipeline is made of — its plugin class and its adapter chain — because that
+    is a fact about MoveIt rather than about this facility.
+    """
+
+    def test_both_pipelines_are_declared(self, real_model: Path) -> None:
+        pipelines = yaml.safe_load(
+            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+        )
+        assert pipelines["planning_pipelines"] == [
+            "pilz_industrial_motion_planner",
+            "ompl",
+        ]
+        assert pipelines["pilz_industrial_motion_planner"]["planning_plugins"] == [
+            "pilz_industrial_motion_planner/CommandPlanner"
+        ]
+        assert pipelines["ompl"]["planning_plugins"] == ["ompl_interface/OMPLPlanner"]
+
+    def test_pilz_declares_no_empty_request_adapter_list(self, real_model: Path) -> None:
+        # An empty ROS parameter sequence has no type, and launch refuses the
+        # whole file with "Expected 'value' to be one of [float, int, str, bool,
+        # bytes], but got '()'" — an error naming a tuple and not the key it came
+        # from. The empty chain is declared by the key's ABSENCE.
+        pilz = yaml.safe_load(artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"])[
+            "pilz_industrial_motion_planner"
+        ]
+        assert "request_adapters" not in pilz
+
+    def test_the_default_pipeline_follows_the_model(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].update(
+                {
+                    "default_pipeline": "ompl",
+                    "default_planner_id": "",
+                    "fallback_pipeline": "pilz_industrial_motion_planner",
+                    "fallback_planner_id": "PTP",
+                }
+            ),
+        )
+        produced = artifacts(real_model)
+        pipelines = yaml.safe_load(produced["moveit/cell_a_arm_1_planning_pipelines.yaml"])
+        assert pipelines["default_planning_pipeline"] == "ompl"
+        # And the same choice reaches L3 through the bring-up plan, because a
+        # planner named only in the MoveIt configuration is one the skill server
+        # cannot ask for.
+        plan = yaml.safe_load(produced["bringup/cell_a_plan.yaml"])
+        arm = next(m for m in plan["plan"]["controller_managers"] if m["asset"] == "arm_1")
+        assert arm["moveit"]["default_pipeline"] == "ompl"
+        assert arm["moveit"]["fallback_pipeline"] == "pilz_industrial_motion_planner"
+        assert arm["moveit"]["fallback_planner_id"] == "PTP"
+
+    def test_the_plan_carries_the_planner_the_model_names(self, real_model: Path) -> None:
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])
+        planned = 0
+        for manager in plan["plan"]["controller_managers"]:
+            if manager.get("moveit") is None:
+                continue
+            planned += 1
+            moveit = manager["moveit"]
+            assert moveit["default_pipeline"] == "pilz_industrial_motion_planner"
+            assert moveit["default_planner_id"] == "PTP"
+            assert moveit["fallback_pipeline"] == "ompl"
+            # Empty means "the pipeline's own default", which for the generated
+            # OMPL block is its single planner configuration.
+            assert moveit["fallback_planner_id"] == ""
+        assert planned == 3, "the cell has three arms; this asserted on none of them"
+
+    def test_a_pipeline_the_generator_cannot_configure_is_an_error(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Not a file that generates cleanly and leaves move_group dying with
+        # "Exception while loading planner", which names a plugin and not the
+        # model line that asked for it.
+        from cite_tools.generate.moveit import UnknownPipelineError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("default_pipeline", "stomp"),
+        )
+        with pytest.raises(UnknownPipelineError, match="stomp"):
+            artifacts(real_model)
+
+    def test_a_fallback_that_is_the_default_is_rejected(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # A refusal retried by the planner that produced it is not a fallback,
+        # and it would name one pipeline twice in `planning_pipelines`.
+        from cite_tools.model.loader import ModelError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__(
+                "fallback_pipeline", "pilz_industrial_motion_planner"
+            ),
+        )
+        with pytest.raises(ModelError, match="fall back"):
             artifacts(real_model)
 
 
