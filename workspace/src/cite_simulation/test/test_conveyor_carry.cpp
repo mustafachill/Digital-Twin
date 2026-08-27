@@ -68,6 +68,7 @@ namespace
 constexpr const char * kCommandTopic = "/test/belt/command";
 constexpr const char * kStateTopic = "/test/belt/state";
 constexpr const char * kBeamTopic = "/test/beam/detection";
+constexpr const char * kHighBeamTopic = "/test/beam_high/detection";
 constexpr const char * kPart = "workpiece";
 
 constexpr double kBeltSpeedMps = 0.15;
@@ -75,6 +76,28 @@ constexpr double kStartX = -0.4;
 constexpr double kRestZ = 0.525;
 constexpr double kBeltEndX = 0.5;
 constexpr double kBeamX = 0.3;
+
+//: Half `<beam_width_m>` in the world, and half the cube. Together they say
+//: where a beam that breaks on a leading edge changes state.
+constexpr double kBeamRadiusM = 0.002;
+constexpr double kPartHalfM = 0.025;
+
+//: The part's ORIGIN when its leading edge first reaches the beam, and when its
+//: trailing edge finally leaves it. These are the two numbers the fix is about.
+constexpr double kLeadingEdgeX = kBeamX - kBeamRadiusM - kPartHalfM;
+constexpr double kTrailingEdgeX = kBeamX + kBeamRadiusM + kPartHalfM;
+
+//: Where the defect used to put the break: the origin test reported the part
+//: only once its CENTRE reached the beam, a quarter of the part late. It is
+//: written down so that the assertion below is visibly a discriminator and not
+//: just a number — 25 mm separates the two, and the tolerance is 10.
+constexpr double kOriginTestX = kBeamX - kBeamRadiusM;
+
+//: How far a measured edge may sit from where the geometry says it is. The part
+//: advances 0.15 mm per step and the state arrives over transport rather than
+//: on the step it changed, so a few millimetres are not attributable; 25 mm,
+//: which is what the defect was worth, is.
+constexpr double kEdgeToleranceM = 0.010;
 
 //: 1 ms, matching <max_step_size> in the world.
 constexpr double kStepS = 0.001;
@@ -144,6 +167,12 @@ public:
           beam_ = message.data();
           beam_ever_broken_ = beam_ever_broken_ || message.data();
         }));
+    node_.Subscribe(
+      kHighBeamTopic, std::function<void(const gz::msgs::Boolean &)>(
+        [this](const gz::msgs::Boolean & message) {
+          const std::lock_guard<std::mutex> lock(mutex_);
+          high_beam_ever_broken_ = high_beam_ever_broken_ || message.data();
+        }));
   }
 
   /// Advance an exact number of physics steps.
@@ -161,6 +190,12 @@ public:
   {
     const std::lock_guard<std::mutex> lock(mutex_);
     return beam_ever_broken_;
+  }
+
+  bool HighBeamEverBroken() const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    return high_beam_ever_broken_;
   }
 
   void ForgetBeamHistory()
@@ -230,6 +265,7 @@ private:
   std::optional<double> reported_speed_;
   bool beam_{false};
   bool beam_ever_broken_{false};
+  bool high_beam_ever_broken_{false};
 };
 
 }  // namespace
@@ -254,6 +290,84 @@ TEST(ConveyorCarry, AnUncommandedBeltCarriesNothing)
   EXPECT_NEAR(cell.Part().pose.Pos().X(), settled, kStationaryToleranceM)
     << "an idle belt moved the part";
   EXPECT_FALSE(cell.Beam()) << "the beam reports a part it cannot see";
+}
+
+
+/// WHERE the beam changes state, not merely that it does.
+///
+/// THE DEFECT THIS LOCKS DOWN. The beam was a box tested against the
+/// work-piece's model ORIGIN, so it reported a 50 mm cube only once the cube's
+/// centre reached it — a quarter of a part late in both directions. Two measured
+/// consequences, one recorded per axis and both the same bug:
+///
+///   * along the belt, `continuous_line` stopped `conveyor_1` on that late edge
+///     and parked every piece 69 mm short of `arm_2`'s grasp. The arm closed on
+///     air — `commanded 45.0 mm, reached 46.0 mm, stalled=false` — and the line
+///     stopped at milestone 4 of 10 on four runs out of four;
+///   * across it, the sensor had a window of part-CENTRE heights instead of a
+///     line, so it saw a part between 20 mm and 100 mm tall and missed anything
+///     outside that, while the physical cell saw all of it.
+///
+/// `test_zone_rules` proves the geometry decides this correctly. This proves the
+/// plugin asks it the right question, against a real body in a real physics
+/// step — which is the half that was wrong, since the geometry it used to ask
+/// about was a point.
+///
+/// The tempting repair was to slide the beam until the line passed. It was
+/// refused twice before this fix and is refused here: a real through beam breaks
+/// on a leading edge, so compensating for a point test would have tuned the
+/// layout to a simulator artefact and left the physical cell parking its parts
+/// 25 mm elsewhere (P2).
+TEST(ConveyorCarry, TheBeamBreaksOnTheLeadingEdgeAndClearsOnTheTrailing)
+{
+  Cell cell;
+  cell.Step(500);
+  ASSERT_TRUE(cell.Part().found);
+  ASSERT_FALSE(cell.Beam());
+  ASSERT_LT(cell.Part().pose.Pos().X(), kLeadingEdgeX)
+    << "the part is already inside the beam before the belt has been commanded";
+
+  ASSERT_TRUE(cell.Command(kBeltSpeedMps)) << "the belt never acknowledged the command";
+
+  // Sampled every five steps so that the recorded position is a function of the
+  // step count, not of how fast the machine ran. Both edges are collected in one
+  // pass: a beam that latched on would never produce the second.
+  std::optional<double> broke_at;
+  std::optional<double> cleared_at;
+  bool was_blocked = false;
+  while (cell.Part().pose.Pos().X() < kTrailingEdgeX + 0.1 &&
+    cell.Part().pose.Pos().X() < kBeltEndX)
+  {
+    cell.Step(5);
+    const double x = cell.Part().pose.Pos().X();
+    const bool blocked = cell.Beam();
+    if (blocked && !was_blocked && !broke_at.has_value()) {
+      broke_at = x;
+    }
+    if (!blocked && was_blocked && broke_at.has_value() && !cleared_at.has_value()) {
+      cleared_at = x;
+    }
+    was_blocked = blocked;
+  }
+
+  ASSERT_TRUE(broke_at.has_value()) << "the part was carried through the beam and it never broke";
+  EXPECT_NEAR(*broke_at, kLeadingEdgeX, kEdgeToleranceM)
+    << "the beam broke with the part's origin at " << *broke_at << " m. A beam at x = "
+    << kBeamX << " is reached by the leading edge of a 50 mm part when the origin is at "
+    << kLeadingEdgeX << " m; testing the origin instead would put it at " << kOriginTestX
+    << " m, which is the defect";
+
+  ASSERT_TRUE(cleared_at.has_value()) << "the beam never cleared: it latched on the first part";
+  EXPECT_NEAR(*cleared_at, kTrailingEdgeX, kEdgeToleranceM)
+    << "the beam cleared with the part's origin at " << *cleared_at
+    << " m, rather than once the trailing edge was through at " << kTrailingEdgeX << " m";
+
+  // The height half, and the case the cell itself has no instance of: a beam
+  // mounted 150 mm above the belt is passed under by a 50 mm cube and must stay
+  // clear the whole way. Under the old window this was decided by where the
+  // part's CENTRE was, which is not what a beam measures.
+  EXPECT_FALSE(cell.HighBeamEverBroken())
+    << "a beam 150 mm above the belt reported a 50 mm part that passed underneath it";
 }
 
 

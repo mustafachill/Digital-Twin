@@ -37,7 +37,7 @@ planning_scene:
         type: box
         dimensions_m: [0.04, 0.04, 0.12]
       pose:
-        xyz_m: [1.55, 0.25, 0.69]
+        xyz_m: [1.627, 0.25, 0.69]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: beam_c2_out
       type: break_beam
@@ -46,7 +46,7 @@ planning_scene:
         type: box
         dimensions_m: [0.04, 0.04, 0.12]
       pose:
-        xyz_m: [3.65, 0.25, 0.69]
+        xyz_m: [3.727, 0.25, 0.69]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: beam_c3_out
       type: break_beam

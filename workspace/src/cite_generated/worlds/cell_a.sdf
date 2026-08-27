@@ -106,10 +106,10 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>1.55 0.25 0.63 0 0 0</beam_pose>
+      <beam_pose>1.627 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
-      <beam_width_m>0.04</beam_width_m>
+      <beam_width_m>0.004</beam_width_m>
       <beam_offset_m>-0.25</beam_offset_m>
       <state_topic>/cite/cell_a/beam_c1_out/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>
@@ -129,10 +129,10 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>3.65 0.25 0.63 0 0 0</beam_pose>
+      <beam_pose>3.727 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
-      <beam_width_m>0.04</beam_width_m>
+      <beam_width_m>0.004</beam_width_m>
       <beam_offset_m>-0.25</beam_offset_m>
       <state_topic>/cite/cell_a/beam_c2_out/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>
@@ -155,7 +155,7 @@
       <beam_pose>5.75 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
-      <beam_width_m>0.04</beam_width_m>
+      <beam_width_m>0.004</beam_width_m>
       <beam_offset_m>-0.25</beam_offset_m>
       <state_topic>/cite/cell_a/beam_c3_out/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>
@@ -178,7 +178,7 @@
       <beam_pose>-0.475 0.25 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
-      <beam_width_m>0.04</beam_width_m>
+      <beam_width_m>0.004</beam_width_m>
       <beam_offset_m>-0.25</beam_offset_m>
       <state_topic>/cite/cell_a/beam_pick/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>

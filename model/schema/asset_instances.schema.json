@@ -98,7 +98,7 @@
           "type": "number"
         },
         "beam_width_m": {
-          "default": 0.04,
+          "default": 0.004,
           "exclusiveMinimum": 0.0,
           "title": "Beam Width M",
           "type": "number"
@@ -111,6 +111,11 @@
           ],
           "title": "Idle State",
           "type": "string"
+        },
+        "indexes_workpiece": {
+          "default": false,
+          "title": "Indexes Workpiece",
+          "type": "boolean"
         },
         "kind": {
           "const": "sensor",

@@ -92,12 +92,24 @@ Transport replaces a physical interaction with a deterministic one, and it flatt
   re-seat, square up or disturb what it carries; it translates it. The campaign is
   [`docs/measurements/2026-08-26-conveyor-yaw-transfer/`](../../../docs/measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md)
   and its numbers stay there.
-* **Detection** is a point test on the work-piece's model origin, not an intersection with
-  its body. A beam therefore reports a part whose *centre* crosses its volume: with the
-  cell's 0.030 m mounting offset and 0.040 m beam width, that is a part between 20 mm and
-  100 mm tall. A real through beam is broken by anything that crosses it at any height, so
-  a part outside that range would be detected on hardware and missed here. The line's one
-  declared work-piece is a 50 mm cube, in the middle of the range.
+* **Detection** is an intersection between the beam and the work-piece's collision body,
+  which is what a through beam measures: it breaks on a part's leading edge and stays
+  broken until the trailing edge is past, at any height the part reaches. The shapes come
+  from the simulator rather than from a dimension declared to the plugin, so a part whose
+  size changes in L0 changes what the beam sees with nothing to keep in step.
+  **This used to be a point test on the model origin, and it was wrong in two directions.**
+  A beam reported a part only once its *centre* crossed the beam's volume, which with the
+  old 0.040 m width gave the sensor a window of part-centre heights — it saw a part between
+  20 mm and 100 mm tall and missed everything outside that, while a physical beam sees all
+  of it. Along the belt the same lateness cost the line its pick position: `beam_c1_out`
+  reported the 50 mm cube 25 mm after its leading edge arrived, the indexed belt stopped on
+  that edge, and every piece parked 69 mm short of `arm_2`'s grasp. `continuous_line`
+  stopped at milestone 4 of 10, four runs out of four.
+  The remaining bound is a real one and holds identically on hardware: a beam mounted
+  0.030 m above the belt cannot see a part shorter than about 30 mm, because the part
+  passes under it. `beam-cannot-see-workpiece` in `cite_tools.validate.geometric` rejects
+  that pairing in the model rather than leaving it to be found at run time. There is no
+  upper bound at all.
 
 P8 applies: any claim about transport reliability needs a measurement against hardware,
 and this package cannot provide one. Grasping is no longer in this list because no plugin

@@ -40,7 +40,7 @@ static_transforms:
 - parent: cite_world
   child: cell_a__beam_c1_out__beam
   xyz_m:
-  - 1.55
+  - 1.627
   - 0.25
   - 0.63
   rpy_rad:
@@ -50,7 +50,7 @@ static_transforms:
 - parent: cite_world
   child: cell_a__beam_c2_out__beam
   xyz_m:
-  - 3.65
+  - 3.727
   - 0.25
   - 0.63
   rpy_rad:

@@ -533,3 +533,151 @@ class TestDefaultGraspWidth:
 
         edit_yaml(real_model / self.EFFECTOR, mutate)
         assert physical_rules(real_model) == set()
+
+
+class TestIndexingBeams:
+    """A beam that stops a belt has to leave the part where a robot can reach it.
+
+    THE FAILURE THESE EXIST FOR. `beam_c1_out` was authored 50 mm upstream of the
+    point `station_transfer_2` picks from. A through beam breaks on a part's
+    leading edge, so the belt stopped with the cube 69 mm short of the grasp and
+    `arm_2` closed on air at `commanded 45.0 mm, reached 46.0 mm, stalled=false`.
+    `continuous_line` stopped at milestone 4 of 10 on four runs out of four, and
+    the model validated cleanly every time.
+
+    The position is derived now — `cite_tools.model.resolve.index_offset_m` — so
+    the specific mistake cannot be made again. These are for the mistakes that
+    are still available: authoring an offset next to the derived one, indexing to
+    a point nobody picks from, and declaring a part the geometry cannot serve.
+    Ten minutes of scenario against a fraction of a second here.
+    """
+
+    SENSORS = "assets/instances/sensors.yaml"
+    WORKPIECE = "assets/types/workpieces/workpiece.yaml"
+
+    #: Index of each beam in `sensors.yaml`, which lists them in this order.
+    PICK, C1_OUT, C2_OUT, C3_OUT = 0, 1, 2, 3
+
+    @staticmethod
+    def _beam_x(path: Path, beam: str = "beam_c1_out") -> float:
+        model = load(path)
+        asset = resolve(model, "cell_a").asset(beam)
+        assert asset is not None
+        return asset.world_pose.xyz_m[0]
+
+    def test_the_stand_off_is_derived_from_the_part(self, real_model: Path) -> None:
+        """The shipped number, and where it comes from.
+
+        `conveyor_1/outfeed` is at x = 1.600. Half a 50 mm cube is 25 mm and half
+        a 4 mm beam is 2 mm, so the housing stands at 1.627 and a part whose
+        leading edge breaks the beam has its centre exactly on the pick point.
+        """
+        assert self._beam_x(real_model) == pytest.approx(1.627)
+
+    def test_the_stand_off_follows_the_part(self, real_model: Path, edit_yaml: Callable) -> None:
+        """The whole point of deriving it rather than writing it down.
+
+        Double the part and the beam moves with it, with nothing authored to keep
+        in step. A fitted coordinate would have stayed at 1.627 and started
+        parking the new part 25 mm short, reporting nothing.
+        """
+
+        def widen(document: dict) -> None:
+            document["asset_type"]["description"]["body"]["collision"]["size_m"] = [
+                0.100,
+                0.100,
+                0.050,
+            ]
+
+        edit_yaml(real_model / self.WORKPIECE, widen)
+        assert self._beam_x(real_model) == pytest.approx(1.652)
+
+    def test_an_authored_offset_beside_the_derived_one_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The repair this project keeps being tempted by, made impossible.
+
+        Sliding the beam by hand until the scenario passes fits L0 geometry to
+        whatever the simulator happens to do. The old -0.050 is used here because
+        it is exactly the value that was there.
+        """
+        edit_yaml(
+            real_model / self.SENSORS,
+            lambda d: d["assets"][self.C1_OUT]["pose"].__setitem__("xyz_m", [-0.050, 0.250, 0.030]),
+        )
+        assert "beam-indexes-off-frame" in geometric_rules(real_model)
+
+    def test_indexing_to_a_point_no_station_picks_from_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """`station_accumulation` is a sink with no actor: nothing picks there.
+
+        A belt indexed to a point no arm reaches for parks parts where nobody
+        collects them, and the line blocks behind them.
+        """
+        edit_yaml(
+            real_model / self.SENSORS,
+            lambda d: d["assets"][self.C3_OUT]["configuration"].__setitem__(
+                "indexes_workpiece", True
+            ),
+        )
+        assert "beam-indexes-no-pick-point" in geometric_rules(real_model)
+
+    def test_a_part_long_enough_to_push_the_beam_off_the_belt_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The transfer point is only 50 mm inside the belt's end.
+
+        The stand-off is half a part, so a long enough part walks the housing
+        past the end of the conveyor — where nothing crosses it, the belt never
+        stops, and parts run off the end.
+        """
+
+        def lengthen(document: dict) -> None:
+            document["asset_type"]["description"]["body"]["collision"]["size_m"] = [
+                0.250,
+                0.250,
+                0.050,
+            ]
+
+        edit_yaml(real_model / self.WORKPIECE, lengthen)
+        assert "beam-off-its-belt" in geometric_rules(real_model)
+
+    def test_indexing_with_no_work_piece_declared_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Half of nothing is not a stand-off.
+
+        Reported rather than raised: resolution runs first, so an exception here
+        would replace every geometric finding with a traceback.
+        """
+        edit_yaml(
+            real_model / "facility/facility.yaml",
+            lambda d: d["facility"].__setitem__("workpiece_models", []),
+        )
+        assert "beam-cannot-index" in geometric_rules(real_model)
+
+    def test_a_beam_the_part_walks_under_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """80 mm above a belt carrying a 50 mm cube.
+
+        This exact height was tried on this cell. The sensor could not be broken
+        by anything the facility declared, and the only symptom was a station
+        that waited for ever — the model validated, the world loaded, the belt
+        ran. It is caught in the model now.
+        """
+        edit_yaml(
+            real_model / self.SENSORS,
+            lambda d: d["assets"][self.C1_OUT]["pose"].__setitem__("xyz_m", [0.000, 0.250, 0.080]),
+        )
+        assert "beam-cannot-see-workpiece" in geometric_rules(real_model)
+
+    def test_the_shipped_mounting_height_clears_the_declared_part(self, real_model: Path) -> None:
+        """30 mm under a 50 mm cube, with 20 mm to spare — and no upper bound.
+
+        The beam used to have one: a window of part-CENTRE heights that missed
+        anything over 100 mm tall while the physical cell saw it. There is no
+        such rule here because there is no such bound any more.
+        """
+        assert "beam-cannot-see-workpiece" not in geometric_rules(real_model)

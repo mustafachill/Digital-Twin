@@ -40,14 +40,43 @@
     </plugin>
 
     <!-- Beam across the belt at x = +0.300, emitted from a housing standing
-         0.250 m to the +y side, exactly as the generated world places one. -->
+         0.250 m to the +y side, exactly as the generated world places one.
+
+         beam_width_m is 0.004 — the real width of a lensed through-beam spot,
+         and what the model now derives every beam's mounting position against.
+         It was 0.040 while the plugin tested the part's model origin, purely so
+         that a part could not step across the beam between two physics frames;
+         the plugin tests the part's BODY now, which is occluded for the whole
+         50 mm length of the cube, so the inflation has no job left. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
       <beam_pose>0.3 0.25 0.53 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
-      <beam_width_m>0.04</beam_width_m>
+      <beam_width_m>0.004</beam_width_m>
       <beam_offset_m>-0.25</beam_offset_m>
       <state_topic>/test/beam/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
+    <!-- A SECOND beam, at x = -0.100 and 0.150 m above the belt surface: high
+         enough that the 50 mm cube passes completely underneath it.
+
+         It exists to prove the height half of the same defect. The beam used to
+         be a box tested against the part's ORIGIN, which gave it a window of
+         part-centre heights rather than a line — it reported a part between
+         20 mm and 100 mm tall and nothing outside that, while a physical beam is
+         broken by any body that reaches it. A beam that a part passes under must
+         stay clear, and one mounted within reach of the part must break; with a
+         window, EITHER could be true for the wrong reason. This is the one the
+         cell has no instance of, so nothing else would ever exercise it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>-0.1 0.25 0.65 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.004</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/test/beam_high/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>
       <watch>workpiece</watch>
     </plugin>
