@@ -45,16 +45,14 @@ from __future__ import annotations
 
 import sys
 
-from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, CollisionBody, planning_scene
 from cite_facility.transforms import quaternion_from_rpy
+from cite_runtime import runtime
 from geometry_msgs.msg import Pose
 from moveit_msgs.msg import CollisionObject, PlanningScene, PlanningSceneComponents
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
 import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.subscription import RCLError
 from shape_msgs.msg import SolidPrimitive
 
 #: Deadline, not a schedule. move_group starts alongside the simulator and is
@@ -192,13 +190,24 @@ def main() -> None:
     node = PlanningSceneLoader()
     try:
         code = node.load()
-    except (ExternalShutdownException, KeyboardInterrupt, RCLError):
-        # An interrupted load stays a failure: the scene was not proven to have
-        # arrived, and bring-up gates the skill servers on this exit code. What
-        # `runtime.init` changes is only that the interruption arrives as one of
-        # a named set rather than as whichever exception the signal happened to
-        # race into — see `cite_facility.runtime` for the two upstream races
-        # this covers.
+    except runtime.SHUTDOWN_EXCEPTIONS as error:
+        # The SET comes from `runtime` and is not restated here (P1); the POLICY
+        # is this node's own and differs from `runtime.spin`'s. An interrupted
+        # load stays a failure: the scene was not proven to have arrived, and
+        # bring-up gates the skill servers on this exit code.
+        #
+        # The narrowing is `runtime`'s too, and it has to be. This clause used to
+        # catch `RCLError` unconditionally, so an rcl fault with a LIVE context
+        # became a bare `exited 1` with no log line — the one `return 1` in this
+        # process that named nothing, while every other one carries a diagnosis.
+        # Now it propagates, exactly as it does in `runtime.spin`.
+        if not runtime.caused_by_shutdown(error, node):
+            raise
+        node.get_logger().error(
+            f"interrupted by {type(error).__name__} before the planning scene was "
+            f"proven applied ({error}); reporting failure so that bring-up does "
+            "not gate the skill servers on an unproven scene"
+        )
         code = 1
     finally:
         runtime.shutdown(node)

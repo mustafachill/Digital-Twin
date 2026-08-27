@@ -31,9 +31,9 @@ sees a partially-populated tree.
 
 from __future__ import annotations
 
-from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, static_transforms, StaticTransform
 from cite_facility.transforms import quaternion_from_rpy
+from cite_runtime import runtime
 from geometry_msgs.msg import TransformStamped
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from tf2_ros import StaticTransformBroadcaster

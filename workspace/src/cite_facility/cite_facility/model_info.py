@@ -26,11 +26,11 @@ value immediately rather than waiting for a publication that never comes.
 
 from __future__ import annotations
 
-from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, generated_dir, model_hash
 from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
+from cite_runtime import runtime
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 TOPIC = "/cite/facility/model_version"

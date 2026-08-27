@@ -41,10 +41,10 @@ subscriber (P1).
 
 from __future__ import annotations
 
-from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, topology
 from cite_interfaces.msg import LineTopology, StationEdge, StationTopology
 from cite_interfaces.qos import LATCHED
+from cite_runtime import runtime
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 #: The L0 station types, mapped onto the message's constants. A type the model

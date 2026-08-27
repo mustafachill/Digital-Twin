@@ -20,12 +20,14 @@ of 30 teardowns with `/clock` saturated, which is a flake, not a test. This
 script makes the same instant deterministic.
 
 The generated `rosgraph_msgs__msg__clock__convert_to_py` builds its Python
-message with `PyObject_CallObject(Clock)`. Raising SIGINT from inside that
-constructor leaves the pending Python handler to run while the interpreter is
-still inside that C call, which is precisely where a handler that raises
-destroys the message pointer that rclpy does not check.
+message with `PyObject_CallObject(Clock)`, looking the class up by attribute on
+`rosgraph_msgs.msg._clock` at call time — which is why replacing that attribute
+before the node imports rclpy is enough to get inside the call. Raising SIGINT
+from within that constructor leaves the pending Python handler to run while the
+interpreter is still inside that C call, which is precisely where a handler that
+raises destroys the message pointer that rclpy does not check.
 
-Usage: sigint_tripwire.py <module-with-main> [--ros-args ...]
+Usage: sigint_tripwire.py <module-with-main> [arguments for that module]
 """
 
 from __future__ import annotations
@@ -53,10 +55,14 @@ class SignalOnFirstConstruction(_REAL_CLOCK):  # type: ignore[misc, valid-type]
             return
         _FIRED.append(True)
         signal.raise_signal(signal.SIGINT)
-        # CPython 3.12 checks the eval breaker on backward jumps, so this loop
-        # is what guarantees the pending handler runs before the frame returns
-        # rather than after `PyObject_CallObject` has already succeeded.
-        for _ in range(100000):
+        # `raise_signal` sets the pending flag; the interpreter only runs the
+        # Python-level handler at its next eval-breaker check, and CPython 3.12
+        # takes that check on a backward jump. ONE backward jump is therefore the
+        # entire requirement, and this loop is the cheapest way to spend one: the
+        # handler runs here, still inside `PyObject_CallObject`, rather than after
+        # the call has already returned a valid pointer. A larger count buys
+        # nothing — the check happens on the first jump or not at all.
+        for _ in range(1):
             pass
 
 

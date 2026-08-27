@@ -26,10 +26,16 @@ difference, and these tests assert the result rather than reapplying it.
 
 from __future__ import annotations
 
+import signal
+
+from cite_facility import planning_scene_loader
 from cite_facility.artifacts import CollisionBody, planning_scene
 from cite_facility.planning_scene_loader import _collision_object
 from moveit_msgs.msg import CollisionObject
 import pytest
+import rclpy
+from rclpy.executors import ExternalShutdownException
+from rclpy.subscription import RCLError
 from shape_msgs.msg import SolidPrimitive
 
 
@@ -112,3 +118,90 @@ def test_a_box_with_the_wrong_number_of_dimensions_is_refused() -> None:
     )
     with pytest.raises(ValueError, match="3 are required"):
         _collision_object(body)
+
+
+# ---------------------------------------------------------------------------
+# `main`'s exception policy.
+#
+# rclpy's DEFAULT context cannot be initialised twice in one process, so the
+# context is owned by the fixture below and `runtime.init`/`runtime.shutdown` are
+# stood down for the duration. That is not a gap: what these two tests are about
+# is which exceptions `main` tolerates and what it says about them, and the
+# lifecycle calls themselves are tested in `cite_runtime`.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(name="context")
+def _context(monkeypatch):
+    """One rclpy context for the test, with `main`'s own lifecycle calls stood down."""
+    previous = signal.getsignal(signal.SIGINT)
+    rclpy.init()
+    monkeypatch.setattr(planning_scene_loader.runtime, "init", lambda args=None: None)
+    monkeypatch.setattr(
+        planning_scene_loader.runtime, "shutdown", lambda node: node.destroy_node()
+    )
+    try:
+        yield
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
+        signal.signal(signal.SIGINT, previous)
+
+
+def test_an_rcl_fault_with_a_live_context_is_not_a_bare_exit_1(context, monkeypatch) -> None:
+    """`main` mirrors `runtime.spin`: only a dead context makes an RCLError benign.
+
+    This clause used to be `except (..., RCLError)` with no condition, so an rcl
+    fault while the context was still valid became `sys.exit(1)` with nothing
+    logged — bring-up reported "exited 1" and named no cause, while every other
+    failure path in this node carries a specific diagnosis.
+    """
+    monkeypatch.setattr(
+        planning_scene_loader.PlanningSceneLoader,
+        "load",
+        _raise(RCLError("an rcl fault that is not a shutdown")),
+    )
+    with pytest.raises(RCLError):
+        planning_scene_loader.main()
+
+
+def test_an_interrupted_load_still_exits_1_and_says_why(context, monkeypatch) -> None:
+    """The policy stays the loader's own: interrupted is not applied.
+
+    The set and the narrowing come from `cite_runtime`; what this node does with
+    them does not. An interruption is still a failure here, because bring-up
+    gates the skill servers on this exit code and the scene was never proven to
+    have arrived — but it now says so rather than exiting silently.
+    """
+    logged: list[str] = []
+    monkeypatch.setattr(
+        planning_scene_loader.PlanningSceneLoader,
+        "load",
+        _raise(ExternalShutdownException()),
+    )
+    monkeypatch.setattr(
+        planning_scene_loader.PlanningSceneLoader,
+        "get_logger",
+        lambda self: _Recorder(logged),
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        planning_scene_loader.main()
+    assert exit_info.value.code == 1
+    assert logged and "ExternalShutdownException" in logged[0]
+
+
+class _Recorder:
+    """The one method `main` calls on a logger."""
+
+    def __init__(self, sink: list[str]) -> None:
+        self._sink = sink
+
+    def error(self, message: str) -> None:
+        self._sink.append(message)
+
+
+def _raise(error):
+    def _load(*args, **kwargs):
+        raise error
+
+    return _load

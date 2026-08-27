@@ -18,6 +18,13 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>rclpy</depend>
+  <!-- Every node here starts, spins and stops through cite_runtime. Declared
+       rather than merely imported: ament_python_install_package puts both
+       packages on one PYTHONPATH, so `from cite_runtime import runtime` would
+       resolve from any sourced workspace with nothing in a manifest to say so
+       — invisible to rosdep and to review. CMakeLists.txt find_package()s it
+       for the same reason, so the build fails rather than the import. -->
+  <depend>cite_runtime</depend>
   <depend>cite_interfaces</depend>
   <depend>geometry_msgs</depend>
   <!-- The planning-scene loader speaks MoveIt's collision-object contract. These
