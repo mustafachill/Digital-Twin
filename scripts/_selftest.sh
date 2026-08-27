@@ -659,13 +659,18 @@ done < <(declared_patches)
 JUNIT_TMP="$(mktemp -d)"
 trap 'rm -rf "${FIXTURE}" "${JUNIT_TMP}"' EXIT
 
+# NOTE THE ABSENT TRAILING NEWLINE, which is not a detail. `launch_test` ends
+# its report without one, and an earlier version of this helper added it — which
+# made every fixture here pass while the real thing failed, because `while read`
+# drops a final line that has no newline and the whole document is that line. A
+# fixture that is tidier than reality tests the fixture. Do not add the newline.
 junit_report() {  # junit_report <file> <testcase-xml...>
     local out="$1"; shift
     {
         printf '<?xml version=%s1.0%s encoding=%sutf-8%s?>\n' "'" "'" "'" "'"
         printf '<testsuites name="s.s"><testsuite name="s.s.launch_tests">'
         printf '%s' "$@"
-        printf '</testsuite></testsuites>\n'
+        printf '</testsuite></testsuites>'
     } > "$out"
 }
 

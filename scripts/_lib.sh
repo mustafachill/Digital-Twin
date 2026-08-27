@@ -360,8 +360,17 @@ scenario_failed_cases() {
     # record per testcase first. The literal newline in the replacement is the
     # portable spelling: BSD sed on the macOS host rejects `\n` there, and this
     # function is driven on the host by scripts/_selftest.sh.
+    #
+    # `|| [ -n "$record" ]` is load-bearing, not defensive. `launch_test` writes
+    # its report with NO trailing newline, so the final chunk — which is where
+    # every `<testcase>` lives, the whole document being one line — makes `read`
+    # return non-zero and a plain `while read` drops it. The symptom was a report
+    # containing a failure being classified as containing none, which fell to the
+    # fail-closed branch and gated a run whose cycle had passed. The synthetic
+    # fixtures hid it by ending in a newline; junit_report in _selftest.sh no
+    # longer does, so this line is covered.
     sed 's/<testcase /\
-<testcase /g' "$xml" | while IFS= read -r record; do
+<testcase /g' "$xml" | while IFS= read -r record || [ -n "$record" ]; do
         case "$record" in
             '<testcase '*) record="${record#<testcase }" ;;
             *) continue ;;
