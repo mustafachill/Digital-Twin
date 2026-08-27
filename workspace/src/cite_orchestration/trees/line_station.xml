@@ -186,9 +186,41 @@
              that; FAILURE means a person is needed, and it propagates to the line
              tree, which halts every other station and so cancels their goals.
 
-             `ReleaseStationClaims` runs on BOTH answers, because a station that
-             is escalating must not keep holding frames the rest of the line needs
-             — releasing a claim moves nothing. -->
+             WHAT HAPPENS TO THE STATION'S CLAIMS IS A DECISION, and an earlier
+             version of this comment stated the opposite of what the tree does. It
+             said `ReleaseStationClaims` "runs on BOTH answers". It cannot: it is
+             the second leaf of a `<Sequence>`, `RecoverFromFailure` returns
+             FAILURE on ESCALATE and on STOP_LINE, and a Sequence stops there. So
+             the claims are released ON THE RETRY PATH AND ON NO OTHER ANSWER, and
+             that is the behaviour this file means.
+
+             AN ESCALATING STATION KEEPS ITS CLAIMS. It performs no motion, so it
+             is still standing in the frames it reached into and still holds the
+             outbound slot for a piece `RecoverFromFailure` deliberately left with
+             it. A claim is the line's record of what a station occupies;
+             releasing one here would tell the arbiter a frame is free while an
+             arm holds a position nothing has established — the same kind of
+             statement about the world that ADR-0037 exists to stop being made,
+             and the one a `MOTION_INTERRUPTED` abort has just contradicted.
+
+             Starving the neighbour is the CORRECT consequence and not a cost to
+             work around. An escalating station stops the line: its FAILURE fails
+             the root `Parallel`, and `L4-orchestration.md`'s designed
+             `OnFault -> StopAll -> AwaitReset` stops it deliberately. There is no
+             station left running to be starved.
+
+             NONE OF THIS IS A PROTECTIVE MEASURE. `resource_arbiter.hpp` says of
+             itself that it prevents deadlock and thrash and that relying on it
+             for anything else is a defect. What is kept honest here is the
+             ALLOCATION RECORD, which is a coordination property.
+
+             The operator reset (ADR-0037 decision 5) does nothing about them, on
+             purpose: reset is not start. A station returns to WAITING still
+             holding what it held, and the next cycle's `ClaimReach` asks again
+             and is answered GRANTED because it is already the holder. Whether an
+             operator should be able to release a station's claims separately is
+             open, and belongs with the deliberate "clear the arm" action that
+             decision also leaves out of scope. -->
         <Sequence name="recover">
           <RecoverFromFailure   station="{station}" workpiece="{workpiece}"
                                 token="{token}" />

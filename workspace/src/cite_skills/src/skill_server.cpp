@@ -1660,122 +1660,69 @@ private:
     return make_result(ResultCode::SUCCESS);
   }
 
-  /// Turn a failed `execute()` into a code L4 can act on (ADR-0037).
+  /// Read the arm and hand the numbers to the classifier (ADR-0037).
   ///
-  /// TWO AXES, AND THE NAMED ONE WINS. They are genuinely orthogonal, and
-  /// ADR-0037 requires the implementation to state which takes precedence rather
-  /// than leaving it to whichever branch happened to be written first:
-  ///
-  ///   * MoveIt's error code says WHY the motion ended, for the two values that
-  ///     survive its funnels intact — TIMED_OUT and PREEMPTED.
-  ///   * The world-state test below says WHETHER THE ARM MOVED, and is the only
-  ///     axis available for everything else.
-  ///
-  /// The named code wins, and the reason is definitional rather than a
-  /// tie-break: `MOTION_INTERRUPTED` is defined as "why it stopped is NOT
-  /// ESTABLISHED". Where MoveIt names the reason it HAS been established, so
-  /// that code's own definition excludes the case. Classifying a timeout as an
-  /// interruption would be a report that we cannot tell why the arm stopped,
-  /// issued at the one moment we can.
-  ///
-  /// A TIMED_OUT or PREEMPTED arm may well be standing mid-path, and that is
-  /// accepted rather than overlooked: `TIMEOUT` and `CANCELLED` carry their own
-  /// policy rows in `recovery_policy.hpp`, decided in the knowledge that the stop
-  /// was MoveIt's own doing rather than the world's.
-  ///
-  /// ADR-0037 CORRECTS THIS FILE'S PREVIOUS NOTE, which said that "reading a
-  /// distinction out of `executed.val` would be inventing one". That holds for
-  /// ABORTED, which arrives as CONTROL_FAILED alongside everything else. It is
-  /// false for these two: they are distinct values in that same field, set at
-  /// distinct sites, and passed through the capability rather than collapsed by
-  /// it.
+  /// THE DECISION IS NOT HERE. It is `cite_skills::classify_execution_failure`,
+  /// a free function over the numbers below, and it is there rather than here
+  /// because a private method of a node class in an anonymous namespace is
+  /// reachable by no test at all — while what it decides is whether L4 retries a
+  /// station unattended or stops it for an operator. What is left in this method
+  /// is the one part that genuinely needs the running server: getting the current
+  /// joint positions out of MoveIt, by the names the trajectory carries.
   ResultCode classify_execution_failure(
     const MoveGroupInterface::Plan & plan, const moveit::core::MoveItErrorCode & executed)
   {
-    if (executed.val == moveit::core::MoveItErrorCode::TIMED_OUT) {
-      // `TrajectoryExecutionManager` stopped the controller because it overran
-      // the trajectory's own expected duration. MoveIt knows this because MoveIt
-      // wrote the duration.
-      return make_result(
-        ResultCode::TIMEOUT,
-        "MoveIt stopped the trajectory because the controller overran its expected duration");
-    }
-    if (executed.val == moveit::core::MoveItErrorCode::PREEMPTED) {
-      // `TrajectoryExecutionManager::stopExecution()` was called. The decision to
-      // stop was taken somewhere that knew why, and re-deciding it here would
-      // override it — the same reasoning `recovery_policy.hpp` gives CANCELLED.
-      return make_result(
-        ResultCode::CANCELLED, "trajectory execution was preempted before it finished");
-    }
-
-    // Everything else arrives as CONTROL_FAILED carrying no usable reason. Ask
-    // the arm where it is instead — see `cite_skills/motion_end.hpp` for why that
-    // is the better question rather than merely the available one.
     const auto & points = plan.trajectory.joint_trajectory.points;
     const auto & names = plan.trajectory.joint_trajectory.joint_names;
     std::vector<double> current;
     std::vector<double> start;
     std::vector<double> goal;
-    if (points.size() >= 2 && !names.empty() &&
-      points.front().positions.size() == names.size() &&
+
+    // THE ARM IS NOT READ WHEN MOVEIT ALREADY NAMED THE REASON, and that is
+    // correctness rather than economy: `getCurrentState` blocks for up to its
+    // timeout, and a TIMED_OUT execution that then waited again for a joint state
+    // would make a reported failure slower to report than an unreported one. The
+    // classifier answers those two from the code alone, so the numbers below are
+    // the ones it would ignore.
+    //
+    // ONE POINT IS ENOUGH. A trajectory whose start and goal coincide is
+    // degenerate, not unreadable, and requiring two points classified the most
+    // trivial motion there is as UNKNOWN -> MOTION_INTERRUPTED -> ESCALATE: the
+    // harshest answer in the policy, for the motion least able to have gone
+    // wrong. `front()` and `back()` are the same point when there is one, so the
+    // arm is judged against it as both start and goal, and the goal-first rule in
+    // `classify_motion_end` answers AT_GOAL when the arm is there.
+    if (!cite_skills::end_is_named_by_moveit(executed.val) && !points.empty() &&
+      !names.empty() && points.front().positions.size() == names.size() &&
       points.back().positions.size() == names.size())
     {
-      // Read BY NAME. The planning group's variable order and the trajectory's
-      // `joint_names` order are not required to agree, and comparing joint 1
-      // against joint 3 would produce a confidently wrong answer rather than no
-      // answer at all.
       const auto state = move_group_->getCurrentState(current_state_timeout_s_);
       if (state && state->getRobotModel()) {
-        for (std::size_t i = 0; i < names.size(); ++i) {
-          // `getJointPositions` rather than `getVariablePosition`, because a
-          // trajectory carries JOINT names and the state is indexed by VARIABLE
-          // names. They coincide for a single-degree-of-freedom joint and stop
-          // coinciding the moment a robot type brings a multi-DOF one, which is
-          // exactly the P9 case this classification is supposed to survive.
-          const auto * joint = state->getRobotModel()->getJointModel(names[i]);
-          if (joint == nullptr || joint->getVariableCount() != 1) {
-            current.clear();
-            break;
-          }
-          current.push_back(*state->getJointPositions(joint));
-          start.push_back(points.front().positions[i]);
-          goal.push_back(points.back().positions[i]);
-        }
+        current = cite_skills::positions_in_trajectory_order(
+          names, [&state](const std::string & joint_name, double & out) {
+            // `getJointPositions` rather than `getVariablePosition`, because a
+            // trajectory carries JOINT names and the state is indexed by
+            // VARIABLE names. They coincide for a single-degree-of-freedom joint
+            // and stop coinciding the moment a robot type brings a multi-DOF
+            // one, which is exactly the P9 case this classification is supposed
+            // to survive.
+            const auto * joint = state->getRobotModel()->getJointModel(joint_name);
+            if (joint == nullptr || joint->getVariableCount() != 1) {
+              return false;
+            }
+            out = *state->getJointPositions(joint);
+            return true;
+          });
+      }
+      if (!current.empty()) {
+        start.assign(points.front().positions.begin(), points.front().positions.end());
+        goal.assign(points.back().positions.begin(), points.back().positions.end());
       }
     }
 
-    const std::string moveit_code = " (MoveIt error code " + std::to_string(executed.val) + ")";
-    switch (cite_skills::classify_motion_end(current, start, goal, arm_goal_tolerance_rad_)) {
-      case cite_skills::MotionEnd::AT_START:
-        return make_result(
-          ResultCode::EXECUTION_FAILED,
-          "the commanded trajectory did not take effect: the arm is still within its goal "
-          "tolerance of the trajectory's first point" + moveit_code);
-
-      case cite_skills::MotionEnd::AT_GOAL:
-        return make_result(
-          ResultCode::EXECUTION_FAILED,
-          "the arm reached the trajectory's last point, but the controller did not report the "
-          "goal met" + moveit_code);
-
-      case cite_skills::MotionEnd::PART_WAY:
-        return make_result(
-          ResultCode::MOTION_INTERRUPTED,
-          "the arm stopped part-way along the commanded trajectory and is holding position; it "
-          "is neither at the start nor at the goal, and nothing on this stack reports why" +
-          moveit_code);
-
-      case cite_skills::MotionEnd::UNKNOWN:
-      default:
-        // Where the arm ended up could not be established. That is not evidence
-        // that it is somewhere harmless, so it does not get the reassuring
-        // answer: an arm whose position cannot be read is exactly the arm that
-        // nothing should replan around unattended.
-        return make_result(
-          ResultCode::MOTION_INTERRUPTED,
-          "the controller did not complete the planned trajectory, and where the arm ended up "
-          "could not be established from its joint state" + moveit_code);
-    }
+    const auto answer = cite_skills::classify_execution_failure(
+      executed.val, current, start, goal, arm_goal_tolerance_rad_);
+    return make_result(answer.code, answer.detail);
   }
 
   void apply_scaling(double velocity, double acceleration)

@@ -596,6 +596,188 @@ TEST_F(RunningLine, TheStationFedFromTheSourceIndexesNoBelt)
        "as an error";
 }
 
+TEST_F(RunningLine, AStationThatEscalatesCommandsNothingAndKeepsWhatItIsStandingIn)
+{
+  // ADR-0037 decision 1, and the half of it that only a running tree can show:
+  // "a station whose classification is ESCALATE or STOP_LINE performs no motion
+  // at all. It stops where it is."
+  //
+  // `MOTION_INTERRUPTED` is the code that makes this routine rather than rare —
+  // it says the arm stopped part-way and is holding a position nothing has
+  // established. `test_recovery_ordering.py` reads the leaf ORDER out of the
+  // shipped XML; this drives the shipped XML and asserts the two consequences of
+  // that order, both of which a state-only test would miss.
+  ASSERT_EQ(plan_.stations.front().id, "station_one");
+  const auto & station = plan_.stations.front();
+  arm_one_->fail_pick_with(ResultCode::MOTION_INTERRUPTED);
+
+  const auto blocked = [this]() {
+      const uint8_t state = (*line_.stations)["station_one"].state;
+      return state == cite_interfaces::msg::StationState::STATE_BLOCKED;
+    };
+  ASSERT_TRUE(run_until(blocked))
+    << "the station never blocked, so MOTION_INTERRUPTED did not reach the policy";
+
+  // NOTHING MOVED. `MoveToHome` is the only motion leaf on the retry path and
+  // the last leaf of the nominal one, so a station that escalated before
+  // reaching either has commanded no trajectory at all. Before the reorder this
+  // count was one: the arm planned and drove home while the failure was still
+  // unclassified.
+  EXPECT_EQ(arm_one_->move_to_goals(), 0)
+    << "an escalating station sent a MoveTo goal, so a failure nobody classified was "
+    "answered by moving the arm";
+
+  // AND IT KEEPS ITS CLAIMS. `ReleaseStationClaims` is the second leaf of a
+  // `<Sequence>` whose first leaf returns FAILURE on ESCALATE, so it does not
+  // run — and that is the decided behaviour, not an accident of the ordering.
+  // The claims are the line's record of what this station occupies, and the arm
+  // is still standing in the frames it reached into. Releasing them would tell
+  // the arbiter a frame is free while an arm holds a position nothing has
+  // established, which is the same class of statement about the world that
+  // ADR-0037 exists to stop being made.
+  //
+  // Read after the tree has settled and before `TearDown` halts it:
+  // `ClaimReach::onHalted` releases, and only a RUNNING node is ever halted.
+  EXPECT_TRUE(line_.arbiter->holds(station.pick_frame, station.id))
+    << "an escalating station gave up the frame its arm is standing in";
+  EXPECT_TRUE(line_.arbiter->holds(station.place_frame, station.id))
+    << "an escalating station gave up the frame its arm is standing in";
+}
+
+TEST_F(RunningLine, AStationThatIsAllowedToRetryGivesItsFramesBackFirst)
+{
+  // The other answer, and the reason `ReleaseStationClaims` is on the retry path
+  // rather than deleted. `EXECUTION_FAILED` says the arm is at one of the
+  // trajectory's endpoints — a place the next attempt can be planned from — so
+  // the policy answers RETRY_SAME, the branch continues past the policy, and the
+  // station lets go of everything it took before starting again.
+  //
+  // `retry_budget` is 1 in this fixture, so the first failure retries and the
+  // second escalates. What is asserted is the FIRST answer: the frames come back
+  // to the arbiter, which is what stops a retrying station starving the line.
+  arm_one_->fail_pick_with(ResultCode::EXECUTION_FAILED);
+  const auto & station = plan_.stations.front();
+
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].consecutive_failures >= 1;
+      }))
+    << "the station never failed at all";
+
+  ASSERT_TRUE(
+    run_until(
+      [this, &station] {
+        return !line_.arbiter->holds(station.pick_frame, station.id);
+      }))
+    << "a station the policy allowed to retry never released the frames it reached into, so "
+    "the leaf that releases them is unreachable on both answers rather than on one";
+}
+
+/// The recovery leaf on its own, on a blackboard nothing else is writing.
+///
+/// `RunningLine` above proves the branch is wired and reached. This proves the
+/// one property of it that no leaf ORDER can establish, because it is about what
+/// survives BETWEEN recoveries rather than within one: `RecoverFromFailure`
+/// consumes `kLastResultCode` as it reads it, so the code it acts on is the
+/// failure that led to THIS recovery and never a previous one.
+///
+/// It needs its own fixture because the case only exists across two recoveries
+/// where the second recorded nothing — a station whose second failure is a
+/// `LineNode` refusal rather than a skill result, which is most of the leaves in
+/// the nominal branch. Driving that through the whole line would mean arranging
+/// two different failures two cycles apart; the leaf answers the question
+/// directly.
+class RecoveryLeaf : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    node_ = std::make_shared<rclcpp::Node>("recovery_leaf_test");
+    line_.node = node_;
+    line_.registry = std::make_shared<WorkpieceRegistry>();
+    line_.ledger = std::make_shared<HandoffLedger>();
+    line_.arbiter = std::make_shared<ResourceArbiter>();
+    line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    // Deliberately generous, so that the budget never decides an answer here.
+    // What is under test is WHICH CODE the policy is handed, not what a spent
+    // budget does with one — `RetriesAreBoundedAndThenEscalate` covers that.
+    line_.retry_budget = 10;
+    (*line_.stations)["station_one"] = StationRuntime{};
+
+    config_.blackboard = BT::Blackboard::create();
+    config_.input_ports["station"] = "station_one";
+  }
+
+  /// Tick the real leaf. A fresh node each time, sharing one blackboard — which
+  /// is what the enclosing `<Repeat>` does to the recovery branch across cycles.
+  BT::NodeStatus recover()
+  {
+    cite_orchestration::RecoverFromFailure leaf("RecoverFromFailure", config_, line_);
+    return leaf.executeTick();
+  }
+
+  void record(uint8_t code)
+  {
+    config_.blackboard->set(cite_orchestration::kLastResultCode, static_cast<int>(code));
+  }
+
+  StationRuntime & station() {return (*line_.stations)["station_one"];}
+
+  rclcpp::Node::SharedPtr node_;
+  LineContext line_;
+  BT::NodeConfig config_;
+};
+
+TEST_F(RecoveryLeaf, AConsumedFailureDoesNotDecideTheNextRecovery)
+{
+  // THE HALF THAT SURVIVED ITS OWN MUTATION UNTIL THIS TEST EXISTED. Suppressing
+  // the success-write in `SkillNode::record` is caught by three tests in
+  // `test_skill_goals.cpp`. Consuming the key on read was caught by none, while
+  // the comment beside it claimed the pair is correct under any leaf ordering —
+  // a claim the suite could not falsify.
+  //
+  // This is the case that needs it. A recovery branch is also reached by leaves
+  // that record NOTHING: `TakeCustody` refusing custody, `OfferHandoff` failing,
+  // `ClaimReach` finding an undeclared frame. None of them is a `SkillNode` and
+  // none writes the key. So without the consume, the second recovery reads the
+  // FIRST cycle's code — a stale failure deciding a live station's fate, and
+  // deciding it as ESCALATE.
+  record(ResultCode::UNREACHABLE);
+  ASSERT_EQ(recover(), BT::NodeStatus::FAILURE);
+  ASSERT_EQ(station().state, cite_interfaces::msg::StationState::STATE_BLOCKED);
+
+  // The next recovery, reached by a leaf that recorded nothing. The station is
+  // put back to work as a retry or an operator reset would leave it.
+  station().state = cite_interfaces::msg::StationState::STATE_WORKING;
+  EXPECT_EQ(recover(), BT::NodeStatus::SUCCESS)
+    << "the second recovery inherited the first one's code, so a failure nobody "
+    "classified was answered with the previous failure's policy row";
+  EXPECT_EQ(station().state, cite_interfaces::msg::StationState::STATE_WAITING);
+  EXPECT_EQ(
+    station().blocked_reason.rfind(
+      "result code " + std::to_string(static_cast<int>(ResultCode::PRECONDITION_FAILED)), 0),
+    0u)
+    << "the recorded reason names a code this recovery was never told about: "
+    << station().blocked_reason;
+}
+
+TEST_F(RecoveryLeaf, AFreshFailureAfterAConsumedOneIsStillTheOneActedOn)
+{
+  // The other direction, and the reason consuming cannot simply be "erase the
+  // key and stop reading it". A code written after a consume belongs to this
+  // cycle and must reach the policy intact — including the two codes that stop
+  // the line, which are exactly the ones a swallowed failure would hide.
+  record(ResultCode::PRECONDITION_FAILED);
+  ASSERT_EQ(recover(), BT::NodeStatus::SUCCESS);
+
+  station().state = cite_interfaces::msg::StationState::STATE_WORKING;
+  record(ResultCode::SAFETY_BLOCKED);
+  EXPECT_EQ(recover(), BT::NodeStatus::FAILURE);
+  EXPECT_EQ(station().state, cite_interfaces::msg::StationState::STATE_FAULTED)
+    << "a refusal the policy must never treat as a transient did not reach it";
+}
+
 int main(int argc, char ** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

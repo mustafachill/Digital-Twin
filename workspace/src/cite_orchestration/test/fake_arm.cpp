@@ -15,6 +15,7 @@
 #include "fake_arm.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -61,7 +62,7 @@ public:
       },
       [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> handle) {
         auto result = std::make_shared<typename ActionT::Result>();
-        result->result.code = ResultCode::SUCCESS;
+        result->result.code = code_.load();
         if (fill_) {
           fill_(*result);
         }
@@ -71,10 +72,15 @@ public:
 
   int accepted() const {return accepted_;}
 
+  /// What this server answers from now on. Atomic because the executor thread
+  /// reads it while the test thread sets it.
+  void set_code(uint8_t code) {code_.store(code);}
+
 private:
   typename rclcpp_action::Server<ActionT>::SharedPtr server_;
   std::function<void(typename ActionT::Result &)> fill_;
   std::atomic<int> accepted_{0};
+  std::atomic<uint8_t> code_{ResultCode::SUCCESS};
 };
 
 }  // namespace
@@ -143,5 +149,7 @@ int FakeArm::move_to_goals() const {return servers_->move_to.accepted();}
 int FakeArm::pick_goals() const {return servers_->pick.accepted();}
 int FakeArm::place_goals() const {return servers_->place.accepted();}
 int FakeArm::detect_goals() const {return servers_->detect.accepted();}
+
+void FakeArm::fail_pick_with(uint8_t code) {servers_->pick.set_code(code);}
 
 }  // namespace cite_orchestration_test

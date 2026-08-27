@@ -58,7 +58,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
+
+#include <cite_interfaces/msg/result_code.hpp>
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
 
 namespace cite_skills
 {
@@ -140,6 +144,164 @@ inline MotionEnd classify_motion_end(
     return MotionEnd::AT_START;
   }
   return MotionEnd::PART_WAY;
+}
+
+/// The joint positions a trajectory names, in the trajectory's own order.
+///
+/// READ BY NAME, and that is the whole reason this exists rather than a copy of
+/// a positions array. A planning group's variable order and a trajectory's
+/// `joint_names` order are not required to agree, and comparing joint 1 against
+/// joint 3 produces a confidently wrong answer rather than no answer at all —
+/// which is the worse of the two outcomes for a classification that decides
+/// whether an arm is replanned around unattended.
+///
+/// `lookup(name, out)` answers for one joint name and returns false when it
+/// cannot. A single unanswerable name empties the whole result: a partial vector
+/// would be compared element-wise against a full one, and `classify_motion_end`
+/// would then be judging a different arm from the one the trajectory describes.
+/// Templated on the callable so this header stays free of the robot model the
+/// caller reads from.
+template<typename Lookup>
+std::vector<double> positions_in_trajectory_order(
+  const std::vector<std::string> & names, const Lookup & lookup)
+{
+  std::vector<double> positions;
+  positions.reserve(names.size());
+  for (const auto & name : names) {
+    double value = 0.0;
+    if (!lookup(name, value)) {
+      return {};
+    }
+    positions.push_back(value);
+  }
+  return positions;
+}
+
+/// A `ResultCode` and the prose that goes with it.
+///
+/// Returned as a pair rather than assembled by the caller so that the decision
+/// and the sentence describing it cannot drift: a caller that switched a second
+/// time to pick the wording would be a second copy of this rule.
+struct ExecutionFailure
+{
+  uint8_t code{cite_interfaces::msg::ResultCode::MOTION_INTERRUPTED};
+  std::string detail;
+};
+
+/// Whether MoveIt itself named why the motion ended.
+///
+/// Exactly the two values ADR-0037 decision 4 establishes survive MoveIt's
+/// funnels intact. `classify_execution_failure` answers from the code alone when
+/// this is true, so a caller can skip reading the arm — and skipping it is not an
+/// optimisation: `getCurrentState` blocks for up to its timeout, and charging a
+/// timeout that has already been reported against a second wait would make a
+/// reported failure slower than an unreported one.
+///
+/// The two values are named HERE and nowhere else, so the predicate and the
+/// classification cannot disagree about which codes they are (P1).
+inline bool end_is_named_by_moveit(int moveit_error_code)
+{
+  return moveit_error_code == moveit_msgs::msg::MoveItErrorCodes::TIMED_OUT ||
+         moveit_error_code == moveit_msgs::msg::MoveItErrorCodes::PREEMPTED;
+}
+
+/// Turn a failed `execute()` into a code L4 can act on (ADR-0037).
+///
+/// TWO AXES, AND THE NAMED ONE WINS. They are genuinely orthogonal, and ADR-0037
+/// requires the implementation to state which takes precedence rather than
+/// leaving it to whichever branch happened to be written first:
+///
+///   * MoveIt's error code says WHY the motion ended, for the two values that
+///     survive its funnels intact — TIMED_OUT and PREEMPTED.
+///   * The world-state test says WHETHER THE ARM MOVED, and is the only axis
+///     available for everything else.
+///
+/// The named code wins, and the reason is definitional rather than a tie-break:
+/// `MOTION_INTERRUPTED` is defined as "why it stopped is NOT ESTABLISHED". Where
+/// MoveIt names the reason it HAS been established, so that code's own
+/// definition excludes the case. Classifying a timeout as an interruption would
+/// be a report that we cannot tell why the arm stopped, issued at the one moment
+/// we can.
+///
+/// A TIMED_OUT or PREEMPTED arm may well be standing mid-path, and that is
+/// accepted rather than overlooked: `TIMEOUT` and `CANCELLED` carry their own
+/// policy rows in `recovery_policy.hpp`, decided in the knowledge that the stop
+/// was MoveIt's own doing rather than the world's.
+///
+/// ADR-0037 CORRECTS THE SKILL SERVER'S PREVIOUS NOTE, which said that "reading
+/// a distinction out of `executed.val` would be inventing one". That holds for
+/// ABORTED, which arrives as CONTROL_FAILED alongside everything else. It is
+/// false for these two: they are distinct values in that same field, set at
+/// distinct sites, and passed through the capability rather than collapsed by
+/// it.
+///
+/// WHY THIS IS A FREE FUNCTION AND NOT A METHOD ON THE SERVER. It was a private
+/// method, and nothing tested it: the decision that chooses between retrying a
+/// station unattended and stopping it for an operator was reachable only by
+/// standing up `move_group` and provoking a real abort, which no fixture in this
+/// repository can do on demand. As a free function over the numbers it actually
+/// uses, every row of it is a unit test. What that still does NOT prove is that a
+/// real abort reaches it — see `test_motion_end.cpp` and ADR-0037's correction to
+/// decision 8.
+inline ExecutionFailure classify_execution_failure(
+  int moveit_error_code, const std::vector<double> & current,
+  const std::vector<double> & start, const std::vector<double> & goal, double tolerance_rad)
+{
+  using cite_interfaces::msg::ResultCode;
+  using moveit_msgs::msg::MoveItErrorCodes;
+
+  if (moveit_error_code == MoveItErrorCodes::TIMED_OUT) {
+    // `TrajectoryExecutionManager` stopped the controller because it overran the
+    // trajectory's own expected duration. MoveIt knows this because MoveIt wrote
+    // the duration.
+    return {
+      ResultCode::TIMEOUT,
+      "MoveIt stopped the trajectory because the controller overran its expected duration"};
+  }
+  if (moveit_error_code == MoveItErrorCodes::PREEMPTED) {
+    // `TrajectoryExecutionManager::stopExecution()` was called. The decision to
+    // stop was taken somewhere that knew why, and re-deciding it here would
+    // override it — the same reasoning `recovery_policy.hpp` gives CANCELLED.
+    return {
+      ResultCode::CANCELLED, "trajectory execution was preempted before it finished"};
+  }
+
+  // Everything else arrives as CONTROL_FAILED carrying no usable reason. Ask the
+  // arm where it is instead — see this header's opening note for why that is the
+  // better question rather than merely the available one.
+  const std::string moveit_code =
+    " (MoveIt error code " + std::to_string(moveit_error_code) + ")";
+  switch (classify_motion_end(current, start, goal, tolerance_rad)) {
+    case MotionEnd::AT_START:
+      return {
+        ResultCode::EXECUTION_FAILED,
+        "the commanded trajectory did not take effect: the arm is still within its goal "
+        "tolerance of the trajectory's first point" + moveit_code};
+
+    case MotionEnd::AT_GOAL:
+      return {
+        ResultCode::EXECUTION_FAILED,
+        "the arm reached the trajectory's last point, but the controller did not report the "
+        "goal met" + moveit_code};
+
+    case MotionEnd::PART_WAY:
+      return {
+        ResultCode::MOTION_INTERRUPTED,
+        "the arm stopped part-way along the commanded trajectory and is holding position; it "
+        "is neither at the start nor at the goal, and nothing on this stack reports why" +
+        moveit_code};
+
+    case MotionEnd::UNKNOWN:
+    default:
+      // Where the arm ended up could not be established. That is not evidence
+      // that it is somewhere harmless, so it does not get the reassuring answer:
+      // an arm whose position cannot be read is exactly the arm that nothing
+      // should replan around unattended.
+      return {
+        ResultCode::MOTION_INTERRUPTED,
+        "the controller did not complete the planned trajectory, and where the arm ended up "
+        "could not be established from its joint state" + moveit_code};
+  }
 }
 
 }  // namespace cite_skills

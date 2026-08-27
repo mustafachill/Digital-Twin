@@ -35,8 +35,8 @@ anything is commanded?
 """
 
 import os
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+import xml.etree.ElementTree as ElementTree
 
 import pytest
 
@@ -44,9 +44,10 @@ import pytest
 #: something and is not in this set would slip past the ordering rule below, so
 #: the set is stated once and both trees are checked against it.
 #:
-#: `ReleaseStationClaims` and `SetStationState` are deliberately absent: releasing
-#: a claim and recording a state command nothing, which is why the first is
-#: allowed to run on the escalate path.
+#: `ReleaseStationClaims` and `SetStationState` are deliberately absent:
+#: releasing a claim and recording a state command nothing at all. Whether
+#: releasing a claim is the RIGHT thing to do after an escalation is a separate
+#: question, decided in `line_station.xml` and asserted below.
 MOTION_LEAVES = frozenset(
     {
         "MoveToHome",
@@ -59,6 +60,18 @@ MOTION_LEAVES = frozenset(
 )
 
 POLICY_LEAF = "RecoverFromFailure"
+
+#: BT.CPP composites that stop at their first failing child. The recovery branch
+#: must be one of them: `RecoverFromFailure` answers ESCALATE and STOP_LINE with
+#: FAILURE, and that FAILURE is what makes every later leaf part of the retry.
+HALTS_ON_FAILURE = frozenset({"Sequence", "SequenceWithMemory", "ReactiveSequence"})
+
+#: Decorators that turn a child's FAILURE into something else. One of these
+#: wrapped around the policy leaf would hide a refusal from the branch that has
+#: to obey it.
+KEEPS_GOING_AFTER_FAILURE = frozenset(
+    {"ForceSuccess", "Inverter", "RetryUntilSuccessful", "KeepRunningUntilFailure"}
+)
 
 
 def _tree(variable: str) -> ElementTree.Element:
@@ -111,21 +124,72 @@ def test_no_station_motion_is_commanded_before_the_policy_has_answered() -> None
     )
 
 
+def test_nothing_after_the_policy_runs_when_the_policy_refuses() -> None:
+    """The recovery branch must abandon itself on ESCALATE and on STOP_LINE.
+
+    `RecoverFromFailure` returns FAILURE on both, so every leaf placed after it
+    is on the RETRY PATH and reachable on no other answer. That is the decided
+    behaviour, and this is the property that delivers it: a composite that went
+    on ticking after a FAILURE — a `Fallback`, a `ForceSuccess` wrapper, a
+    `Parallel` — would give a station the policy refused a way to keep acting.
+
+    Stated as a rule about answers rather than as `tag == "Sequence"`, because
+    what matters is what a refused station does, not which composite happens to
+    express it.
+    """
+    branch = _recover_branch(_tree("CITE_STATION_TREE_XML"))
+    assert branch.tag in HALTS_ON_FAILURE, (
+        f"a {branch.tag} does not stop at its first failing child, so a station the "
+        "policy refused would go on running the leaves after it"
+    )
+    for child in branch:
+        assert child.tag not in KEEPS_GOING_AFTER_FAILURE, (
+            f"{child.tag} would swallow the policy's refusal and let the branch continue"
+        )
+
+
 def test_clearing_the_arm_is_reachable_only_on_the_retry_path() -> None:
     # The justification for clearing the arm — a station that failed mid-cycle
     # may have left it somewhere the next attempt would collide with — argues for
     # doing it INSIDE the retry. If the answer is escalate there is no next
-    # attempt to protect, and `RecoverFromFailure` returns FAILURE, so a
-    # `<Sequence>` never reaches what follows it.
+    # attempt to protect.
     branch = _recover_branch(_tree("CITE_STATION_TREE_XML"))
-    assert branch.tag == "Sequence", (
-        "the recovery branch must be a Sequence, or a policy that answered ESCALATE "
-        f"would not stop the leaves after it from running; it is a {branch.tag}"
-    )
-
     leaves = _leaf_names(branch)
     assert "MoveToHome" in leaves, "the retry path no longer clears the arm at all"
     assert leaves.index("MoveToHome") > leaves.index(POLICY_LEAF)
+
+
+def test_the_claims_are_given_up_on_the_retry_path_and_on_no_other_answer() -> None:
+    """The decision this file's comment used to state backwards.
+
+    An earlier comment in `line_station.xml` said `ReleaseStationClaims` "runs on
+    BOTH answers". It cannot, and the tree does not: it sits after the policy in
+    a composite that stops at the first failure, so an escalating station keeps
+    everything it holds.
+
+    That is the decided behaviour, not an accident of the ordering. A station
+    that escalates performs no motion, so its arm is still standing in the frames
+    it reached into, and telling the arbiter they are free would be a claim about
+    the world that the failure has just contradicted. What the station does with
+    them once an operator has reset it is deliberately open (ADR-0037 decision
+    5); what it must not do is give them up while nobody has looked at it.
+
+    The consequence is asserted where it can be observed —
+    `test_line_nodes.cpp`'s `AStationThatEscalatesCommandsNothingAndKeepsWhatItIsStandingIn`
+    drives the shipped tree and reads the arbiter. This asserts the structure
+    that produces it, so that a leaf moved above the policy fails here rather
+    than only there.
+    """
+    branch = _recover_branch(_tree("CITE_STATION_TREE_XML"))
+    leaves = _leaf_names(branch)
+    assert "ReleaseStationClaims" in leaves, (
+        "the retry path no longer gives the frames back, so a retrying station starves "
+        "the rest of the line"
+    )
+    assert leaves.index("ReleaseStationClaims") > leaves.index(POLICY_LEAF), (
+        "the claims are released before the policy has answered, so an escalating "
+        "station gives up the frames its arm is still standing in"
+    )
 
 
 def test_the_single_station_cycle_commands_nothing_when_it_gives_up() -> None:

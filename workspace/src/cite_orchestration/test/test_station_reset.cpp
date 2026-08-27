@@ -210,7 +210,11 @@ TEST(StationResetTest, TheServiceNameIsTheOneTheInterfaceDeclares)
   // P1 and P3: the name is written once, on the `.srv`, and is discoverable with
   // `ros2 interface show`. A literal in the orchestrator would be a value in two
   // places, and a client would have to repeat it a third time.
-  EXPECT_STREQ(ResetStation::Request::SERVICE, "/cite/line/reset_station");
+  //
+  // EXPECT_EQ and not EXPECT_STREQ: rosidl renders a `.srv` string constant as a
+  // `std::basic_string`, not a `const char *`, so `STREQ` does not compile
+  // against it at all.
+  EXPECT_EQ(ResetStation::Request::SERVICE, "/cite/line/reset_station");
 }
 
 /// The real service object, driven through its real handler.

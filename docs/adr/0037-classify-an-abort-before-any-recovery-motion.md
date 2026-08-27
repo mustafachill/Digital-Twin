@@ -1,8 +1,14 @@
 # ADR-0037: Classify an execution abort before any recovery motion is dispatched
 
-- **Status:** Proposed. **Nothing in this record is implemented.** It is written before the
-  change, which is the point ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below is a
-  commitment, not a description.
+- **Status:** Proposed. It was written before the change, which is the point
+  ([CLAUDE.md §12](../../CLAUDE.md)), and every "will" below was a commitment rather than a
+  description when it was written.
+  **That is no longer true of the whole record, and saying so is not the same as accepting
+  it.** Decisions 1-5 are implemented on branch `feat/classify-abort-before-recovery`;
+  decision 6 is deliberately undecided; decision 7 is an ordering that has been followed;
+  and decision 8 was **wrong about the fixture** and is corrected below. The status stays
+  `Proposed` until the branch merges — read "Corrections to this record" before treating any
+  "will" here as a description of what was built.
 - **Date:** 2026-08-27
 - **Deciders:** Docs-writer agent, from findings raised independently by two agents while
   auditing the L4 recovery path after ADR-0036
@@ -697,6 +703,116 @@ rather than from what **this controller** emits. The action's `Result` declares
 `INVALID_JOINTS` and `OLD_HEADER_TIMESTAMP`; `joint_trajectory_controller.cpp` never sets
 them. Reading the interface and not the implementation is the same shape as ADR-0036's own
 correction, which read the code that *set* a tolerance and not the code that *read* it.
+
+## Corrections to this record — 2026-08-27, from implementing it
+
+Three things this record says are wrong or unstated, found while implementing it and while
+reviewing the implementation. They are corrected here rather than in the code, because in
+each case the code is right and this record is the copy that is out of date.
+
+### 1. `EXECUTION_FAILED` covers BOTH endpoints, not only the start
+
+Decision 2 narrows `EXECUTION_FAILED` to *"the command did not take effect and the arm did
+not move"*, while decision 3 lists three outcomes and leaves the middle one — *"within goal
+tolerance of `points.back()` → it arrived and did not settle → the goal-side case"* —
+without a code. The two halves of the same decision do not agree, and the implementation had
+to pick one. **It put both endpoints under `EXECUTION_FAILED`, and that is now the
+decision.**
+
+`EXECUTION_FAILED` reads:
+
+> the commanded motion did not complete, and the arm is at one of the trajectory's
+> endpoints: it either never left the start or it reached the goal. It is **not** part-way
+> and **not** holding an unexplained position.
+
+The reason the two share a code is the reason the policy row exists at all. `RETRY_SAME` is
+safe when the next plan can be built from where the arm actually is, and at either endpoint
+it can: the arm is at a point the trajectory itself names, so the world has not contradicted
+the plan. What `MOTION_INTERRUPTED` marks is precisely the case where it has. The two
+endpoint cases are told apart in `detail`, which is prose for a person and which nothing
+parses (`ResultCode.msg`).
+
+**A third constant was considered and refused**, for decision 2's own reason: a code has to
+be a fact about the world that any robot type can express, and "arrived but the controller
+did not report the goal met" is a statement about a controller's settling behaviour. It also
+has no distinct policy row to justify it — it would answer `RETRY_SAME`, which is what it
+already gets.
+
+### 2. Decision 8 names a fixture that cannot carry the assertion
+
+Decision 8 says of `cite_bringup/test/test_trajectory_constraints_launch.py`: *"That is the
+fixture the L4 assertion is built on."* **It is not, and it cannot be.** Two independent
+reasons, both read out of that file:
+
+- **It never reaches L3.** The rig launches `robot_state_publisher` and `ros2_control_node`
+  and sends goals straight to
+  `/cite/<zone>/<arm>/<arm>_joint_trajectory_controller/follow_joint_trajectory`. There is
+  no `move_group` and no skill server in it, so nothing it produces passes through
+  `classify_execution_failure` at all.
+- **The abort it produces is the one answer that is not `MOTION_INTERRUPTED`.** Mistracking
+  is injected with `mock_components/GenericSystem`'s `disable_commands`, which stops the
+  command propagating so the state interface stays at its `initial_value` — the trajectory's
+  first point. An arm frozen at `points.front()` classifies `AT_START`, which is
+  `EXECUTION_FAILED`. The fixture that was named as evidence for the interruption case
+  produces the endpoint case by construction.
+
+**What the implementation evidences instead**, stated as narrowly as it deserves:
+
+- The decision itself is a free function, `cite_skills::classify_execution_failure`, and
+  every row of it is unit-tested in `cite_skills/test/test_motion_end.cpp` — both MoveIt
+  codes, the precedence between the two axes, both endpoints, the interrupted case, the
+  unreadable case, and that the answer turns on the tolerance handed in rather than on a
+  constant. It was a private method of the server before this, reachable by no test.
+- Reading the joint state **by the names the trajectory carries** is a second free function,
+  `positions_in_trajectory_order`, tested for order and for the one-unreadable-joint case.
+- That the tolerance is L0's and not a second copy is guarded at the layer the delivery
+  happens at, by three tests in `cite_bringup/test/test_plan.py` modelled on the
+  `GRIPPER_KEYS` ones.
+
+**What remains unevidenced, and is a real gap rather than a wording problem: no fixture in
+this repository drives a genuine abort into L3 on demand.** Doing so needs `move_group`, a
+skill server, and mock hardware that can be made to hold a joint *part way* along a
+trajectory rather than at its start — `disable_commands` cannot, because it never lets the
+arm leave. That fixture does not exist and building it is not part of this change. Until it
+does, the claim "a real abort reaches the classifier" is untested, and no document may say
+otherwise.
+
+### 3. What an escalating station does with its claims was changed and not declared
+
+Decision 1 reorders the recovery branch and says a station whose classification is
+`ESCALATE` or `STOP_LINE` *"performs no motion at all"*. It says nothing about the station's
+resource claims, and the reorder changes them: `ReleaseStationClaims` used to run ahead of
+the policy, so claims were released on **every** recovery; after the reorder it sits behind a
+leaf that returns `FAILURE` on both refusing answers, so they are released on **neither**.
+
+**That behaviour is now decided, and it is the one the implementation has: an escalating
+station keeps its claims.** It performs no motion, so its arm is still standing in the
+frames it reached into and it still holds the outbound slot for a work-piece
+`RecoverFromFailure` deliberately leaves with it. A claim is the line's record of what a
+station occupies; releasing one would tell the arbiter a frame is free while an arm holds a
+position nothing has established — which is the same kind of statement about the world that
+this record exists to stop being made, about the same failure. Starving a neighbour is the
+correct consequence and not a cost to work around, because an escalating station stops the
+line: its `FAILURE` fails the root `Parallel` today, and `L4-orchestration.md`'s designed
+`OnFault → StopAll → AwaitReset` stops it deliberately.
+
+**This is not a protective measure.** `resource_arbiter.hpp` says of itself that it prevents
+deadlock and thrash and that relying on it for anything else is a defect. What is kept
+honest here is the allocation record, which is a coordination property.
+
+It follows that decision 5's reset does nothing about them, which is consistent with *reset
+is not start*: a station returns to `WAITING` still holding what it held, and the next
+cycle's `ClaimReach` asks again and is answered `GRANTED` because it is already the holder.
+**Whether an operator should be able to release a blocked station's claims separately is
+left open**, with the deliberate "clear the arm" action decision 5 also leaves out of scope.
+Both are the same shape of question — a second, explicit operator action taken with a person
+present — and neither should be invented as a side effect of a reset.
+
+The comment that stated the opposite (*"`ReleaseStationClaims` runs on BOTH answers"*) was
+false the moment it was written, because a `Sequence` stops at its first failing child. It is
+corrected in `line_station.xml`, and the behaviour is now asserted by
+`RunningLine.AStationThatEscalatesCommandsNothingAndKeepsWhatItIsStandingIn` against the
+shipped tree rather than inferred from the tree's shape.
 
 ## How the claims here were verified
 

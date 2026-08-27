@@ -475,7 +475,7 @@ def _skills(entry: object | None, where: str) -> SkillActions | None:
 def _named_numbers(
     entry: object, keys: tuple[str, ...], where: str
 ) -> Mapping[str, float]:
-    """The values the plan carries for `keys`, under L3's own parameter names.
+    """Read the values the plan carries for `keys`, under L3's own parameter names.
 
     A key the plan omits is omitted here rather than defaulted to zero. That is
     the whole point: the skill server declares its own defaults and says why, and
