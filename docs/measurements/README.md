@@ -59,6 +59,14 @@ carry that, and neither disturbs the verdicts.
   the data is a threshold chosen by the data. Where an interpretation genuinely had to
   change, it is recorded as a numbered deviation in the write-up, applied to data already
   collected — never by re-running until the definition suited.
+- **`harness/` is frozen for the same reason, and `raw/` with it.** It is the code that
+  produced the data, so editing it makes it no longer that. When the tree moves under a
+  published harness — a function it names is renamed or deleted, a topic it used is now
+  owned elsewhere — **annotate the campaign's write-up with a dated note and leave the
+  harness alone.** A stale reference inside a harness is a fact about when the measurement
+  was taken; a corrected one is a claim about code that never ran. The worked example is the
+  2026-08-27 note in
+  [`2026-08-26-conveyor-yaw-transfer/ANALYSIS.md`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md).
 - **A campaign measures the simulator unless it says otherwise.** Nothing here evidences
   behaviour on the physical arm; the layout is `PROVISIONAL` and the physical scan is
   Phase 3 (charter §8).

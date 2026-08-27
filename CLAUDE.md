@@ -85,8 +85,19 @@ repository is partway there. Check before assuming.
   predict it**, and the fourth is further evidence rather than a new symptom. The one
   candidate that has ever looked like a predictor is **run duration** — in an earlier set of
   five the failing run was the slowest — and that is a suggestion from a handful of runs, not
-  a result. The cause is not established, **no exemption has been added or widened**, and
-  `./scripts/scenario pick_and_place` runs in CI as `continue-on-error` at this commit.
+  a result. **The cause is still not established and no exemption has been added or
+  widened** — the one that exists is still exactly one process and one signal
+  (`move_group`/-11) and is to be deleted rather than widened. Every teardown check still
+  runs and still reports every bad exit.
+  **What did change, and this file said otherwise until 2026-08-27:**
+  `./scripts/scenario pick_and_place` is a **blocking** CI step, not `continue-on-error`. It
+  was promoted at `c1e9e03` against its own recorded conditions. CI passes
+  `--teardown-advisory` to all three scenarios, which splits the two questions a scenario
+  answers in one exit code: **the cycle is gated, the post-shutdown teardown is reported and
+  not gated.** The flag is off by default, so an interactive run still answers the strict
+  question. Read `scripts/scenario`'s header and the phase-split block in `scripts/_lib.sh`
+  before treating a teardown failure as a gate — and do not answer one by widening a
+  tolerance.
 - **The line completes, and this is the newest and least-settled claim in this file.**
   `./scripts/scenario continuous_line` drives the three-arm sensor-driven line: the aid
   topics are bridged, `Detect` turns a beam level into a typed `DetectionEvent`, L4 stops
@@ -99,6 +110,26 @@ repository is partway there. Check before assuming.
   campaign** — no thresholds were registered in advance, and an independent verification was
   in flight when this was written whose count is **not recorded here**. `continuous_line`
   runs in CI as `continue-on-error`.
+  **Then a harness turned out to have been doing L4's job, and this is the sharpest example
+  in this file of why a green run is not evidence.** ADR-0032 gave the belt setpoint an owner
+  in L4 on 2026-08-26, and that owner delivered nothing. `ConveyorIndex` creates its
+  publishers inside the topology callback and `run_all()` publishes from the same callback —
+  **reliable QoS is a promise to *matched* subscribers, and at that instant none are
+  matched**, however long the bridge has been up. The belts were being started by the
+  scenario's own ten repeated sends, which the record already described as a closed gap.
+  Reported by the fixing agent on 2026-08-27, measured once on one machine: with the
+  scenario's publisher removed, a subscriber up for 100 s received nothing for the next 300.
+  **Every `continuous_line` result above was produced with a test harness compensating for a
+  defect in the thing under test.** Fixed event-driven — a subscriber matching is treated as
+  an event and the belt's current setpoint is sent then, with `run_all()`'s immediate publish
+  kept so an RMW without the matched event degrades to the old behaviour rather than worse.
+  Two gtests fail without it and pass with it. The pass counts above are **not** re-measured
+  against the fix and are left as they were reported.
+  **After the fix, and this is the least-settled number here:** `continuous_line` passed
+  **3 of 3** on both cycle and teardown, against a 3-of-4 and 2-of-4 baseline. That is the
+  fixing agent's three runs on one machine, and the agent said in as many words that three
+  runs on one machine is not a campaign. An independent three-run verification was in flight
+  as this was written and **its result is not known**. Do not promote the gate on this.
   **It is not finished.** One run had a piece stall at 8 of 10 after `arm_3` closed on air
   at `conveyor_2`'s outfeed, following the loosest grasp recorded anywhere — the full cube
   width, no compression. The stated hypothesis, and it is a hypothesis: a leading-edge test
@@ -140,6 +171,12 @@ repository is partway there. Check before assuming.
     make commanded and measured speed disagree visibly, and **nothing publishes it**; the
     bridge carries a bare `std_msgs/Float64` each way. A belt that fails to stop, or fails
     to restart, is a spilling or a stalled line that nothing notices.
+    **This is the gap that hid the delivery defect above for ten commits**, and it is the
+    reason that bullet is not merely a cost. There is no confirmation path, so "commanded"
+    and "running" were indistinguishable from inside the system, and the only thing that
+    could tell them apart was a scenario that was itself supplying the command. A publisher
+    of `ConveyorState` — in the simulation plugin and on the hardware drive, which is L1/L2
+    work — is what closes it.
   - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` reaches `gz sim --seed`, which
     seeds sensor noise and nothing else — not the physics solver, not the planner. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
@@ -164,6 +201,49 @@ repository is partway there. Check before assuming.
 - **Measured evidence lives in [`docs/measurements/`](docs/measurements/README.md)**, one
   directory per campaign, each with its thresholds written down before the first trial.
   This is what P8 looks like in practice. Cite a campaign; do not copy its numbers around.
+- **Where Phase 1's exit criterion actually stands.** The charter states it in one sentence
+  (§8, Phase 1); this is the clause-by-clause status, and one clause is blocked for a reason
+  that is not technical.
+  - **"On a clean machine, `git clone` followed by a single bootstrap command produces a
+    running three-robot line"** — the clone-to-green half is **walked and passing**. Reported
+    by the project owner on 2026-08-27, from a fresh clone of the remote into an empty
+    directory rather than a worktree, **with zero deviations**: `./scripts/bootstrap`
+    applied both vendor patches, `./scripts/doctor` reported **23 passed, 0 failed** with
+    both patches verified present, `./scripts/build` finished **19 packages**,
+    `./scripts/test` was clean, and `./scripts/enter dev ./scripts/lint` was clean across
+    **all eight linter labels**. Both previously-recorded clean-clone defects — the empty
+    include directory that failed a fresh build, and the patch step that reported success and
+    total failure identically inside a worktree — are gone. **What that walk did *not*
+    include is launching the cell from the clean clone**: it ran to `lint`, and the running
+    line is the next clause's evidence, measured elsewhere. *One measurement on one machine,
+    not a campaign.*
+  - **"…that executes a continuous, sensor-driven pick-and-transfer cycle"** — measured, and
+    it is the least-settled claim in this file. See the `continuous_line` bullet above,
+    including that a harness had been starting the belts and that the post-fix figure is
+    three runs on one machine.
+  - **"The entire cell layout is changeable by editing the facility model alone"** —
+    **demonstrated.** Reported by the project owner on 2026-08-27: a pedestal was moved 50 mm
+    in L0 and the tree regenerated. Five generated artifacts changed — the bring-up plan, the
+    scene description, the static TF table, the planning-scene object and the model hash —
+    the arm anchored to that pedestal followed it, and **nothing outside `model/` and
+    `cite_generated/` changed at all.** That is P1 demonstrated end to end: a coordinate
+    changed in one place and propagated everywhere it is used, with no hand edit anywhere.
+    *One measurement on one machine, and it moved one asset — it is not a proof that every
+    asset type propagates.*
+  - **"CI is green" — CANNOT BE VERIFIED, AND NOT FOR A TECHNICAL REASON.** Triggering the
+    workflow on 2026-08-27 returned *"The job was not started because recent account payments
+    have failed or your spending limit needs to be increased"*, and **all three jobs —
+    `host-tooling`, `ros-workspace`, `supply-chain` — were refused before starting**. That is
+    an **account-level block on the GitHub Actions runner**, not a build failure, not a test
+    failure, and not evidence of anything about the code. Nothing may be inferred about CI's colour from it in either direction: the last
+    known CI state is not this commit's. **Do not record this clause as met, and do not
+    record it as a technical gap.** It is unblocked by billing, and until then the clause is
+    open.
+  - **"Every architectural decision is written down"** — **33** ADRs at this commit. **Six**
+    are `Accepted (corrected …)` and a seventh, ADR-0023, carries a correction and is also
+    superseded. `./scripts/doctor` enforces that every ADR on disk is in the index and that
+    every ADR referenced from `docs/` exists; it does **not** check that the set is
+    *complete*, and no check can. That clause is a judgement, not a measurement.
 
 State this honestly in reports. Never claim a capability exists because the charter
 describes it.
@@ -326,7 +406,12 @@ A capability is done only when **all** hold. There is no partial credit.
 Recurring failure classes in this domain. Treat each as a review checkpoint.
 
 - **QoS**: declare profiles explicitly. Incompatible publisher/subscriber QoS connects
-  silently and delivers nothing — the most common silent failure in ROS 2.
+  silently and delivers nothing — the most common silent failure in ROS 2. **Compatible QoS
+  is not delivery either:** reliable is a promise to *matched* subscribers, so anything
+  published in the same callback that created the publisher reaches nobody. That cost this
+  project a belt setpoint that was never once delivered. Treat a match as an event, never a
+  sleep or a publish loop — see
+  [`docs/interfaces/qos-profiles.md`](docs/interfaces/qos-profiles.md).
 - **Lifecycle**: use managed nodes. They are what makes P4 achievable.
 - **Executors and callback groups**: never block inside a callback; choose the callback
   group deliberately, or you will deadlock under load.

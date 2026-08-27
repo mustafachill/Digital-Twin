@@ -168,13 +168,25 @@ decision was justified by a pose that was only ever the sensor's own mounting tr
 A consumer that needs the uncertainty needs new fields in `cite_interfaces`, not a
 convention improvised at the call site.
 
-**One gap, stated because it is the kind that drifts.** `pose_is_observed` is the test a
-consumer should make, and no consumer can call it: `cite_skills` declares no
-`ament_export_*`, so its installed headers reach no other package. `cite_orchestration`'s
-`PickAt` therefore tests `header.frame_id.empty()` directly, which catches every unobserved
-pose the detector actually produces and would *not* catch a pose that carried a frame and
-NaN components. The predicate is deliberately not restated there; the note in
-`skill_nodes.hpp` says so.
+**That gap is closed as of 2026-08-27, and how it closed is worth more than the fact.**
+`pose_is_observed` is the test a consumer should make, and for a while no consumer could
+call it: `cite_skills` declared no `ament_export_*`, so `find_package(cite_skills)` succeeded
+and contributed no include directory. `cite_orchestration`'s `PickAt` fell back to testing
+`header.frame_id.empty()` directly — which catches every unobserved pose the detector
+actually produces, and does **not** catch a pose that carries a frame over NaN components.
+That pose went to the planner as an object pose.
+
+`cite_skills` now exports `include/${PROJECT_NAME}` and its `geometry_msgs` dependency, and
+`PickAt` **calls** `cite_skills::pose_is_observed`. The predicate is not restated at the call
+site, and now it cannot be: the call is a compile dependency rather than a comment asserting
+another package's build state. Depending on an L3 header from L4 is downward and legal
+(CLAUDE.md §5).
+
+**The lesson is the one this section is about.** The convention had a writer and a reader in
+one header precisely so they could not drift, and the reader was unreachable, so a consumer
+wrote a weaker test that agreed with it on every input the system produced. Two rules that
+agree on all observed inputs are not one rule. **A convention is only single-sourced when the
+consumer can link against it.**
 
 ## Documenting an interface
 

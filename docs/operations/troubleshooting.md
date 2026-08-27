@@ -142,6 +142,14 @@ Compare reliability, durability, and history on both sides. A best-effort publis
 reliable subscriber never connect, and nothing reports it. See
 [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md).
 
+**If both sides agree and one particular message still never arrives, it is not
+compatibility.** Reliable delivery is a promise to subscribers the publisher has been
+*matched* with, so a message published before that match reaches nobody — measured here as a
+subscriber up for 100 s receiving nothing for the next 300 while the bridge ran throughout.
+The section "Reliable is a promise to *matched* subscribers" in
+[`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md) has how to tell the two
+apart and what to do about it. **Do not answer it with a sleep or a publish loop.**
+
 ### Nodes cannot see each other
 
 - `ROS_DOMAIN_ID` differs between shells, or collides with somebody else's session in the

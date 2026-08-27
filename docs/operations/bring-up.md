@@ -93,6 +93,16 @@ publishes the typed event on `…/detection`.
 ([ADR-0032](../adr/0032-index-the-belt.md)); a second publisher fights it, and a belt running
 under a part a station is reaching for puts the part on the floor.
 
+**If the belts never start and nothing reports an error:** check the log for
+`line_orchestrator` announcing that it re-sent a setpoint to a subscriber that appeared after
+the belt was last commanded. The start-up command is published from the same callback that
+creates the publishers, when no subscriber has been matched yet — **reliable QoS is a promise
+to *matched* subscribers, so that first message is delivered to nobody** however long the
+bridge has been up. Delivery depends on the matched-subscriber event, which is where to look
+if an RMW other than the default is in use. This failed silently for ten commits and the
+symptom was a line that simply never moved; the measurement is in the 2026-08-27 correction
+on [ADR-0032](../adr/0032-index-the-belt.md).
+
 **If a controller is inactive:** check that its joint names match the description
 (`./scripts/validate-model`). The spawner error names the spawner, not the mismatch — this
 is the single most time-consuming false trail in ROS 2 controller bring-up.

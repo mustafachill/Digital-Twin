@@ -1,10 +1,71 @@
 # ADR-0026: Plan to joint-space goals obtained by solving IK on the exact pose
 
-- **Status:** Accepted
+- **Status:** Accepted (corrected 2026-08-27) — **the decision stands in full and nothing in
+  it is withdrawn.** What is corrected is a *follow-up this record described as open*: the
+  reachability result code. It is closed, and it was closed in a way this record did not
+  anticipate — the local alias was **deleted** rather than repointed. See the section
+  "Correction — 2026-08-27: the reachability follow-up is closed, and the alias was deleted
+  rather than repointed", immediately after this block.
 - **Date:** 2026-08-24
 - **Deciders:** Phase 1.C review fan-out (debugger measurement, architect and reviewer findings), remediated in `cite_skills`
 - **Related:** [ADR-0006](0006-moveit2-motion-planning.md), [ADR-0010](0010-typed-ros-interfaces.md), [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md), CLAUDE.md §3 (P2, P5, P9)
 - **See also:** [ADR-0027](0027-pilz-planning-pipeline.md) on the planning *pipeline* — station-to-station motion moves to the Pilz Industrial Motion Planner, with OMPL retained as a fallback. That is a separate decision, taken separately, and this record does not depend on it. The two are easy to confuse and should be read together.
+
+## Correction — 2026-08-27: the reachability follow-up is closed, and the alias was deleted rather than repointed
+
+The decision is untouched. What is corrected is one paragraph in the Context that described
+an **open follow-up**, and the shape of the repair it prescribed.
+
+### What was written
+
+> At the time of writing they still do share one, because `ResultCode.msg` has no constant
+> for reachability and `cite_interfaces` was outside the change that implemented this
+> decision. The messages are distinct and the code carries a single named alias, so adding
+> `uint8 UNREACHABLE` and pointing that alias at it is the whole of the follow-up.
+
+### What is true now
+
+`ResultCode.msg` carries `uint8 UNREACHABLE=9`, with the distinction from `PLANNING_FAILED`
+written into the message itself. `skill_server.cpp` returns `ResultCode::UNREACHABLE`
+directly on the no-IK-solution path. `recovery_policy.hpp` maps it to `ESCALATE`, and
+`test_line_logic.cpp` asserts it is neither `RETRY_SAME`, nor `RETRY_DIFFERENTLY`, nor the
+same recovery as a planning failure. A launch test in `test_skill_contract.py` sends a pose
+2.5 m out to a real skill server and requires `UNREACHABLE` back, so the split is evidenced
+end to end rather than by inspection.
+
+### The prescribed repair was the wrong shape, and that is the transferable part
+
+This record said "pointing that alias at it is the whole of the follow-up". Repointing the
+alias would have worked and would have left the failure mode in place. What actually
+happened is the failure mode:
+
+`constexpr uint8_t kUnreachable = ResultCode::PLANNING_FAILED;` **predated the constant and
+did not move when the constant landed.** Nothing broke, nothing warned, and an unreachable
+pose went on reaching L4 as a planning failure — the retryable one — which is exactly the
+behaviour the distinction exists to prevent. A stale alias compiles perfectly.
+
+So the alias is **deleted**, not repointed, and the call site names `ResultCode::UNREACHABLE`
+directly. The difference is that the constant's absence is now a compile error rather than a
+comment that quietly stopped being true. **An alias that stands in for a constant that does
+not exist yet is a promise to come back**, and a promise the compiler cannot check is one
+nobody is told was broken.
+
+### What survives
+
+Everything the decision says. Reachability failure and planning failure remain separate
+diagnoses with separate recoveries — that requirement is not corrected, it is now met. The
+only sentence withdrawn is the one describing the follow-up as open and the one prescribing
+how to close it.
+
+### How the error survived
+
+The record said "this record says so rather than implying the split is complete (P7)", and
+on that count it did its job: the gap was declared. What it did not do was leave anything
+that would notice when the gap closed *halfway*. The interface package gained the constant
+and the consumer did not follow, and both halves were individually correct — a message file
+that defines a code nobody sends, and a server that sends a code with a legitimate name. The
+defect lived in the space between two files that each looked finished. **A follow-up written
+into an ADR is a note; the thing that closes it has to be a test or a compile error.**
 
 ## Context
 
@@ -146,6 +207,10 @@ The messages are distinct and the code carries a single named alias, so adding
 `uint8 UNREACHABLE` and pointing that alias at it is the whole of the follow-up. Until then
 L4 cannot tell the two apart from the code alone, and this record says so rather than
 implying the split is complete (P7).
+**[Corrected 2026-08-27 — see the Correction section above. The follow-up is closed:
+`ResultCode.msg` carries `UNREACHABLE=9` and `skill_server.cpp` returns it. "Pointing that
+alias at it" was the wrong repair — the alias is deleted, so the constant's absence is a
+compile error instead of a comment that silently stopped being true.]**
 
 **The rule is not conditioned on the robot type in code.** L3 encodes mechanism, never
 which robot is present (P5, P9); the skill server applies this path to whatever arm it was
