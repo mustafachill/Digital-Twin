@@ -164,7 +164,14 @@ if(BUILD_TESTING)
   # the default one can actually produce a trajectory — which is where a missing
   # deceleration limit shows up, and nowhere earlier — and whether the same
   # request produces the same trajectory twice. No skill server, no controllers.
-  add_launch_test(test/test_planning_pipeline.py TIMEOUT 400)
+  #
+  # It also loads the cell's real planning scene and asks the question the
+  # safety of ADR-0027 rests on: whether the response adapter that is now the
+  # SOLE environment-collision gate refuses a path through the furniture, and
+  # whether the identical request succeeds without it. That pair takes longer
+  # than the rest of the file put together, which is what the raised timeout is
+  # for.
+  add_launch_test(test/test_planning_pipeline.py TIMEOUT 600)
 
   # Whether another package can reach this one's headers at all. Every test above
   # gets at them through `target_include_directories(... PRIVATE include)` on the

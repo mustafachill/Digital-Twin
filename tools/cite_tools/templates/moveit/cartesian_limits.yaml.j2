@@ -16,6 +16,23 @@
 # prefix is applied by whoever loads this file, because it is a MoveIt convention
 # and not a fact about the facility. The deceleration sign is MoveIt's too, and
 # is applied here for the same reason the joint one is.
+#
+# Three things about these four numbers that a reader should not have to
+# discover, because the L0 comment beside them once implied otherwise.
+#
+#   * They are consumed by NO motion in this cell today. Every motion is planned
+#     by a joint-space planner, which never reads them. They exist so that the
+#     pipeline can be constructed at all.
+#   * `max_trans_dec` is read by nothing in Jazzy's Pilz beyond one debug log:
+#     the shipped `libpilz_industrial_motion_planner.so` contains the parameter
+#     name and its descriptor and no other reference, and the planner's own
+#     headers never mention it. It is declared because the parameter listener
+#     declares all four without defaults, not because it bounds anything.
+#   * A Cartesian ceiling cannot guarantee a joint stays inside its own. The
+#     required joint rate for a tool velocity is `J^-1 x_dot`, which is unbounded
+#     near a singularity, so for ANY positive value here there is a pose at which
+#     the joint ceiling is reached first. What actually bounds the joints is
+#     Pilz's per-sample joint check, not this file.
 cartesian_limits:
   max_trans_vel: {{ arm.max_cartesian_velocity_m_s | f }}
   max_trans_acc: {{ arm.max_cartesian_acceleration_m_s2 | f }}

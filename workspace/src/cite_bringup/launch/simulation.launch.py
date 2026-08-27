@@ -928,6 +928,7 @@ def _skill_parameters(plan: Plan, manager) -> dict:
         "default_planner_id": manager.moveit.default_planner_id,
         "fallback_pipeline": manager.moveit.fallback_pipeline,
         "fallback_planner_id": manager.moveit.fallback_planner_id,
+        "cartesian_planner_ids": list(manager.moveit.cartesian_planner_ids),
         "use_sim_time": True,
         **manager.gripper,
     }

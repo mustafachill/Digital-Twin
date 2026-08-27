@@ -218,6 +218,9 @@ def generate_test_description() -> LaunchDescription:
                         "default_planner_id": moveit["default_planner_id"],
                         "fallback_pipeline": moveit["fallback_pipeline"],
                         "fallback_planner_id": moveit["fallback_planner_id"] or "",
+                        "cartesian_planner_ids": list(
+                            moveit.get("cartesian_planner_ids") or []
+                        ),
                         "use_sim_time": False,
                     },
                 ],

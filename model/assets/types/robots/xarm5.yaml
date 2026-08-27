@@ -167,11 +167,22 @@ asset_type:
     # rather than as a constant in generate/moveit.py (P5).
     max_acceleration_rad_s2: 2.0
     # Braking ceiling, rad/s^2, as a magnitude. Pilz's trapezoidal profile treats
-    # braking separately from accelerating and will not build a PTP generator for
-    # a group whose joints do not all declare one — and it raises that at PLAN
-    # time, so the pipeline loads cleanly and then refuses every request
-    # (ADR-0027). Equal to the acceleration ceiling because nothing about this
-    # arm makes it brake harder than it accelerates; MoveIt's negative sign
+    # braking separately from accelerating (ADR-0027).
+    #
+    # What this key is NOT for, because the comment here used to say it was:
+    # omitting it would not make Pilz refuse every request. MoveIt derives the
+    # ceiling when it is missing — `joint_limits_aggregator.cpp` sets
+    # `max_deceleration = -max_acceleration` whenever an acceleration limit is
+    # present and a deceleration limit is not — and this type already declares
+    # one above, so the derived value would have been -2.0, which is exactly what
+    # the generator now emits. The refusal that comment described needs the
+    # acceleration ceiling to be absent too.
+    #
+    # It is stated anyway so that the braking ceiling is a decision about this
+    # arm rather than an accident of its acceleration ceiling: derived, the two
+    # can never differ, and an arm that has to brake harder than it accelerates
+    # would have nowhere to say so. Equal to the acceleration ceiling because
+    # nothing about this arm makes it brake harder; MoveIt's negative sign
     # convention is applied by the template, not written here.
     max_deceleration_rad_s2: 2.0
 
@@ -188,7 +199,11 @@ asset_type:
     # Pilz refuses a request with an empty planner id, so PTP is named. LIN is
     # configured and loadable but is NOT the default: a straight Cartesian path
     # needs the full 6-DOF pose reachable along its whole length, and this arm
-    # has five degrees of freedom (ADR-0026).
+    # has five degrees of freedom (ADR-0026). That is not left to a comment — the
+    # generator refuses a Cartesian planner as an arm's DEFAULT when its planning
+    # group has fewer than six joints, and refuses an id the pipeline does not
+    # register at all, so a typo or an empty string fails validation rather than
+    # at the first request.
     default_planner_id: PTP
     fallback_pipeline: ompl
     # Empty: the OMPL block the generator emits declares one planner
@@ -198,12 +213,29 @@ asset_type:
     fallback_planner_id: ""
 
     # Task-space ceilings, read by the pipelines that interpolate in Cartesian
-    # space (Pilz LIN and CIRC). They are ceilings chosen for this arm rather
-    # than vendor figures: the tool-point speed an xArm 5 reaches is a
-    # consequence of its joint limits and its pose, and a single number for it
-    # exists only because a planner asks for one. Chosen to sit under what the
-    # joint ceilings above allow at this arm's 0.7 m reach, so that the
-    # Cartesian ceiling is never the thing that makes a joint exceed its own.
+    # space (Pilz LIN and CIRC). They exist because that pipeline cannot be
+    # constructed without all four — its parameter listener declares them with no
+    # defaults — and NO motion in this cell consumes them today: every motion is
+    # planned in joint space (ADR-0026, ADR-0027).
+    #
+    # Conservative placeholders, and this comment overreached in two ways until
+    # it was corrected.
+    #
+    #   * The three translational figures are ours and sit well under MoveIt's
+    #     own template values (1.0, 2.25, -5.0). The rotational one, 1.57, is
+    #     MoveIt's template default byte for byte — it was never chosen for this
+    #     arm, and describing all four as chosen made a copied number look like a
+    #     measurement.
+    #   * "Never the thing that makes a joint exceed its own" cannot hold for any
+    #     positive value. The joint rate a tool velocity requires is `J^-1
+    #     x_dot`, which grows without bound as the arm approaches a singularity,
+    #     so there is always a pose at which the joint ceiling binds first. What
+    #     actually keeps the joints inside their limits is Pilz's per-sample
+    #     joint check, not these numbers.
+    #
+    # Read them as: low enough not to be the interesting constraint, present so
+    # the pipeline loads, and to be replaced by a measurement on the day a
+    # Cartesian planner is actually asked for a motion.
     max_cartesian_velocity_m_s: 0.25
     max_cartesian_acceleration_m_s2: 0.5
     max_cartesian_deceleration_m_s2: 0.5

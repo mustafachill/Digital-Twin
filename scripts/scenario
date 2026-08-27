@@ -26,13 +26,17 @@
 # transport RNG. It does NOT seed the physics solver.
 #
 # ADR-0027 removed one of the two stochastic components and left the other. Every
-# arm now plans with Pilz by default — a trajectory generator, so the same request
-# yields the same trajectory, asserted in cite_skills' planning-pipeline launch
-# test — and OMPL is retained as the fallback for the motions Pilz refuses. OMPL
-# is still unseeded and still unseedable: MoveIt reaches no seeding entry point,
-# and ADR-0027 records why a seed would not help even if it did. So a run whose
-# motions were all answered by Pilz has one fewer source of variance than it used
-# to, and a run that fell back does not.
+# arm now plans with Pilz by default — a trajectory generator rather than a
+# search. What is measured about that, stated exactly, because the difference
+# matters: cite_skills' planning-pipeline launch test asserts that ONE move_group
+# answers two identical requests with a bit-identical trajectory, WITHIN ONE
+# PROCESS. That is repeatability of a planner. It is not a claim that two runs of
+# a scenario plan the same motions, and it must not be read as one — the requests
+# a scenario makes depend on where the physics put the work-piece. OMPL is
+# retained as the fallback and is still unseeded and still unseedable: MoveIt
+# reaches no seeding entry point, and ADR-0027 records why a seed would not help
+# even if it did. So a run whose motions were all answered by Pilz has one fewer
+# source of variance than it used to, and a run that fell back does not.
 #
 # A seeded run is still not a reproducible run, and the reason is now the physics
 # rather than the planner. Running pick_and_place four times under one seed
@@ -100,9 +104,12 @@ info "Running scenario '${NAME}' on DDS domain ${ROS_DOMAIN_ID}"
 warn "Seed ${CITE_PHYSICS_SEED} reaches 'gz sim --seed' only — this run is not reproducible."
 warn "  That seeds gz::math::Rand: sensor noise and transport RNG."
 warn "  It does NOT seed the physics solver."
-warn "  Planning is deterministic only where Pilz answered it (ADR-0027). The OMPL"
-warn "  fallback is unseeded and unseedable (ADR-0006); grep this run's log for"
-warn "  'planner fallback:' to see which motions took it."
+warn "  Planning: what is PROVEN is that one move_group answers an identical request"
+warn "  identically within one process (cite_skills' planning-pipeline launch test)."
+warn "  That is repeatability, not scenario determinism, and it holds only where Pilz"
+warn "  answered; the OMPL fallback is unseeded and unseedable (ADR-0006). Grep this"
+warn "  run's log for 'planner fallback:' to see which motions took it, and for"
+warn "  'planner fallback declined:' for the ones that refused a substitute."
 
 # The report is what lets the cycle and teardown questions be told apart after
 # the fact. It lands in workspace/log/ so that CI's existing artifact upload

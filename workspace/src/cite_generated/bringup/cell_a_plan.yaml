@@ -126,9 +126,14 @@ plan:
         # server: a planner choice is a claim about this arm, and the server's
         # own parameter names are these names, so nothing maps one to the other.
         default_pipeline: pilz_industrial_motion_planner
-        default_planner_id: PTP
+        default_planner_id: "PTP"
         fallback_pipeline: ompl
         fallback_planner_id: ""
+        # Of the planner ids those pipelines register, the ones that define the
+        # SHAPE of the path. The server refuses to let the fallback answer such a
+        # request: a sampling planner would return a curve through the same
+        # endpoints and the skill would report success (ADR-0027).
+        cartesian_planner_ids: [LIN, CIRC]
     - asset: arm_2
       node: /cite/cell_a/arm_2/controller_manager
       backend: sim
@@ -235,9 +240,14 @@ plan:
         # server: a planner choice is a claim about this arm, and the server's
         # own parameter names are these names, so nothing maps one to the other.
         default_pipeline: pilz_industrial_motion_planner
-        default_planner_id: PTP
+        default_planner_id: "PTP"
         fallback_pipeline: ompl
         fallback_planner_id: ""
+        # Of the planner ids those pipelines register, the ones that define the
+        # SHAPE of the path. The server refuses to let the fallback answer such a
+        # request: a sampling planner would return a curve through the same
+        # endpoints and the skill would report success (ADR-0027).
+        cartesian_planner_ids: [LIN, CIRC]
     - asset: arm_3
       node: /cite/cell_a/arm_3/controller_manager
       backend: sim
@@ -344,9 +354,14 @@ plan:
         # server: a planner choice is a claim about this arm, and the server's
         # own parameter names are these names, so nothing maps one to the other.
         default_pipeline: pilz_industrial_motion_planner
-        default_planner_id: PTP
+        default_planner_id: "PTP"
         fallback_pipeline: ompl
         fallback_planner_id: ""
+        # Of the planner ids those pipelines register, the ones that define the
+        # SHAPE of the path. The server refuses to let the fallback answer such a
+        # request: a sampling planner would return a curve through the same
+        # endpoints and the skill would report success (ADR-0027).
+        cartesian_planner_ids: [LIN, CIRC]
 
   conveyors:
     - asset: conveyor_1

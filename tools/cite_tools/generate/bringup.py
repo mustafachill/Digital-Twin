@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cite_tools.generate import Artifact
+from cite_tools.generate.moveit import PIPELINES
 from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell, ResolveError
 from cite_tools.model.units import fmt
@@ -45,6 +46,10 @@ class _ManagerView:
     default_planner_id: str | None
     fallback_pipeline: str | None
     fallback_planner_id: str | None
+    #: Which of the planner ids the arm's pipelines register define the SHAPE of
+    #: a path rather than only its endpoints. Read from the one place that says
+    #: what a pipeline is made of, so the L3 server never restates it.
+    cartesian_planner_ids: tuple[str, ...]
     home_rad: tuple[float, ...]
     trajectory_action: str | None
     gripper_action: str | None
@@ -129,6 +134,28 @@ def _planning_field(asset: ResolvedAsset, field: str) -> str | None:
     """
     planning = asset.asset_type.planning
     return getattr(planning, field) if planning else None
+
+
+def _cartesian_planner_ids(asset: ResolvedAsset) -> tuple[str, ...]:
+    """Every Cartesian planner id reachable from this arm's two pipelines.
+
+    A planner whose contract is the shape of the path — Pilz LIN and CIRC — must
+    not have a refusal answered by a planner that samples: the caller asked for a
+    straight line and would get a curve through the same endpoints, reported as
+    success. The L3 server enforces that, and it takes the SET from here rather
+    than compiling it in, because which ids are Cartesian is a fact about MoveIt
+    that `generate/moveit.py` already states once (P1, ADR-0027).
+    """
+    planning = asset.asset_type.planning
+    if planning is None:
+        return ()
+    ids_: list[str] = []
+    for name in (planning.default_pipeline, planning.fallback_pipeline):
+        pipeline = PIPELINES.get(name)
+        if pipeline is None:
+            continue
+        ids_ += [i for i in pipeline.cartesian_planners if i not in ids_]
+    return tuple(ids_)
 
 
 def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
@@ -316,6 +343,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             default_planner_id=_planning_field(asset, "default_planner_id"),
             fallback_pipeline=_planning_field(asset, "fallback_pipeline"),
             fallback_planner_id=_planning_field(asset, "fallback_planner_id"),
+            cartesian_planner_ids=_cartesian_planner_ids(asset),
             home_rad=_home(asset),
             trajectory_action=_controller_action(asset, "joint_trajectory_controller"),
             gripper_action=_controller_action(asset, "gripper_controller"),

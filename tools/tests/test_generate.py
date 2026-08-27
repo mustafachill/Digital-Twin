@@ -615,15 +615,57 @@ class TestThePlannerChoiceIsData:
         ]
         assert pipelines["ompl"]["planning_plugins"] == ["ompl_interface/OMPLPlanner"]
 
-    def test_pilz_declares_no_empty_request_adapter_list(self, real_model: Path) -> None:
-        # An empty ROS parameter sequence has no type, and launch refuses the
-        # whole file with "Expected 'value' to be one of [float, int, str, bool,
-        # bytes], but got '()'" — an error naming a tuple and not the key it came
-        # from. The empty chain is declared by the key's ABSENCE.
-        pilz = yaml.safe_load(artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"])[
-            "pilz_industrial_motion_planner"
+    def test_every_pipeline_gets_upstreams_request_adapter_chain(self, real_model: Path) -> None:
+        # Both pipelines get all four, which is what MoveIt's own
+        # `moveit_configs_utils/default_configs/*_planning.yaml` ships for each
+        # of them. An earlier version declared none for Pilz and justified it
+        # with "Pilz wants no request adapters", which was wrong about
+        # ResolveConstraintFrames — nothing else performs it, and the day a goal
+        # names a frame its absence is a plan against the wrong frame rather than
+        # an error.
+        pipelines = yaml.safe_load(
+            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+        )
+        expected = [
+            "default_planning_request_adapters/ResolveConstraintFrames",
+            "default_planning_request_adapters/ValidateWorkspaceBounds",
+            "default_planning_request_adapters/CheckStartStateBounds",
+            "default_planning_request_adapters/CheckStartStateCollision",
         ]
-        assert "request_adapters" not in pilz
+        for name in pipelines["planning_pipelines"]:
+            assert pipelines[name]["request_adapters"] == expected, name
+
+    def test_the_declared_list_is_every_pipeline_the_generator_can_configure(
+        self, real_model: Path
+    ) -> None:
+        # R-08. The name set used to live in the generator's guard AND in the
+        # template's hardcoded list, so a third name passed the guard and
+        # generated a file whose list omitted it — the exact failure the guard
+        # exists to prevent. Both now come from one mapping, and this is what
+        # says so.
+        from cite_tools.generate.moveit import PIPELINES
+
+        pipelines = yaml.safe_load(
+            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+        )
+        assert pipelines["planning_pipelines"] == list(PIPELINES)
+        for name in PIPELINES:
+            assert name in pipelines, f"{name} is declared and has no block"
+
+    def test_only_the_searching_pipeline_states_a_segment_resolution(
+        self, real_model: Path
+    ) -> None:
+        # `longest_valid_segment_fraction` is what a pipeline that INTERPOLATES
+        # between checked states is allowed to skip. The other one checks the
+        # waypoints its own sampling time produced and interpolates nothing, so
+        # the key would be an unread number in its block rather than a stricter
+        # check — see the note the generator renders above it.
+        produced = artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+        pipelines = yaml.safe_load(produced)
+        assert pipelines["ompl"]["arm_1_xarm5"]["longest_valid_segment_fraction"] == 0.005
+        assert "longest_valid_segment_fraction" not in str(
+            pipelines["pilz_industrial_motion_planner"]
+        )
 
     def test_the_default_pipeline_follows_the_model(
         self, real_model: Path, edit_yaml: Callable
@@ -633,7 +675,7 @@ class TestThePlannerChoiceIsData:
             lambda d: d["asset_type"]["planning"].update(
                 {
                     "default_pipeline": "ompl",
-                    "default_planner_id": "",
+                    "default_planner_id": "RRTConnectkConfigDefault",
                     "fallback_pipeline": "pilz_industrial_motion_planner",
                     "fallback_planner_id": "PTP",
                 }
@@ -697,6 +739,71 @@ class TestThePlannerChoiceIsData:
         )
         with pytest.raises(ModelError, match="fall back"):
             artifacts(real_model)
+
+    def test_an_empty_default_planner_id_is_rejected_by_the_model(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # M-03. It used to be schema-legal, and it failed at LAUNCH — after
+        # `validate-model` had already called the model valid, which is the worst
+        # possible place for it. Pilz answers "No ContextLoader for planner_id
+        # ''" to a request with an empty id.
+        from cite_tools.model.loader import ModelError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("default_planner_id", ""),
+        )
+        with pytest.raises(ModelError):
+            artifacts(real_model)
+
+    def test_a_planner_the_pipeline_does_not_register_is_an_error(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Same failure shape as the missing deceleration limit ADR-0027 already
+        # met once: the pipeline loads perfectly and then refuses every request.
+        from cite_tools.generate.moveit import UnknownPlannerError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("default_planner_id", "PTP2"),
+        )
+        with pytest.raises(UnknownPlannerError, match="PTP2"):
+            artifacts(real_model)
+
+    def test_a_cartesian_planner_may_not_be_an_arms_default(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Not a taste question and not hardcoded to this arm: a Cartesian planner
+        # interpolates the tool POSE and solves full six-degree-of-freedom IK at
+        # every sample, so on a group with fewer than six joints the reachable
+        # poses are a surface and most straight paths have no solution in the
+        # middle (ADR-0026). Measured in cite_skills' planning-pipeline launch
+        # test, which plans a vertical approach with LIN and is refused a motion
+        # that turns the base.
+        from cite_tools.generate.moveit import UnknownPlannerError
+
+        edit_yaml(
+            real_model / "assets/types/robots/xarm5.yaml",
+            lambda d: d["asset_type"]["planning"].__setitem__("default_planner_id", "LIN"),
+        )
+        with pytest.raises(UnknownPlannerError, match="Cartesian"):
+            artifacts(real_model)
+
+    def test_the_plan_names_the_planners_that_define_a_path(self, real_model: Path) -> None:
+        # S-04. The L3 server refuses to let the fallback answer a request whose
+        # contract is the SHAPE of the path — a sampling planner would return a
+        # curve through the same endpoints and the skill would report success.
+        # Which ids those are is a fact about MoveIt, stated once in the
+        # generator and carried to the server as data rather than compiled into
+        # it twice.
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])
+        named = 0
+        for manager in plan["plan"]["controller_managers"]:
+            if manager.get("moveit") is None:
+                continue
+            named += 1
+            assert manager["moveit"]["cartesian_planner_ids"] == ["LIN", "CIRC"]
+        assert named == 3, "the cell has three arms; this asserted on none of them"
 
 
 class TestTheDeterminismCheckCanSeeWhatItClaimsTo:

@@ -94,6 +94,10 @@ class MoveItConfig:
     default_planner_id: str
     fallback_pipeline: str
     fallback_planner_id: str
+    #: Which of those planner ids define the SHAPE of a path rather than only its
+    #: endpoints, so that the skill server can refuse to have such a request
+    #: rescued by a planner that samples (ADR-0027).
+    cartesian_planner_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -495,6 +499,11 @@ def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
         # planner id means "whatever that pipeline defaults to", so it is read
         # with a default rather than required, and `_require` would reject it.
         fallback_planner_id=str(_optional(entry, "fallback_planner_id") or ""),
+        # May legitimately be empty — a cell whose pipelines register no
+        # Cartesian planner has nothing to list — so it is read with a default.
+        cartesian_planner_ids=tuple(
+            str(value) for value in (_optional(entry, "cartesian_planner_ids") or [])
+        ),
     )
 
 

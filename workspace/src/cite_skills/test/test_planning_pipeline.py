@@ -18,7 +18,20 @@ ADR-0027 decides that station-to-station motion is planned by Pilz, with OMPL
 kept as the fallback. Everything about that decision is *configuration*, and
 configuration is exactly the kind of change that generates cleanly, launches
 without an error, and then does nothing — so this file drives the real binary
-against the real generated files and asks three questions a unit test cannot.
+against the real generated files and asks questions a unit test cannot.
+
+The first of them is the one the safety of the whole decision rests on, and it
+is asked last because it is the only one that puts anything into move_group's
+world: **is the sole remaining collision gate actually working?** Pilz does not
+search the scene, so the `ValidateSolution` response adapter is now the only
+thing between a generated straight line and the cell's furniture. Tests 9a and
+9b load the real generated planning scene, prove that a particular joint-space
+interpolation passes through a named object in it, assert the request is refused
+with an empty trajectory, and then assert that the identical request succeeds
+once the objects are removed. The second half is what makes the first evidence:
+without it, the refusal could be coming from anywhere.
+
+The others:
 
 1. **Did the pipeline load at all?** `query_planner_interface` answers it, and it
    is not a formality: a planning plugin that fails to load leaves move_group
@@ -30,7 +43,14 @@ against the real generated files and asks three questions a unit test cannot.
    throws "deceleration limit not set for group" on every single request. Nothing
    short of asking for a plan can see that.
 
-3. **Is the answer the same twice?** That is the whole reason ADR-0027 exists.
+3. **How far apart are the checked waypoints?** `isPathValid` iterates the
+   trajectory's waypoints and interpolates nothing between them, so their spacing
+   IS the resolution of the collision check above. It is a C++ default argument
+   in MoveIt with no ROS parameter behind it, which makes it a number that
+   decides whether an obstacle is seen and that nobody had written down. Test 4b
+   measures it.
+
+4. **Is the answer the same twice?** That is the whole reason ADR-0027 exists.
    PTP integrates a trapezoidal profile over the joint limits; it draws no random
    numbers, so the same request must produce the same trajectory to the bit. The
    assertion here is a *planner* property and not a scenario guarantee — ADR-0006
@@ -46,7 +66,7 @@ prove — that a refused LIN request does not take move_group down — is proven
 instead by test 8 planning successfully after test 7 was refused, through the same
 service and the same process.
 
-A fourth question is asked because ADR-0027 answers it too loosely. It lists LIN
+A further question is asked because ADR-0027 answers it too loosely. It lists LIN
 as "available for the moves where a defined Cartesian path is the requirement",
 and on a five-joint arm that is true for a much narrower set of moves than it
 reads. Both halves are asserted here rather than described: LIN plans a purely
@@ -65,26 +85,43 @@ import time
 import unittest
 
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import PoseStamped
+from cite_facility.artifacts import planning_scene, static_transforms
+from cite_facility.transforms import quaternion_from_rpy
+from geometry_msgs.msg import Pose, PoseStamped, TransformStamped
 from launch import LaunchDescription
 from launch.substitutions import Command
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 import launch_testing
 import launch_testing.markers
-from moveit_msgs.msg import Constraints, JointConstraint, MoveItErrorCodes, RobotState
+from moveit_msgs.msg import (
+    CollisionObject,
+    Constraints,
+    JointConstraint,
+    MoveItErrorCodes,
+    PlanningScene,
+    PlanningSceneComponents,
+    RobotState,
+)
 from moveit_msgs.srv import (
+    ApplyPlanningScene,
     GetMotionPlan,
+    GetPlanningScene,
     GetPositionFK,
     GetPositionIK,
+    GetStateValidity,
     QueryPlannerInterfaces,
 )
 import pytest
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.duration import Duration
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node as RclpyNode
+from rclpy.time import Time as RclpyTime
 from sensor_msgs.msg import JointState
+from shape_msgs.msg import SolidPrimitive
+from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
 import yaml
 
 ZONE = "cell_a"
@@ -105,7 +142,23 @@ CALL_CEILING_S = 120.0
 #: the same way twice, not whether this arm can reach anything difficult.
 JOINT1_TARGET_RAD = 0.30
 
+#: Pilz's sampling time, in seconds. NOT a setting — there is no parameter for
+#: it — but the spacing of the only collision check a generated path receives,
+#: so it is written down here and asserted rather than left as a library
+#: default nobody has looked at.
+SAMPLING_TIME_S = 0.1
+
 GENERATED = Path(get_package_share_directory("cite_generated"))
+
+#: The L0 primitive names, mapped onto `shape_msgs/SolidPrimitive`. The same
+#: mapping `cite_facility`'s planning-scene loader applies. Only the box arm of
+#: it is exercised by this cell; a primitive the model grows that is missing
+#: here fails loudly rather than being dropped from the scene.
+PRIMITIVES = {
+    "box": SolidPrimitive.BOX,
+    "cylinder": SolidPrimitive.CYLINDER,
+    "sphere": SolidPrimitive.SPHERE,
+}
 
 
 def _read(path: Path) -> dict:
@@ -242,6 +295,128 @@ class Harness(RclpyNode):
         self.ik = self.create_client(
             GetPositionIK, f"{NAMESPACE}/compute_ik", callback_group=self.callbacks
         )
+
+        # --- the cell's furniture, and the frame it is expressed in ----------
+        #
+        # Read through `cite_facility`, which owns both readers and is what
+        # bring-up itself uses. Parsing the generated YAML a second time here
+        # would be a second place that knows a collision object's pose names its
+        # CENTRE while an L0 body's pose names the point it stands on.
+        self.scene_frame, self.bodies = planning_scene(ZONE)
+        self.scene_ids = frozenset(body.object_id for body in self.bodies)
+        self.apply_scene = self.create_client(
+            ApplyPlanningScene,
+            f"{NAMESPACE}/apply_planning_scene",
+            callback_group=self.callbacks,
+        )
+        self.get_scene = self.create_client(
+            GetPlanningScene,
+            f"{NAMESPACE}/get_planning_scene",
+            callback_group=self.callbacks,
+        )
+        # What makes the premise of the collision test provable rather than
+        # asserted: move_group's own collision check, on one configuration, with
+        # the contacts it found.
+        self.validity = self.create_client(
+            GetStateValidity,
+            f"{NAMESPACE}/check_state_validity",
+            callback_group=self.callbacks,
+        )
+        # The generated static transforms, republished here because there is no
+        # `cite_bringup` in this rig to run `frame_server`. Without them the
+        # collision objects arrive in a frame TF cannot resolve, and move_group
+        # ACCEPTS the diff and then drops them — a scene that reports success and
+        # holds nothing, which is precisely the failure this file exists to catch
+        # rather than to suffer.
+        self.frames = StaticTransformBroadcaster(self)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+    def publish_frames(self) -> None:
+        messages = []
+        for transform in static_transforms(ZONE):
+            message = TransformStamped()
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.header.frame_id = transform.parent
+            message.child_frame_id = transform.child
+            (
+                message.transform.translation.x,
+                message.transform.translation.y,
+                message.transform.translation.z,
+            ) = transform.xyz_m
+            message.transform.rotation = quaternion_from_rpy(*transform.rpy_rad)
+            messages.append(message)
+        self.frames.sendTransform(messages)
+
+    def wait_for_scene_frame(self, timeout: float = CALL_CEILING_S) -> bool:
+        """Block until the frame the collision objects are expressed in resolves.
+
+        A wait on a condition, not on a duration: `can_transform` returns as soon
+        as the transform is in the buffer. It is the same shape as
+        `wait_for_service` above, and it is here because applying an object into
+        an unresolvable frame succeeds and then silently drops it.
+        """
+        return self.tf_buffer.can_transform(
+            self.moveit["base_link"],
+            self.scene_frame,
+            RclpyTime(),
+            timeout=Duration(seconds=timeout),
+        )
+
+    def _collision_object(self, body, operation) -> CollisionObject:
+        primitive = SolidPrimitive()
+        primitive.type = PRIMITIVES[body.primitive]
+        primitive.dimensions = list(body.dimensions_m)
+
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = body.xyz_m
+        pose.orientation = quaternion_from_rpy(*body.rpy_rad)
+
+        obj = CollisionObject()
+        obj.id = body.object_id
+        obj.header.frame_id = body.frame_id
+        obj.primitives = [primitive]
+        obj.primitive_poses = [pose]
+        obj.operation = operation
+        return obj
+
+    def set_scene(self, operation) -> bool:
+        """Add or remove every generated collision object; return the service verdict."""
+        scene = PlanningScene()
+        # A diff: move_group's scene already holds the robot's own state and its
+        # allowed-collision matrix, and replacing it wholesale would discard both.
+        scene.is_diff = True
+        scene.world.collision_objects = [
+            self._collision_object(body, operation) for body in self.bodies
+        ]
+        response = self.call(self.apply_scene, ApplyPlanningScene.Request(scene=scene))
+        return response is not None and response.success
+
+    def scene_object_names(self) -> set:
+        request = GetPlanningScene.Request()
+        request.components.components = PlanningSceneComponents.WORLD_OBJECT_NAMES
+        response = self.call(self.get_scene, request)
+        assert response is not None, "get_planning_scene never answered"
+        return {obj.id for obj in response.scene.world.collision_objects}
+
+    def validity_of(self, positions) -> tuple:
+        """Return (valid, colliding generated-object ids) for one configuration.
+
+        `is_diff` on the state, so the gripper joint and everything else comes
+        from what move_group is monitoring; only the arm joints are being asked
+        about.
+        """
+        request = GetStateValidity.Request()
+        state = self._state(positions)
+        state.is_diff = True
+        request.robot_state = state
+        request.group_name = self.moveit["group"]
+        response = self.call(self.validity, request)
+        assert response is not None, "check_state_validity never answered"
+        touched = set()
+        for contact in response.contacts:
+            touched |= {contact.contact_body_1, contact.contact_body_2} & self.scene_ids
+        return response.valid, touched
 
     def _publish_state(self) -> None:
         message = JointState()
@@ -389,6 +564,23 @@ class TestPlanningPipeline(unittest.TestCase):
         assert cls.harness.ik.wait_for_service(STARTUP_CEILING_S), (
             "move_group never advertised compute_ik"
         )
+        for client, name in (
+            (cls.harness.apply_scene, "apply_planning_scene"),
+            (cls.harness.get_scene, "get_planning_scene"),
+            (cls.harness.validity, "check_state_validity"),
+        ):
+            assert client.wait_for_service(STARTUP_CEILING_S), (
+                f"move_group never advertised {name}"
+            )
+        # Published once the executor is running, so the latched transforms are
+        # already in move_group's buffer by the time anything is applied into the
+        # frame they define.
+        cls.harness.publish_frames()
+
+    #: The configuration test 9a found, so that 9b can ask for the same one
+    #: without the scene. Set by 9a, and its absence is 9b's failure message
+    #: rather than an error nobody can read.
+    blocked_goal = None
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -490,6 +682,53 @@ class TestPlanningPipeline(unittest.TestCase):
             "two identical requests to the deterministic planner produced different "
             "trajectories; whatever ADR-0027 bought, it did not buy this",
         )
+
+    def test_4_b_the_checked_waypoint_spacing_is_the_planners_sampling_time(self) -> None:
+        # The number that decides whether an obstacle is SEEN, measured rather
+        # than assumed.
+        #
+        # Pilz's only path check is the ValidateSolution response adapter, which
+        # calls `PlanningScene::isPathValid`. That iterates the trajectory's
+        # WAYPOINTS and interpolates nothing between them, so the spacing of the
+        # waypoints is the resolution of the collision check. The spacing is
+        # Pilz's sampling time, and it is a C++ default argument —
+        # `TrajectoryGenerator::generate(..., double sampling_time = 0.1)`,
+        # called with three arguments — with no ROS parameter anywhere: `grep -rn
+        # sampling_time` over this repository returns nothing because there is
+        # nothing here to state.
+        #
+        # This test is what turns that from a library default nobody wrote down
+        # into a number this project has measured and will be told about if it
+        # changes. The consequence of the number is stated where the
+        # configuration is, in the generated planning-pipelines file.
+        moveit = self.harness.moveit
+        response = self.harness.call(
+            self.harness.plan,
+            self.harness.request(moveit["default_pipeline"], moveit["default_planner_id"]),
+        )
+        self.assertIsNotNone(response)
+        points = response.motion_plan_response.trajectory.joint_trajectory.points
+        self.assertGreater(len(points), 2, "too few waypoints to measure a spacing")
+
+        def seconds(point) -> float:
+            return point.time_from_start.sec + point.time_from_start.nanosec * 1e-9
+
+        # The last interval is whatever is left over when the motion ends between
+        # two samples, so it is excluded rather than tolerated.
+        steps = [seconds(b) - seconds(a) for a, b in zip(points, points[1:])][:-1]
+        self.assertTrue(steps, "a trajectory with no interior interval")
+        for step in steps:
+            self.assertAlmostEqual(
+                step,
+                SAMPLING_TIME_S,
+                places=6,
+                msg=(
+                    f"the planner sampled at {step:.6f} s, not {SAMPLING_TIME_S} s. "
+                    "That is the spacing of the only collision check a Pilz path "
+                    "gets, so the note about what it can and cannot see in the "
+                    "generated planning-pipelines file is now wrong"
+                ),
+            )
 
     def test_5_the_fallback_pipeline_still_plans(self) -> None:
         # The fallback has to work on the day the default refuses, and the day it
@@ -611,4 +850,234 @@ class TestPlanningPipeline(unittest.TestCase):
             MoveItErrorCodes.SUCCESS,
             "the goal LIN refused is one PTP must be able to make; if PTP refuses it "
             "too then the goal is unreachable and test 7 proves nothing",
+        )
+
+    # -------------------------------------------------------------------------
+    # The one question the safety of ADR-0027 rests on
+    # -------------------------------------------------------------------------
+    #
+    # Under OMPL, `ValidateSolution` was redundant: the planner searched the
+    # scene and would not return a colliding path in the first place. Under Pilz
+    # it is the SOLE environment-collision gate for every arm motion in this
+    # cell — the generator performs one self-collision check during IK and
+    # nothing else, so nothing but this adapter refuses a straight line through a
+    # table.
+    #
+    # A component that became load-bearing and gained no assertion is the defect,
+    # not the configuration. "The fallback was taken zero times across three
+    # runs" is equally consistent with the mechanism working and never being
+    # needed, and with the mechanism being inert; the two are indistinguishable
+    # from that evidence.
+    #
+    # These two tests make them distinguishable. 9a loads the cell's real
+    # planning scene, PROVES that a particular joint-space interpolation passes
+    # through a named generated object — start valid, goal valid, an intermediate
+    # configuration in contact with `conveyor_1` or whatever else it finds — and
+    # asserts the request is refused with an empty trajectory. 9b removes the
+    # objects and asserts the identical request then succeeds. Without 9b the
+    # refusal in 9a could be coming from anywhere; with it, the scene is the only
+    # thing that changed.
+    #
+    # They run last and in this order on purpose: 9a is the only test that leaves
+    # state in move_group's world, and 9b is what takes it out again.
+
+    #: Candidate goals for 9a — the first three joints, in the order they are
+    #: tried. Joint-space rather than poses, because the claim is about a
+    #: joint-space INTERPOLATION and a pose goal would put IK between the test
+    #: and what it is asserting.
+    #:
+    #: Their shape, so the next reader does not have to reverse-engineer it: the
+    #: base is swung a quarter or a half turn towards one of the belts and the
+    #: shoulder and elbow are pitched out and down. That is the shape of every
+    #: motion in this cell that has furniture under it, and the belts are the
+    #: furniture nearest an arm — `conveyor_1` and `conveyor_2` stand either side
+    #: of `arm_2`, their top faces level with its mounting plane.
+    #:
+    #: They were found by sweeping 225 configurations against move_group's own
+    #: collision check on 2026-08-27; twelve satisfied the premise below and
+    #: these ten are them, ordered so that the one blocked earliest along its
+    #: path is tried first. NONE OF THAT IS TRUSTED HERE. Each candidate is
+    #: admitted only if move_group says, now, that the start is clear, the goal
+    #: is clear, and some point on the straight line between them is inside a
+    #: named generated object. If none is, this test fails rather than passing
+    #: vacuously — the layout moved, or the scene stopped being loaded, and both
+    #: are worth being told about.
+    BLOCKED_CANDIDATES = (
+        (1.5708, 1.20, -1.05),
+        (-1.5708, 1.20, -1.05),
+        (1.5708, 1.20, -1.40),
+        (-1.5708, 1.20, -1.40),
+        (1.5708, 0.80, -1.05),
+        (-1.5708, 0.80, -1.05),
+        (1.1781, 1.20, -1.05),
+        (-1.1781, 1.20, -1.05),
+        (1.5708, 1.20, -1.80),
+        (-1.5708, 1.20, -1.80),
+    )
+
+    #: Where along the straight joint-space line between start and goal the
+    #: interpolation is sampled. Fractions rather than a count of waypoints,
+    #: because what is being demonstrated is a property of the LINE and not of
+    #: any particular planner's sampling.
+    INTERPOLATION_FRACTIONS = tuple(i / 10.0 for i in range(1, 10))
+
+    def _candidate(self, first_three) -> list:
+        """One candidate as a full joint vector: its three joints, then home's."""
+        goal = [float(value) for value in self.harness.home]
+        goal[:3] = [float(value) for value in first_three]
+        return goal
+
+    def _blocked_between(self, start, goal):
+        """Return the ids a point on the straight line between these two touches."""
+        for fraction in self.INTERPOLATION_FRACTIONS:
+            between = [a + (b - a) * fraction for a, b in zip(start, goal)]
+            valid, touched = self.harness.validity_of(between)
+            if not valid and touched:
+                return fraction, touched
+        return None, set()
+
+    def test_9_a_a_ptp_path_through_the_cells_furniture_is_refused(self) -> None:
+        harness = self.harness
+
+        self.assertTrue(
+            harness.wait_for_scene_frame(),
+            f"{harness.scene_frame} never resolved against "
+            f"{harness.moveit['base_link']}, so a collision object placed in it "
+            "would be accepted and dropped rather than added",
+        )
+        self.assertTrue(
+            harness.set_scene(CollisionObject.ADD),
+            "move_group refused the generated planning scene",
+        )
+        # Applying is not trusted. `ApplyPlanningScene` reports success when the
+        # diff was accepted, which is not the same as the objects being in the
+        # world — the same distinction `cite_facility`'s loader makes, and for
+        # the same reason.
+        present = harness.scene_object_names()
+        self.assertEqual(
+            harness.scene_ids - present,
+            set(),
+            f"move_group accepted the diff and holds {sorted(present)}",
+        )
+
+        start = [float(value) for value in harness.home]
+        valid, touched = harness.validity_of(start)
+        self.assertTrue(
+            valid,
+            "the home configuration L0 declares is in collision with "
+            f"{sorted(touched)} once the cell's own furniture is loaded. That is a "
+            "finding about the model or the scene, not about this test — every "
+            "plan in the running cell starts from here",
+        )
+
+        found = None
+        for candidate in self.BLOCKED_CANDIDATES:
+            goal = self._candidate(candidate)
+            goal_valid, _ = harness.validity_of(goal)
+            if not goal_valid:
+                continue
+            fraction, blocked_by = self._blocked_between(start, goal)
+            if fraction is not None:
+                found = (goal, fraction, blocked_by)
+                break
+
+        self.assertIsNotNone(
+            found,
+            "no candidate goal has a clear start, a clear goal and a blocked "
+            "straight line between them. The premise of this test is gone, not its "
+            "conclusion: either the layout moved or the scene stopped being loaded, "
+            "and both are worth knowing",
+        )
+        goal, fraction, blocked_by = found
+        type(self).blocked_goal = goal
+
+        response = harness.call(
+            harness.plan,
+            harness.request(
+                harness.moveit["default_pipeline"], harness.moveit["default_planner_id"], goal
+            ),
+        )
+        self.assertIsNotNone(response, "plan_kinematic_path never answered")
+        result = response.motion_plan_response
+        self.assertNotEqual(
+            result.error_code.val,
+            MoveItErrorCodes.SUCCESS,
+            f"the default planner returned a path whose interpolation is inside "
+            f"{sorted(blocked_by)} at {fraction:.0%} of the way along it. Nothing "
+            "else in this configuration checks a generated path against the scene, "
+            "so this is an arm driven through the cell's furniture",
+        )
+        # The code, pinned — and what it is pinned to is the point. MoveIt's
+        # ValidateSolution reports a plain `FAILURE`, not `INVALID_MOTION_PLAN`
+        # and not a collision-specific code, so a CALLER CANNOT TELL from the
+        # response that the refusal was a collision. It cannot tell it from an
+        # unreachable goal or from a start state out of bounds either. That is
+        # why the pair of tests is the evidence and a single refusal is not, and
+        # it is why the skill server's fallback treats every refusal alike.
+        self.assertEqual(
+            result.error_code.val,
+            MoveItErrorCodes.FAILURE,
+            f"the refusal came back as {result.error_code.val}, which is not the "
+            "generic FAILURE this pipeline reported when this test was written. If "
+            "MoveIt has started distinguishing a collision refusal, the skill "
+            "server can act on it and the comment here is out of date",
+        )
+        # And what a refusal LOOKS like here, because it is not what test 7's
+        # refusal looks like and a caller that told them apart by the wrong
+        # feature would execute this one. LIN is refused during generation and
+        # comes back empty; this path is generated successfully and then marked
+        # invalid, so the trajectory that failed IS ATTACHED to the response.
+        # Only the error code says it must not be run.
+        self.assertGreater(
+            len(result.trajectory.joint_trajectory.points),
+            0,
+            "a path rejected after generation came back without the trajectory it "
+            "rejected; if MoveIt now clears it, the warning in this test about "
+            "callers that branch on the trajectory is out of date",
+        )
+
+    def test_9_b_the_same_request_plans_once_the_furniture_is_gone(self) -> None:
+        # The complement, and it is what makes 9a evidence rather than
+        # decoration. A refusal on its own could come from an unreachable goal, a
+        # joint limit, a start state out of bounds — from anywhere. Removing the
+        # objects and asking for the identical plan leaves the scene as the only
+        # difference between the two answers.
+        harness = self.harness
+        self.assertIsNotNone(
+            self.blocked_goal,
+            "test 9a did not record a goal, so this test has nothing to ask for "
+            "and proves nothing",
+        )
+
+        self.assertTrue(
+            harness.set_scene(CollisionObject.REMOVE),
+            "move_group refused to remove the generated planning scene",
+        )
+        self.assertEqual(
+            harness.scene_object_names() & harness.scene_ids,
+            set(),
+            "the objects are still in move_group's world, so the request below "
+            "would be asked under the same conditions as 9a",
+        )
+
+        response = harness.call(
+            harness.plan,
+            harness.request(
+                harness.moveit["default_pipeline"],
+                harness.moveit["default_planner_id"],
+                self.blocked_goal,
+            ),
+        )
+        self.assertIsNotNone(response, "plan_kinematic_path never answered")
+        result = response.motion_plan_response
+        self.assertEqual(
+            result.error_code.val,
+            MoveItErrorCodes.SUCCESS,
+            "the identical request was refused with an EMPTY world, so the refusal "
+            f"in 9a was not the planning scene. Error code {result.error_code.val}",
+        )
+        self.assertGreater(
+            len(result.trajectory.joint_trajectory.points),
+            1,
+            "the planner reported success and returned no motion",
         )

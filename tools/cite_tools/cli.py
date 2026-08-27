@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cite_tools import generate as gen
+from cite_tools.generate.moveit import PlanningConfigurationError
 from cite_tools.model import export
 from cite_tools.model.loader import ModelError, load
 from cite_tools.model.resolve import ResolveError, resolve
@@ -38,6 +39,24 @@ ModelOption = Annotated[
     Path,
     typer.Option("--model", "-m", help="Path to the model/ directory.", show_default=False),
 ]
+
+
+def _generate(facility_model):
+    """Run the generators, reporting a model problem as a finding rather than a trace.
+
+    A generator raises when the model asks for something it cannot emit — an
+    unknown planning pipeline, a planner the pipeline does not register. That is
+    a MODEL problem and belongs in the same shape as every other one, `error
+    <rule> <where>`. It used to abort the command with a raw traceback, which
+    reads as a tool that crashed rather than as a model that is wrong.
+    """
+    try:
+        return gen.generate(facility_model)
+    except PlanningConfigurationError as exc:
+        err_console.print(f"[red]error[/red] [dim]{exc.rule}[/dim] {exc.where}")
+        err_console.print(f"  {exc.message}")
+        err_console.print("\n[red]1 error(s).[/red] The model is not valid.")
+        raise typer.Exit(code=1) from exc
 
 
 def generated_dir(model: Path) -> Path:
@@ -164,7 +183,7 @@ def validate(
     # reference produces a traceback instead of a finding.
     if write:
         export.write(model / "schema")
-        gen.write(gen.generate(facility_model), generated_dir(model))
+        gen.write(_generate(facility_model), generated_dir(model))
 
     findings = referential.check(facility_model)
     findings += physical.check(facility_model)
@@ -186,7 +205,7 @@ def validate(
     # because generation is deterministic (ADR-0004).
     generated_problems: list[str] = []
     if not any(f.severity is Severity.ERROR for f in findings) and not schema_problems:
-        artifacts = gen.generate(facility_model)
+        artifacts = _generate(facility_model)
         generated_problems = _determinism_problems(model, artifacts)
         generated_problems += gen.differences(artifacts, generated_dir(model))
         for problem in generated_problems:

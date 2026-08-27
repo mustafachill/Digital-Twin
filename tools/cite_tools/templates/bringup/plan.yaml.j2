@@ -136,9 +136,14 @@ plan:
         # server: a planner choice is a claim about this arm, and the server's
         # own parameter names are these names, so nothing maps one to the other.
         default_pipeline: {{ manager.default_pipeline }}
-        default_planner_id: {{ manager.default_planner_id }}
+        default_planner_id: "{{ manager.default_planner_id }}"
         fallback_pipeline: {{ manager.fallback_pipeline }}
         fallback_planner_id: "{{ manager.fallback_planner_id }}"
+        # Of the planner ids those pipelines register, the ones that define the
+        # SHAPE of the path. The server refuses to let the fallback answer such a
+        # request: a sampling planner would return a curve through the same
+        # endpoints and the skill would report success (ADR-0027).
+        cartesian_planner_ids: [{{ manager.cartesian_planner_ids | join(', ') }}]
 {% endif %}
 {% endfor %}
 

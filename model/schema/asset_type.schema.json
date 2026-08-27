@@ -798,6 +798,7 @@
           "type": "string"
         },
         "default_planner_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
           "title": "Default Planner Id",
           "type": "string"
         },
@@ -819,6 +820,7 @@
         },
         "fallback_planner_id": {
           "default": "",
+          "pattern": "^([A-Za-z][A-Za-z0-9_]*)?$",
           "title": "Fallback Planner Id",
           "type": "string"
         },

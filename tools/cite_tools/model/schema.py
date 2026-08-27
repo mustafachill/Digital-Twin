@@ -33,6 +33,13 @@ Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*$")]
 #: ``cite_world``, or ``<asset_id>/<frame_id>`` naming a frame on another asset.
 FrameRef = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?$")]
 
+#: A MoveIt planner id, as the planner registers it — ``PTP``, ``LIN``,
+#: ``RRTConnectkConfigDefault``. Deliberately NOT `Identifier`: these are MoveIt's
+#: names and MoveIt capitalises them, so rule 4's `lower_snake_case` does not
+#: apply. What this does enforce is that the value is a name at all — non-empty,
+#: and not something that YAML will read back as a boolean or a number.
+PlannerId = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_]*$")]
+
 Triple = tuple[float, float, float]
 
 
@@ -557,13 +564,21 @@ class PlanningSpec(Strict):
     #: would silently apply one arm's ceiling to a different robot.
     max_acceleration_rad_s2: Annotated[float, Field(gt=0.0)]
     #: Joint deceleration ceiling in rad/s^2, as a MAGNITUDE. Pilz's trapezoidal
-    #: profile treats braking separately from accelerating and refuses to build a
-    #: PTP generator for a group whose joints do not all declare one — the error
-    #: is "deceleration limit not set for group", raised at plan time rather than
-    #: at load time, so a pipeline that started cleanly still fails every request
-    #: (ADR-0027). MoveIt's own convention is that the value is negative; the
-    #: sign is applied where MoveIt is the consumer, not stated here, because a
-    #: braking ceiling is a magnitude in every other part of this model.
+    #: profile treats braking separately from accelerating (ADR-0027).
+    #:
+    #: It is NOT true that omitting it makes Pilz refuse every request, which is
+    #: what this comment claimed before it was checked. MoveIt derives the
+    #: ceiling when it is missing — `joint_limits_aggregator.cpp` sets
+    #: `max_deceleration = -max_acceleration` whenever an acceleration limit is
+    #: present and a deceleration limit is not — so an arm that states
+    #: `max_acceleration_rad_s2` already has a derived braking ceiling equal to
+    #: it. Requiring this key makes that ceiling a stated decision rather than a
+    #: side effect of the acceleration one, which is the only form in which the
+    #: two can ever differ.
+    #:
+    #: MoveIt's own convention is that the value is negative; the sign is applied
+    #: where MoveIt is the consumer, not stated here, because a braking ceiling
+    #: is a magnitude in every other part of this model.
     max_deceleration_rad_s2: Annotated[float, Field(gt=0.0)]
 
     #: Which MoveIt pipeline plans by default, and which one a refusal falls back
@@ -580,13 +595,25 @@ class PlanningSpec(Strict):
     #: Pilz has no default planner and refuses a request with an empty planner id
     #: ("No ContextLoader for planner_id ''"), so this is stated rather than left
     #: to the pipeline.
-    default_planner_id: str
+    #:
+    #: Constrained rather than a bare `str`. An empty value was schema-legal,
+    #: generated an unquoted plan value that YAML parses back as `None`, and
+    #: failed at launch — after `validate-model` had already said the model was
+    #: valid, which is the worst possible place for it to fail. The generator
+    #: checks the rest: that the id is one the chosen pipeline registers, and
+    #: that a Cartesian planner is not made the default of a group that cannot
+    #: solve one along a whole path.
+    default_planner_id: PlannerId
     fallback_pipeline: str
     #: Empty means "whatever that pipeline is configured to default to". For the
     #: generated OMPL block that is its single planner configuration, which is
     #: exactly the planner every motion in this cell used before ADR-0027 — so
     #: the fallback path is the behaviour this cell already had, unchanged.
-    fallback_planner_id: str = ""
+    #:
+    #: The one planner id that may be empty, which is why it is not a `PlannerId`.
+    #: A non-empty value still has to be a name, and the generator still checks it
+    #: against what the fallback pipeline registers.
+    fallback_planner_id: Annotated[str, Field(pattern=r"^([A-Za-z][A-Za-z0-9_]*)?$")] = ""
 
     #: Cartesian ceilings for the pipelines that interpolate a path in task space
     #: rather than in joint space — Pilz LIN and CIRC read all four and cannot be

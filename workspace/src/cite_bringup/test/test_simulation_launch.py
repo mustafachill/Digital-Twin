@@ -29,6 +29,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 from pathlib import Path
+import re
 from types import ModuleType
 
 from cite_bringup.plan import HARDWARE_OPT_IN_ENV, load, resolve_uri
@@ -768,6 +769,98 @@ def test_every_gripper_value_in_the_plan_reaches_the_skill_server(
         )
         assert delivered["asset_id"] == manager.asset
         assert delivered["use_sim_time"] is True
+
+
+#: Where the L3 server declares its parameter names. Read rather than restated:
+#: rclcpp drops an override for a parameter the node never declared, WITHOUT an
+#: error, so a rename on either side of this boundary is silent by construction
+#: and only a comparison can see it.
+SKILL_SERVER = (
+    Path(__file__).resolve().parents[2] / "cite_skills" / "src" / "skill_server.cpp"
+)
+
+#: The one delivered name the server does not declare, and does not have to.
+#: `use_sim_time` is declared by rclcpp itself for every node.
+BUILT_IN_PARAMETERS = frozenset({"use_sim_time"})
+
+#: The planner choice the plan carries for L3 (ADR-0027), by the name the server
+#: declares. Listed rather than derived from `MoveItConfig`: most of that
+#: dataclass is artifact paths for move_group and never reaches the skill server,
+#: so a derived list would assert something else and pass.
+PLANNER_KEYS = (
+    "default_pipeline",
+    "default_planner_id",
+    "fallback_pipeline",
+    "fallback_planner_id",
+    "cartesian_planner_ids",
+)
+
+
+def _declared_parameters() -> set:
+    assert SKILL_SERVER.exists(), (
+        f"{SKILL_SERVER} is not where this test expects it; the comparison below "
+        "would silently assert nothing"
+    )
+    return set(re.findall(r'declare_parameter\(\s*"([A-Za-z0-9_]+)"', SKILL_SERVER.read_text()))
+
+
+def test_every_planner_value_in_the_plan_reaches_the_skill_server(
+    module: ModuleType,
+) -> None:
+    """The gripper defect above, in the shape ADR-0027 could repeat it.
+
+    The test beside this one exists because eleven plan values silently failed to
+    arrive. It iterates `manager.gripper`, and the planner choice is not there —
+    it is on `manager.moveit`, so nothing that test does can see it. Which
+    pipeline plans and which one rescues a refusal is exactly the kind of value
+    whose absence changes nothing visible: the planner field stays empty, the
+    default pipeline answers everything, and every scenario still passes.
+    """
+    plan = _plan()
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        delivered = module._skill_parameters(plan, manager)
+        for key in PLANNER_KEYS:
+            expected = getattr(manager.moveit, key)
+            if isinstance(expected, tuple):
+                expected = list(expected)
+            assert key in delivered, f"{manager.asset}: {key} never reaches L3"
+            assert delivered[key] == expected, f"{manager.asset}: {key}"
+
+        # Not empty, which is the failure the four keys were added to prevent:
+        # an empty pipeline name means "say nothing", so a plan that stopped
+        # carrying them would leave every arm on move_group's own default and
+        # look identical from outside.
+        assert delivered["default_pipeline"], manager.asset
+        assert delivered["default_planner_id"], manager.asset
+        assert delivered["fallback_pipeline"] != delivered["default_pipeline"], (
+            f"{manager.asset}: the fallback is the planner that would have refused"
+        )
+
+
+def test_the_skill_server_declares_every_parameter_the_plan_delivers(
+    module: ModuleType,
+) -> None:
+    """The mechanism behind both of the tests above, asserted once.
+
+    An override for an undeclared parameter is dropped by rclcpp without an
+    error. That is why `gripper_max_width_m` "arrived" for as long as nobody
+    checked. Comparing the delivered names against the declared ones catches the
+    next one without anybody having to think of it first.
+    """
+    declared = _declared_parameters()
+    plan = _plan()
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        delivered = set(module._skill_parameters(plan, manager))
+        undeclared = delivered - declared - BUILT_IN_PARAMETERS
+        assert not undeclared, (
+            f"{manager.asset}: {sorted(undeclared)} are delivered to the skill server "
+            f"and declared nowhere in {SKILL_SERVER.name}, so rclcpp drops them "
+            "silently"
+        )
 
 
 def test_the_skill_servers_are_given_those_parameters(

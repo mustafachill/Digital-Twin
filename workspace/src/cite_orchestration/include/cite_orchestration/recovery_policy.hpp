@@ -88,10 +88,19 @@ inline Recovery recovery_for(uint8_t code)
     case ResultCode::CANCELLED:
       return Recovery::NONE;
 
-    //: A planner is stochastic and a scene changes. Both mean the next attempt
-    //: is a genuinely different attempt — but only if the goal is rebuilt from a
-    //: fresh observation, because the pose that failed to plan may simply not be
-    //: where the work-piece is any more.
+    //: The next attempt has to be a genuinely DIFFERENT attempt, and what makes
+    //: it one is the re-observation this value names — not the planner.
+    //:
+    //: That distinction used to be carried by "a planner is stochastic and a
+    //: scene changes", and the first half of it stopped being true under
+    //: ADR-0027: the default planner integrates a profile, so an identical goal
+    //: against an unchanged scene returns an identical refusal, immediately.
+    //: Nothing about the policy changes, because the policy never rested on
+    //: redrawing samples: `RecoverNode` returns the station to WAITING and the
+    //: station's tree detects before it picks, so the goal is rebuilt from what
+    //: the cell looks like now. What is bounded is the loop — `recovery_for`
+    //: with a budget turns a retry past `retry_budget` into an ESCALATE — so a
+    //: pose that keeps failing reaches an operator rather than circling.
     case ResultCode::PLANNING_FAILED:
       return Recovery::RETRY_DIFFERENTLY;
 

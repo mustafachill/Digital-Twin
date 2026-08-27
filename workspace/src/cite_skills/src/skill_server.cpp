@@ -53,6 +53,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -187,6 +188,14 @@ public:
     declare_parameter("default_planner_id", "");
     declare_parameter("fallback_pipeline", "");
     declare_parameter("fallback_planner_id", "");
+    // Which of the planner ids above define the SHAPE of the path rather than
+    // only its endpoints. From the plan, generated from the one place that says
+    // what a pipeline is made of, because it is a fact about MoveIt and would
+    // otherwise be a second copy of that fact living in this file.
+    //
+    // What it decides: whether a refusal may be rescued by the fallback. It may
+    // not, when a straight line was the requirement — see `is_cartesian`.
+    declare_parameter("cartesian_planner_ids", std::vector<std::string>{});
     declare_parameter("gripper_max_effort_n", 60.0);
     // The gripper's own units at each end of its travel, and the opening they
     // correspond to. GripperCommand.position is passed straight to the joint, so
@@ -345,7 +354,17 @@ public:
     fallback_planner_ = {
       get_parameter("fallback_pipeline").as_string(),
       get_parameter("fallback_planner_id").as_string()};
-    if (fallback_planner_.pipeline == preferred_planner_.pipeline) {
+    const auto cartesian = get_parameter("cartesian_planner_ids").as_string_array();
+    cartesian_planner_ids_ = std::set<std::string>(cartesian.begin(), cartesian.end());
+    // Emptiness FIRST. Both defaults are empty on purpose — that is this node's
+    // documented pre-ADR-0027 behaviour, "say nothing and let move_group apply
+    // the file's default" — and an empty fallback next to an empty default is
+    // not two names colliding, it is no names at all. Testing equality first
+    // warned about it at the same level as the fallback line people are told to
+    // grep for.
+    if (!fallback_planner_.empty() &&
+      fallback_planner_.pipeline == preferred_planner_.pipeline)
+    {
       // Not fatal, and deliberately not silent: a fallback that is the planner
       // that just refused doubles the time every failure takes and reports
       // nothing new. The model forbids it; this catches a plan that was written
@@ -928,6 +947,17 @@ private:
 
     report(Pick::Feedback::PHASE_APPROACHING, 0.2);
     auto approach = grasp;
+    // The standoff pose an approach starts from. Whoever wires a Cartesian
+    // planner into this approach — which is the obvious next use of ADR-0027's
+    // LIN — should read this first, because on this arm the boundary is narrow
+    // and measured. `test/test_planning_pipeline.py` asserts both halves: LIN
+    // plans a purely vertical 50 mm approach at a fixed base yaw, and REFUSES a
+    // motion that turns the base, because a straight Cartesian path needs the
+    // full six-degree-of-freedom pose solvable at every sample and this arm's
+    // tool axis is confined to the plane its first joint points at (ADR-0026).
+    // Both hold on the hardware. The fallback will NOT rescue such a request —
+    // see `is_cartesian` — so the grasps that turn the base will fail rather
+    // than quietly execute a curve, and that refusal is the intended behaviour.
     approach.pose = cite_skills::offset_along_tool_z(grasp.pose, goal->approach_distance_m);
     auto outcome = move_to_pose(approach, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
@@ -1028,6 +1058,12 @@ private:
     release.pose = cite_skills::offset_along_tool_z(release.pose, -pad_offset_m);
 
     auto approach = release;
+    // The same Cartesian-planner boundary as in `Pick`'s approach above, and it
+    // applies here identically: a straight descent onto the release point is the
+    // motion a LIN request would be for, and a base yaw anywhere in it puts the
+    // request outside what this arm can solve along a whole path (ADR-0026, and
+    // measured in `test/test_planning_pipeline.py`). The fallback declines to
+    // answer such a request rather than substituting a sampled curve.
     approach.pose = cite_skills::offset_along_tool_z(release.pose, goal->approach_distance_m);
     auto outcome = move_to_pose(approach, handle, {});
     if (outcome.code != ResultCode::SUCCESS) {
@@ -1348,7 +1384,11 @@ private:
 
     moveit::core::RobotState solution(*state);
     MoveGroupInterface::Plan plan;
+    //: What both passes did together, not what the last one did. `plan_to_pose`
+    //: zeroes the counts it is handed, so the second pass would otherwise erase
+    //: the first pass's work from the number an operator reads.
     cite_skills::PoseGoalAttempts attempts;
+    cite_skills::PoseGoalAttempts this_pass;
 
     // One whole IK-and-plan pass per planner, rather than a fallback inside the
     // per-branch loop. The choice matters: falling back per branch would log a
@@ -1360,7 +1400,7 @@ private:
     // planning time budget.
     const auto pass = [&](const PlannerChoice & choice) {
         select(choice);
-        return cite_skills::plan_to_pose(
+        const auto outcome = cite_skills::plan_to_pose(
           ik_seeds_,
           [&](int seed) {
             // Seed 0 is where the arm stands, so the branch chosen is the one
@@ -1374,27 +1414,51 @@ private:
             }
             // A zero timeout means the solver's own configured timeout, which comes
             // from the generated kinematics.yaml.
-            return solution.setFromIK(group, target.pose, tip_link_, 0.0);
-          },
-          [&] {
+            if (!solution.setFromIK(group, target.pose, tip_link_, 0.0)) {
+              return false;
+            }
+            // Installing the target belongs to SOLVING, not to planning, and it
+            // was on the wrong side of that line. `setJointValueTarget` rejects
+            // a solution that falls outside the joint limits, and the planner is
+            // never asked — but the rejection used to happen inside the planning
+            // callable, after `plan_to_pose` had already counted the branch as
+            // planned. A pose whose every IK branch is out of limits was then
+            // reported as "the planner found no path", which is a sentence about
+            // a planner that was never called, and it triggered a whole second
+            // pass and a fallback log line for a failure no planner produced.
+            // Here, an out-of-limits solution is what it is: this seed yielded
+            // nothing usable.
             if (!move_group_->setJointValueTarget(solution)) {
               RCLCPP_WARN(
                 get_logger(),
                 "discarding an IK solution that falls outside the joint limits");
               return false;
             }
+            return true;
+          },
+          [&] {
             return move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
           },
-          [&] {return cancelled(handle);}, &attempts);
+          [&] {return cancelled(handle);}, &this_pass);
+        attempts = attempts + this_pass;
+        return outcome;
       };
 
     auto failure = pass(preferred_planner_);
-    // Only a planning failure falls back. `NoIkSolution` is a statement about
-    // the arm's reachable set (ADR-0026) and no planner changes it, so retrying
-    // it would spend a second full pass to arrive at the same answer.
-    if (failure == cite_skills::PoseGoalFailure::NoPlan && !fallback_planner_.empty()) {
+    const bool have_fallback = !fallback_planner_.empty();
+    const bool cartesian = is_cartesian(preferred_planner_);
+    if (cite_skills::fallback_is_allowed(failure, have_fallback, cartesian)) {
       report_fallback();
-      failure = pass(fallback_planner_);
+      // The second pass may improve the verdict and may not replace it. Its
+      // seeds are drawn afresh, so it can miss where the first pass found a
+      // branch and answer `NoIkSolution` for a pose the first pass proved
+      // reachable — which L4 ESCALATEs where it would have retried.
+      failure = cite_skills::combined_failure(failure, pass(fallback_planner_));
+    } else if (failure == cite_skills::PoseGoalFailure::NoPlan && have_fallback && cartesian) {
+      // A fallback existed and was deliberately not taken. Said out loud,
+      // because the silent version of this decision is indistinguishable from
+      // the bug it prevents.
+      report_cartesian_refusal();
     }
 
     switch (failure) {
@@ -1450,6 +1514,22 @@ private:
     move_group_->setPlannerId(choice.planner_id);
   }
 
+  /// Whether this choice asks for a path whose SHAPE is the requirement.
+  ///
+  /// The boundary this guards is measured, not assumed. On a five-joint arm a
+  /// Cartesian planner plans a purely vertical approach at a fixed base yaw and
+  /// refuses a motion that turns the base — both asserted in
+  /// `test/test_planning_pipeline.py`, and both consequences of the arm's
+  /// kinematics rather than of the simulator, so they hold on the hardware
+  /// identically. If such a request were quietly rescued by a sampling planner,
+  /// the grasps that stay in the arm's plane would get their straight line and
+  /// the ones that turn the base would get a curve, and the skill would report
+  /// SUCCESS for both.
+  bool is_cartesian(const PlannerChoice & choice) const
+  {
+    return cartesian_planner_ids_.count(choice.planner_id) > 0;
+  }
+
   /// Record that the preferred planner refused and the fallback is being tried.
   ///
   /// A log line rather than a counter, and that is a deliberate limit rather
@@ -1469,6 +1549,20 @@ private:
       describe(preferred_planner_).c_str(), describe(fallback_planner_).c_str());
   }
 
+  /// Record that a fallback was available and deliberately not taken.
+  ///
+  /// The counterpart to `report_fallback`, and it exists because the silent
+  /// version of this decision is indistinguishable from the bug it prevents.
+  void report_cartesian_refusal()
+  {
+    RCLCPP_WARN(
+      get_logger(),
+      "planner fallback declined: %s defines the path, not only its endpoints, so "
+      "%s may not answer in its place — it would return a sampled curve through the "
+      "same endpoints and this skill would report success. Refusing instead.",
+      describe(preferred_planner_).c_str(), describe(fallback_planner_).c_str());
+  }
+
   /// Plan to whatever target is already installed on the move group.
   ///
   /// The joint-space counterpart of the two-pass fallback in `move_to_pose`, for
@@ -1480,6 +1574,12 @@ private:
       return true;
     }
     if (fallback_planner_.empty()) {
+      return false;
+    }
+    // The same refusal as in `move_to_pose`, for the same reason: a planner
+    // asked for a defined path is not interchangeable with one that samples.
+    if (is_cartesian(preferred_planner_)) {
+      report_cartesian_refusal();
       return false;
     }
     report_fallback();
@@ -1790,6 +1890,9 @@ private:
 
   PlannerChoice preferred_planner_;
   PlannerChoice fallback_planner_;
+  //: Which planner ids define a path rather than only its endpoints. Data from
+  //: the plan, never a constant here.
+  std::set<std::string> cartesian_planner_ids_;
 
   int ik_seeds_{8};
   double current_state_timeout_s_{5.0};
