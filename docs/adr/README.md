@@ -127,3 +127,4 @@ not rewritten either.
 | [0033](0033-derive-the-index-standoff-from-the-workpiece.md) | Sense against the part's body, and derive an indexing beam's stand-off from it | Accepted |
 | [0034](0034-process-lifecycle-mechanism-in-cite-runtime.md) | Compensate two rclpy shutdown races, in a new `cite_runtime` package | Accepted |
 | [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted (corrected 2026-08-27) |
+| [0037](0037-classify-an-abort-before-any-recovery-motion.md) | Classify an execution abort before any recovery motion is dispatched | Proposed |
