@@ -22,6 +22,7 @@ project runs its agents. That module records the failure.
 
 from __future__ import annotations
 
+import codecs
 import re
 import sys
 from dataclasses import dataclass
@@ -38,6 +39,62 @@ CONFIG_NAME = ".english-only.yaml"
 #: this check — a Python loop over every character — took 15.7 s across this tree against
 #: 0.25 s for the compiled pattern, and a gate nobody minds running is part of the design.
 _CHUNK_IS_BINARY = b"\x00"
+
+#: How many 16-bit units of a byte-order-mark-less file to test for the UTF-16 pattern.
+#: Enough to be conclusive — the alternating-NUL run has to hold across all of them — and
+#: bounded so the test costs the same on a 4 KB file and a 40 MB one.
+_UTF16_SAMPLE_UNITS = 64
+
+
+def _utf16_encoding(raw: bytes) -> str | None:
+    """The UTF-16 flavour `raw` is written in, or `None` if it is not UTF-16.
+
+    This exists because the NUL-byte binary test cannot tell UTF-16 text from a mesh: every
+    ASCII character in UTF-16 is a byte and a NUL, so `_CHUNK_IS_BINARY` matches on the
+    first letter. A UTF-16 file was therefore dropped without a word — with or without a
+    byte-order mark — which is exactly the silence this module's docstring says it does not
+    do, and a suppression route needing no configuration change at all. It is not exotic:
+    Windows PowerShell and several editors write UTF-16 by default.
+
+    A byte-order mark settles it outright. Without one the test is structural, then
+    confirmed by decoding.
+
+    *Structural*: in UTF-16 text drawn from any Latin script every NUL byte falls at the
+    same parity — second of each pair in LE, first in BE — and no NUL falls at the other.
+    Note what this does **not** assume: that the companion byte is NUL. It is not, for
+    precisely the letters this module hunts. A dotless i is U+0131, so UTF-16-LE writes it
+    `31 01` with a non-NUL high byte, and a test demanding alternating NULs would miss the
+    Turkish file it exists to catch while matching the pure-ASCII one that carries no
+    signal at all.
+
+    *Confirmed by decoding*: the parity test alone can match binary that happens to hold
+    NULs at one parity, so the candidate is decoded and the result required to be printable
+    text. The order matters — `bytes.decode("utf-16-le")` succeeds on almost any
+    even-length input, so decoding *first* would report every mesh and PNG in `assets/` as
+    UTF-16. The parity test is what makes the decode meaningful.
+    """
+    if raw.startswith(codecs.BOM_UTF16_LE):
+        return "utf-16-le"
+    if raw.startswith(codecs.BOM_UTF16_BE):
+        return "utf-16-be"
+
+    sample = raw[: 2 * _UTF16_SAMPLE_UNITS]
+    if len(sample) < 4 or len(sample) % 2 or _CHUNK_IS_BINARY not in sample:
+        return None
+
+    # `(nul_offset, encoding)`: UTF-16-LE puts the NUL of a Latin character second, BE first.
+    for nul_offset, encoding in ((1, "utf-16-le"), (0, "utf-16-be")):
+        if any(byte == 0 for byte in sample[1 - nul_offset :: 2]):
+            continue  # a NUL at the wrong parity — not this flavour
+        if not any(byte == 0 for byte in sample[nul_offset::2]):
+            continue  # no NUL at the right parity either — nothing to go on
+        try:
+            decoded = sample.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if all(character.isprintable() or character in "\t\n\r" for character in decoded):
+            return encoding
+    return None
 
 
 @dataclass(frozen=True)
@@ -221,6 +278,12 @@ def check(root: Path, config: Config | None = None) -> tuple[list[str], list[str
         except OSError:
             # Declared in the manifest but absent from the working tree — a submodule that
             # was never initialised, or a sparse checkout. Not this checker's business.
+            continue
+        # Before the binary test, which cannot tell the two apart: a UTF-16 file is text
+        # that is not valid UTF-8, so it is reported like any other undecodable file rather
+        # than dropped as though it were a mesh.
+        if (encoding := _utf16_encoding(raw)) is not None:
+            problems.append(f"{relative}: not valid UTF-8 (this file is {encoding})")
             continue
         if _CHUNK_IS_BINARY in raw:
             continue

@@ -438,6 +438,62 @@ def test_a_binary_file_is_skipped(write: Writer, tmp_path: Path, signals: Config
     assert problems == []
 
 
+@pytest.mark.parametrize(
+    ("encoding", "reported"),
+    [
+        ("utf-16", "utf-16-le"),  # Python's `utf-16` writes a little-endian BOM
+        ("utf-16-le", "utf-16-le"),
+        ("utf-16-be", "utf-16-be"),
+    ],
+)
+def test_a_utf16_file_is_reported_not_skipped(
+    write: Writer, tmp_path: Path, signals: Config, encoding: str, reported: str
+) -> None:
+    """The suppression route that needed no configuration change at all.
+
+    Every ASCII character in UTF-16 is a byte and a NUL, so the binary test matched on the
+    first letter and the file was dropped without a word — with or without a byte-order
+    mark. That is precisely the silence this module's docstring and ADR-0035 both name as
+    something the checker does not do, and it is reachable by accident: Windows PowerShell
+    and several editors write UTF-16 by default.
+    """
+    write("docs/notes.md", TURKISH.encode(encoding))
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == [f"docs/notes.md: not valid UTF-8 (this file is {reported})"]
+
+
+def test_binary_content_is_not_mistaken_for_utf16(
+    write: Writer, tmp_path: Path, signals: Config
+) -> None:
+    """The other side of the UTF-16 test, and the reason it is structural rather than a
+    bare decode attempt. `bytes.decode("utf-16-le")` succeeds on almost any even-length
+    input, so a checker that simply tried it would report every mesh and every PNG in
+    `assets/` as a text file in the wrong encoding — a gate firing on content nobody wrote,
+    which is how gates get switched off."""
+    write("assets/scene.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x90\xde\xad\xbe\xef")
+    write("assets/mesh.stl", b"\x00" * 80 + b"\x03\x00\x00\x00" + b"\x9a\x99\x19\xbf\xff\xfe\x7f\x42")
+    write("model/grid.bin", b"\x00" * 256)
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == []
+
+
+def test_a_utf16_file_of_english_is_still_reported(
+    write: Writer, tmp_path: Path, signals: Config
+) -> None:
+    """The claim being repaired is about *decoding*, not about Turkish. A file the checker
+    cannot read is a coverage gap whatever it turns out to say, so the report does not
+    depend on the content carrying a signal."""
+    write("docs/notes.md", "# Layout\n\nThe cell has three arms.\n".encode("utf-16-le"))
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == ["docs/notes.md: not valid UTF-8 (this file is utf-16-le)"]
+
+
 def test_a_file_that_is_not_utf8_is_reported_not_skipped(
     write: Writer, tmp_path: Path, signals: Config
 ) -> None:
