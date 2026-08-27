@@ -444,17 +444,121 @@ preemption is `setAborted` (`jazzy:1832`), so it arrives as `CONTROL_FAILED` and
 `stopExecution()`. Do not write a test that assumes a controller-side preempt produces
 `PREEMPTED`; assert against the version in the image and record which one it was.
 
-### 5. The operator reset is part of this work, not a follow-up
+### 5. The operator reset is decided here, and it does not command motion
+
+#### Why it is part of this change and not a follow-up
 
 [`L4-orchestration.md:89`](../architecture/L4-orchestration.md) lists `reset` among the
-control services L4 exposes. `cite_interfaces/srv/` contains exactly two files:
-`GetModelVersion.srv` and `SetMode.srv`. **There is no reset.**
+control services L4 exposes, and the tree in the same document at `:106` contains
+`Sequence: OnFault → StopAll → AwaitReset`. **There is an `AwaitReset` step in the design
+with nothing to await.** `cite_interfaces/srv/` contains exactly `GetModelVersion.srv` and
+`SetMode.srv`, and `cite_orchestration` contains **not a single `create_service` call**.
 
-Making `ESCALATE` common without one turns the first path-tolerance abort into an
-unrecoverable line: the station goes to `BLOCKED`, `RecoverFromFailure` returns `FAILURE`,
-that propagates to the line tree, and nothing can clear it short of restarting the process.
-That cost is stated here so it is not discovered after the merge. The reset service ships in
-the same change or the change does not ship.
+So `Recovery::ESCALATE` (`line_nodes.hpp:894-899`) sets `STATE_BLOCKED`, logs *"is blocked
+and needs an operator"*, and returns `FAILURE` — and the operator it names has no control at
+all. The only exit is restarting the process.
+
+That is survivable today because `ESCALATE` is rare: it is reached by `UNREACHABLE`,
+`NOT_IMPLEMENTED`, an unrecognised code from a newer producer, or a retry past budget.
+**Decision 2 makes it routine.** `MOTION_INTERRUPTED → ESCALATE` means the first
+path-tolerance abort blocks a station permanently. Without the reset, this change stops the
+line correctly and never starts it again — trading a safety hole for an availability hole,
+and this project's history says an availability hole gets the detector exempted rather than
+fixed. The reset ships in this change or the change does not ship.
+
+#### The decision: reset is not start
+
+**Clearing `STATE_BLOCKED` returns the station to `STATE_WAITING` — awaiting its trigger —
+and does nothing else.** It must not plan, must not send a `MoveTo` goal, must not drive the
+arm home, and must not resume a belt.
+
+This is ISO 14118's *reset is not start*, and it is the one principle from the standards
+that transfers to this path. It is **not** ISO 10218: those restart-interlock clauses address
+the safety channel — protective stops, presence sensing, a person in the safeguarded space —
+and a controller abort is a functional-channel fault. Do not reach for them here. *(The ISO
+14118 attribution itself is secondary-source and is marked unverified in the evidence table;
+what is decided is the behaviour, which stands on its own reasoning below.)*
+
+There is a second reason beyond safety, and it is the one Universal Robots' Product Alert
+actually gives: **automatic acknowledgement masks the faults that predict a failure.** A
+reset that silently re-drives the arm destroys the evidence of why it stopped. Restarting the
+process — today's only recourse — does exactly that, just more slowly.
+
+If clearing the arm is needed after a reset, that is a **separate, deliberate operator
+action**, at reduced speed with a person present. This is the same reasoning that moves
+`MoveToHome` out of the pre-decision path and into the retry path in decision 1: the motion
+that makes the next attempt possible is part of the attempt, not part of the decision to
+allow one.
+
+#### Scope: one station, and it refuses a faulted line
+
+The service resets **one station**, named in the request. `STATE_BLOCKED` is per-station
+(`StationState.msg:9`) and is what `ESCALATE` sets.
+
+`STATE_FAULTED` (`StationState.msg:10`), which `STOP_LINE` sets at `line_nodes.hpp:901-905`,
+is a **different condition and is not in scope for this service.** `STOP_LINE` is reserved
+for `SAFETY_BLOCKED` and `HARDWARE_FAULT` — the two codes that say the cell itself cannot be
+commanded — so a per-station reset of a faulted line would be resuming one station of a cell
+that is not in a state to be commanded at all. The service **rejects** a request naming a
+faulted station, and **rejects a request for any station while any station is faulted**,
+because `line_maintenance.hpp:105-106` makes one faulted station a faulted line.
+
+Clearing `STATE_FAULTED` is deliberately left open. It needs a decision about what evidence
+makes a cell commandable again, and that decision belongs with the safety layer that does not
+exist yet (`cross-cutting-safety.md`, status `DESIGNED`). Recording it as open is the honest
+answer; implementing a line-wide reset now would be inventing that evidence standard by
+accident.
+
+#### It refuses a reset for a station that is not blocked
+
+A request naming a station in `IDLE`, `WAITING` or `WORKING` is **rejected**, not silently
+accepted as a no-op. Accepting it would make the service a general "make it go" button, and a
+button that is safe to press when nothing is wrong gets pressed when something is.
+
+The rejection carries a typed reason, not a bare `false` — the caller needs to distinguish
+"there was nothing to reset" from "this station is faulted and you may not".
+
+#### What it must record
+
+The diagnostic argument above is lost if the reason a station blocked is discarded on reset.
+It currently would be: `SetStationState` at `line_nodes.hpp:818-822` **clears
+`runtime.blocked_reason` whenever the new state is neither `BLOCKED` nor `FAULTED`**, so a
+reset implemented as "set the station to `WAITING`" destroys the reason as its first act.
+
+`LineState` alone is not where the reason can live afterwards. `LineState.msg:3-5` says it is
+published on the STATE profile — reliable, **volatile** — and is *"a periodic report of the
+present, not a record"*. A person reading it after the fact gets the next message, not the
+last one. And `line_maintenance.hpp:100-102` publishes only the **first** non-empty station
+reason (`if (reason.empty() && ...)`), because `LineState.blocked_reason` is a single
+line-level string and `StationState` carries no reason field at all — so with two stations
+blocked, one reason is already unpublished today.
+
+Three requirements follow, and they are part of this decision:
+
+1. **The reset echoes the reason it cleared** in its typed response. That is the one place a
+   volatile topic cannot lose it, because the operator who reset is holding the reply.
+2. **The reset logs the cleared reason at `WARN` or above, in a stable format** — the station
+   id, the `ResultCode` that caused the block, and the reason string — so the record survives
+   in the process log whether or not anyone was subscribed.
+3. **The station's post-reset state is `WAITING` with the reason cleared, and this must be an
+   explicit act, not a side effect of `SetStationState`.** Relying on the clearing behaviour
+   at `line_nodes.hpp:818-822` is what would make the loss silent.
+
+Whether `StationState` should gain a per-station reason field so that all blocked reasons are
+published rather than the first is **left open**: it is a change to a published message with
+its own consumers, it is not needed for the reset to be diagnosable given requirement 1, and
+deciding it inside this ADR would widen the change without evidence. It is named in "revisit".
+
+#### It is typed, and it lives in `cite_interfaces`
+
+P3 and [ADR-0010](0010-typed-ros-interfaces.md): a new `.srv` in `cite_interfaces`,
+discoverable with `ros2 interface show`. Not a `std_msgs/String` command topic, not a
+parameter, not an untyped trigger — a service, because a reset has exactly one caller at a
+time, must return an answer, and must be able to refuse.
+
+The request names a station. The response carries acceptance, a typed reason on refusal, and
+the cleared reason on success. Beyond that the shape is the implementation's, and this record
+deliberately does not sketch it.
 
 ### 6. What is not decided: recovering the vendor error code
 
@@ -520,7 +624,17 @@ leaves in either order.
   tolerances are tighter than a healthy run needs, this converts ADR-0036's CI flake risk
   into a CI stop.
 - **The reset service is new scope**, pulled into this change by decision 5. It is a typed
-  service, a handler in `line_orchestrator`, and its own tests.
+  `.srv` in `cite_interfaces`, a service server in `cite_orchestration` — which has **no
+  `create_service` call at all** today, so this is the first — and its own tests. It is not
+  optional and it is not small.
+- **The reset deliberately leaves the operator with an unhelpful answer in one case.** After
+  a reset the station awaits its trigger with the arm wherever the abort left it. If that
+  position blocks the next attempt, the operator must clear it as a separate deliberate
+  action. That is the cost of *reset is not start*, and it is accepted rather than designed
+  around.
+- **`STATE_FAULTED` remains unclearable**, so `SAFETY_BLOCKED` and `HARDWARE_FAULT` still
+  require restarting the process. Decision 5 narrows the unrecoverable set rather than
+  emptying it, and says why.
 - **A new interface constant to maintain**, and a narrowed meaning for an existing one, with
   every producer and consumer of `EXECUTION_FAILED` to be re-read.
 - **The classification is a heuristic over positions, and it will sometimes be wrong.** A
@@ -552,6 +666,14 @@ leaves in either order.
 - **If a robot type is added whose controller reports execution failures richly**, the
   temptation will be to branch on it. That is a P9 break and an `ESCALATE`, not a special
   case.
+- **Whether `StationState` should carry a per-station blocked reason.** Today
+  `LineState.blocked_reason` is one line-level string and `line_maintenance.hpp:100-102`
+  publishes only the **first** blocked station's reason, so with two stations blocked one
+  reason is already unpublished. Decision 5 works around this by returning the reason in the
+  reset response rather than by widening a published message. If a second consumer ever needs
+  all of them, that is the change to make.
+- **How `STATE_FAULTED` is cleared**, once there is a safety layer to say what evidence makes
+  a cell commandable again. Left open by decision 5 on purpose.
 
 ## What this record corrects
 
@@ -588,6 +710,13 @@ In the style of [`toolchain.md`](../reference/toolchain.md). Everything below wa
 | `recovery_policy.hpp:132-141`; `ResultCode` max is `UNREACHABLE=9` | Read at `b54140f` | Exact; `10` is the next free value |
 | `MoveToHome` is a `SkillNode`; `record()` is unconditional; `RecoverFromFailure` reads the same key | `skill_nodes.hpp:462`, `:222`, `:305-311`; `line_nodes.hpp:870-892` | Confirmed by reading; **not** observed in a run |
 | `cite_interfaces/srv/` has no reset | `find` at `b54140f` | Two files: `GetModelVersion.srv`, `SetMode.srv` |
+| `cite_orchestration` has no service server at all | grepped for `create_service` at `b54140f` | Zero occurrences in the package |
+| `ESCALATE` sets `STATE_BLOCKED`; `STOP_LINE` sets `STATE_FAULTED` | `line_nodes.hpp:894-899`, `:901-905` | Exact |
+| The design already specified an `AwaitReset` with nothing to await | `L4-orchestration.md:89`, `:106` | Exact |
+| A reset via `SetStationState` would destroy the reason | `line_nodes.hpp:818-822` | Clears `blocked_reason` whenever the new state is neither `BLOCKED` nor `FAULTED` |
+| `LineState` cannot hold the reason afterwards | `LineState.msg:3-5`, `:31`; `line_maintenance.hpp:100-102` | Volatile STATE profile, "a periodic report of the present, not a record"; one line-level string; only the **first** blocked station's reason is published |
+| `StationState` carries no reason field | `StationState.msg` read in full | Confirmed; `STATE_BLOCKED=3`, `STATE_FAULTED=4` |
+| One faulted station makes a faulted line | `line_maintenance.hpp:105-106` | Exact |
 | Four `setAborted` sites on `jazzy` | Fetched `ros2_controllers` `jazzy` HEAD, grepped | Codes at `:470/:517/:1264/:1830`; `setAborted` at `:472/:519/:1266/:1832` |
 | Three sites at tag `4.40.1` | Fetched tag `4.40.1`, grepped | `preempt_active_goal` calls `setCanceled` at `:1919` |
 | Jazzy's released `ros2_controllers` | `ros/rosdistro` `jazzy/distribution.yaml` | `4.42.1-1`; branch `package.xml` says `4.42.1` |
