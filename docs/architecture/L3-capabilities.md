@@ -1,7 +1,7 @@
 # L3 — Capabilities (skills)
 
-- **Status:** `PARTIAL` — **all six skills below now have a server; two of them have never
-  been run against the simulator.**
+- **Status:** `PARTIAL` — **all six skills below have a server; one of them has never been
+  run against the simulator.**
   **Built:** `MoveTo`, `Grasp`, `Pick`, `Place` and `Transfer` are action servers in
   `cite_skills/src/skill_server.cpp`; `Detect` is a server in
   `cite_skills/src/detection_server.cpp`, kept out of the per-arm node because it commands
@@ -11,13 +11,17 @@
   stall on it, and friction carries it — see the status block in
   [CLAUDE.md §2](../../CLAUDE.md) for the current measured pass count, which is not
   restated here (P1).
-  **Built but never brought up:** `detection_server` is compiled and installed, and
-  `cite_bringup/launch/simulation.launch.py` starts one `skill_server` per arm and nothing
-  else. No launch graph starts it, and the belt and beam topics it would read are on Gazebo
-  transport with no ROS bridge, so `Detect` has not run against the simulator at all.
-  `Transfer` has a server and no caller: today's L0 topology is conveyor-mediated and
+  **`Detect` now runs.** `simulation.launch.py` starts one `detection_server` for the zone
+  alongside one `skill_server` per arm, and bridges every beam's raw level from Gazebo into
+  ROS, so the server has something to read. It turns that level into a typed
+  `DetectionEvent`; [L4](L4-orchestration.md) starts a station on the transition and stops
+  the belt on it ([ADR-0032](../adr/0032-index-the-belt.md)). This is exercised by
+  `./scripts/scenario continuous_line`, which is not a gate — see the status block in
+  [CLAUDE.md §2](../../CLAUDE.md) for what it has and has not shown.
+  **`Transfer` has a server and no caller:** today's L0 topology is conveyor-mediated and
   [L4](L4-orchestration.md) refuses a direct arm-to-arm edge at plan time
-  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)).
+  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), corrected
+  2026-08-26 — the refusal stands, its stated reason did not).
   **Not proven:** `./scripts/scenario pick_and_place` is not a green gate. It runs in CI as
   `continue-on-error` at this commit. `MoveTo.Goal.cartesian_path` returns
   `NOT_IMPLEMENTED` ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
@@ -164,9 +168,12 @@ gripper cannot rotate into alignment with the receiving one, so the refusal is u
 squaring-up is a rigid-body result with no friction declared on the pads; Phase 2 has to
 re-measure it before anything is built on it.
 
-**The continuous line of Phase 1.D** accumulates orientation error across stations, and
-that gap is open. Whoever writes it closes the gap first or states plainly that they have
-not.
+**Whether orientation error accumulates across the three stations of the continuous line is
+unmeasured**, and the campaign above names it as such: each station squares the part up on
+closure and gives some back on release, and whether that converges or drifts over the ladder
+was not run. It is not a prediction either way — do not write it down as one. The line now
+reaches far enough to exercise it, which makes the experiment possible rather than
+unnecessary.
 
 ### Skills are stateless between goals
 

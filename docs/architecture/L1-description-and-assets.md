@@ -6,7 +6,10 @@
   `./scripts/scenario bringup`. Inertial validation is implemented and tested
   (`tools/cite_tools/validate/physical.py`). Two simulation fidelity aids ship as Gazebo
   system plugins in `cite_simulation` — the belt and the through-beam — and the generated
-  world instantiates one per asset.
+  world instantiates one per asset. The beam intersects a segment with the part's **collision
+  body**, and an indexing beam's along-belt mounting is **derived from the part** rather than
+  authored ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)); five
+  rules in `cite_tools.validate.geometric` refuse the model shapes that would break it.
   **Not built:** no first-party meshes or materials exist — `assets/` holds only its README
   and manifest — and the scan pipeline is Phase 3.
   **Removed:** the contact-triggered grasp attachment plugin, per
@@ -18,7 +21,7 @@
   `Proposed` with nothing yet in `assets/`; the section "Visual and collision geometry are
   always separate" states the rule, not the current state.
 - **Asset policy and pipeline:** [`../../assets/README.md`](../../assets/README.md)
-- **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md)
+- **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)
 
 ## Responsibility
 
@@ -88,12 +91,17 @@ Two consequences belong to this layer specifically.
   it — and both [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) and Phase 3 point at
   retuning physics for real-time factor — moves grasp quality with it and must be
   **re-measured, not assumed**.
-- **The part rotates between the jaws.** The cause of the large rotations is a grasp-plane
-  offset — the pads engage the part above its centre of mass, which is a couple — measured
-  in
+- **The part rolls between the jaws, about the pad-to-pad axis.** The cause of the large
+  rotations is a grasp-plane offset — the pads engage the part above its centre of mass,
+  which is a couple — measured in
   [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md).
-  **The correction is not in the tree at this commit.** A residual rotation survives it in
-  any case and is an open sim/real divergence for Phase 2.
+  **The correction is now in the tree**, applied by the L3 skill server from the end
+  effector's declared `linkage`, so it is no longer an L1 concern. A residual rotation
+  survives it and is an open sim/real divergence for Phase 2. **Name the axis whenever you
+  quote the residual**: it is a roll between the pads, not a yaw about the tool axis, and the
+  two do not cost the same thing — see that campaign's re-analysis note and
+  [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)'s
+  correction, where the figure had been put into a calculation only a yaw can enter.
 
 The belt and beam plugins that remain are described in
 [`cite_simulation`'s README](../../workspace/src/cite_simulation/README.md), including what

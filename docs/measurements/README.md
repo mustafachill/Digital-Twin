@@ -13,12 +13,28 @@ inspection of code.
 | Campaign | Question | Answer, in one line |
 |---|---|---|
 | [`2026-08-25-friction-grasp/`](2026-08-25-friction-grasp/results.md) | Is a friction grasp in `cell_a` repeatable enough to build a scenario on? | Repeatable in **position**, not in **orientation**. 84 trials. Decided [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). |
-| [`2026-08-25-grasp-plane-offset/`](2026-08-25-grasp-plane-offset/ANALYSIS.md) | Does the grasp-plane offset cause the twist? | It causes the **high mode** and not the rest. Rotations above 20°: 12/20 uncorrected, 0/20 corrected. Up to 18.7° survives correction. |
+| [`2026-08-25-grasp-plane-offset/`](2026-08-25-grasp-plane-offset/ANALYSIS.md) | Does the grasp-plane offset cause the twist? | It causes the **high mode** and not the rest. Rotations above 20°: 12/20 uncorrected, 0/20 corrected. Up to 18.7° of **roll about the pad-to-pad axis** survives correction. |
 | [`2026-08-26-conveyor-yaw-transfer/`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md) | What yaw does a work-piece carry when it reaches a downstream outfeed, and can the gripper pick it? | The belt changes the yaw by **nothing** (36 trials), and the pick succeeds anyway — 23/23 up to 30° — because **the jaws square the part up as they close**. 74 trials. Corrected [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md). |
 
 Read the second alongside the first: it corrects two of the first campaign's published
 readings, and the corrections are listed in its own *Corrections to the friction campaign*
 section.
+
+## The two residual rotations are different quantities
+
+This directory has published **two** rotation figures for the same cell and they have been
+read as one. They are not, and confusing them has already put a number into an ADR's
+arithmetic where it could not belong. Whenever you quote either, quote its axis.
+
+| Figure | What it is | Where it comes from |
+|---|---|---|
+| up to **18.7°** | a **roll about the pad-to-pad axis** — the part turning between the pads, horizontally | the offset campaign's corrected condition, n = 20, with the axis established by a 2026-08-26 re-analysis over 72 published carries |
+| up to **10.62°** | a **yaw about the world vertical** — how the part is turned as it lies on the belt | the conveyor-yaw campaign's 12 end-to-end trials |
+
+A yaw is what decides how wide a part presents to closing jaws, and how far along a belt its
+leading edge breaks a beam. A roll is not, and cannot be substituted for one. **An angle
+without an axis is not a measurement of anything** — that lesson is the conveyor-yaw
+campaign's own, applied to the campaign it quoted.
 
 Read the third alongside both. It is the campaign a decision record was corrected on: it
 did not change what ADR-0031 decided, and it replaced the whole of the reason. It also
@@ -51,6 +67,12 @@ carry that, and neither disturbs the verdicts.
   [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md).
 - **Do not restate a campaign's numbers elsewhere (P1).** Link to the directory. A number
   copied into a layer document is a number that will disagree with its source.
+- **What is not here is not measured.** Three campaigns exist at this commit. In
+  particular, **nothing here measures the three-arm continuous line**: that it now completes
+  is reported from scenario runs, with no thresholds registered in advance, and the status
+  block in [CLAUDE.md §2](../../CLAUDE.md) says so. Nothing here measures the parked index
+  position either, or whether the release-orientation residual accumulates over three
+  stations — the conveyor-yaw campaign names that last one as explicitly unmeasured.
 - **Interleave, do not block.** The offset campaign established that the twist in this cell
   is a two-state process, so a comparison split into consecutive blocks samples the two
   states unevenly and misleads. Alternate conditions against one running cell.

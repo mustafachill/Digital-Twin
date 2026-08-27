@@ -4,8 +4,8 @@
   across 15 files) and the generators in `tools/cite_tools/generate/` emit every artifact in
   the table below except the last two. All five validation levels run: `./scripts/validate-model`
   exits 0, and that command includes the fresh-generator diff **and** a determinism check that
-  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 204
-  tests, all passing.
+  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 215
+  tests at this commit, counted by collection rather than by a run.
   **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
   (Phase 4) — the two rows whose consumers do not exist yet.
   **The two gaps this line used to name are closed**, both by
@@ -20,7 +20,13 @@
   L0 and no longer hand-written above it.
   Seven types, 14 assets: the work-piece type has **no instances**, deliberately — where a
   part is at any moment is the process's business, not the layout's.
-- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md)
+  **The work-piece datum now also places a sensor.** An indexing break beam declares
+  `indexes_workpiece: true` and a **zero** along-belt offset; the resolver derives its
+  stand-off from the declared part length and the beam width, and
+  `tools/cite_tools/validate/geometric.py` refuses a non-zero authored offset so a fitted
+  constant cannot re-enter the model
+  ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)).
+- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)
 
 ## Responsibility
 

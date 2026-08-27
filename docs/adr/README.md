@@ -116,4 +116,5 @@ not rewritten either.
 | [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
 | [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |
-| [0032](0032-index-the-belt.md) | Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff` | Accepted |
+| [0032](0032-index-the-belt.md) | Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff` | Accepted (corrected 2026-08-26) |
+| [0033](0033-derive-the-index-standoff-from-the-workpiece.md) | Sense against the part's body, and derive an indexing beam's stand-off from it | Accepted |

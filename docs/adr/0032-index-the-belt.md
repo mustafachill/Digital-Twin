@@ -1,12 +1,22 @@
 # ADR-0032: Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff`
 
-- **Status:** Accepted — **decided, not yet implemented.** Nothing in the running system
-  commands a conveyor at this commit, and this record is the decision rather than a
-  description of one. It is the first record on this branch written in the order charter
+- **Status:** Accepted (corrected 2026-08-26) — **the decision stands and is now
+  implemented.** L4 owns the belt setpoint, stops the belt on the `DetectionEvent`
+  transition and restarts it on `CompleteHandoff`. What is corrected is one *consequence*:
+  "the piece is stationary at the pick point" was false as written, and the piece parked
+  short of it. See the section "Correction — 2026-08-26: the piece stopped short of the pick
+  point, and the beam is why", immediately after this block. The **open question** left in
+  *What we will have to revisit* — restart at `CompleteHandoff` or at `PickAt` — is
+  **closed** in favour of `CompleteHandoff`; the update on that bullet gives the reasoning.
+  **The original status text follows, unchanged**, because it was true when written and the
+  order it records is part of the record: *Accepted — **decided, not yet implemented.**
+  Nothing in the running system commands a conveyor at this commit, and this record is the
+  decision rather than a description of one. It is the first record on this branch written
+  in the order charter
   §12 asks for; [ADR-0030](0030-facility-model-describes-the-workpiece.md) and
   [ADR-0031](0031-refuse-direct-handoff-without-orientation-certainty.md) were both written
   after their implementations and say so on their face. Stated because P7 makes the order
-  part of the record, not a detail of it.
+  part of the record, not a detail of it.*
 - **Date:** 2026-08-26
 - **Deciders:** Project owner
 - **Related:** [ADR-0003](0003-gazebo-harmonic.md) (why the conveyor plugin is ours),
@@ -20,6 +30,74 @@
   [L1](../architecture/L1-description-and-assets.md),
   [L4](../architecture/L4-orchestration.md), charter §4 (P2, P4, P8)
 
+## Correction — 2026-08-26: the piece stopped short of the pick point, and the beam is why
+
+The decision is unchanged: the belt still stops on a `DetectionEvent` transition and still
+restarts on `CompleteHandoff`. What is corrected is a **consequence written before the
+implementation existed** — a prediction about where the piece would come to rest.
+
+### What was written
+
+> The pick window stops being a race. The piece is stationary **at the pick point** for as
+> long as the station needs.
+
+### What was true when it was implemented
+
+The stopping worked and the position did not. With indexing in place the piece was held
+motionless on the belt at pick height — the beam stayed blocked for hundreds of seconds
+against under one second before, and the furthest and last samples were identical, so it did
+not creep. But it stopped **0.069 m short** of `conveyor_1/outfeed`, at x = 1.531 against a
+pick point at x = 1.600, on four runs out of four, and `arm_2` closed on air: `commanded
+45.0 mm, reached 46.0 mm, stalled=false`. `continuous_line` stopped at milestone 4 of 10.
+
+The cause was not in this decision. It was in the sensor the decision keys on. The break-beam
+plugin tested the work-piece's **model origin** against a box, so `blocked` first fired with
+the cube's *centre* short of the beam plane rather than with its *leading edge* at it — a
+part-centre window, not a light beam. The same defect had already been recorded from the
+other direction, as a beam that misses a part taller than 100 mm or shorter than 20 mm.
+They were one bug.
+
+**[Unverified in this record.]** The 0.069 m, the x = 1.531, the four-run count and the
+`Pick` message are reported from the implementing agent's runs and are **not** a published
+campaign. They are stated once, here. What would settle them is a campaign directory under
+[`../measurements/`](../measurements/README.md) with thresholds written before the trials.
+The frame coordinates are read from the model and need no campaign.
+
+### What is true now
+
+The beam intersects the segment with the part's real collision shapes, read from the
+simulator, and an indexing beam's **stand-off is derived rather than authored**: it is
+mounted with its upstream face on the leading-edge plane of a correctly parked part, half a
+part length plus half a beam width downstream of the point the part must stop on. For
+`beam_c1_out` that moves the beam frame from x = 1.550 to **x = 1.627** — `conveyor_1/outfeed`
+at 1.600 plus a derived 0.027 m — so a part whose leading edge breaks the beam comes to rest
+with its centre on the outfeed frame. `model/assets/instances/sensors.yaml` now carries a
+**zero** along-belt component for every indexing beam and `cite_tools.validate.geometric`
+refuses a non-zero one, so a fitted constant cannot come back. The reasoning, the options and
+what it costs are in [ADR-0033](0033-derive-the-index-standoff-from-the-workpiece.md).
+
+Fixing the extents test did **not** by itself fix where the part parked, and the record
+should say so: a leading-edge break stops the part *earlier*, so at the old mounting the
+shortfall would have grown from 0.069 m to about 0.077 m. Getting the physics right created
+the need for the derivation rather than removing it.
+
+### What survives
+
+All of it. Both ends of the decision remain events, nothing sleeps, the setpoint still has
+its owner at L4, and every cost listed below still holds — including that this touches timing
+and not orientation. The corrected sentence is a *prediction about geometry* made in a record
+about *control*, and it is the only thing withdrawn.
+
+### How the error survived
+
+It was written as a consequence of the decision when it was in fact a consequence of the
+sensor. "Stationary at the pick point" bundles two claims — that the piece stops, and that it
+stops *there* — and the ADR only reasoned about the first. The second silently depended on
+the break-beam plugin reporting a part where a photo-eye would, which nothing in this
+repository asserted and which was already known to be false in the vertical axis. **A record
+written before implementation is allowed to predict; it is not allowed to predict in the same
+sentence that it decides**, because a reader cannot then tell which half was weighed.
+
 ## Context
 
 The line in `cell_a` is sensor-driven by construction: a station acts because a beam
@@ -30,6 +108,10 @@ from a frame on the belt that beam watches.
 
 **A station cannot pick from a running belt, and the window is arithmetic on the L0 model
 rather than an estimate.** Every figure below is resolved from `model/` at this commit:
+**[Note 2026-08-26 — the beam placements below are no longer what the model says. An
+indexing beam's along-belt offset is now zero in `sensors.yaml` and its stand-off is derived;
+see the Correction section above and ADR-0033. The window arithmetic is unaffected: the
+transit times below come from the belt's length and speed, not from where the beam sits.]**
 
 - `model/assets/instances/sensors.yaml` places each outfeed beam at `xyz_m: [-0.050, 0.250,
   0.030]` in its belt's `outfeed` frame — **0.050 m upstream of the pick point**.
@@ -139,6 +221,9 @@ needs no second mechanism.
 ### What this gets us
 - The pick window stops being a race. The piece is stationary at the pick point for as long
   as the station needs, which is what makes a ~110 s cycle compatible with a 1.2 m belt.
+  **[Corrected 2026-08-26 — see the Correction section above. The piece stopped; it stopped
+  0.069 m short of the pick point. It parks on the pick point only since the break beam
+  began testing the part's body and the index stand-off was derived from it.]**
 - **The belt setpoint gets an owner at L4**, closing the gap
   `tests/scenarios/continuous_line.py::_start_the_belts` currently reports. A scenario stops
   supplying a value the running system does not have.
@@ -216,6 +301,19 @@ needs no second mechanism.
   inbound buffer claim at that point for exactly that reason. Restarting there would recover
   most of the lost throughput. It was not chosen here and it was not weighed here; it is an
   open question, not a rejected option.
+  **[Closed 2026-08-26, in favour of `CompleteHandoff`.** Three reasons, none of them
+  throughput. **First**, releasing the inbound buffer claim at `PickAt` is *slot
+  bookkeeping* — it says a slot is free — and not a statement about motion; reading it as
+  permission to move a belt reads one concept as another. **Second**, the throughput it
+  would recover is not there to recover: an indexed edge's effective concurrency is **1**
+  whatever the edge declares, which is the cost bullet above, so restarting earlier admits
+  no second piece to the belt sooner. **Third**, `CompleteHandoff` is the first point at
+  which the station is accountable for **nothing** on that belt; before it, a failure path
+  can still leave a piece there, and a belt running under a piece a failed station has not
+  taken puts that piece on the floor. `line_station.xml` places `ResumeBelt` immediately
+  after `CompleteHandoff` and deliberately not in the recovery branch. This closes the
+  question rather than measuring it: **no scenario compares the two placements**, and the
+  throughput each would give is unmeasured.]**
 - **Whether the physical belts can be indexed at all.** That they are VFD-driven and can be
   started and stopped on command is the assumption **P2** rests on for this decision, and it
   is *[unverified]* — no drive on the physical line has been inspected. The layout is
