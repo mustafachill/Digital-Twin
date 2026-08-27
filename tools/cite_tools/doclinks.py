@@ -14,54 +14,17 @@ import re
 import sys
 from pathlib import Path
 
+from cite_tools.tree import is_skipped
+
 # [text](target) — skips images, which are ![text](target)
 LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)]+)\)")
 # "## Some Heading" -> "some-heading"
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
 
-#: Directory *names*, matched at any depth. Build and tool output, which is
-#: regenerated rather than edited, plus one deliberate exception.
-#:
-#: `.claude` is here for a reason worth stating: CLAUDE.md §11 makes it local
-#: tooling that is deliberately **not committed**, and it holds agent worktrees —
-#: whole copies of the repository. Walking it reports the same document many
-#: times over, and reports dead links in those copies that no commit can repair,
-#: because the target they reach for is itself uncommitted. A gate that fails on
-#: files no change of ours can fix is a gate people learn to ignore, which is the
-#: failure `./scripts/lint` documents at length elsewhere.
-SKIP_DIRS = {
-    ".claude",
-    ".git",
-    ".venv",
-    "build",
-    "install",
-    "log",
-    "node_modules",
-}
-
-#: Paths relative to the repository root, skipped at **exactly** that location.
-#:
-#: `workspace/src/external` is the vendor tree `./scripts/bootstrap` imports from
-#: `external/cite.repos`. Its Markdown belongs to `xarm_ros2`, and ADR-0008 pins
-#: and patches that source rather than hand-correcting it — so any finding this
-#: checker raises inside it is one no commit of ours may act on.
-#:
-#: The measured cost, taken at the commit this was written against: walking it
-#: made the answer depend on whether `vcs import` had run. **100** Markdown files
-#: with the vendor tree imported, **88** without it — same commit, same command,
-#: twelve vendor files. None of those twelve had a dead link that day, so what is
-#: repaired here is the unstable count. The unactionable failure is the standing
-#: risk of gating on a tree we do not control, not a defect observed on the day.
-#:
-#: It is anchored rather than added to `SKIP_DIRS` because that set matches path
-#: *parts*. A bare `"external"` would also skip the top-level `external/`, which
-#: is ours: `external/patches/README.md` links to ADR-0008 and to the v1 lessons,
-#: and keeping links like those alive is the whole point of this checker. Skipping
-#: a directory we own to avoid naming a directory we do not would be the checker
-#: quietly reducing its own coverage.
-SKIP_PATHS = {
-    Path("workspace/src/external"),
-}
+#: Whose files this checker walks lives in `tree.py`, because `english.py` asks the same
+#: question and P1 forbids a second copy of the answer. The rationale and the measurements
+#: that produced these rules moved there with them.
+#: ---------------------------------------------------------------------------------------
 
 
 def slugify(heading: str) -> str:
@@ -78,13 +41,6 @@ def anchors_of(path: Path) -> set[str]:
         return {slugify(h) for h in HEADING.findall(path.read_text(encoding="utf-8"))}
     except OSError:
         return set()
-
-
-def is_skipped(relative: Path) -> bool:
-    """True if a repository-relative path lies outside this checker's remit."""
-    if any(part in SKIP_DIRS for part in relative.parts):
-        return True
-    return any(relative.is_relative_to(prefix) for prefix in SKIP_PATHS)
 
 
 def markdown_files(root: Path) -> list[Path]:
