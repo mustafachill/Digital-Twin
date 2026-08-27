@@ -9,7 +9,7 @@ it cites and is consulted the same way.
 | [standards.md](standards.md) | ISO 23247, Asset Administration Shell, robot safety standards |
 | [literature.md](literature.md) | Academic sources the architecture draws on |
 | [toolchain.md](toolchain.md) | Version-specific documentation for every tool in the stack |
-| [v1-lessons.md](v1-lessons.md) | What the superseded `legacy/` tree taught, captured before it is deleted |
+| [v1-lessons.md](v1-lessons.md) | What the superseded v1 tree taught, captured before that tree was deleted at the end of Phase 1 |
 
 ## How to use this section
 

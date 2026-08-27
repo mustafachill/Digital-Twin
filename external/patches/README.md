@@ -9,7 +9,12 @@ An edit made inside a checked-out dependency is invisible to git, lost on the
 next `vcs import`, and impossible to review. The previous iteration of this
 project lost a critical `gazebo_ros2_control` fix exactly this way: the patch
 existed on one machine, was never committed anywhere, and a fresh clone could
-not build. See `legacy/README.md`.
+not build. [ADR-0008](../../docs/adr/0008-external-dependencies-via-vcstool.md)
+is the decision that closes that failure. The v1 tree was deleted at the end of
+Phase 1, and [`docs/reference/v1-lessons.md`](../../docs/reference/v1-lessons.md)
+records under *What this page does not capture* that the patch itself was never
+in this repository — only v1's own description of it, which survives in git
+history and nowhere else.
 
 A patch file is visible in the diff, reviewable in a pull request, survives a
 dependency update as a merge conflict rather than a silent loss, and documents

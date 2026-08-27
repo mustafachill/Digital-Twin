@@ -9,12 +9,16 @@
   **Not built:** "every node that participates in bring-up is a managed node" is not true
   today. `cite_skills`' skill server and `cite_orchestration`'s line coordinator are plain
   `rclcpp::Node`s with no lifecycle interface. The pattern below remains binding on them.
-- **Related:** charter §4 (P4), [ADR-0009](../adr/0009-docker-primary-environment.md), [`../operations/bring-up.md`](../operations/bring-up.md)
+- **Related:** charter §4 (P4), [ADR-0009](../adr/0009-docker-primary-environment.md), [`../operations/bring-up.md`](../operations/bring-up.md), [`../reference/v1-lessons.md`](../reference/v1-lessons.md)
 
 ## The problem this solves
 
-The v1 workspace sequenced startup with sleeps
-(`legacy/fleet_manager/launch/multi_robot_test.launch.py`):
+The v1 workspace sequenced startup with sleeps, in
+`legacy/fleet_manager/launch/multi_robot_test.launch.py`. That tree was deleted at the end
+of Phase 1 and survives only in version control, so the path is cited as text rather than
+as a link; recover the file with
+`git show f16ea98^:legacy/fleet_manager/launch/multi_robot_test.launch.py`. The lines below
+were read from it that way on 2026-08-27 — lines 190-191, 236 and 263:
 
 ```python
 spawn_delay = 2.0

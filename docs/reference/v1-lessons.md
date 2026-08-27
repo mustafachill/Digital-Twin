@@ -1,11 +1,14 @@
 # v1 lessons
 
 What the first iteration of this project cost us to learn, written down before the tree
-that taught it is deleted. Charter §12 schedules `legacy/` for deletion at the end of
-Phase 1 and requires the knowledge to be captured first; this page is that capture.
+that taught it was deleted. [ADR-0001](../adr/0001-rebuild-rather-than-migrate.md) is what
+scheduled that deletion — its chosen option ends *"delete `legacy/` at the end of Phase 1"*
+— and its decision is *"we carry forward knowledge, not code"*. This page is what was
+carried forward. The deletion happened on 2026-08-27 in commit `f16ea98`, which removed 952
+files; charter §7 records it and §14 dates it (v1.6).
 
 - **Related:** [ADR-0001](../adr/0001-rebuild-rather-than-migrate.md),
-  [`../../CLAUDE.md`](../../CLAUDE.md) §2, `legacy/README.md`
+  [`../../CLAUDE.md`](../../CLAUDE.md) §1, charter §7
 
 This is not a list of v1's mistakes. It is a list of **what to do instead**, each one
 anchored to the code that proves the problem was real. The test a section has to pass is
@@ -25,12 +28,21 @@ whether an engineer hitting the same wall in Phase 2 or Phase 3 finds the answer
 > and the two commits that date it were read with `git show`; the topology, the refusal in
 > `plan_line` and the scenario it names were read out of the current tree. Nothing was run
 > here either.
+>
+> **Third pass — 2026-08-27, after the deletion.** `legacy/` no longer exists in any
+> checkout, so this pass read its files out of git with `git show f16ea98^:<path>`. It added
+> [The goals document, two weeks earlier](#the-goals-document-two-weeks-earlier), amended
+> the "one thing" claim in the section before it, and recorded two v1 documents judged not
+> worth carrying under [What this page does not capture](#what-this-page-does-not-capture).
+> Every date and commit named in the new section was read with `git log --follow`,
+> `git diff` and `git show`, not taken from an earlier summary. Nothing was run here either.
 
-> **Why `legacy/` paths here are code spans and not links.** This document is written to
-> outlive the tree it describes. `./scripts/lint` resolves every relative Markdown link and
-> fails on a dead one, so a link into `legacy/` would turn the scheduled deletion into a
-> lint failure. Cite these paths as text; a reader who needs the file can recover it from
-> git history, which ADR-0001 keeps.
+> **Why `legacy/` paths here are code spans and not links.** This document was written to
+> outlive the tree it describes, and now does. `./scripts/lint` resolves every relative
+> Markdown link and fails on a dead one, so a link into `legacy/` would have turned the
+> deletion into a lint failure; cited as text, every reference below survived it intact.
+> **Recover any `legacy/` file named on this page with `git show f16ea98^:<path>`** — for
+> example `git show f16ea98^:legacy/README.md`. ADR-0001 is what keeps that history.
 
 ## How to read this
 
@@ -42,14 +54,27 @@ whether an engineer hitting the same wall in Phase 2 or Phase 3 finds the answer
 | Add a robot, or a fourth arm | [4. Multi-robot spawning](#4-multi-robot-spawning) |
 | Argue that something is "already working" | [5. What did not scale](#5-what-did-not-scale) |
 | Write about what this project was asked to do, or scope a handoff | [The requirement, as first written](#the-requirement-as-first-written) |
+| Ask where a principle came from, or what this project was originally asked to *be* | [The goals document, two weeks earlier](#the-goals-document-two-weeks-earlier) |
 
 ## The requirement, as first written
 
 **Everything else on this page is engineering. This is not.** `legacy/urls.txt` ends with a
 note recording what the project was asked for, in the words it was asked in. It is the
-earliest statement of that requirement anywhere in the repository, and it is the one thing
-in `legacy/` whose value is not a lesson about ROS 2. It is reproduced here because the
-file holding it is deleted at the end of Phase 1.
+earliest statement of the **multi-robot** requirement anywhere in the repository, and one of
+**two** things in `legacy/` whose value is not a lesson about ROS 2. It is reproduced here
+because the file holding it was deleted with the rest of the tree.
+
+> **Amended — 2026-08-27.** This paragraph called the note **"the one thing"** in `legacy/`
+> whose value is not a lesson about ROS 2. That was wrong. The other is `legacy/docs/GOALS.md`,
+> written fifteen days earlier and now carried in
+> [The goals document, two weeks earlier](#the-goals-document-two-weeks-earlier).
+> **The dating in this section survives unchanged**, and the goals document corroborates it
+> rather than contradicting it: GOALS.md scopes the twin to a single arm and lists multiple
+> arms under *future extensions*, so multi-robot really was out of scope on 2025-11-25 and
+> this note is what introduces it. What is no longer true is the count.
+> **How the error survived:** the first pass went into `legacy/` looking for the multi-robot
+> requirement, found it, and never asked what else in `legacy/docs/` was not about ROS 2.
+> A search that is told what it is looking for cannot report what it did not look for.
 
 > dr mize dedi ki birden fazla robot olacak ve senkron çalışacaklar. mesela bir bant üzerinde malzeme yürüyecek, bir robot alacak öbür robota gidecek öbür robot bunu alacak
 
@@ -133,6 +158,93 @@ explainer on what a digital twin is, has no direct successor in `docs/reference/
 judgement here is that it does not need one: [literature.md](literature.md) carries
 Kritzinger and the ISO 23247 material, which cover the same ground as sources this project
 can cite in a report. Recorded so the deletion is made knowingly rather than silently.
+
+## The goals document, two weeks earlier
+
+`legacy/docs/GOALS.md` is the **second** thing in `legacy/` whose value is not a lesson
+about ROS 2, and it is the older of the two. It is a requirements document — what a digital
+twin of a robot arm was taken to be, what was in scope, and what the repository had to
+satisfy — and it was written before this project had a charter, a principle, or an ADR.
+
+**Provenance, read with `git log --follow` on 2026-08-27.** Added as `docs/GOALS.md` in
+`10663a1`, 2025-11-25 — the repository's **second commit**, after `7f01b42` the same day.
+Moved to `legacy/docs/GOALS.md` unchanged (`R100`) when the v1 workspace was archived in
+`13b94a7`, and deleted with the tree in `f16ea98`. It therefore **predates the `urls.txt`
+note above by fifteen days**: that note was appended in `1cc35d6`, 2025-12-10.
+
+**Recover it with `git show f16ea98^:legacy/docs/GOALS.md`**, or at its original path with
+`git show 10663a1:docs/GOALS.md`. Everything below was read from the first of those. Unlike
+the `urls.txt` note, GOALS.md is written in English throughout, so it is quoted directly and
+needs no rendering.
+
+**It was never revised.** The file is byte-identical at `10663a1`, at `d68838b` — the commit
+the rest of this page was read from — and at `f16ea98^`, the last commit that contained it:
+all three hash to `31dbaa2`. Nine months of work, and nobody went back to the requirements.
+Keep that in view while reading the next two sections.
+
+### It is the ancestor of four principles, written before any of them existed
+
+The rebuild derived these from the failures in §0 below, not from this file. That is the
+same argument §0 makes about failures, extended to requirements: a requirement that two
+independent passes arrive at is a property of the problem.
+
+| GOALS.md, 2025-11-25 | Where it ended up |
+|---|---|
+| §3.1 — the simulated and the real arm "must share a common ROS 2 interface (topics, services, actions)", and "a node that controls the robot in simulation should require minimal or no changes to control the real robot" | **P2**, which [`../../CLAUDE.md`](../../CLAUDE.md) §3 makes the highest-severity defect in the project to break, and [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), which puts the seam at the `ros2_control` hardware plugin |
+| §3.2 — new control algorithms, motion plans and behaviours "should be validated in the Gazebo simulation first", and deployed to the real arm only after they "pass basic safety and correctness checks" | The simulation-in-the-loop scenario level, `./scripts/scenario` — though only `bringup` blocks CI today; [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) carries the standing of the other two |
+| §3.3 — the system "should allow for comparison between" behaviour "predicted by the simulation" and behaviour "measured from the physical arm", with the discrepancies used "to refine models, controllers, and assumptions" | **P8**, and L5's divergence metrics — [`../architecture/L5-twin-synchronization.md`](../architecture/L5-twin-synchronization.md) |
+| §5 — "All source code, comments, configuration file contents, and documentation inside the repository must be written in English" | **P10** and [ADR-0015](../adr/0015-english-only.md) |
+
+Three more of its clauses have successors in the layer stack rather than in a principle:
+§4's "optional diagnostic topics for monitoring twin consistency" is L5; §4's "log relevant
+data from the real robot and simulation" and "allow replaying a recorded run in the
+simulation for analysis" is L6; and §5's "hardware-specific details are isolated from
+generic control logic where possible" is P9.
+
+### The lesson is not that it was right. It is that being right changed nothing.
+
+GOALS.md is a good requirements document and the tree that carried it met neither of its two
+hardest clauses.
+
+- **It required a hardware path, in §4:** launch configurations to "connect to the real
+  robot arm" and to "start both simultaneously in a 'twin mode'".
+  [ADR-0001](../adr/0001-rebuild-rather-than-migrate.md)'s context records what the review
+  actually found — "no hardware interface anywhere in the codebase, despite the project's
+  name". The definition in §1, a twin with a **two-way** data connection that "should evolve
+  over time together with the physical system", was stated on day two and never built. That
+  is why maturity is a declared, checkable level in this rebuild
+  ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md)) rather than a word in a goals
+  file.
+- **It required English, in §5**, and this page's own cross-cutting table below cites
+  Turkish headings, a Turkish docstring and a file named `HIZLITEST.md` as the evidence
+  behind [ADR-0015](../adr/0015-english-only.md). `legacy/docs/HIZLITEST.md` was added in
+  `39b7453` on 2025-12-02, read with `git log --follow --diff-filter=A` on 2026-08-27:
+  **the requirement was seven days old when the tree began violating it.**
+
+**What transfers, and it is not comfortable.** A requirement with nothing that checks it is
+a wish, and this project has not escaped that as cleanly as it would like. P2 is the better
+case: the sim/real seam is not maintained by hand but generated from one model, so the names
+that would drift cannot ([ADR-0004](../adr/0004-facility-model-single-source-of-truth.md),
+[ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md)) — though the hardware half of it
+is still unbuilt, which [`../../CLAUDE.md`](../../CLAUDE.md) §2 states plainly. **P10 is the
+worse case: a survey of `scripts/`, `tools/` and `.github/` on 2026-08-27 found nothing that
+tests for non-English content.** It rests on review and on the standing prohibition in
+[`../../CLAUDE.md`](../../CLAUDE.md) §4 — which is a stronger position than GOALS.md §5
+occupied, and still not a check. Recorded here as an open gap rather than a closed one,
+because the failure above is what a written-down requirement with no check looks like after
+seven days.
+
+### On its scope, which agrees with the note above
+
+GOALS.md §2 scopes the work as "an **asset-level** digital twin focused on a single robotic
+arm" and states that "system-level or factory-level twins are explicitly out of scope for
+now". §6 lists "support for multiple robot arms or multi-robot scenarios" under **future
+extensions, not required now**.
+
+This is the reason the amendment above says the goals document corroborates the `urls.txt`
+dating rather than upsetting it. On 2025-11-25 multi-robot was written down as out of scope;
+fifteen days later the note in `urls.txt` put it in. The two documents are consistent, and
+between them they date the change.
 
 ## 0. What this rebuild rediscovered on its own
 
@@ -544,7 +656,7 @@ of thing one test would have caught on the day it was introduced. See
 
 ## Cross-cutting decisions this tree produced
 
-Recorded elsewhere, listed here so the connection is not lost when `legacy/` goes. Do not
+Recorded elsewhere, listed here so the connection was not lost when `legacy/` went. Do not
 restate their reasoning; follow the link.
 
 | v1 experience | Decision |
@@ -566,12 +678,29 @@ Stated so that the deletion is made with the gaps visible.
   description is all that survives. It applies to Gazebo Classic and is of historical
   interest only.
 - **The vendor meshes and the vendor stack.** Not lost: `xarm_ros2` is pinned by commit SHA
-  in `external/cite.repos`, and `legacy/xarm_ros2/` is a copy of it. Deleting the copy
-  removes nothing the manifest cannot restore.
+  in `external/cite.repos`, and `legacy/xarm_ros2/` was a copy of it. Deleting the copy
+  removed nothing the manifest cannot restore.
 - **The v1 world and model geometry.** Deliberately not carried forward. The layout in
   `model/` is `PROVISIONAL` and engineered; v1's coordinates were engineered too, and
   disagreed with themselves in the ways §5 sets out. Reusing them would import the
   disagreement.
+- **Two v1 documents judged not worth carrying, on 2026-08-27.** Recorded so the deletion
+  is knowing rather than silent. Both were read in full before the judgement.
+  `legacy/docs/BLENDER_TO_GAZEBO_GUIDE.md` — Turkish, and a Gazebo Classic workflow
+  throughout (`GAZEBO_MODEL_PATH`, `<sdf version="1.6">`, hand-edited `.world` includes,
+  a `cd ~/Desktop/Digital-Twin` build step). Its one durable idea is the collision-mesh
+  trade-off in *Collision Mesh Stratejileri*, which lists reusing the visual mesh **first**
+  and labels it *"Kolay"* — easy — against "yavaş simülasyon", a slow simulation. That is
+  the defect class [`../../CLAUDE.md`](../../CLAUDE.md) §10 names, this project has twelve
+  links per arm suffering from it, and
+  [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) already decides the fix. Carrying
+  the guide would carry the ranking with it.
+  `legacy/docs/QUICK_CONTROL_GUIDE.md` — Turkish, `source /opt/ros/humble/setup.bash`, and
+  `cd ~/Desktop/Digital-Twin` repeated in every block. Its content is a list of
+  `ros2 action send_goal` invocations against `xarm5_traj_controller`, superseded by L3.
+  The only lesson in it is the hard-coded home directory, which is the same
+  [ADR-0009](../adr/0009-docker-primary-environment.md) evidence the table above already
+  cites from `PROJECT_CONTEXT.md`.
 - **Whether any of these failures reproduce.** Everything here is read from source at
   `d68838b`. The tree targets ROS 2 Humble and Gazebo Classic, neither of which this
   project's container provides, so nothing on this page was run and nothing on it should be
