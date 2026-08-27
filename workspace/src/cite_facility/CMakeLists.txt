@@ -40,6 +40,11 @@ if(BUILD_TESTING)
   ament_add_pytest_test(artifacts test/test_artifacts.py)
   ament_add_pytest_test(topology_message test/test_topology_message.py)
   ament_add_pytest_test(planning_scene_loader test/test_planning_scene_loader.py)
+  # Spawns the real node executables and signals them, so it needs a longer
+  # budget than a unit test and must not run beside another copy of itself.
+  ament_add_pytest_test(shutdown_under_signal test/test_shutdown_under_signal.py
+    TIMEOUT 300
+  )
 endif()
 
 ament_package()

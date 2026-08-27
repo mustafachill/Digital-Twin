@@ -31,10 +31,10 @@ sees a partially-populated tree.
 
 from __future__ import annotations
 
+from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, static_transforms, StaticTransform
 from cite_facility.transforms import quaternion_from_rpy
 from geometry_msgs.msg import TransformStamped
-import rclpy
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from tf2_ros import StaticTransformBroadcaster
 
@@ -97,16 +97,12 @@ class FrameServer(LifecycleNode):
 
 
 def main() -> None:
-    rclpy.init()
+    runtime.init()
     node = FrameServer()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+        runtime.spin(node)
     finally:
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        runtime.shutdown(node)
 
 
 if __name__ == "__main__":

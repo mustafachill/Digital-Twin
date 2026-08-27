@@ -45,13 +45,16 @@ from __future__ import annotations
 
 import sys
 
+from cite_facility import runtime
 from cite_facility.artifacts import ArtifactError, CollisionBody, planning_scene
 from cite_facility.transforms import quaternion_from_rpy
 from geometry_msgs.msg import Pose
 from moveit_msgs.msg import CollisionObject, PlanningScene, PlanningSceneComponents
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.subscription import RCLError
 from shape_msgs.msg import SolidPrimitive
 
 #: Deadline, not a schedule. move_group starts alongside the simulator and is
@@ -185,16 +188,20 @@ def _collision_object(body: CollisionBody) -> CollisionObject:
 
 
 def main() -> None:
-    rclpy.init()
+    runtime.init()
     node = PlanningSceneLoader()
     try:
         code = node.load()
-    except KeyboardInterrupt:
+    except (ExternalShutdownException, KeyboardInterrupt, RCLError):
+        # An interrupted load stays a failure: the scene was not proven to have
+        # arrived, and bring-up gates the skill servers on this exit code. What
+        # `runtime.init` changes is only that the interruption arrives as one of
+        # a named set rather than as whichever exception the signal happened to
+        # race into — see `cite_facility.runtime` for the two upstream races
+        # this covers.
         code = 1
     finally:
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        runtime.shutdown(node)
     sys.exit(code)
 
 
