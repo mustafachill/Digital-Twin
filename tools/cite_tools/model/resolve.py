@@ -17,7 +17,12 @@ from dataclasses import dataclass, field
 from cite_tools.model import ids
 from cite_tools.model.geometry import Aabb, Pose
 from cite_tools.model.loader import FacilityModel
-from cite_tools.model.schema import AssetInstance, AssetType, ControllerSpec
+from cite_tools.model.schema import (
+    AssetInstance,
+    AssetType,
+    ControllerSpec,
+    TrajectoryConstraints,
+)
 
 
 class ResolveError(Exception):
@@ -41,6 +46,11 @@ class ResolvedController:
     command_interfaces: tuple[str, ...]
     state_interfaces: tuple[str, ...]
     parameters: dict[str, str | bool | int | float]
+    #: The execution-side mistracking detector this controller declares, or
+    #: ``None`` for a controller that has no such block (ADR-0036). Carried
+    #: through unchanged: the per-joint expansion needs ``joints`` above, which
+    #: only exists once the instance has been resolved.
+    constraints: TrajectoryConstraints | None = None
 
 
 @dataclass(frozen=True)
@@ -338,6 +348,7 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
                 command_interfaces=tuple(spec.command_interfaces),
                 state_interfaces=tuple(spec.state_interfaces),
                 parameters=dict(spec.parameters),
+                constraints=spec.constraints,
             )
             for spec in sorted(specs, key=lambda s: (s.stage, s.suffix))
         )

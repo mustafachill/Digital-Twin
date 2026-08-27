@@ -252,6 +252,17 @@
           "title": "Command Interfaces",
           "type": "array"
         },
+        "constraints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrajectoryConstraints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "joints": {
           "enum": [
             "arm",
@@ -958,6 +969,47 @@
         "max_cartesian_rotational_velocity_rad_s"
       ],
       "title": "PlanningSpec",
+      "type": "object"
+    },
+    "TrajectoryConstraints": {
+      "additionalProperties": false,
+      "description": "When a `JointTrajectoryController` should call a trajectory mistracked.\n\nADR-0036. Without these the controller runs any trajectory to the end and\nreports ``SUCCEEDED`` however badly it tracked, because\n`joint_trajectory_controller` defaults every tolerance to ``0.0`` and\n``check_state_tolerance_per_joint`` skips any variable whose tolerance is not\n``> 0.0``. That silence reaches the caller: MoveIt returns success,\n``execute_plan`` maps it to ``ResultCode::SUCCESS``, and ``Pick`` reports a\nclean pick it never made.\n\nThese are a DETECTOR and not a protective measure. What stops an arm driving\ninto a fixture is the vendor controller's torque limiting and physical\nguarding — a risk assessment and ISO 10218 matter outside this repository\n(charter §3.2). This turns a silent success into an ``EXECUTION_FAILED``\nafter the fact, which is what lets L4 fault a station instead of building on\na lie.\n\nThey live in the model rather than in the generator for the same reason\n``update_rate_hz`` and ``max_acceleration_rad_s2`` do: how tightly a\nparticular arm tracks is a fact about that arm (P5). One block serves both\nbackends — a tolerance that differed between simulation and hardware would\nbe a P2 break, not a tuning choice.",
+      "properties": {
+        "goal_time_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Goal Time S",
+          "type": "number"
+        },
+        "goal_tolerance_rad": {
+          "exclusiveMinimum": 0.0,
+          "title": "Goal Tolerance Rad",
+          "type": "number"
+        },
+        "stopped_velocity_tolerance_rad_s": {
+          "minimum": 0.0,
+          "title": "Stopped Velocity Tolerance Rad S",
+          "type": "number"
+        },
+        "trajectory_tolerance_rad": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trajectory Tolerance Rad"
+        }
+      },
+      "required": [
+        "goal_time_s",
+        "goal_tolerance_rad",
+        "stopped_velocity_tolerance_rad_s"
+      ],
+      "title": "TrajectoryConstraints",
       "type": "object"
     }
   },

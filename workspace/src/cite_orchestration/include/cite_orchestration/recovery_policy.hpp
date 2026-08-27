@@ -113,6 +113,34 @@ inline Recovery recovery_for(uint8_t code)
     //: whether the goal was right, so the same goal is the right next attempt —
     //: bounded, because a controller that aborts every time is a fault and not a
     //: transient.
+    //:
+    //: THAT SENTENCE STOPPED BEING UNIVERSALLY TRUE ON 2026-08-27, AND THIS
+    //: BRANCH IS NOT YET RIGHT. ADR-0036 gave the trajectory controller a path
+    //: tolerance, so `PATH_TOLERANCE_VIOLATED` is now a routine producer of
+    //: `EXECUTION_FAILED` — and a path-tolerance abort says precisely that
+    //: something physically held the arm. This file's own principle is that a
+    //: refusal is never a transient; a stopped arm is a refusal by the world, and
+    //: it belongs with `SAFETY_BLOCKED` and `UNREACHABLE` rather than here.
+    //: Retrying it means the station's recovery subtree replans and drives
+    //: `MoveToHome` seconds later, unattended, possibly still in contact.
+    //:
+    //: It is not changed here because L3 CANNOT TELL THE TWO APART, and guessing
+    //: would be worse than the gap. The only place `PATH_TOLERANCE_VIOLATED`
+    //: exists is `control_msgs/FollowJointTrajectory::Result::error_code`, and
+    //: `moveit_simple_controller_manager`'s `finishControllerExecution` takes
+    //: only an `rclcpp_action::ResultCode` — the controller's code is logged and
+    //: dropped. Everything is funnelled into
+    //: `moveit_controller_manager::ExecutionStatus`, whose whole vocabulary is
+    //: {UNKNOWN, RUNNING, SUCCEEDED, PREEMPTED, TIMED_OUT, ABORTED, FAILED}, so
+    //: `ABORTED` carries a physical stall, `INVALID_GOAL`, `INVALID_JOINTS` and
+    //: `OLD_HEADER_TIMESTAMP` indistinguishably. The last of those is a transport
+    //: fault and MUST keep retrying. Escalating all of `EXECUTION_FAILED` would
+    //: stop the line on a transient, which is how a detector gets deleted.
+    //:
+    //: Closing this needs a discriminator that does not exist yet — a controller
+    //: manager that retains the code, or an execution monitor — and that is a
+    //: decision with an ADR, not an edit here. Do not narrow this branch on a
+    //: guess about which abort it was.
     case ResultCode::EXECUTION_FAILED:
     case ResultCode::TIMEOUT:
       return Recovery::RETRY_SAME;

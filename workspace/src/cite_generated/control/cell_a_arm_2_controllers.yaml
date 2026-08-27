@@ -55,3 +55,71 @@
     state_interfaces:
       - position
       - velocity
+    # WHEN THIS CONTROLLER CALLS A TRAJECTORY MISTRACKED (ADR-0036).
+    #
+    # If you are reading this because a motion failed, the controller aborted the
+    # goal because the arm was not where the trajectory said it should be. The
+    # error code tells you which check fired:
+    #
+    #   PATH_TOLERANCE_VIOLATED  a joint drifted further than `trajectory` below
+    #                            WHILE MOVING. Something is holding the arm back
+    #                            — it clipped a fixture, or the plan started from
+    #                            a state the arm was not in.
+    #   GOAL_TOLERANCE_VIOLATED  the arm did not settle inside `goal` below
+    #                            within `goal_time` of the trajectory's end.
+    #
+    # MoveIt returns that as a failed execution, the L3 skill server maps it to
+    # EXECUTION_FAILED, and L4 can fault the station on it.
+    #
+    # THIS IS A DETECTOR, NOT A PROTECTIVE MEASURE. It reports after the fact and
+    # prevents nothing. What stops an arm driving into a fixture is the vendor
+    # controller's torque limiting and physical guarding, which are outside this
+    # repository (charter §3.2). Do not cite this block as a safety function.
+    #
+    # Every value comes from the L0 arm type, so it is the same on the simulated
+    # and the physical cell. A tolerance that differed between them would be a P2
+    # break rather than a tuning choice.
+    #
+    # Do not "fix" a firing tolerance by widening it. A tolerance wide enough
+    # never to fire is not a detector; if the path check proves unusable, the
+    # model sets `trajectory_tolerance_rad: null` and says so.
+    constraints:
+      # Seconds after the trajectory's end time that the controller keeps waiting
+      # for `goal` below. NOT optional and never 0.0: at zero the controller
+      # waits forever instead of failing, so a missed goal becomes a hang rather
+      # than a report. The model's schema refuses zero for that reason.
+      goal_time: 0.5
+      # Joint velocity, rad/s, below which the arm counts as stopped at the goal.
+      # THIS CHECK CANNOT FIRE on this controller, whatever value stands below and
+      # whatever `goal_time` is, and the reason is `command_interfaces` above
+      # rather than the number. `get_segment_tolerances` does assign this to the
+      # goal state's velocity unconditionally, and upstream does default it to
+      # 0.01 rather than to zero — but `compute_error_for_joint` writes a velocity
+      # error only under `has_velocity_state_interface_ &&
+      # (has_velocity_command_interface_ || has_effort_command_interface_)`, and
+      # this controller commands neither velocity nor effort. `state_error_`'s
+      # velocities stay at the zeros they were sized to, so `abs(0.0) > tolerance`
+      # is never true. An earlier version of this comment said `goal_time` armed
+      # it; see ADR-0036's 2026-08-27 correction.
+      #
+      # Stating the value anyway costs nothing and pre-empts the one change that
+      # would arm it: adding `velocity` or `effort` to `command_interfaces` above.
+      # Whoever makes that change inherits this number, and the upstream 0.01 this
+      # line exists to override would then start aborting a joint that settles a
+      # little late.
+      stopped_velocity_tolerance: 0.0
+      arm_2_joint1:
+        trajectory: 1.0
+        goal: 0.01
+      arm_2_joint2:
+        trajectory: 1.0
+        goal: 0.01
+      arm_2_joint3:
+        trajectory: 1.0
+        goal: 0.01
+      arm_2_joint4:
+        trajectory: 1.0
+        goal: 0.01
+      arm_2_joint5:
+        trajectory: 1.0
+        goal: 0.01

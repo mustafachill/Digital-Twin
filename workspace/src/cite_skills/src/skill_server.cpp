@@ -1633,6 +1633,21 @@ private:
       // trajectory" covers a controller that refused the goal, one that timed
       // out, and one that finished outside tolerance, and telling them apart
       // from the text alone cost a whole investigation.
+      //
+      // Since ADR-0036 it covers one more case, and that case does not belong
+      // with the others: a `PATH_TOLERANCE_VIOLATED` abort, which means a joint
+      // was physically held. L4 answers `EXECUTION_FAILED` with RETRY_SAME, so a
+      // stalled arm is replanned and driven home unattended — see the long note
+      // on that branch in `cite_orchestration/recovery_policy.hpp`.
+      //
+      // IT CANNOT BE SPLIT HERE, and this is the place a reader will try. The
+      // value below is a `moveit_msgs/MoveItErrorCodes`, and the controller's own
+      // code never reaches it: `moveit_simple_controller_manager` funnels every
+      // abort through `ExecutionStatus::ABORTED`, which move_group reports as
+      // `CONTROL_FAILED` whether the arm was held, the goal was malformed, or the
+      // trajectory's header was stale. Reading a distinction out of `executed.val`
+      // would be inventing one. `detail` below is prose and nothing may parse it
+      // (`ResultCode.msg`), so it is not a channel either.
       return make_result(
         ResultCode::EXECUTION_FAILED,
         "the controller did not complete the planned trajectory (MoveIt error code " +
