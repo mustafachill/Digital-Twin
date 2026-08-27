@@ -173,9 +173,6 @@ if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/
 else
     report skip "workspace/src" "empty (Phase 1.B)"
 fi
-if [ -d "${REPO_ROOT}/legacy" ]; then
-    report skip "legacy/" "present — reference only, not built"
-fi
 
 step "Documentation"
 DOCS="${REPO_ROOT}/docs"
