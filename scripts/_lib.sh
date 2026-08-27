@@ -288,6 +288,192 @@ assert_lint_coverage() {
 }
 
 # -----------------------------------------------------------------------------
+# Scenario outcomes, split by phase.
+#
+# A `launch_test` run answers two independent questions in one exit code:
+#
+#   cycle     did the cell do the thing? — the active-phase tests, which are the
+#             assertions a phase item's acceptance claim actually rests on
+#   teardown  did every process exit cleanly? — the `@post_shutdown_test` class
+#
+# Collapsing both into one status is what makes the scenario steps in CI
+# un-gateable. The teardown question currently fails for a reason outside this
+# project: a SIGSEGV/abort inside rclpy/rmw destruction, measured at roughly 7.5%
+# per process over 40 trials, which across the processes a scenario launches is
+# about a one-in-five chance of a spurious teardown failure per run. A gate that
+# fails one run in five for an upstream reason is not a gate — it is a coin toss
+# that teaches people to re-run until green, which is worse than having no gate.
+#
+# THE OBVIOUS FIX IS THE WRONG ONE, and it has already been rejected on measured
+# grounds. Exempting the offending process would be a guess dressed as a
+# discriminator: teardown failures here have landed on at least four distinct
+# processes with three distinct exits — `parameter_bridge` (-6), `gz` (-9) and
+# `topology_server.py` (1) among them — and CLAUDE.md §2 records the conclusion
+# drawn from that set, which is that PROCESS IDENTITY DOES NOT PREDICT IT.
+# `topology_server.py` is ours, so even "exempt the upstream processes" has no
+# boundary to draw. There is no signature to key on. Widening the allowlist in
+# `TestCleanShutdown` would therefore not target the upstream defect at all; it
+# would leave an assertion that cannot fail, and the existing one-process one-
+# signal `move_group`/-11 allowance is already on the record as the mistake of
+# exempting the process that most needed the assertion.
+#
+# So the split is by PHASE, which is a real property of the run, and never by
+# process name or exit code, which are not. The teardown assertion keeps running,
+# keeps checking every process, and keeps reporting every bad exit in full — it
+# is neither deleted nor exempted. `./scripts/scenario --teardown-advisory`
+# merely stops it deciding the exit status, and the caller that asks for that is
+# responsible for surfacing what it found. CI does so as an annotation, so a
+# first-party teardown regression is visible on the pull request rather than
+# buried in a collapsed log.
+#
+# FAIL-CLOSED IS THE INVARIANT. Anything this cannot confidently classify as a
+# teardown failure counts as a cycle failure and gates: an unreadable or absent
+# report, a `launch_test` that died before writing one, a failing class this does
+# not recognise. A renamed or additional post-shutdown class therefore starts
+# gating rather than starts being ignored.
+# -----------------------------------------------------------------------------
+
+#: The post-shutdown class every scenario declares. Recognised by name because
+#: `launch_test`'s JUnit report records no phase marker of its own — a testcase
+#: carries only `classname` and `name`, so the convention is the only handle
+#: there is. Keep it in step with tests/scenarios/*.py; a mismatch makes teardown
+#: failures gate, which is the safe direction and is asserted in _selftest.sh.
+SCENARIO_TEARDOWN_CLASS="TestCleanShutdown"
+
+# scenario_failed_cases <junit-xml>
+#
+# Prints one tab-separated record per failing or erroring testcase:
+#
+#     <phase>\t<classname>.<name>\t<summary>
+#
+# <phase> is `teardown` for the post-shutdown class and `cycle` for everything
+# else. <summary> is the last line of the failure text, which for a unittest
+# assertion is the `AssertionError: ...` line carrying the process and exit code.
+#
+# Returns 0 when the report was readable, 1 when it was not. Emptiness is a valid
+# readable answer and means the report recorded no failure.
+scenario_failed_cases() {
+    local xml="$1"
+    [ -f "$xml" ] || return 1
+
+    # `launch_test` writes the whole report on one line, so split it into one
+    # record per testcase first. The literal newline in the replacement is the
+    # portable spelling: BSD sed on the macOS host rejects `\n` there, and this
+    # function is driven on the host by scripts/_selftest.sh.
+    #
+    # `|| [ -n "$record" ]` is load-bearing, not defensive. `launch_test` writes
+    # its report with NO trailing newline, so the final chunk — which is where
+    # every `<testcase>` lives, the whole document being one line — makes `read`
+    # return non-zero and a plain `while read` drops it. The symptom was a report
+    # containing a failure being classified as containing none, which fell to the
+    # fail-closed branch and gated a run whose cycle had passed. The synthetic
+    # fixtures hid it by ending in a newline; junit_report in _selftest.sh no
+    # longer does, so this line is covered.
+    sed 's/<testcase /\
+<testcase /g' "$xml" | while IFS= read -r record || [ -n "$record" ]; do
+        case "$record" in
+            '<testcase '*) record="${record#<testcase }" ;;
+            *) continue ;;
+        esac
+        # A passing testcase is self-closing and carries neither child element.
+        case "$record" in
+            *'<failure'* | *'<error'*) ;;
+            *) continue ;;
+        esac
+
+        # Attribute values in this report are `launch_test`'s own output and
+        # contain no escaped quotes, so the delimiters are unambiguous. Read with
+        # parameter expansion rather than a regex: the pattern needed to tell
+        # `name=` from `classname=` is exactly the kind of quoting that breaks
+        # differently between bash 3.2 on the macOS host and bash 5 in the
+        # container, and this function has to give the same answer in both.
+        local classname name phase summary rest
+        rest="${record#classname=\"}"
+        classname="${rest%%\"*}"
+        rest="${rest#*\"}"
+        rest="${rest#* name=\"}"
+        name="${rest%%\"*}"
+
+        # Match the class's own name, never the module that qualifies it, so that
+        # a scenario module named after the class cannot be mistaken for it.
+        case "${classname##*.}" in
+            "$SCENARIO_TEARDOWN_CLASS") phase="teardown" ;;
+            *) phase="cycle" ;;
+        esac
+
+        # Isolate the message attribute BEFORE decoding, or the entity-decoded
+        # newlines make the closing tags the last line and every summary reads
+        # `" /></testcase>`. Real quotes inside the message are written `&quot;`,
+        # so the attribute delimiters are unambiguous at this point and stop
+        # being so immediately after.
+        case "$record" in
+            *'message="'*)
+                summary="${record#*message=\"}"
+                summary="${summary%%\"*}"
+                ;;
+            *) summary="" ;;
+        esac
+
+        # Decode the entities and keep the last non-empty line, which is the
+        # assertion itself rather than the traceback leading to it.
+        if [ -n "$summary" ]; then
+            summary="$(
+                printf '%s\n' "$summary" \
+                    | sed -e 's/&#10;/\
+/g' -e 's/&quot;/"/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g' \
+                    | grep -v '^[[:space:]]*$' \
+                    | tail -n 1
+            )"
+        fi
+        [ -n "$summary" ] || summary="(no failure message recorded)"
+
+        printf '%s\t%s.%s\t%s\n' "$phase" "$classname" "$name" "$summary"
+    done
+}
+
+# scenario_verdict <junit-xml> <teardown-policy>
+#
+# The judgement CI and ./scripts/scenario both need, separated from the
+# `launch_test` plumbing so scripts/_selftest.sh can drive it with synthetic
+# reports — the states that matter here are precisely the ones that are expensive
+# to reproduce on demand, each costing a full simulated bring-up.
+#
+# <teardown-policy> is `blocking` or `advisory`. Returns 0 when the run counts as
+# a pass under that policy, 1 otherwise. Called only when `launch_test` itself
+# failed, so "no failures recorded" means the report does not explain the failure
+# and is treated as a cycle failure.
+scenario_verdict() {
+    local xml="$1" policy="$2"
+    local cases cycle_failures teardown_failures tab
+    tab="$(printf '\t')"
+
+    if ! cases="$(scenario_failed_cases "$xml")"; then
+        printf 'no readable JUnit report at %s — treating as a cycle failure' "$xml"
+        return 1
+    fi
+
+    # Anchored on the field separator so that a summary mentioning either word
+    # cannot be counted as a phase. `grep -c` exits 1 on zero matches, which
+    # `set -o pipefail` would otherwise turn into a failed assignment.
+    cycle_failures="$(printf '%s\n' "$cases" | grep -c "^cycle${tab}" || true)"
+    teardown_failures="$(printf '%s\n' "$cases" | grep -c "^teardown${tab}" || true)"
+
+    if [ "$cycle_failures" -gt 0 ]; then
+        printf '%s cycle assertion(s) failed' "$cycle_failures"
+        return 1
+    fi
+    if [ "$teardown_failures" -eq 0 ]; then
+        printf 'the run failed but its report records no failing testcase'
+        return 1
+    fi
+    if [ "$policy" != "advisory" ]; then
+        printf '%s teardown assertion(s) failed' "$teardown_failures"
+        return 1
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # unpinned_manifest_entries — vcs manifest entries not pinned to a commit SHA.
 #
 # Prints one "<repo>: <version>" line per offending entry; empty output means

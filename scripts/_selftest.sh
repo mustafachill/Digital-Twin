@@ -646,6 +646,128 @@ while IFS= read -r p; do
 done < <(declared_patches)
 
 # -----------------------------------------------------------------------------
+# scenario_failed_cases / scenario_verdict — the phase split behind CI's scenario
+# gates. These decide whether a red `launch_test` reds the build, so a mistake
+# here is a gate that stops gating, and the states that matter each cost a full
+# simulated bring-up to reproduce. Driven with synthetic reports instead.
+#
+# The fixtures below are the real shape, copied from a `launch_test --junit-xml`
+# run rather than imagined: one line, self-closing `<testcase>` for a pass, a
+# `<failure>` child whose `message` attribute carries the whole traceback with
+# newlines as `&#10;` and quotes as `&quot;`.
+# -----------------------------------------------------------------------------
+JUNIT_TMP="$(mktemp -d)"
+trap 'rm -rf "${FIXTURE}" "${JUNIT_TMP}"' EXIT
+
+# NOTE THE ABSENT TRAILING NEWLINE, which is not a detail. `launch_test` ends
+# its report without one, and an earlier version of this helper added it — which
+# made every fixture here pass while the real thing failed, because `while read`
+# drops a final line that has no newline and the whole document is that line. A
+# fixture that is tidier than reality tests the fixture. Do not add the newline.
+junit_report() {  # junit_report <file> <testcase-xml...>
+    local out="$1"; shift
+    {
+        printf '<?xml version=%s1.0%s encoding=%sutf-8%s?>\n' "'" "'" "'" "'"
+        printf '<testsuites name="s.s"><testsuite name="s.s.launch_tests">'
+        printf '%s' "$@"
+        printf '</testsuite></testsuites>'
+    } > "$out"
+}
+
+PASSING_CASE='<testcase classname="bringup.TestBringup" name="test_a_trajectory_executes" time="1.0" />'
+CYCLE_FAILURE='<testcase classname="bringup.TestBringup" name="test_a_trajectory_executes" time="1.0"><failure message="Traceback (most recent call last):&#10;AssertionError: no trajectory executed&#10;" /></testcase>'
+# The upstream teardown abort this whole split exists for.
+TEARDOWN_UPSTREAM='<testcase classname="bringup.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : parameter_bridge-5 exited with -6&#10;" /></testcase>'
+# A first-party teardown bug wearing the SAME exit code as the upstream one.
+# `line_orchestrator` aborting on UnknownGoalHandleError is a real cancellation
+# defect that this check has already caught once, and it must stay reported.
+TEARDOWN_OURS='<testcase classname="continuous_line.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6&#10;" /></testcase>'
+
+junit_report "${JUNIT_TMP}/cycle-failed.xml" "$CYCLE_FAILURE" "$PASSING_CASE"
+junit_report "${JUNIT_TMP}/teardown-upstream.xml" "$PASSING_CASE" "$TEARDOWN_UPSTREAM"
+junit_report "${JUNIT_TMP}/teardown-ours.xml" "$PASSING_CASE" "$TEARDOWN_OURS"
+junit_report "${JUNIT_TMP}/both-failed.xml" "$CYCLE_FAILURE" "$TEARDOWN_UPSTREAM"
+junit_report "${JUNIT_TMP}/nothing-failed.xml" "$PASSING_CASE"
+
+expect_eq "a failing cycle assertion is classified as the cycle phase" \
+          "cycle" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/cycle-failed.xml" | cut -f1)"
+expect_eq "a failing post-shutdown assertion is classified as the teardown phase" \
+          "teardown" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/teardown-upstream.xml" | cut -f1)"
+expect_eq "a passing testcase is not reported as a failure" \
+          "" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/nothing-failed.xml")"
+expect_eq "the failing process and exit code survive into the summary" \
+          "AssertionError: -6 not found in [0, -2] : parameter_bridge-5 exited with -6" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/teardown-upstream.xml" | cut -f3)"
+
+# The gate proper. A cycle failure must red the build under EITHER policy —
+# --teardown-advisory buys nothing for the assertion the acceptance claim rests
+# on, which is the entire point of splitting by phase rather than by process.
+expect_fail "a cycle failure gates under the blocking policy" \
+            scenario_verdict "${JUNIT_TMP}/cycle-failed.xml" blocking
+expect_fail "a cycle failure gates under the advisory policy too" \
+            scenario_verdict "${JUNIT_TMP}/cycle-failed.xml" advisory
+expect_fail "a cycle failure gates even when a teardown failure accompanies it" \
+            scenario_verdict "${JUNIT_TMP}/both-failed.xml" advisory
+
+expect_fail "a teardown failure gates under the blocking policy" \
+            scenario_verdict "${JUNIT_TMP}/teardown-upstream.xml" blocking
+expect_ok   "a teardown failure is advisory under the advisory policy" \
+            scenario_verdict "${JUNIT_TMP}/teardown-upstream.xml" advisory
+
+# THE PROPERTY THAT KEEPS THIS FROM BECOMING AN EXEMPTION. The split is by phase
+# and never by process or exit code, so a first-party teardown bug is treated
+# exactly like the upstream one: still asserted, still reported, and gating
+# whenever the caller has not explicitly asked for advisory teardown. What must
+# never happen is the two being told apart by name, which is what "exempt
+# parameter_bridge" would have meant and what CLAUDE.md §2 records as
+# unsupportable — process identity does not predict these failures.
+expect_fail "a first-party teardown failure gates under the blocking policy" \
+            scenario_verdict "${JUNIT_TMP}/teardown-ours.xml" blocking
+expect_eq "a first-party teardown failure is reported with its process named" \
+          "AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/teardown-ours.xml" | cut -f3)"
+
+# Fail-closed, three ways. Anything unclassifiable must gate rather than pass.
+expect_fail "an absent report gates" \
+            scenario_verdict "${JUNIT_TMP}/does-not-exist.xml" advisory
+expect_fail "a report recording no failure at all gates, because it explains nothing" \
+            scenario_verdict "${JUNIT_TMP}/nothing-failed.xml" advisory
+
+# A post-shutdown class this does not recognise must gate, not be ignored. This
+# is what makes renaming TestCleanShutdown in tests/scenarios/ safe: the gate
+# tightens rather than silently stops covering teardown.
+junit_report "${JUNIT_TMP}/unknown-class.xml" \
+    '<testcase classname="bringup.TestSomeOtherShutdownClass" name="test_x" time="0.0"><failure message="AssertionError: gz-4 exited with -9&#10;" /></testcase>'
+expect_fail "an unrecognised post-shutdown class gates instead of being ignored" \
+            scenario_verdict "${JUNIT_TMP}/unknown-class.xml" advisory
+expect_eq "an unrecognised class is classified as the cycle phase" \
+          "cycle" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/unknown-class.xml" | cut -f1)"
+
+# The class is matched on its own name, not on the module qualifying it, so a
+# scenario module could not be mistaken for the class.
+junit_report "${JUNIT_TMP}/module-named-like-class.xml" \
+    '<testcase classname="TestCleanShutdown.TestBringup" name="test_x" time="0.0"><failure message="AssertionError: boom&#10;" /></testcase>'
+expect_eq "a module named like the teardown class does not make a cycle failure teardown" \
+          "cycle" \
+          "$(scenario_failed_cases "${JUNIT_TMP}/module-named-like-class.xml" | cut -f1)"
+
+# ./scripts/scenario must keep asking the strict question unless asked otherwise:
+# the advisory policy is opt-in, so an interactive run and a review agent both
+# still see a teardown failure as a failure.
+# shellcheck disable=SC2016  # matching the literal default, which must not expand
+if grep -q 'TEARDOWN_POLICY="blocking"' "${REPO_ROOT}/scripts/scenario"; then
+    SELFTEST_PASS=$((SELFTEST_PASS + 1))
+else
+    SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+    printf '  %sFAIL%s ./scripts/scenario gates on teardown unless --teardown-advisory\n' \
+           "$C_RED" "$C_RST" >&2
+fi
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"
