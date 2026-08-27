@@ -519,6 +519,44 @@ class TestCleanShutdown(unittest.TestCase):
     #: this assertion into one that cannot fail.
     UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
 
+    #: What the L3 skill server logs when the default planner refused and the
+    #: fallback was tried, and when it refused and the fallback was declined.
+    #: Matched rather than parsed: these are log lines for a person, and the only
+    #: thing taken from them is that one happened.
+    FALLBACK_TAKEN = "planner fallback:"
+    FALLBACK_DECLINED = "planner fallback declined:"
+
+    def test_report_how_often_the_planner_fell_back(self, proc_output) -> None:
+        """A count, not a gate — and the count is the point (ADR-0027).
+
+        ADR-0027 keeps OMPL as the fallback for the motions a point-to-point
+        interpolation cannot make, and says in as many words that a fallback
+        which becomes the common path is a finding about the cell's geometry
+        rather than about the planner. That is a frequency, a frequency is a
+        metric, and metrics belong to L6, which does not exist. This is not a
+        second attempt at L6: the report `scripts/scenario` already writes is
+        uploaded by CI, and printing the count here puts the number into it at
+        the cost of no new interface and no new file.
+
+        Deliberately without a threshold. Nothing has measured what a normal rate
+        is on this cell, and a limit invented here would be a pre-registered
+        claim with no campaign behind it (P8).
+        """
+        taken = 0
+        declined = 0
+        for entry in proc_output:
+            text = (
+                entry.text.decode(errors="replace")
+                if isinstance(entry.text, bytes)
+                else str(entry.text)
+            )
+            taken += text.count(self.FALLBACK_TAKEN)
+            declined += text.count(self.FALLBACK_DECLINED)
+        print(
+            f"planner-fallback count: taken={taken} declined={declined} "
+            "(ADR-0027; reported, not gated)"
+        )
+
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
         allowed = [0, launch_testing.asserts.EXIT_SIGINT]
         for info in proc_info:

@@ -793,6 +793,15 @@
       "additionalProperties": false,
       "description": "How this type is planned for, and where its SRDF comes from.\n\nGroup names are the vendor's, prefixed with the asset id exactly as joints\nand controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording\nthe vendor's suffix here rather than hardcoding it keeps the same property\nthe description has: a vendor rename is a model edit.",
       "properties": {
+        "default_pipeline": {
+          "title": "Default Pipeline",
+          "type": "string"
+        },
+        "default_planner_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "title": "Default Planner Id",
+          "type": "string"
+        },
         "end_effector_group_suffix": {
           "anyOf": [
             {
@@ -804,6 +813,16 @@
           ],
           "default": null,
           "title": "End Effector Group Suffix"
+        },
+        "fallback_pipeline": {
+          "title": "Fallback Pipeline",
+          "type": "string"
+        },
+        "fallback_planner_id": {
+          "default": "",
+          "pattern": "^([A-Za-z][A-Za-z0-9_]*)?$",
+          "title": "Fallback Planner Id",
+          "type": "string"
         },
         "group_suffix": {
           "title": "Group Suffix",
@@ -832,6 +851,31 @@
         "max_acceleration_scaling": {
           "default": 0.5,
           "title": "Max Acceleration Scaling",
+          "type": "number"
+        },
+        "max_cartesian_acceleration_m_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Acceleration M S2",
+          "type": "number"
+        },
+        "max_cartesian_deceleration_m_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Deceleration M S2",
+          "type": "number"
+        },
+        "max_cartesian_rotational_velocity_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Rotational Velocity Rad S",
+          "type": "number"
+        },
+        "max_cartesian_velocity_m_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Velocity M S",
+          "type": "number"
+        },
+        "max_deceleration_rad_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Deceleration Rad S2",
           "type": "number"
         },
         "max_velocity_scaling": {
@@ -903,7 +947,15 @@
       "required": [
         "group_suffix",
         "tip_link_suffix",
-        "max_acceleration_rad_s2"
+        "max_acceleration_rad_s2",
+        "max_deceleration_rad_s2",
+        "default_pipeline",
+        "default_planner_id",
+        "fallback_pipeline",
+        "max_cartesian_velocity_m_s",
+        "max_cartesian_acceleration_m_s2",
+        "max_cartesian_deceleration_m_s2",
+        "max_cartesian_rotational_velocity_rad_s"
       ],
       "title": "PlanningSpec",
       "type": "object"

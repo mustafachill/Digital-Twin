@@ -33,6 +33,8 @@ namespace
 
 using cite_skills::PoseGoalAttempts;
 using cite_skills::PoseGoalFailure;
+using cite_skills::combined_failure;
+using cite_skills::fallback_is_allowed;
 using cite_skills::plan_to_pose;
 
 const auto kNeverCancelled = [] {return false;};
@@ -163,4 +165,93 @@ TEST(PoseGoal, AcceptsANullAttemptsPointer)
   const auto failure = plan_to_pose(
     2, [](int) {return false;}, [] {return true;}, kNeverCancelled, nullptr);
   EXPECT_EQ(failure, PoseGoalFailure::NoIkSolution);
+}
+
+
+// --- Two passes, one verdict (ADR-0027) --------------------------------------
+//
+// A goal is searched for once per planner. The second pass draws its own random
+// seeds, so it can answer a different question from the first one's — and the
+// answers are not interchangeable: L4 ESCALATEs UNREACHABLE and retries
+// PLANNING_FAILED, so letting the second pass overwrite the first's diagnosis
+// spends an operator's attention on a goal that was merely blocked.
+
+TEST(PoseGoalTwoPass, TheSecondPassMayNotDowngradeTheFirstsDiagnosis)
+{
+  // Pass 1 proved IK has a solution and no path to it was found. Pass 2's
+  // different seeds all miss. The answer is still that the pose is reachable.
+  EXPECT_EQ(
+    combined_failure(PoseGoalFailure::NoPlan, PoseGoalFailure::NoIkSolution),
+    PoseGoalFailure::NoPlan);
+}
+
+TEST(PoseGoalTwoPass, TheSecondPassMayImproveTheVerdict)
+{
+  EXPECT_EQ(
+    combined_failure(PoseGoalFailure::NoPlan, PoseGoalFailure::None),
+    PoseGoalFailure::None);
+  // A cancel during the second pass is news, not a downgrade: the goal was
+  // called off and saying anything else about it would be wrong.
+  EXPECT_EQ(
+    combined_failure(PoseGoalFailure::NoPlan, PoseGoalFailure::Cancelled),
+    PoseGoalFailure::Cancelled);
+}
+
+TEST(PoseGoalTwoPass, CountsAccumulateAcrossPasses)
+{
+  // `plan_to_pose` zeroes what it is given, so the totals an operator reads have
+  // to be summed by the caller. Eight seeds tried twice is sixteen, not eight.
+  PoseGoalAttempts first;
+  first.seeds_tried = 8;
+  first.branches_planned = 3;
+  PoseGoalAttempts second;
+  second.seeds_tried = 8;
+  second.branches_planned = 5;
+
+  const auto total = first + second;
+  EXPECT_EQ(total.seeds_tried, 16);
+  EXPECT_EQ(total.branches_planned, 8);
+}
+
+TEST(PoseGoalTwoPass, OnlyAPlanningFailureFallsBack)
+{
+  EXPECT_TRUE(fallback_is_allowed(PoseGoalFailure::NoPlan, true, false));
+  // Reachability is a property of the arm, not of the planner (ADR-0026).
+  EXPECT_FALSE(fallback_is_allowed(PoseGoalFailure::NoIkSolution, true, false));
+  EXPECT_FALSE(fallback_is_allowed(PoseGoalFailure::Cancelled, true, false));
+  EXPECT_FALSE(fallback_is_allowed(PoseGoalFailure::None, true, false));
+  EXPECT_FALSE(fallback_is_allowed(PoseGoalFailure::NoPlan, false, false));
+}
+
+TEST(PoseGoalTwoPass, ACartesianRequestIsRefusedRatherThanRescued)
+{
+  // The one that has no caller yet and is the reason this function exists. A
+  // planner asked for a straight line and a planner that samples are not
+  // interchangeable: the substitute returns a curve through the same endpoints,
+  // the skill reports SUCCESS, and every scenario assertion — all of which are
+  // about where the work-piece ends up — still passes. The boundary would then
+  // be rediscovered on the physical cell.
+  EXPECT_FALSE(fallback_is_allowed(PoseGoalFailure::NoPlan, true, true));
+}
+
+// --- The classification an out-of-limits IK solution gets ---------------------
+
+TEST(PoseGoal, ASolutionRejectedBeforeThePlannerIsNotAPlanningFailure)
+{
+  // The caller installs the target inside `solve_ik`, so a solution the move
+  // group refuses for being outside the joint limits never counts as a branch
+  // that was planned to. Reported the other way round, it produced the sentence
+  // "the planner found no path" about a planner that was never called — and
+  // triggered a whole fallback pass for a failure no planner had produced.
+  int plans = 0;
+  PoseGoalAttempts attempts;
+
+  const auto failure = plan_to_pose(
+    4, [](int) {return false;},  // every seed: IK solved, target refused
+    [&] {++plans; return true;}, kNeverCancelled, &attempts);
+
+  EXPECT_EQ(failure, PoseGoalFailure::NoIkSolution);
+  EXPECT_EQ(plans, 0);
+  EXPECT_EQ(attempts.seeds_tried, 4);
+  EXPECT_EQ(attempts.branches_planned, 0);
 }

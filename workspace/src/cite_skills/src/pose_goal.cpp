@@ -17,6 +17,27 @@
 namespace cite_skills
 {
 
+PoseGoalAttempts operator+(const PoseGoalAttempts & a, const PoseGoalAttempts & b)
+{
+  PoseGoalAttempts sum;
+  sum.seeds_tried = a.seeds_tried + b.seeds_tried;
+  sum.branches_planned = a.branches_planned + b.branches_planned;
+  return sum;
+}
+
+bool fallback_is_allowed(PoseGoalFailure first, bool have_fallback, bool cartesian_request)
+{
+  return first == PoseGoalFailure::NoPlan && have_fallback && !cartesian_request;
+}
+
+PoseGoalFailure combined_failure(PoseGoalFailure first, PoseGoalFailure second)
+{
+  if (second == PoseGoalFailure::None || second == PoseGoalFailure::Cancelled) {
+    return second;
+  }
+  return first;
+}
+
 PoseGoalFailure plan_to_pose(
   int max_seeds,
   const std::function<bool(int)> & solve_ik,

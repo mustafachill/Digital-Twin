@@ -58,6 +58,20 @@
   <test_depend>robot_state_publisher</test_depend>
   <test_depend>rclpy</test_depend>
   <test_depend>sensor_msgs</test_depend>
+  <!-- The planning-pipeline launch test speaks to move_group's own services
+       (`query_planner_interface`, `plan_kinematic_path`) rather than through
+       MoveGroupInterface, because the question is what move_group loaded and
+       what it answers — not what a client made of it. -->
+  <test_depend>moveit_msgs</test_depend>
+  <test_depend>shape_msgs</test_depend>
+  <!-- The planning-pipeline launch test loads the cell's generated planning
+       scene into move_group, because ValidateSolution is the only thing that
+       refuses a Pilz path through a table and a rig with an empty world cannot
+       show it. It reads the scene and the generated frame table through
+       cite_facility, which already owns both readers, rather than parsing the
+       generated YAML a second time. cite_facility is below cite_skills in the
+       layer stack, so this is a downward dependency and a test-only one. -->
+  <test_depend>cite_facility</test_depend>
   <!-- The detection test republishes the beams' generated static transforms,
        because there is no cite_bringup in that rig to do it. -->
   <test_depend>tf2_ros</test_depend>
