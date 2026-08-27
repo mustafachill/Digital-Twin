@@ -148,26 +148,63 @@
 
         </Sequence>
 
-        <!-- Recovery is expressed, not implied.
+        <!-- Recovery is expressed, not implied — and NOTHING MOVES BEFORE THE
+             POLICY HAS CHOSEN (ADR-0037).
 
-             Returning home first is deliberate: a station that failed mid-cycle
-             may have left the arm somewhere the next attempt would collide with.
+             `RecoverFromFailure` is the FIRST leaf, and that ordering is the
+             decision. It used to be the third, after `MoveToHome`: so a station
+             that failed planned and drove a fresh trajectory, unattended, before
+             anything had asked whether it was allowed to move at all. Two policy
+             rows say plainly that it must not. `SAFETY_BLOCKED`'s own comment
+             says L4 must never treat a refusal as a transient; `HARDWARE_FAULT`'s
+             says the cell is not in a state to be commanded — after which, in
+             that order, the cell was commanded.
 
-             It only works because a leaf that gives up cancels the goal it
-             abandons — see `SkillNode`. Without that, `MoveToHome` here is sent
-             to a server still executing the goal that just failed, and the skill
-             server rejects it: the recovery branch would fail every time, for a
-             reason that appears nowhere in this file.
+             CLEARING THE ARM IS AN ACTION OF THE RETRY PATH. The justification
+             that used to stand here — "a station that failed mid-cycle may have
+             left the arm somewhere the next attempt would collide with" — is
+             sound and was in the wrong place. It argues for clearing the arm
+             INSIDE the retry, not before the decision to allow one. If the answer
+             is escalate, there is no next attempt to protect. So the comment
+             moves with the node rather than being deleted, and a station whose
+             classification is ESCALATE or STOP_LINE now performs no motion at
+             all: it stops where it is.
+
+             THE ORDER IS NOT WHAT MAKES THIS SAFE, and a reader adding a leaf
+             here should know why. `RecoverFromFailure` reads the failing
+             `ResultCode` from the blackboard, and every `SkillNode` used to write
+             that key on SUCCESS as well as on failure — so the old `MoveToHome`
+             overwrote the very code the policy was about to read, the policy saw
+             SUCCESS, answered NONE, and the Repeat retried. ESCALATE and
+             STOP_LINE were unreachable here. That is fixed at both ends: a
+             successful skill no longer writes the key, and `RecoverFromFailure`
+             consumes it as it reads. The ordering below is still the right
+             ordering; it is no longer the only thing holding.
 
              `RecoverFromFailure` decides from the structured `ResultCode`, never
              from text. SUCCESS means try again and the Repeat above does exactly
              that; FAILURE means a person is needed, and it propagates to the line
-             tree, which halts every other station and so cancels their goals. -->
+             tree, which halts every other station and so cancels their goals.
+
+             `ReleaseStationClaims` runs on BOTH answers, because a station that
+             is escalating must not keep holding frames the rest of the line needs
+             — releasing a claim moves nothing. -->
         <Sequence name="recover">
-          <MoveToHome           asset="{asset}" action="{move_to_action}" />
-          <ReleaseStationClaims station="{station}" />
           <RecoverFromFailure   station="{station}" workpiece="{workpiece}"
                                 token="{token}" />
+          <ReleaseStationClaims station="{station}" />
+
+          <!-- The retry path, reached only because the policy chose to retry.
+               A station that failed mid-cycle may have left the arm somewhere the
+               next attempt would collide with, so the next attempt begins by
+               clearing it.
+
+               It only works because a leaf that gives up cancels the goal it
+               abandons — see `SkillNode`. Without that, `MoveToHome` here is sent
+               to a server still executing the goal that just failed, and the
+               skill server rejects it: the recovery branch would fail every time,
+               for a reason that appears nowhere in this file. -->
+          <MoveToHome           asset="{asset}" action="{move_to_action}" />
         </Sequence>
 
       </Fallback>

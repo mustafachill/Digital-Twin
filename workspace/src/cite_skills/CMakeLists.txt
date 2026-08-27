@@ -151,6 +151,15 @@ if(BUILD_TESTING)
   target_include_directories(test_observation PRIVATE include)
   ament_target_dependencies(test_observation geometry_msgs)
 
+  # Where an arm ended up relative to the trajectory it was given (ADR-0037).
+  # This decides whether L4 retries a station unattended or stops it for an
+  # operator, and the boundary cases it has to get right — a short trajectory
+  # whose ends overlap, one mistracking joint among five that arrived, a joint
+  # state that could not be read at all — cannot be produced on demand in a
+  # simulator. So the rule is tested as a rule. No ROS runtime and no MoveIt.
+  ament_add_gtest(test_motion_end test/test_motion_end.cpp)
+  target_include_directories(test_motion_end PRIVATE include)
+
   # The parts of the action contract that only a running server can show:
   # goal exclusion, a cancel that reaches the gripper, and a reachable pose that
   # is planned to rather than refused. move_group, no simulator, no controllers —

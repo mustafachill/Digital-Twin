@@ -861,15 +861,35 @@ public:
       line_.ledger->abandon(token, station);
     }
 
-    // Read defensively. A recovery branch can be reached by a leaf that failed
-    // before it ever sent a goal — a missing action name, an empty frame — and
-    // that leaf recorded no code. Treating "no code" as SUCCESS would make the
-    // policy answer NONE and the station retry for ever; PRECONDITION_FAILED is
-    // what it actually is, and it is bounded by the budget like anything else.
-    int code = static_cast<int>(cite_interfaces::msg::ResultCode::PRECONDITION_FAILED);
-    if (!config().blackboard->get<int>(kLastResultCode, code)) {
+    // Read defensively, THEN CONSUME. Both halves matter and they answer
+    // different failures.
+    //
+    // Defensively: a recovery branch can be reached by a leaf that failed before
+    // it ever sent a goal — a missing action name, an empty frame — and that leaf
+    // recorded no code. Treating "no code" as SUCCESS would make the policy
+    // answer NONE and the station retry for ever; PRECONDITION_FAILED is what it
+    // actually is, and it is bounded by the budget like anything else.
+    //
+    // Consume: the key is cleared the moment it is read, so it describes THE
+    // FAILURE THAT LED TO THIS RECOVERY and never a previous one. Without that,
+    // suppressing the success-write in `SkillNode::record` (ADR-0037) would let a
+    // code recorded two cycles ago be read as this cycle's — a stale failure
+    // deciding a live station's fate. With it, the pair is correct under any leaf
+    // ordering: nothing later in the branch can write the code the policy already
+    // acted on, and nothing earlier can leave one behind.
+    //
+    // SUCCESS is the cleared marker rather than an erased key, so the two states
+    // a defensive read has to tell apart — never written, and already consumed —
+    // reach the same answer through the same line below.
+    const int no_failure_recorded =
+      static_cast<int>(cite_interfaces::msg::ResultCode::SUCCESS);
+    int code = no_failure_recorded;
+    if (!config().blackboard->get<int>(kLastResultCode, code) ||
+      code == no_failure_recorded)
+    {
       code = static_cast<int>(cite_interfaces::msg::ResultCode::PRECONDITION_FAILED);
     }
+    config().blackboard->set(kLastResultCode, no_failure_recorded);
     const Recovery response = recovery_for(
       static_cast<uint8_t>(code), runtime.consecutive_failures - 1, line_.retry_budget);
 

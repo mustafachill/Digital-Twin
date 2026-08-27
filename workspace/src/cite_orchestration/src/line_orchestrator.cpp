@@ -69,6 +69,7 @@
 #include <cite_interfaces/msg/line_topology.hpp>
 #include <cite_interfaces/msg/station_state.hpp>
 #include <cite_interfaces/qos.hpp>
+#include <cite_interfaces/srv/reset_station.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
 #include "cite_orchestration/conveyor_index.hpp"
@@ -77,6 +78,7 @@
 #include "cite_orchestration/line_plan.hpp"
 #include "cite_orchestration/line_tree.hpp"
 #include "cite_orchestration/skill_nodes.hpp"
+#include "cite_orchestration/station_reset.hpp"
 
 namespace
 {
@@ -309,6 +311,15 @@ int main(int argc, char ** argv)
     "line_state_topic", std::string(cite_interfaces::msg::LineState::TOPIC));
   const auto line_state_topic = node->get_parameter("line_state_topic").as_string();
 
+  // Same shape and the same reason as `line_state_topic` above: the name is
+  // written once, on the `.srv` itself, and stays a parameter so a test rig can
+  // serve somewhere private. A string literal here would be a value in two
+  // places (P1) and would not be discoverable with `ros2 interface show` (P3).
+  node->declare_parameter(
+    "reset_station_service",
+    std::string(cite_interfaces::srv::ResetStation::Request::SERVICE));
+  const auto reset_service = node->get_parameter("reset_station_service").as_string();
+
   node->declare_parameter("topology_deadline_s", 30.0);
   node->declare_parameter("handoff_timeout_s", 120.0);
   node->declare_parameter("skill_deadline_s", 180.0);
@@ -503,6 +514,15 @@ int main(int argc, char ** argv)
           auto tree = factory.createTree("Line");
           LineMaintenance maintenance(line, plan, line_state_topic);
 
+          // The operator's only control over a blocked station (ADR-0037). It
+          // clears a block and commands nothing: no plan, no `MoveTo`, no belt.
+          //
+          // The mutex is held across a whole tick below, so a reset lands between
+          // ticks rather than inside one - which is what lets every other reader
+          // of `StationRuntime` go on assuming it runs on the tick thread alone.
+          auto tick_mutex = std::make_shared<std::mutex>();
+          StationReset reset(line, plan, reset_service, tick_mutex);
+
           // START THE PLANT. Every belt the model declares goes to its installed
           // speed, once, before the first tick — the indexed ones will be stopped
           // again by the first work-piece that reaches their beam, and the ones
@@ -552,12 +572,20 @@ int main(int argc, char ** argv)
           rclcpp::Time last_report = node->get_clock()->now();
           BT::NodeStatus outcome = BT::NodeStatus::RUNNING;
           while (rclcpp::ok() && outcome == BT::NodeStatus::RUNNING) {
-            outcome = tree.tickOnce();
-            maintenance.run();
-            const rclcpp::Time now = node->get_clock()->now();
-            if (now - last_report >= state_period) {
-              maintenance.publish();
-              last_report = now;
+            {
+              // Held across the tick and the maintenance pass, and released
+              // before the sleep. The only other holder is the reset service, so
+              // this is a boundary marker rather than contention: it makes
+              // "touched only from the tick thread" true again now that one thing
+              // is not on the tick thread.
+              const std::lock_guard<std::mutex> lock(*tick_mutex);
+              outcome = tree.tickOnce();
+              maintenance.run();
+              const rclcpp::Time now = node->get_clock()->now();
+              if (now - last_report >= state_period) {
+                maintenance.publish();
+                last_report = now;
+              }
             }
             // BT.CPP's own wait: it returns early when a leaf signals a wake-up,
             // so this is a ceiling on latency rather than a fixed cadence.

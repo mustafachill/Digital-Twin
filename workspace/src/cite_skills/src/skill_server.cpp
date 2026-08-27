@@ -1692,7 +1692,7 @@ private:
   ResultCode classify_execution_failure(
     const MoveGroupInterface::Plan & plan, const moveit::core::MoveItErrorCode & executed)
   {
-    if (executed.val == moveit_msgs::msg::MoveItErrorCodes::TIMED_OUT) {
+    if (executed.val == moveit::core::MoveItErrorCode::TIMED_OUT) {
       // `TrajectoryExecutionManager` stopped the controller because it overran
       // the trajectory's own expected duration. MoveIt knows this because MoveIt
       // wrote the duration.
@@ -1700,7 +1700,7 @@ private:
         ResultCode::TIMEOUT,
         "MoveIt stopped the trajectory because the controller overran its expected duration");
     }
-    if (executed.val == moveit_msgs::msg::MoveItErrorCodes::PREEMPTED) {
+    if (executed.val == moveit::core::MoveItErrorCode::PREEMPTED) {
       // `TrajectoryExecutionManager::stopExecution()` was called. The decision to
       // stop was taken somewhere that knew why, and re-deciding it here would
       // override it — the same reasoning `recovery_policy.hpp` gives CANCELLED.
@@ -1727,11 +1727,17 @@ private:
       const auto state = move_group_->getCurrentState(current_state_timeout_s_);
       if (state && state->getRobotModel()) {
         for (std::size_t i = 0; i < names.size(); ++i) {
-          if (!state->getRobotModel()->hasJointModel(names[i])) {
+          // `getJointPositions` rather than `getVariablePosition`, because a
+          // trajectory carries JOINT names and the state is indexed by VARIABLE
+          // names. They coincide for a single-degree-of-freedom joint and stop
+          // coinciding the moment a robot type brings a multi-DOF one, which is
+          // exactly the P9 case this classification is supposed to survive.
+          const auto * joint = state->getRobotModel()->getJointModel(names[i]);
+          if (joint == nullptr || joint->getVariableCount() != 1) {
             current.clear();
             break;
           }
-          current.push_back(state->getVariablePosition(names[i]));
+          current.push_back(*state->getJointPositions(joint));
           start.push_back(points.front().positions[i]);
           goal.push_back(points.back().positions[i]);
         }

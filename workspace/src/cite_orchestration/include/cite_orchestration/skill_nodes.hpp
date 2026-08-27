@@ -302,10 +302,35 @@ private:
     return client;
   }
 
+  /// Record the code this leaf's skill came back with.
+  ///
+  /// SUCCESS IS NOT WRITTEN TO THE BLACKBOARD, and that omission is the fix for
+  /// a defect that made the recovery policy dead code (ADR-0037).
+  ///
+  /// This used to write unconditionally. `kLastResultCode` has exactly one
+  /// reader — `RecoverFromFailure` — and the recovery branch of
+  /// `line_station.xml` ran `MoveToHome` before it. So on the common path the
+  /// recovery motion SUCCEEDED, wrote SUCCESS over the code the policy was about
+  /// to read, `recovery_for(SUCCESS)` answered `Recovery::NONE`, the station was
+  /// set back to WAITING and the enclosing `<Repeat num_cycles="-1">` tried
+  /// again. `ESCALATE` and `STOP_LINE` were unreachable on that path: every
+  /// failure became a retry, including `SAFETY_BLOCKED`, whose own policy comment
+  /// says L4 must never treat a refusal as a transient.
+  ///
+  /// ADR-0037 reorders that branch so the policy decides first. THIS IS THE
+  /// OTHER HALF, and it is here rather than left to the ordering because a leaf
+  /// added to the branch later would silently reintroduce the defect and no
+  /// test of the ordering would catch it. Together with `RecoverFromFailure`
+  /// consuming the key as it reads it, the code the policy acts on is correct
+  /// under ANY leaf ordering.
+  ///
+  /// `last_code_` is still set on success: it is this node's own memory of its
+  /// own outcome, private to the instance, and nothing chooses a recovery from
+  /// it.
   void record(uint8_t code)
   {
     last_code_ = code;
-    if (config().blackboard) {
+    if (code != ResultCode::SUCCESS && config().blackboard) {
       config().blackboard->set(kLastResultCode, static_cast<int>(code));
     }
   }
