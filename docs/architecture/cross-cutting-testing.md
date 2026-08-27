@@ -1,7 +1,7 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **215**
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **222**
   host tests at this commit, counted by collection, plus shell self-tests for the gate logic
   in `scripts/_lib.sh`. The contract level is populated: 22 interface definitions are frozen
   against a stored baseline.
@@ -151,6 +151,53 @@ Interface definitions are checked against a stored baseline. A breaking change t
 `.msg`, `.srv`, or `.action` fails the build rather than surfacing at runtime in a consumer
 nobody thought about.
 
+## Negative controls
+
+Some assertions are only as good as the setup that reaches them. A test that says *"SIGINT
+taken inside message conversion still exits 0"* is worth nothing unless the signal really
+lands inside message conversion — and if the fixture that places it there quietly stops
+working, the assertion goes on passing and stops meaning anything. It has become a **vacuous
+pass**: green, and evidence of nothing. Nothing in the test itself can distinguish the two
+states, because from inside, "the thing under test is correct" and "the setup no longer
+exercises it" look identical.
+
+A **negative control** is the second assertion that tells them apart. It drives the same
+fixture with an input **known to fail** and asserts that it still does. If the control goes
+green, the fixture has stopped exercising what it claims to, and the positive assertion beside
+it must not be believed until that is understood.
+
+The worked example is `cite_runtime`. `test/spinning_probe.py` carries the pre-`runtime`
+shutdown idiom as a second mode, copied verbatim rather than paraphrased, and
+`test_the_tripwire_still_breaks_the_idiom_it_replaced` drives it through the same SIGINT
+tripwire as the fixed idiom and asserts that it still dies with the exact upstream traceback.
+
+**A committed test that asserts a bug still exists is unusual, and the next person will want
+to delete it.** These are the conditions under which it is legitimate, and all four must
+hold:
+
+1. **It validates another assertion.** The control exists to keep a specific positive test
+   from passing vacuously. Name that test in the docstring. A "known bad" test with nothing
+   depending on it is not a control; it is a behaviour lock.
+2. **It asserts the failure's *signature*, not merely that it failed.** `returncode != 0` can
+   be satisfied by an import error. The `cite_runtime` control also requires
+   `Unable to convert call argument` in stderr, so the probe failing for an unrelated reason
+   does not satisfy it.
+3. **The subject is outside our control** — a third-party defect, a platform behaviour, an
+   environment property. **A test asserting that *our own* bug still exists is not a negative
+   control. It is a bug with a test.** Ours get fixed.
+4. **Going red is a documented result, not a breakage.** The docstring must enumerate the
+   ways it can turn green and say what each means, and the ADR carrying the removal condition
+   must name the test as the detector. The `cite_runtime` control has exactly two: the
+   tripwire stopped placing the signal, or upstream fixed `convert_to_py` — the second being
+   [ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md)'s removal condition
+   for Compensation 1 met. Without that, a red control is a puzzle, and a puzzle in CI gets
+   deleted.
+
+The pattern's real value is that it turns a "revisit when upstream fixes this" note — which
+nobody revisits — into a test that fails on the day the condition is met and says why. Where
+a compensation has no such control, **say so in the ADR** rather than leaving the reader to
+assume one exists; ADR-0034's Compensation 2 is the worked example of that admission.
+
 ## Standing guarantees
 
 The `tester` agent verifies these on **every** run, regardless of what changed:
@@ -203,8 +250,10 @@ conditions rather than by decree:
 
 - **The ROS package lint step blocks.** The reason it did not was that the gate selected
   linters by test *name* and ran 3 of 8 per package. It selects by the `linter` **label**
-  now, which is what ament actually sets — 41 linter tests across the seven first-party
-  packages. `./scripts/lint` additionally refuses to answer at all unless the build tree's
+  now, which is what ament actually sets — 41 linter tests, measured across the seven
+  first-party packages that existed at `c1e9e03`. `cite_runtime` has been added since and
+  registers linters of its own, so the current number is higher and is not re-measured here.
+  `./scripts/lint` additionally refuses to answer at all unless the build tree's
   fingerprint matches the first-party `package.xml` and `CMakeLists.txt` on disk, so a stale
   tree produces a diagnosis rather than a confident wrong linter set.
 - **`pick_and_place` blocks.** Its remaining condition had narrowed to reproducibility, and
@@ -220,11 +269,22 @@ ADR-0032, ADR-0033 and the milestone ladder going from 4 of 10 to 10 of 10. Not 
 change, and not a teardown allowance — the teardown half is already reported rather than
 gated.
 
-The teardown question is separate from all of this and is unresolved. `pick_and_place`'s
-teardown check has failed after a passing cycle on several occasions, on four distinct
-processes so far, so process identity does not predict it; the exemption route is closed on
-evidence, and the fix named is a teardown coordinator in `cite_bringup` or a
-lifecycle-managed bridge — not a wider allowlist and not a longer timeout.
+The teardown question is separate from all of this and is **half resolved**. A scenario's
+cycle can pass and its post-shutdown check still fail, and this paragraph said until
+2026-08-27 that the failures spread over four processes with no predictor but run duration.
+That was wrong. Split by exit status the failures are **two families**, and within the split
+process identity predicts the family exactly: an **exit-1 family** of `rclpy` nodes, whose
+cause is established and fixed in
+[ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md); and a **signal
+family** of MoveIt-linked C++ processes that is **still unexplained**, one member of which is
+outside the single narrow exemption that exists. Run duration is retired as a predictor. The
+figures, their provenance and what remains unaccounted for are in
+[CLAUDE.md §2](../../CLAUDE.md) rather than here, so that one number has one home (P1).
+
+For the unexplained family, the position is unchanged: the exemption route stays closed, the
+fix named is a teardown coordinator in `cite_bringup` or a lifecycle-managed bridge, and the
+answer is not a wider allowlist and not a longer timeout. Tolerating a cause nobody has
+demonstrated is how an assertion stops being able to fail.
 
 ## Failure modes
 

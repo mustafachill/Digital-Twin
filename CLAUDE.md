@@ -46,13 +46,24 @@ repository is partway there. Check before assuming.
   process topology and the bring-up plan. That directory is **generated in its entirety and
   must never be hand-edited** (ADR-0021). `./scripts/validate-model` diffs it against a
   fresh generator run *and* regenerates in a second interpreter under a different hash seed
-  to prove the output is byte-identical; it exits 0. `tools/tests/` holds **215** tests at
-  this commit, counted by collection rather than by a run.
-- **Seven first-party packages exist**, and `workspace/src/external/` adds the twelve from
-  `xarm_ros2`. `./scripts/build` is a blocking CI step. The seven are `cite_interfaces`,
-  `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`, `cite_orchestration`
-  and `cite_simulation`. **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`,
-  `cite_control` and `cite_hardware` do not exist.**
+  to prove the output is byte-identical; it exits 0. `tools/tests/` holds **222** tests at
+  this commit, counted by collection rather than by a run
+  (`pytest tools/tests --collect-only -q`, 2026-08-27).
+- **Eight first-party packages exist**, and `workspace/src/external/` adds the twelve from
+  `xarm_ros2`. `./scripts/build` is a blocking CI step. The eight are `cite_interfaces`,
+  `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`,
+  `cite_orchestration` and `cite_simulation`. `cite_runtime` is the newest: it holds
+  process-lifecycle mechanism only — signals, shutdown, spin-and-exit for `rclpy` nodes — and
+  it exists rather than a helper landing in `cite_interfaces`
+  ([ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md), charter v1.7).
+  **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`, `cite_control` and
+  `cite_hardware` do not exist**; those six plus the eight above are the fourteen charter §7
+  lists.
+  **Check the count rather than this sentence.** `./scripts/doctor`'s `workspace/src` line
+  counts every `package.xml` beneath it, so it reads **8** in a checkout that has not run
+  `./scripts/bootstrap` — measured on macOS on 2026-08-27 — and **20** once the manifest is
+  imported, that being 8 plus the 12 `xarm_ros2` packages the manifest's own pinning note
+  records building. The 20 is arithmetic here, not a reading taken in this checkout.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -87,15 +98,10 @@ repository is partway there. Check before assuming.
   stale build tree — **measure it yourself anyway.**
   **Do not read any of this as a green scenario.** In the 6 runs above the *scenario
   verdict* was **5 of 6**: one run passed the cycle and then failed the post-cycle teardown
-  check. That failure was on a **fourth distinct process**, after `parameter_bridge` (-6),
-  `gz` (-9) and `topology_server.py` (1) on earlier runs — so **process identity does not
-  predict it**, and the fourth is further evidence rather than a new symptom. The one
-  candidate that has ever looked like a predictor is **run duration** — in an earlier set of
-  five the failing run was the slowest — and that is a suggestion from a handful of runs, not
-  a result. **The cause is still not established and no exemption has been added or
-  widened** — the one that exists is still exactly one process and one signal
-  (`move_group`/-11) and is to be deleted rather than widened. Every teardown check still
-  runs and still reports every bad exit.
+  check. Every teardown check still runs and still reports every bad exit. The account of
+  that failure that stood here until 2026-08-27 has been overturned — see the teardown bullet
+  below, and do not carry "process identity does not predict it" or "run duration" out of an
+  older copy of this file.
   **What did change, and this file said otherwise until 2026-08-27:**
   `./scripts/scenario pick_and_place` is a **blocking** CI step, not `continue-on-error`. It
   was promoted at `c1e9e03` against its own recorded conditions. CI passes
@@ -135,8 +141,14 @@ repository is partway there. Check before assuming.
   **After the fix, and this is the least-settled number here:** `continuous_line` passed
   **3 of 3** on both cycle and teardown, against a 3-of-4 and 2-of-4 baseline. That is the
   fixing agent's three runs on one machine, and the agent said in as many words that three
-  runs on one machine is not a campaign. An independent three-run verification was in flight
-  as this was written and **its result is not known**. Do not promote the gate on this.
+  runs on one machine is not a campaign.
+  **The independent verification came back, and only half of it replicated.** Three further
+  runs, taken by the project owner on one machine on 2026-08-27: **the cycle completed 3 of
+  3, and the scenario verdict was 1 of 3.** Both failures were **teardown-only** — runs 2 and
+  3 each reported `OK` from their in-flight tests and then failed the post-shutdown check. So
+  the cycle figure replicated and the teardown figure did not. **That gap is the difference
+  between "the line works" and "the scenario is green", and they are not the same claim.** The
+  teardown half is the next bullet. Do not promote the gate on either number.
   **It is not finished.** One run had a piece stall at 8 of 10 after `arm_3` closed on air
   at `conveyor_2`'s outfeed, following the loosest grasp recorded anywhere — the full cube
   width, no compression. The stated hypothesis, and it is a hypothesis: a leading-edge test
@@ -146,6 +158,45 @@ repository is partway there. Check before assuming.
   compensated in the beam. It belongs to the release-orientation residual, and
   [`docs/measurements/2026-08-26-conveyor-yaw-transfer/`](docs/measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md)
   lists **whether that residual accumulates over three stations as explicitly unmeasured**.
+- **The teardown flake is two failure families, not one, and what this file said about it
+  was wrong until 2026-08-27.** It said the failures hit four undifferentiated processes, that
+  **process identity does not predict it**, that the only candidate predictor ever seen was
+  **run duration**, and that the cause was not established. A `debugger` investigation and the
+  runs below overturned all four. Split by exit status, process identity predicts the family
+  exactly.
+  - **Exit code 1 — `topology_server.py` and `model_info.py`.** Both are `cite_facility`
+    `rclpy` nodes, and both are instances of **one cause, which is established and fixed**.
+    [ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md) records it: two
+    upstream `rclpy` shutdown races, each link of the chain read in upstream source rather
+    than inferred, each compensation carrying the condition for deleting it. **Read the ADR.**
+    The mechanism is deliberately not restated here, and a second copy of it in this file
+    would be the duplication P1 forbids.
+  - **Signal deaths — `move_group` (×3) and `skill_server`.** Both MoveIt-linked C++, and
+    **still unexplained.** The stated hypothesis, and it is only a hypothesis: `skill_server`
+    holds a `shared_ptr<MoveGroupInterface>` constructed from its own node, and
+    `MoveGroupInterface::getNode()` returns a `shared_ptr` reference, so a reference cycle may
+    mean `~SkillServer` never runs. That is a **type-level observation, not a demonstrated
+    cause** — the debugger said so in as many words, and nothing has been instrumented to show
+    the destructor is skipped.
+    **One member of this family is outside the exemption.** The third of the three runs below
+    lost `skill_server` to -11, and the exemption in `tests/scenarios/continuous_line.py`
+    covers `move_group` and
+    -11 and nothing else — while the comment beside it attributes the cause to a MoveIt
+    *destructor*, which is not specific to that binary. **No exemption has been added or
+    widened.** Widening one to cover `skill_server` would be tolerating an undemonstrated
+    cause, which is the opposite of what the split above bought.
+  **Run duration is retired as a predictor.** Three `continuous_line` runs on one machine on
+  2026-08-27 took **478.055 s (passed), 480.607 s (failed) and 497.710 s (failed)**. The
+  longest run did fail, so duration is not *uncorrelated* — but 2.5 s separating a pass from a
+  fail rules it out as the mechanism. The comment in `tests/scenarios/continuous_line.py`
+  still asserts the duration correlation and has not been updated.
+  **What is not accounted for here.** The superseded account also named `parameter_bridge`
+  (-6) and `gz` (-9). Those two are not in the set the split above was measured over and this
+  bullet does not classify them.
+  Every figure in this bullet is from one machine on 2026-08-27, with **no thresholds
+  registered before the runs**, and there is no directory for it in
+  [`docs/measurements/`](docs/measurements/README.md). Treat them as the size of the
+  evidence, not as a measurement of the defect.
 - **What does not work, stated plainly** (Phase 1.C/1.D, in progress):
   - **A grasp holds a position, not an orientation, and the two published residuals are
     different quantities.** Correcting the grasp-plane offset took rotations above 20° from
@@ -212,7 +263,9 @@ repository is partway there. Check before assuming.
     by the project owner on 2026-08-27, from a fresh clone of the remote into an empty
     directory rather than a worktree, **with zero deviations**: `./scripts/bootstrap`
     applied both vendor patches, `./scripts/doctor` reported **23 passed, 0 failed** with
-    both patches verified present, `./scripts/build` finished **19 packages**,
+    both patches verified present, `./scripts/build` finished **19 packages** — a figure from
+    before `cite_runtime` existed; a package has been added since and the walk has not been
+    repeated, so read it as 19 at that commit and not as the count today —
     `./scripts/test` was clean, and `./scripts/enter dev ./scripts/lint` was clean across
     **all eight linter labels**. Both previously-recorded clean-clone defects — the empty
     include directory that failed a fresh build, and the patch step that reported success and
@@ -242,9 +295,13 @@ repository is partway there. Check before assuming.
     known CI state is not this commit's. **Do not record this clause as met, and do not
     record it as a technical gap.** It is unblocked by billing, and until then the clause is
     open.
-  - **"Every architectural decision is written down"** — **33** ADRs at this commit. **Six**
-    are `Accepted (corrected …)` and a seventh, ADR-0023, carries a correction and is also
-    superseded. `./scripts/doctor` enforces that every ADR on disk is in the index and that
+  - **"Every architectural decision is written down"** — **34** ADRs at this commit,
+    the newest being [ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md).
+    **Six** are `Accepted (corrected …)` and a seventh, ADR-0023, carries a correction and
+    is also superseded. Check the total against `./scripts/doctor`'s `ADR index` line, which
+    reported **34 records, all indexed** on 2026-08-27, and the corrected count against the
+    `Accepted (corrected …)` rows in [`docs/adr/README.md`](docs/adr/README.md) — `doctor`
+    does not count those. `doctor` enforces that every ADR on disk is in the index and that
     every ADR referenced from `docs/` exists; it does **not** check that the set is
     *complete*, and no check can. That clause is a judgement, not a measurement.
 
