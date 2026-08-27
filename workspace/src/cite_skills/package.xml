@@ -42,6 +42,12 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <!-- The downstream-include test configures and compiles a throwaway CMake
+       consumer against the install space, which is Python work rather than a
+       gtest: what is under test is the package's exported CMake interface, not
+       any code inside it. -->
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
   <!-- The action contract needs a running server to show it, so the integration
        test brings up move_group against the generated description. No simulator
        and no controllers: it is the skill server that is under test. -->
