@@ -118,7 +118,7 @@ not rewritten either.
 | [0024](0024-handoff-split-between-l3-and-l4.md) | Split handoff — L4 owns the negotiation, L3 owns the motion | Accepted |
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted (corrected 2026-08-27) |
-| [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26) |
+| [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26 and 2026-08-27) |
 | [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed |
 | [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |

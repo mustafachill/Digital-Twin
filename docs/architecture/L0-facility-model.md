@@ -1,11 +1,16 @@
 # L0 — Facility model
 
-- **Status:** `BUILT` — `model/` describes the cell (1 zone, 7 types, 14 assets, 5 stations,
-  across 15 files) and the generators in `tools/cite_tools/generate/` emit every artifact in
-  the table below except the last two. All five validation levels run: `./scripts/validate-model`
-  exits 0, and that command includes the fresh-generator diff **and** a determinism check that
-  regenerates in a second interpreter under a different hash seed. `tools/tests/` holds 215
-  tests at this commit, counted by collection rather than by a run.
+- **Status:** `BUILT` — `model/` describes the cell (1 zone, 7 types, **15** assets, 5
+  stations, across 15 files) and the generators in `tools/cite_tools/generate/` emit every
+  artifact in the table below except the last two. All five validation levels run:
+  `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
+  **and** a determinism check that regenerates in a second interpreter under a different hash
+  seed. `tools/tests/` holds **236** tests at this commit, counted by collection
+  (`pytest tools/tests --collect-only -q`, 2026-08-27).
+  Both figures were stale on 2026-08-27 — the asset count by one instance, the test count by
+  two separate additions — because they are counts of a generated or collected set written by
+  hand into prose, and nothing can fail when one moves. Take them from the two commands
+  above rather than from this sentence.
   **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
   (Phase 4) — the two rows whose consumers do not exist yet.
   **The two gaps this line used to name are closed**, both by
@@ -18,8 +23,16 @@
   datum made expressible. The end-effector type's `linkage` block declares the seven vendor
   dimensions from which the grasp-plane offset is *derived*, so the offset is a property of
   L0 and no longer hand-written above it.
-  Seven types, 14 assets: the work-piece type has **no instances**, deliberately — where a
+  Seven types, 15 assets: the work-piece type has **no instances**, deliberately — where a
   part is at any moment is the process's business, not the layout's.
+  **L0 now also decides which planner an arm plans with.** The robot type declares the
+  default and fallback pipelines, the planner id for each, a per-joint deceleration limit and
+  four Cartesian ceilings, and the generator holds what a pipeline is *made* of — that is the
+  P5 split, and it is why the MoveIt row below reads "planning pipelines" rather than "OMPL"
+  ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). The four Cartesian ceilings are
+  placeholders that no motion in this cell consumes — every motion is planned in joint space
+  — and one of the four is MoveIt's template default rather than a figure chosen here; the
+  model comment says so, and so does the ADR.
   **The work-piece datum now also places a sensor.** An indexing break beam declares
   `indexes_workpiece: true` and a **zero** along-belt offset; the resolver derives its
   stand-off from the declared part length and the beam width, and
@@ -70,7 +83,7 @@ That is why it can be plain Python with no ROS dependency and run on any machine
 | Simulation world files (SDF) | L1 / the simulator |
 | Robot and component descriptions (URDF/Xacro) | L1, L2, MoveIt |
 | Controller configurations | L2 |
-| MoveIt configuration — SRDF, kinematics, joint limits, controllers, OMPL | L2 / MoveIt |
+| MoveIt configuration — SRDF, kinematics, joint limits, Cartesian limits, controllers, and the planning pipelines each arm plans with ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)) | L2 / MoveIt |
 | Planning scene | L2 |
 | Launch graphs | bringup |
 | Process topology | L4 |

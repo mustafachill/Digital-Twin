@@ -1,7 +1,7 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **222**
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **236**
   host tests at this commit, counted by collection, plus shell self-tests for the gate logic
   in `scripts/_lib.sh`. The contract level is populated: 22 interface definitions are frozen
   against a stored baseline.
@@ -66,6 +66,16 @@ delivers nothing — the topic exists, both endpoints appear in `ros2 topic info
 data flows. It is the ecosystem's most-misdiagnosed failure, and it is trivially catchable
 by asserting that a message actually arrives.
 
+**A test of a safety gate is not finished until it has been mutation-checked.** The worked
+example is the planning pipeline's collision gate
+([ADR-0027](../adr/0027-pilz-planning-pipeline.md)): the gate was removed, the tree
+**regenerated rather than hand-edited**, and the one test that should fail was confirmed to
+fail while every other test in the file still passed. Without that step, a test that passes
+proves the system works *or* that the test is inert, and the two are indistinguishable —
+which is the same argument that makes "the fallback was never taken" evidence of nothing.
+Pair it with an **anti-vacuous** assertion: remove the precondition and the test should fail
+saying the premise is gone, not pass quietly.
+
 ### Scenario
 
 Full system, headless, in the container, driven by `./scripts/scenario <name>`.
@@ -88,21 +98,20 @@ than it sounds and must not be read as more.** `gz sim --seed N` reaches
 `ServerConfig::SetSeed()`, whose body is `math::Rand::Seed(_seed)` — so it seeds
 `gz::math::Rand`, which is what sensor noise and the comms systems draw from. It does not
 seed the physics solver: no library under `gz_physics_vendor` or `gz_dartsim_vendor`
-references `gz::math::Rand` at all. And it has nothing to do with OMPL, which under
-[ADR-0006](../adr/0006-moveit2-motion-planning.md) is the stochastic component that decides
-whether a plan succeeds. Measured before the seed was plumbed: `pick_and_place` run four
+references `gz::math::Rand` at all. And it reaches no planner at all. Measured before the
+seed was plumbed, and **not repeated since the planner changed**: `pick_and_place` run four
 times under an identical seed produced **two distinct failure modes**, each twice, both
 under domain isolation.
 
-**OMPL cannot be seeded from here, and a seed would not be enough if it could.** MoveIt
-never calls `ompl::RNG::setSeed` and exposes no parameter for it; MoveIt is apt-installed
-rather than pinned as source, so there is no patch hook; and OMPL draws each instance's seed
-from a process-global generator whose hand-out order across threads is not fixed, while
-MoveIt's default termination is wall-clock. The full evidence, and the decision taken
-because of it, are in [ADR-0027](../adr/0027-pilz-planning-pipeline.md): station-to-station
-motion moves to a non-sampling planner. **That decision does not by itself make a scenario
-reproducible**, and nothing here may be upgraded on the strength of it — under P8 the claim
-is earned by running scenarios repeatedly and measuring, or it is not made.
+**Which part is stochastic has changed; that scenarios are not reproducible has not.**
+[ADR-0027](../adr/0027-pilz-planning-pipeline.md) is the single record of both — the
+evidence that OMPL cannot be seeded through MoveIt and would not be deterministic if it
+could, and the decision that moved station-to-station motion to a non-sampling planner. It
+is not restated here (P1). What matters at this level is the residue: Pilz answers by
+default, the OMPL **fallback** remains unseeded and unseedable, and the physics solver is
+untouched by any of it. **The decision does not by itself make a scenario reproducible**,
+and nothing here may be upgraded on the strength of it — under P8 the claim is earned by
+running scenarios repeatedly and measuring, or it is not made.
 
 Until then a passing scenario is evidence about that run only. The design intent stands and
 is what the seed exists for: a fixed seed so that a failure reproduces instead of being a
@@ -138,9 +147,17 @@ a system whose runs are independent samples rather than replicates, any structur
 it. Where a comparison genuinely cannot be interleaved, say so, and treat the result as
 weaker than a threshold test makes it look.
 
-A scenario asserts on **outcomes and constraints**, never on exact trajectories. Sampling
--based planners are stochastic ([ADR-0006](../adr/0006-moveit2-motion-planning.md)); a test
+A scenario asserts on **outcomes and constraints**, never on exact trajectories. A test
 asserting an exact joint sequence will be flaky and will be deleted by whoever is on call.
+
+**A deterministic planner does not relax this rule.** Sampling-based planning is stochastic
+([ADR-0006](../adr/0006-moveit2-motion-planning.md)) and is still reachable through the
+OMPL fallback, so a scenario cannot know which planner answered. And even where Pilz did:
+it makes the same *request* produce the same answer, not the request the same. The one
+place a trajectory may be the subject of an assertion rather than a proxy for a motion
+having gone well is the planner's own launch test — see
+[ADR-0027](../adr/0027-pilz-planning-pipeline.md), which is where that distinction is
+argued.
 
 Good: *the work-piece reaches station 2 within 30 seconds, the arm never exceeds its
 workspace bounds, no collision is reported.*
@@ -207,9 +224,9 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes and the three-arm line has now been reported completing its milestone ladder, but neither scenario is a merge gate, both are reported from runs rather than from a campaign, and the line has not carried every piece in every run. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
+| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes and gates the build (`pick_and_place` carries no `continue-on-error` in `ci.yml`, checked 2026-08-27), and the three-arm line has been reported completing its milestone ladder but **does not gate** and has not carried every piece in every run. Both are reported from runs rather than from a campaign. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
-| Scenario determinism | Same seed, same outcome — **not met today**, see Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
+| Scenario determinism | Same seed, same outcome — **not met today, and moving to Pilz did not meet it.** One `move_group` returns a byte-identical trajectory to an identical request; nothing has measured same seed, same trajectory across runs, and physics is unseeded either way. See Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
 ## What tests are not allowed to do
 
