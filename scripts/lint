@@ -44,6 +44,10 @@ step "English only (P10)"
 # on the Linux workstation is a rule half the contributors never meet. ADR-0035 records the
 # instrument and what each rejected candidate was measured to fire on.
 if [ -x "${VENV}/python" ]; then
+    # Guarded like the documentation-link check below, and for the same reason: this is
+    # cite_tools judging this checkout, not a third-party linter read out of ${VENV}/ by
+    # path. A foreign copy would answer about a tree nobody is looking at.
+    require_local_cite_tools "${VENV}/python" "The English-only check"
     check "${VENV}/python" -m cite_tools.english "${REPO_ROOT}"
 else
     warn "cite_tools not installed — run ./scripts/bootstrap --host-only"
