@@ -18,6 +18,13 @@ whether an engineer hitting the same wall in Phase 2 or Phase 3 finds the answer
 > where the runtime consequence is inferred rather than observed are marked
 > `not observed`. Where `legacy/`'s own documentation contradicts `legacy/`'s code, both
 > are given and the contradiction is the lesson.
+>
+> **Second pass — 2026-08-26, at commit `2380c66`.** The section
+> [The requirement, as first written](#the-requirement-as-first-written) was added by a
+> reader going back through `legacy/` for what the first pass did not carry. Its quotation
+> and the two commits that date it were read with `git show`; the topology, the refusal in
+> `plan_line` and the scenario it names were read out of the current tree. Nothing was run
+> here either.
 
 > **Why `legacy/` paths here are code spans and not links.** This document is written to
 > outlive the tree it describes. `./scripts/lint` resolves every relative Markdown link and
@@ -34,6 +41,98 @@ whether an engineer hitting the same wall in Phase 2 or Phase 3 finds the answer
 | Change how a belt moves anything | [3. Conveyor mechanics](#3-conveyor-plugin-mechanics) |
 | Add a robot, or a fourth arm | [4. Multi-robot spawning](#4-multi-robot-spawning) |
 | Argue that something is "already working" | [5. What did not scale](#5-what-did-not-scale) |
+| Write about what this project was asked to do, or scope a handoff | [The requirement, as first written](#the-requirement-as-first-written) |
+
+## The requirement, as first written
+
+**Everything else on this page is engineering. This is not.** `legacy/urls.txt` ends with a
+note recording what the project was asked for, in the words it was asked in. It is the
+earliest statement of that requirement anywhere in the repository, and it is the one thing
+in `legacy/` whose value is not a lesson about ROS 2. It is reproduced here because the
+file holding it is deleted at the end of Phase 1.
+
+> dr mize dedi ki birden fazla robot olacak ve senkron çalışacaklar. mesela bir bant üzerinde malzeme yürüyecek, bir robot alacak öbür robota gidecek öbür robot bunu alacak
+
+**English rendering.** "Our Dr. told us there will be more than one robot and they will work
+in synchrony. For example, material will travel on a belt, one robot will pick it up, it
+will go to the other robot, the other robot will take it."
+
+Two notes on that rendering, the second of which decides how the rest of this section
+reads. *Dr.* is an academic title, and who it refers to is not recorded anywhere in the
+tree. And the subject of *gidecek* — "will go" — is unstated in the Turkish: what goes to
+the other robot could be the material or the robot carrying it. **The sentence does not say
+by what means the part crosses between the two arms**, and it should not be read as
+settling that either way.
+
+**Where it came from.** The last line of `legacy/urls.txt`, whose own header calls it "the
+earliest written statement of the multi-robot synchronisation requirement that this project
+exists to satisfy". That file's first four lines — a vendor explainer on digital twins and
+three `docs.ros.org/en/humble/` pages — were committed on 2025-11-25 in `10663a1`, the
+repository's second commit; the note was appended in `1cc35d6`, 2025-12-10. The note itself
+carries no date and may have been written earlier. 2025-12-10 is the earliest date the tree
+can prove.
+
+**Why the Turkish is kept, and must not be "corrected".**
+[ADR-0015](../adr/0015-english-only.md) governs the artifacts this project writes, and this
+page is one of them: it is in English. The block above is a quotation of a primary source,
+and a translated primary source stops being one — the citation would survive the deletion
+in name and not in substance. The English rendering sits beside it so that a reader who
+does not read Turkish loses nothing, which is what ADR-0015 asks for when it lists
+"publishable and shareable without a translation pass" among its benefits. It is the only
+passage of non-English prose on this page, and it is quoted data rather than something this
+project wrote.
+
+### Which half of it is built
+
+The resemblance between this sentence and what Phase 1.D produced is close enough to be
+worth recording and close enough to overclaim, so both halves are stated.
+
+**Built: the belt, the pick, and the next robot taking it.** The generated process topology
+`workspace/src/cite_generated/topology/cell_a_flow.yaml` describes this line and nothing
+else — `station_transfer_1` (actor `arm_1`) picks at `cell_a__table_pick__surface` and
+places at `cell_a__conveyor_1__infeed`; `station_transfer_2` (`arm_2`) picks at
+`cell_a__conveyor_1__outfeed` and places at `conveyor_2`'s infeed; `station_transfer_3`
+(`arm_3`) does the same again into `conveyor_3`. Every transfer station carries a beam
+trigger, and every edge between two robots is declared `via` a conveyor.
+`./scripts/scenario continuous_line` is the test of that claim. Material travelling on a
+belt, one robot picking it up, the next robot taking it: the requirement's first clause and
+its last are the same thing the topology declares. Note that the requirement itself opens
+with a belt — the conveyor is not a substitution introduced by the rebuild.
+
+**Not built: the crossing, if it was meant to be arm to arm.** Every edge in the model is
+conveyor-mediated, and L4 refuses a direct one at plan time rather than leaving it
+unimplemented. `plan_line`, in
+`workspace/src/cite_orchestration/include/cite_orchestration/line_plan.hpp`, records a
+refusal for any outbound edge whose receiving station has a robot actor and whose
+`via_asset_id` is empty. [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)
+carries the decision and its 2026-08-26 correction, and the correction is the part that
+matters here: what makes the *permitted* conveyor edge safe is the receiving gripper
+squaring a free part up as it closes on it, and a direct handoff denies precisely that,
+because a part still clamped by the giving gripper cannot rotate into alignment with the
+receiving one. Read that ADR before writing anything about either topology; its numbers are
+not restated here.
+
+**"Synchronously" is the least settled word in the sentence.** The three arms are
+coordinated by `line_orchestrator`, which instantiates one behaviour subtree per station
+from that same generated topology. What that has been *measured* to do — over how many
+runs, on whose machine, under what CI status, and what its own tests do and do not prove
+about motion — is recorded in [`../../CLAUDE.md`](../../CLAUDE.md) §2, which calls the line
+completing the newest and least-settled claim in that file. It is not copied here (P1).
+Read it there before treating this clause as delivered.
+
+**Nothing in this section signs anything off.** The belt, the picks and the next robot
+taking the part exist and are exercised by a scenario. The crossing between two arms is
+*answered* rather than delivered — refused, deliberately, with the reason written down. The
+synchrony is measured rather than settled. The charter, not this note, is the authority on
+what 1.D must deliver — [`../../what-we-are-doing.md`](../../what-we-are-doing.md) §8.
+
+**On the four links above the note.** Three point at ROS 2 Humble documentation, which
+[ADR-0002](../adr/0002-ros2-jazzy.md) supersedes; [toolchain.md](toolchain.md) carries the
+Jazzy and Gazebo Harmonic equivalents, with each pin verified. The fourth, a vendor
+explainer on what a digital twin is, has no direct successor in `docs/reference/`, and the
+judgement here is that it does not need one: [literature.md](literature.md) carries
+Kritzinger and the ISO 23247 material, which cover the same ground as sources this project
+can cite in a report. Recorded so the deletion is made knowingly rather than silently.
 
 ## 0. What this rebuild rediscovered on its own
 
