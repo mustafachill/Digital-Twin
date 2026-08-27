@@ -2,7 +2,7 @@
 
 How work moves from an idea to a merged change.
 
-- **Related:** [`../../CLAUDE.md`](../../CLAUDE.md), [`../../.claude/orchestration.md`](../../.claude/orchestration.md), [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md)
+- **Related:** [`../../CLAUDE.md`](../../CLAUDE.md) §11, [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md)
 
 ## Before you write anything
 
@@ -54,11 +54,22 @@ discussion, so hitting one is wasted work:
 Green before you hand off. Handing off a red branch spends someone else's time discovering
 what you already could have.
 
+**On macOS that gate is narrower than it looks, and CI's is not.** `./scripts/lint` runs
+the Python, YAML, shell and documentation checks anywhere, but the C++, CMake and package
+linters need a ROS environment, so on a laptop they skip themselves and say so in the
+output. CI runs them as a **blocking** step. Read the warning rather than the exit code,
+and get the full set in one command before handing off:
+
+```bash
+./scripts/enter dev ./scripts/lint
+```
+
 ### Review
 
-Human review, plus the agent pipeline in
-[`../../.claude/orchestration.md`](../../.claude/orchestration.md). Which agents run
-depends on what the diff touches:
+Human review, plus the agent pipeline. `CLAUDE.md` §11 states the rules that bind every
+contributor here, with or without the agents; the pipeline's dispatch routing lives with
+the agent configuration, which is local tooling and is not committed, so a fresh clone
+will not contain it. Which agents run depends on what the diff touches:
 
 | Your diff touches | Also runs |
 |---|---|

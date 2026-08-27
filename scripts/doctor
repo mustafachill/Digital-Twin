@@ -8,7 +8,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 set +e   # a doctor reports problems, it does not exit on the first one
 
-PASS=0; FAIL=0; SKIP=0
+PASS=0; FAIL=0; SKIP=0; WARN=0
 # `A && B || C` is not if-then-else — C also runs when A succeeds and B fails.
 # These helpers keep the report lines short without that trap.
 check_have() {   # check_have <command> <label> [detail-command]
@@ -27,6 +27,13 @@ report() {
         pass) printf '  %s✓%s %-34s %s\n' "$C_GRN" "$C_RST" "$2" "${3:-}"; PASS=$((PASS+1)) ;;
         fail) printf '  %s✗%s %-34s %s\n' "$C_RED" "$C_RST" "$2" "${3:-}"; FAIL=$((FAIL+1)) ;;
         skip) printf '  %s-%s %-34s %s\n' "$C_DIM" "$C_RST" "$2" "${3:-}"; SKIP=$((SKIP+1)) ;;
+        # Something is wrong on this HOST but not necessarily in this checkout —
+        # the case that prompted this is a shared Docker volume another worktree
+        # created. Reporting it as `fail` would block the person who did not
+        # cause it; reporting it as `skip` would file a live defect under
+        # "expected at the current phase". It is neither, so it is its own state
+        # and is counted separately without changing the exit code.
+        warn) printf '  %s!%s %-34s %s\n' "$C_YEL" "$C_RST" "$2" "${3:-}"; WARN=$((WARN+1)) ;;
     esac
 }
 
@@ -70,13 +77,92 @@ else
     fi
 fi
 
-step "Host tooling"
-if [ -x "${REPO_ROOT}/.venv/bin/python" ]; then
-    report pass "virtualenv" ".venv"
-    if "${REPO_ROOT}/.venv/bin/python" -c "import cite_tools" 2>/dev/null; then
-        report pass "cite_tools" "importable"
+step "DDS"
+# Everything used to default to domain 0, so two cells running at once on this
+# host discovered each other's nodes and one scenario run took four times as long
+# as it should have. The identifier below is derived per checkout — see
+# cite_domain_id in scripts/_lib.sh.
+if [ "${ROS_DOMAIN_ID}" -eq 0 ]; then
+    report fail "ROS_DOMAIN_ID" \
+        "0 — the shared default; concurrent runs on this host will cross-talk"
+else
+    report pass "ROS_DOMAIN_ID" "${ROS_DOMAIN_ID} (${CITE_DOMAIN_SOURCE})"
+fi
+report pass "RMW implementation" "${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp (default)}"
+
+step "Container isolation"
+# The other half of the same problem the DDS domain solves, and the one that was
+# missed for longer. Compose scopes named volumes to the project, so a single
+# fixed project name gave every checkout on this host ONE set of build, install
+# and log volumes. Concurrent builds corrupted each other through them, one
+# checkout ran another's binaries, and `./scripts/clean --all` destroyed a
+# worktree's build that was still in progress. Derived per checkout now — see
+# cite_project_name in scripts/_lib.sh.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+    report fail "compose project" "unset — this checkout would share the host's volumes"
+else
+    report pass "compose project" "${COMPOSE_PROJECT_NAME} (${CITE_PROJECT_SOURCE})"
+fi
+
+if have docker; then
+    # The shared set, by its real name. `cite-digital-twin` is the fallback
+    # project in the compose file, so any checkout that reaches compose without
+    # the derived `-p` lands there — and every such checkout shares one build,
+    # install and log volume with every other. Matched on the project prefix
+    # rather than on a bare `cite-build`, because compose always prefixes a named
+    # volume with its project and the bare form never actually appears.
+    #
+    # Reported, never removed, and never a failure: these volumes may be another
+    # worktree's live build. Destroying them is precisely the accident this
+    # mechanism exists to prevent, and it is not this checkout's call to make.
+    SHARED="$(docker volume ls --quiet 2>/dev/null \
+        | grep -Ec '^cite-digital-twin_cite-(build|install|log)$' || true)"
+    if [ "${SHARED:-0}" -gt 0 ]; then
+        report warn "shared volumes" \
+            "${SHARED} × cite-digital-twin_cite-* — a checkout is not isolated"
     else
+        report pass "shared volumes" "none"
+    fi
+fi
+
+# Build freshness is only answerable where the build actually lives. On a Docker
+# host workspace/build is an empty directory with a named volume mounted over it
+# inside the container, so checking from the host would report "no build" about a
+# perfectly good one. Reported as skipped there rather than guessed.
+if in_container || native_ros_available; then
+    step "Build freshness"
+    BUILD_STAMP="$(cite_build_stamp_path)"
+    if [ ! -d "${REPO_ROOT}/workspace/build" ] \
+       || [ -z "$(ls -A "${REPO_ROOT}/workspace/build" 2>/dev/null)" ]; then
+        report skip "build tree" "absent — run ./scripts/build"
+    elif [ ! -f "$BUILD_STAMP" ]; then
+        report fail "build fingerprint" \
+            "missing — built before this check existed; rebuild to make gates trustworthy"
+    elif [ "$(cat "$BUILD_STAMP" 2>/dev/null)" = "$(cite_build_inputs_fingerprint)" ]; then
+        report pass "build fingerprint" "matches the source tree"
+    else
+        report fail "build fingerprint" \
+            "STALE — a package.xml or CMakeLists.txt changed since the build; gates will lie"
+    fi
+fi
+
+step "Host tooling"
+CITE_PY="$(cite_python 2>/dev/null || true)"
+if [ -n "$CITE_PY" ] && [ -x "$CITE_PY" ]; then
+    report pass "virtualenv" "$(dirname "$(dirname "$CITE_PY")")"
+    CITE_TOOLS_FOUND="$(cite_tools_found_dir "$CITE_PY" || true)"
+    if [ -z "$CITE_TOOLS_FOUND" ]; then
         report fail "cite_tools" "not installed — run ./scripts/bootstrap --host-only"
+    elif CITE_TOOLS_WHERE="$(assert_cite_tools_local \
+             "$(cite_tools_expected_dir || true)" "$CITE_TOOLS_FOUND")"; then
+        report pass "cite_tools" "$CITE_TOOLS_FOUND"
+    else
+        # Both paths named rather than summarised, because the whole failure mode
+        # is that the wrong tree is indistinguishable from the right one at a
+        # glance. A `fail`, not a `warn`: validate-model, lint and test all
+        # refuse in this state, so this checkout is not usable until it is fixed.
+        report fail "cite_tools" \
+            "${CITE_TOOLS_WHERE} — run ./scripts/bootstrap --host-only here"
     fi
 else
     report fail "virtualenv" "missing — run ./scripts/bootstrap --host-only"
@@ -96,9 +182,6 @@ if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/
 else
     report skip "workspace/src" "empty (Phase 1.B)"
 fi
-if [ -d "${REPO_ROOT}/legacy" ]; then
-    report skip "legacy/" "present — reference only, not built"
-fi
 
 step "Documentation"
 DOCS="${REPO_ROOT}/docs"
@@ -107,7 +190,8 @@ if [ -d "$DOCS" ]; then
     # An index that drifts from the files is how a decision record becomes unfindable.
     # 0000 is the template, not a decision record — it is correctly absent from the index.
     adr_files=$(find "$DOCS/adr" -name '[0-9][0-9][0-9][0-9]-*.md' -not -name '0000-*' 2>/dev/null | wc -l | tr -d ' ')
-    adr_indexed=$(grep -cE '^\| \[[0-9]{4}\]' "$DOCS/adr/README.md" 2>/dev/null || echo 0)
+    adr_indexed=$(grep -cE '^\| \[[0-9]{4}\]' "$DOCS/adr/README.md" 2>/dev/null | head -1)
+    adr_indexed=${adr_indexed:-0}
     if [ "${adr_files:-0}" -eq "${adr_indexed:-0}" ] && [ "${adr_files:-0}" -gt 0 ]; then
         report pass "ADR index" "${adr_files} records, all indexed"
     else
@@ -130,7 +214,11 @@ if [ -d "$DOCS" ]; then
     for f in "$DOCS"/architecture/L*.md "$DOCS"/architecture/cross-cutting-*.md \
              "$DOCS"/architecture/standards-alignment.md "$DOCS"/interfaces/*.md; do
         [ -f "$f" ] || continue
-        head -8 "$f" | grep -qE '\*\*Status:\*\* +`?(DESIGNED|PARTIAL|BUILT)' || unmarked=$((unmarked+1))
+        # Same SIGPIPE/pipefail trap as elsewhere: a document that *does* carry a
+        # marker could be counted as unmarked when grep closes the pipe early.
+        head_lines="$(head -8 "$f")"
+        grep -qE '\*\*Status:\*\* +`?(DESIGNED|PARTIAL|BUILT)' <<<"$head_lines" \
+            || unmarked=$((unmarked+1))
     done
     if [ "$unmarked" -eq 0 ]; then
         report pass "status markers" "every design document declares one"
@@ -142,25 +230,98 @@ else
 fi
 
 step "Reproducibility"
-UNPINNED=$(grep -cE '^\s+version:\s*[a-z]' "${REPO_ROOT}/external/cite.repos" 2>/dev/null || echo 0)
-if [ "${UNPINNED:-0}" -gt 0 ]; then
-    report fail "manifest pinning" "${UNPINNED} entry not pinned to a commit SHA (Phase 1.A gate)"
+# The validator lives in _lib.sh and is shared with the CI supply-chain job (P1).
+# It used to be restated in both places as a starts-with-lowercase grep, and the
+# two copies were wrong in opposite directions — see unpinned_manifest_entries.
+UNPINNED="$(unpinned_manifest_entries)"
+if [ -n "$UNPINNED" ]; then
+    report fail "manifest pinning" \
+        "$(printf '%s\n' "$UNPINNED" | grep -c .) entry not pinned to a commit SHA (ADR-0008)"
+    printf '%s\n' "$UNPINNED" | sed 's/^/      /'
 else
-    report pass "manifest pinning" "all entries pinned"
+    report pass "manifest pinning" "all entries pinned to a 40-character SHA"
 fi
-GITLINKS=$(git -C "${REPO_ROOT}" ls-files -s 2>/dev/null | awk '$1=="160000"' | wc -l | tr -d ' ')
-if [ "${GITLINKS:-0}" -gt 0 ]; then
-    if [ -f "${REPO_ROOT}/.gitmodules" ]; then
-        report pass "submodules" "${GITLINKS} gitlink(s), .gitmodules present"
-    else
-        report fail "submodules" "${GITLINKS} gitlink(s) with NO .gitmodules — clone will lose them"
-    fi
+
+# -----------------------------------------------------------------------------
+# Declared patches must be PRESENT in the checkout.
+#
+# The check that did not exist. `01-xarm_ros2-gripper-mimic-joints.patch` was
+# committed, never reached a single build, and every measurement taken for hours
+# afterwards ran against source that did not contain it. Nothing looked: not
+# doctor, not build, not validate-model. Bootstrap looked and could not tell
+# "already applied" from "does not apply", so it reported both as an info line.
+#
+# Deliberately here rather than in ./scripts/build: this is the first thing
+# anyone runs when something is wrong, it needs no ROS, and it answers the
+# question in one second. `patch_state` lives in _lib.sh and is the same function
+# bootstrap applies with, so the auditor and the applier cannot drift (P1).
+# -----------------------------------------------------------------------------
+if ! have git; then
+    report skip "declared patches" "git not available to check them"
 else
-    report pass "submodules" "none"
+    PATCHES=()
+    while IFS= read -r p; do PATCHES+=("$p"); done < <(declared_patches)
+    if [ "${#PATCHES[@]}" -eq 0 ]; then
+        report pass "declared patches" "none declared"
+    else
+        for p in "${PATCHES[@]}"; do
+            NAME="$(basename "$p")"
+            REPO="$(patch_target_repo "$p")"
+            if [ -z "$REPO" ]; then
+                report fail "patch ${NAME}" "no '# Repo:' header — it can never be applied"
+                continue
+            fi
+            TARGET="${REPO_ROOT}/workspace/src/${REPO}"
+            case "$(patch_state "$p" "$TARGET")" in
+                applied)
+                    report pass "patch ${NAME}" "present in workspace/src/${REPO}" ;;
+                pending)
+                    report fail "patch ${NAME}" \
+                        "declared but NOT applied — run ./scripts/bootstrap" ;;
+                conflict)
+                    report fail "patch ${NAME}" \
+                        "neither applies nor present in workspace/src/${REPO} — stale against the pin" ;;
+                empty)
+                    report fail "patch ${NAME}" \
+                        "workspace/src/${REPO} is EMPTY — the import failed part-way" ;;
+                no-target)
+                    # Not a failure: on a machine that has never bootstrapped, the
+                    # build fails loudly for want of source long before a missing
+                    # patch could mislead anyone.
+                    report skip "patch ${NAME}" \
+                        "workspace/src/${REPO} not imported yet — run ./scripts/bootstrap" ;;
+            esac
+        done
+    fi
+fi
+
+# The gitlink check needs repository metadata, so it has to establish that it can
+# read any before reporting on what it found. Inside the container this is false
+# for a git worktree — /workspace/.git names a gitdir on the host that is not
+# mounted — and the check used to swallow that error and report "none", which is
+# the same class of defect as the patch check that did not exist: an absent
+# answer presented as a clean one.
+if ! repo_git_readable; then
+    report skip "submodules" "git cannot read this checkout from here — not audited"
+else
+    GITLINKS=$(git -C "${REPO_ROOT}" ls-files -s 2>/dev/null | awk '$1=="160000"' | wc -l | tr -d ' ')
+    if [ "${GITLINKS:-0}" -gt 0 ]; then
+        if [ -f "${REPO_ROOT}/.gitmodules" ]; then
+            report pass "submodules" "${GITLINKS} gitlink(s), .gitmodules present"
+        else
+            report fail "submodules" "${GITLINKS} gitlink(s) with NO .gitmodules — clone will lose them"
+        fi
+    else
+        report pass "submodules" "none"
+    fi
 fi
 
 step "Summary"
-printf '  %d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
+printf '  %d passed, %d failed, %d skipped' "$PASS" "$FAIL" "$SKIP"
+if [ "$WARN" -gt 0 ]; then
+    printf ', %d warned' "$WARN"
+fi
+printf '\n'
 if [ "$FAIL" -gt 0 ]; then
     printf '\n  %sSome checks failed.%s Skipped items are expected at the current phase;\n' "$C_YEL" "$C_RST"
     printf '  failures are not. See CLAUDE.md §2 for what should exist today.\n'

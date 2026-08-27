@@ -37,6 +37,47 @@ Numbers are permanent. A superseded ADR is **never deleted or rewritten** — it
 changes to `Superseded by NNNN` and it stays exactly as written. The record of a decision
 that turned out wrong is more valuable than the record of one that turned out right.
 
+## Corrections
+
+A **correction** is not a supersession. It is what you write when the decision holds but a
+supporting claim in the record turns out to be false — an inference that was written down
+as a fact and later measured. The decision survives; only the claim is wrong.
+
+The same rule applies as for supersession: **nothing is rewritten.** A record that quietly
+repairs itself teaches the reader nothing, and the most valuable thing in a corrected ADR
+is how the wrong claim survived review in the first place. So:
+
+1. Add a `## Correction — YYYY-MM-DD: <what was wrong>` section immediately **after** the
+   metadata block and **before** `## Context`, so nobody can read the false text without
+   first meeting the correction.
+2. Leave the false sentences exactly where they are, each followed by
+   `**[Corrected YYYY-MM-DD — see the Correction section above.]**`.
+3. Qualify the `**Status:**` line with what stands and what does not, and name the
+   correction section. Name it rather than linking to it: the heading carries an em
+   dash and a colon, and Markdown renderers do not agree on the anchor that produces.
+4. State plainly what survives. A correction that leaves a reader unsure whether the
+   decision still binds has replaced one ambiguity with another.
+5. End the correction with **how the error survived** — the untested inference, the silent
+   failure mode, the missing assertion. That is the part that transfers.
+6. Mark the index row `Accepted (corrected YYYY-MM-DD)`.
+7. **A second correction goes above the first**, so the newest state is the first thing a
+   reader meets, and the earlier correction is left exactly as it stands. Say in one line
+   that it is there. Status and index row list every date:
+   `Accepted (corrected YYYY-MM-DD and YYYY-MM-DD)`.
+   **An earlier correction is not exempt from being corrected.** ADR-0032's 2026-08-26
+   correction asserted that arithmetic downstream of the constant it moved was independent
+   of it, and it was not — that is what the second correction on that record fixes.
+
+If the *decision* is what turned out wrong, this is not a correction. Write a new ADR and
+set this one to `Superseded by NNNN`.
+
+[ADR-0022](0022-gripper-as-ros2-control-controller.md) is the worked example of a
+correction. [ADR-0023](0023-simulated-grasping-via-attachment.md) is the worked example of
+the distinction: it was corrected on 2026-08-25 for a claim, and superseded by
+[ADR-0029](0029-simulated-grasping-by-friction.md) the same day when measurement showed the
+decision itself was wrong. Its correction section is left in place — a superseded record is
+not rewritten either.
+
 ## Status values
 
 | Status | Meaning |
@@ -45,6 +86,7 @@ that turned out wrong is more valuable than the record of one that turned out ri
 | `Accepted` | Binding. Violating it is an `ESCALATE`, not a code-review finding. |
 | `Superseded by NNNN` | Replaced. Kept for the record. |
 | `Deprecated` | No longer applies, and nothing replaced it. |
+| `Accepted (corrected YYYY-MM-DD)` | Binding, and a supporting claim in it was measured false. See **Corrections** above. Several dates mean several corrections, newest first in the record. |
 
 ## Index
 
@@ -69,3 +111,19 @@ that turned out wrong is more valuable than the record of one that turned out ri
 | [0017](0017-mcap-recording-format.md) | Record with rosbag2 and MCAP storage | Accepted |
 | [0018](0018-visualization-rviz-and-foxglove.md) | RViz 2 for debugging, Foxglove for shareable inspection | Accepted |
 | [0019](0019-language-split-cpp-python.md) | C++ for control paths, Python for orchestration and tooling | Accepted |
+| [0020](0020-facility-model-conventions.md) | Fix the facility model's units, axes, and file layout | Accepted |
+| [0021](0021-generated-artifacts-are-committed.md) | Commit generated artifacts, in one generated package | Accepted |
+| [0022](0022-gripper-as-ros2-control-controller.md) | Drive the gripper through `ros2_control`, not a separate action server | Accepted (corrected 2026-08-25) |
+| [0023](0023-simulated-grasping-via-attachment.md) | Simulate a grasp by attachment, triggered by contact | Superseded by [0029](0029-simulated-grasping-by-friction.md) |
+| [0024](0024-handoff-split-between-l3-and-l4.md) | Split handoff — L4 owns the negotiation, L3 owns the motion | Accepted |
+| [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
+| [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted (corrected 2026-08-27) |
+| [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26 and 2026-08-27) |
+| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed |
+| [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
+| [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
+| [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |
+| [0032](0032-index-the-belt.md) | Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff` | Accepted (corrected 2026-08-26 and 2026-08-27) |
+| [0033](0033-derive-the-index-standoff-from-the-workpiece.md) | Sense against the part's body, and derive an indexing beam's stand-off from it | Accepted |
+| [0034](0034-process-lifecycle-mechanism-in-cite-runtime.md) | Compensate two rclpy shutdown races, in a new `cite_runtime` package | Accepted |
+| [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted (corrected 2026-08-27) |

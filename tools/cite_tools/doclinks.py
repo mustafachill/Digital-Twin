@@ -14,12 +14,17 @@ import re
 import sys
 from pathlib import Path
 
+from cite_tools.tree import is_skipped
+
 # [text](target) — skips images, which are ![text](target)
 LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)]+)\)")
 # "## Some Heading" -> "some-heading"
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
 
-SKIP_DIRS = {".git", ".venv", "legacy", "node_modules", "build", "install", "log"}
+#: Whose files this checker walks lives in `tree.py`, because `english.py` asks the same
+#: question and P1 forbids a second copy of the answer. The rationale and the measurements
+#: that produced these rules moved there with them.
+#: ---------------------------------------------------------------------------------------
 
 
 def slugify(heading: str) -> str:
@@ -39,11 +44,7 @@ def anchors_of(path: Path) -> set[str]:
 
 
 def markdown_files(root: Path) -> list[Path]:
-    return [
-        p
-        for p in root.rglob("*.md")
-        if not any(part in SKIP_DIRS for part in p.relative_to(root).parts)
-    ]
+    return [p for p in root.rglob("*.md") if not is_skipped(p.relative_to(root))]
 
 
 def check(root: Path) -> list[str]:

@@ -1,0 +1,367 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# UFACTORY parallel gripper, as built into the xArm description by the vendor's
+# `add_gripper` argument. It is a separate type because it is separately
+# replaceable (P9) — a vacuum end-effector is a different type on the same arm.
+#
+# One actuated joint, `drive_joint`; the five finger joints follow it through
+# URDF <mimic> tags. See ADR-0022 for why it is a ros2_control controller rather
+# than a separate action server, and for the Harmonic mimic-constraint caveat.
+#
+# HOW THE FOLLOWERS ARE ACTUALLY COUPLED, and the one limit of it.
+#   A URDF <mimic> tag reaches ros2_control only for a joint that also appears in
+#   the vendor's <ros2_control> block, and the vendor lists only `drive_joint`.
+#   `external/patches/01-xarm_ros2-gripper-mimic-joints.patch` adds the five
+#   followers there as state-only mimic joints, which is what populates
+#   `HardwareInfo::mimic_joints` and lets gz_ros2_control drive them. Nothing else
+#   would: Gazebo Harmonic's dartsim does not implement SetMimicConstraintFeature,
+#   and the vendor's Gazebo Classic mimic plugin cannot load under Harmonic.
+#
+#   LIMIT — gz_ros2_control 1.2.19 honours a mimic's `multiplier` but IGNORES its
+#   `offset`. Its servo is velocity_sp = -(q_follower - q_leader*multiplier)*rate,
+#   with no offset term. All five joints of THIS gripper declare offset="0", so
+#   the coupling is exact here. A different end effector whose linkage needs a
+#   non-zero offset would be silently wrong in simulation while looking correct in
+#   its URDF — check that before adding one, because nothing here will report it.
+asset_type:
+  id: xarm_parallel_gripper
+  category: end_effector
+  vendor: ufactory
+
+  # No frames. There was a `grasp` frame here declaring the point between the
+  # pads as 0.172 m from the gripper base; it is deleted because it was the same
+  # fact twice and false besides. The vendor's own chain already ends at
+  # `link_tcp`, exactly 0.172 m past `link_eef`, and `robot_state_publisher`
+  # publishes it — while nothing generated or written here ever emitted or read
+  # the `grasp` frame, so its comment's claim that every skill referenced it was
+  # untrue (P7). Plan to `<prefix>link_tcp`, which `planning.tip_link_suffix`
+  # on the arm type already names.
+
+  description:
+    # No description of its own: the vendor macro builds the gripper into the arm
+    # when `add_gripper` is true, so emitting a second one would place the same
+    # geometry twice.
+    provider: xacro_macro
+    package: xarm_description
+    file: urdf/xarm_device_macro.xacro
+    macro: xarm_device
+
+  # The gripper's stroke, and what a skill commands on it. Every value below is
+  # read by the L3 skill server on the simulated and the physical path alike.
+  #
+  # THREE FIELDS USED TO LIVE HERE AND NO LONGER DO: `attach_link_suffix`,
+  # `closed_threshold_rad` and `open_threshold_rad`. They configured ADR-0023's
+  # contact-triggered attachment plugin, which is removed. The 84-trial campaign
+  # in `docs/measurements/2026-08-25-friction-grasp/` measured why: the plugin
+  # armed at 0.30 rad while the pads only reach a 50 mm part at 0.4056 rad, so it
+  # welded the part to a finger before any contact force existed, the jaws then
+  # closed through it to 46 mm feeling nothing, and `Pick` failed 8/8 while the
+  # weld carried the part 0.576 m anyway. It destroyed the stall this block
+  # exists to produce. Friction alone held in all 84 trials.
+  grasp:
+    drive_joint_suffix: drive_joint
+    # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed).
+    # GripperCommand.position is passed straight to the joint, so a skill sending
+    # metres would be sending radians — and 0.085 is a valid angle, so nothing
+    # would report the mistake. `linkage` below is what converts between the two.
+    open_position: 0.0
+    closed_position: 0.85
+
+    # HOW FAST THIS GRIPPER CLOSES, and why the number is what it is.
+    #
+    # PROVENANCE FIRST, because the whole argument turns on it (P7). This is NOT
+    # a manufacturer figure. UFACTORY publishes no jaw speed and no open-to-close
+    # time for this gripper. Searched and not found: the xArm Gripper User Manual
+    # V1.11.0 §5 "Technical Specifications" (which tabulates working range 0-84 mm,
+    # clamping force 30 N, weight 802 g, and has no speed row at all), the V2.2.0
+    # revision, ufactory.cc, docs.ufactory.cc, and distributor reproductions. The
+    # SDK's `set_gripper_speed()` does take a speed, but its unit is **r/min of
+    # the motor** over 1-5000, and UFACTORY publishes no conversion from r/min to
+    # jaw travel. So: a conservative engineering value, labelled as one.
+    #
+    #   Do NOT substitute the xArm Gripper G2's published 15-225 mm/s. That is a
+    #   different product with a different API (`set_gripper_g2_position`, which
+    #   takes mm and mm/s directly). The vendor description we invoke defaults to
+    #   `gripper_version:='G1'`, and the G2 branch in `xarm_gripper.urdf.xacro`
+    #   swaps meshes only — same kinematics, same joint limits. Attributing the
+    #   G2's specification to this gripper would be inventing a manufacturer
+    #   figure, which is the one thing worse than admitting there isn't one.
+    #
+    # WHAT IT HAS TO BE BELOW, which is the derivable part. `follower_max_rate_rad_s`
+    # is the followers' own limit; `follower_headroom_fraction` is
+    # 1 - max_drive_rate_rad_s / follower_max_rate_rad_s. See that property for
+    # why a mimic follower under Gazebo Harmonic spends its whole authority just
+    # keeping up. At the vendor's 2 rad/s for both, headroom is exactly zero, the
+    # servo is saturated for the entire stroke, and any perturbation is
+    # uncorrectable: one follower runs to its 0.85 limit and stays there, leaving
+    # a pad about 23 degrees out of position. That was the measured defect.
+    #
+    # WHY 1.0 AND NOT 1.5. Eleven candidates were measured, three reps each,
+    # round-robin interleaved, criteria fixed before any data. A narrower bound
+    # alone fails (nothing enforces it) and enforcement alone fails (it clamps to
+    # the unchanged 2 rad/s, so no headroom is gained); both together give a worst
+    # settled follower error of 0.0000 rad, 3 of 3, at 1.5 rad/s and at 1.0 rad/s
+    # alike. 1.5 is the measured sufficiency threshold, so 1.0 buys margin rather
+    # than function, and it costs 0.11 s on a 0.62 s close. It is chosen anyway,
+    # for two reasons:
+    #
+    #   * Headroom doubles, 25% -> 50%. The sufficiency threshold was measured on
+    #     an undisturbed stroke; the reason the limit exists is the disturbed one,
+    #     and 25% of a 2 rad/s actuator is not much correction authority to hold a
+    #     50 mm part against contact.
+    #   * It is the more truthful description of the hardware. Through the linkage
+    #     above, d(opening)/dq is 84.1 mm/rad fully open rising to 108.8 mm/rad
+    #     fully closed, so 1.0 rad/s is a jaw speed of roughly 84-109 mm/s. The
+    #     vendor's 2 rad/s is ~168-218 mm/s, and what the simulation actually did
+    #     before this — 0.85 rad in 0.23 s, i.e. 3.7 rad/s — is ~310-400 mm/s,
+    #     faster than any gripper UFACTORY sells, including the G2's 225 mm/s
+    #     maximum. A cross-check rather than a citation, but it points one way.
+    #
+    # Units are the drive joint's, not the jaw's, because that is what every
+    # consumer of this number sees: `<limit velocity>` is rad/s and the mimic
+    # servo works in rad/s. The metres are derived, never declared (P1).
+    max_drive_rate_rad_s: 1.0
+
+    # The followers' velocity limit as the VENDOR declares it — a fact about
+    # `xarm_gripper.urdf.xacro`, where all six joints carry
+    # `<limit lower="0" upper="0.85" effort="50" velocity="2"/>`. Restated here,
+    # not parsed, because L1 forbids ingesting a vendor description; see the field
+    # docstring. `cite_tools.validate.physical` checks the headroom this implies,
+    # so a vendor bump that changes the limit fails a test instead of quietly
+    # removing the margin above.
+    follower_max_rate_rad_s: 2.0
+
+    # Where the pads are, as a function of the drive joint — across the tool axis
+    # and along it. This is the ONLY place either relationship is written (P1);
+    # the L3 skill server and `cite_tools.validate.physical` derive from these
+    # seven numbers and never restate the maps.
+    #
+    #   opening(q) = 2 * (drive_pivot_y_m - pad_inset_m
+    #                     + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))
+    #
+    #   pad_plane_offset(q) = tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m
+    #                         - (finger_offset_y_m*sin(q)
+    #                            + finger_offset_z_m*cos(q))
+    #
+    # Why this shape: `drive_joint` rotates `left_outer_knuckle` about +x, and
+    # `left_finger_joint` mimics it about -x, so the two rotations cancel and the
+    # pad face stays parallel to the tool axis while its origin translates. Both
+    # maps are that one translation, read on two axes: the y component opens the
+    # jaws, the z component slides the pad face along the tool axis. They share a
+    # crank, which is why they share a block — writing the axial map anywhere else
+    # would mean a second copy of `finger_offset_y_m` and `finger_offset_z_m`.
+    #
+    # Every number is a fact in the vendor's own files, so each can be re-checked
+    # rather than believed:
+    #   drive_pivot_y_m    drive_joint <origin xyz="0 0.035 0.059098">
+    #   drive_pivot_z_m    ... the z of that same origin
+    #   finger_offset_y_m  left_finger_joint <origin xyz="0 0.035465 0.042039">
+    #   finger_offset_z_m  ... the z of that same origin
+    #   pad_inset_m        left_finger.stl, whose y_min is -0.026003 in the link
+    #                      frame — a 26 mm design dimension, stored as float32
+    #   tip_link_z_m       joint_tcp <origin>, which is what puts `link_tcp`
+    #                      0.172 m past the gripper base
+    #   pad_face_centre_z_m  left_finger.stl again: its y = -0.026003 pad face
+    #                      spans z 0.022253 .. 0.059753 in the link frame, so the
+    #                      face is 37.5 mm tall and centred at 0.041003
+    #
+    # This replaces a linear interpolation across the stroke, which was not an
+    # approximation but simply wrong: it claimed 85.00 mm fully open against a
+    # true 88.93 mm, and 45.00 mm at q=0.400 against a true 50.59 mm. That last
+    # error is the whole width of the clearance the default grasp depends on, so
+    # the gripper closed on air and every layer above reported success.
+    #
+    # Derived rather than declared, because a declared copy is a second place to
+    # be wrong: fully open is opening(0.00) = 88.93 mm, fully closed is
+    # opening(0.85) = 1.65 mm; and the pad plane sits 29.86 mm proximal of
+    # `link_tcp` fully open, 18.58 mm at the 45 mm default width.
+    #
+    # WHAT THE AXIAL MAP IS FOR, because it is the newer half and the one that
+    # was missing. `link_tcp` — which `planning.tip_link_suffix` on the arm type
+    # names, and which every skill plans to — is the FINGERTIP plane. The pads
+    # grip with their faces, whose centre sits proximal of that tip by
+    # `pad_plane_offset(q)`. A skill that sent an object's pose straight to the
+    # planner therefore parked the pad face that far ABOVE the object, and the
+    # interleaved 40-trial campaign in
+    # `docs/measurements/2026-08-25-grasp-plane-offset/` measured what that
+    # costs: 24.4 mm high, 19.3 mm of a 37.5 mm pad face engaged, a 15.35 mm
+    # lever arm on the contact patch, and a work-piece that rotated more than
+    # 20 degrees in 12 of 20 trials. Corrected, 0 of 20, p < 0.0001.
+    #
+    # The number 0.0718988 that campaign quotes is the constant part of the map,
+    # `tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m`. It is derived and
+    # never declared, for the same reason `max_width_m` is: a declared copy is a
+    # second place to be wrong.
+    #
+    # NOT A CONSTANT, and this is the trap the deleted `grasp` frame fell into.
+    # That frame declared a single 0.172 m and called it the point between the
+    # pads; 0.172 is the fingertip, and the pad centre moves 11.3 mm along the
+    # tool axis across the stroke. Anything that bakes in one number is wrong at
+    # every width but one — and, being per-end-effector, must live here rather
+    # than in a skill (P9).
+    linkage:
+      drive_pivot_y_m: 0.035
+      drive_pivot_z_m: 0.059098
+      finger_offset_y_m: 0.035465
+      finger_offset_z_m: 0.042039
+      pad_inset_m: 0.026
+      tip_link_z_m: 0.172
+      pad_face_centre_z_m: 0.041003
+    # What a Pick closes to when its goal names no width. 45 mm, and the bound
+    # that produces that number rather than any other:
+    #
+    #   * Below the work-piece, not equal to it. The cell's reference work-piece
+    #     is a 50 mm cube, and a parallel gripper evidences a grasp by *failing*
+    #     to reach where it was sent: the pads meet the part, the joint stops
+    #     short, the controller reports a stall, and the skill compares the width
+    #     it reached against the width it asked for. Commanding 50 mm would let
+    #     the gripper arrive exactly on target and teach the skill nothing.
+    #
+    # What 45 mm actually buys, through the map above rather than through the
+    # linear one that used to be here:
+    #     commanded 45 mm      -> q = 0.4528 rad
+    #     50 mm part stops it  -> q = 0.4056 rad, i.e. opening 50.00 mm
+    #     unrelieved error     -> 0.047 rad, about 4.7x the controller's 0.01 rad
+    #                             goal_tolerance, so the stall is unambiguous
+    #     width margin         -> 5.00 mm, against a 2.11 mm discrimination
+    #                             threshold (see gripper_is_holding)
+    #
+    # The number is unchanged from before the map was corrected, and that is a
+    # coincidence worth naming rather than hiding: 45 mm was always the right
+    # *intent*, but the linear map turned it into a 0.400 rad command that opened
+    # the pads to 50.59 mm — 0.3 mm of clearance per side on a 50 mm part, which
+    # is why no work-piece was ever grasped. The value did not need recomputing;
+    # the map that read it did.
+    #
+    # `cite_tools.validate.physical` NOW ENFORCES THE BOUND THAT MATTERS. This
+    # block used to end by saying it could not: the 60.92 mm ceiling died with
+    # ADR-0023's attachment plugin, the 88.93 mm one that replaced it is only the
+    # gripper's own opening, and "narrower than the part" was unenforceable while
+    # L0 recorded no work-piece geometry. L0 records it now
+    # (assets/types/workpieces/workpiece.yaml), so the ceiling is derived from
+    # the part and the controller together:
+    #
+    #   narrowest work-piece                       50.00 mm
+    #   less 2 x goal_tolerance, in width           2.14 mm
+    #   ceiling                                    47.86 mm
+    #
+    # The subtracted term is not padding. `GripperActionController` ends a goal
+    # as soon as |error| < goal_tolerance, so the width it reports is
+    # systematically wider than commanded even in free air, and
+    # `cite_skills::gripper_is_holding` demands twice that bias before it calls
+    # anything a grasp. A default inside that band produces real grasps L3 cannot
+    # tell from closing on air. 45 mm leaves 5.00 mm — 2.3x the threshold.
+    #
+    # Honest about its home (P7): this is a property of an end effector *paired
+    # with a work-piece*, and it still sits on the end-effector type. The day a
+    # second work-piece size exists, this value moves to the work-piece and the
+    # goal carries it; the end-effector keeps only the stroke. Until then it is
+    # written once, here, and the validator checks it against the part rather
+    # than against a comment.
+    default_grasp_width_m: 0.045
+
+  controllers:
+    - suffix: gripper_controller
+      # GripperActionController, not a trajectory controller: a grasp is "close
+      # to this width with at most this effort, and tell me if you stalled", and
+      # a stall is precisely what a trajectory controller reports as failure.
+      type: position_controllers/GripperActionController
+      joints: end_effector
+      stage: 1
+      parameters:
+        # Drive-joint speed, in rad/s, below which the gripper is treated as
+        # stalled. NOT metres of travel, which is what this said until the width
+        # map was corrected — `drive_joint` is revolute, and every quantity the
+        # controller sees is in its units, not in task space.
+        #
+        # THE MECHANISM, because both bounds below fall out of it rather than
+        # being preferences. `GripperActionController::checkForSuccess` ends a
+        # goal in exactly two ways and in no others — ros2_controllers on Jazzy,
+        # `gripper_action_controller_impl.hpp:166-189`:
+        #
+        #     if      |error| < goal_tolerance          -> reached_goal, succeed
+        #     else if |velocity| > THIS THRESHOLD       -> last_movement_time = now
+        #     else if now - last_movement_time > stall_timeout -> stalled
+        #
+        # So this value has a floor and a ceiling, for two unrelated reasons. Too
+        # LOW and a joint creeping against a part still counts as moving:
+        # `last_movement_time` is reset every cycle, so the stall branch is
+        # unreachable — while the part holds |error| above `goal_tolerance`, so
+        # the success branch is unreachable too, and the goal has no way to end.
+        # Too HIGH and a joint that is genuinely travelling counts as stopped, so
+        # the stall timer runs during an ordinary approach.
+        #
+        # THE MEASURED WINDOW. These two are observations, not choices:
+        #
+        #   * Floor, ~0.025 rad/s — the fastest contact creep observed while the
+        #     drive joint pressed against a part (the range seen was 0.003-0.024
+        #     rad/s). Below this the joint never appears stalled.
+        #   * Ceiling, ~0.16 rad/s — in free air, and against a part narrower than
+        #     commanded, the joint is still travelling at 0.160 rad/s at the
+        #     instant |error| < `goal_tolerance`, and was never slower in the
+        #     preceding 0.4 s. That 0.4 s exceeds `stall_timeout` below, so a
+        #     threshold above 0.160 would not merely arm the timer — it would let
+        #     it expire and report a stall on a stroke that is not a grasp. With
+        #     `allow_stalling: true` that is returned to the caller as SUCCESS,
+        #     so the failure above the ceiling is a wrong answer, not a hang.
+        #
+        # THE CHOSEN VALUE is 0.05, and it is a choice rather than a measurement:
+        # any value strictly inside the window satisfies the mechanism. It clears
+        # the fastest observed creep by 2.1x and sits 3.2x below the slowest
+        # observed approach. Because the window is the fact and the number is a
+        # selection inside it, `tools/tests/test_gripper_stall_threshold.py`
+        # asserts the WINDOW — it fails for any value outside, not for any value
+        # other than this one.
+        #
+        # WHAT 0.001 DID, which is why this is a defect and not a tuning tweak.
+        # It sat 25x below the floor. The drive joint creeps against a part at
+        # 0.003-0.024 rad/s, permanently above 0.001, so `last_movement_time` was
+        # reset on every cycle and the gripper never stalled — and, held short by
+        # the part, it never reached goal either. Neither of the two terminating
+        # branches above can fire, so THE ACTION SIMPLY NEVER RETURNS. The caller
+        # does not observe a wrong answer, it observes a timeout, which is why
+        # this read as a fault in the layer above for so long.
+        #
+        # ON HARDWARE (P2, and Definition of Done item 5) this transfers as a
+        # DECLARED PROPERTY OF THE END EFFECTOR while its enforcement mechanism
+        # does not exist on that path — the same split that
+        # `external/patches/02-xarm_ros2-gripper-drive-rate-parameter.patch`
+        # records for the close rate, and stated here for the same reason.
+        # `xarm_gripper_macro.xacro:20` emits the gripper's <ros2_control> block
+        # only when the plugin is not `uf_robot_hardware/UFRobotSystemHardware`,
+        # so on the physical arm there is no `drive_joint` in `ros2_control` at
+        # all — hence no `GripperActionController`, and no parameter for it to
+        # read. The real gripper is driven through the SDK's service layer
+        # (`xarm_driver.cpp:594`, `set_gripper_speed`) in motor r/min over
+        # 1-5000, and UFACTORY publishes no conversion from r/min to jaw travel.
+        # Detecting a stall there is Phase 2 work against a different interface.
+        # Nothing here should be read as claiming the two paths detect a stall
+        # alike, because they do not.
+        stall_velocity_threshold: 0.05
+        stall_timeout: 0.3
+        max_effort: 60.0
+        # Declared rather than left to GripperActionController's default, because
+        # L3 needs the same number: `gripper_is_holding` sizes its discrimination
+        # threshold from this tolerance, since the controller ends a goal as soon
+        # as |error| < goal_tolerance and so reports a position systematically
+        # short of the command. Left implicit, that number would have had to be
+        # guessed in the skill server — a value in two places, one of them a
+        # guess. It reaches L3 through the generated bring-up plan.
+        goal_tolerance: 0.01
+        # A stall is an OUTCOME, not a fault — ADR-0022: "a stall is reported,
+        # not interpreted", and deciding what it means is the Grasp skill's job.
+        #
+        # GripperActionController defaults this to false, and false means a stall
+        # calls `setAborted` on the goal. That is the controller ruling on a
+        # question it cannot answer: the one case a parallel gripper exists to
+        # report — pads closed onto a part and stopped — is delivered to the
+        # caller as a failed action, indistinguishable at the action layer from a
+        # controller that fell over. The skill then has to read success out of an
+        # abort, which is exactly the interpretation ADR-0022 puts above the
+        # controller, not inside it.
+        #
+        # True makes the controller report `stalled` and let L3 judge it. Model
+        # data, so simulation and hardware are configured identically (P2).
+        allow_stalling: true

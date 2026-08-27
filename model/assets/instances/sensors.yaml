@@ -1,0 +1,157 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Break-beam sensors at each belt's outfeed transfer point, placed relative to
+# that belt rather than in world coordinates — so moving a conveyor, or moving
+# the transfer point on its type, moves the sensor with it and the two cannot
+# drift apart. That anchoring is what made the 0.050 m outfeed inset a one-line
+# change here: nothing in this file needed touching for it.
+#
+# Three things about the offsets below are load-bearing rather than incidental.
+#
+# ALONG THE BELT: NOTHING IS AUTHORED, AND THAT IS THE POINT. The two beams an
+# indexing station stops on carry x = 0.000 and `indexes_workpiece: true`. The
+# zero is not a placement, it is a statement that the frame named above IS the
+# point a part must come to rest on; how far downstream the housing actually
+# stands is derived by `cite_tools.model.resolve.index_offset_m` from the
+# work-piece's own length and the beam's own width.
+#
+# It used to read -0.050 — 50 mm upstream of the pick point — and that number is
+# what stopped the line at milestone 4 of 10. A through beam breaks on a part's
+# LEADING edge, so a belt stopped on the break leaves the part's centre half a
+# part-length short of the beam; 50 mm upstream of the pick point put it 75 mm
+# short of `arm_2`'s grasp, and the arm closed on air at `commanded 45.0 mm,
+# reached 46.0 mm, stalled=false`.
+#
+# The repair that was refused, twice, and is refused here again: sliding the beam
+# downstream until the scenario passed. The plugin at the time tested the
+# work-piece's model ORIGIN rather than its body, so a fitted offset would have
+# been compensation for a simulator artefact — about 25 mm of it — and the
+# physical cell, whose beams break on the real leading edge, would have parked
+# its parts somewhere else entirely. That is P2, and P2 is the one this project
+# treats as most severe. The plugin was fixed to intersect the part instead, and
+# the mounting position derived from geometry that is true of both cells.
+#
+# +Y, not the belt centreline. The outfeed is also a station's pick point, and a
+# housing standing on the centreline puts 120 mm of solid geometry inside the
+# gripper's descent. The belt is 0.400 m wide, so +0.250 clears its edge by
+# 30 mm and stands on the side away from the arms, which work from -Y.
+# `approach-obstruction` in cite_tools.validate.geometric now rejects the old
+# placement mechanically.
+#
+# +0.030 above the belt surface, and AUTHORED — a mounting height, not a derived
+# one, because what it has to satisfy is a range rather than a point: high enough
+# to clear the belt surface, low enough to pass under the top of the shortest
+# part the line handles. 30 mm satisfies both for a 50 mm cube with 20 mm to
+# spare, and `beam-cannot-see-workpiece` in cite_tools.validate.geometric fails
+# the model if a declared part is ever short enough to walk under it.
+#
+# This number used to carry a much longer argument about a "window of part-centre
+# heights 0.010 m to 0.050 m", and that window was an artefact of the origin test
+# too: it made the sensor blind to a part taller than 100 mm, which every real
+# beam sees. The beam now intersects the part's body, so there is no upper bound
+# at all — a part of any height breaks it — and the only bound left is the
+# physical one this height states, which holds identically on hardware.
+assets:
+  # The infeed's own presence sensor.
+  #
+  # WHY IT EXISTS. `station_transfer_1` is fed from outside the cell, and until
+  # this beam it was the one acting station in the line with nothing to observe.
+  # Its cycle fell through `AwaitTrigger` — no topic, so no wait — and came to
+  # rest in `DetectAt`, which polls for ever when a station has no trigger. The
+  # measured symptom was a station reporting WORKING with occupancy 0/1 while a
+  # `Detect` on `table_pick/surface` answered "no sensor in this zone lies inside
+  # the requested region". A station that acts must observe; this is what it
+  # observes with.
+  #
+  # WHY NOT SIMPLY STOP GATING THE STATION. The alternative was to let a
+  # source-fed station pick without observing, on the ground that it was told
+  # about the part rather than seeing it. Nothing tells it: the only thing that
+  # would then bound its cycle is the pick failing, so an empty table would send
+  # the arm down to check and burn the station's retry budget doing it. A robot
+  # busy-wait is a worse answer than a sensor, and `break_beam.yaml` states the
+  # rule this line is built on — a station acts because a work-piece was
+  # detected, never because a duration elapsed.
+  #
+  # THE OFFSET IS THE SAME +0.250 AS EVERY OTHER BEAM, and for the same two
+  # reasons. It stands on the side away from the arms, which work from -Y — every
+  # pedestal is at y = -0.300. And it clears the gripper's descent: the approach
+  # corridor `cite_tools.validate.geometric` enforces is 0.100 m of half-width
+  # about the pick point, so a 0.040 m housing has to stand further out than
+  # 0.120 m or `approach-obstruction` rejects it. The table is 0.600 m square, so
+  # 0.250 m leaves the housing 0.030 m inside its own edge, exactly as 0.250 m on
+  # a 0.400 m belt leaves 0.030 m of belt edge to spare.
+  #
+  # The height is the belts' 0.030 m, and nothing about the reason for it is
+  # specific to a belt: clear of the surface, under the top of the shortest part.
+  #
+  # It does NOT index. A table is not driven, so there is nothing to stop; this
+  # beam only tells `station_transfer_1` that a part is there to pick. Its pose
+  # is therefore an ordinary authored mounting position, with no derived offset.
+  - id: beam_pick
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: table_pick/surface
+      xyz_m: [0.000, 0.250, 0.030]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear
+
+  # `station_transfer_2` picks from `conveyor_1/outfeed` and the line stops
+  # `conveyor_1` on this beam's edge, so this beam indexes: x is 0.000 because
+  # the frame IS the point a part must stop on, and the stand-off downstream of
+  # it is derived from the part.
+  - id: beam_c1_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_1/outfeed
+      # Beside the belt, 30 mm above its surface. Nothing along the belt: see
+      # `indexes_workpiece` below and the header above.
+      xyz_m: [0.000, 0.250, 0.030]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      indexes_workpiece: true
+      idle_state: clear
+
+  # The same, for `station_transfer_3` picking from `conveyor_2/outfeed`.
+  - id: beam_c2_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_2/outfeed
+      xyz_m: [0.000, 0.250, 0.030]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      indexes_workpiece: true
+      idle_state: clear
+
+  # This one does NOT index, and the asymmetry is real rather than an oversight.
+  # `station_accumulation` is a sink with no actor: nothing picks from
+  # `conveyor_3/outfeed`, so `conveyor_3` is never stopped and there is no rest
+  # position to stand off from. The beam's job here is to make the arrival at the
+  # accumulation table observed rather than inferred, which it does wherever it
+  # is mounted. It keeps its authored position 50 mm short of the transfer point.
+  - id: beam_c3_out
+    zone: cell_a
+    type: break_beam
+    pose:
+      frame: conveyor_3/outfeed
+      xyz_m: [-0.050, 0.250, 0.030]
+    hardware: {backend: sim}
+    configuration:
+      kind: sensor
+      beam_axis: y
+      beam_length_m: 0.500
+      idle_state: clear

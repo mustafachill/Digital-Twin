@@ -82,6 +82,30 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       ros-jazzy-ament-cmake-clang-format \
     && rm -rf /var/lib/apt/lists/*
 
+# --- External source dependencies -------------------------------------------
+# The vcs manifest is imported and its system dependencies resolved here, at
+# image build time, so that the image can build the pinned workspace on its own.
+#
+# This is not an optimisation. A container started from this image is ephemeral:
+# `./scripts/build` and CI each run `docker run --rm`, so anything a run-time
+# `rosdep install` installs is discarded the moment that container exits. Without
+# this layer the build fails on a missing apt package that `./scripts/bootstrap`
+# appears to have just installed — which is a genuinely confusing place to start
+# debugging.
+#
+# The source tree itself is discarded; only the resolved apt dependencies are
+# kept. The real checkout is imported into the mounted workspace by bootstrap.
+# Changing external/cite.repos therefore requires an image rebuild, which is
+# correct: the manifest and the image that can build it version together.
+COPY external/cite.repos /tmp/cite.repos
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    mkdir -p /tmp/deps/src \
+ && vcs import --recursive /tmp/deps/src < /tmp/cite.repos \
+ && apt-get update \
+ && rosdep update --rosdistro "$ROS_DISTRO" \
+ && rosdep install --from-paths /tmp/deps/src --ignore-src -r -y --rosdistro "$ROS_DISTRO" \
+ && rm -rf /tmp/deps /tmp/cite.repos /var/lib/apt/lists/*
+
 # --- osv-scanner (supply-chain CVE scanning) ---------------------------------
 # Pinned by version AND checksum. Bumping the version forces updating the hash,
 # which makes the upgrade a deliberate act rather than a silent one — the same
@@ -109,7 +133,15 @@ RUN python3 -m venv "$CITE_VENV" \
  && "$CITE_VENV/bin/pip" install --no-cache-dir --upgrade pip \
  && "$CITE_VENV/bin/pip" install --no-cache-dir \
       -r /tmp/requirements/tools.txt -r /tmp/requirements/dev.txt \
- && rm -rf /tmp/requirements
+ && rm -rf /tmp/requirements \
+ # cite_tools itself is NOT installed here. It lives in the bind-mounted
+ # workspace, so it cannot be copied in at image build time without going stale,
+ # and a `pip install -e` at run time would be discarded when the container
+ # exits — every ephemeral `docker run` would need to repeat it. A path entry
+ # pointing at the mount makes it importable and always current, with no install
+ # step anywhere.
+ && echo "/workspace/tools" \
+      > "$("$CITE_VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')/cite_tools.pth"
 
 # --- Non-root user -----------------------------------------------------------
 # UID/GID are build args so that files created in the mounted workspace are
@@ -126,6 +158,16 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" 2>/dev/null || true \
  && rm -rf /var/lib/apt/lists/*
 
 RUN rosdep update --rosdistro "$ROS_DISTRO" || true
+
+# Docker seeds a fresh named volume from the image's directory at that path,
+# ownership included — and creates it root-owned if the path does not exist.
+# compose mounts named volumes over workspace/{build,install,log}, so without
+# these directories existing here and owned by the build user, every colcon run
+# in a fresh environment dies with a PermissionError on its own log directory.
+RUN mkdir -p /workspace/workspace/build \
+             /workspace/workspace/install \
+             /workspace/workspace/log \
+ && chown -R "$USER_UID:$USER_GID" /workspace
 
 COPY infra/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

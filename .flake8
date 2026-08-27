@@ -1,0 +1,25 @@
+# flake8 for the ROS packages, run by ament_flake8.
+#
+# This exists because `ament_lint_common` was registered for the first time on
+# this branch, and its default configuration disagrees with the style this
+# repository has used since its first commit on exactly one point. Everything
+# else is ament's default, copied verbatim from
+# /opt/ros/$ROS_DISTRO/lib/python3.*/site-packages/ament_flake8/configuration/ament_flake8.ini
+# so that the two do not silently drift apart.
+#
+# The one difference is Q000. flake8-quotes defaults to preferring single
+# quotes; this repository uses double quotes everywhere, in the ROS packages and
+# in `tools/`, where `./scripts/format` runs `ruff format` and would rewrite
+# single quotes back to double on the next invocation. With Q000 enabled the two
+# configured toolchains fight each other on every file, and the loser is whoever
+# ran last. So the preference is stated once, here, rather than fought 837 times.
+#
+# This is a style decision, not a defect being suppressed: every substantive
+# check — undefined names, unused imports, import order, shadowed builtins,
+# complexity, line length — is enabled exactly as ament ships it.
+[flake8]
+extend-ignore = B902,C816,D100,D101,D102,D103,D104,D105,D106,D107,D203,D212,D404,I202,Q000
+import-order-style = google
+max-line-length = 99
+show-source = true
+statistics = true

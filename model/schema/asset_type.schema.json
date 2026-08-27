@@ -1,0 +1,987 @@
+{
+  "$defs": {
+    "AssetType": {
+      "additionalProperties": false,
+      "description": "A reusable definition, instantiated many times with different prefixes.",
+      "properties": {
+        "category": {
+          "enum": [
+            "robot",
+            "end_effector",
+            "conveyor",
+            "sensor",
+            "fixture",
+            "workpiece"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "control": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControlSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "controllers": {
+          "items": {
+            "$ref": "#/$defs/ControllerSpec"
+          },
+          "title": "Controllers",
+          "type": "array"
+        },
+        "description": {
+          "$ref": "#/$defs/DescriptionSpec"
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/NamedFrame"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "grasp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GraspSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hardware_backends": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "$ref": "#/$defs/HardwareBackend"
+            }
+          },
+          "title": "Hardware Backends",
+          "type": "object"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kinematics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Kinematics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "planning": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanningSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "description"
+      ],
+      "title": "AssetType",
+      "type": "object"
+    },
+    "Body": {
+      "additionalProperties": false,
+      "description": "Geometry for a part we author ourselves — a conveyor, a table, a pedestal.\n\nVisual and collision are separate fields with no default linking them,\ndeliberately. L1 calls reusing a dense visual mesh as collision geometry the\nsingle most consequential mistake in that layer: it destroys real-time factor\nand produces contact behaviour nobody can explain. Making them separate\nrequired fields means doing it is a visible choice, not an omission.",
+      "properties": {
+        "collision": {
+          "discriminator": {
+            "mapping": {
+              "box": "#/$defs/BoxGeometry",
+              "cylinder": "#/$defs/CylinderGeometry",
+              "mesh": "#/$defs/MeshGeometry"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BoxGeometry"
+            },
+            {
+              "$ref": "#/$defs/CylinderGeometry"
+            },
+            {
+              "$ref": "#/$defs/MeshGeometry"
+            }
+          ],
+          "title": "Collision"
+        },
+        "inertial": {
+          "$ref": "#/$defs/Inertial"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "visual": {
+          "discriminator": {
+            "mapping": {
+              "box": "#/$defs/BoxGeometry",
+              "cylinder": "#/$defs/CylinderGeometry",
+              "mesh": "#/$defs/MeshGeometry"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BoxGeometry"
+            },
+            {
+              "$ref": "#/$defs/CylinderGeometry"
+            },
+            {
+              "$ref": "#/$defs/MeshGeometry"
+            }
+          ],
+          "title": "Visual"
+        }
+      },
+      "required": [
+        "visual",
+        "collision",
+        "inertial"
+      ],
+      "title": "Body",
+      "type": "object"
+    },
+    "BoxGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "box",
+          "default": "box",
+          "enum": [
+            "box"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "size_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Size M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "size_m"
+      ],
+      "title": "BoxGeometry",
+      "type": "object"
+    },
+    "ControlSpec": {
+      "additionalProperties": false,
+      "description": "How the `ros2_control` manager for this type is configured.\n\nThe update rate is a fact about the robot — the vendor ships one — and it\nused to be a module constant in the generator, applied identically to every\ntype. P5 puts it here instead: code encodes how a controller manager is\nconfigured, never which rate a particular arm runs at.",
+      "properties": {
+        "enforce_command_limits": {
+          "title": "Enforce Command Limits",
+          "type": "boolean"
+        },
+        "update_rate_hz": {
+          "exclusiveMinimum": 0,
+          "title": "Update Rate Hz",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "update_rate_hz",
+        "enforce_command_limits"
+      ],
+      "title": "ControlSpec",
+      "type": "object"
+    },
+    "ControllerSpec": {
+      "additionalProperties": false,
+      "description": "A controller a type needs, named by suffix and ordered by stage.\n\n``stage`` exists because a broadcaster must be active before the controllers\nthat depend on its state, and expressing that as data rather than as a sleep\nis what P4 requires.",
+      "properties": {
+        "command_interfaces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command Interfaces",
+          "type": "array"
+        },
+        "joints": {
+          "enum": [
+            "arm",
+            "end_effector",
+            "none"
+          ],
+          "title": "Joints",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "stage": {
+          "minimum": 0,
+          "title": "Stage",
+          "type": "integer"
+        },
+        "state_interfaces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "State Interfaces",
+          "type": "array"
+        },
+        "suffix": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Suffix",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "suffix",
+        "type",
+        "joints",
+        "stage"
+      ],
+      "title": "ControllerSpec",
+      "type": "object"
+    },
+    "CylinderGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cylinder",
+          "default": "cylinder",
+          "enum": [
+            "cylinder"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "length_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "radius_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Radius M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "radius_m",
+        "length_m"
+      ],
+      "title": "CylinderGeometry",
+      "type": "object"
+    },
+    "DescriptionSpec": {
+      "additionalProperties": false,
+      "description": "How a type becomes geometry.\n\n``xacro_macro`` is how a vendor description is incorporated **without editing\nit** — the open question L1 leaves for the component library. The generator's\nentire knowledge of the vendor package is the argument names below, which are\nmodel data. It never opens a vendor file and never patches one, so a vendor\nupgrade that renames a parameter is a two-line model diff.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bound_args": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "macro parameter -> generator binding name; an unknown binding is an error",
+          "title": "Bound Args",
+          "type": "object"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "fixed_args": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Fixed Args",
+          "type": "object"
+        },
+        "macro": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Macro"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package"
+        },
+        "provider": {
+          "enum": [
+            "xacro_macro",
+            "body"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "DescriptionSpec",
+      "type": "object"
+    },
+    "GraspSpec": {
+      "additionalProperties": false,
+      "description": "How this end effector grasps: the stroke it has, and what a skill commands.\n\nOne audience, on both paths. Every value here is read by the L3 skill server\nin simulation and on hardware alike; none of it is simulation-only. That is a\nchange from what this block used to be. It also carried\n`attach_link_suffix`, `closed_threshold_rad` and `open_threshold_rad`, which\nexisted solely to configure the contact-triggered attachment plugin ADR-0023\nintroduced. That plugin is gone — superseded on the evidence of the 84-trial\nfriction campaign in `docs/measurements/2026-08-25-friction-grasp/`, which\nmeasured it firing at first pad contact and destroying the very stall this\nblock exists to produce — so the fields that fed it are gone with it.\n\nWhat remains is one stroke described once: where the joint travels, how fast,\nhow its angle maps to a pad opening, and how wide to close by default. A\ngrasp is now evidenced the way ADR-0022 always said it was — the pads meet\nthe part, the joint stops short of its command, and the controller reports a\nstall.",
+      "properties": {
+        "closed_position": {
+          "default": 0.85,
+          "title": "Closed Position",
+          "type": "number"
+        },
+        "default_grasp_width_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Grasp Width M"
+        },
+        "drive_joint_suffix": {
+          "title": "Drive Joint Suffix",
+          "type": "string"
+        },
+        "follower_max_rate_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Follower Max Rate Rad S",
+          "type": "number"
+        },
+        "linkage": {
+          "$ref": "#/$defs/GripperLinkage"
+        },
+        "max_drive_rate_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Drive Rate Rad S",
+          "type": "number"
+        },
+        "open_position": {
+          "default": 0.0,
+          "title": "Open Position",
+          "type": "number"
+        }
+      },
+      "required": [
+        "drive_joint_suffix",
+        "max_drive_rate_rad_s",
+        "follower_max_rate_rad_s",
+        "linkage"
+      ],
+      "title": "GraspSpec",
+      "type": "object"
+    },
+    "GripperLinkage": {
+      "additionalProperties": false,
+      "description": "Where a parallel gripper's pads are, as a function of its drive angle.\n\nTwo maps, one crank. Across the tool axis::\n\n    opening(q) = 2 * (drive_pivot_y_m - pad_inset_m\n                      + finger_offset_y_m*cos(q) - finger_offset_z_m*sin(q))\n\nand along it, how far PROXIMAL of the planning tip link the centre of the pad\nface sits::\n\n    pad_plane_offset(q) = tip_link_z_m - drive_pivot_z_m - pad_face_centre_z_m\n                          - (finger_offset_y_m*sin(q)\n                             + finger_offset_z_m*cos(q))\n\nThis is the single home of both relationships (P1). The L3 skill server\nreceives these seven numbers through the generated bring-up plan and\nevaluates the same closed forms, so task-space widths and task-space *poses*\nmean the same thing in the model, in the validator, and on the robot.\n\nThey are closed forms rather than fits or tables because they are derivable:\nthe drive joint and the finger joint rotate about opposite axes by the same\nangle, so their rotations cancel, the pad face stays parallel to the tool\naxis, and only its origin translates. The two maps are that one translation\nresolved on two axes — which is also why they belong in one model rather than\ntwo, since separating them would mean a second copy of the crank.\n\nEvery field is a dimension in the robot's own description, which is what makes\nan audit possible: each can be checked against the vendor URDF or mesh rather\nthan taken on trust.",
+      "properties": {
+        "drive_pivot_y_m": {
+          "title": "Drive Pivot Y M",
+          "type": "number"
+        },
+        "drive_pivot_z_m": {
+          "title": "Drive Pivot Z M",
+          "type": "number"
+        },
+        "finger_offset_y_m": {
+          "title": "Finger Offset Y M",
+          "type": "number"
+        },
+        "finger_offset_z_m": {
+          "title": "Finger Offset Z M",
+          "type": "number"
+        },
+        "pad_face_centre_z_m": {
+          "title": "Pad Face Centre Z M",
+          "type": "number"
+        },
+        "pad_inset_m": {
+          "minimum": 0.0,
+          "title": "Pad Inset M",
+          "type": "number"
+        },
+        "tip_link_z_m": {
+          "title": "Tip Link Z M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "drive_pivot_y_m",
+        "drive_pivot_z_m",
+        "finger_offset_y_m",
+        "finger_offset_z_m",
+        "pad_inset_m",
+        "tip_link_z_m",
+        "pad_face_centre_z_m"
+      ],
+      "title": "GripperLinkage",
+      "type": "object"
+    },
+    "HardwareBackend": {
+      "additionalProperties": false,
+      "description": "One selectable ``ros2_control`` backend for a type.\n\nThe plugin class string exists exactly once, here. That is what makes\n'the only thing that differs is which plugin is loaded' (ADR-0005) true by\nconstruction rather than by discipline.",
+      "properties": {
+        "instance_params": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Instance Params",
+          "type": "array"
+        },
+        "ros2_control_plugin": {
+          "title": "Ros2 Control Plugin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ros2_control_plugin"
+      ],
+      "title": "HardwareBackend",
+      "type": "object"
+    },
+    "Inertial": {
+      "additionalProperties": false,
+      "description": "Mass properties. Validated, never trusted — see L1.\n\nA wrong inertia tensor raises no error. The simulation runs and the physics\nis wrong in a way that reads as a controller bug, which is why\n``cite_tools.validate.physical`` checks positive-definiteness and the\ntriangle inequality rather than assuming the author got it right.",
+      "properties": {
+        "com_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Com M",
+          "type": "array"
+        },
+        "ixx": {
+          "exclusiveMinimum": 0.0,
+          "title": "Ixx",
+          "type": "number"
+        },
+        "ixy": {
+          "default": 0.0,
+          "title": "Ixy",
+          "type": "number"
+        },
+        "ixz": {
+          "default": 0.0,
+          "title": "Ixz",
+          "type": "number"
+        },
+        "iyy": {
+          "exclusiveMinimum": 0.0,
+          "title": "Iyy",
+          "type": "number"
+        },
+        "iyz": {
+          "default": 0.0,
+          "title": "Iyz",
+          "type": "number"
+        },
+        "izz": {
+          "exclusiveMinimum": 0.0,
+          "title": "Izz",
+          "type": "number"
+        },
+        "mass_kg": {
+          "exclusiveMinimum": 0.0,
+          "title": "Mass Kg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mass_kg",
+        "ixx",
+        "iyy",
+        "izz"
+      ],
+      "title": "Inertial",
+      "type": "object"
+    },
+    "Kinematics": {
+      "additionalProperties": false,
+      "properties": {
+        "base_link_suffix": {
+          "title": "Base Link Suffix",
+          "type": "string"
+        },
+        "dof": {
+          "maximum": 7,
+          "minimum": 1,
+          "title": "Dof",
+          "type": "integer"
+        },
+        "joint_suffixes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Joint Suffixes",
+          "type": "array"
+        },
+        "max_reach_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Reach M",
+          "type": "number"
+        },
+        "tip_link_suffix": {
+          "title": "Tip Link Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dof",
+        "joint_suffixes",
+        "base_link_suffix",
+        "tip_link_suffix",
+        "max_reach_m"
+      ],
+      "title": "Kinematics",
+      "type": "object"
+    },
+    "MeshGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "mesh",
+          "default": "mesh",
+          "enum": [
+            "mesh"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "scale": {
+          "default": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Scale",
+          "type": "array"
+        },
+        "uri": {
+          "description": "package:// or file:// URI, declared in assets/manifest.yaml",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "MeshGeometry",
+      "type": "object"
+    },
+    "NamedFrame": {
+      "additionalProperties": false,
+      "description": "A reference frame a type offers, that instances can be placed against.\n\n``conveyor_1/outfeed`` resolves through one of these, so the coordinate of a\nbelt's end is written once — in the type — rather than at every station that\nreaches for it.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "URDF link this frame is attached to, if the type has a description.",
+          "title": "Link"
+        },
+        "rpy_rad": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rpy Rad",
+          "type": "array"
+        },
+        "xyz_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xyz M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "NamedFrame",
+      "type": "object"
+    },
+    "PlanningSpec": {
+      "additionalProperties": false,
+      "description": "How this type is planned for, and where its SRDF comes from.\n\nGroup names are the vendor's, prefixed with the asset id exactly as joints\nand controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording\nthe vendor's suffix here rather than hardcoding it keeps the same property\nthe description has: a vendor rename is a model edit.",
+      "properties": {
+        "default_pipeline": {
+          "title": "Default Pipeline",
+          "type": "string"
+        },
+        "default_planner_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "title": "Default Planner Id",
+          "type": "string"
+        },
+        "end_effector_group_suffix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Effector Group Suffix"
+        },
+        "fallback_pipeline": {
+          "title": "Fallback Pipeline",
+          "type": "string"
+        },
+        "fallback_planner_id": {
+          "default": "",
+          "pattern": "^([A-Za-z][A-Za-z0-9_]*)?$",
+          "title": "Fallback Planner Id",
+          "type": "string"
+        },
+        "group_suffix": {
+          "title": "Group Suffix",
+          "type": "string"
+        },
+        "kinematics_plugin": {
+          "default": "kdl_kinematics_plugin/KDLKinematicsPlugin",
+          "title": "Kinematics Plugin",
+          "type": "string"
+        },
+        "kinematics_resolution": {
+          "default": 0.005,
+          "title": "Kinematics Resolution",
+          "type": "number"
+        },
+        "kinematics_timeout_s": {
+          "default": 0.05,
+          "title": "Kinematics Timeout S",
+          "type": "number"
+        },
+        "max_acceleration_rad_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Acceleration Rad S2",
+          "type": "number"
+        },
+        "max_acceleration_scaling": {
+          "default": 0.5,
+          "title": "Max Acceleration Scaling",
+          "type": "number"
+        },
+        "max_cartesian_acceleration_m_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Acceleration M S2",
+          "type": "number"
+        },
+        "max_cartesian_deceleration_m_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Deceleration M S2",
+          "type": "number"
+        },
+        "max_cartesian_rotational_velocity_rad_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Rotational Velocity Rad S",
+          "type": "number"
+        },
+        "max_cartesian_velocity_m_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Cartesian Velocity M S",
+          "type": "number"
+        },
+        "max_deceleration_rad_s2": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Deceleration Rad S2",
+          "type": "number"
+        },
+        "max_velocity_scaling": {
+          "default": 0.5,
+          "title": "Max Velocity Scaling",
+          "type": "number"
+        },
+        "srdf_args": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Srdf Args",
+          "type": "object"
+        },
+        "srdf_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf File"
+        },
+        "srdf_macro": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf Macro"
+        },
+        "srdf_package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Srdf Package"
+        },
+        "tip_link_suffix": {
+          "title": "Tip Link Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_suffix",
+        "tip_link_suffix",
+        "max_acceleration_rad_s2",
+        "max_deceleration_rad_s2",
+        "default_pipeline",
+        "default_planner_id",
+        "fallback_pipeline",
+        "max_cartesian_velocity_m_s",
+        "max_cartesian_acceleration_m_s2",
+        "max_cartesian_deceleration_m_s2",
+        "max_cartesian_rotational_velocity_rad_s"
+      ],
+      "title": "PlanningSpec",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/asset_type/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "asset_type": {
+      "$ref": "#/$defs/AssetType"
+    },
+    "schema": {
+      "const": "cite/asset_type/v1",
+      "enum": [
+        "cite/asset_type/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "asset_type"
+  ],
+  "title": "cite/asset_type/v1",
+  "type": "object"
+}

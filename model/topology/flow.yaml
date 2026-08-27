@@ -1,0 +1,37 @@
+---
+# yaml-language-server: $schema=../schema/flow.schema.json
+schema: cite/flow/v1
+
+# The process flow as an edge list, not as per-station upstream/downstream
+# fields: writing both ends of a link states the same fact twice. Each station's
+# neighbours are derived.
+#
+# WHAT `buffer` MEANS ON A BELT-MEDIATED EDGE, SINCE ADR-0032. It is how many
+# work-pieces the link may HOLD — and on an indexed belt that is no longer the
+# same as how many may be in flight.
+#
+# A belt stops when the station it feeds is triggered and runs again when that
+# station completes its handoff, because the pick window on a running belt is
+# under a second against a cycle of roughly two minutes. A stopped belt stops
+# EVERY piece on it. So the two edges below that declare `buffer: 4` have an
+# effective concurrency of 1: a second piece may legitimately be released onto
+# the belt and claim a slot, and it will then stand still until the piece ahead of
+# it has been picked and handed on.
+#
+# The 4 is left as declared because it remains a true statement about the belt —
+# 1.2 m of belt holds four 50 mm pieces comfortably, and it is what stops the
+# upstream station promising room the link has not got. It is recorded here
+# because a reader would otherwise take it as a throughput number, which it has
+# stopped being.
+#
+# The accumulation edge's `buffer: 12` is unaffected. `station_accumulation` is a
+# sink: it has a trigger and no actor, so it has no handoff to complete and
+# `conveyor_3` never indexes. It runs continuously.
+flow:
+  id: cell_a_serial_transfer
+  zone: cell_a
+  edges:
+    - {from: station_infeed, to: station_transfer_1, via: null, buffer: 6}
+    - {from: station_transfer_1, to: station_transfer_2, via: conveyor_1, buffer: 4}
+    - {from: station_transfer_2, to: station_transfer_3, via: conveyor_2, buffer: 4}
+    - {from: station_transfer_3, to: station_accumulation, via: conveyor_3, buffer: 12}

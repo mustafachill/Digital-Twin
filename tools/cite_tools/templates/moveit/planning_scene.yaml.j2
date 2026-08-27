@@ -1,0 +1,45 @@
+---
+{{ hash_banner() }}
+#
+# The cell's furniture as MoveIt collision objects: every authored body in the
+# zone, in world coordinates, taken from the same resolved bodies the scene
+# description is built from.
+#
+# Without these, an arm's planning scene contains that arm and nothing else.
+# Every pick and place point in this cell lies exactly on a surface, so a plan
+# that dives through the surface is the normal case rather than the exception,
+# and the failure looks like a controller fault.
+#
+# `pose` is the pose of the primitive's CENTRE, which is what MoveIt's
+# `primitive_poses` means. An L0 body's pose names the point it STANDS ON, so
+# the two differ by half a height and the difference is applied here rather than
+# left for a consumer to remember.
+#
+# Two omissions, on purpose:
+#   * Neighbouring arms are not listed. An articulated robot frozen at one pose
+#     is confidently wrong wherever it actually is; coordinating arms needs the
+#     live scene and is L4's problem.
+#   * Nothing reads this file yet. The node that publishes these objects lives
+#     in cite_facility or cite_bringup, and neither exists (CLAUDE.md §2).
+planning_scene:
+  zone: {{ cell.zone }}
+  frame_id: {{ world_frame }}
+
+  collision_objects:
+{% for object in objects %}
+    - id: {{ object.id }}
+      type: {{ object.type_id }}
+      frame_id: {{ world_frame }}
+      primitive:
+{% if object.kind == 'box' %}
+        type: box
+        dimensions_m: [{{ object.size_m | map('f') | join(', ') }}]
+{% else %}
+        type: cylinder
+        radius_m: {{ object.radius_m | f }}
+        length_m: {{ object.length_m | f }}
+{% endif %}
+      pose:
+        xyz_m: [{{ object.centre_xyz_m | map('f') | join(', ') }}]
+        rpy_rad: [{{ object.rpy_rad | map('f') | join(', ') }}]
+{% endfor %}

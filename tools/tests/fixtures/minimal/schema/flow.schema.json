@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "Flow": {
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/FlowEdge"
+          },
+          "minItems": 1,
+          "title": "Edges",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "zone": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Zone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "zone",
+        "edges"
+      ],
+      "title": "Flow",
+      "type": "object"
+    },
+    "FlowEdge": {
+      "additionalProperties": false,
+      "description": "One directed link in the process flow.\n\nAn edge list, not per-station ``upstream``/``downstream`` fields: writing\nboth ends of a link is the same fact twice. The generator derives each\nstation's neighbours.",
+      "properties": {
+        "buffer": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Buffer",
+          "type": "integer"
+        },
+        "from": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "To",
+          "type": "string"
+        },
+        "via": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Via"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "FlowEdge",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/flow/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "flow": {
+      "$ref": "#/$defs/Flow"
+    },
+    "schema": {
+      "const": "cite/flow/v1",
+      "enum": [
+        "cite/flow/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "flow"
+  ],
+  "title": "cite/flow/v1",
+  "type": "object"
+}

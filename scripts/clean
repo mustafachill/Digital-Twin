@@ -3,6 +3,14 @@
 #
 #   ./scripts/clean         workspace build/install/log
 #   ./scripts/clean --all   also the Python venv and container volumes
+#
+# EVERY container operation here is scoped to this checkout's compose project,
+# which `compose` in scripts/_lib.sh derives from the checkout's absolute path
+# and passes as `-p`. That is load-bearing rather than tidy: when the project
+# name was a single fixed string shared by every checkout on the host, the
+# `compose down --volumes` below reached into another worktree and destroyed a
+# build that was in progress. Nothing in this script may name a volume or a
+# container absolutely, or it will do that again.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -14,6 +22,26 @@ step "Workspace artifacts"
 rm -rf "${REPO_ROOT}/workspace/build" "${REPO_ROOT}/workspace/install" "${REPO_ROOT}/workspace/log"
 ok "Removed workspace/{build,install,log}"
 
+# On a Docker host those three directories are empty: compose mounts named
+# volumes over them, so the real build output — including the CMake caches that
+# make a stale configuration stick — lives in the volumes and survives the rm
+# above. A clean that leaves the artifacts in place is worse than no clean,
+# because the next build reuses exactly the state the developer was trying to
+# discard. Emptying the volumes needs a container, since only a container can
+# see them.
+if ! in_container && have docker && [ "${ALL:-0}" -eq 0 ]; then
+    step "Container build volumes"
+    if compose run --rm --entrypoint sh dev -c \
+        'rm -rf /workspace/workspace/build/* /workspace/workspace/build/.??* \
+                /workspace/workspace/install/* /workspace/workspace/install/.??* \
+                /workspace/workspace/log/* /workspace/workspace/log/.??* 2>/dev/null; exit 0' \
+        >/dev/null 2>&1; then
+        ok "Emptied ${COMPOSE_PROJECT_NAME}_cite-{build,install,log}"
+    else
+        warn "Could not empty the container build volumes (is the image built?)"
+    fi
+fi
+
 if [ "$ALL" -eq 1 ]; then
     step "Python virtualenv"
     rm -rf "${REPO_ROOT}/.venv"
@@ -21,8 +49,39 @@ if [ "$ALL" -eq 1 ]; then
 
     if ! in_container && have docker; then
         step "Container volumes"
-        compose down --volumes 2>/dev/null || true
-        ok "Removed container volumes"
+        # Scoped by the `-p` that `compose` supplies, so this can only reach the
+        # volumes belonging to this checkout. The project is printed because the
+        # blast radius of this command is the one thing a reader needs to be able
+        # to check, and because it is what makes a mistake here visible before it
+        # costs somebody their build rather than afterwards.
+        info "Project ${COMPOSE_PROJECT_NAME} (${CITE_PROJECT_SOURCE})"
+        if compose down --volumes >/dev/null 2>&1; then
+            ok "Removed ${COMPOSE_PROJECT_NAME}_cite-{build,install,log}"
+        else
+            # Previously `|| true` followed by an unconditional success message,
+            # which reported a clean that had not happened (P7).
+            warn "Could not remove this checkout's container volumes."
+            warn "  Other checkouts' volumes are untouched either way."
+        fi
+
+        # A tripwire, not a cleanup. `cite-digital-twin` is the fallback project
+        # in the compose file, so its volumes are the shared set that every
+        # unisolated checkout writes into. If they are still here, some checkout
+        # on this host is not isolated.
+        #
+        # Reported and deliberately NOT deleted: they may be another worktree's
+        # live build, and destroying one of those is the exact accident that
+        # prompted all of this. `grep -E` reads its input to the end, so there is
+        # no SIGPIPE of the kind `grep -q` caused in exec_in_container; `|| true`
+        # covers the ordinary no-match exit 1 under `set -e`.
+        SHARED_VOLUMES="$(docker volume ls --quiet 2>/dev/null \
+            | grep -E '^cite-digital-twin_cite-(build|install|log)$' || true)"
+        if [ -n "$SHARED_VOLUMES" ]; then
+            warn "The shared fallback volumes exist on this host, and were NOT removed:"
+            printf '%s\n' "$SHARED_VOLUMES" | sed 's/^/    /'
+            warn "  Some checkout is reaching compose without ./scripts/*."
+            warn "  They may be another worktree's live build — do not delete blindly."
+        fi
     fi
 fi
 

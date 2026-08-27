@@ -31,11 +31,17 @@ require_ros_env sim "$@"
 if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
     die "No build found. Run ./scripts/build first."
 fi
-source "${REPO_ROOT}/workspace/install/setup.bash"
+source_overlay
 
-if ! ros2 pkg list 2>/dev/null | grep -q '^cite_bringup$'; then
+# Captured first, then matched against a here-string rather than through a pipe.
+# `grep -q` exits on its first match, which sends SIGPIPE to `ros2 pkg list`, and
+# under `set -o pipefail` that turns a *successful* match into a failed pipeline.
+# The visible effect was this script reporting that cite_bringup is not built
+# whenever it was.
+PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
+if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
     warn "cite_bringup is not built yet — there is nothing to launch."
-    warn "The simulation bringup arrives in Phase 1.C. See CLAUDE.md §2."
+    warn "Run ./scripts/build. See CLAUDE.md §2."
     exit 0
 fi
 

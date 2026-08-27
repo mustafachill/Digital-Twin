@@ -1,0 +1,16 @@
+---
+# yaml-language-server: $schema=../schema/zones.schema.json
+schema: cite/zones/v1
+
+# Zones partition the facility; they do not nest (naming-and-namespaces.md rule
+# 6). Nesting would change every name in the system and needs an ADR.
+zones:
+  - id: cell_a
+    name: Three-arm serial transfer cell
+    bounds:
+      kind: aabb
+      frame: cite_world
+      # Encloses the whole line with roughly a metre of clearance at each end,
+      # and enough height for an arm at full extension.
+      min_m: [-1.000, -1.200, 0.000]
+      max_m: [6.800, 0.800, 2.500]

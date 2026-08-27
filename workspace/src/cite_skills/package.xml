@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_skills</name>
+  <version>0.1.0</version>
+  <description>
+    L3: robot-agnostic capability servers.
+
+    Skills are the vocabulary the system speaks about work. Goals are in task
+    space, never joint space — a joint-space goal leaks the robot's kinematics
+    upward and breaks the promise that swapping an xArm 5 for a different arm
+    changes nothing above this line.
+
+    C++ because every skill sits on a motion path, and cross-cutting-safety.md
+    requires simulation-only code to be audited as if it were hardware code.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>cite_interfaces</depend>
+  <depend>control_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <!-- For `std_msgs/Bool` only, and only as the type `ros_gz_bridge` produces
+       from the break beam's `gz.msgs.Boolean`. It carries a sensor's raw level —
+       one boolean, which is exactly what a through-beam measures — and not
+       structured data; the typed contract is the `DetectionEvent` this package
+       publishes from it. -->
+  <depend>std_msgs</depend>
+
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       package having checked nothing. -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <!-- The downstream-include test configures and compiles a throwaway CMake
+       consumer against the install space, which is Python work rather than a
+       gtest: what is under test is the package's exported CMake interface, not
+       any code inside it. -->
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <!-- The action contract needs a running server to show it, so the integration
+       test brings up move_group against the generated description. No simulator
+       and no controllers: it is the skill server that is under test. -->
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>ament_index_python</test_depend>
+  <test_depend>cite_generated</test_depend>
+  <test_depend>moveit_ros_move_group</test_depend>
+  <test_depend>robot_state_publisher</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <!-- The planning-pipeline launch test speaks to move_group's own services
+       (`query_planner_interface`, `plan_kinematic_path`) rather than through
+       MoveGroupInterface, because the question is what move_group loaded and
+       what it answers — not what a client made of it. -->
+  <test_depend>moveit_msgs</test_depend>
+  <test_depend>shape_msgs</test_depend>
+  <!-- The planning-pipeline launch test loads the cell's generated planning
+       scene into move_group, because ValidateSolution is the only thing that
+       refuses a Pilz path through a table and a rig with an empty world cannot
+       show it. It reads the scene and the generated frame table through
+       cite_facility, which already owns both readers, rather than parsing the
+       generated YAML a second time. cite_facility is below cite_skills in the
+       layer stack, so this is a downward dependency and a test-only one. -->
+  <test_depend>cite_facility</test_depend>
+  <!-- The detection test republishes the beams' generated static transforms,
+       because there is no cite_bringup in that rig to do it. -->
+  <test_depend>tf2_ros</test_depend>
+  <test_depend>xacro</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

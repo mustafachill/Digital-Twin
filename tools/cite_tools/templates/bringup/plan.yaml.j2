@@ -1,0 +1,190 @@
+---
+{{ hash_banner() }}
+#
+# The bring-up plan: what to start, in what order, and what each node needs to
+# know. It is data rather than generated Python on purpose (P5) — the launch
+# mechanism in cite_bringup is written once, reviewed once, and tested once;
+# adding a fourth arm changes this list, not that code.
+#
+# `stage` expresses dependency, not time. The launch mechanism gates each stage
+# on the previous one reporting success, never on a duration (P4).
+plan:
+  zone: {{ cell.zone }}
+  world: package://cite_generated/worlds/{{ cell.zone }}.sdf
+  scene: package://cite_generated/description/{{ cell.zone }}_scene.urdf.xacro
+  static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
+  topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml
+
+  controller_managers:
+{% for manager in managers %}
+    - asset: {{ manager.asset }}
+      node: {{ manager.node }}
+      backend: {{ manager.backend }}
+      # `simulator` means the controller manager is created inside the Gazebo
+      # process by gz_ros2_control, so there is no separate process to wait on —
+      # the spawner's service-availability wait is the synchronisation point.
+      hosted_by: {{ manager.hosted_by }}
+      description_topic: {{ manager.description_topic }}
+      description: {{ manager.description }}
+      # Where this model is placed in the world. Stated here rather than inside
+      # the description, so the description says what the arm IS and the model
+      # says where it stands (L1).
+      spawn_xyz_m: "{{ manager.spawn_xyz_m }}"
+      spawn_rpy_rad: "{{ manager.spawn_rpy_rad }}"
+      parameters: package://cite_generated/control/{{ cell.zone }}_{{ manager.asset }}_controllers.yaml
+{% if manager.trajectory_action %}
+      trajectory_action: {{ manager.trajectory_action }}
+{% endif %}
+{% if manager.gripper_action %}
+      gripper_action: {{ manager.gripper_action }}
+      # The gripper's drive joint travels between these two values in its OWN
+      # units. The skill server maps a task-space width onto it; without the
+      # mapping a width in metres would be commanded as an angle.
+      gripper_open_position: {{ manager.gripper_open_position | f }}
+      gripper_closed_position: {{ manager.gripper_closed_position | f }}
+      # The linkage that converts between the two, and that places the pads on
+      # the tool axis, as seven dimensions of the end effector rather than as two
+      # fitted curves:
+      #   opening(q) = 2*(drive_pivot_y - pad_inset
+      #                   + finger_offset_y*cos(q) - finger_offset_z*sin(q))
+      #   pad_plane_offset(q) = tip_link_z - drive_pivot_z - pad_face_centre_z
+      #                         - (finger_offset_y*sin(q)
+      #                            + finger_offset_z*cos(q))
+      # The widest opening is derived from these, never carried alongside them —
+      # a declared maximum is a second place for one fact to be stated, and the
+      # one it used to state (85 mm, against a true 88.93 mm) was wrong. The
+      # axial map's constant term, 0.0718988 m, is derived for the same reason.
+      #
+      # `pad_plane_offset` is why L3 can be given an object's pose rather than a
+      # tool pose: the planning tip link is the FINGERTIP plane and the pads grip
+      # with their faces, so a skill that planned straight to an object's pose
+      # held it that far off centre. Measured at 24.4 mm, and measured to cause
+      # every work-piece rotation above 20 degrees
+      # (docs/measurements/2026-08-25-grasp-plane-offset/).
+      gripper_drive_pivot_y_m: {{ manager.gripper_drive_pivot_y_m | f }}
+      gripper_drive_pivot_z_m: {{ manager.gripper_drive_pivot_z_m | f }}
+      gripper_finger_offset_y_m: {{ manager.gripper_finger_offset_y_m | f }}
+      gripper_finger_offset_z_m: {{ manager.gripper_finger_offset_z_m | f }}
+      gripper_pad_inset_m: {{ manager.gripper_pad_inset_m | f }}
+      gripper_tip_link_z_m: {{ manager.gripper_tip_link_z_m | f }}
+      gripper_pad_face_centre_z_m: {{ manager.gripper_pad_face_centre_z_m | f }}
+{% if manager.gripper_goal_tolerance_rad is not none %}
+      # The gripper controller's own goal tolerance, delivered to L3 because the
+      # skill server needs it to judge a grasp: the controller ends a goal as soon
+      # as |error| < goal_tolerance, so the position it reports is systematically
+      # short of the command, and that bias has to be exceeded before a width
+      # margin means anything. Same number the controller is configured with.
+      gripper_goal_tolerance_rad: {{ manager.gripper_goal_tolerance_rad | f }}
+{% endif %}
+{% if manager.gripper_max_drive_rate_rad_s is not none %}
+      # How fast the drive joint may travel, rad/s, in either direction. Carried
+      # to L3 for the same reason `gripper_goal_tolerance_rad` is: a skill that
+      # waits for a grasp has to know how long the stroke can legitimately take
+      # before a timeout means anything, and deriving that from a hardcoded guess
+      # would put the gripper's speed in a second place.
+      #
+      # It is also the value the Phase 2 hardware bring-up must convert. The
+      # physical gripper is not a `ros2_control` joint at all — `uf_robot_hardware`
+      # exports interfaces for joint1..5 only and drives the gripper through
+      # `xarm_api`'s service layer, whose speed argument is in motor r/min. The
+      # declaration transfers; the mechanism does not. See the fix report.
+      gripper_max_drive_rate_rad_s: {{ manager.gripper_max_drive_rate_rad_s | f }}
+{% endif %}
+{% if manager.gripper_default_grasp_width_m is not none %}
+      # What a Pick closes to when its goal names no width. Narrower than the
+      # work-piece on purpose: a parallel gripper evidences a grasp by failing to
+      # reach where it was sent, so a width equal to the part teaches the skill
+      # nothing (ADR-0022). Its ceiling is derived and enforced in
+      # cite_tools.validate.physical.
+      gripper_default_grasp_width_m: {{ manager.gripper_default_grasp_width_m | f }}
+{% endif %}
+{% endif %}
+{% if manager.skills %}
+      # The L3 actions this arm's skill server advertises. L4 read these as
+      # parallel parameter arrays supplied by whoever launched the coordinator,
+      # which is an asset name assembled outside the model — the one thing
+      # CLAUDE.md §8 forbids. They are generated by `ids.py` here instead, so
+      # what the server advertises and what the coordinator calls are one
+      # statement.
+      skills:
+        move_to: {{ manager.skills.move_to }}
+        pick: {{ manager.skills.pick }}
+        place: {{ manager.skills.place }}
+        grasp: {{ manager.skills.grasp }}
+        transfer: {{ manager.skills.transfer }}
+{% endif %}
+      controllers:
+{% for controller in manager.controllers %}
+        - {name: {{ controller.name }}, stage: {{ controller.stage }}}
+{% endfor %}
+{% if manager.planning_group %}
+      moveit:
+        group: {{ manager.planning_group }}
+        base_link: {{ manager.planning_base_link }}
+        tip_link: {{ manager.planning_tip_link }}
+        # The home configuration comes from L0: where an arm rests between cycles
+        # is a fact about this facility, not about the vendor's robot.
+        home_rad: [{{ manager.home_rad | map('m') | join(', ') }}]
+        srdf: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}.srdf.xacro
+        kinematics: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_kinematics.yaml
+        planning_pipelines: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_planning_pipelines.yaml
+        joint_limits: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_joint_limits.yaml
+        cartesian_limits: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_cartesian_limits.yaml
+        controllers: package://cite_generated/moveit/{{ cell.zone }}_{{ manager.asset }}_moveit_controllers.yaml
+        # Which pipeline the L3 skill server asks first, and what it falls back
+        # to when that one refuses (ADR-0027). Here rather than compiled into the
+        # server: a planner choice is a claim about this arm, and the server's
+        # own parameter names are these names, so nothing maps one to the other.
+        default_pipeline: {{ manager.default_pipeline }}
+        default_planner_id: "{{ manager.default_planner_id }}"
+        fallback_pipeline: {{ manager.fallback_pipeline }}
+        fallback_planner_id: "{{ manager.fallback_planner_id }}"
+        # Of the planner ids those pipelines register, the ones that define the
+        # SHAPE of the path. The server refuses to let the fallback answer such a
+        # request: a sampling planner would return a curve through the same
+        # endpoints and the skill would report success (ADR-0027).
+        cartesian_planner_ids: [{{ manager.cartesian_planner_ids | join(', ') }}]
+{% endif %}
+{% endfor %}
+
+  conveyors:
+{% for conveyor in conveyors %}
+    - asset: {{ conveyor.asset }}
+      state_topic: {{ conveyor.state_topic }}
+      command_topic: {{ conveyor.command_topic }}
+      installed_speed_mps: {{ conveyor.installed_speed_mps | m }}
+{% endfor %}
+
+  # A break beam has TWO topics and they are deliberately not the same name.
+  #
+  #   detection_topic — the TYPED `DetectionEvent`. The name a station's trigger
+  #                     in the process topology already subscribes to, and also
+  #                     the name the break-beam plugin advertises on the GAZEBO
+  #                     transport: both come from one call to `ids.interface`.
+  #   level_topic     — where the bridge lands the RAW `std_msgs/Bool` level in
+  #                     ROS. Bridging the level onto `detection_topic` would put
+  #                     two publishers of two different types on the one topic the
+  #                     line acts on, and they would fight over it.
+  #
+  # They are different interfaces, not two names for one: the level is a state
+  # republished periodically and a dropped sample is recovered by the next; the
+  # event is an edge that must not be dropped at all. L3 turns one into the other.
+  sensors:
+{% for sensor in sensors %}
+    - asset: {{ sensor.asset }}
+      detection_topic: {{ sensor.detection_topic }}
+      level_topic: {{ sensor.level_topic }}
+      # The frame a detection from this beam is reported in, published by the
+      # generated static TF table.
+      frame_id: {{ sensor.frame_id }}
+      beam_axis: {{ sensor.beam_axis }}
+      beam_length_m: {{ sensor.beam_length_m | m }}
+{% endfor %}
+{% if detection %}
+
+  # L3 detection for the whole zone: one server for every beam, because a beam
+  # watches a belt rather than a robot.
+  detection:
+    namespace: {{ detection.namespace }}
+    detect_action: {{ detection.detect_action }}
+{% endif %}

@@ -1,6 +1,8 @@
 # Standards alignment
 
-- **Status:** `DESIGNED` — the mapping is defined; the layers it maps are not yet built.
+- **Status:** `DESIGNED` — the mapping is defined and none of it has been demonstrated.
+  L0–L4 exist in part (see each layer document); L5–L7, which carry most of what ISO 23247
+  would recognise as a twin rather than a simulation, do not exist at all.
 - **Related:** [ADR-0016](../adr/0016-iso-23247-alignment.md), [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), [`../reference/standards.md`](../reference/standards.md)
 
 This document maps the CITE Digital Twin architecture onto **ISO 23247**, reconciles our

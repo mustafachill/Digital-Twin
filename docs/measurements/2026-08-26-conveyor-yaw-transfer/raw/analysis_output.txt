@@ -1,0 +1,184 @@
+
+==============================================================================
+ARM A — the belt's yaw transfer function
+==============================================================================
+trials recorded 36, ok 36
+
+==============================================================================
+G — gates (evaluated before any effect)
+==============================================================================
+G1 travelled >= 0.9 m : 36/36 pass
+   travelled_m  min 1.052  median 1.079  max 1.105
+G2 negative control (name outside the <carry> list): n=3, travelled_m max 0.0000
+   -> PASS - the gate discriminates
+G3 tilt <= 5.0 deg at the read : 36/36 pass
+G4 still on the belt at the read : 36/36 pass
+G5 the input was actually set (|settled - commanded| <= 2.0 deg):
+     0.0 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+     5.0 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+    10.0 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+    18.7 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+    30.0 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+    45.0 deg : n= 6  median |err| 0.0000 deg  max 0.0000  ok
+   -> PASS
+
+valid trials for the effect: 36
+
+==============================================================================
+H1 — does a conveyor ride change the yaw?
+==============================================================================
+  level      mode   n   settled   at read  med |d|  p95 |d|  presented
+    0.0   indexed   3     0.000     0.000   0.0000   0.0000      50.00
+    0.0   running   3     0.000     0.000   0.0000   0.0000      50.00
+    5.0   indexed   3     5.000     5.000   0.0000   0.0000      54.17
+    5.0   running   3     5.000     5.000   0.0000   0.0000      54.17
+   10.0   indexed   3    10.000    10.000   0.0000   0.0000      57.92
+   10.0   running   3    10.000    10.000   0.0000   0.0000      57.92
+   18.7   indexed   3    18.700    18.700   0.0000   0.0000      63.39
+   18.7   running   3    18.700    18.700   0.0000   0.0000      63.39
+   30.0   indexed   3    30.000    30.000   0.0000   0.0000      68.30
+   30.0   running   3    30.000    30.000   0.0000   0.0000      68.30
+   45.0   indexed   3    45.000    45.000   0.0000   0.0000      70.71
+   45.0   running   3    45.000    45.000   0.0000   0.0000      70.71
+
+pooled |delta|: n=36  median 0.0000 deg  p95 0.0000 deg  max 0.0000 deg
+signed delta: median -0.0000 deg  bootstrap 95% CI [-0.00000, -0.00000] deg
+-> H1 verdict: the belt PRESERVES the yaw (thresholds: preserve median<=2.0, p95<=5.0)
+
+==============================================================================
+H2 — is the part still turning when it arrives?
+==============================================================================
+|yaw rate| at the read: n=36  median 0.0000 deg/s  max 0.0000 deg/s
+turning faster than 1.0 deg/s: 0/36  Wilson 95% [0.000, 0.096]
+-> H2 verdict: SETTLED
+
+==============================================================================
+H3 — does stopping the belt change the answer?
+==============================================================================
+paired |read - after stop|: n=36  median 0.0000 deg  max 0.0000 deg
+running delta  n=18 median -0.0000 deg
+indexed delta  n=18 median -0.0000 deg
+two-sided permutation p = 0.7417 (100 000 perms, seed 20260825)
+-> H3 verdict: stopping the belt does NOT change the answer
+
+==============================================================================
+ARM D — the shipped path, end to end
+==============================================================================
+trials recorded 12, ok 12
+
+==============================================================================
+H5 — what the shipped path delivers
+==============================================================================
+yaw as DEPOSITED on the belt : n=12 median 0.711 deg  p95 3.030  max 10.615 deg
+yaw AT THE OUTFEED           : n=12 median 0.711 deg  p95 3.030  max 10.615 deg
+presented at the outfeed     : median 50.62 mm  max 58.35 mm
+ride contribution |delta|    : median 0.0000 deg  max 0.0000 deg
+
+spin as deposited: median 0.0000 deg/s  max 0.0000  >1.0 deg/s in 0/12 Wilson [0.000, 0.243]
+spin at the outfeed: median 0.0000 deg/s  max 0.0000  >1.0 deg/s in 0/12
+
+left the belt before being picked: 0/12
+
+per trial:
+trial      mode  deposited   at read    delta  presented  placed
+    1   running      0.115     0.115   -0.000      50.10    True
+    2   indexed      0.161     0.161   -0.000      50.14    True
+    3   running      0.828     0.828   -0.000      50.72    True
+    4   indexed     10.615    10.615   -0.000      58.35    True
+    5   running      0.404     0.404   -0.000      50.35    True
+    6   indexed      0.834     0.834   -0.000      50.72    True
+    7   running      0.291     0.291   -0.000      50.25    True
+    8   indexed      0.147     0.147   -0.000      50.13    True
+    9   running      0.594     0.594   -0.000      50.52    True
+   10   indexed      3.030     3.030   -0.000      52.57    True
+   11   running      2.437     2.437   -0.000      52.08    True
+   12   indexed      1.658     1.658   -0.000      51.43    True
+
+`pick_reported_holding` is NOT reported for this arm: the block was run with a
+harness that read it from the wrong field. See deviation 3. That the gripper was
+holding is evidenced instead by `Place` succeeding with require_holding=True, and by
+the part physically arriving on the belt.
+
+==============================================================================
+ARM C — where does the grasp boundary fall?
+==============================================================================
+trials 23  (blocks: {'graspyaw': 7, 'graspyaw2': 16})
+
+==============================================================================
+G6 — did the arm get a grasp to measure?
+==============================================================================
+Pick returned SUCCESS: 23/23
+     0.0 deg : 5/5 reached a grasp
+     5.0 deg : 4/4 reached a grasp
+    10.0 deg : 4/4 reached a grasp
+    15.0 deg : 4/4 reached a grasp
+    20.0 deg : 3/3 reached a grasp
+    30.0 deg : 3/3 reached a grasp
+
+==============================================================================
+H4 — physical grasp success by spawn yaw
+==============================================================================
+`grasp_ok` = lift>0.05 m AND held_through_transport AND place_err<=0.05 m.
+NOT `pick_reported_holding`, which is true by construction at every yaw.
+
+   yaw  presented   n  holding  grasp_ok   rate         Wilson 95%
+   0.0      50.00   5   5/5      5/5       1.00 [0.566, 1.000]
+   5.0      54.17   4   4/4      4/4       1.00 [0.510, 1.000]
+  10.0      57.92   4   4/4      4/4       1.00 [0.510, 1.000]
+  15.0      61.24   4   4/4      4/4       1.00 [0.510, 1.000]
+  20.0      64.09   3   3/3      3/3       1.00 [0.438, 1.000]
+  30.0      68.30   3   3/3      3/3       1.00 [0.438, 1.000]
+
+Fisher exact against the 0 deg cell:
+     5.0 deg : p = 1.00000
+    10.0 deg : p = 1.00000
+    15.0 deg : p = 1.00000
+    20.0 deg : p = 1.00000
+    30.0 deg : p = 1.00000
+
+theta_safe (largest level with Wilson lower bound >= 0.80): NONE OF THE TESTED LEVELS
+theta_fail (smallest level with Wilson upper bound <= 0.50): none of the tested levels
+
+POWER. With k = n, the Wilson lower bound is n/(n+3.8416). Clearing 0.80 needs n >= 16
+in a single cell; the largest cell here is 5. The per-level rule is therefore UNDERPOWERED,
+and theta_safe is reported above as undetermined rather than as a failure of the gripper.
+pooled  0-30 deg (all levels): 23/23  Wilson 95% [0.857, 1.000]
+pooled  5-30 deg (yawed only): 18/18  Wilson 95% [0.824, 1.000]
+
+==============================================================================
+POST-HOC — does closing the jaws square the part up?
+==============================================================================
+Not pre-registered. Reported because it changes what the Arm C rate means.
+
+blk/tr  yaw in   before    carry    after  stall mm  pred mm  squared?
+1/1       0.0     0.00     0.17     0.00     49.87    50.00          
+1/2       5.0     5.00     0.04     1.12     49.90    54.17       yes
+1/3      10.0    10.00     0.02     0.63     49.85    57.92       yes
+1/4      15.0    15.00     0.00     1.80     49.16    61.24       yes
+1/5      20.0    20.00     0.04     0.64     49.73    64.09       yes
+1/6      30.0    30.00     0.03     0.02     49.64    68.30       yes
+1/7       0.0     0.00     0.22     5.86     48.79    50.00          
+2/1       0.0     0.00     0.01     3.50     49.64    50.00          
+2/2       5.0     5.00     0.37     0.69     49.37    54.17       yes
+2/3      10.0    10.00     0.01     1.62     48.97    57.92       yes
+2/4      15.0    15.00     0.03     0.08     49.37    61.24       yes
+2/5      20.0    20.00     0.01     0.70     49.86    64.09       yes
+2/6      30.0    30.00     0.07     0.75     50.02    68.30       yes
+2/7       0.0     0.00     0.33     0.10     49.85    50.00          
+2/8       5.0     5.00     0.01     0.22     49.88    54.17       yes
+2/9      10.0    10.00     0.01     0.01     49.79    57.92       yes
+2/10     15.0    15.00     0.00     0.04     49.84    61.24       yes
+2/11     20.0    20.00     0.00     0.23     49.77    64.09       yes
+2/12     30.0    30.00     0.01     0.01     49.96    68.30       yes
+2/13      0.0     0.00     0.01     0.88     49.13    50.00          
+2/14      5.0     5.00     0.06     4.20     49.74    54.17       yes
+2/15     10.0    10.00     0.03     1.26     49.91    57.92       yes
+2/16     15.0    15.00     0.01     0.05     48.99    61.24       yes
+
+  level   n   median yaw in carry   median stall mm  predicted mm
+    0.0   5                  0.17             49.64         50.00
+    5.0   4                  0.06             49.88         54.17
+   10.0   4                  0.02             49.85         57.92
+   15.0   4                  0.01             49.37         61.24
+   20.0   3                  0.01             49.77         64.09
+   30.0   3                  0.03             49.96         68.30

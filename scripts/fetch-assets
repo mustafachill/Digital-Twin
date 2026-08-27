@@ -14,10 +14,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 MANIFEST="${REPO_ROOT}/assets/manifest.yaml"
 [ -f "$MANIFEST" ] || die "No asset manifest at assets/manifest.yaml"
 
-PY="${REPO_ROOT}/.venv/bin/python"
-[ -x "$PY" ] || PY="${CITE_VENV:-/opt/cite-venv}/bin/python"
+PY="$(cite_python)" || true
 [ -x "$PY" ] || PY="$(command -v python3 || true)"
 [ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
+
+# The fetcher writes into this checkout's assets/, so it has to be this
+# checkout's fetcher deciding what and where.
+require_local_cite_tools "$PY" "The asset fetcher"
 
 ENTRIES=$("$PY" - "$MANIFEST" <<'PYEOF'
 import sys, yaml

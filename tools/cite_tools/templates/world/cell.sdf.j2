@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<sdf version="1.9">
+  <world name="{{ cell.zone }}">
+    <physics name="default" type="ignored">
+      <max_step_size>{{ step_size | m }}</max_step_size>
+      <real_time_factor>{{ real_time_factor | m }}</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <!-- Contact reporting. Kept deliberately, though nothing in this repository
+         reads it today: it was loaded for ADR-0023's attachment plugin, which is
+         removed, and it is what any `<sensor type="contact">` a scenario declares
+         would need. It is a generic simulator capability rather than plugin
+         apparatus, so it is left in place rather than removed and rediscovered. -->
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+
+{% for conveyor in conveyors %}
+    <!-- {{ conveyor.asset }} — a belt, as a simulation fidelity aid.
+
+         A world system rather than a model plugin, because converting the scene
+         from URDF to SDF lumps every fixed-jointed body into one link: there is
+         no {{ conveyor.asset }} model in the spawned world to attach to. Every
+         value below is resolved from L0, including the pose, which comes from
+         the same surface frame the stations pick and place against.
+
+         Nothing above ros2_control knows this exists. It speaks Gazebo transport
+         only; naming and typing it for ROS is a bridge's business, above this
+         boundary and identical on the hardware path. -->
+    <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
+      <surface_pose>{{ conveyor.surface_pose | map('m') | join(' ') }}</surface_pose>
+      <belt_length_m>{{ conveyor.length_m | m }}</belt_length_m>
+      <belt_width_m>{{ conveyor.width_m | m }}</belt_width_m>
+      <carry_height_m>{{ conveyor.carry_height_m | m }}</carry_height_m>
+      <direction>{{ conveyor.direction }}</direction>
+      <installed_speed_mps>{{ conveyor.installed_speed_mps | m }}</installed_speed_mps>
+      <command_topic>{{ conveyor.command_topic }}</command_topic>
+      <state_topic>{{ conveyor.state_topic }}</state_topic>
+      <publish_period_s>{{ publish_period_s | m }}</publish_period_s>
+{% for model in workpieces %}
+      <carry>{{ model }}</carry>
+{% endfor %}
+    </plugin>
+
+{% endfor %}
+{% for beam in beams %}
+    <!-- {{ beam.asset }} — a through-beam presence sensor.
+
+         A world system for the same reason the belts are: its housing is lumped
+         into the scene's single link, so there is no {{ beam.asset }} model to
+         attach to and its pose has to arrive as data. It is resolved from the
+         same L0 placement that positions the housing, so the beam and the thing
+         it is drawn as cannot end up in different places.
+
+         beam_pose is where the HOUSING stands. beam_offset_m is how far past it,
+         along the beam axis, the middle of the beam lies — because a through
+         beam is emitted from its housing and crosses what it watches, rather
+         than being centred on it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>{{ beam.beam_pose | map('m') | join(' ') }}</beam_pose>
+      <beam_axis>{{ beam.beam_axis }}</beam_axis>
+      <beam_length_m>{{ beam.beam_length_m | m }}</beam_length_m>
+      <beam_width_m>{{ beam.beam_width_m | m }}</beam_width_m>
+      <beam_offset_m>{{ beam.beam_offset_m | m }}</beam_offset_m>
+      <state_topic>{{ beam.detection_topic }}</state_topic>
+      <publish_period_s>{{ publish_period_s | m }}</publish_period_s>
+{% for model in workpieces %}
+      <watch>{{ model }}</watch>
+{% endfor %}
+    </plugin>
+
+{% endfor %}
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>{{ ground_size | m }} {{ ground_size | m }}</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>{{ ground_size | m }} {{ ground_size | m }}</size></plane></geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

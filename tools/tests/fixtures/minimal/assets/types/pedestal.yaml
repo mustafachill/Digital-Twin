@@ -1,0 +1,14 @@
+---
+schema: cite/asset_type/v1
+asset_type:
+  id: pedestal
+  category: fixture
+  frames:
+    - id: top
+      xyz_m: [0.0, 0.0, 0.6]
+  description:
+    provider: body
+    body:
+      visual: {kind: box, size_m: [0.3, 0.3, 0.6]}
+      collision: {kind: box, size_m: [0.3, 0.3, 0.6]}
+      inertial: {mass_kg: 40.0, ixx: 1.5, iyy: 1.5, izz: 1.0}

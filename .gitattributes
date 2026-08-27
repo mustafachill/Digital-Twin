@@ -1,0 +1,6 @@
+# The generated package is committed (ADR-0021) so that the hand-edit check has
+# something to compare a fresh generator run against. Marking it generated
+# collapses it in review by default, which is the mitigation that ADR names for
+# the diff noise this arrangement costs — it stays fully diffable when opened.
+workspace/src/cite_generated/** linguist-generated=true
+model/schema/*.schema.json linguist-generated=true

@@ -1,0 +1,18 @@
+# Place a held object: approach, release, and retreat.
+
+geometry_msgs/PoseStamped target_pose
+float64 approach_distance_m             # m
+float64 retreat_distance_m              # m
+bool require_holding                    # fail rather than mime a place when the
+                                        # gripper reports nothing held
+---
+ResultCode result
+geometry_msgs/PoseStamped release_pose
+builtin_interfaces/Duration duration
+---
+uint8 PHASE_PLANNING=0
+uint8 PHASE_APPROACHING=1
+uint8 PHASE_RELEASING=2
+uint8 PHASE_RETREATING=3
+uint8 phase
+float64 fraction_complete               # 0..1

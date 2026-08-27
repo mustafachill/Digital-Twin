@@ -1,0 +1,30 @@
+# Bring a held work-piece to a handoff pose, signal ready, and wait for release.
+#
+# Deliberately single-robot (ADR-0024). It takes a pose and an opaque rendezvous
+# token, never a peer's identity, so a skill never knows which robot — if any —
+# is on the other side. L4 owns the ownership transfer and the two-party
+# confirmation; this action owns only the motion.
+#
+# That split is what makes a handoff testable in isolation, which is what v1's
+# handoff protocol never was: it published to a topic nothing subscribed to and
+# every transaction timed out forever, with no test able to notice.
+
+geometry_msgs/PoseStamped handoff_pose
+string rendezvous_token                 # issued by L4; opaque to this layer
+string workpiece_id
+builtin_interfaces/Duration hold_timeout  # bounded, with a defined outcome: on
+                                        # expiry the piece is still held and the
+                                        # result is TIMEOUT, never a silent drop
+---
+ResultCode result
+bool still_holding                      # true after a TIMEOUT — the upstream
+                                        # robot retains ownership
+builtin_interfaces/Duration duration
+---
+uint8 PHASE_PLANNING=0
+uint8 PHASE_APPROACHING=1
+uint8 PHASE_WAITING_FOR_PEER=2
+uint8 PHASE_RELEASING=3
+uint8 PHASE_RETREATING=4
+uint8 phase
+builtin_interfaces/Duration waited

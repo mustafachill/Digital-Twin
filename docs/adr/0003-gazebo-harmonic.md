@@ -92,6 +92,25 @@ with `gz_ros2_control` providing the simulated hardware interface.
   > defensible. But it should rest on that judgement, stated openly, rather than on the
   > claim that no alternative exists. Evaluate `conveyor_sim_ros2` before writing the
   > plugin in Phase 1.C.
+  >
+  > **Evaluated 2026-08-24. We write our own — for the interface, not for the physics.**
+  >
+  > What it gets right: it genuinely targets ROS 2 Jazzy and Gazebo Harmonic, it is MIT
+  > licensed, and it works. The maintenance concern above turned out not to be the
+  > deciding factor.
+  >
+  > What rules it out is its contract. It is controlled by publishing a
+  > `std_msgs/msg/Float64` to a fixed `/conveyor/cmd_vel`, and that is disqualifying three
+  > times over: an untyped scalar carrying a command is what `CLAUDE.md` §4 prohibits and
+  > what ADR-0010 exists to prevent; a hardcoded global topic cannot be instantiated three
+  > times under `/cite/<zone>/<asset_id>/command`, which is the naming P2 is made of; and
+  > it reports no state, so a belt commanded to run and not moving is invisible — exactly
+  > the failure a line must notice. It is also a model plus a bridge rather than a system
+  > plugin, so it cannot be attached per-asset to a world generated from L0.
+  >
+  > Adapting it would mean wrapping it in a typed, namespaced interface that reports
+  > measured as well as commanded speed — which is most of the work, with a dependency
+  > still underneath. The belt physics is the small part; the contract is the point.
 - Every sensor must be re-specified against the Gazebo Sim sensor system and bridged
   through `ros_gz_bridge`. Classic's `libgazebo_ros_*` plugins do not exist here.
 - World and model files are regenerated, not ported — which ADR-0004 requires regardless.

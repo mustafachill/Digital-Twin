@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ cell.zone }}">
+
+  <!-- Anchor the cell furniture to the world.
+
+       Every link below is joined by a fixed joint, so converting this URDF to
+       SDF lumps the whole cell into ONE link. Without this the simulator gets a
+       single free rigid body of a few hundred kilograms resting on the ground
+       plane by contact friction alone: joint reaction torques from three arms
+       slide it, and the symptom is base drift that reads as a calibration fault
+       and gets debugged in the wrong layer.
+
+       `static` rather than a fixed joint to a link named `world`: nothing here
+       has a joint that moves, and a `world` link would also become a second TF
+       parent for every body — `robot_state_publisher` would publish it
+       alongside the generated static transform table, giving one frame two
+       parents. Static costs the physics engine nothing and changes no name. -->
+  <gazebo>
+    <static>true</static>
+  </gazebo>
+
+  <!-- The facility root. Tied to the surveyed physical origin (L5); every frame
+       below is expressed relative to it. -->
+  <link name="{{ world_frame }}"/>
+
+{% for asset in bodies %}
+  <!-- {{ asset.id }} — {{ asset.asset_type.id }} -->
+  <link name="{{ asset.prefix }}base_link">
+    <inertial>
+      <!-- The body's pose names the point it stands on, so the mass sits half a
+           height above the link origin. `com_m` is measured from the box centre
+           and the tensor beside it is centroidal; declaring both at the foot
+           states a centroidal tensor about a point up to 0.3 m from the mass. -->
+      <origin xyz="{{ asset.inertial_origin_m | triple }}" rpy="0 0 0"/>
+      <mass value="{{ asset.body.inertial.mass_kg | m }}"/>
+      <inertia ixx="{{ asset.body.inertial.ixx | m }}" ixy="{{ asset.body.inertial.ixy | m }}"
+               ixz="{{ asset.body.inertial.ixz | m }}" iyy="{{ asset.body.inertial.iyy | m }}"
+               iyz="{{ asset.body.inertial.iyz | m }}" izz="{{ asset.body.inertial.izz | m }}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 {{ asset.half_height | m }}" rpy="0 0 0"/>
+      <geometry>{{ asset.visual_xml }}</geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 {{ asset.half_height | m }}" rpy="0 0 0"/>
+      <geometry>{{ asset.collision_xml }}</geometry>
+    </collision>
+  </link>
+  <joint name="{{ asset.prefix }}anchor" type="fixed">
+    <parent link="{{ world_frame }}"/>
+    <child link="{{ asset.prefix }}base_link"/>
+    <origin xyz="{{ asset.world_pose.xyz_m | triple }}" rpy="{{ asset.world_pose.rpy_rad | triple }}"/>
+  </joint>
+{% for frame in asset.named_frames %}
+  <link name="{{ frame.name }}"/>
+  <joint name="{{ frame.name }}_fixed" type="fixed">
+    <parent link="{{ asset.prefix }}base_link"/>
+    <child link="{{ frame.name }}"/>
+    <origin xyz="{{ frame.xyz_m | triple }}" rpy="{{ frame.rpy_rad | triple }}"/>
+  </joint>
+{% endfor %}
+
+{% endfor %}
+</robot>

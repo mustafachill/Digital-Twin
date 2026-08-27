@@ -1,0 +1,34 @@
+interleaving commanded grasp heights [0.03, 0.0058] against one cell
+pick frame  cell_a__table_pick__surface at (-0.475, 0.0, 0.6)
+place frame cell_a__conveyor_1__infeed at (0.45, 0.0, 0.6)
+waiting for the whole stack to be up and matched...
+stack ready
+recording from /world/cell_a/dynamic_pose/info
+arm model arm_1 world position (0.0, -0.35, 0.6)
+
+=== trial 1/20  model=probe_part_paired_fine_001 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [interleave] trial 1: commanded grasp height 0.0300 m
+  [diag] pose feed carries 41 entities; matching: ['arm_1_left_finger', 'arm_1_right_finger', 'arm_2_left_finger', 'arm_2_right_finger', 'arm_3_left_finger', 'arm_3_right_finger', 'probe_part_paired_fine_001']
+  [diag] arm world pose p=(0.0, -0.35, 0.6) q=(0.0, 0.0, 0.7071067823197225, 0.7071067800533724)
+  [diag] pad composed into world: (0.011951692439873707, 0.14977122819911926, 1.143528139243297) (gz model -m arm_1 -p said (0.0, -0.35, 0.6))
+  {"trial": 1, "label": "paired_fine", "model": "probe_part_paired_fine_001", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 106.3, "t_grasp_sim": 33.801500000000004, "t_release_sim": 45.906000000000006, "q_at_stall_rad": 0.4059503655552372, "note": "", "z_rest": 0.624999, "z_max": 0.7407157511567457, "lift_m": 0.11571675115674573, "n_samples_wp": 6339, "n_samples_pad": 6339, "v_max_mps": 0.22399950882813544, "carry_samples": 2391, "carry_duration_s": 12.095500000000001, "lifted_during_carry": true, "z_min_during_carry": 0.6249986518594629, "twist_max_deg": 29.322111497432495, "twist_final_deg": 19.73518748455047, "pad_distance_drift_mm_max": 5.707180308362979, "slip_max_mm": 15.192616684470313, "slip_final_mm": 10.604964987053695, "slip_rate_mm_per_s": 0.7185897514741366, "held_through_transport": true, "pad_separation_mm_min": 101.8031481146355, "pad_separation_mm_max": 102.00418694149873, "pad_separation_mm_mean": 101.89424432826792, "place_err_m": 0.017885885030831612}
+
+=== trial 2/20  model=probe_part_paired_fine_002 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [interleave] trial 2: commanded grasp height 0.0058 m
+  {"trial": 2, "label": "paired_fine", "model": "probe_part_paired_fine_002", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 82.6, "t_grasp_sim": 71.1885, "t_release_sim": 83.224, "q_at_stall_rad": 0.4148510575274731, "note": "", "z_rest": 0.624999, "z_max": 0.7571266345110049, "lift_m": 0.13212763451100495, "n_samples_wp": 5003, "n_samples_pad": 5003, "v_max_mps": 3.35848970325022, "carry_samples": 2496, "carry_duration_s": 12.034999999999997, "lifted_during_carry": true, "z_min_during_carry": 0.6250041430745251, "twist_max_deg": 0.36833983136132814, "twist_final_deg": 0.09206405111911768, "pad_distance_drift_mm_max": 1.0638824319660927, "slip_max_mm": 1.46680464954228, "slip_final_mm": 1.46680464954228, "slip_rate_mm_per_s": 0.13233751801317026, "held_through_transport": true, "pad_separation_mm_min": 101.13363847941072, "pad_separation_mm_max": 101.86968217039967, "pad_separation_mm_mean": 101.54028541097134, "place_err_m": 0.03217129739891071}
+
+=== trial 3/20  model=probe_part_paired_fine_003 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [interleave] trial 3: commanded grasp height 0.0300 m
+  {"trial": 3, "label": "paired_fine", "model": "probe_part_paired_fine_003", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 70.9, "t_grasp_sim": 106.90750000000001, "t_release_sim": 118.99400000000001, "q_at_stall_rad": 0.40764543544958864, "note": "", "z_rest": 0.624999, "z_max": 0.7440568109455906, "lift_m": 0.11905781094559065, "n_samples_wp": 4373, "n_samples_pad": 4373, "v_max_mps": 3.320986290213661, "carry_samples": 1928, "carry_duration_s": 12.076999999999998, "lifted_during_carry": true, "z_min_during_carry": 0.6250097335045909, "twist_max_deg": 11.250934759562755, "twist_final_deg": 11.250934759562755, "pad_distance_drift_mm_max": 4.279728798282491, "slip_max_mm": 6.811653863647722, "slip_final_mm": 6.803730189319095, "slip_rate_mm_per_s": 0.6864649509996005, "held_through_transport": true, "pad_separation_mm_min": 99.9124794231527, "pad_separation_mm_max": 101.9236102289933, "pad_separation_mm_mean": 100.85568894690209, "place_err_m": 0.06763420126581246}
+
+=== trial 4/20  model=probe_part_paired_fine_004 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [interleave] trial 4: commanded grasp height 0.0058 m
+  {"trial": 4, "label": "paired_fine", "model": "probe_part_paired_fine_004", "plugin_can_fire": false, "mu": 1.0, "homed": true, "pick_succeeded": true, "pick_reported_holding": true, "place_succeeded": true, "wall_s": 76.0, "t_grasp_sim": 143.637, "t_release_sim": 155.673, "q_at_stall_rad": 0.4124665169394449, "note": "", "z_rest": 0.624999, "z_max": 0.7579365486660439, "lift_m": 0.1329375486660439, "n_samples_wp": 4662, "n_samples_pad": 4662, "v_max_mps": 3.303668953458389, "carry_samples": 2286, "carry_duration_s": 12.031499999999994, "lifted_during_carry": true, "z_min_during_carry": 0.6250076084487585, "twist_max_deg": 0.37063383774143754, "twist_final_deg": 0.06474750540314347, "pad_distance_drift_mm_max": 0.6120071088422634, "slip_max_mm": 0.8843447150315802, "slip_final_mm": 0.8843447150315802, "slip_rate_mm_per_s": 0.08048627447095266, "held_through_transport": true, "pad_separation_mm_min": 101.34310531354286, "pad_separation_mm_max": 101.89497253401159, "pad_separation_mm_mean": 101.66199279577367, "place_err_m": 0.07348409154384898}
+
+=== trial 5/20  model=probe_part_paired_fine_005 ===
+  settled at (-0.475, -0.0, 0.624999)
+  [interleave] trial 5: commanded grasp height 0.0300 m

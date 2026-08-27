@@ -5,8 +5,8 @@
 | | |
 |---|---|
 | **Owner** | Center for Innovation, Technology and Entrepreneurship (CITE), Sam Houston State University |
-| **Document version** | 1.4 |
-| **Date** | 2026-08-24 |
+| **Document version** | 1.7 |
+| **Date** | 2026-08-27 |
 | **Status** | Active — this is the authoritative source of truth |
 
 ---
@@ -293,7 +293,15 @@ Digital-Twin/
 │
 ├── workspace/src/                ← The ROS 2 workspace               (Phase 1.B)
 │   ├── cite_interfaces/          ←   L3-L5: typed messages, services, actions
-│   ├── cite_facility/            ←   L0-L1: model loading, validation, generators
+│   ├── cite_runtime/             ←   process lifecycle mechanism only (ADR-0034)
+│   ├── cite_facility/            ←   L0-L1 at runtime: serves the generated model
+│   │                                 version, the frame and namespace plan, and the
+│   │                                 process topology as a typed LineTopology; loads
+│   │                                 the generated planning scene into MoveIt
+│   ├── cite_generated/           ←   every artifact generated from L0: descriptions,
+│   │                                 world, controller config, MoveIt config, static
+│   │                                 frames, process topology, bring-up plan, planning
+│   │                                 scene. Committed, never hand-edited (ADR-0021)
 │   ├── cite_description/         ←   L1: robot and component descriptions
 │   ├── cite_hardware/            ←   L2: hardware interfaces, sim and real
 │   ├── cite_control/             ←   L2: controller configuration and bringup
@@ -338,17 +346,30 @@ Digital-Twin/
 │
 ├── tests/                        ← System- and scenario-level tests
 │
-├── docs/
-│   ├── adr/                      ← Architecture Decision Records
-│   ├── architecture/             ← Detailed per-layer design
-│   ├── interfaces/               ← Interface contract reference
-│   ├── operations/               ← Runbooks, bring-up, calibration, safety
-│   ├── onboarding/               ← Getting started, workflow, glossary
-│   └── reference/                ← Standards, literature, toolchain
-│
-└── legacy/                       ← Superseded v1. Reference only, never built.
-                                    Deleted at the end of Phase 1.   (temporary)
+└── docs/
+    ├── adr/                      ← Architecture Decision Records
+    ├── architecture/             ← Detailed per-layer design
+    ├── interfaces/               ← Interface contract reference
+    ├── operations/               ← Runbooks, bring-up, calibration, safety
+    ├── onboarding/               ← Getting started, workflow, glossary
+    └── reference/                ← Standards, literature, toolchain
 ```
+
+**`legacy/` is gone.** The superseded v1 workspace was archived here for the length of the
+rebuild and deleted at the end of Phase 1, as this tree said it would be. What it taught is
+in `docs/reference/v1-lessons.md`, written before the deletion and anchored to the code that
+proved each point; why it was replaced rather than migrated is **ADR-0001**. The tree itself
+remains in version control, as §12 says — it is removed from the working tree, not from the
+repository's history.
+
+Two conventions in the tree above have their reasoning recorded rather than restated here:
+
+- **`cite_generated/` is committed, not built.** Generated artifacts live in git and are
+  verified against a fresh generator run, which is what makes hand-editing one detectable
+  rather than merely forbidden. See **ADR-0021**.
+- **QoS profiles are a library inside `cite_interfaces`, not a table each node copies.** An
+  incompatible publisher/subscriber pair connects silently and delivers nothing, so the
+  profiles are code with one definition rather than prose with many. See **ADR-0025**.
 
 ### 7.1 Naming and namespace convention
 
@@ -372,22 +393,114 @@ Each phase has a hard **exit criterion**. A phase is not complete because the ca
 
 *The rebuild. Everything correct, from zero. This phase produces the platform that every later phase stands on.*
 
-**1.A — Toolchain and repository foundation**
+**All five sub-phases are complete. The exit criterion is OPEN.** Those are two different
+claims and this section keeps them apart. A sub-phase closes when its work exists and has
+been measured; the phase closes when the exit criterion is demonstrated, and one of its
+clauses currently cannot be attempted at all. Each sub-phase below keeps its original text —
+that is the record of what the phase reached for — with a note beneath it stating what was
+actually delivered wherever the two differ. Where a note gives a figure, it also gives who
+measured it and over how many runs, because this phase repeatedly had "it passes" overturned
+by measurement.
+
+**1.A — Toolchain and repository foundation — COMPLETE**
 Ubuntu 24.04 / Jazzy / Harmonic baseline stood up. Docker and devcontainer images. External dependencies declared in a manifest with pinned revisions and reviewable patches. `rosdep` complete. CI pipeline building and testing headlessly. Repository restructured per §7. Coding standards, linting, and formatting enforced automatically. Early verification of xArm support on the target stack.
 
-**1.B — Architecture and contracts**
+> *Delivered as written.* `xarm_ros2` is pinned to a commit SHA and was built and driven
+> against this stack rather than inspected — the verification table is in
+> `docs/reference/toolchain.md`. **One qualification:** "CI pipeline building and testing
+> headlessly" means the workflow is written and its jobs are defined, not that it has been
+> observed to pass. See the exit criterion's CI clause below.
+
+**1.B — Architecture and contracts — COMPLETE**
 The facility model schema and validator. Generators from L0 to worlds, descriptions, controller configs, and launch graphs. All interface packages defined and reviewed *before* the implementations that use them. Lifecycle and namespace conventions established. Architecture Decision Records written for every choice in §6.
 
-**1.C — Vertical slice: one arm, every layer**
+> *Delivered, and wider than written.* The generators also produce MoveIt configuration, the
+> planning scene, static frames, process topology and the bring-up plan. `./scripts/validate-model`
+> diffs the committed output against a fresh generator run and regenerates under a different
+> hash seed to prove byte-identical output (**ADR-0021**).
+
+**1.C — Vertical slice: one arm, every layer — COMPLETE**
 A single xArm 5 in Harmonic, driven through the full stack: facility model → generated description → `ros2_control` with the simulation hardware plugin → MoveIt 2 → a real `Pick` skill → a behaviour tree that executes it. Thin but complete: this proves the architecture end to end before it is replicated.
 
-**1.D — The three-arm virtual line**
+> *Delivered.* The grasp is held by friction alone, with no simulation aid: **ADR-0029**
+> removed the attachment plugin because it produced silent successes. The evidence is the
+> friction-grasp campaign in `docs/measurements/`, which is also where the finding lives that
+> the grasp is repeatable in **position and not in orientation** — a limitation that shapes
+> 1.D and Phase 2 rather than being resolved here.
+
+**1.D — The three-arm virtual line — COMPLETE, with one phrase not delivered as written**
 Three arms, conveyors, and sensors — all instantiated from the facility model, not hand-placed. Real motion, real grasping, real sensor-triggered transitions, real handoff negotiation between robots. The line runs a continuous cycle without intervention. *This is the workload the previous iteration aimed at and never reached.*
 
-**1.E — Documentation and quality gates**
+> ***"Real handoff negotiation between robots" was not delivered in the sense the phrase
+> reaches for, and this is not being redefined to match what was built.*** Read the sentence
+> as it stands: it puts two robots in direct negotiation over a part. What exists is
+> **conveyor-mediated**. Every edge in the L0 topology passes through a belt, and L4 does not
+> merely leave the direct arm-to-arm case unimplemented — it **refuses** such an edge at plan
+> time, so a topology containing one will not start.
+>
+> **ADR-0031** carries that decision and its 2026-08-26 correction, and the correction is the
+> part to read: what makes the permitted conveyor edge safe is that the *receiving* gripper
+> squares the part up as it closes on a free part, and a direct handoff denies exactly that,
+> because a part still clamped by the giving gripper cannot rotate into alignment with the
+> receiving one. The mechanism that rescues one case is the one the other forecloses. A direct
+> handoff has never been attempted or measured in this cell. `Transfer` and its behaviour-tree
+> leaf remain built and tested against their contract, with no caller.
+>
+> **What *was* delivered:** three arms, three belts and four beams instantiated from L0 and not
+> hand-placed; real motion under MoveIt; a friction grasp; and sensor-triggered transitions —
+> a beam edge becomes a typed `DetectionEvent`, L4 stops the belt on it and restarts it on
+> completion (**ADR-0032**, **ADR-0033**). The line runs a continuous cycle without
+> intervention, which is the sub-phase's last sentence and is met.
+>
+> **How well it runs is measured thinly and must be read that way.** The counts that exist are
+> single-machine run sets by the implementing agent and by the project owner — a handful of
+> runs each, with no thresholds registered in advance. They are recorded, with their
+> qualifications, in `CLAUDE.md` §2 and are deliberately not copied here (P1). **The line
+> completing is not the same as the line being reliable**, and no campaign in
+> `docs/measurements/` measures its reliability. Two known open items go to Phase 2: the belts
+> are commanded open-loop with nothing publishing `ConveyorState`, and the release-orientation
+> residual's accumulation across three stations is explicitly unmeasured.
+
+**1.E — Documentation and quality gates — COMPLETE**
 Per-layer architecture documentation. Interface reference. Onboarding guide that a new contributor can follow to a running system unaided. Full test pyramid in place and enforced.
 
+> *Delivered.* Every architecture and interface document carries a `DESIGNED` / `PARTIAL` /
+> `BUILT` marker, which `./scripts/doctor` checks for presence, so a specification cannot be
+> read as a description. The onboarding guide was walked from a fresh clone rather than
+> reviewed — see the exit criterion's first clause. **"Enforced" is enforced by the local
+> quality gate, not yet by an observed CI run**; the same CI clause applies.
+
 > **Exit criterion:** On a clean machine, `git clone` followed by a single bootstrap command produces a running three-robot line in Gazebo Harmonic that executes a continuous, sensor-driven pick-and-transfer cycle. CI is green. The entire cell layout is changeable by editing the facility model alone. Every architectural decision is written down.
+
+**Exit criterion status — OPEN, as of 2026-08-27.** Phase 1 is **not closed**. Its clauses are
+broken out below so that what was measured is distinguishable from what was inferred, and so
+that the one failing clause is not mistaken for a defect in the code.
+
+| Clause | Status | On what evidence |
+|---|---|---|
+| Clean machine; clone plus one bootstrap command; a running line | **Demonstrated** | Walked by the project owner from a fresh clone of the remote — not a worktree — with no deviation from the documented steps: `./scripts/doctor` 23 passed / 0 failed, both vendor patches verified present in the imported vendor tree, `./scripts/build` 19 packages, `./scripts/test` clean, in-container `./scripts/lint` clean across all eight linter labels. **One walk, on one machine.** |
+| A continuous, sensor-driven pick-and-transfer cycle | **Demonstrated; not characterised** | 3 of 4 runs completed. The run that did not failed when `ros2 run ros_gz_sim create` timed out spawning a work-piece — a harness failure. **No run failed for a line defect.** A further verification was in flight when this was written and its result is not recorded here. Four runs on one machine with no pre-registered thresholds is a demonstration, **not a reliability figure**. |
+| The entire cell layout is changeable by editing the facility model alone | **Demonstrated** | A pedestal was moved 50 mm in L0 and the tree regenerated: five generated artifacts changed, the arm anchored to that pedestal followed it, and **nothing outside `model/` and `workspace/src/cite_generated/` changed at all**. This is P1 and **ADR-0004** exercised rather than asserted. |
+| **CI is green** | **UNVERIFIED — and not currently verifiable** | An account-level block; see below. |
+| Every architectural decision is written down | **Cannot be closed as stated** | The record is complete and self-consistent — `./scripts/doctor` checks that every ADR on disk is indexed and every ADR reference resolves. But "every decision" is a universal that no check establishes, and there is a known counter-instance: **ADR-0031 records that its own decision existed only in a commit message until the documentation pass after the fact.** Read this clause as *the decisions we know of are recorded*, which is what the evidence supports. |
+
+**Why the CI clause is open.** It is an **account-level block, not a technical result.** Every
+workflow run in this repository's history — three, the most recent dispatched against
+`feature/phase-1` on 2026-08-27 — was refused before any step executed, with the message:
+
+> The job was not started because recent account payments have failed or your spending limit
+> needs to be increased. Please check the 'Billing & plans' section in your settings
+
+Both jobs that were not skipped recorded **zero steps**; the third `needs:` one of them and was
+skipped in consequence. **No step of this workflow has ever run in this repository.**
+
+That cuts both ways and both halves matter. Nothing here is evidence that the code fails CI — a
+reader must not draw that inference. Nothing here is evidence that it passes either, and the
+local quality gate is not a substitute: it runs on one machine, on a tree that machine prepared,
+which is the whole of what CI exists to not be.
+
+**What would settle it:** the workflow running to completion. Nothing in the repository needs to
+change first; the billing block does.
 
 ---
 
@@ -551,6 +664,9 @@ The project underwent an extended R&D period before this charter. That work prod
 
 | Version | Date | Change |
 |---|---|---|
+| 1.7 | 2026-08-27 | §7 gains `cite_runtime`, a package holding process-lifecycle mechanism only — signal handling and shutdown for `rclpy` nodes, with no domain knowledge and no in-project dependencies. It exists because a shutdown helper had to live somewhere and neither existing candidate was right: `cite_interfaces` holds interfaces and their delivery contract, and ADR-0025's closing clause named a helper landing there as the signal to reopen by amendment rather than let the package widen gradually — which is what this entry is; `cite_facility` describes itself as runtime access to artifacts generated from L0, which a signal handler is not. Recorded with the two upstream `rclpy` races it compensates for, and the condition for deleting each, in **ADR-0034**. One package added to the §7 tree. No change to scope, architecture, technology baseline, or roadmap. |
+| 1.6 | 2026-08-27 | **Phase 1's record closed.** §8 marks sub-phases 1.A through 1.E complete, each with a note naming what was delivered and, where a figure is given, who measured it and over how many runs. **1.D is marked complete with one phrase explicitly not delivered as written:** "real handoff negotiation between robots" reaches for a direct arm-to-arm crossing, and what exists is conveyor-mediated, with L4 refusing a direct edge at plan time rather than leaving it unimplemented (ADR-0031 and its 2026-08-26 correction). The phrase is left standing and the divergence recorded beside it, rather than the phase being redefined to match what was built. **§8's exit criterion stays OPEN.** Three clauses are demonstrated — the clean-clone walk, the continuous sensor-driven cycle, and the layout being changeable from L0 alone — each with the size and limits of its evidence stated. The **CI clause is unverified and not currently verifiable**: every workflow run in this repository's history was refused at the account level before any step executed, for failed payments or a spending limit, which is a billing block and not a test result; the workflow running to completion is what would settle it. The fifth clause, "every architectural decision is written down", is recorded as unclosable as stated, since it is a universal and ADR-0031 is a known counter-instance. §7 removes `legacy/` from the repository tree, the v1 workspace having been deleted at the end of Phase 1 as that tree said it would be and after its lessons were captured in `docs/reference/v1-lessons.md`; the tree remains in version control. No change to scope, architecture, technology baseline, or the phases beyond 1. |
+| 1.5 | 2026-08-25 | §7 brought back in line with the workspace. Added `cite_generated/`, which now exists and holds every artifact derived from L0 — descriptions, world, controller configuration, MoveIt configuration, static frames, process topology, bring-up plan and the planning scene. Corrected the description of `cite_facility/`, which had described something narrower than the package became: it is an L0–L1 **runtime** package that serves the generated model version, the frame and namespace plan and the process topology as a typed `LineTopology` message, and loads the generated planning scene into MoveIt — the generators themselves live in `tools/`, as the same tree already stated. Added pointers to ADR-0021 (generated artifacts are committed and verified against a fresh generator run) and ADR-0025 (the QoS profiles ship as a library inside `cite_interfaces`), because §7 is where a reader looks for the reasoning behind those two entries. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.4 | 2026-08-24 | Marked `.claude/` as local tooling that is not committed, in the §7 tree, §10.2 and the §11 documentation map. The agent configuration is excluded from the repository by decision; without the marker a reader would look for a directory a clone does not contain. Notes that the rules the agents enforce live in `CLAUDE.md`, which is committed, so the standards do not depend on the tooling. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.3 | 2026-08-24 | §7 repository structure brought back in line with the tree and given an explicit meaning: it describes the **target** structure, with markers for what does not yet exist (`model/`, `workspace/src/`, `hmi/`) and what is temporary (`legacy/`). Added `tools/`, `requirements/`, `docs/reference/`, `.devcontainer/`, `.github/` and `legacy/`; corrected the claim that `infra/` holds the devcontainer and CI, which live at the repository root because their tooling requires it. Removed `subagents/`, the portable upstream template library the active roles were adapted from — it was never tracked in git and is no longer present; the adapted roles in `.claude/agents/` are the only roster. §10.2 updated accordingly: the two roles deferred to Phase 4 will be written then rather than carried as dormant templates. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.2 | 2026-08-24 | Documentation tree written. Twin maturity levels renamed to align with the established literature: L1 `Mirror`→`Shadow`, L2 `Shadow`→`Validated`, with the corresponding L5 operating modes renamed to match (§2, §5). Architecture aligned with the ISO 23247 reference architecture (§2). The xArm Jazzy/Harmonic risk is closed following verification (§13). §11 documentation map expanded to the full tree and the status-marker convention introduced. No change to scope, layer architecture, technology baseline, or roadmap. |

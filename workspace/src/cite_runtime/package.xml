@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_runtime</name>
+  <version>0.1.0</version>
+  <description>
+    Process lifecycle for this repository's Python nodes: start rclpy, spin until
+    the context is shut down, release it. Nothing else.
+
+    ADMISSION TEST, and it is the whole reason this package exists rather than a
+    module inside a node package. Something belongs here only if all three hold:
+
+      1. it is process lifecycle MECHANISM — start-up, shutdown, signals;
+      2. it carries NO DOMAIN KNOWLEDGE — no facility, no asset, no topic, no
+         layer of the L0-L7 stack is nameable from inside it;
+      3. it DEPENDS ON NOTHING IN-PROJECT — rclpy and the standard library only,
+         so that every other package may depend on it without direction.
+
+    Anything that fails one of those belongs in the package that owns the
+    behaviour. Test dependencies obey the rule too: the tests here drive a probe
+    node this package owns, never another package's node, because a test edge is
+    still an edge and would make rule 3 false.
+
+    ADR-0034 records the decision and what was weighed against it.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <!-- The tripwire patches the generated `rosgraph_msgs/Clock` class and the
+       probe subscribes to /clock, so this package's tests use it directly. It
+       resolves today only as a transitive exec_depend of rclpy, which is not a
+       declaration and would break the day rclpy stopped needing it. -->
+  <test_depend>rosgraph_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

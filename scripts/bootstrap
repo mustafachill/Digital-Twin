@@ -93,36 +93,97 @@ setup_ros_workspace() {
     step "External sources (vcstool)"
     mkdir -p "${REPO_ROOT}/workspace/src/external"
     if have vcs; then
-        vcs import "${REPO_ROOT}/workspace/src" \
-            < "${REPO_ROOT}/external/cite.repos" || warn "vcs import reported problems"
+        # --recursive is required, not optional: xarm_ros2 carries xarm_sdk/cxx as a
+        # git submodule, and without it that directory arrives empty and the build
+        # fails on xarm_sdk. Reproducibility is preserved because the submodule
+        # pointer is part of the parent's pinned commit, so a SHA pin on the parent
+        # fixes the submodule exactly (ADR-0008).
+        #
+        # `git_without_enclosing_repo` is what makes this work from a git worktree;
+        # see the block on it in _lib.sh for the failure it removes. Failure is
+        # FATAL rather than a warning, because the state it leaves behind is not
+        # "no external source" — it is a target directory that exists and is empty,
+        # which every later step reads as source that is simply already there.
+        if ! git_without_enclosing_repo \
+                vcs import --recursive "${REPO_ROOT}/workspace/src" \
+                < "${REPO_ROOT}/external/cite.repos"; then
+            die "vcs import failed, so workspace/src/external is incomplete.
+  Every declared patch and every build after this point would silently be
+  missing the external source. Nothing further has run.
+  Check network access and external/cite.repos, then re-run ./scripts/bootstrap."
+        fi
         ok "External repositories imported"
     else
         warn "vcstool not found — skipping external source import"
     fi
 
     step "Local patches"
-    shopt -s nullglob
-    local patches=("${REPO_ROOT}"/external/patches/*.patch)
-    shopt -u nullglob
+    local patches=()
+    while IFS= read -r line; do patches+=("$line"); done < <(declared_patches)
     if [ ${#patches[@]} -eq 0 ]; then
         ok "No patches to apply"
     else
+        # A patch declared in external/patches/ and not present in the checkout is
+        # a total failure of a declared modification, so each branch below either
+        # reaches "present" or stops the bootstrap naming the patch and the reason.
+        # The one state that is allowed to pass quietly is `applied`, and it is
+        # what keeps re-running bootstrap idempotent.
+        local p name repo target state
         for p in "${patches[@]}"; do
-            local repo
-            repo="$(sed -n 's/^# Repo:[[:space:]]*//p' "$p" | head -1)"
-            [ -n "$repo" ] || { warn "$(basename "$p"): no 'Repo:' header — skipped"; continue; }
-            local target="${REPO_ROOT}/workspace/src/${repo}"
-            [ -d "$target" ] || { warn "$(basename "$p"): target $repo missing — skipped"; continue; }
-            if git -C "$target" apply --check "$p" 2>/dev/null; then
-                git -C "$target" apply "$p" && ok "Applied $(basename "$p")"
-            else
-                info "$(basename "$p") already applied or does not apply — skipped"
-            fi
+            name="$(basename "$p")"
+            repo="$(patch_target_repo "$p")"
+            [ -n "$repo" ] || die "${name} carries no '# Repo:' header, so there is no
+  checkout it can be applied to. See external/patches/README.md for the header
+  every patch must have."
+            target="${REPO_ROOT}/workspace/src/${repo}"
+            state="$(patch_state "$p" "$target")"
+            case "$state" in
+                applied)
+                    ok "${name} already applied"
+                    ;;
+                pending)
+                    git -C "$target" apply "$p" \
+                        || die "${name} passed its own dry-run and then failed to apply
+  to workspace/src/${repo}. The checkout is now in an unknown state; delete it
+  and re-run ./scripts/bootstrap."
+                    ok "Applied ${name}"
+                    ;;
+                no-target)
+                    die "${name} targets workspace/src/${repo}, which does not exist.
+  The external source it modifies was never imported, so this patch cannot reach
+  the build. Run ./scripts/bootstrap with vcstool available."
+                    ;;
+                empty)
+                    die "${name} targets workspace/src/${repo}, which exists and is EMPTY.
+  That is the signature of an import that failed part-way — the usual cause is
+  running from a git worktree whose .git pointer the container cannot resolve.
+  Delete workspace/src/${repo} and re-run ./scripts/bootstrap."
+                    ;;
+                conflict)
+                    die "${name} does not apply to workspace/src/${repo}, and is not
+  already present there. A declared modification is missing from the build.
+  The usual cause is a version bump in external/cite.repos that moved the code
+  this patch edits: refresh the patch against the pinned commit, or delete it and
+  record why in external/patches/README.md. Bootstrap will not continue with a
+  declared patch unaccounted for."
+                    ;;
+                *)
+                    die "${name}: unknown patch state '${state}' — this is a bug in patch_state."
+                    ;;
+            esac
         done
     fi
 
     step "System dependencies (rosdep)"
     if have rosdep; then
+        # The image builds its apt layers with a cache mount, so /var/lib/apt/lists
+        # is empty in the final image. Without this refresh every `rosdep install`
+        # in a fresh container fails with "Unable to locate package" for packages
+        # that do exist — which reads as a missing dependency rather than a stale
+        # index, and sends people looking in the wrong place entirely.
+        if in_container; then
+            sudo apt-get update -qq || warn "apt-get update failed; rosdep may not resolve"
+        fi
         rosdep update --rosdistro "${ROS_DISTRO:-jazzy}" >/dev/null 2>&1 || true
         rosdep install --from-paths "${REPO_ROOT}/workspace/src" \
             --ignore-src -r -y --rosdistro "${ROS_DISTRO:-jazzy}" \

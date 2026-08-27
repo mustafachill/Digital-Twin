@@ -1,0 +1,65 @@
+---
+# yaml-language-server: $schema=../schema/stations.schema.json
+schema: cite/stations/v1
+
+# A station says what it is connected to, never what it does. Behaviour is L4's —
+# that separation is what keeps a layout change from being a code change.
+#
+# Every pick and place point is a reference to a frame on another asset. There is
+# no coordinate anywhere in this file, which is the property that made v1's
+# diverged pick/place tables impossible to reproduce here.
+stations:
+  - id: station_infeed
+    zone: cell_a
+    type: source_station
+    assets: [table_pick]
+    capacity: 6
+
+  - id: station_transfer_1
+    zone: cell_a
+    type: transfer_station
+    actor: arm_1
+    assets: [arm_1, pedestal_1]
+    pick_from: {asset: table_pick, frame: surface}
+    place_to: {asset: conveyor_1, frame: infeed}
+    # The infeed is fed from outside the cell, and this is what tells the station
+    # a part has arrived. It used to have no trigger, on the reasoning that L4
+    # would start the station instead — but nothing tells L4 either, and the
+    # station's cycle came to rest polling `Detect` against a region no sensor
+    # was in. A station that acts observes; see `beam_pick` in
+    # assets/instances/sensors.yaml for the placement and the alternative that
+    # was rejected.
+    trigger: {sensor: beam_pick, state: blocked}
+
+  - id: station_transfer_2
+    zone: cell_a
+    type: transfer_station
+    actor: arm_2
+    assets: [arm_2, pedestal_2]
+    pick_from: {asset: conveyor_1, frame: outfeed}
+    place_to: {asset: conveyor_2, frame: infeed}
+    trigger: {sensor: beam_c1_out, state: blocked}
+
+  - id: station_transfer_3
+    zone: cell_a
+    type: transfer_station
+    actor: arm_3
+    assets: [arm_3, pedestal_3]
+    pick_from: {asset: conveyor_2, frame: outfeed}
+    place_to: {asset: conveyor_3, frame: infeed}
+    trigger: {sensor: beam_c2_out, state: blocked}
+
+  - id: station_accumulation
+    zone: cell_a
+    type: sink_station
+    assets: [table_accumulation]
+    capacity: 12
+    # The sink watches the last belt's outfeed beam. Without it, an arrival at
+    # the accumulation table is an INFERENCE — the line counted a piece when the
+    # upstream robot let go of it, which is a statement about a gripper and not
+    # about the table. `beam_c3_out` was declared here and used by nothing, so
+    # the one asset that could have observed the arrival was watching nobody.
+    #
+    # A sink has no actor, so this is not what starts work: nothing at a sink
+    # acts. It is what makes the arrival observed rather than assumed.
+    trigger: {sensor: beam_c3_out, state: blocked}

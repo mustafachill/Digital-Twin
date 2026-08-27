@@ -1,0 +1,14 @@
+# Find objects in a region.
+#
+# Phase 1 satisfies this from the simulator's own knowledge and from break-beam
+# sensors; a perception pipeline replaces the implementation later without
+# changing this contract, which is the point of defining it now.
+
+string region_frame                     # TF frame the region is expressed in
+geometry_msgs/Vector3 region_size_m     # m, axis-aligned extents about the frame
+string workpiece_type                   # empty matches any type
+---
+ResultCode result
+Detection[] detections
+---
+uint32 detections_so_far

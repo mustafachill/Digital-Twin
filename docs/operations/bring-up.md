@@ -1,6 +1,11 @@
 # Bring-up
 
-- **Status:** `DESIGNED` — the simulated path is buildable once Phase 1.C lands; the physical path is Phase 2.
+- **Status:** `PARTIAL` — the simulated path below works and is what `./scripts/scenario bringup`
+  drives. Of the last two stages of the step-4 sequence, **twin sync does not exist** (there
+  is no `cite_twin` package) and **orchestration is off by default**: the line coordinator
+  starts only with `line:=true`, because it takes exclusive hold of every arm's skills, so a
+  default bring-up leaves the arms free for an operator or a scenario. The physical path is
+  Phase 2 and has never been run.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell
@@ -38,9 +43,15 @@ against an invalid model debugs the wrong thing.
 ### 4. Launch
 
 ```bash
-./scripts/sim              # GUI, Linux only
-./scripts/sim --headless   # anywhere
+./scripts/sim                          # GUI, Linux only
+./scripts/sim --headless               # anywhere
+./scripts/sim --headless line:=true    # and let L4 drive every station
 ```
+
+**`line:=true` hands the cell over.** The coordinator claims each arm's skill server, and a
+skill server admits one goal at a time, so anything else that sends a goal — an operator, a
+diagnostic, a scenario — is refused by a server that is busy. Bring the line up this way only
+when you mean to watch it run.
 
 **Expect:** bring-up proceeds through the ordered sequence, each step gated on the previous
 one reporting active:
@@ -61,6 +72,36 @@ ros2 topic hz /cite/cell_a/arm_1/joint_states
 ros2 action list | grep cite           # skill servers present
 ros2 topic echo /cite/twin/mode --once # expect SIM
 ```
+
+The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process, and the
+beams are what start a station:
+
+```bash
+ros2 node list | grep gz_bridge                             # exactly one
+ros2 topic echo /cite/cell_a/beam_pick/detection_level      # the raw level, std_msgs/Bool
+ros2 topic echo /cite/cell_a/beam_pick/detection            # the typed DetectionEvent
+ros2 topic pub --once /cite/cell_a/conveyor_1/command \
+    std_msgs/msg/Float64 "{data: 0.15}"                     # only with the line NOT running
+```
+
+**If a beam's level ticks and its `detection` topic is silent:** the detection server is not
+running or is watching a different name. The two are deliberately different topics — the raw
+`gz.msgs.Boolean` is landed on `…/detection_level` and only `cite_skills`' detection server
+publishes the typed event on `…/detection`.
+
+**Do not command a belt by hand while the line is running.** L4 owns that setpoint
+([ADR-0032](../adr/0032-index-the-belt.md)); a second publisher fights it, and a belt running
+under a part a station is reaching for puts the part on the floor.
+
+**If the belts never start and nothing reports an error:** check the log for
+`line_orchestrator` announcing that it re-sent a setpoint to a subscriber that appeared after
+the belt was last commanded. The start-up command is published from the same callback that
+creates the publishers, when no subscriber has been matched yet — **reliable QoS is a promise
+to *matched* subscribers, so that first message is delivered to nobody** however long the
+bridge has been up. Delivery depends on the matched-subscriber event, which is where to look
+if an RMW other than the default is in use. This failed silently for ten commits and the
+symptom was a line that simply never moved; the measurement is in the 2026-08-27 correction
+on [ADR-0032](../adr/0032-index-the-belt.md).
 
 **If a controller is inactive:** check that its joint names match the description
 (`./scripts/validate-model`). The spawner error names the spawner, not the mismatch — this

@@ -1,0 +1,242 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# UFACTORY xArm 5 — the reference manipulator (charter §3.1).
+#
+# This entry is the whole of the generator's knowledge of `xarm_description`. The
+# vendor description is *invoked*, never ingested: nothing here opens a vendor
+# file, copies one, or patches one, so a vendor upgrade that renames a macro
+# parameter is a two-line diff in this file rather than a change to code. That is
+# the rule L1 left open for incorporating vendor descriptions.
+asset_type:
+  id: xarm5
+  category: robot
+  vendor: ufactory
+
+  kinematics:
+    dof: 5
+    # The vendor's own joint names, verbatim. They are not reformatted: a
+    # controller whose joint names differ from the description by one character
+    # fails at runtime with an error naming the spawner, not the mismatch.
+    joint_suffixes: [joint1, joint2, joint3, joint4, joint5]
+    base_link_suffix: link_base
+    tip_link_suffix: link_eef
+    # UFACTORY specification. Used by the geometric validator to reject a station
+    # whose pick or place point is beyond what the arm can actually reach.
+    max_reach_m: 0.700
+
+  frames:
+    - id: base
+      xyz_m: [0.0, 0.0, 0.0]
+      link: link_base
+    - id: tcp
+      xyz_m: [0.0, 0.0, 0.0]
+      link: link_tcp
+
+  description:
+    provider: xacro_macro
+    package: xarm_description
+    file: urdf/xarm_device_macro.xacro
+    macro: xarm_device
+    # Facts about the type — identical for every instance of it.
+    fixed_args:
+      robot_type: xarm
+      dof: 5
+      limited: false
+      velocity_control: false
+      effort_control: false
+      model1300: false
+      mesh_suffix: stl
+      # We generate the mount link ourselves, so the vendor must not add one.
+      create_attach_link: false
+      # Suppressed deliberately: the vendor's plugin emission has no way to set
+      # <ros><namespace>, and the controller manager must live under
+      # /cite/<zone>/<asset_id>. The cell generator emits the plugin instead.
+      load_gazebo_plugin: false
+    # Macro parameter -> generator binding. A binding name the generator does not
+    # know is an error, so a vendor rename fails loudly here instead of silently
+    # producing a description with a default in it.
+    bound_args:
+      prefix: instance.prefix
+      hw_ns: instance.id
+      attach_to: instance.parent_link
+      attach_xyz: instance.parent_xyz_m
+      attach_rpy: instance.parent_rpy_rad
+      ros2_control_plugin: instance.hardware.ros2_control_plugin
+      add_gripper: instance.end_effector.vendor_integrated
+      # The fitted end effector's declared close rate, handed to the vendor macro
+      # so that it bounds the drive joint's velocity command interface — which is
+      # the only route a limit has into the running system. A limit cannot live in
+      # the controller configuration: controller_manager 4.45.2's
+      # ResourceManager::import_joint_limiters passes null node interfaces, so no
+      # `joint_limits.<joint>.*` key there is ever read, and
+      # GripperActionController has no rate parameter. Limits come from the
+      # description or they do not exist.
+      #
+      # The macro parameter this binds to arrives with
+      # external/patches/02-xarm_ros2-gripper-drive-rate-parameter.patch; the
+      # vendor hardcodes +/-3.14 rad/s. Read that patch's header before assuming
+      # the physical gripper is bounded too — it is not, and the header says why.
+      gripper_max_drive_rate_rad_s: instance.end_effector.max_drive_rate_rad_s
+
+  # The plugin class string exists exactly once, here. That is what makes
+  # ADR-0005's "the only thing that differs is which plugin is loaded" true by
+  # construction rather than by discipline.
+  hardware_backends:
+    sim:
+      ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+      instance_params: []
+    real:
+      ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
+      # Phase 2. Declared now so that a mixed fleet is a data change.
+      instance_params: [robot_ip, report_type]
+
+  control:
+    # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is
+    # a fact about the robot rather than about the generator — it lived in
+    # generate/control.py, where it was applied identically to every type the
+    # generator would ever see, which is the P5 inversion ("code encodes how,
+    # never which"). A controller loop that cannot hold this rate is a
+    # performance finding, not a value to quietly lower.
+    update_rate_hz: 150
+    # Clamp every command against the joint's declared limits before writing it.
+    #
+    # This is a safety finding in its own right, not a detail of the gripper fix
+    # that motivated it. `ros2_control` defaults this to false, it had never been
+    # set, and the result was that NOTHING enforced any declared limit anywhere in
+    # this cell — not for the gripper and not for the five arm joints, on either
+    # path. The limits were all present and all inert: the vendor description
+    # declares position, velocity and effort limits for every joint,
+    # `cross-cutting-safety.md` requires limits enforced at planning *and* at
+    # execution, and the generated MoveIt `joint_limits.yaml` states outright that
+    # it is "the planning half, and the controller is the other". The other half
+    # was not running.
+    #
+    # What it costs: the limiter now also clamps the five arm joints, so a
+    # trajectory that asked for more than the description allows is followed as
+    # far as the description allows instead of overshooting. That is the intended
+    # behaviour, but it is a change to the arm's execution path and not only to
+    # the gripper's — measured rather than assumed, see the fix report.
+    enforce_command_limits: true
+
+  controllers:
+    # Stage 0 must be active before stage 1: the controllers below read the state
+    # this broadcaster publishes. Expressing that as data rather than as a sleep
+    # is what P4 requires of bring-up.
+    - suffix: joint_state_broadcaster
+      type: joint_state_broadcaster/JointStateBroadcaster
+      joints: none
+      stage: 0
+    - suffix: joint_trajectory_controller
+      type: joint_trajectory_controller/JointTrajectoryController
+      joints: arm
+      stage: 1
+      command_interfaces: [position]
+      state_interfaces: [position, velocity]
+
+  planning:
+    # The vendor's own SRDF group names, prefixed with the asset id exactly as
+    # joints and controllers are: arm_1 plans with group arm_1_xarm5.
+    group_suffix: xarm5
+    end_effector_group_suffix: xarm_gripper
+    # link_tcp rather than link_eef: with a gripper fitted the vendor's chain
+    # continues to the tool centre point, and planning to the flange instead
+    # would put the gripper's length quietly into every placement error.
+    tip_link_suffix: link_tcp
+    # The SRDF is invoked, not copied — same rule as the description. It carries
+    # the self-collision matrix, which is a fact about the vendor's geometry.
+    srdf_package: xarm_moveit_config
+    srdf_file: srdf/xarm_macro.srdf.xacro
+    srdf_macro: xarm_macro_srdf
+    srdf_args:
+      dof: 5
+      robot_type: xarm
+    kinematics_plugin: kdl_kinematics_plugin/KDLKinematicsPlugin
+    kinematics_resolution: 0.005
+    kinematics_timeout_s: 0.05
+    # Conservative planning-time scaling. The arm's own limits are in the vendor
+    # description; these are what MoveIt is allowed to ask for.
+    max_velocity_scaling: 0.35
+    max_acceleration_scaling: 0.35
+    # Joint acceleration ceiling, rad/s^2. The vendor description carries
+    # velocity and effort limits but no acceleration limit, and MoveIt's time
+    # parameterisation needs one — without it the planner emits trajectories the
+    # controller cannot track, which presents as following error rather than as
+    # a missing limit. A ceiling is a property of THIS arm, so it is stated here
+    # rather than as a constant in generate/moveit.py (P5).
+    max_acceleration_rad_s2: 2.0
+    # Braking ceiling, rad/s^2, as a magnitude. Pilz's trapezoidal profile treats
+    # braking separately from accelerating (ADR-0027).
+    #
+    # What this key is NOT for, because the comment here used to say it was:
+    # omitting it would not make Pilz refuse every request. MoveIt derives the
+    # ceiling when it is missing — `joint_limits_aggregator.cpp` sets
+    # `max_deceleration = -max_acceleration` whenever an acceleration limit is
+    # present and a deceleration limit is not — and this type already declares
+    # one above, so the derived value would have been -2.0, which is exactly what
+    # the generator now emits. The refusal that comment described needs the
+    # acceleration ceiling to be absent too.
+    #
+    # It is stated anyway so that the braking ceiling is a decision about this
+    # arm rather than an accident of its acceleration ceiling: derived, the two
+    # can never differ, and an arm that has to brake harder than it accelerates
+    # would have nowhere to say so. Equal to the acceleration ceiling because
+    # nothing about this arm makes it brake harder; MoveIt's negative sign
+    # convention is applied by the template, not written here.
+    max_deceleration_rad_s2: 2.0
+
+    # ADR-0027. Pilz is a trajectory generator rather than a search: PTP is a
+    # computation on the joint limits above, so the same request produces the
+    # same trajectory and a failure can be bisected. OMPL is kept as the fallback
+    # for the motions a point-to-point interpolation cannot make.
+    #
+    # Which pipeline plans is data because it is a claim about THIS arm. The
+    # generator knows what each pipeline is made of — plugin class, adapter chain
+    # — and rejects a name it does not know, which is the P5 split: the model
+    # chooses, the generator configures.
+    default_pipeline: pilz_industrial_motion_planner
+    # Pilz refuses a request with an empty planner id, so PTP is named. LIN is
+    # configured and loadable but is NOT the default: a straight Cartesian path
+    # needs the full 6-DOF pose reachable along its whole length, and this arm
+    # has five degrees of freedom (ADR-0026). That is not left to a comment — the
+    # generator refuses a Cartesian planner as an arm's DEFAULT when its planning
+    # group has fewer than six joints, and refuses an id the pipeline does not
+    # register at all, so a typo or an empty string fails validation rather than
+    # at the first request.
+    default_planner_id: PTP
+    fallback_pipeline: ompl
+    # Empty: the OMPL block the generator emits declares one planner
+    # configuration, so "the pipeline's own default" is unambiguous — and it is
+    # the planner every motion in this cell used before ADR-0027, which makes the
+    # fallback path the behaviour this cell already had rather than a new one.
+    fallback_planner_id: ""
+
+    # Task-space ceilings, read by the pipelines that interpolate in Cartesian
+    # space (Pilz LIN and CIRC). They exist because that pipeline cannot be
+    # constructed without all four — its parameter listener declares them with no
+    # defaults — and NO motion in this cell consumes them today: every motion is
+    # planned in joint space (ADR-0026, ADR-0027).
+    #
+    # Conservative placeholders, and this comment overreached in two ways until
+    # it was corrected.
+    #
+    #   * The three translational figures are ours and sit well under MoveIt's
+    #     own template values (1.0, 2.25, -5.0). The rotational one, 1.57, is
+    #     MoveIt's template default byte for byte — it was never chosen for this
+    #     arm, and describing all four as chosen made a copied number look like a
+    #     measurement.
+    #   * "Never the thing that makes a joint exceed its own" cannot hold for any
+    #     positive value. The joint rate a tool velocity requires is `J^-1
+    #     x_dot`, which grows without bound as the arm approaches a singularity,
+    #     so there is always a pose at which the joint ceiling binds first. What
+    #     actually keeps the joints inside their limits is Pilz's per-sample
+    #     joint check, not these numbers.
+    #
+    # Read them as: low enough not to be the interesting constraint, present so
+    # the pipeline loads, and to be replaced by a measurement on the day a
+    # Cartesian planner is actually asked for a motion.
+    max_cartesian_velocity_m_s: 0.25
+    max_cartesian_acceleration_m_s2: 0.5
+    max_cartesian_deceleration_m_s2: 0.5
+    max_cartesian_rotational_velocity_rad_s: 1.57

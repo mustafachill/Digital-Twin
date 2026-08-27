@@ -1,0 +1,22 @@
+# Actuate the end effector.
+#
+# Named `Grasp` to match charter §5 and CLAUDE.md §5. It is the end-effector
+# actuation skill in general, not only closing a parallel gripper: a vacuum
+# end effector actuates through the same skill, which is why the goal is
+# expressed as a target width and an effort rather than as a gripper command.
+#
+# The skill commands the gripper's ros2_control controller and nothing else
+# (ADR-0022), so this action behaves identically in simulation and on hardware.
+
+float64 width_m                 # m, target opening between the pads
+float64 max_effort_n            # N, upper bound on grip force
+bool expect_object              # when true, closing to zero width is a failure:
+                                # it means the gripper closed on nothing
+---
+ResultCode result
+float64 reached_width_m         # m
+float64 measured_effort_n       # N
+bool holding                    # the controller stalled against something
+---
+float64 current_width_m         # m
+float64 current_effort_n        # N

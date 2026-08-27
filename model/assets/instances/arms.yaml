@@ -1,0 +1,74 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Three xArm 5 instances. They differ only in id and where they stand — the
+# component library holds everything else, which is what makes adding a fourth
+# arm a data change rather than a code change (P9).
+#
+# Each is placed against its pedestal's `top` frame and yawed +90 degrees to face
+# the belt centreline at +Y. The yaw is written in radians because ADR-0020
+# forbids a second representation of an angle; `cite-model show` renders degrees
+# for reading.
+assets:
+  - id: arm_1
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_1/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      # The vendor description builds the gripper in, so no second description
+      # is emitted for it.
+      vendor_integrated: true
+    # Required with no default: a schema default here would let an arm become
+    # `real` because someone omitted a key, and cross-cutting-safety.md is
+    # explicit that a mode must never be reachable by omission.
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      # A retracted, collision-free pose the arm returns to between cycles.
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    # Written by `cite-model register` in Phase 2, never by hand. Kept apart from
+    # `pose` so a measurement can never overwrite engineered intent.
+    registration:
+      status: unregistered
+
+  - id: arm_2
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_2/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    registration:
+      status: unregistered
+
+  - id: arm_3
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_3/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    registration:
+      status: unregistered

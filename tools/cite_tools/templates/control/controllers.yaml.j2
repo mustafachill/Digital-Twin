@@ -1,0 +1,58 @@
+---
+{{ hash_banner() }}
+#
+# Controller configuration for {{ arm.id }}, loaded by the gz_ros2_control plugin
+# in {{ zone }}.urdf.xacro. Every name below is derived from the L0 model, which
+# is what makes ADR-0005's guarantee structural: these are the same controller
+# and joint names the physical arm will use, because there is nowhere else for
+# them to come from.
+{{ namespace }}/controller_manager:
+  ros__parameters:
+    update_rate: {{ update_rate }}  # Hz
+    use_sim_time: {{ use_sim_time }}
+    # Clamp each command against the limits the description declares for that
+    # joint, before it is written. `ros2_control` defaults this to false, which is
+    # how every declared limit in this cell came to be inert — see the
+    # `control:` block of the robot type for the finding.
+    #
+    # The limit VALUES are not here and cannot be. The controller manager builds
+    # its limiters with `init(..., nullptr, nullptr)`, so it reads no
+    # `joint_limits.<joint>.*` parameter; it takes the most restrictive of the
+    # URDF `<limit>` and the `<ros2_control>` command-interface bounds. This flag
+    # is the switch, the description holds the numbers, and stating a value here
+    # as well would be a second place to be wrong that nothing would ever read.
+    enforce_command_limits: {{ enforce_command_limits }}
+{% for controller in controllers %}
+    {{ controller.name }}:
+      type: {{ controller.type }}
+{% endfor %}
+{% for controller in controllers %}
+{% if controller.joints or controller.parameters %}
+
+{{ namespace }}/{{ controller.name }}:
+  ros__parameters:
+{% if controller.joints | length == 1 and controller.single_joint_key %}
+    joint: {{ controller.joints[0] }}
+{% elif controller.joints %}
+    joints:
+{% for joint in controller.joints %}
+      - {{ joint }}
+{% endfor %}
+{% endif %}
+{% if controller.command_interfaces %}
+    command_interfaces:
+{% for interface in controller.command_interfaces %}
+      - {{ interface }}
+{% endfor %}
+{% endif %}
+{% if controller.state_interfaces %}
+    state_interfaces:
+{% for interface in controller.state_interfaces %}
+      - {{ interface }}
+{% endfor %}
+{% endif %}
+{% for key, value in controller.parameters %}
+    {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}
+{% endfor %}

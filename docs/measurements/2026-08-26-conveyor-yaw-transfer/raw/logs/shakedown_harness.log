@@ -1,0 +1,6 @@
+recording from /world/cell_a/dynamic_pose/info
+cell ready: sim clock 1.15 s, 39 entities in the pose feed
+== trial 1/2: yaw 20.0 deg, running ==
+   {"ok": true, "carried": true, "travelled_m": 1.3171874277836408, "yaw_settled_deg": 19.999999977146672, "yaw_at_read_deg": 19.999999958842736, "delta_yaw_deg": -1.830393614454806e-08, "yaw_rate_at_read_deg_s": -20.23361528897711, "note": ""}
+== trial 2/2: yaw 20.0 deg, indexed ==
+   {"ok": true, "carried": true, "travelled_m": 1.0535563516876518, "yaw_settled_deg": 19.999999977146672, "yaw_at_read_deg": 19.99999995962351, "delta_yaw_deg": -1.7523163364785432e-08, "yaw_rate_at_read_deg_s": 0.0, "note": ""}

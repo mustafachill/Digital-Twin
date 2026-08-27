@@ -1,0 +1,5 @@
+This directory is generated in its entirety by `cite-model generate`.
+Nothing here is authored, including package.xml and CMakeLists.txt.
+
+Edit model/ and regenerate. A hand edit is a Critical review finding
+(ADR-0004) and ./scripts/validate-model will fail on it.

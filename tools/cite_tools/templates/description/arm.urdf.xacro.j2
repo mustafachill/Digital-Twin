@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+{{ xml_banner() }}
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ arm.id }}">
+
+  <!-- One description per arm, spawned as its own Gazebo model.
+       gz_ros2_control attaches to a MODEL, and the controller manager it creates
+       claims every ros2_control component in that model's description. With all
+       three arms in one model, all three managers claimed all eighteen joints and
+       wrote to them every cycle. Splitting the arms into separate models gives
+       each manager exactly its own hardware — and keeps the namespace
+       /cite/<zone>/<asset_id> that the naming scheme requires. -->
+
+  <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
+       generated static transform table, so this description states no world
+       coordinate of its own. -->
+  <link name="{{ arm.mount_link }}"/>
+
+  <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
+  <xacro:{{ arm.macro }}
+{% for name, value in arm.args %}
+      {{ name }}="{{ value }}"
+{% endfor %}
+  />
+
+  <!-- Bolt the arm to the world.
+
+       `create_attach_link` is false and `{{ arm.mount_link }}` is not the name
+       the URDF-to-SDF converter anchors on, so without this the arm's root is a
+       free rigid body standing on its pedestal by contact friction alone. Joint
+       reaction torques slide or tip it, and the symptom — base drift — reads as
+       a calibration fault.
+
+       The joint lives inside a `gazebo` block rather than as a URDF joint to a
+       link named `world`, and that placement is the whole point: a URDF `world`
+       link would make `robot_state_publisher` publish `world` -> mount as a
+       second parent for a frame the generated static transform table already
+       parents to `cite_world`. One frame, two parents, intermittently wrong.
+       Inside `gazebo` the converter sees it and TF never does.
+
+       The joint carries no pose. Where the arm stands is stated once, by the
+       spawn pose in the bring-up plan; a pose here would apply it twice. -->
+  <gazebo>
+    <joint name="{{ arm.mount_link }}_world_anchor" type="fixed">
+      <parent>world</parent>
+      <child>{{ arm.mount_link }}</child>
+    </joint>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find cite_generated)/control/{{ zone }}_{{ arm.id }}_controllers.yaml</parameters>
+      <ros>
+        <namespace>{{ arm.namespace }}</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+</robot>

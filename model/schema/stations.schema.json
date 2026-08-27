@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "Station": {
+      "additionalProperties": false,
+      "description": "A place in the process where work happens.\n\nA station says what it is connected to, never what it does — behaviour is\nL4's. The distinction is what keeps a layout change from being a code change.",
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor"
+        },
+        "assets": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "capacity": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Capacity",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "pick_from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StationPoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "place_to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StationPoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StationTrigger"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "enum": [
+            "source_station",
+            "transfer_station",
+            "sink_station"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "zone": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Zone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "zone",
+        "type"
+      ],
+      "title": "Station",
+      "type": "object"
+    },
+    "StationPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Asset",
+          "type": "string"
+        },
+        "frame": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Frame",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset",
+        "frame"
+      ],
+      "title": "StationPoint",
+      "type": "object"
+    },
+    "StationTrigger": {
+      "additionalProperties": false,
+      "description": "The sensor state that starts this station's work.\n\nThe field is ``state`` and not ``on``, which reads better, because YAML 1.1\nresolves a bare ``on`` to the boolean ``true``. A key that quietly becomes\n``True`` is precisely the silently-wrong-value class this model exists to\neliminate, and relying on every author remembering to quote it is not a\ndefence.",
+      "properties": {
+        "sensor": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Sensor",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "blocked",
+            "clear"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sensor",
+        "state"
+      ],
+      "title": "StationTrigger",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/stations/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "schema": {
+      "const": "cite/stations/v1",
+      "enum": [
+        "cite/stations/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    },
+    "stations": {
+      "items": {
+        "$ref": "#/$defs/Station"
+      },
+      "minItems": 1,
+      "title": "Stations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "stations"
+  ],
+  "title": "cite/stations/v1",
+  "type": "object"
+}

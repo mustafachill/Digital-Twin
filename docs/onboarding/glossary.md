@@ -43,7 +43,10 @@ Runtime modes at L5, corresponding to the levels above.
 | **Skill** | An L3 robot-agnostic capability exposed as a ROS 2 action. The unit of meaningful work. |
 | **Station** | An L4 position in the process topology where work happens. A station has a robot; a robot may serve a station. |
 | **Handoff** | Transfer of ownership of a work-piece between two robots. Exactly one owner at any instant. |
-| **Work-piece** | The thing being processed. Tracked by L4. |
+| **Work-piece** | The thing being processed. Tracked by L4. Its geometry is declared once, in L0, as a type with no instances. |
+| **Through beam / break beam** | The cell's only sensor: an emitter and a receiver across the belt. It reports **occupancy** — that something crossed it — and nothing about where along the beam or how the part is turned. |
+| **Indexed belt** | A belt that stops when the station it feeds is triggered and restarts when that station reports `CompleteHandoff`, so the part stands still to be picked ([ADR-0032](../adr/0032-index-the-belt.md)). Its effective concurrency is 1, whatever buffer the topology declares. |
+| **Index stand-off** | How far downstream of a pick point an indexing beam is mounted, so that a part breaking it on its **leading edge** comes to rest centred on that point. Derived from the declared part length, never authored ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)). |
 | **Twin monitor** | The L5 component that continuously measures and publishes divergence. |
 | **Divergence** | Measured difference between predicted (model) and observed (physical) behaviour. Never an estimate — always a published number. |
 | **Registration** | The transform between the real cell's coordinate frame and the model's. What makes measurements transferable. |

@@ -1,0 +1,80 @@
+# Repo:     external/xarm_ros2
+# Upstream: https://github.com/xArm-Developer/xarm_ros2/issues/ (not yet filed)
+# Reason:   The gripper's five finger joints are declared <mimic> in the URDF but
+#           are absent from the vendor's <ros2_control> block, so
+#           HardwareInfo::mimic_joints is empty and nothing couples them under
+#           Gazebo Harmonic. Only one finger moves; the pads never close parallel,
+#           never touch the work-piece, and never stall, so no grasp is possible.
+# Removal:  Delete when xarm_ros2 declares these five joints in the gripper's
+#           <ros2_control> block itself. Check xarm_gripper.ros2_control.xacro on
+#           any version bump — if upstream has added them, this patch will conflict
+#           rather than silently double-declare.
+#
+# Scope on the hardware path (P2), because a vendor patch changes both paths:
+#   xarm_gripper_macro.xacro emits this block only when
+#     ros2_control_plugin != 'uf_robot_hardware/UFRobotSystemHardware'
+#   so the REAL hardware plugin never instantiates it. The paths this patch can
+#   reach are gz_ros2_control/GazeboSimSystem (ours) and
+#   uf_robot_hardware/UFRobotFakeSystemHardware, which is a typedef of
+#   ros2_control's own mock_components::GenericSystem. Both implement upstream
+#   mimic support. Nothing is double-driven: the component parser rejects a mimic
+#   joint that carries a command interface, and the physical gripper's fingers are
+#   coupled by a mechanical linkage, which is exactly what a mimic declares.
+diff --git a/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro b/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
+index e0238d0..3feeae4 100644
+--- a/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
++++ b/xarm_description/urdf/gripper/xarm_gripper.ros2_control.xacro
+@@ -17,6 +17,52 @@
+         <state_interface name="velocity"/>
+         <!-- <state_interface name="effort"/> -->
+       </joint>
++
++      <!-- The five follower joints of the parallel linkage.
++
++           xarm_gripper.urdf.xacro already gives each of these a URDF
++           <mimic joint="${prefix}drive_joint" multiplier="1" offset="0"/>, but a
++           <mimic> tag only reaches ros2_control for a joint that also appears in
++           THIS block. Without these entries HardwareInfo::mimic_joints is empty,
++           and under Gazebo Harmonic nothing else couples them either: dartsim
++           does not implement SetMimicConstraintFeature, and the vendor's Gazebo
++           Classic mimic plugin (xarm_gripper.gazebo.xacro) cannot load. The
++           measured result is a gripper with one driven finger that tilts instead
++           of closing parallel, so it never touches the work-piece and never
++           stalls.
++
++           State interfaces only, and that is not a stylistic choice: ros2_control's
++           component parser REJECTS a mimic joint carrying a command interface
++           ("Activated mimic joints cannot have command interfaces"). A follower is
++           driven by gz_ros2_control's mimic servo from the leader's position, never
++           commanded independently, so it cannot be double-driven.
++
++           CAVEAT — the multiplier is honoured, the offset is NOT. gz_ros2_control
++           1.2.19 (gz_system.cpp, the mimic block in its write()) computes
++           velocity_sp = -(q_follower - q_leader * multiplier) * update_rate. There
++           is no offset term. Every joint below has offset="0" in the vendor URDF,
++           so this is exact for THIS gripper and would be silently wrong for an end
++           effector whose linkage needs one. -->
++      <joint name="${prefix}left_finger_joint" mimic="true">
++        <state_interface name="position"/>
++        <state_interface name="velocity"/>
++      </joint>
++      <joint name="${prefix}left_inner_knuckle_joint" mimic="true">
++        <state_interface name="position"/>
++        <state_interface name="velocity"/>
++      </joint>
++      <joint name="${prefix}right_outer_knuckle_joint" mimic="true">
++        <state_interface name="position"/>
++        <state_interface name="velocity"/>
++      </joint>
++      <joint name="${prefix}right_finger_joint" mimic="true">
++        <state_interface name="position"/>
++        <state_interface name="velocity"/>
++      </joint>
++      <joint name="${prefix}right_inner_knuckle_joint" mimic="true">
++        <state_interface name="position"/>
++        <state_interface name="velocity"/>
++      </joint>
+     </ros2_control>
+   </xacro:macro>
+ </robot>
+\ No newline at end of file

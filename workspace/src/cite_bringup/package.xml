@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_bringup</name>
+  <version>0.1.0</version>
+  <description>
+    Composed launch entry points for the CITE Digital Twin.
+
+    This package holds mechanism only. What to start, in what order, and with what
+    parameters is data — the bring-up plan generated from the L0 model. Adding a
+    fourth arm changes that plan, not this code (P5).
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <exec_depend>cite_generated</exec_depend>
+  <exec_depend>cite_facility</exec_depend>
+  <exec_depend>cite_skills</exec_depend>
+  <exec_depend>cite_orchestration</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <!-- The two planning pipelines the generated MoveIt configuration declares
+       (ADR-0027). Both arrive transitively today through `ros-jazzy-moveit`,
+       which is not a declaration: a slimmer image, or an upstream that stops
+       pulling `moveit-planners`, leaves move_group up and every request failing
+       with "Exception while loading planner". Bring-up is where they are needed,
+       so bring-up is where they are declared. -->
+  <exec_depend>pilz_industrial_motion_planner</exec_depend>
+  <exec_depend>moveit_planners_ompl</exec_depend>
+  <exec_depend>cite_interfaces</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>ros_gz_sim</exec_depend>
+  <exec_depend>gz_ros2_control</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>cite_interfaces</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

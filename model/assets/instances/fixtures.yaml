@@ -1,0 +1,103 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Pedestals and tables. Placed first because arms and work areas are placed
+# relative to *their* frames, so the height of the line is stated once.
+#
+# LAYOUT STATUS: PROVISIONAL. These are engineered coordinates, not a survey of
+# the building. Charter §8 puts the physical scan in Phase 3; until then a
+# measurement taken from this model does not transfer to the room. Stated here
+# rather than implied, per P7.
+#
+# The line runs along +X. Every arm sits 0.30 m in front of the belt centreline,
+# giving a 0.562 m working distance to the pick table and 0.583 m to a belt
+# transfer point, against a 0.700 m envelope.
+#
+# THE STANDOFF WAS 0.35 m AND IS NOW 0.30 m. It was a stated design choice, not
+# an accident, and it is changed on measurement rather than on taste — moving the
+# belt transfer frames 0.050 m inboard of the belt ends (see
+# assets/types/conveyors/belt_1200x400.yaml, which explains why they had to move)
+# adds that 0.050 m to the working distance at every transfer station:
+#
+#   standoff 0.350, inset 0.050  ->  0.6103 m,  87.2% of reach   WARNING at all 5
+#   standoff 0.300, inset 0.050  ->  0.5831 m,  83.3% of reach   clean
+#   standoff 0.300, inset 0.050  ->  0.5618 m,  80.3% at table_pick (was 84.3%)
+#
+# 87.2% is over `geometric.COMFORTABLE_REACH_FRACTION`, and the warning is right:
+# at the edge of the envelope there is no room for the 0.250 m approach corridor
+# the gripper needs above the point, and the arm's conditioning there is poor.
+# Trading lateral budget for x budget buys the inset back and then some — the
+# pick from table_pick improves as well, because it is 0.475 m along ∓X and the
+# standoff is the other leg of the same triangle.
+#
+# Sliding the BELTS was considered and rejected: both ends of every belt serve
+# different arms, so moving one belt helps one station and hurts the other by the
+# same amount. Reducing the standoff helps both ends of every belt equally.
+#
+# What it does NOT cost, checked rather than asserted. A pedestal is 0.300 m
+# square, so its near face moves from y = -0.200 to y = -0.150 — level with and
+# then 0.050 m inboard of the belt's near edge — but every pedestal sits BETWEEN
+# two belts in x, 0.300 m clear of each, so no pair comes near touching. The two
+# tight clearances in this file are both x-only and are unchanged at 25 mm and
+# 50 mm. `_no_overlapping_bodies` and `_approach_corridors_are_clear` both pass.
+#
+# LEGITIMATE NOW rather than deferred: charter §8 marks this layout PROVISIONAL
+# until the Phase 3 building scan, so re-spacing it is a model edit, not a
+# revision of a surveyed measurement.
+#
+# The tables are held clear of their neighbours rather than butted against them.
+# A table whose face exactly touches a pedestal validates today only because the
+# overlap test uses a strict inequality: one micrometre of Phase-2 registration
+# correction turns it into a penetration the physics engine resolves by flinging
+# both bodies apart. `insufficient-clearance` warns below
+# geometric.MIN_CLEARANCE_M, and these poses are chosen to sit above it:
+#
+#   table_pick          x ends   -0.175  |  pedestal_1 x starts -0.150  ->  25 mm
+#   table_accumulation  x starts  5.900  |  conveyor_3 x ends    5.850  ->  50 mm
+#
+# table_pick cannot move further out than this: its `surface` frame is
+# station_transfer_1's pick point, and at -0.475 arm_1 reaches 80% of its 0.700 m
+# envelope. Buying more clearance here costs reach margin there.
+assets:
+  # --- arm pedestals ---
+  - id: pedestal_1
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [0.000, -0.300, 0.000]
+    hardware: {backend: sim}
+
+  - id: pedestal_2
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [2.100, -0.300, 0.000]
+    hardware: {backend: sim}
+
+  - id: pedestal_3
+    zone: cell_a
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [4.200, -0.300, 0.000]
+    hardware: {backend: sim}
+
+  # --- work surfaces at each end of the line ---
+  - id: table_pick
+    zone: cell_a
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [-0.475, 0.000, 0.000]
+    hardware: {backend: sim}
+
+  - id: table_accumulation
+    zone: cell_a
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [6.200, 0.000, 0.000]
+    hardware: {backend: sim}

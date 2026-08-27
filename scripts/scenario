@@ -3,9 +3,47 @@
 #
 #   ./scripts/scenario                 list available scenarios
 #   ./scripts/scenario pick_and_place  run one
+#   ./scripts/scenario bringup --teardown-advisory
+#                                      gate on the cycle only; still run and
+#                                      report the post-shutdown check
 #
-# Scenarios are deterministic: the physics seed is fixed so that a failure is
-# reproducible rather than a coin flip.
+# --teardown-advisory exists for CI and is off by default, so an interactive run
+# keeps answering the strict question. It does not delete, skip or exempt the
+# post-shutdown assertion — that class still runs and still reports every bad
+# exit — it only stops an upstream teardown abort deciding the exit status. The
+# measurement behind it, and why exempting the offending process would be a guess
+# rather than a fix, is in the phase-split block in scripts/_lib.sh. A caller that
+# passes it owns surfacing what the teardown check found.
+#
+# SCENARIOS ARE NOT YET DETERMINISTIC, and the seed below does not make them so.
+#
+# CITE_PHYSICS_SEED now has exactly one consumer: `simulation.launch.py` passes it
+# to `gz sim --seed`. An earlier version of this header said the variable "reaches
+# nothing, not Gazebo", and that is no longer true — but the conclusion it drew
+# still is, so be precise about what the seed actually buys.
+#
+# `gz sim --seed` calls `gz::math::Rand::Seed`. That covers sensor noise and the
+# transport RNG. It does NOT seed the physics solver.
+#
+# ADR-0027 removed one of the two stochastic components and left the other. Every
+# arm now plans with Pilz by default — a trajectory generator rather than a
+# search. What is measured about that, stated exactly, because the difference
+# matters: cite_skills' planning-pipeline launch test asserts that ONE move_group
+# answers two identical requests with a bit-identical trajectory, WITHIN ONE
+# PROCESS. That is repeatability of a planner. It is not a claim that two runs of
+# a scenario plan the same motions, and it must not be read as one — the requests
+# a scenario makes depend on where the physics put the work-piece. OMPL is
+# retained as the fallback and is still unseeded and still unseedable: MoveIt
+# reaches no seeding entry point, and ADR-0027 records why a seed would not help
+# even if it did. So a run whose motions were all answered by Pilz has one fewer
+# source of variance than it used to, and a run that fell back does not.
+#
+# A seeded run is still not a reproducible run, and the reason is now the physics
+# rather than the planner. Running pick_and_place four times under one seed
+# produced two distinct failure modes, each twice; that measurement predates
+# ADR-0027 and has not been repeated under it. Treat a passing scenario as
+# evidence about this run and not about the next one. See
+# docs/architecture/cross-cutting-testing.md for what is and is not guaranteed.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -25,20 +63,96 @@ if [ $# -eq 0 ]; then
     exit 0
 fi
 
+# Decided before re-entry, not after, so the host and the container cannot derive
+# it independently. Being a CITE_ variable, exec_in_container carries it across;
+# with the export below the re-exec point, the container recomputed its own value
+# and the two agreed only because the default happens to be a constant.
+export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
+
 require_ros_env scenario "$@"
 
 NAME="$1"; shift
 SCENARIO="${SCENARIO_DIR}/${NAME}.py"
 [ -f "$SCENARIO" ] || die "No such scenario: ${NAME}  (run ./scripts/scenario to list)"
 
+# Parsed after the re-entry above rather than before it, so the flag survives the
+# hop into the container as an ordinary argument and is read once, on the side
+# that actually runs launch_test.
+TEARDOWN_POLICY="blocking"
+LAUNCH_TEST_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --teardown-advisory) TEARDOWN_POLICY="advisory" ;;
+        *) LAUNCH_TEST_ARGS+=("$arg") ;;
+    esac
+done
+
 [ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
-source "${REPO_ROOT}/workspace/install/setup.bash"
+source_overlay
 
-export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
-info "Running scenario '${NAME}' (seed ${CITE_PHYSICS_SEED})"
+info "Running scenario '${NAME}' on DDS domain ${ROS_DOMAIN_ID}"
+# Stated on every run rather than buried in a header nobody opens: the seed does
+# reach Gazebo now, but it seeds the wrong thing to make a run repeatable, so a
+# green run here still does not mean the next one is green.
+#
+# The planner half of this warning narrowed with ADR-0027 and did not go away.
+# Pilz answers the motions it can, deterministically; OMPL answers the rest and is
+# unseeded and unseedable. Which of the two answered a given motion is in the run
+# log, so the last line says how to look rather than leaving the reader to assume
+# the good case. Removing these lines requires the physics solver to be seeded and
+# the OMPL fallback to be gone, not merely Gazebo to be seeded.
+warn "Seed ${CITE_PHYSICS_SEED} reaches 'gz sim --seed' only — this run is not reproducible."
+warn "  That seeds gz::math::Rand: sensor noise and transport RNG."
+warn "  It does NOT seed the physics solver."
+warn "  Planning: what is PROVEN is that one move_group answers an identical request"
+warn "  identically within one process (cite_skills' planning-pipeline launch test)."
+warn "  That is repeatability, not scenario determinism, and it holds only where Pilz"
+warn "  answered; the OMPL fallback is unseeded and unseedable (ADR-0006). Grep this"
+warn "  run's log for 'planner fallback:' to see which motions took it, and for"
+warn "  'planner fallback declined:' for the ones that refused a substitute."
 
-if launch_test "$SCENARIO" "$@"; then
+# The report is what lets the cycle and teardown questions be told apart after
+# the fact. It lands in workspace/log/ so that CI's existing artifact upload
+# carries it without a second path to keep in step.
+JUNIT_DIR="${REPO_ROOT}/workspace/log"
+mkdir -p "$JUNIT_DIR"
+JUNIT_XML="${JUNIT_DIR}/scenario-${NAME}-$(date -u +%Y%m%dT%H%M%SZ).junit.xml"
+
+if launch_test --junit-xml="$JUNIT_XML" "$SCENARIO" \
+        ${LAUNCH_TEST_ARGS[@]+"${LAUNCH_TEST_ARGS[@]}"}; then
     ok "Scenario '${NAME}' passed"
-else
-    die "Scenario '${NAME}' failed"
+    exit 0
 fi
+
+# Failed. Say which phase failed before saying what it means, because the two
+# have been used to explain each other before.
+FAILURES="$(scenario_failed_cases "$JUNIT_XML" || true)"
+if [ -n "$FAILURES" ]; then
+    step "Failing assertions"
+    printf '%s\n' "$FAILURES" | while IFS="$(printf '\t')" read -r phase case_id summary; do
+        printf '  %-8s %s\n           %s\n' "$phase" "$case_id" "$summary"
+    done
+fi
+
+if VERDICT="$(scenario_verdict "$JUNIT_XML" "$TEARDOWN_POLICY")"; then
+    # Advisory, and reported rather than swallowed. The cycle — the assertion the
+    # phase item's acceptance claim rests on — passed; only the post-shutdown
+    # check failed, and that is the one currently dominated by an upstream abort
+    # in rclpy/rmw destruction that no exemption here can target (see _lib.sh).
+    warn "Scenario '${NAME}': the cycle passed and the post-shutdown check did not."
+    warn "  Reported, not gated, because --teardown-advisory was given."
+    warn "  This is NOT an exemption: every process was checked and the failures are above."
+    warn "  Report: ${JUNIT_XML}"
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        # Annotated so a first-party teardown regression is visible on the pull
+        # request itself. A check that only reports into a collapsed log is a
+        # check nobody reads, which would make this a quiet deletion of the
+        # assertion rather than a downgrade of it.
+        printf '::warning title=Scenario %s teardown::%s\n' \
+            "$NAME" "$(printf '%s' "$FAILURES" | tr '\n\t' '; ')"
+    fi
+    ok "Scenario '${NAME}' passed its cycle assertions"
+    exit 0
+fi
+
+die "Scenario '${NAME}' failed — ${VERDICT}"

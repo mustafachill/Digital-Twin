@@ -8,12 +8,25 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 FAILED=0
 check() { "$@" || FAILED=1; }
 
-VENV="${REPO_ROOT}/.venv/bin"
+VENV="$(cite_venv_bin || echo "${REPO_ROOT}/.venv/bin")"
 
 step "Python (ruff)"
 if [ -x "${VENV}/ruff" ]; then
-    check "${VENV}/ruff" check "${REPO_ROOT}/tools"
-    check "${VENV}/ruff" format --check "${REPO_ROOT}/tools"
+    # Both trees, not just tools/. The scenario suite is Python that runs in CI
+    # and gates every phase item, and it went unlinted for as long as this line
+    # named one directory — three violations sat in tests/scenarios/bringup.py
+    # without anything reporting them. Each tree resolves its own ruff
+    # configuration by discovery: tools/pyproject.toml declares the rules, and
+    # tests/ruff.toml extends it rather than restating it.
+    # A loop rather than `mapfile`: this step runs on the host, where macOS still
+    # ships bash 3.2 and `mapfile` does not exist. The one in ros_lint() below is
+    # safe because that block only runs where ROS does.
+    PY_TREES=()
+    while IFS= read -r tree; do
+        [ -n "$tree" ] && PY_TREES+=("$tree")
+    done < <(python_trees)
+    check "${VENV}/ruff" check "${PY_TREES[@]}"
+    check "${VENV}/ruff" format --check "${PY_TREES[@]}"
 else
     warn "ruff not installed — run ./scripts/bootstrap --host-only"
 fi
@@ -25,8 +38,28 @@ else
     warn "mypy not installed or nothing to check"
 fi
 
+step "English only (P10)"
+# Deliberately in the host half, which is the half that always runs. P10 binds every file
+# in the repository, not only the ones a ROS environment can lint, and a rule enforced only
+# on the Linux workstation is a rule half the contributors never meet. ADR-0035 records the
+# instrument and what each rejected candidate was measured to fire on.
+if [ -x "${VENV}/python" ]; then
+    # Guarded like the documentation-link check below, and for the same reason: this is
+    # cite_tools judging this checkout, not a third-party linter read out of ${VENV}/ by
+    # path. A foreign copy would answer about a tree nobody is looking at.
+    require_local_cite_tools "${VENV}/python" "The English-only check"
+    check "${VENV}/python" -m cite_tools.english "${REPO_ROOT}"
+else
+    warn "cite_tools not installed — run ./scripts/bootstrap --host-only"
+fi
+
 step "Documentation links"
 if [ -x "${VENV}/python" ]; then
+    # The only step here that executes cite_tools rather than a third-party
+    # linter, so it is the only one that can be another checkout's code judging
+    # this checkout's documents. ruff, mypy and yamllint are read out of
+    # ${VENV}/ by path and configured from this tree.
+    require_local_cite_tools "${VENV}/python" "The documentation-link check"
     check "${VENV}/python" -m cite_tools.doclinks "${REPO_ROOT}"
 else
     warn "cite_tools not installed — run ./scripts/bootstrap --host-only"
@@ -50,17 +83,130 @@ else
     warn "shellcheck not installed — skipped"
 fi
 
+# -----------------------------------------------------------------------------
+# ROS package linters.
+#
+# A gate that cannot tell "clean" from "did not run" is worse than no gate: it
+# reports success while checking nothing, and every report built on it overstates
+# what was verified. This block used to do exactly that, in two compounding ways:
+#
+#   1. `--packages-skip-build-finished` skipped every already-built package — in
+#      practice all of them — so colcon printed "Summary: 0 packages finished"
+#      and this script printed "Lint clean". The flag is gone.
+#   2. Even with every package selected, ctest reports "No tests were found!!!"
+#      and exits 0, because the packages declare `ament_lint_auto` but no linter
+#      set for `ament_lint_auto_find_test_dependencies()` to discover. colcon does
+#      not treat an empty test set as an error, so this is asserted explicitly.
+#
+# Both conditions now fail the gate and name what is missing, rather than passing.
+# -----------------------------------------------------------------------------
+ros_lint() {
+    local -a packages=()
+    mapfile -t packages < <(first_party_packages)
+
+    local build="${REPO_ROOT}/workspace/build"
+    if [ ! -d "$build" ]; then
+        die "Lint gate broken: workspace/build does not exist, so no linter can run.
+  Run ./scripts/build first."
+    fi
+
+    # Before asking ctest anything. This gate's whole output is a claim about
+    # which linters a package registers, and that is decided at CMake configure
+    # time — so against a stale tree it reports the linter set of an older
+    # package.xml with complete confidence. That exact false negative is what
+    # made two correctly-configured packages look broken here.
+    assert_build_inputs_current "The lint gate"
+
+    # Scoped to our own packages: linting vcstool-imported vendor source reports
+    # their style choices, which we neither control nor should change.
+    #
+    # Selected by LABEL (-L linter), not by name (-R lint). ament registers every
+    # linter with the `linter` label, and the names are only sometimes spelled
+    # with "lint" in them. `-R lint` matched cpplint, lint_cmake and xmllint and
+    # silently dropped flake8, pep257, copyright, cppcheck and uncrustify — so
+    # this gate ran three of eight linters per package while reporting "Lint
+    # clean", and five of them had never executed under it at all. An agent's
+    # change passed here with flake8 and pep257 genuinely failing.
+    #
+    # Verified rather than reasoned about: `ctest -N -L linter` on cite_skills
+    # lists 8 tests, `ctest -N -R lint` lists 3.
+    local log rc=0
+    log="$(mktemp)"
+    if [ "${#packages[@]}" -gt 0 ]; then
+        (cd "${REPO_ROOT}/workspace" && colcon test \
+            --packages-select "${packages[@]}" \
+            --event-handlers console_direct+ \
+            --return-code-on-test-failure \
+            --ctest-args -L linter) >"$log" 2>&1 || rc=$?
+        cat "$log"
+    fi
+
+    # A real linter failure is reported as such and outranks everything below —
+    # the coverage questions only make sense about a run that itself succeeded.
+    if [ "$rc" -ne 0 ]; then
+        rm -f "$log"
+        FAILED=1
+        return 0
+    fi
+
+    local finished
+    finished="$(sed -n 's/^Summary: \([0-9][0-9]*\) package.*/\1/p' "$log" | tail -1)"
+    finished="${finished:-0}"
+    rm -f "$log"
+
+    # Which packages registered no linter at all? Asked of ctest directly rather
+    # than inferred from colcon's prose, so the answer is per package and exact.
+    #
+    # Same label selector as the run above, and it has to stay the same: when this
+    # counted `-R lint` while the run used `-R lint` too, the coverage check was
+    # counting the wrong population — a package registering only flake8 and pep257
+    # would have been reported as registering no linter at all.
+    local pkg n
+    local -a without_linters=()
+    for pkg in "${packages[@]}"; do
+        if [ ! -f "${build}/${pkg}/CTestTestfile.cmake" ]; then
+            without_linters+=("${pkg}(not-built)")
+            continue
+        fi
+        n="$(ctest --test-dir "${build}/${pkg}" -N -L linter 2>/dev/null \
+             | sed -n 's/^Total Tests: //p' | tail -1 || true)"
+        [ "${n:-0}" -gt 0 ] || without_linters+=("$pkg")
+    done
+
+    local diagnosis
+    if ! diagnosis="$(assert_lint_coverage \
+            "${#packages[@]}" "$finished" ${without_linters[@]+"${without_linters[@]}"})"; then
+        die "Lint gate broken — ${diagnosis}.
+  A gate that cannot tell 'clean' from 'never ran' must not report success.
+  Every first-party package needs a linter set for ament_lint_auto to discover:
+    package.xml:    <test_depend>ament_lint_common</test_depend>
+    CMakeLists.txt: find_package(ament_lint_auto REQUIRED)
+                    ament_lint_auto_find_test_dependencies()
+  Declaring only <test_depend>ament_lint_auto</test_depend> registers zero linters."
+    fi
+}
+
+RAN_ROS_LINT=0
 if in_container || native_ros_available; then
     step "ROS packages"
-    if [ -d "${REPO_ROOT}/workspace/src" ] && [ -n "$(ls -A "${REPO_ROOT}/workspace/src" 2>/dev/null)" ]; then
-        (cd "${REPO_ROOT}/workspace" && colcon test --packages-skip-build-finished \
-            --ctest-args -R "lint" 2>/dev/null) || FAILED=1
-    else
-        warn "workspace/src is empty — no ROS linters to run yet"
-    fi
+    ros_lint
+    RAN_ROS_LINT=1
+else
+    # Never skip this silently. A green ./scripts/lint on a laptop used to be
+    # indistinguishable from a green one in the container, and only the second
+    # has looked at a single line of C++.
+    step "ROS packages"
+    warn "SKIPPED — no ROS 2 environment on this host."
+    warn "  The Python, YAML, shell and documentation checks above did run."
+    warn "  The C++, CMake and package linters did NOT."
+    warn "  For the full gate, in one command: ./scripts/enter dev ./scripts/lint"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
     die "Lint failed"
 fi
-ok "Lint clean"
+if [ "$RAN_ROS_LINT" -eq 1 ]; then
+    ok "Lint clean"
+else
+    ok "Lint clean — host checks only; ROS package linters were not run"
+fi

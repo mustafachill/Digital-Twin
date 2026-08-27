@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!-- One station's work cycle.
+
+     Recovery is expressed, not implied. The Fallback below is what makes a
+     failed pick a decision rather than an exception: the station returns home
+     and reports itself blocked, so the line attributes the failure here instead
+     of discovering it downstream.
+
+     Recovery only works because a leaf that gives up cancels the goal it
+     abandons — see SkillNode::send. Without that, MoveToHome below is sent to a
+     server that is still executing the goal that just failed, and the skill
+     server rejects it: the recovery branch would fail every time, for a reason
+     that appears nowhere in this file.
+
+     Nothing in this tree plans a trajectory or commands a controller. Every leaf
+     is an L3 skill called as a ROS 2 action — that separation is what lets an
+     arm be swapped without touching orchestration (P9).
+
+     Every name below is a blackboard reference. Neither this file nor the
+     coordinator writes an asset name or an action name: they arrive as
+     parameters, because names are generated from the L0 model and no asset name
+     is written by hand twice (CLAUDE.md §8).
+
+     The cycle is pick-then-place, which is one station's whole contribution to
+     the line. Transfer — the two-party handoff — is L4's protocol and arrives
+     with the second station (ADR-0024). -->
+<root BTCPP_format="4" main_tree_to_execute="StationCycle">
+
+  <BehaviorTree ID="StationCycle">
+    <Fallback name="cycle_with_recovery">
+
+      <Sequence name="nominal">
+        <MoveToHome asset="{asset}" action="{move_to_action}" />
+        <PickAt     asset="{asset}" action="{pick_action}"  frame="{pick_frame}"
+                    workpiece="{workpiece}" />
+        <PlaceAt    asset="{asset}" action="{place_action}" frame="{place_frame}" />
+        <MoveToHome asset="{asset}" action="{move_to_action}" />
+      </Sequence>
+
+      <!-- Returning home first is deliberate: a station that failed mid-cycle
+           may have left the arm somewhere the next attempt would collide with. -->
+      <Sequence name="recover">
+        <MoveToHome    asset="{asset}" action="{move_to_action}" />
+        <ReportBlocked asset="{asset}" reason="the station could not complete its cycle" />
+      </Sequence>
+
+    </Fallback>
+  </BehaviorTree>
+</root>
