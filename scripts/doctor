@@ -150,10 +150,19 @@ step "Host tooling"
 CITE_PY="$(cite_python 2>/dev/null || true)"
 if [ -n "$CITE_PY" ] && [ -x "$CITE_PY" ]; then
     report pass "virtualenv" "$(dirname "$(dirname "$CITE_PY")")"
-    if "$CITE_PY" -c "import cite_tools" 2>/dev/null; then
-        report pass "cite_tools" "importable"
-    else
+    CITE_TOOLS_FOUND="$(cite_tools_found_dir "$CITE_PY" || true)"
+    if [ -z "$CITE_TOOLS_FOUND" ]; then
         report fail "cite_tools" "not installed — run ./scripts/bootstrap --host-only"
+    elif CITE_TOOLS_WHERE="$(assert_cite_tools_local \
+             "$(cite_tools_expected_dir || true)" "$CITE_TOOLS_FOUND")"; then
+        report pass "cite_tools" "$CITE_TOOLS_FOUND"
+    else
+        # Both paths named rather than summarised, because the whole failure mode
+        # is that the wrong tree is indistinguishable from the right one at a
+        # glance. A `fail`, not a `warn`: validate-model, lint and test all
+        # refuse in this state, so this checkout is not usable until it is fixed.
+        report fail "cite_tools" \
+            "${CITE_TOOLS_WHERE} — run ./scripts/bootstrap --host-only here"
     fi
 else
     report fail "virtualenv" "missing — run ./scripts/bootstrap --host-only"

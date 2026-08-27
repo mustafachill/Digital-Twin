@@ -18,6 +18,10 @@ PY="$(cite_python)" || true
 [ -x "$PY" ] || PY="$(command -v python3 || true)"
 [ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
 
+# The fetcher writes into this checkout's assets/, so it has to be this
+# checkout's fetcher deciding what and where.
+require_local_cite_tools "$PY" "The asset fetcher"
+
 ENTRIES=$("$PY" - "$MANIFEST" <<'PYEOF'
 import sys, yaml
 with open(sys.argv[1]) as f:
