@@ -9,7 +9,12 @@
   **Not built:** "every node that participates in bring-up is a managed node" is not true
   today. `cite_skills`' skill server and `cite_orchestration`'s line coordinator are plain
   `rclcpp::Node`s with no lifecycle interface. The pattern below remains binding on them.
-- **Related:** charter §4 (P4), [ADR-0009](../adr/0009-docker-primary-environment.md), [`../operations/bring-up.md`](../operations/bring-up.md), [`../reference/v1-lessons.md`](../reference/v1-lessons.md)
+  **Nor is shutdown symmetric with startup**: on SIGINT the Python lifecycle nodes are
+  destroyed without transitioning, so `on_deactivate` and `on_cleanup` never run — see
+  *Lifecycle callbacks do not run on SIGINT* below, which records it as a gap.
+- **Related:** charter §4 (P4), [ADR-0009](../adr/0009-docker-primary-environment.md),
+  [ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md),
+  [`../operations/bring-up.md`](../operations/bring-up.md), [`../reference/v1-lessons.md`](../reference/v1-lessons.md)
 
 ## The problem this solves
 
@@ -97,6 +102,54 @@ That last point is not hygiene. An orphaned `gz sim` holds ports and names, and 
 bring-up fails in a way that points nowhere near the cause. It is in the `debugger` agent's
 trap list because it costs people hours.
 
+## How an `rclpy` process exits
+
+**Scope: this section is about `rclpy` and nothing else.** The convention below exists to
+compensate for two specific defects in rclpy's shutdown path, both recorded with their
+mechanism and their **removal conditions** in
+[ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md). It is implemented
+once, in `cite_runtime`, and imported — it is not copied into a node.
+
+- **SIGINT does not raise.** A handler is installed that returns without raising, so no
+  `KeyboardInterrupt` can be delivered asynchronously into a message conversion. rclpy's
+  own handler still runs, so shutdown remains an *event* (P4); only the exception riding
+  alongside it is removed.
+- **Shutdown is observed, not caught.** A node exits on `rclpy.ok()` going false or on
+  `ExternalShutdownException`. `except KeyboardInterrupt` is no longer a shutdown path,
+  because nothing raises it any more.
+- **One exception is tolerated, narrowly.** An `RCLError` out of the executor is swallowed
+  **only while `rclpy.ok()` is already false**. Under any other condition it propagates.
+
+**Do not delete the no-op handler because it looks wrong.** It looks wrong; it is load-bearing
+until upstream is fixed, and ADR-0034 states the two conditions under which each half is to
+be deleted rather than kept.
+
+**The C++ side has no equivalent, and this document does not invent one.** `rclcpp` does
+not chain to a Python handler, has no `KeyboardInterrupt`, and does not run the message
+conversion that fails — so neither race is known to port. Whether `rclcpp` has a teardown
+race of its own is an **open question**: this project has seen an unexplained `skill_server`
+SIGSEGV at teardown, a `MoveGroupInterface` reference cycle is *suspected*, and nothing has
+been demonstrated. A convention would be written for a defect nobody has shown to exist.
+
+### Lifecycle callbacks do not run on SIGINT — this is a gap
+
+Three of the four `cite_facility` Python nodes are `LifecycleNode`s. All three implement
+`on_cleanup`; `frame_server` also implements `on_deactivate`. **On SIGINT, none of them
+runs.** `main()` calls `destroy_node()` directly, so the process goes from `active` to gone
+without passing through `deactivate` or `cleanup`.
+
+That was already true of the code the shutdown fix replaced, so the fix does not introduce
+it — but it canonizes it, and it contradicts the transition table above, which says
+`cleanup` "release[s] everything `configure` allocated".
+
+**Recorded as a gap, not as a design.** It is harmless *today* for one checkable reason:
+those callbacks release publishers and services and nothing else, and process exit releases
+those anyway. It stops being harmless at the first Python lifecycle node whose `on_cleanup`
+releases something that outlives the process or matters on the way out — a file being
+written, a hardware handle, a latched output, a safety interlock. At that point an
+event-driven `deactivate` → `cleanup` on the shutdown path is required, and it is a
+decision to be recorded, not a patch.
+
 ## Testing bring-up
 
 Bring-up is tested like anything else ([cross-cutting-testing.md](cross-cutting-testing.md)):
@@ -117,3 +170,6 @@ Bring-up is tested like anything else ([cross-cutting-testing.md](cross-cutting-
 | Unsafe state on `deactivate` | Arm left in an indeterminate position | `safety-auditor` — Critical |
 | Orphaned process after shutdown | The *next* bring-up fails, pointing nowhere useful | `tester` standing check |
 | Circular dependency | Bring-up hangs with no error | Explicit ordering; scenario test |
+| `rclpy` node exits 1 at teardown | `RuntimeError: Unable to convert call argument '0' to Python object`, intermittently and only under load | Scenario teardown check; the convention above ([ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md)) |
+| The no-op SIGINT handler removed as "obviously wrong" | The teardown failure above returns at roughly 1 run in 10 under load — low enough to be dismissed as flake | ADR-0034's removal conditions; `reviewer` |
+| A Python lifecycle node holding a resource that matters | Nothing on SIGINT: `on_cleanup` never runs, so the resource is released only by process exit | Nothing detects this today — see the gap recorded above |
