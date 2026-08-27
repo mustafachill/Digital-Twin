@@ -179,7 +179,7 @@ else
     warn "SKIPPED — no ROS 2 environment on this host."
     warn "  The Python, YAML, shell and documentation checks above did run."
     warn "  The C++, CMake and package linters did NOT."
-    warn "  For the full gate: CITE_ENV=docker ./scripts/enter, then ./scripts/lint"
+    warn "  For the full gate, in one command: ./scripts/enter dev ./scripts/lint"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
