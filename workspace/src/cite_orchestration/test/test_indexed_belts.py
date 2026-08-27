@@ -38,7 +38,9 @@ Nothing here writes a station name, a belt name, a topic or a speed.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import re
 
 from ament_index_python.packages import get_package_share_directory
 import pytest
@@ -48,9 +50,60 @@ ZONE = "cell_a"
 
 GENERATED = Path(get_package_share_directory("cite_generated"))
 
+#: The two places this package writes the indexing stand-off down in prose, both
+#: supplied by CMake rather than composed from a relative path — a test that
+#: walked out of its own source tree would pass or fail on where it was invoked
+#: from. Read where they are USED, so a missing variable is a named failure in
+#: one test instead of a KeyError during collection.
+#:
+#: Both said "0.050 m upstream" for as long as that was true and for a while
+#: after it stopped being. The number is derived from the work-piece now
+#: (ADR-0033), so it moves whenever the part does, and a sentence that states it
+#: is a sentence that will go stale in silence unless something reads it.
+STANDOFF_SOURCES = ("CITE_CONVEYOR_INDEX_HEADER", "CITE_STATION_TREE_XML")
+
+#: `<number> m DOWNSTREAM`, which is how both of them state it.
+STANDOFF_PATTERN = re.compile(r"(\d+\.\d+)\s+m\s+DOWNSTREAM")
+
 
 def _read(path: Path) -> dict:
     return yaml.safe_load(path.read_text()) or {}
+
+
+def stated_standoff_m() -> dict[str, float]:
+    """Return `file -> the stand-off it states`, for every file that states one."""
+    stated: dict[str, float] = {}
+    for variable in STANDOFF_SOURCES:
+        configured = os.environ.get(variable)
+        assert configured, (
+            f"{variable} is unset. CMakeLists.txt sets it for this test, so run it "
+            "through ./scripts/test rather than invoking pytest on this file directly"
+        )
+        path = Path(configured)
+        found = STANDOFF_PATTERN.findall(path.read_text())
+        assert found, (
+            f"{path.name} states no indexing stand-off in the form this test reads "
+            "('<number> m DOWNSTREAM'). Either the sentence was reworded or it was "
+            "dropped; a number that nothing reads is the one that goes stale"
+        )
+        assert len(set(found)) == 1, (
+            f"{path.name} states {sorted(set(found))} as the stand-off, which is one "
+            "value written more than one way (P1)"
+        )
+        stated[path.name] = float(found[0])
+    return stated
+
+
+def static_transforms() -> dict[str, list]:
+    """Return `child frame -> its xyz in the world`, from the generated table."""
+    table = _read(GENERATED / "frames" / f"{ZONE}_static_tf.yaml")["static_transforms"]
+    return {entry["child"]: entry["xyz_m"] for entry in table}
+
+
+def sensor_frames() -> dict[str, str]:
+    """Return `detection topic -> the frame the beam stands in`, from the plan."""
+    plan = _read(GENERATED / "bringup" / f"{ZONE}_plan.yaml")["plan"]
+    return {entry["detection_topic"]: entry["frame_id"] for entry in plan.get("sensors", [])}
 
 
 def topology() -> dict:
@@ -166,6 +219,62 @@ def test_no_station_indexes_the_belt_it_places_onto() -> None:
                 wrong.append((station["id"], belt))
     assert not wrong, (
         f"these stations would stop the belt they place onto: {wrong}"
+    )
+
+
+def test_the_stated_standoff_is_the_one_the_cell_is_built_to() -> None:
+    """The number both comments quote, checked against the generated frames.
+
+    An indexing beam has to break at the instant the part's centre reaches the
+    pick point, so its stand-off is half a part length plus half a beam width and
+    lies DOWNSTREAM of the pick frame — derived by
+    `cite_tools.model.resolve.index_offset_m`, never authored (ADR-0033).
+
+    WHY A TEST AND NOT A COMMENT. `conveyor_index.hpp` and `trees/line_station.xml`
+    both said the beam stood 0.050 m UPSTREAM, and both built window arithmetic on
+    it. That was true of an authored placement and stopped being true when the
+    placement became derived; nothing failed, because nothing read it. This reads
+    it. A part of a different length moves the beam, and the sentence that
+    describes it now moves with the cell or fails here in milliseconds.
+    """
+    stated = stated_standoff_m()
+    assert len(set(stated.values())) == 1, (
+        f"the stand-off is written as {stated}, which is one value in two places (P1)"
+    )
+
+    frames = static_transforms()
+    topics = sensor_frames()
+    stations = {station["id"]: station for station in topology()["stations"]}
+
+    checked = 0
+    for belt, station_id in indexed_belts().items():
+        station = stations[station_id]
+        trigger = (station.get("trigger") or {}).get("topic", "")
+        assert trigger, (
+            f"'{station_id}' indexes belt '{belt}' and has no trigger, so nothing "
+            "stops that belt and it would run until the line was killed"
+        )
+        beam_frame = topics.get(trigger)
+        assert beam_frame, f"no sensor in the plan publishes '{trigger}'"
+
+        # Along the belt is world x for every conveyor in this cell, which is the
+        # same restriction `cite_tools.validate.geometric` already carries.
+        offset = frames[beam_frame][0] - frames[station["pick_frame"]][0]
+        assert offset > 0.0, (
+            f"'{beam_frame}' stands {offset:.4f} m from '{station['pick_frame']}' "
+            "along the belt, which is upstream. An indexing beam upstream of the "
+            "pick point stops the part before it arrives"
+        )
+        assert offset == pytest.approx(next(iter(stated.values())), abs=5e-4), (
+            f"'{beam_frame}' stands {offset:.4f} m downstream of "
+            f"'{station['pick_frame']}', and this package's comments say {stated}. "
+            "The stand-off is derived from the work-piece, so it moves whenever the "
+            "part does — the prose has to move with it"
+        )
+        checked += 1
+
+    assert checked, (
+        "no indexed belt has a trigger and a pick frame, so nothing was checked"
     )
 
 

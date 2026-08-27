@@ -14,12 +14,17 @@
 
 // The belt setpoint, and its owner (ADR-0032).
 //
-// A station cannot pick from a running belt. The beam that starts a station is
-// 0.050 m upstream of the point the station picks from, and the work-piece
-// leaves the belt's carry volume 0.100 m past it — 0.333 s and 0.667 s at the
-// declared 0.150 m/s, against a pick-and-place cycle of 106 to 119 s. So the
-// belt is INDEXED: it stops when the station it feeds is triggered, and runs
-// again when that station reports `CompleteHandoff`.
+// A station cannot pick from a running belt, and the beam that starts it leaves
+// no margin at all. It stands 0.027 m DOWNSTREAM of the point the station picks
+// from — half a part length plus half a beam width, derived by
+// `cite_tools.model.resolve.index_offset_m` from the work-piece's own geometry
+// rather than authored (ADR-0033) — so a part breaks it exactly when the part's
+// centre reaches the pick point. The instant of the edge is the instant the part
+// is where it is wanted; there is no travel time to spend, and every further
+// metre of belt is displacement. At the declared 0.150 m/s the part clears its
+// own 0.050 m length in 0.333 s, against a pick-and-place cycle of 106 to 119 s.
+// So the belt is INDEXED: it stops when the station it feeds is triggered, and
+// runs again when that station reports `CompleteHandoff`.
 //
 // WHICH BELT IS NEVER NAMED HERE. A belt is the `via_asset_id` of the inbound
 // edge of a station that has a robot actor — the same derivation `line_plan.hpp`
@@ -112,12 +117,36 @@ public:
   : node_(std::move(node)), drives_(std::move(drives))
   {
     for (const auto & [asset, drive] : drives_) {
+      // THE SETPOINT IS RE-SENT TO A SUBSCRIBER THAT ARRIVES AFTER IT, and
+      // without that this class commands nothing at start-up.
+      //
+      // Reliable delivery is a promise to subscribers this publisher has been
+      // MATCHED with, and matching is a discovery event. These publishers are
+      // created in the topology callback and `run_all()` publishes from the same
+      // callback a tree-construction later, so at that instant the count of
+      // matched subscribers is zero and the message is delivered to nobody —
+      // however long the bridge has been up, and however reliable the profile.
+      // Measured: with the continuous-line scenario's own publisher removed, a
+      // subscriber that had been up for a hundred seconds received nothing for
+      // the following three hundred. The scenario used to publish the same
+      // setpoint ten times over a second, and that is what actually started the
+      // belts; ADR-0032's `run_all()` never has.
+      //
+      // So the arrival of a subscriber is treated as what it is — an event — and
+      // the belt's CURRENT commanded setpoint is sent to it. Not a retry and not
+      // a delay (P4): nothing here waits for a duration, and the value sent is
+      // whatever this class last decided, so a bridge that restarts mid-run
+      // learns the state of the belt rather than the state it started in.
+      rclcpp::PublisherOptions options;
+      options.event_callbacks.matched_callback =
+        [this, asset](rclcpp::MatchedInfo & info) {on_subscriber_matched(asset, info);};
+
       // The COMMAND profile by name — reliable, so a setpoint reaches a
       // subscriber that is already connected. A `rclcpp::QoS` literal outside
       // `cite_interfaces/qos.hpp` is a review finding, and an improvised profile
       // here would connect to the bridge silently and deliver nothing.
-      publishers_[asset] =
-        node_->create_publisher<std_msgs::msg::Float64>(drive.command_topic, cite::qos::command());
+      publishers_[asset] = node_->create_publisher<std_msgs::msg::Float64>(
+        drive.command_topic, cite::qos::command(), options);
     }
   }
 
@@ -175,7 +204,10 @@ public:
   ///
   /// This is what gives the setpoint an owner. Before ADR-0032 nothing in the
   /// running system commanded a conveyor and `tests/scenarios/continuous_line.py`
-  /// supplied one, reporting itself as a gap rather than a boundary.
+  /// supplied one, reporting itself as a gap rather than a boundary. That
+  /// scenario now reads the command topics instead of writing them and asserts a
+  /// non-zero setpoint on every belt, so this call is the only writer and its
+  /// absence is a scenario failure rather than an invisible one.
   void run_all()
   {
     for (const auto & asset : assets()) {
@@ -256,6 +288,33 @@ private:
     return assets;
   }
 
+  /// A subscriber appeared on this belt's command topic: tell it where the belt is.
+  ///
+  /// Only when the count went UP, and only when this class has already decided
+  /// something. Before the first command there is no intent to state, and a zero
+  /// sent then would be this class asserting a standstill it never chose.
+  void on_subscriber_matched(const std::string & asset, const rclcpp::MatchedInfo & info)
+  {
+    if (info.current_count_change <= 0) {
+      return;
+    }
+    double setpoint = 0.0;
+    {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      const auto entry = commanded_.find(asset);
+      if (entry == commanded_.end()) {
+        return;
+      }
+      setpoint = entry->second;
+    }
+    RCLCPP_INFO(
+      node_->get_logger(),
+      "a subscriber appeared on '%s' after it was last commanded; re-sending %.3f m/s so "
+      "it learns where the belt is rather than waiting for the next change",
+      asset.c_str(), setpoint);
+    static_cast<void>(command(asset, setpoint));
+  }
+
   bool command(const std::string & asset, double speed)
   {
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr publisher;
@@ -266,6 +325,9 @@ private:
         return false;
       }
       publisher = entry->second;
+      // Recorded before publishing, so a subscriber that matches during the
+      // publish below is answered with this value rather than the previous one.
+      commanded_[asset] = speed;
     }
     std_msgs::msg::Float64 message;
     message.data = speed;
@@ -281,6 +343,11 @@ private:
   subscriptions_;
   std::map<std::string, std::vector<std::pair<uint8_t, std::string>>> watched_;
   std::set<std::string> indexed_;
+  //: What each belt was last commanded to, which is this class's whole state
+  //: about the plant. Absent until the first command: "not commanded yet" and
+  //: "commanded to a standstill" are different, and only one of them is a
+  //: decision.
+  std::map<std::string, double> commanded_;
 };
 
 }  // namespace cite_orchestration

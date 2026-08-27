@@ -63,6 +63,9 @@
 #include <cite_interfaces/action/place.hpp>
 #include <cite_interfaces/action/transfer.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
+// L3's rule for reading the unobserved-pose convention, beside its rule for
+// writing one. Downward and therefore legal; see `PickAt::onStart`.
+#include <cite_skills/observation.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
@@ -573,23 +576,26 @@ public:
 
     Pick::Goal goal;
     const auto observed = getInput<geometry_msgs::msg::PoseStamped>("pose");
-    // THE RIGHT TEST IS `cite_skills::pose_is_observed`, AND IT CANNOT BE CALLED
-    // FROM HERE YET. `cite_skills/observation.hpp` holds the rule for reading the
-    // unobserved convention beside the rule for writing it, which is what stops
-    // the two drifting apart, and depending on L3 from L4 is downward and
-    // therefore legal (CLAUDE.md §5). But `cite_skills` declares no
-    // `ament_export_include_directories` — no `ament_export_*` at all — so its
-    // installed headers reach no other package, and this is the first would-be
-    // consumer. Reported rather than worked around by restating the predicate
-    // here, differently, which is the drift the L3 header exists to prevent.
+    // `cite_skills::pose_is_observed` IS THE TEST, CALLED RATHER THAN RESTATED.
+    // `cite_skills/observation.hpp` holds the rule for reading the unobserved
+    // convention beside the rule for writing it, so the two cannot drift; a
+    // predicate spelled out again here would be exactly the drift that header
+    // exists to prevent. Depending on L3 from L4 is downward and therefore legal
+    // (CLAUDE.md §5), and `cite_skills` exports its include directory — so
+    // this is a compile dependency rather than a comment asserting the state of
+    // another package's build, which is what stood here and stopped being true.
     //
-    // What the frame_id test below covers: `mark_pose_unobserved` clears the
-    // frame_id, so every unobserved pose the real detector produces is caught.
-    // What it does not: a pose with a frame set and NaN components, which this
-    // would pass through to the planner as an object pose.
-    if (observed && !observed->header.frame_id.empty()) {
-      // Measured, not assumed. Position AND orientation come from the
-      // observation, which is the only thing that can know the part's yaw.
+    // It is strictly stronger than the `header.frame_id.empty()` test it
+    // replaces: that one admitted a pose with a frame set over NaN components and
+    // handed it to the planner as an object pose. `mark_pose_unobserved` writes
+    // the empty frame AND the NaNs, and this reads both.
+    if (observed && cite_skills::pose_is_observed(observed.value())) {
+      // Measured, not assumed — position and orientation both. NO DETECTOR IN
+      // THIS CELL PRODUCES ONE. Every sensor here is a through-beam: it reports
+      // occupancy, cannot know where along itself the part lies, and knows
+      // nothing whatever about its yaw. `Detect` says so by leaving the pose
+      // explicitly unobserved, so the fallback below is this cell's NORMAL path
+      // and this branch is the contract the day a detector that measures arrives.
       goal.object_pose = observed.value();
     } else {
       const auto frame = getInput<std::string>("frame");

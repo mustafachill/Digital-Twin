@@ -262,6 +262,77 @@ TEST_F(IndexedBelts, IndexingIsRefusedForABeltWithNoDeclaredDrive)
   EXPECT_FALSE(index_->indexes("conveyor_that_does_not_exist"));
 }
 
+TEST(ConveyorIndexDelivery, TheStartingSetpointReachesASubscriberThatWasNotMatchedYet)
+{
+  // THE DEFECT EVERY TEST ABOVE IS BLIND TO, and it kept the line's belts still.
+  //
+  // `IndexedBelts` creates its subscribers first and then lets discovery settle,
+  // so by the time it calls `run_all()` the publishers are matched and the
+  // message lands. Production does the opposite: `line_orchestrator` constructs
+  // the `ConveyorIndex` inside the topology callback and calls `run_all()` from
+  // the same callback a tree-construction later, with a matched-subscriber count
+  // of zero. Reliable QoS is a promise about MATCHED subscribers, so that
+  // publication went nowhere — for as long as ADR-0032 has existed. It was
+  // invisible because `tests/scenarios/continuous_line.py` published the same
+  // setpoint ten times itself and was starting the belts.
+  //
+  // This orders it the way production does: index first, command immediately,
+  // subscribe afterwards. A subscriber appearing is an event, and the belt's
+  // current setpoint is sent when it does — so the value arrives without anything
+  // here retrying or waiting for a guessed duration.
+  auto node = std::make_shared<rclcpp::Node>("conveyor_index_late_subscriber_test");
+
+  constexpr const char * kBelt = "conveyor_late";
+  constexpr const char * kCommand = "/conveyor_index_test/late/conveyor/command";
+  ConveyorDrivesByAsset drives;
+  drives[kBelt] = ConveyorDrive{kCommand, kInstalledSpeed};
+
+  auto index = std::make_shared<ConveyorIndex>(node, drives);
+  index->run_all();
+
+  Setpoint late(node, kCommand);
+  const auto deadline = std::chrono::steady_clock::now() + 2s;
+  while (std::chrono::steady_clock::now() < deadline && late.count() == 0) {
+    rclcpp::spin_some(node);
+    std::this_thread::sleep_for(5ms);
+  }
+
+  ASSERT_TRUE(late.latest().has_value())
+    << "the belt was commanded before any subscriber had been matched and the setpoint "
+       "was never delivered, so the belt stands still and nothing reports it";
+  EXPECT_DOUBLE_EQ(late.latest().value(), kInstalledSpeed);
+}
+
+TEST(ConveyorIndexDelivery, ASubscriberThatArrivesAfterAStopIsToldTheBeltIsStopped)
+{
+  // The re-send states the CURRENT setpoint, not the starting one. A bridge that
+  // restarts while a station is picking must learn that its belt is stopped;
+  // being told the installed speed instead would run a belt out from under an arm
+  // that is reaching into it.
+  auto node = std::make_shared<rclcpp::Node>("conveyor_index_late_stop_test");
+
+  constexpr const char * kBelt = "conveyor_late_stop";
+  constexpr const char * kCommand = "/conveyor_index_test/late/stopped/command";
+  ConveyorDrivesByAsset drives;
+  drives[kBelt] = ConveyorDrive{kCommand, kInstalledSpeed};
+
+  auto index = std::make_shared<ConveyorIndex>(node, drives);
+  index->run_all();
+  EXPECT_TRUE(index->stop(kBelt));
+
+  Setpoint late(node, kCommand);
+  const auto deadline = std::chrono::steady_clock::now() + 2s;
+  while (std::chrono::steady_clock::now() < deadline && late.count() == 0) {
+    rclcpp::spin_some(node);
+    std::this_thread::sleep_for(5ms);
+  }
+
+  ASSERT_TRUE(late.latest().has_value());
+  EXPECT_DOUBLE_EQ(late.latest().value(), 0.0)
+    << "a subscriber that arrived after the belt was stopped was told the installed "
+       "speed, which would run the belt while a station is picking from it";
+}
+
 }  // namespace
 
 int main(int argc, char ** argv)

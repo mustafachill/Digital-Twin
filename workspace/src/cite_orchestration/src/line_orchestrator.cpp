@@ -36,9 +36,10 @@
 // frames and the assets arrive in the topology — CLAUDE.md §8 puts name
 // construction in the model and says no asset name is ever written by hand twice,
 // and this project has removed a hand-composed `/cite/<zone>/<asset>/<skill>`
-// from three separate files. Nothing generated yet declares a station's skill
-// actions, so whoever launches this node still writes them; that gap is reported
-// rather than closed here with a format string.
+// from three separate files. The names now come from the model end to end: the
+// generated bring-up plan carries a `skills:` block per arm, `cite_bringup`
+// reads it and passes the parallel arrays below, and no string is composed
+// anywhere in between.
 //
 // THREADING. An executor spins the node on its own thread; the tree is ticked on
 // this one. No leaf spins, and no leaf blocks except on the cancellation path,
@@ -144,8 +145,10 @@ bool read_skill_actions(
   if (assets.empty()) {
     complaint =
       "skill_assets is empty. The topology says which arm serves which station; this "
-      "parameter says what each arm's skill actions are called. Nothing generated "
-      "declares those names yet, so they arrive from whoever launches this node.";
+      "parameter says what each arm's skill actions are called. Those names are in the "
+      "generated bring-up plan, under each controller manager's `skills:` block, and "
+      "whoever launches this node reads them from there — an empty array means the "
+      "launch mechanism did not, not that the model is silent.";
     return false;
   }
   for (const auto & [label, values] :
@@ -293,12 +296,18 @@ int main(int argc, char ** argv)
   std::vector<std::string> missing;
   const auto zone = required(node, "zone", missing);
   const auto station_tree = required(node, "station_tree", missing);
-  // `LineState` carries no `TOPIC` constant the way `LineTopology` does, so this
-  // name cannot be read off the message and has to be supplied. That asymmetry is
-  // reported rather than papered over with a string literal here: a name written
-  // in a publisher and again in every subscriber is a value in two places, and
-  // the fix belongs on the message.
-  const auto line_state_topic = required(node, "line_state_topic", missing);
+  // THE NAME IS THE MESSAGE'S, NOT THIS FILE'S. `LineState::TOPIC` is the one
+  // place it is written — the asymmetry with `LineTopology` that this comment
+  // used to report is closed — so the default comes off the constant and a
+  // string literal here would be a value in two places (P1). It stays a
+  // parameter so a test rig can publish somewhere private, which is the same
+  // shape `LineState.msg` prescribes and `cite_bringup`'s
+  // `test_the_line_state_topic_comes_off_the_message` already checks on the
+  // launch side. Reading the constant is what makes it a compile dependency
+  // rather than a comment about another package.
+  node->declare_parameter(
+    "line_state_topic", std::string(cite_interfaces::msg::LineState::TOPIC));
+  const auto line_state_topic = node->get_parameter("line_state_topic").as_string();
 
   node->declare_parameter("topology_deadline_s", 30.0);
   node->declare_parameter("handoff_timeout_s", 120.0);
@@ -508,16 +517,31 @@ int main(int argc, char ** argv)
           // is no work-piece on a belt to produce that edge.
           //
           // This is where the belt setpoint acquires an owner. Until ADR-0032
-          // nothing in the running system commanded a conveyor, and
-          // `tests/scenarios/continuous_line.py::_start_the_belts` supplied one,
-          // reporting itself as a gap rather than a boundary.
+          // nothing in the running system commanded a conveyor and the
+          // continuous-line scenario supplied one, reporting itself as a gap
+          // rather than a boundary. It no longer publishes: it subscribes to the
+          // same command topics and asserts a non-zero setpoint arrives, so
+          // deleting this line fails
+          // `continuous_line::_assert_the_line_started_the_belts` rather than
+          // being covered by the harness that was standing in for it.
           //
-          // ONE PUBLICATION, NOT A LOOP. The COMMAND profile is reliable, so a
-          // subscriber that is already connected receives it; the bridge has been
-          // up since long before the topology arrived, which is what this line
-          // has just spent up to `topology_deadline_s` waiting for. A repeated
-          // send would be covering a discovery race that this ordering has
-          // already closed.
+          // ONE PUBLICATION, NOT A LOOP — AND IT IS NOT ENOUGH ON ITS OWN. This
+          // comment used to argue that it was: the COMMAND profile is reliable,
+          // the bridge has been up since long before the topology arrived, so a
+          // repeated send would only be covering a race this ordering had closed.
+          // That is wrong, and it was wrong in the direction that leaves three
+          // belts stationary. Reliability is a promise to subscribers this
+          // publisher has been MATCHED with, and the publishers were created a few
+          // lines above, inside this same callback: at this instant the matched
+          // count is zero and the message goes nowhere, no matter how long the
+          // bridge has been running. The scenario's own publisher — ten sends over
+          // a second — is what actually started the belts, and removing it is how
+          // this surfaced.
+          //
+          // What closes it is in `conveyor_index.hpp`: a subscriber appearing is
+          // an event, and the belt's current setpoint is sent when it does. So
+          // this call states the intent once, and the intent reaches whoever turns
+          // up. Still no retry and still no delay (P4).
           line.conveyors->run_all();
 
           const auto tick_period = std::chrono::milliseconds(

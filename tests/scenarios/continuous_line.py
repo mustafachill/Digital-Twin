@@ -50,8 +50,11 @@ work-piece's *name* is read out of the generated world rather than written.
    declares a family of work-piece names, this scenario fails and says to make
    itself concurrent.
 
-It also supplies the belt setpoints, which is a gap rather than a boundary; see
-`_start_the_belts`.
+It supplies nothing else. It used to supply the belt setpoints too, because
+nothing in the running system commanded a conveyor; ADR-0032 gave that setpoint an
+owner in L4, so this scenario now READS the command topics and asserts the line
+started its own belts — see `_assert_the_line_started_the_belts`. A second
+publisher on a topic the system owns is a hazard, not a gap.
 
 ## What this scenario cannot see
 
@@ -470,6 +473,9 @@ class TestContinuousLine(unittest.TestCase):
         self._line_states: list[LineState] = []
         self._samples: list[Sample] = []
         self._subscriptions: list[object] = []
+        #: `belt asset -> the fastest setpoint anything was seen commanding it to`.
+        #: Read only, and by exactly one writer: L4 (ADR-0032).
+        self._belt_setpoints: dict[str, float] = {}
         #: Where in `_beams` the current work-piece's own events start. Without it
         #: the second piece inherits the first piece's beam reports and every
         #: sensed milestone is satisfied before it has moved.
@@ -682,6 +688,20 @@ class TestContinuousLine(unittest.TestCase):
         self._subscriptions.append(
             self.node.create_subscription(LineState, LineState.TOPIC, self._on_line_state, STATE)
         )
+        # The belt setpoints, read and never written (ADR-0032). Subscribed HERE,
+        # with the rest of the listeners and before the wait for the first
+        # `LineState` below, because `run_all()` publishes once and does it before
+        # the coordinator's first tick — so a subscriber created at step 6 would
+        # have missed the very message it is looking for.
+        for conveyor in plan.conveyors:
+            self._subscriptions.append(
+                self.node.create_subscription(
+                    Float64,
+                    conveyor.command_topic,
+                    lambda message, asset=conveyor.asset: self._on_belt_command(asset, message),
+                    COMMAND,
+                )
+            )
 
         self._buffer = tf2_ros.Buffer()
         # Held on the instance: a listener that goes out of scope stops filling
@@ -703,8 +723,8 @@ class TestContinuousLine(unittest.TestCase):
         #    rides, now that TF is filling.
         self._resolve_envelope(ladder)
 
-        # 6. Run the belts.
-        publishers = self._start_the_belts(plan)
+        # 6. The belts are running, because L4 started them.
+        self._assert_the_line_started_the_belts(plan)
 
         # 7. Feed the line, one piece at a time, and follow each one.
         journeys: list[Journey] = []
@@ -717,9 +737,6 @@ class TestContinuousLine(unittest.TestCase):
                 # feeding the rest would spend an hour proving it. What was not fed
                 # is named in the report rather than left as a silent short count.
                 break
-
-        for publisher in publishers:
-            self.node.destroy_publisher(publisher)
 
         # 8. The verdict, in three parts.
         context = self._context(ladder, journeys)
@@ -783,34 +800,57 @@ class TestContinuousLine(unittest.TestCase):
         self._span_x = (min(edges), max(edges))
         self._lowest_surface_z = min(heights)
 
-    def _start_the_belts(self, plan) -> list:
-        """Command every belt at the speed the model records for its drive.
+    def _on_belt_command(self, asset: str, message: Float64) -> None:
+        self._belt_setpoints[asset] = max(self._belt_setpoints.get(asset, 0.0), message.data)
 
-        NOTHING IN THE RUNNING SYSTEM COMMANDS A CONVEYOR. `line_orchestrator`
-        plans, arbitrates, tracks custody and calls skills, and commands no belt;
-        `model/assets/instances/conveyors.yaml` says the runtime setpoint is L4's
-        decision and does not belong in the model. So the setpoint has no owner
-        today and this scenario supplies it, which is a GAP and is reported as one
-        rather than hidden.
+    def _assert_the_line_started_the_belts(self, plan) -> None:
+        """The belts run because L4 ran them, and this scenario writes nothing.
 
-        It is starting the plant, not driving a work-piece: one constant per belt
-        for the whole run, never changed in response to where a piece is, and no
-        assertion depends on when it was sent. A scenario that stopped a belt when
-        a beam tripped would be implementing the line control it is supposed to be
-        testing.
+        THIS USED TO PUBLISH. `line_orchestrator` commanded no conveyor, the model
+        says the runtime setpoint is L4's decision rather than L0's, and so the
+        setpoint had no owner and the scenario supplied it — a gap, reported as
+        one. ADR-0032 gave it an owner: `ConveyorIndex::run_all` is called once at
+        bring-up, and the same object stops a belt on its station's trigger edge
+        and runs it again on `CompleteHandoff`.
+
+        Publishing here after that is not a leftover, it is a SECOND WRITER on a
+        command topic with one owner. Nothing arbitrates two publishers of a
+        setpoint: whichever message arrives last wins, so a belt L4 had just
+        stopped for a station to pick from could be restarted by a test harness,
+        and the work-piece would ride past the pick point while every assertion
+        in this file still passed. The right thing for a scenario to do with a
+        topic the system owns is read it.
+
+        So this reads it. A non-zero setpoint on every declared belt, observed
+        rather than assumed, is what says the owner exists and did its job — and
+        it is the check that fails if `run_all()` is ever removed, which is
+        exactly the state the deleted publisher was hiding.
         """
-        publishers = [
-            self.node.create_publisher(Float64, conveyor.command_topic, COMMAND)
-            for conveyor in plan.conveyors
-        ]
-        # Published more than once because the bridge may connect after the first
-        # message and a dropped setpoint is a belt that never starts. A retry on a
-        # command, not a schedule: the value is constant and nothing waits on it.
-        for _ in range(10):
-            for conveyor, publisher in zip(plan.conveyors, publishers, strict=True):
-                publisher.publish(Float64(data=conveyor.installed_speed_mps))
-            rclpy.spin_once(self.node, timeout_sec=0.1)
-        return publishers
+        # `True` or `None`, never `False`: `_spin_until` waits on `is not None`,
+        # so a predicate that answered `False` would be read as a good answer and
+        # would return on the first call having waited for nothing.
+        self._spin_until(
+            lambda: True
+            if all(
+                self._belt_setpoints.get(conveyor.asset, 0.0) > 0.0 for conveyor in plan.conveyors
+            )
+            else None,
+            BRING_UP_CEILING_S,
+            "L4 to command every belt to a non-zero setpoint (ADR-0032). Nothing "
+            "else publishes one: if this times out, either `run_all()` no longer "
+            "runs at bring-up or the coordinator never reached it",
+        )
+        for conveyor in plan.conveyors:
+            self.assertAlmostEqual(
+                self._belt_setpoints[conveyor.asset],
+                conveyor.installed_speed_mps,
+                places=6,
+                msg=f"L4 commanded '{conveyor.asset}' to "
+                f"{self._belt_setpoints[conveyor.asset]} m/s against the "
+                f"{conveyor.installed_speed_mps} m/s its drive is installed at. The "
+                "setpoint is L4's decision and the installed speed is the model's; a "
+                "disagreement is a number invented somewhere between them",
+            )
 
     def _spawn_workpiece(self, at: tuple[float, float, float]) -> None:
         sdf_path = Path(f"/tmp/cite_{self.workpiece}.sdf")

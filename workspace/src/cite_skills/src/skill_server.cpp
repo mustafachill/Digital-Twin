@@ -93,17 +93,6 @@ using cite_interfaces::msg::ResultCode;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
 
-/// A pose the arm cannot reach at all, as distinct from one it cannot find a
-/// path to.
-///
-/// These are different diagnoses with different recoveries and they should not
-/// share a code. `cite_interfaces` has no constant for reachability yet, and
-/// that package is not this change's to edit, so the two share `PLANNING_FAILED`
-/// for now and are told apart only by their `detail` — which nothing may parse.
-/// Adding `uint8 UNREACHABLE` to `ResultCode.msg` and pointing this alias at it
-/// is the whole of the follow-up.
-constexpr uint8_t kUnreachable = ResultCode::PLANNING_FAILED;
-
 //: How long to wait for the gripper controller, its acceptance, and its result.
 constexpr std::chrono::seconds kGripperServerWait{10};
 constexpr std::chrono::seconds kGripperAcceptWait{10};
@@ -186,6 +175,26 @@ public:
     // needs it to size the margin that separates a real grasp from the position
     // bias the controller's own end-of-goal test produces.
     declare_parameter("gripper_goal_tolerance_rad", 0.01);
+    // The drive joint's installed maximum rate, carried here under the name the
+    // generated bring-up plan uses for it.
+    //
+    // THIS NODE DOES NOT ACT ON IT, and that is stated rather than left to be
+    // inferred from the absence of a reader. The rate bounds the joint, and the
+    // place a joint is bounded is its description: the generated
+    // `*.urdf.xacro` takes the same L0 value as an argument, which is the path by
+    // which the gripper actually moves at it. Nothing in L3 sequences on it, and
+    // deriving a timeout from it here would be a second opinion about the same
+    // number.
+    //
+    // It is declared because the plan delivers it. An override for a parameter a
+    // node never declared is accepted by launch, dropped by rclcpp and reported
+    // by neither — the exact failure mode that let `gripper_default_grasp_width_m`
+    // and seven linkage dimensions never arrive while the node ran on compiled
+    // defaults that happened to equal the L0 values. Declaring it makes the
+    // delivered value land, and makes it readable with `ros2 param get`, so the
+    // plan's gripper block and this node's parameter set are the same set rather
+    // than two sets that agree by eleven twelfths.
+    declare_parameter("gripper_max_drive_rate_rad_s", 1.0);
     // What `Pick.Goal.grasp_width_m == 0` resolves to — the end effector's
     // default grasp opening. Zero means "not supplied", which is a state the
     // skill reports rather than papers over.
@@ -1306,8 +1315,21 @@ private:
       case cite_skills::PoseGoalFailure::Cancelled:
         return make_result(ResultCode::CANCELLED, "cancelled before execution began");
       case cite_skills::PoseGoalFailure::NoIkSolution:
+        // `UNREACHABLE`, NOT `PLANNING_FAILED`, and the difference is the whole
+        // point of the code existing. `ResultCode.msg` says why: no IK solution
+        // exists for this pose at all, so the remedy is to move the station or
+        // re-reach the pose, not to clear an obstacle. L4's recovery policy
+        // ESCALATEs this one and RETRY_DIFFERENTLYs a planning failure, so
+        // sending the wrong one spends a station's whole retry budget resending
+        // a pose no IK branch can reach.
+        //
+        // No local alias stands between this line and the constant. There was
+        // one, pointing at `PLANNING_FAILED` while the constant it described did
+        // not yet exist; the constant landed and the alias did not move, and
+        // nothing failed. Naming the constant directly is what makes its absence
+        // a compile error rather than a comment that quietly stopped being true.
         return make_result(
-          kUnreachable,
+          ResultCode::UNREACHABLE,
           "this arm cannot reach the requested pose: inverse kinematics found no "
           "solution from any of " + std::to_string(attempts.seeds_tried) +
             " seeds. This is a reachability or degrees-of-freedom failure, not an "

@@ -25,21 +25,23 @@
 // can be tested.
 //
 // It builds no name. Every action it calls arrives as a parameter, exactly as
-// the frames and the asset do — CLAUDE.md §8 puts name construction in the model
-// and says no asset name is ever written by hand twice, and this file used to
-// compose `/cite/<zone>/<asset>/<skill>` from a format string of its own. What
-// remains unfinished is stated in the report rather than here: nothing generated
-// yet declares these names, so whoever launches this node still writes them.
+// the frames and the asset do — CLAUDE.md §8 puts name construction in the
+// model and says no asset name is ever written by hand twice, and this file used
+// to compose `/cite/<zone>/<asset>/<skill>` from a format string of its own. The
+// names come from the model end to end now: the generated bring-up plan carries a
+// `skills:` block per arm and the launch mechanism reads it, so nothing composes
+// a skill name anywhere between L0 and here.
 //
 // ONE STATION, ON PURPOSE. The line lives in `line_orchestrator.cpp`, which
 // instantiates a subtree per station from the L0 topology. This executable runs
 // ONE station's tree from parameters and exits when it finishes, which is what
-// makes a station — and, once `Transfer` has a server, a handoff — drivable in
-// isolation with no second arm and no topology server present. ADR-0024 requires
-// exactly that isolation, and `tests/scenarios/pick_and_place.py` is what
-// currently uses it. The two share every mechanism through the headers; folding
-// them into one entry point belongs with the continuous-line scenario, which
-// does not exist yet.
+// makes a station — and a handoff, `Transfer` having had a server since ADR-0024's
+// motion half was built — drivable in isolation with no second arm and no
+// topology server present. ADR-0024 requires exactly that isolation, and
+// `tests/scenarios/pick_and_place.py` is what currently uses it. The two share
+// every mechanism through the headers. The continuous-line scenario this comment
+// once waited on exists — `tests/scenarios/continuous_line.py` — and the two
+// entry points are still two; folding them into one is undone, not decided.
 //
 // THE NODE IS SPUN HERE, NOT IN A LEAF. The leaves became `StatefulActionNode`s
 // when the line gained parallel stations: they send a goal, return RUNNING, and

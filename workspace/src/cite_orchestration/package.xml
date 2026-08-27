@@ -23,6 +23,12 @@
   <depend>rclcpp_action</depend>
   <depend>behaviortree_cpp</depend>
   <depend>cite_interfaces</depend>
+  <!-- L3, header-only: `cite_skills/observation.hpp` carries the rule for reading
+       the unobserved-pose convention beside the rule for writing one, and `PickAt`
+       calls it rather than restating it. L4 depending on L3 is downward and
+       therefore legal (CLAUDE.md §5); this declaration is what makes the
+       export a build fact instead of a comment about another package. -->
+  <depend>cite_skills</depend>
   <depend>geometry_msgs</depend>
   <!-- The belt command topic. A scalar setpoint in m/s, which is what the bridge
        already carries in each direction; `cite_interfaces/ConveyorState` is the

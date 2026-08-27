@@ -167,23 +167,25 @@ refuses to start without the names. Use the launch.
 | `Detect` returns `PRECONDITION_FAILED` on a zero-sized region | a default-constructed goal has one, and an empty result from it would read as "nothing is on the belt" — a wrong answer that looks exactly like a right one |
 | `Detect` times out waiting for a sensor | the bridge is not delivering. The grace period exists so a `Detect` issued just after start-up does not fail for want of a sample about to arrive; expiry is a diagnosis, not an empty belt |
 
-**One gripper key is delivered and dropped, at this commit.** `cite_bringup`'s `GRIPPER_KEYS`
-lists twelve keys and documents them as being "under the exact name the skill server declares
-it". `skill_server.cpp` declares eleven of them: `gripper_max_drive_rate_rad_s` is carried by
-the generated plan, delivered by `_skill_parameters`, and never declared here, so it is an
-unused node override. The drive rate does reach the gripper by another route — it is an
-argument in the generated `*.urdf.xacro` — so nothing is misconfigured; the delivery to this
-node simply goes nowhere. It is the same shape as the `gripper_max_width_m` defect that
-`plan.py` documents as fixed.
+**Every gripper key the plan delivers is now declared here.**
+`gripper_max_drive_rate_rad_s` was the twelfth of `cite_bringup`'s `GRIPPER_KEYS` and was
+declared by nothing, so rclcpp accepted the override and dropped it without a word — the
+same shape as the `gripper_max_width_m` defect that `plan.py` documents as fixed. It is
+declared now and this node does not act on it: the rate bounds the drive joint, a joint is
+bounded in its description, and the same L0 value reaches the gripper as an argument to the
+generated `*.urdf.xacro`. `cite_bringup`'s
+`test_every_gripper_key_is_one_the_skill_server_declares` reads this file's
+`declare_parameter` calls, so a key that is delivered and declared nowhere fails a unit test
+rather than going quiet.
 
-**Known stale claim in this package's code, at this commit.** `skill_server.cpp` defines
-`constexpr uint8_t kUnreachable = ResultCode::PLANNING_FAILED` with a comment saying
-`cite_interfaces` "has no constant for reachability yet". It does —
-`ResultCode::UNREACHABLE = 9` exists, and `cite_orchestration/recovery_policy.hpp` has a
-distinct `ESCALATE` branch for it with a test asserting that it differs from
-`PLANNING_FAILED`. Nothing emits `UNREACHABLE`, so that branch is unreachable in practice and
-an unreachable pose is still reported to L4 as a planning failure it will retry. Not fixed
-here; documentation does not edit code.
+**An unreachable pose is reported as `UNREACHABLE`.** It used to be reported as
+`PLANNING_FAILED`, through a local `kUnreachable` alias written while `ResultCode.msg`
+carried no constant for reachability. The constant landed; the alias did not move; nothing
+failed. `cite_orchestration/recovery_policy.hpp` ESCALATEs `UNREACHABLE` and retries
+`PLANNING_FAILED`, so the drift spent a station's whole retry budget resending a pose no IK
+branch can reach. The constant is now named at the one place that produces it, and
+`test_skill_contract.py::test_3b_an_unreachable_pose_is_reported_as_unreachable` sends a pose
+2.5 m out and asserts the code that comes back.
 
 ## Tests
 
@@ -207,6 +209,7 @@ no waiting.
 | `test_detection_contract.py` | launch test: a level on the plan's topic becomes a typed event and a typed detection, driven by a plain ROS publisher |
 | `test_downstream_include.py` | whether another package can reach these headers **from the install space**. Every other test reaches them through the source tree, which is the one path a consumer does not have — so all of them passed while `observation.hpp` was unreachable from outside the package |
 
-`test_detection_contract.py`'s docstring still says "the bridge does not exist yet"; it does,
-in `cite_bringup`. The test's own rig is unchanged and correct — it drives the ROS side by
-hand — but that sentence no longer describes the repository.
+`test_detection_contract.py` used to say "the bridge does not exist yet". It does, in
+`cite_bringup`, and the docstring now says what that test does and does not prove about it:
+the rig drives the ROS side by hand and is unchanged, so a Gazebo boolean actually arriving is
+`tests/scenarios/continuous_line.py`'s to show and not this file's.

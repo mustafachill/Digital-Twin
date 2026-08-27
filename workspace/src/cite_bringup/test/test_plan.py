@@ -408,6 +408,39 @@ def test_every_gripper_key_the_plan_states_is_read() -> None:
             assert manager.gripper[key] == pytest.approx(float(entry[key])), key
 
 
+#: The skill server's own source. `GRIPPER_KEYS` claims its entries are spelled
+#: "under the exact name the skill server declares it", and that claim is about
+#: another package — the kind of statement that is true when written and rots in
+#: silence. Reading the declarations is what turns it into a test.
+SKILL_SERVER = (
+    Path(__file__).resolve().parents[2] / "cite_skills" / "src" / "skill_server.cpp"
+)
+
+
+def test_every_gripper_key_is_one_the_skill_server_declares() -> None:
+    """A key the server does not declare is delivered, dropped and reported by nobody.
+
+    `rclcpp` ignores an override for a parameter that was never declared: launch
+    accepts it, the node discards it, and neither says so. That is how
+    `gripper_default_grasp_width_m` and seven linkage dimensions never arrived
+    while the node ran on compiled defaults which happened to equal the L0 values
+    — a P1 defect that worked because two copies agreed.
+
+    `gripper_max_drive_rate_rad_s` was the twelfth key and was in exactly that
+    state at the commit before this test: carried by the plan, delivered by
+    `_skill_parameters`, and declared by nothing.
+    """
+    assert SKILL_SERVER.is_file(), f"the skill server's source is not at {SKILL_SERVER}"
+    source = SKILL_SERVER.read_text()
+    undeclared = [
+        key for key in GRIPPER_KEYS if f'declare_parameter("{key}"' not in source
+    ]
+    assert not undeclared, (
+        f"{sorted(undeclared)} are delivered to the skill server and declared by it "
+        f"nowhere in {SKILL_SERVER.name}, so rclcpp drops them without a word"
+    )
+
+
 def test_a_gripper_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path) -> None:
     """Omission must not become a value.
 

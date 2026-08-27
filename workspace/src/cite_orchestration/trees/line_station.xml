@@ -66,10 +66,24 @@
           <ClaimReach    station="{station}" pick_frame="{pick_frame}"
                          place_frame="{place_frame}" />
 
-          <!-- Where the part actually is, including its yaw. This is the leaf
-               that makes the grasp safe against the rotation a previous gripper
-               left in it (ADR-0029) — the alternative is assuming the part is
-               square to its frame, which it is not once it has been handled. -->
+          <!-- Confirm the part is still there before an arm is sent for it.
+
+               IT SAYS NOTHING ABOUT YAW, and this comment used to say it did:
+               "where the part actually is, including its yaw ... the leaf that
+               makes the grasp safe against the rotation a previous gripper left
+               in it". ADR-0031's correction retracted exactly that sentence.
+               Every detector in this cell is a break beam; a through-beam knows
+               that something crossed it and nothing about where along itself, let
+               alone about its orientation. `Detect` returns an explicitly
+               unobserved pose, `PickAt` refuses it through
+               `cite_skills::pose_is_observed`, and the pick goes to the station's
+               L0 frame — which is the NORMAL path here, not a fallback anyone is
+               waiting to replace.
+
+               So what this leaf is for is the other half of its name. The
+               station's trigger said a part arrived; this says it is still there.
+               An empty result is a disagreement between trigger and detector, and
+               `DetectAt` reports it as a failure rather than looking again. -->
           <DetectAt      asset="{asset}" action="{detect_action}" frame="{pick_frame}"
                          pose="{detected_pose}" workpiece="{detected_workpiece}" />
 
@@ -98,11 +112,17 @@
 
           <!-- The belt this station picks from runs again (ADR-0032).
 
-               It was stopped when this station's trigger fired, so that the
-               piece stood still at the pick point instead of riding past it: the
-               beam is 0.050 m upstream of that point and the piece leaves the
-               belt's carry volume 0.100 m past it, which is under a second at
-               belt speed against a cycle of roughly two minutes.
+               It was stopped when this station's trigger fired, so that the piece
+               stood still at the pick point instead of riding past it. The beam
+               that fired stands 0.027 m DOWNSTREAM of that point — half a part
+               length plus half a beam width, derived in
+               `cite_tools.model.resolve.index_offset_m` rather than authored — so
+               a part breaks it at the instant its own centre reaches the pick
+               point (ADR-0033). There is therefore no travel budget to spend:
+               every metre the belt runs after that edge is a metre the part is in
+               the wrong place, and at the declared 0.150 m/s it clears its own
+               0.050 m length in 0.333 s, against a station cycle of roughly two
+               minutes.
 
                STOPPING IT IS NOT A LEAF, and its absence here is deliberate
                rather than an omission. A leaf acts when this station's cycle
