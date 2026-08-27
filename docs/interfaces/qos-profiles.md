@@ -75,6 +75,50 @@ happily against a QoS mismatch — which is the shape of the v1 handoff defect, 
 coordinator published commands to a topic with no subscriber and every transaction timed
 out forever.
 
+## Reliable is a promise to *matched* subscribers, and this cost the project a working line
+
+Compatibility is not the only way a reliable message reaches nobody. **Reliability is
+retransmission to endpoints the publisher has already been matched with**, and matching is a
+discovery event. Publish before it happens and the message is delivered to zero subscribers,
+with no incompatibility to find and nothing wrong on either side of `ros2 topic info`.
+
+The measured case is in this repository. `ConveyorIndex` creates its belt command publishers
+inside `line_orchestrator`'s topology callback and publishes the start-up setpoint from the
+same callback. With the scenario's own publisher removed, **a subscriber that had been up for
+a hundred seconds received nothing for the following three hundred.** The bridge had been
+running the whole time; the profile was `COMMAND`, reliable; nothing was misconfigured. L4's
+belt command had never once arrived, and a test harness had been starting the belts.
+See the 2026-08-27 correction on [ADR-0032](../adr/0032-index-the-belt.md).
+
+**Tell the two apart before reaching for a profile change:**
+
+| Symptom | Likely cause |
+|---|---|
+| Endpoints listed, profiles differ on a "No" row above | Incompatible QoS |
+| Endpoints listed, profiles agree, nothing ever arrives from one specific publish | The publish happened before the match |
+| Data arrives once the subscriber restarts, or once anything else appears on the topic | The publish happened before the match |
+
+**The fix is an event, never a retry, a sleep or a wider profile (P4).**
+
+- Treat a subscriber matching as an event —
+  `rclcpp::PublisherOptions::event_callbacks.matched_callback` — and send the publisher's
+  *current* value from it. Sending the current value, not the original, means a bridge that
+  restarts mid-run learns the present state rather than the start-up state.
+- **Keep the original immediate publish**, so an RMW that does not deliver the matched event
+  degrades to the previous behaviour rather than to something worse.
+- **`LATCHED` is not the general answer.** Transient local would deliver the last value to a
+  late joiner, but it also replays it to every future one, which for a command topic means a
+  belt learning a setpoint that was current minutes ago. Use it for configuration, per the
+  section below; use the matched event for commands.
+- Never fix it by publishing on a timer until something answers. That is a guessed duration
+  in the shape of a workaround, and it fails silently again the day discovery is slower.
+
+**The test has to be ordered the way production is.** Every pre-existing case against
+`ConveyorIndex` subscribed first and then commanded, and not one of them could see this. The
+two that catch it are ordered index, command, subscribe — the production order. A delivery
+test that sets up its subscriber first is testing a scenario the running system never
+executes.
+
 ## Latching and late joiners
 
 `LATCHED` (transient local, depth 1) is what makes a late-joining node receive the current

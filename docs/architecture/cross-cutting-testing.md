@@ -6,12 +6,16 @@
   in `scripts/_lib.sh`. The contract level is populated: 22 interface definitions are frozen
   against a stored baseline.
   The scenario level has three: `bringup`, a blocking CI gate run twice per run;
-  `pick_and_place`; and `continuous_line`, which drives the whole three-arm line. **The
-  latter two run as `continue-on-error`** and are therefore evidence, not gates — a scenario
-  that cannot fail the build cannot hold a claim up. Three gaps below are still open and are
-  called out where they occur: **scenarios are not deterministic**, ROS package linters
-  register nothing, and neither of the two cycle scenarios is yet a gate. Everything else
-  below the status line is design, not description.
+  `pick_and_place`, **promoted to a blocking gate at `c1e9e03`**; and `continuous_line`,
+  which drives the whole three-arm line and is the **one** container-stage step still marked
+  `continue-on-error`. A scenario that cannot fail the build cannot hold a claim up, so
+  `continuous_line` is evidence and not a gate.
+  All three are run with `--teardown-advisory`, which splits the two questions a scenario
+  answers in one exit code: **the cycle gates, the post-shutdown teardown is reported and
+  does not gate.** It exempts no process and deletes no assertion — see the phase-split block
+  in `scripts/_lib.sh`.
+  One gap below is still open and is called out where it occurs: **scenarios are not
+  deterministic.** Everything else below the status line is design, not description.
 - **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md),
   [`../measurements/README.md`](../measurements/README.md)
 
@@ -190,22 +194,37 @@ container stage can run the C++, CMake and package linters. A green `./scripts/l
 laptop means the Python, YAML, shell and documentation checks passed — it says nothing
 about the C++.
 
-Three container-stage steps are marked `continue-on-error` and are **not** merge gates yet:
-the ROS package lint step, because no first-party package declares a linter set for
-`ament_lint_auto` to find, and both cycle scenarios — `pick_and_place` and
-`continuous_line`. All three run so the failure is visible; none is allowed to report
-success. The conditions for promoting each to blocking are recorded next to it in
-`.github/workflows/ci.yml`.
+**One** container-stage step is marked `continue-on-error`: `continuous_line`. It runs so
+that the failure is visible; it is not allowed to report success. Its promotion condition is
+recorded next to it in `.github/workflows/ci.yml`.
 
-Both cycles now complete (see [L3](L3-capabilities.md) and [L4](L4-orchestration.md)). What
-still stands between either and a merge gate is that **they are not reproducible**, that
-`pick_and_place`'s own teardown check has failed after a passing cycle on several occasions
-— on four distinct processes so far, so process identity does not predict it — and that
-`continuous_line` has not carried every piece in every run. Promoting either before that is
-understood would install exactly the flaky gate the failure-mode table below warns about.
+The other two that used to be here were promoted at `c1e9e03`, against their own recorded
+conditions rather than by decree:
 
-**`continuous_line`'s promotion conditions in `.github/workflows/ci.yml` predate the line
-completing and have not been revised** — read them as history until they are.
+- **The ROS package lint step blocks.** The reason it did not was that the gate selected
+  linters by test *name* and ran 3 of 8 per package. It selects by the `linter` **label**
+  now, which is what ament actually sets — 41 linter tests across the seven first-party
+  packages. `./scripts/lint` additionally refuses to answer at all unless the build tree's
+  fingerprint matches the first-party `package.xml` and `CMakeLists.txt` on disk, so a stale
+  tree produces a diagnosis rather than a confident wrong linter set.
+- **`pick_and_place` blocks.** Its remaining condition had narrowed to reproducibility, and
+  its **seeding** condition was deliberately not carried forward: ADR-0027 establishes that
+  OMPL cannot be seeded through MoveIt, and a gate held behind an unmeetable condition never
+  gates. What replaced it is the pass count plus the phase split — not a determinism claim.
+  Read `ci.yml`'s block above that step for what would **retract** the promotion.
+
+`continuous_line`'s promotion condition was re-decided at the same commit and is now **one
+rather than four**: it passes repeatably in an isolated, freshly built tree, measured against
+thresholds written down before the runs. Three of its four original conditions were closed by
+ADR-0032, ADR-0033 and the milestone ladder going from 4 of 10 to 10 of 10. Not a tolerance
+change, and not a teardown allowance — the teardown half is already reported rather than
+gated.
+
+The teardown question is separate from all of this and is unresolved. `pick_and_place`'s
+teardown check has failed after a passing cycle on several occasions, on four distinct
+processes so far, so process identity does not predict it; the exemption route is closed on
+evidence, and the fix named is a teardown coordinator in `cite_bringup` or a
+lifecycle-managed bridge — not a wider allowlist and not a longer timeout.
 
 ## Failure modes
 

@@ -22,8 +22,11 @@
   [L4](L4-orchestration.md) refuses a direct arm-to-arm edge at plan time
   ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), corrected
   2026-08-26 — the refusal stands, its stated reason did not).
-  **Not proven:** `./scripts/scenario pick_and_place` is not a green gate. It runs in CI as
-  `continue-on-error` at this commit. `MoveTo.Goal.cartesian_path` returns
+  **`./scripts/scenario pick_and_place` is a blocking CI gate** as of `c1e9e03`, run with
+  `--teardown-advisory` so the cycle gates and the post-shutdown check is reported. It is
+  still **not reproducible** — a passing run is evidence about that run, not the next one —
+  and the promotion is retracted by a cycle failure that the machine does not explain.
+  **Not proven:** `MoveTo.Goal.cartesian_path` returns
   `NOT_IMPLEMENTED` ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
   **Not assertable:** how a part is oriented in the jaws — see "A grasp is evidenced by a
   stall" below.

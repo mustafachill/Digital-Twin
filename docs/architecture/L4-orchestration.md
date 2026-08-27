@@ -24,6 +24,13 @@
   because a piece reaches the beam whenever it reaches the beam. Nothing sleeps and nothing
   branches on being in simulation. Which belt is never named here: it is the `via_asset_id`
   of the inbound edge of a station with a robot actor.
+  **It owned the setpoint from 2026-08-26 and delivered it from 2026-08-27.** The publishers
+  are created in the topology callback and the start-up command is published from that same
+  callback, when no subscriber is matched yet — so a reliable profile delivered it to nobody
+  and a test harness was starting the belts. A subscriber matching is now treated as an event
+  and the belt's current setpoint is sent then. Read the 2026-08-27 correction on
+  [ADR-0032](../adr/0032-index-the-belt.md) before changing anything about how the setpoint
+  is published; the measurement and the failure mode are there and are not restated (P1).
   **Refused, deliberately:** a direct arm-to-arm handoff. `line_plan.hpp` rejects such an
   edge at plan time and a plan carrying refusals is not `usable()`
   ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)). Today's

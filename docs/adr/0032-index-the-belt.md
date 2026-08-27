@@ -1,8 +1,16 @@
 # ADR-0032: Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff`
 
-- **Status:** Accepted (corrected 2026-08-26) — **the decision stands and is now
+- **Status:** Accepted (corrected 2026-08-26 and 2026-08-27) — **the decision stands and is
   implemented.** L4 owns the belt setpoint, stops the belt on the `DetectionEvent`
-  transition and restarts it on `CompleteHandoff`. What is corrected is one *consequence*:
+  transition and restarts it on `CompleteHandoff`.
+  **The 2026-08-27 correction is the one to read first.** L4 owned the setpoint from
+  2026-08-26 and *delivered* it to nobody: `run_all()`'s message reached zero matched
+  subscribers and a test harness was starting the belts instead. See the section
+  "Correction — 2026-08-27: the setpoint had an owner and no delivery, and a harness was
+  covering for it", immediately after this block. It also withdraws two figures the
+  2026-08-26 correction declared unaffected, and retires a consequence that said nothing
+  asserted this decision.
+  The 2026-08-26 correction stands as written. What it corrected is one *consequence*:
   "the piece is stationary at the pick point" was false as written, and the piece parked
   short of it. See the section "Correction — 2026-08-26: the piece stopped short of the pick
   point, and the beam is why", immediately after this block. The **open question** left in
@@ -29,6 +37,138 @@
   corrected**, and the update in that cost bullet says how),
   [L1](../architecture/L1-description-and-assets.md),
   [L4](../architecture/L4-orchestration.md), charter §4 (P2, P4, P8)
+
+## Correction — 2026-08-27: the setpoint had an owner and no delivery, and a harness was covering for it
+
+**Two corrections now sit on this record. The newest is placed first**, so that a reader
+meets the most recent state before the older one; the 2026-08-26 correction follows
+unchanged. The convention is recorded in [`README.md`](README.md).
+
+The decision is unchanged, again: a belt still stops on a `DetectionEvent` transition and
+still restarts on `CompleteHandoff`. What is corrected here is the **claim that giving the
+setpoint an owner had given it a writer**, and two figures the earlier correction said its
+own change did not touch.
+
+### 1. The owner published, and nothing received it
+
+> **The belt setpoint gets an owner at L4**, closing the gap
+> `tests/scenarios/continuous_line.py::_start_the_belts` currently reports. A scenario stops
+> supplying a value the running system does not have.
+
+The owner landed. The delivery did not, and for the ten commits that followed, this record
+said the gap was closed while the belts were still being started by the scenario.
+
+`ConveyorIndex` creates its publishers inside `line_orchestrator`'s topology callback and
+`run_all()` publishes from that same callback, a tree construction later. **Reliable QoS is
+a promise to subscribers a publisher has already been *matched* with**, and matching is a
+discovery event that has not happened at that instant, so the message is delivered to
+nobody — however long the bridge has been up, and however reliable the profile. Reliability
+does not buy delivery to a subscriber that does not yet exist to the publisher; it buys
+retransmission to one that does.
+
+**What was measured, and by whom.** With the scenario's own publisher removed, a subscriber
+that had been up for a hundred seconds received nothing for the following three hundred.
+That is the fixing agent's measurement on one machine on 2026-08-27, reported here once. It
+is not a campaign and no thresholds were registered in advance. What settles it is already
+in the tree as an assertion rather than a number: `test_conveyor_index.cpp` orders its two
+delivery cases the way production runs — index, command, subscribe — and both fail without
+the fix.
+
+So the belts in every `continuous_line` run before 2026-08-27 were started by
+`_start_the_belts`, a harness publishing the same setpoint ten times over a second. **The
+redundant writer this ADR asked to remove was the only writer that worked.** The task that
+found it was the removal of that redundancy as a two-writer hazard; the hazard was real and
+so was the dependency.
+
+**The fix is an event, not a retry (P4).** A subscriber matching is treated as what it is —
+an event — and the belt's *current* commanded setpoint is sent then, so a bridge that
+restarts mid-run learns where the belt is rather than where it started. `run_all()`'s
+immediate publish is kept, so an RMW that does not deliver the matched event degrades to
+the previous behaviour rather than to something worse. Nothing waits for a duration.
+
+### 2. `_start_the_belts` no longer exists
+
+Both places this record names it are stale. `tests/scenarios/continuous_line.py` now
+**reads** the command topics and asserts a non-zero setpoint equal to each drive's
+`installed_speed_mps`, so the absence of `run_all()` is a scenario failure rather than an
+invisible one. The gap this ADR described is genuinely closed as of 2026-08-27 — one day and
+ten commits after this record said it was.
+
+One reference is deliberately left uncorrected:
+`docs/measurements/2026-08-26-conveyor-yaw-transfer/harness/belt_yaw.py` cites the function
+in a docstring. A published campaign's `harness/` is the code that produced its `raw/`, and
+editing it makes it no longer that. It is annotated in that campaign's `ANALYSIS.md`
+instead.
+
+### 3. The window arithmetic was beam-derived after all
+
+The 2026-08-26 correction added this note to the Context:
+
+> The window arithmetic is unaffected: the transit times below come from the belt's length
+> and speed, not from where the beam sits.
+
+That is wrong, and it is wrong about the very numbers it was protecting. Both come from
+where the beam sits:
+
+- **0.333 s before the pick point** is 0.050 m (the old upstream mounting) ÷ 0.150 m/s.
+- **0.667 s to leave the carry volume** is 0.100 m (that mounting to the belt's geometric
+  end) ÷ 0.150 m/s.
+
+Recomputed from the generated artifacts at this commit — `cell_a_static_tf.yaml` puts
+`cell_a__beam_c1_out__beam` at x = 1.627 and `cell_a__conveyor_1__outfeed` at x = 1.600;
+`cell_a.sdf` gives `conveyor_1` a `surface_pose` at x = 1.05 with `belt_length_m` 1.2, so
+the carry volume spans x ∈ [0.45, 1.65] and `conveyor.cpp` tests the model's **origin**
+against it:
+
+- A part breaks the beam's upstream face when its own centre is on x = 1.600. **The margin
+  before the pick point is 0 s, not 0.333 s** — the instant of the edge *is* the instant the
+  part is where it is wanted. That is not a regression; it is what deriving the stand-off
+  from the part was for, and `conveyor_index.hpp` states it as "there is no travel time to
+  spend".
+- The origin leaves the carry volume after 0.050 m of further travel: **0.333 s, not
+  0.667 s.**
+
+The argument the figures served is untouched and is strengthened. Sub-second against a 106
+to 119 s cycle was already two orders of magnitude short; zero seconds is shorter. Option A
+— buy time by moving the beam — is refuted by the belt's length regardless of either
+number.
+
+### 4. "Nothing asserts any of this yet" is retired
+
+That consequence was true when written and is not now. `test_conveyor_index.cpp` drives real
+`DetectionEvent` messages through real topics and asserts which edge stops which belt, that
+a level is not an edge, that the opposite edge does not stop it, that a belt feeding no
+actor is never stopped, and that the speed coming back out is the model's; `continuous_line`
+asserts that every declared belt is commanded to its installed speed by L4 and by nothing
+else. **The narrower half of that bullet still holds**: no *scenario* checks that a belt
+stops on a trigger or restarts on a handoff. The scenario checks the start only.
+
+### What survives
+
+The decision, entirely, and every cost below it. Indexing still touches timing and not
+orientation; the belt is still commanded open-loop with nothing publishing `ConveyorState`;
+`buffer_capacity` still means capacity rather than concurrency on an indexed edge. Nothing
+in the corrections above changes which belt stops, when, or why.
+
+### How the error survived
+
+**A publisher with no subscriber fails silently and looks identical to one with nothing to
+say.** ADR-0032 reasoned about ownership — who decides the setpoint — and treated delivery
+as plumbing already proven, in a bullet that said so in as many words: "What was missing was
+the decision, not the plumbing." The plumbing was missing too, in the one place a decision
+record does not look.
+
+It survived a second layer as well. The scenario that would have caught it was *also* the
+thing compensating for it, so removing the compensation and asserting the behaviour had to
+happen in the same change or neither would have shown anything. **A test that supplies a
+value the system under test is supposed to supply cannot report that the system does not.**
+When a harness fills a gap, the record of that gap has to name the harness — this one did —
+*and* the closing change has to delete the harness's version in the same commit that adds
+the system's. Here they were ten commits apart on this branch, and the interval read as working.
+
+The third error is smaller and the same shape: a correction that moved a geometric constant
+asserted, without recomputing, that the arithmetic downstream of it was independent. Two
+divisions would have shown otherwise. **A correction is not exempt from being checked.**
 
 ## Correction — 2026-08-26: the piece stopped short of the pick point, and the beam is why
 
@@ -112,22 +252,38 @@ rather than an estimate.** Every figure below is resolved from `model/` at this 
 indexing beam's along-belt offset is now zero in `sensors.yaml` and its stand-off is derived;
 see the Correction section above and ADR-0033. The window arithmetic is unaffected: the
 transit times below come from the belt's length and speed, not from where the beam sits.]**
+**[Corrected 2026-08-27 — see the Correction section "the setpoint had an owner and no
+delivery, and a harness was covering for it" above. The last sentence of the note is false:
+both transit times below are derived from where the beam sits. They are 0 s and 0.333 s at
+this commit, not 0.333 s and 0.667 s.]**
 
 - `model/assets/instances/sensors.yaml` places each outfeed beam at `xyz_m: [-0.050, 0.250,
   0.030]` in its belt's `outfeed` frame — **0.050 m upstream of the pick point**.
+  **[Corrected 2026-08-26 — see the Correction sections above. The along-belt component is
+  `0.000` and the beam frame resolves to x = 1.627, which is 0.027 m *downstream* of the
+  pick point at x = 1.600 and derived from the work-piece rather than authored.]**
 - `model/assets/types/conveyors/belt_1200x400.yaml` makes the belt **1.200 m** long and
   insets `outfeed` **0.050 m** from its end, so the pick point is 0.050 m short of the
   geometry and the beam is **0.100 m** short of it.
+  **[Corrected 2026-08-27 — the belt length and the outfeed inset stand. The beam is not
+  0.100 m short of the belt's end; it is 0.023 m short of it, at x = 1.627 against a carry
+  volume ending at x = 1.650.]**
 - `workspace/src/cite_generated/worlds/cell_a.sdf` gives the plugin
   `<belt_length_m>1.2</belt_length_m>`, and `conveyor.cpp` builds the carry volume as a box
   of that full length centred on `<surface_pose>`. The carry volume therefore ends at the
   belt's geometric end, 0.100 m past the beam.
+  **[Corrected 2026-08-27 — the carry volume still ends at the belt's geometric end,
+  x = 1.650. It is 0.023 m past the beam, not 0.100 m.]**
 - `model/assets/instances/conveyors.yaml` declares `installed_speed_mps: 0.150` on all
   three drives.
 
 So a work-piece crosses the beam **0.333 s** before it reaches the pick point and leaves the
 carry volume **0.667 s** after crossing it. Against that, the pick-and-place cycle measured
 on the development host is **106 to 119 s**.
+**[Corrected 2026-08-27 — see the 2026-08-27 Correction section above. Both times are
+withdrawn. A part now breaks the beam at the instant its centre is on the pick point, so the
+margin is **0 s**, and it leaves the carry volume **0.333 s** later. The cycle range stands
+and so does the conclusion: the window was already two orders of magnitude too short.]**
 
 **It was observed failing, not inferred to fail.** In four consecutive `continuous_line`
 runs the piece rode off the end before `arm_2` arrived and came to rest on the floor at
@@ -150,6 +306,10 @@ model. The gap is currently filled by the test:
 `tests/scenarios/continuous_line.py::_start_the_belts` publishes one constant per belt for
 the whole run and documents itself as a gap rather than a boundary. So the decision below is
 not only about timing; it gives the setpoint an owner.
+**[Corrected 2026-08-27 — see the 2026-08-27 Correction section above. This was true when
+written and stayed true for the ten commits between this decision being implemented and 2026-08-27, which is the
+part worth knowing. `_start_the_belts` no longer exists: the scenario reads the command
+topics and asserts that L4 commanded every belt to its installed speed.]**
 
 **The decision is forced now** because the sensor-driven three-arm line is the Phase 1.D
 claim, and the belt is the only thing between a station's trigger and its pick.
@@ -227,6 +387,10 @@ needs no second mechanism.
 - **The belt setpoint gets an owner at L4**, closing the gap
   `tests/scenarios/continuous_line.py::_start_the_belts` currently reports. A scenario stops
   supplying a value the running system does not have.
+  **[Corrected 2026-08-27 — see the 2026-08-27 Correction section above. The owner arrived;
+  the delivery did not. `run_all()` published to zero matched subscribers, so the scenario
+  went on being the only thing that started a belt until the matched-subscriber event was
+  added. The gap closed on 2026-08-27, not on 2026-08-26.]**
 - **No new interface, and no new value in a second place.**
   `cite_generated/bringup/cell_a_plan.yaml` already carries `command_topic`, `state_topic`
   and `installed_speed_mps` per conveyor, all resolved from L0;
@@ -287,6 +451,11 @@ needs no second mechanism.
 - **Nothing asserts any of this yet.** No scenario checks that a belt stops on a trigger or
   restarts on a handoff, and until one does, this decision is a decision and not a
   capability (P6, P7).
+  **[Corrected 2026-08-27 — see the 2026-08-27 Correction section above. The first sentence
+  is retired: `test_conveyor_index.cpp` asserts which edge stops which belt, and which belt
+  is left running, through real topics. The second sentence still holds — the scenario
+  asserts only that the belts were *started*, and no scenario asserts the stop or the
+  restart.]**
 
 ### What we will have to revisit
 - **If accumulation becomes representable** — an L0 rail plus a plugin that carries by

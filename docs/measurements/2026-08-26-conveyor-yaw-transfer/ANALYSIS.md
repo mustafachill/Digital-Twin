@@ -340,6 +340,37 @@ between documents far more easily than the condition that gives it meaning. The 
 lesson is the one this campaign already states about its own metric — **an angle without an
 axis is not a measurement of anything** — applied to the campaign that quoted it.
 
+## Note, 2026-08-27 — the harness cites a function that no longer exists, and it is not edited
+
+`harness/belt_yaw.py`'s `Belt` docstring says:
+
+> `tests/scenarios/continuous_line.py:_start_the_belts` records that nothing in the running
+> system does — the setpoint has no owner, and the scenario supplies it. This harness
+> supplies it the same way, on the same topic, with the same message type and QoS profile,
+> so that "the belt was running" means here what it means there.
+
+That function no longer exists. ADR-0032 gave the setpoint an owner in L4, and on 2026-08-27
+that owner was made to actually deliver — see the 2026-08-27 correction on
+[ADR-0032](../../adr/0032-index-the-belt.md). `continuous_line` now reads the command topics
+instead of writing them.
+
+**The file is not edited, and this note is the correction instead.** `harness/` is the code
+that produced `raw/`; changing it makes it no longer that, and this campaign's `criteria.md`
+is frozen. A reader who wants to know what was executed to produce the numbers above must be
+able to read it as executed. The rule is now written down in
+[`../README.md`](../README.md).
+
+**It changes nothing in this campaign, and it sharpens one thing.** The harness commanded the
+belt itself and said so; no result here depended on L4 commanding it, and the campaign never
+claimed otherwise. What is now known is *why* the docstring's description was right: the
+docstring on `command()` explains its `repeats: int = 10` as "repeated for the reason the
+scenario repeats it: the bridge may connect after the first message, and a dropped setpoint
+is a belt that never starts." That diagnosis was correct and understated: what a message
+misses is not only a bridge that has not connected but any subscriber a reliable publisher
+has not yet been *matched* with, which is why L4's own belt command reached nobody however
+long the bridge had been up. This harness was right to publish, and right for a reason
+nobody knew at the time.
+
 ## Threats to validity
 
 - **This measures the simulator, not the cell.** Nothing here evidences behaviour on the
