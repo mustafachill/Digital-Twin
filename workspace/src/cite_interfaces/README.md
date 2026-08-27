@@ -11,7 +11,7 @@ exists, and it is why this package sits at the bottom of the dependency graph.
 
 ## What is here
 
-22 definitions — 14 `.msg`, 2 `.srv`, 6 `.action` — listed in `CMakeLists.txt` and frozen
+23 definitions — 14 `.msg`, 3 `.srv`, 6 `.action` — listed in `CMakeLists.txt` and frozen
 against `test/interfaces.baseline`. Read the shapes with `ros2 interface show`; they are not
 restated here (P1). The conventions they follow are in
 [`docs/interfaces/README.md`](../../../docs/interfaces/README.md).
@@ -36,6 +36,7 @@ than by reading the definitions.
 | `RobotState` | **nothing** |
 | `SafetyState` | **nothing** |
 | `TwinMode`, `DivergenceMetrics`, `SetMode` | **nothing** — L5 does not exist (CLAUDE.md §2) |
+| `ResetStation` | `cite_orchestration/line_orchestrator` — the operator's only control over a blocked station (ADR-0037) |
 
 `LineTopology` and `LineState` each carry their own topic name as a `string TOPIC` constant,
 so the name exists in one place and a consumer reads it off the message rather than

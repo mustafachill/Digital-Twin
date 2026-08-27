@@ -131,6 +131,30 @@ if(BUILD_TESTING)
     rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   )
 
+  # The operator reset (ADR-0037). What is under test is a set of REFUSALS —
+  # a station that is not blocked, a station that is faulted, any station while
+  # any other is faulted, a station this line does not have — and refusals are
+  # the part of an operator control a happy-path test never reaches. It drives
+  # the real `StationReset` through its real handler rather than a client,
+  # because a client blocking on a future served by the same executor is the
+  # deadlock every service test has to avoid.
+  ament_add_gtest(test_station_reset test/test_station_reset.cpp)
+  target_include_directories(test_station_reset PRIVATE include)
+  ament_target_dependencies(test_station_reset
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
+  )
+
+  # The recovery branch's leaf ORDER, in both trees (ADR-0037). Read out of the
+  # shipped XML, because the defect it guards against is not a wrong value but a
+  # wrong sequence: a `MoveToHome` ahead of `RecoverFromFailure` plans and drives
+  # a fresh trajectory before anything has asked whether the station is allowed
+  # to move, and a test that only checked the final station state would pass with
+  # the leaves in either order.
+  ament_add_pytest_test(test_recovery_ordering test/test_recovery_ordering.py
+    ENV
+      CITE_STATION_TREE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/line_station.xml
+      CITE_STATION_CYCLE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/station_cycle.xml)
+
   # Indexing the belt (ADR-0032), against a real publisher and a real
   # subscription in one process. What is under test is a decision about EVENTS —
   # which edge stops which belt, and which belt is left alone — so a fake that

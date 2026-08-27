@@ -81,8 +81,9 @@ template<typename ActionT>
 class RecordingServer
 {
 public:
-  explicit RecordingServer(const std::string & action)
-  : node_(std::make_shared<rclcpp::Node>("recording_skill_server_" + std::to_string(++count_)))
+  explicit RecordingServer(const std::string & action, uint8_t code = ResultCode::SUCCESS)
+  : node_(std::make_shared<rclcpp::Node>("recording_skill_server_" + std::to_string(++count_))),
+    code_(code)
   {
     server_ = rclcpp_action::create_server<ActionT>(
       node_, action,
@@ -94,12 +95,20 @@ public:
       [](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>) {
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> handle) {
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> handle) {
+        const uint8_t code = code_;
         std::thread(
-          [handle]() {
+          [handle, code]() {
             auto result = std::make_shared<typename ActionT::Result>();
-            result->result.code = ResultCode::SUCCESS;
-            handle->succeed(result);
+            result->result.code = code;
+            // ABORTED rather than succeeded when the code is a failure: a leaf
+            // reads the CODE, and a server that reported a failure through a
+            // successful goal would be testing a shape the cell never produces.
+            if (code == ResultCode::SUCCESS) {
+              handle->succeed(result);
+            } else {
+              handle->abort(result);
+            }
           }).detach();
       });
 
@@ -124,6 +133,7 @@ public:
 private:
   static inline std::atomic<int> count_{0};
   rclcpp::Node::SharedPtr node_;
+  uint8_t code_;
   typename rclcpp_action::Server<ActionT>::SharedPtr server_;
   rclcpp::executors::SingleThreadedExecutor executor_;
   std::thread spinner_;
@@ -376,6 +386,97 @@ TEST_F(SkillGoals, PlaceRefusesToMimeAPlaceWithAnEmptyGripper)
   ASSERT_TRUE(goal.has_value());
   EXPECT_TRUE(goal->require_holding) << "without this the line believes a work-piece "
     "arrived somewhere it never did, and the failure surfaces at the next station";
+}
+
+
+// ---------------------------------------------------------------------------
+// The blackboard key the recovery policy reads (ADR-0037).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// The code recorded on a blackboard, or nothing if none was.
+std::optional<int> recorded_code(const BT::Blackboard::Ptr & blackboard)
+{
+  int code = 0;
+  if (!blackboard->get<int>(cite_orchestration::kLastResultCode, code)) {
+    return std::nullopt;
+  }
+  return code;
+}
+
+}  // namespace
+
+TEST_F(SkillGoals, ASuccessfulSkillDoesNotWriteTheCodeTheRecoveryPolicyReads)
+{
+  // THIS IS THE DEFECT THAT MADE THE RECOVERY POLICY DEAD CODE, and it is worth
+  // stating in full because the symptom looked like nothing at all.
+  //
+  // `SkillNode::poll` recorded its outcome unconditionally, success included, and
+  // `kLastResultCode` has exactly one reader: `RecoverFromFailure`. The recovery
+  // branch of `line_station.xml` ran `MoveToHome` before it. So on the common
+  // path — recovery motion succeeds — SUCCESS was written over the failure code
+  // the policy was about to read, `recovery_for(SUCCESS)` answered NONE, the
+  // station went back to WAITING, and the enclosing `<Repeat num_cycles="-1">`
+  // tried again. `ESCALATE` and `STOP_LINE` were unreachable on that path: every
+  // failure became a retry, `SAFETY_BLOCKED` and `HARDWARE_FAULT` included.
+  //
+  // ADR-0037 reorders that branch so the policy is consulted first. This is the
+  // other half, and it is not redundant with the ordering: a leaf added to the
+  // branch later would silently reintroduce the defect, and no test of the order
+  // would catch it.
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  const auto blackboard = config.blackboard;
+  PickAt leaf("PickAt", config, context_for(client_node_));
+
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+  EXPECT_FALSE(recorded_code(blackboard).has_value())
+    << "a skill that succeeded wrote the key the recovery policy reads, so a recovery "
+    "MoveToHome can overwrite the failure that caused it";
+}
+
+TEST_F(SkillGoals, AFailedSkillDoesWriteTheCodeTheRecoveryPolicyReads)
+{
+  // The other direction, and the reason the fix above cannot simply stop writing
+  // the key. A failure must still reach the policy, and it must reach it as the
+  // CODE the server sent rather than as a default.
+  RecordingServer<Place> server(kPlaceAction, ResultCode::MOTION_INTERRUPTED);
+  auto config = ports(kPlaceAction);
+  const auto blackboard = config.blackboard;
+  PlaceAt leaf("PlaceAt", config, context_for(client_node_));
+
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::FAILURE);
+  const auto code = recorded_code(blackboard);
+  ASSERT_TRUE(code.has_value()) << "the failure never reached the policy at all";
+  EXPECT_EQ(*code, static_cast<int>(ResultCode::MOTION_INTERRUPTED));
+}
+
+TEST_F(SkillGoals, ASuccessAfterAFailureDoesNotEraseTheFailure)
+{
+  // The sequence the recovery branch actually runs: something failed, and then a
+  // later leaf on the same blackboard succeeded. The failure has to survive it,
+  // because that is the value the policy chooses ESCALATE or STOP_LINE from.
+  auto config = ports(kPlaceAction);
+  const auto blackboard = config.blackboard;
+
+  {
+    RecordingServer<Place> failing(kPlaceAction, ResultCode::SAFETY_BLOCKED);
+    PlaceAt leaf("PlaceAt", config, context_for(client_node_));
+    ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::FAILURE);
+  }
+
+  auto move_config = ports(kPickAction);
+  move_config.blackboard = blackboard;
+  RecordingServer<Pick> succeeding(kPickAction);
+  PickAt clearing("PickAt", move_config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(clearing), BT::NodeStatus::SUCCESS);
+
+  const auto code = recorded_code(blackboard);
+  ASSERT_TRUE(code.has_value());
+  EXPECT_EQ(*code, static_cast<int>(ResultCode::SAFETY_BLOCKED))
+    << "a successful leaf erased the refusal the policy must never treat as a transient";
 }
 
 int main(int argc, char ** argv)

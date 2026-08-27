@@ -25,6 +25,11 @@
   <depend>cite_interfaces</depend>
   <depend>control_msgs</depend>
   <depend>geometry_msgs</depend>
+  <!-- `motion_end.hpp` names two `MoveItErrorCodes` values (ADR-0037 decision 4),
+       so the message package is a build dependency of the header rather than a
+       transitive one it happens to get. It was already a test_depend below; this
+       is the declaration the header itself needs. -->
+  <depend>moveit_msgs</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
@@ -62,7 +67,6 @@
        (`query_planner_interface`, `plan_kinematic_path`) rather than through
        MoveGroupInterface, because the question is what move_group loaded and
        what it answers — not what a client made of it. -->
-  <test_depend>moveit_msgs</test_depend>
   <test_depend>shape_msgs</test_depend>
   <!-- The planning-pipeline launch test loads the cell's generated planning
        scene into move_group, because ValidateSolution is the only thing that

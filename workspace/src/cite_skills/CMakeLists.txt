@@ -12,6 +12,7 @@ find_package(cite_interfaces REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(moveit_core REQUIRED)
+find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -26,7 +27,7 @@ add_executable(skill_server
 target_include_directories(skill_server PRIVATE include)
 ament_target_dependencies(skill_server
   rclcpp rclcpp_action cite_interfaces control_msgs geometry_msgs
-  moveit_core moveit_ros_planning_interface tf2_ros tf2_geometry_msgs
+  moveit_core moveit_msgs moveit_ros_planning_interface tf2_ros tf2_geometry_msgs
 )
 
 # `Detect` is a separate executable, and deliberately: it commands no motion, so
@@ -150,6 +151,22 @@ if(BUILD_TESTING)
   ament_add_gtest(test_observation test/test_observation.cpp)
   target_include_directories(test_observation PRIVATE include)
   ament_target_dependencies(test_observation geometry_msgs)
+
+  # Where an arm ended up relative to the trajectory it was given (ADR-0037).
+  # This decides whether L4 retries a station unattended or stops it for an
+  # operator, and the boundary cases it has to get right — a short trajectory
+  # whose ends overlap, one mistracking joint among five that arrived, a joint
+  # state that could not be read at all — cannot be produced on demand in a
+  # simulator. So the rule is tested as a rule. No ROS runtime and no MoveIt.
+  #
+  # NO ROS RUNTIME AND NO MOVEIT LIBRARY. It links two generated message headers
+  # — `cite_interfaces` for the `ResultCode` the classifier answers with, and
+  # `moveit_msgs` for the two error-code values ADR-0037 decision 4 says survive
+  # MoveIt's funnels intact — and nothing else. Neither brings a node, an
+  # executor or a planner with it.
+  ament_add_gtest(test_motion_end test/test_motion_end.cpp)
+  target_include_directories(test_motion_end PRIVATE include)
+  ament_target_dependencies(test_motion_end cite_interfaces moveit_msgs)
 
   # The parts of the action contract that only a running server can show:
   # goal exclusion, a cancel that reaches the gripper, and a reachable pose that

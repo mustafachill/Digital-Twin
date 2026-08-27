@@ -113,9 +113,52 @@ inline Recovery recovery_for(uint8_t code)
     //: whether the goal was right, so the same goal is the right next attempt —
     //: bounded, because a controller that aborts every time is a fault and not a
     //: transient.
+    //:
+    //: NARROWED BY ADR-0037, AND THE NARROWING IS IN L3 RATHER THAN HERE. The
+    //: sentence above stopped being universally true when ADR-0036 gave the
+    //: controller a path tolerance: a `PATH_TOLERANCE_VIOLATED` abort means
+    //: something physically held the arm, and replanning from a model of the
+    //: world that the abort itself contradicts is not a retry of the same goal —
+    //: it is the same goal against a world nobody has looked at.
+    //:
+    //: What that needed was a discriminator, and the branch that carried this
+    //: note said one did not exist. That was half right. It reasoned from what
+    //: the `FollowJointTrajectory` ACTION DEFINITION makes expressible rather
+    //: than from what THIS CONTROLLER emits, and so listed `INVALID_JOINTS` and
+    //: `OLD_HEADER_TIMESTAMP` as arriving indistinguishably — describing the
+    //: second as a transport fault that MUST keep retrying. Neither is ever set
+    //: by `joint_trajectory_controller`. Both conditions are caught in
+    //: `validate_trajectory_msg` and turned into a goal REJECTION, and a ROS 2
+    //: rejection carries no result message and therefore no code at all. The
+    //: retryable transport fault that argued for keeping this branch broad does
+    //: not exist on this stack.
+    //:
+    //: So the discriminator is not a vendor code. L3 asks the ARM where it is —
+    //: at the start, at the goal, or part-way — and answers `MOTION_INTERRUPTED`
+    //: for the third. This branch keeps its meaning for the two endpoint cases,
+    //: where the arm is somewhere the next attempt can be planned from.
     case ResultCode::EXECUTION_FAILED:
     case ResultCode::TIMEOUT:
       return Recovery::RETRY_SAME;
+
+    //: The arm stopped part-way through a commanded motion and is holding a
+    //: position no part of that motion asked it to hold, and nothing on this
+    //: stack reports why. There is no goal to resend against a world that has
+    //: already contradicted the plan the last one was built from.
+    //:
+    //: ESCALATE AND NOT STOP_LINE, deliberately. One station is compromised; the
+    //: cell is not. `STOP_LINE` stays reserved for `SAFETY_BLOCKED` and
+    //: `HARDWARE_FAULT`, the two codes that say the cell itself cannot be
+    //: commanded at all — and widening it to cover an arm that stopped would
+    //: make every path-tolerance abort a line-wide fault, which is how a
+    //: detector gets exempted rather than fixed.
+    //:
+    //: THIS IS NOT A PROTECTIVE MEASURE. It removes an automatic resumption.
+    //: What stops an arm remains the vendor controller's torque limiting and
+    //: physical guarding (charter §3.2). A station that stops instead of
+    //: retrying is not safer in any certifiable sense; it is diagnosable.
+    case ResultCode::MOTION_INTERRUPTED:
+      return Recovery::ESCALATE;
 
     //: No IK solution exists for this pose. Not "not found this time" — none
     //: exists. Resending it is the definition of failing repeatedly at speed;

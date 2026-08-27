@@ -482,10 +482,47 @@ TEST(RecoveryPolicyTest, EveryDeclaredCodeHasAResponse)
   EXPECT_EQ(recovery_for(ResultCode::PRECONDITION_FAILED), Recovery::RETRY_DIFFERENTLY);
   EXPECT_EQ(recovery_for(ResultCode::EXECUTION_FAILED), Recovery::RETRY_SAME);
   EXPECT_EQ(recovery_for(ResultCode::TIMEOUT), Recovery::RETRY_SAME);
+  EXPECT_EQ(recovery_for(ResultCode::MOTION_INTERRUPTED), Recovery::ESCALATE);
   EXPECT_EQ(recovery_for(ResultCode::UNREACHABLE), Recovery::ESCALATE);
   EXPECT_EQ(recovery_for(ResultCode::NOT_IMPLEMENTED), Recovery::ESCALATE);
   EXPECT_EQ(recovery_for(ResultCode::SAFETY_BLOCKED), Recovery::STOP_LINE);
   EXPECT_EQ(recovery_for(ResultCode::HARDWARE_FAULT), Recovery::STOP_LINE);
+}
+
+TEST(RecoveryPolicyTest, AnInterruptedMotionIsNeverRetriedAndDoesNotStopTheLine)
+{
+  // ADR-0037. `MOTION_INTERRUPTED` says the arm stopped part-way and is holding a
+  // position no part of the commanded motion asked for, and that nothing on this
+  // stack reports why. Replanning from a model of the world the abort itself
+  // contradicted is the one thing that must not happen.
+  using cite_orchestration::recovery_for;
+  EXPECT_NE(recovery_for(ResultCode::MOTION_INTERRUPTED), Recovery::RETRY_SAME);
+  EXPECT_NE(recovery_for(ResultCode::MOTION_INTERRUPTED), Recovery::RETRY_DIFFERENTLY);
+  EXPECT_NE(recovery_for(ResultCode::MOTION_INTERRUPTED), Recovery::NONE);
+
+  // A budget cannot soften it into a retry either, at any spend.
+  EXPECT_EQ(recovery_for(ResultCode::MOTION_INTERRUPTED, 0, 5), Recovery::ESCALATE);
+
+  // ESCALATE AND NOT STOP_LINE: one station is compromised, the cell is not.
+  // `STOP_LINE` stays reserved for the two codes that say the cell itself cannot
+  // be commanded, and widening it here would make every path-tolerance abort a
+  // line-wide fault.
+  EXPECT_NE(recovery_for(ResultCode::MOTION_INTERRUPTED), Recovery::STOP_LINE);
+  EXPECT_NE(
+    recovery_for(ResultCode::MOTION_INTERRUPTED), recovery_for(ResultCode::SAFETY_BLOCKED));
+  EXPECT_NE(
+    recovery_for(ResultCode::MOTION_INTERRUPTED), recovery_for(ResultCode::HARDWARE_FAULT));
+}
+
+TEST(RecoveryPolicyTest, AnInterruptedMotionIsAnsweredDifferentlyFromAnEndpointFailure)
+{
+  // The whole point of splitting `EXECUTION_FAILED` (ADR-0037). Before the split
+  // both arrived under one code and both were retried; if these two ever agree
+  // again the split has been undone and the arm that stopped mid-path is being
+  // replanned around unattended.
+  using cite_orchestration::recovery_for;
+  EXPECT_NE(
+    recovery_for(ResultCode::MOTION_INTERRUPTED), recovery_for(ResultCode::EXECUTION_FAILED));
 }
 
 TEST(RecoveryPolicyTest, AnUnreachablePoseIsNeverRetried)

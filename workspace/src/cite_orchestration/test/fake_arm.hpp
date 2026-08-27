@@ -36,6 +36,7 @@
 #ifndef FAKE_ARM_HPP_
 #define FAKE_ARM_HPP_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -70,6 +71,18 @@ public:
   int pick_goals() const;
   int place_goals() const;
   int detect_goals() const;
+
+  /// Make every subsequent `pick` goal come back with `code` instead of SUCCESS.
+  ///
+  /// The result is still SUCCEEDED at the action layer, exactly as a real skill
+  /// server reports a refusal: `ResultCode` is the channel a recovery branch
+  /// reacts to, and an aborted goal would be testing `rclcpp_action`'s transport
+  /// rather than L4's policy. The same shape `test_skill_goals.cpp` uses.
+  ///
+  /// It exists because the recovery branch is otherwise unreachable in this
+  /// fixture: every server succeeds, so the tree never leaves its nominal
+  /// branch, and what the branch does on an ESCALATE was evidenced by nothing.
+  void fail_pick_with(uint8_t code);
 
 private:
   struct Servers;

@@ -80,6 +80,7 @@
 #include "cite_skills/approach.hpp"
 #include "cite_skills/exclusive_goal.hpp"
 #include "cite_skills/gripper.hpp"
+#include "cite_skills/motion_end.hpp"
 #include "cite_skills/pose_goal.hpp"
 
 namespace
@@ -230,6 +231,22 @@ public:
     // needs it to size the margin that separates a real grasp from the position
     // bias the controller's own end-of-goal test produces.
     declare_parameter("gripper_goal_tolerance_rad", 0.01);
+    // The ARM trajectory controller's own goal tolerance, carried here from the
+    // same L0 `constraints:` block that configures the controller (ADR-0036).
+    //
+    // ADR-0037 classifies a failed execution by comparing the arm against the
+    // plan's first and last points, and this is the threshold that comparison
+    // uses. It is the arm's own number and not a second opinion about it (P1):
+    // the generator reads it off the resolved controller parameters, exactly as
+    // `gripper_goal_tolerance_rad` above is read, so the value the controller
+    // checks against and the value L3 classifies with cannot drift apart.
+    //
+    // A "start tolerance" is deliberately NOT a separate number. There is no L0
+    // declaration for one, and inventing a constant here would put a threshold in
+    // a place the model cannot reach — so both endpoint comparisons use the arm's
+    // goal tolerance. That the two ends are judged by one threshold is a decision,
+    // recorded in `cite_skills/motion_end.hpp`.
+    declare_parameter("arm_goal_tolerance_rad", 0.01);
     // The drive joint's installed maximum rate, carried here under the name the
     // generated bring-up plan uses for it.
     //
@@ -331,6 +348,15 @@ public:
         "gripper_goal_tolerance_rad must be positive; it is what sizes the margin "
         "separating a real grasp from the controller's own end-of-goal position bias, "
         "and at zero every close in free air reports as holding");
+      return false;
+    }
+    arm_goal_tolerance_rad_ = get_parameter("arm_goal_tolerance_rad").as_double();
+    if (arm_goal_tolerance_rad_ <= 0.0) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "arm_goal_tolerance_rad must be positive; it is what separates an arm that never "
+        "moved, and an arm that arrived, from one stopped part-way along an aborted "
+        "trajectory (ADR-0037), and at zero every abort classifies as MOTION_INTERRUPTED");
       return false;
     }
     default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
@@ -1629,16 +1655,74 @@ private:
       return make_result(ResultCode::CANCELLED, "cancelled during execution");
     }
     if (executed != moveit::core::MoveItErrorCode::SUCCESS) {
-      // MoveIt's own code, carried through. "The controller did not complete the
-      // trajectory" covers a controller that refused the goal, one that timed
-      // out, and one that finished outside tolerance, and telling them apart
-      // from the text alone cost a whole investigation.
-      return make_result(
-        ResultCode::EXECUTION_FAILED,
-        "the controller did not complete the planned trajectory (MoveIt error code " +
-          std::to_string(executed.val) + ")");
+      return classify_execution_failure(plan, executed);
     }
     return make_result(ResultCode::SUCCESS);
+  }
+
+  /// Read the arm and hand the numbers to the classifier (ADR-0037).
+  ///
+  /// THE DECISION IS NOT HERE. It is `cite_skills::classify_execution_failure`,
+  /// a free function over the numbers below, and it is there rather than here
+  /// because a private method of a node class in an anonymous namespace is
+  /// reachable by no test at all — while what it decides is whether L4 retries a
+  /// station unattended or stops it for an operator. What is left in this method
+  /// is the one part that genuinely needs the running server: getting the current
+  /// joint positions out of MoveIt, by the names the trajectory carries.
+  ResultCode classify_execution_failure(
+    const MoveGroupInterface::Plan & plan, const moveit::core::MoveItErrorCode & executed)
+  {
+    const auto & points = plan.trajectory.joint_trajectory.points;
+    const auto & names = plan.trajectory.joint_trajectory.joint_names;
+    std::vector<double> current;
+    std::vector<double> start;
+    std::vector<double> goal;
+
+    // THE ARM IS NOT READ WHEN MOVEIT ALREADY NAMED THE REASON, and that is
+    // correctness rather than economy: `getCurrentState` blocks for up to its
+    // timeout, and a TIMED_OUT execution that then waited again for a joint state
+    // would make a reported failure slower to report than an unreported one. The
+    // classifier answers those two from the code alone, so the numbers below are
+    // the ones it would ignore.
+    //
+    // ONE POINT IS ENOUGH. A trajectory whose start and goal coincide is
+    // degenerate, not unreadable, and requiring two points classified the most
+    // trivial motion there is as UNKNOWN -> MOTION_INTERRUPTED -> ESCALATE: the
+    // harshest answer in the policy, for the motion least able to have gone
+    // wrong. `front()` and `back()` are the same point when there is one, so the
+    // arm is judged against it as both start and goal, and the goal-first rule in
+    // `classify_motion_end` answers AT_GOAL when the arm is there.
+    if (!cite_skills::end_is_named_by_moveit(executed.val) && !points.empty() &&
+      !names.empty() && points.front().positions.size() == names.size() &&
+      points.back().positions.size() == names.size())
+    {
+      const auto state = move_group_->getCurrentState(current_state_timeout_s_);
+      if (state && state->getRobotModel()) {
+        current = cite_skills::positions_in_trajectory_order(
+          names, [&state](const std::string & joint_name, double & out) {
+            // `getJointPositions` rather than `getVariablePosition`, because a
+            // trajectory carries JOINT names and the state is indexed by
+            // VARIABLE names. They coincide for a single-degree-of-freedom joint
+            // and stop coinciding the moment a robot type brings a multi-DOF
+            // one, which is exactly the P9 case this classification is supposed
+            // to survive.
+            const auto * joint = state->getRobotModel()->getJointModel(joint_name);
+            if (joint == nullptr || joint->getVariableCount() != 1) {
+              return false;
+            }
+            out = *state->getJointPositions(joint);
+            return true;
+          });
+      }
+      if (!current.empty()) {
+        start.assign(points.front().positions.begin(), points.front().positions.end());
+        goal.assign(points.back().positions.begin(), points.back().positions.end());
+      }
+    }
+
+    const auto answer = cite_skills::classify_execution_failure(
+      executed.val, current, start, goal, arm_goal_tolerance_rad_);
+    return make_result(answer.code, answer.detail);
   }
 
   void apply_scaling(double velocity, double acceleration)
@@ -1896,6 +1980,9 @@ private:
 
   int ik_seeds_{8};
   double current_state_timeout_s_{5.0};
+  //: The arm trajectory controller's goal tolerance, in radians, from L0 via the
+  //: generated bring-up plan. Read by `classify_execution_failure` only.
+  double arm_goal_tolerance_rad_{0.01};
   double tf_timeout_s_{5.0};
   std::chrono::duration<double> feedback_period_{0.1};
   double default_velocity_scaling_{1.0};

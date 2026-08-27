@@ -37,10 +37,25 @@
         <MoveToHome asset="{asset}" action="{move_to_action}" />
       </Sequence>
 
-      <!-- Returning home first is deliberate: a station that failed mid-cycle
-           may have left the arm somewhere the next attempt would collide with. -->
+      <!-- NOTHING MOVES HERE (ADR-0037). This branch used to return the arm
+           home first, on the reasoning that a station which failed mid-cycle may
+           have left the arm somewhere the next attempt would collide with. That
+           reasoning is sound and it belongs to a RETRY, and this tree has none:
+           there is no `<Repeat>` above, so the recover branch reports and the
+           cycle ends. Clearing the arm for an attempt that will not happen is an
+           unattended motion after an undiagnosed failure, bought for nothing.
+
+           The nominal branch above already begins with `MoveToHome`, so a cycle
+           that is run again clears the arm as its first act — which is the
+           correct place for it, inside the attempt rather than before the
+           decision to allow one.
+
+           Unlike `line_station.xml` this tree consults no recovery policy at all;
+           `ReportBlocked` logs and returns SUCCESS. That gap is not closed here —
+           this tree is the single-station coordinator ADR-0024 keeps for testing
+           a handoff with one arm, and giving it a policy would be inventing a
+           second one. What is fixed is the motion. -->
       <Sequence name="recover">
-        <MoveToHome    asset="{asset}" action="{move_to_action}" />
         <ReportBlocked asset="{asset}" reason="the station could not complete its cycle" />
       </Sequence>
 

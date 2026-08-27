@@ -29,6 +29,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/StationTopology.msg
   msg/TwinMode.msg
   srv/GetModelVersion.srv
+  srv/ResetStation.srv
   srv/SetMode.srv
   action/Detect.action
   action/Grasp.action

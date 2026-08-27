@@ -25,6 +25,7 @@ import copy
 from pathlib import Path
 
 from cite_bringup.plan import (
+    ARM_KEYS,
     ControllerManager,
     ControllerRef,
     GRIPPER_KEYS,
@@ -119,6 +120,7 @@ def test_stage_grouping_is_deterministic() -> None:
         gripper_action=None,
         skills=None,
         gripper={},
+        arm={},
     )
     assert manager.stages() == [(0, ("jsb",)), (1, ("a", "b"))]
 
@@ -453,3 +455,71 @@ def test_a_gripper_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path)
     plan = load(_written(tmp_path, document))
     assert "gripper_default_grasp_width_m" not in plan.controller_managers[0].gripper
     assert "gripper_open_position" in plan.controller_managers[0].gripper
+
+
+# --- The arm values reach L3 by the same route, and need the same guards -----
+#
+# `ARM_KEYS` is `GRIPPER_KEYS`' younger sibling (ADR-0037) and arrived with none
+# of its guards. The three below are the gripper's three, applied to it. They
+# exist because of a defect that had already happened once: eight values were
+# delivered to a node that declared none of them, `rclcpp` dropped every one
+# without a word, and nothing noticed because the compiled defaults happened to
+# equal the L0 values — a P1 defect that worked because two copies agreed.
+#
+# `arm_goal_tolerance_rad` is in exactly that position. The skill server declares
+# it with a compiled default of 0.01 and L0 currently declares 0.01, so the day
+# the model changes and the delivery breaks, nothing downstream would tell the
+# difference. These are what tell the difference.
+
+
+def test_every_arm_key_the_plan_states_is_read() -> None:
+    """A key the plan states must reach the reader, with the plan's own value."""
+    plan = load(_generated())
+    document = _document()
+    for manager, entry in zip(
+        plan.controller_managers, document["plan"]["controller_managers"]
+    ):
+        if manager.trajectory_action is None:
+            continue
+        stated = {key for key in ARM_KEYS if entry.get(key) is not None}
+        assert stated == set(manager.arm), (
+            f"{manager.asset}: the plan states {sorted(stated)} and the reader "
+            f"produced {sorted(manager.arm)}"
+        )
+        assert stated, f"{manager.asset} has a trajectory action and no arm values"
+        for key in stated:
+            assert manager.arm[key] == pytest.approx(float(entry[key])), key
+
+
+def test_every_arm_key_is_one_the_skill_server_declares() -> None:
+    """An undeclared key is delivered, dropped by rclcpp, and reported by nobody.
+
+    The same silence that hid `gripper_default_grasp_width_m` and seven linkage
+    dimensions. `arm_goal_tolerance_rad` is the threshold ADR-0037 classifies an
+    aborted motion against, so a delivery that is dropped leaves the classifier
+    judging against a compiled constant while the model says something else.
+    """
+    assert SKILL_SERVER.is_file(), f"the skill server's source is not at {SKILL_SERVER}"
+    source = SKILL_SERVER.read_text()
+    undeclared = [key for key in ARM_KEYS if f'declare_parameter("{key}"' not in source]
+    assert not undeclared, (
+        f"{sorted(undeclared)} are delivered to the skill server and declared by it "
+        f"nowhere in {SKILL_SERVER.name}, so rclcpp drops them without a word"
+    )
+
+
+def test_an_arm_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path) -> None:
+    """Omission must not become a value.
+
+    A zero manufactured here would be passed as a parameter and would override
+    the skill server's declared default with a number the model never stated —
+    and `arm_goal_tolerance_rad` at zero makes every aborted motion classify as
+    MOTION_INTERRUPTED, which is the answer that blocks a station for an operator.
+    The server refuses a non-positive value on configure for that reason; this
+    keeps the plan from ever handing it one.
+    """
+    document = _document()
+    del document["plan"]["controller_managers"][0]["arm_goal_tolerance_rad"]
+    plan = load(_written(tmp_path, document))
+    assert "arm_goal_tolerance_rad" not in plan.controller_managers[0].arm
+    assert plan.controller_managers[1].arm["arm_goal_tolerance_rad"] > 0.0

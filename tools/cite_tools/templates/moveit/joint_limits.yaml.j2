@@ -15,18 +15,28 @@
 # What the controller actually enforces. `enforce_command_limits: true` in the
 # generated controller configuration builds its limiter from the URDF `<limit>`
 # element, which carries position, velocity and effort and has NO field for
-# acceleration or deceleration. The generated `JointTrajectoryController`
-# configuration declares no `constraints:` block at all, and
-# `joint_trajectory_controller` defaults every tolerance in one — `goal_time`,
-# the per-joint trajectory tolerance, the goal tolerance — to 0.0, which means
-# disabled.
+# acceleration or deceleration.
 #
-# So position and velocity are enforced at both ends, and the ACCELERATION and
-# DECELERATION ceilings below are stated here and enforced nowhere at execution:
-# a trajectory that respects them is planned, and nothing checks that what runs
-# still does. That is a real gap, it is named rather than implied (P7), and
-# closing it is a change to execution behaviour rather than a correction to the
-# file that states the planning half.
+# Half of what this paragraph used to say is now out of date, and the half that
+# is not is the important one. It read: "The generated
+# `JointTrajectoryController` configuration declares no `constraints:` block at
+# all, and `joint_trajectory_controller` defaults every tolerance in one to 0.0,
+# which means disabled." That block now exists — ADR-0036 generates `goal_time`
+# and per-joint `trajectory` and `goal` tolerances from the arm type, so a
+# trajectory the controller fails to TRACK is detected and aborted where it
+# previously reported SUCCEEDED.
+#
+# What has NOT changed is the sentence that follows, and no part of ADR-0036
+# should be read as closing it. Those tolerances bound POSITION ERROR — how far
+# the arm is from where the trajectory said it would be. They say nothing about
+# how hard it accelerated or braked getting there. So the ACCELERATION and
+# DECELERATION ceilings below are still stated here and enforced nowhere at
+# execution: a trajectory that respects them is planned, and nothing checks that
+# what runs still does. A deceleration ceiling the physical arm cannot honour is
+# still caught by nothing in this repository, on either backend.
+#
+# That remains a real gap, it is named rather than implied (P7), and closing it
+# needs a limit the URDF has no field to express — not a tolerance.
 default_velocity_scaling_factor: {{ arm.max_velocity_scaling | f }}
 default_acceleration_scaling_factor: {{ arm.max_acceleration_scaling | f }}
 
