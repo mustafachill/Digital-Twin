@@ -134,6 +134,72 @@ asset_type:
       stage: 1
       command_interfaces: [position]
       state_interfaces: [position, velocity]
+      # When this arm should call a trajectory mistracked (ADR-0036).
+      #
+      # THE GAP THESE CLOSE. Without a `constraints:` block
+      # `joint_trajectory_controller` defaults every tolerance to 0.0, and 0.0
+      # DISABLES the check — `check_state_tolerance_per_joint` skips any variable
+      # whose tolerance is not `> 0.0`. So a trajectory that clipped a conveyor
+      # ran to the end, reported SUCCEEDED, and `Pick` reported a pick it never
+      # made. Nothing else in this repository observed the difference: the
+      # scenario containment check bounds the WORK-PIECE, not the arm.
+      #
+      # They are a detector and not a protective measure. What stops this arm
+      # driving into a fixture is UFACTORY's torque limiting and physical
+      # guarding (charter §3.2). These convert a silent success into an
+      # EXECUTION_FAILED that L4 can fault a station on, after the fact.
+      #
+      # PROVENANCE, and this is the part to read before trusting a number.
+      # All four are UFACTORY's own values for the xArm 5, copied from
+      # `xarm_controller/config/xarm5_controllers.yaml` at the commit
+      # `external/cite.repos` pins. They are the vendor's numbers for the
+      # vendor's arm — the same class of provenance as `max_reach_m` above — and
+      # they are NOT a measurement taken on this stack. No healthy-run following
+      # error was sampled before choosing them, because that is only observable
+      # under Gazebo and the change that introduced them was not permitted to run
+      # a scenario. ADR-0036 records the campaign that replaces them.
+      constraints:
+        # Seconds after the trajectory's end time to keep waiting for
+        # `goal_tolerance_rad`. Never 0.0: at zero the controller waits forever
+        # rather than failing, turning a missed goal into a hang. The schema
+        # refuses zero, so that combination cannot be written here.
+        goal_time_s: 0.5
+        # Radians of per-joint position error allowed at the goal. ~0.57°.
+        goal_tolerance_rad: 0.01
+        # Radians of per-joint position error allowed WHILE MOVING. ~57°, which
+        # is deliberately enormous, and the size is the decision rather than an
+        # oversight.
+        #
+        # This is the only one of the three that catches a clipped fixture
+        # mid-motion, and it is also the only one evaluated on every cycle of
+        # every motion — so it is the one that can cry wolf, and a flake here
+        # lands on `./scripts/scenario pick_and_place`, which is a BLOCKING CI
+        # gate. At 1.0 rad it fires when a joint is held back hard enough to
+        # accumulate 57° of error, which is a stall, not a loaded machine.
+        #
+        # State plainly what that buys and what it does not: it detects a joint
+        # that is being HELD, and it does not detect a graze that deflects the
+        # arm and lets it continue. That case remains invisible, exactly as it is
+        # today, and closing it needs a scene-aware monitor rather than a smaller
+        # number here.
+        #
+        # If this ever fires on a healthy run, set it to `null` — which disables
+        # the path check and keeps the goal check — rather than widening it. A
+        # tolerance wide enough never to fire is not a detector.
+        trajectory_tolerance_rad: 1.0
+        # rad/s below which a joint counts as stopped at the goal. 0.0 disables
+        # the check, and disabling it is the decision.
+        #
+        # This is the one tolerance that is ALREADY armed on this cell:
+        # `get_segment_tolerances` assigns it to the goal state's velocity
+        # unconditionally and upstream defaults it to 0.01, not to zero. It has
+        # been harmless only because `goal_time` was 0.0, so a joint still
+        # creeping at the end kept the goal open instead of failing it. Setting
+        # `goal_time_s` above is what arms it — a joint that settles later than
+        # 0.5 s succeeds today and would begin aborting. UFACTORY ships 0.0 here,
+        # and following them keeps this block a POSITION detector rather than
+        # smuggling in a velocity one.
+        stopped_velocity_tolerance_rad_s: 0.0
 
   planning:
     # The vendor's own SRDF group names, prefixed with the asset id exactly as

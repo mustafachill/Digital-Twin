@@ -21,15 +21,38 @@
   interpolates nothing between them, at Pilz's fixed 0.1 s sampling. An object thinner than
   one waypoint step can lie between two checked states. The step, the arithmetic and the two
   ways it can grow are in the ADR's 2026-08-27 correction; the number is not repeated here.
+  **Built, and narrower than its name:** an execution-side mistracking detector. Every
+  generated `JointTrajectoryController` now carries a `constraints:` block — `goal_time`,
+  and per-joint `trajectory` and `goal` tolerances — from the arm type in L0
+  ([ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md)). Until it existed the
+  controller ran any trajectory to the end and reported `SUCCEEDED` however badly it
+  tracked, because every tolerance defaults to `0.0` and `0.0` disables the check; that
+  silence reached `Pick` as a successful pick. A launch test drives two real controller
+  managers over mock hardware and requires a tracked trajectory to succeed, a held joint to
+  abort as `PATH_TOLERANCE_VIOLATED`, and an error between the two thresholds to abort as
+  `GOAL_TOLERANCE_VIOLATED` — which is what shows the two are read as two numbers.
+  **It is a detector, not a protective measure**, and it must not be cited as one: it
+  reports after the fact, and what stops an arm driving into a fixture remains the vendor
+  controller's torque limiting and physical guarding (charter §3.2).
+  **Two residuals are stated rather than implied.** The tolerance values are UFACTORY's own
+  for the xArm 5, *copied* from the vendor configuration at the pinned commit and **not
+  measured on this stack** — no healthy-run following error has been sampled, because that
+  is observable only under Gazebo. And the path tolerance detects a joint that is *held*,
+  not a graze that deflects the arm and lets it continue; that case is still invisible.
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
+  **Still enforced at planning only:** the acceleration and deceleration ceilings. ADR-0036
+  bounds position error, not the rates that produced it, and `enforce_command_limits` builds
+  its limiter from the URDF `<limit>` element, which has no acceleration or deceleration
+  field. A deceleration ceiling the physical arm cannot honour is caught by nothing here, on
+  either backend.
   **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
   instance in L0, and a plan naming a non-simulated backend is refused at the ROS boundary
   unless `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`).
   **Not held:** the configured rate. The model asks for 150 Hz; `joint_states` was measured
   at roughly 21 Hz at a real-time factor of 0.14 (see
   [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
-- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [cross-cutting-safety.md](cross-cutting-safety.md)
+- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility
 

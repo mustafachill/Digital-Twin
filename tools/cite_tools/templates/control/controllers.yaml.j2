@@ -27,7 +27,7 @@
       type: {{ controller.type }}
 {% endfor %}
 {% for controller in controllers %}
-{% if controller.joints or controller.parameters %}
+{% if controller.joints or controller.parameters or controller.constraints %}
 
 {{ namespace }}/{{ controller.name }}:
   ros__parameters:
@@ -54,5 +54,55 @@
 {% for key, value in controller.parameters %}
     {{ key }}: {{ value }}
 {% endfor %}
+{% if controller.constraints %}
+    # WHEN THIS CONTROLLER CALLS A TRAJECTORY MISTRACKED (ADR-0036).
+    #
+    # If you are reading this because a motion failed, the controller aborted the
+    # goal because the arm was not where the trajectory said it should be. The
+    # error code tells you which check fired:
+    #
+    #   PATH_TOLERANCE_VIOLATED  a joint drifted further than `trajectory` below
+    #                            WHILE MOVING. Something is holding the arm back
+    #                            — it clipped a fixture, or the plan started from
+    #                            a state the arm was not in.
+    #   GOAL_TOLERANCE_VIOLATED  the arm did not settle inside `goal` below
+    #                            within `goal_time` of the trajectory's end.
+    #
+    # MoveIt returns that as a failed execution, the L3 skill server maps it to
+    # EXECUTION_FAILED, and L4 can fault the station on it.
+    #
+    # THIS IS A DETECTOR, NOT A PROTECTIVE MEASURE. It reports after the fact and
+    # prevents nothing. What stops an arm driving into a fixture is the vendor
+    # controller's torque limiting and physical guarding, which are outside this
+    # repository (charter §3.2). Do not cite this block as a safety function.
+    #
+    # Every value comes from the L0 arm type, so it is the same on the simulated
+    # and the physical cell. A tolerance that differed between them would be a P2
+    # break rather than a tuning choice.
+    #
+    # Do not "fix" a firing tolerance by widening it. A tolerance wide enough
+    # never to fire is not a detector; if the path check proves unusable, the
+    # model sets `trajectory_tolerance_rad: null` and says so.
+    constraints:
+      # Seconds after the trajectory's end time that the controller keeps waiting
+      # for `goal` below. NOT optional and never 0.0: at zero the controller
+      # waits forever instead of failing, so a missed goal becomes a hang rather
+      # than a report. The model's schema refuses zero for that reason.
+      goal_time: {{ controller.constraints.goal_time }}
+      # Joint velocity, rad/s, below which the arm counts as stopped at the goal.
+      # 0.0 disables the check, and that is deliberate: this is the ONE tolerance
+      # that is armed by default (upstream defaults it to 0.01, not to zero), and
+      # setting `goal_time` above is what would arm it. A joint that settles a
+      # little late would then abort a motion that is otherwise correct — a
+      # velocity flake in a block added to detect a position error.
+      stopped_velocity_tolerance: {{ controller.constraints.stopped_velocity_tolerance }}
+{% for joint in controller.constraints.per_joint %}
+      {{ joint.joint }}:
+{% if joint.trajectory %}
+        trajectory: {{ joint.trajectory }}
+{% endif %}
+        goal: {{ joint.goal }}
+{% endfor %}
+{% endif %}
 {% endif %}
 {% endfor %}

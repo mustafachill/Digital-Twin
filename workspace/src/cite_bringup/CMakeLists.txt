@@ -37,6 +37,17 @@ if(BUILD_TESTING)
   # on. A correct check that nothing calls is the defect this catches, and it is
   # the one that was there.
   ament_add_pytest_test(simulation_launch test/test_simulation_launch.py)
+
+  # ADR-0036. The generator suite proves the `constraints:` block is emitted;
+  # only a running controller proves the parameter names are ones
+  # joint_trajectory_controller actually reads. A misspelled key generates
+  # cleanly, loads cleanly, and restores the silent success the block removes.
+  #
+  # It stands up two controller managers over mock hardware — no Gazebo, no
+  # planner — so the timeout is for process start-up and three action goals,
+  # not for physics.
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_trajectory_constraints_launch.py TIMEOUT 300)
 endif()
 
 ament_package()

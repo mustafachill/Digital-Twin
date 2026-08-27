@@ -281,6 +281,93 @@ class ControlSpec(Strict):
     enforce_command_limits: bool
 
 
+class TrajectoryConstraints(Strict):
+    """When a `JointTrajectoryController` should call a trajectory mistracked.
+
+    ADR-0036. Without these the controller runs any trajectory to the end and
+    reports ``SUCCEEDED`` however badly it tracked, because
+    `joint_trajectory_controller` defaults every tolerance to ``0.0`` and
+    ``check_state_tolerance_per_joint`` skips any variable whose tolerance is not
+    ``> 0.0``. That silence reaches the caller: MoveIt returns success,
+    ``execute_plan`` maps it to ``ResultCode::SUCCESS``, and ``Pick`` reports a
+    clean pick it never made.
+
+    These are a DETECTOR and not a protective measure. What stops an arm driving
+    into a fixture is the vendor controller's torque limiting and physical
+    guarding — a risk assessment and ISO 10218 matter outside this repository
+    (charter §3.2). This turns a silent success into an ``EXECUTION_FAILED``
+    after the fact, which is what lets L4 fault a station instead of building on
+    a lie.
+
+    They live in the model rather than in the generator for the same reason
+    ``update_rate_hz`` and ``max_acceleration_rad_s2`` do: how tightly a
+    particular arm tracks is a fact about that arm (P5). One block serves both
+    backends — a tolerance that differed between simulation and hardware would
+    be a P2 break, not a tuning choice.
+    """
+
+    #: How long after the trajectory's end time the controller keeps waiting for
+    #: the goal tolerance below, in seconds.
+    #:
+    #: Required and strictly positive, and that constraint is the whole reason
+    #: this is a typed block rather than two loose keys. ``0.0`` does NOT mean
+    #: "disabled" here: in ``update()`` the abort lives in an
+    #: ``else if (!within_goal_time)`` branch, and ``within_goal_time`` is only
+    #: ever set false inside ``if (goal_time_tolerance != 0.0)``. So a goal
+    #: tolerance paired with ``goal_time: 0.0`` can neither succeed nor fail — the
+    #: controller "runs another cycle" forever. Upstream says so outright: "If set
+    #: to zero, the controller will wait a potentially infinite amount of time."
+    #:
+    #: That is the failure shape ADR-0022 already found once, in
+    #: ``GripperActionController``, where neither terminating branch could fire
+    #: and the action simply never returned. The caller sees a timeout in the
+    #: layer above rather than an answer, which is strictly worse than the false
+    #: success this block exists to remove. Making both fields required and
+    #: positive means the model cannot express that combination.
+    goal_time_s: Annotated[float, Field(gt=0.0)]
+
+    #: Per-joint position error allowed at the goal, in radians, checked from the
+    #: trajectory's end time until ``goal_time_s`` after it. Exceeded, the goal
+    #: aborts with ``GOAL_TOLERANCE_VIOLATED``.
+    #:
+    #: Strictly positive for the mirror-image reason: at ``0.0`` the position
+    #: check is skipped entirely, the success branch is taken immediately, and
+    #: ``goal_time_s`` becomes configuration nothing reads.
+    goal_tolerance_rad: Annotated[float, Field(gt=0.0)]
+
+    #: Per-joint position error allowed WHILE MOVING, in radians. Exceeded, the
+    #: goal aborts mid-trajectory with ``PATH_TOLERANCE_VIOLATED``. This is the
+    #: only one of the three that catches a trajectory clipping a fixture rather
+    #: than merely arriving wrong.
+    #:
+    #: Nullable, and the null case is a real one rather than a schema
+    #: convenience. This is also the tolerance that can cry wolf: it is evaluated
+    #: on every cycle of every motion, and one that fires on a healthy run under
+    #: a loaded machine converts a blocking CI gate into a flake — which this
+    #: project's history says gets exempted rather than fixed. ``null`` emits no
+    #: per-joint ``trajectory`` key and leaves the path check off, so an arm can
+    #: decline the path detector while keeping the goal detector. Prefer that to
+    #: widening the value until it never fires, which leaves something that only
+    #: looks like a detector.
+    trajectory_tolerance_rad: Annotated[float, Field(gt=0.0)] | None = None
+
+    #: Joint velocity, in rad/s, below which the arm counts as stopped at the
+    #: goal. ``0.0`` disables the check.
+    #:
+    #: Required with no default because it is the one goal-side tolerance that is
+    #: ALREADY armed. ``get_segment_tolerances`` assigns
+    #: ``goal_state_tolerance[i].velocity = stopped_velocity_tolerance``
+    #: unconditionally, and that parameter defaults to ``0.01`` rather than to
+    #: zero — it has been harmless only because ``goal_time`` was ``0.0``, so a
+    #: joint still creeping at the end kept the goal open instead of failing it.
+    #:
+    #: Setting ``goal_time_s`` arms it. A joint that settles later than
+    #: ``goal_time_s`` succeeds today and would abort. Leaving this to its default
+    #: would mean shipping a VELOCITY-driven flake while intending to add a
+    #: POSITION detector, so the model states it rather than inheriting it.
+    stopped_velocity_tolerance_rad_s: Annotated[float, Field(ge=0.0)]
+
+
 class ControllerSpec(Strict):
     """A controller a type needs, named by suffix and ordered by stage.
 
@@ -296,6 +383,11 @@ class ControllerSpec(Strict):
     command_interfaces: list[str] = Field(default_factory=list)
     state_interfaces: list[str] = Field(default_factory=list)
     parameters: dict[str, str | bool | int | float] = Field(default_factory=dict)
+    #: Execution-side mistracking detector, for a trajectory controller only
+    #: (ADR-0036). Optional on the field because most controllers have no such
+    #: block; a trajectory controller that omits it is rejected by the generator
+    #: rather than defaulted, which is where that rule can name the type.
+    constraints: TrajectoryConstraints | None = None
 
 
 class GripperLinkage(Strict):

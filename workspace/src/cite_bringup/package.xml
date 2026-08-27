@@ -47,6 +47,19 @@
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>cite_interfaces</test_depend>
+  <!-- ADR-0036's launch test: two controller managers over mock hardware,
+       driving the generated JointTrajectoryController configuration. -->
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>ament_index_python</test_depend>
+  <test_depend>cite_generated</test_depend>
+  <test_depend>control_msgs</test_depend>
+  <test_depend>trajectory_msgs</test_depend>
+  <test_depend>joint_trajectory_controller</test_depend>
+  <!-- mock_components/GenericSystem, the stand-in hardware the test injects a
+       held joint with. It ships in hardware_interface. -->
+  <test_depend>hardware_interface</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>python3-yaml</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
