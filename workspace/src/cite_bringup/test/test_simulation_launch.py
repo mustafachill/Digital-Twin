@@ -438,7 +438,7 @@ def test_the_planning_scene_is_loaded_before_the_skills(
     ), "a skill server can start before the planning scene is loaded"
 
 
-# --- The Gazebo/ROS bridge: nine names, none of them written here -------------
+# --- The Gazebo/ROS bridge: ten names, none of them written here --------------
 #
 # `launch_ros` normalises a node's parameters and keeps its arguments private, so
 # these read the pure functions the launch file builds them from rather than
@@ -482,9 +482,14 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
 
     The belt and beam plugins were built, instantiated by the generated world and
     publishing on the Gazebo transport under exactly these names — and
-    `cite_bringup` bridged `/clock` and nothing else. Nine declared interfaces had
-    no ROS endpoint at all, so the bring-up plan advertised a system the running
-    one did not provide.
+    `cite_bringup` bridged `/clock` and nothing else. Ten declared interfaces had
+    no ROS endpoint at all — a command and a state topic for each of the three
+    belts, and a level for each of the four beams — so the bring-up plan
+    advertised a system the running one did not provide.
+
+    The count below is arithmetic on the plan rather than the literal ten, for
+    the reason this docstring had to be corrected: a number written out is a
+    number that stops being true when the cell gains a sensor.
     """
     plan = _plan()
     arguments, _ = module._bridge_topics(plan)

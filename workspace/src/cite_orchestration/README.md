@@ -69,12 +69,14 @@ action name. That is one name read once, not one name in three places.
 
 ## Indexing the belt (ADR-0032)
 
-A station cannot pick from a running belt. The beam that starts a station sits a short distance
-upstream of the point it picks from, and the work-piece leaves the belt's carry volume shortly
-after — under a second at the declared belt speed, against a pick-and-place cycle of roughly
-two minutes. The distances and the arithmetic are in `conveyor_index.hpp` and are not repeated
-here. So the belt is **indexed**: it stops when the station it feeds is triggered, and runs
-again when that station reports `CompleteHandoff`.
+A station cannot pick from a running belt, and the beam that starts it leaves no margin at all:
+it sits a short distance **downstream** of the pick point, derived from the work-piece's own
+length (ADR-0033), so a part breaks it at the instant the part's centre reaches the point it
+must stop on. Every further metre of belt is displacement, against a pick-and-place cycle of
+roughly two minutes. The distance and the arithmetic are in `conveyor_index.hpp` and are not
+repeated here; `test_indexed_belts.py` reads the number out of that header and checks it
+against the generated frames. So the belt is **indexed**: it stops when the station it feeds is
+triggered, and runs again when that station reports `CompleteHandoff`.
 
 The two ends are not symmetric, and that is load-bearing. The **stop** is bound to the sensor
 edge itself, in `conveyor_index.hpp`, not to a leaf: a leaf acts only when its station's cycle

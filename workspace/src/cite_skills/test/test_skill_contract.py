@@ -447,6 +447,55 @@ class TestSkillContract(unittest.TestCase):
             f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
         )
 
+    def test_3b_an_unreachable_pose_is_reported_as_unreachable(self) -> None:
+        # THE DISTINCTION L4 BRANCHES ON, and nothing emitted the code that
+        # carries it. `ResultCode.msg` separates UNREACHABLE — no IK solution
+        # exists for this pose at all — from PLANNING_FAILED, which means one
+        # exists and no collision-free path to it was found, because the remedies
+        # differ completely. `recovery_policy.hpp` ESCALATEs the first and retries
+        # the second, so reporting the first as the second retries a pose that no
+        # IK branch can reach and burns the station's recovery budget doing it.
+        #
+        # The skill server aliased UNREACHABLE onto PLANNING_FAILED while
+        # `cite_interfaces` had no such constant, the constant landed, and the
+        # alias stayed. Every test still passed. This is the one that would not
+        # have.
+        #
+        # 2.5 m along the arm's own +x is not a marginal pose: no xArm 5 reaches
+        # it from any seed, so IK fails outright rather than the planner failing
+        # to find a path.
+        goal = MoveTo.Goal()
+        goal.target = PoseStamped()
+        goal.target.header.frame_id = self.harness.moveit["base_link"]
+        goal.target.pose.position.x = 2.5
+        goal.target.pose.position.y = 0.0
+        goal.target.pose.position.z = 0.5
+        # Tool pointing down, as every reachable pose in this file is stated.
+        goal.target.pose.orientation.x = 1.0
+        goal.target.pose.orientation.y = 0.0
+        goal.target.pose.orientation.z = 0.0
+        goal.target.pose.orientation.w = 0.0
+
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the move never reported a result")
+        self.assertNotEqual(
+            wrapped.result.result.code,
+            ResultCode.PLANNING_FAILED,
+            "a pose no IK branch can reach was reported as a planning failure, which "
+            "L4 retries: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.UNREACHABLE,
+            f"expected UNREACHABLE, got {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+
     # -------------------------------------------------------------------------
     # Transfer — half of a handoff, and only half (ADR-0024)
     # -------------------------------------------------------------------------

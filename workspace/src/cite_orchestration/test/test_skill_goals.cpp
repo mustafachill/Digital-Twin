@@ -43,6 +43,10 @@
 #include <cite_interfaces/action/pick.hpp>
 #include <cite_interfaces/action/place.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
+// The rule for WRITING the unobserved-pose convention. The fixtures below are
+// built with it rather than by hand, so they cannot drift from what the
+// detection server really publishes.
+#include <cite_skills/observation.hpp>
 
 #include "gtest/gtest.h"
 #include "cite_orchestration/skill_nodes.hpp"
@@ -217,14 +221,15 @@ TEST_F(SkillGoals, PickFallsBackToTheStationFrameWhenTheDetectionCarriesNoObserv
   // occupancy and knows nothing about position, so `Detection.pose` comes back
   // marked unobserved and `PickAt` must reach for the station's L0 frame instead.
   //
-  // Default-constructed, which is what an unobserved detection decodes to on this
-  // side: `cite_skills::mark_pose_unobserved` clears the frame_id, and an empty
-  // frame_id is what `PickAt` tests. NOT built by calling that function, because
-  // `cite_skills` exports no include directory and nothing outside it can — see
-  // the note on the guard in `skill_nodes.hpp`. The case this therefore does NOT
-  // cover is a frame set over NaN components, which today's guard would pass
-  // through to the planner.
+  // BUILT BY THE FUNCTION THAT WRITES THE CONVENTION, not by a hand-made
+  // stand-in. `cite_skills::mark_pose_unobserved` is what the detection server
+  // calls, so this fixture cannot drift from the message the line really carries
+  // — and if the convention gains a fourth way of spelling absence, this test
+  // gets it for free. It used to be a default-constructed pose, because
+  // `cite_skills` exported no include directory and nothing outside it could
+  // reach the function; it exports one now.
   geometry_msgs::msg::PoseStamped unobserved;
+  cite_skills::mark_pose_unobserved(unobserved);
 
   RecordingServer<Pick> server(kPickAction);
   auto config = ports(kPickAction);
@@ -241,6 +246,41 @@ TEST_F(SkillGoals, PickFallsBackToTheStationFrameWhenTheDetectionCarriesNoObserv
        "be sent to wherever that pose happens to decode to";
   EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.x));
   EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.y));
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
+}
+
+TEST_F(SkillGoals, PickRefusesAPoseThatHasAFrameAndNoNumbers)
+{
+  // THE CASE THE OLD GUARD LET THROUGH. `PickAt` used to ask only whether the
+  // frame_id was empty, because `cite_skills/observation.hpp` was unreachable
+  // from this package and the predicate could not be called. A pose with a frame
+  // set over NaN components passed that test and went to the planner as an object
+  // pose — where a NaN fails in TF or in inverse kinematics with a message about
+  // neither the detection nor the frame.
+  //
+  // `pose_is_observed` reads all three markings the convention writes, so this is
+  // the half that the frame_id test could not see. It is not hypothetical: it is
+  // exactly what a detector that stamps its own frame onto an unfilled pose would
+  // produce.
+  geometry_msgs::msg::PoseStamped half_marked;
+  cite_skills::mark_pose_unobserved(half_marked);
+  half_marked.header.frame_id = "a_frame_that_says_nothing";
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", half_marked);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+  EXPECT_EQ(goal->object_pose.header.frame_id, kFrame)
+    << "a pose carrying a frame and no finite numbers was sent as the object's pose";
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.x));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.y));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.orientation.w));
   EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
 }
 

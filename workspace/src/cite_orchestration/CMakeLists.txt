@@ -10,6 +10,9 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(cite_interfaces REQUIRED)
+# L3, for `cite_skills/observation.hpp` — the unobserved-pose predicate `PickAt`
+# reads. A downward dependency (CLAUDE.md section 5) and a header-only one.
+find_package(cite_skills REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -17,7 +20,7 @@ find_package(tf2_ros REQUIRED)
 add_executable(line_coordinator src/line_coordinator.cpp)
 target_include_directories(line_coordinator PRIVATE include)
 ament_target_dependencies(line_coordinator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs std_msgs
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   tf2_ros
 )
 
@@ -27,7 +30,7 @@ ament_target_dependencies(line_coordinator
 add_executable(line_orchestrator src/line_orchestrator.cpp)
 target_include_directories(line_orchestrator PRIVATE include)
 ament_target_dependencies(line_orchestrator
-  rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs std_msgs
+  rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   tf2_ros
 )
 
@@ -88,7 +91,15 @@ if(BUILD_TESTING)
   # that the two artifacts name the same set of belts. A belt in one and not the
   # other is a cell that refuses to come up, or a belt stopped for ever — both
   # of which cost a seven-minute scenario to discover and milliseconds here.
-  ament_add_pytest_test(test_indexed_belts test/test_indexed_belts.py)
+  # It also pins the indexing STAND-OFF, which is the number both this package's
+  # belt comments quote and neither of them could keep true: the beam's placement
+  # is derived from the work-piece (ADR-0033), so it moves whenever the part does.
+  # The two files that state it in prose are handed to the test, which reads the
+  # number out of them and checks it against the generated frames.
+  ament_add_pytest_test(test_indexed_belts test/test_indexed_belts.py
+    ENV
+      CITE_CONVEYOR_INDEX_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/cite_orchestration/conveyor_index.hpp
+      CITE_STATION_TREE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/line_station.xml)
 
   # Driven against a real action server, in-process. The defect under test is
   # what a leaf does to a SERVER when it gives up, so a mock would test the wrong
@@ -96,7 +107,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_skill_cancellation test/test_skill_cancellation.cpp)
   target_include_directories(test_skill_cancellation PRIVATE include)
   ament_target_dependencies(test_skill_cancellation
-    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs
   )
 
   # What these leaves put in a goal, read from the far side of the action. A
@@ -106,7 +117,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_skill_goals test/test_skill_goals.cpp)
   target_include_directories(test_skill_goals PRIVATE include)
   ament_target_dependencies(test_skill_goals
-    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs
   )
 
   # The rules the line is made of — single ownership, the two-party handoff and
@@ -117,7 +128,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_line_logic test/test_line_logic.cpp)
   target_include_directories(test_line_logic PRIVATE include)
   ament_target_dependencies(test_line_logic
-    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs std_msgs
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   )
 
   # Indexing the belt (ADR-0032), against a real publisher and a real
@@ -129,7 +140,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_conveyor_index test/test_conveyor_index.cpp)
   target_include_directories(test_conveyor_index PRIVATE include)
   ament_target_dependencies(test_conveyor_index
-    rclcpp behaviortree_cpp cite_interfaces geometry_msgs std_msgs
+    rclcpp behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   )
 
   # The same rules, composed: a real behaviour tree with real in-process action
@@ -140,7 +151,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_line_nodes test/test_line_nodes.cpp test/fake_arm.cpp TIMEOUT 180)
   target_include_directories(test_line_nodes PRIVATE include test)
   ament_target_dependencies(test_line_nodes
-    rclcpp rclcpp_action behaviortree_cpp cite_interfaces geometry_msgs std_msgs
+    rclcpp rclcpp_action behaviortree_cpp cite_interfaces cite_skills geometry_msgs std_msgs
   )
   # The station subtree under test is the one that ships, read from the source
   # tree rather than copied: a test that carried its own copy would keep passing

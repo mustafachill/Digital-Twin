@@ -42,8 +42,9 @@
 // succeed because they are told to. What is under test is the SEQUENCE and the
 // OWNERSHIP — that a work-piece is admitted once, owned by exactly one station at
 // every instant, handed over only after both parties confirmed, and counted once
-// when it arrives. The simulation-in-the-loop scenario that drives real arms does
-// not exist yet.
+// when it arrives. Motion is `tests/scenarios/continuous_line.py`'s to show — it
+// drives the three-arm line against real arms in Gazebo — and nothing green here
+// is evidence for it.
 
 #include <chrono>
 #include <map>

@@ -14,12 +14,17 @@
 
 // The belt setpoint, and its owner (ADR-0032).
 //
-// A station cannot pick from a running belt. The beam that starts a station is
-// 0.050 m upstream of the point the station picks from, and the work-piece
-// leaves the belt's carry volume 0.100 m past it — 0.333 s and 0.667 s at the
-// declared 0.150 m/s, against a pick-and-place cycle of 106 to 119 s. So the
-// belt is INDEXED: it stops when the station it feeds is triggered, and runs
-// again when that station reports `CompleteHandoff`.
+// A station cannot pick from a running belt, and the beam that starts it leaves
+// no margin at all. It stands 0.027 m DOWNSTREAM of the point the station picks
+// from — half a part length plus half a beam width, derived by
+// `cite_tools.model.resolve.index_offset_m` from the work-piece's own geometry
+// rather than authored (ADR-0033) — so a part breaks it exactly when the part's
+// centre reaches the pick point. The instant of the edge is the instant the part
+// is where it is wanted; there is no travel time to spend, and every further
+// metre of belt is displacement. At the declared 0.150 m/s the part clears its
+// own 0.050 m length in 0.333 s, against a pick-and-place cycle of 106 to 119 s.
+// So the belt is INDEXED: it stops when the station it feeds is triggered, and
+// runs again when that station reports `CompleteHandoff`.
 //
 // WHICH BELT IS NEVER NAMED HERE. A belt is the `via_asset_id` of the inbound
 // edge of a station that has a robot actor — the same derivation `line_plan.hpp`
@@ -175,7 +180,10 @@ public:
   ///
   /// This is what gives the setpoint an owner. Before ADR-0032 nothing in the
   /// running system commanded a conveyor and `tests/scenarios/continuous_line.py`
-  /// supplied one, reporting itself as a gap rather than a boundary.
+  /// supplied one, reporting itself as a gap rather than a boundary. That
+  /// scenario now reads the command topics instead of writing them and asserts a
+  /// non-zero setpoint on every belt, so this call is the only writer and its
+  /// absence is a scenario failure rather than an invisible one.
   void run_all()
   {
     for (const auto & asset : assets()) {

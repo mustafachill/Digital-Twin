@@ -167,10 +167,11 @@ if(BUILD_TESTING)
   ament_add_pytest_test(downstream_include test/test_downstream_include.py TIMEOUT 300)
 
   # `Detect` against a running server, with a plain ROS publisher standing in for
-  # the bridged beam. No simulator and no bridge — the bridge does not exist yet,
-  # which is stated in the test's own docstring rather than implied by a green
-  # result. Cancellation is tested where the skill actually blocks: inside its
-  # bounded wait for a sensor that has not reported.
+  # the bridged beam. No simulator and no bridge is run here — the bridge exists
+  # and is `cite_bringup`'s, and what this file does and does not prove about it
+  # is stated in the test's own docstring rather than implied by a green result.
+  # Cancellation is tested where the skill actually blocks: inside its bounded
+  # wait for a sensor that has not reported.
   add_launch_test(test/test_detection_contract.py TIMEOUT 300)
 endif()
 

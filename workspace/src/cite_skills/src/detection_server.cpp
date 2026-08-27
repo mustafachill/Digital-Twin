@@ -104,9 +104,9 @@ struct Sensor
   std::string asset_id;
   //: The ROS topic carrying the bridged boolean level. Supplied, never derived —
   //: the bridge from Gazebo transport into ROS is `cite_bringup`'s to declare,
-  //: and it is free to land the level on a different name from the one the
-  //: plugin publishes on. Composing it here would hard-code a bridge that does
-  //: not exist yet.
+  //: and it lands the level on `level_topic`, deliberately NOT on the name the
+  //: plugin publishes the event under. Composing it here would hard-code one
+  //: package's choice into another's source.
   std::string state_topic;
   //: Where this beam's typed events are published.
   std::string event_topic;

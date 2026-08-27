@@ -14,18 +14,22 @@
 
 """The parts of `Detect` that only a running server can show.
 
-There is no simulator here and there is no bridge. A plain ROS publisher stands
-in for the bridged break beam, which is exactly the right stand-in: the beam
-plugin publishes a boolean level on the Gazebo transport, `cite_bringup` will
-carry it into ROS as `std_msgs/Bool`, and from this node's point of view those
-two facts are the whole of the sensor. Nothing here branches on which one it is,
-because nothing anywhere may (P2).
+There is no simulator here and no bridge is run. A plain ROS publisher stands in
+for the bridged break beam, which is exactly the right stand-in: the beam plugin
+publishes a boolean level on the Gazebo transport, `cite_bringup` carries it into
+ROS as `std_msgs/Bool`, and from this node's point of view those two facts are the
+whole of the sensor. Nothing here branches on which one it is, because nothing
+anywhere may (P2).
 
-**What this cannot show.** The bridge does not exist yet. These tests drive the
-ROS side of it by hand, so they prove that a level on the topic named by the
-plan becomes a typed event and a typed detection — and they prove nothing about
-whether Gazebo's boolean reaches that topic. That half is `cite_bringup`'s and is
-untested until it lands.
+**What this cannot show.** These tests drive the ROS side of the bridge by hand,
+so they prove that a level on the topic named by the plan becomes a typed event
+and a typed detection — and they prove nothing about whether Gazebo's boolean
+reaches that topic. The bridge itself exists: `cite_bringup` launches one
+`ros_gz_bridge` carrying every belt and beam topic the generated plan declares,
+`test_simulation_launch.py` checks that the plan's interfaces are all in its
+argument list, and `tests/scenarios/continuous_line.py` is what shows a Gazebo
+level actually arriving. None of those is this file, which is the point of saying
+so here.
 
 The sensors, their frames and their topics are read from the generated artifacts
 rather than restated. A copy of them here would be a second place they live (P1)

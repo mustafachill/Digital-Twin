@@ -143,9 +143,12 @@ package at this commit, and every backend in `cell_a_plan.yaml` is `sim`.
   delivered while eleven real values were not, and the node ran on compiled defaults that
   happened to equal the L0 values. It worked, and only for as long as two copies agreed.
   `GRIPPER_KEYS` describes itself as holding the keys "under the exact name the skill server
-  declares it"; that is true of eleven of the twelve. `gripper_max_drive_rate_rad_s` is
-  delivered and is not declared by `skill_server.cpp`, so it is an unused node override — the
-  drive rate reaches the gripper through the generated `*.urdf.xacro` instead.
+  declares it", and `test_every_gripper_key_is_one_the_skill_server_declares` reads
+  `skill_server.cpp` and checks it. It was true of eleven of the twelve until that test
+  existed: `gripper_max_drive_rate_rad_s` was delivered and declared nowhere, so rclcpp
+  dropped it silently. The skill server declares it now and does not act on it — the rate
+  bounds the drive joint, and a joint is bounded in its description, which is where the same
+  L0 value reaches the gripper through the generated `*.urdf.xacro`.
 - **It does not resolve `package://` at generation time.** The plan is committed to git, so an
   absolute path in it would be wrong on every machine but the one that generated it. URIs are
   resolved at launch.
