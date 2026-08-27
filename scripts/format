@@ -31,7 +31,25 @@ if [ -x "${VENV}/ruff" ]; then
     # formatted only tools/ while the gate checked tools/ AND tests/, so a
     # formatting violation under tests/ could not be fixed by running the tool
     # whose entire job is to fix formatting violations.
-    mapfile -t PY_TREES < <(python_trees)
+    # Read with a `while read` loop rather than `mapfile`. `mapfile` is a bash 4
+    # builtin, and macOS ships bash 3.2 — the last GPLv2 release — so this line
+    # aborted the whole script with `mapfile: command not found` on the
+    # development host. A formatter that only runs on the machines that do not
+    # need it is a formatter people work around, and two contributors already had:
+    # they ran `ruff format` by hand, which skips the C++ half below and silently
+    # drops the one guarantee this script's header exists to make.
+    #
+    # POSIX `read` is in every shell this repository can meet. `IFS=` and `-r`
+    # keep a path with spaces or backslashes intact, and the guard on an empty
+    # line is what keeps a trailing newline from becoming an empty argument that
+    # ruff would resolve against the current directory.
+    PY_TREES=()
+    while IFS= read -r tree; do
+        if [ -n "$tree" ]; then
+            PY_TREES+=("$tree")
+        fi
+    done < <(python_trees)
+
     if [ ${#PY_TREES[@]} -gt 0 ]; then
         "${VENV}/ruff" format "${PY_TREES[@]}"
         "${VENV}/ruff" check --fix "${PY_TREES[@]}"

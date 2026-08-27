@@ -45,9 +45,39 @@ ament_target_dependencies(detection_server
 install(TARGETS skill_server detection_server DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
+# Installing the headers is not the same as making them reachable. Without an
+# `ament_export_*` the install rule above copies `observation.hpp` into the
+# install space and nothing downstream can find it: `find_package(cite_skills)`
+# succeeds and contributes no include directory, so the first `#include
+# <cite_skills/observation.hpp>` in another package fails to compile.
+#
+# It had a would-be consumer. `observation.hpp` holds `pose_is_observed`, the
+# rule for READING the unobserved-pose convention, beside `mark_pose_unobserved`,
+# the rule for writing it — one place, so the two cannot drift. L4's `PickAt`
+# needs exactly that predicate and could not reach it, so it fell back to testing
+# `header.frame_id.empty()` alone, which admits a pose with a frame set and NaN
+# position and hands it to the planner. Depending on an L3 header from L4 is
+# downward and therefore legal (CLAUDE.md §5); the export is what makes it
+# possible.
+#
+# `include/${PROJECT_NAME}`, not `include`, and the difference is load-bearing:
+# `install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})` above copies
+# the CONTENTS of include/ — that is, the `cite_skills/` directory — so the
+# header lands at `<prefix>/include/cite_skills/cite_skills/observation.hpp`.
+# The directory that makes `#include <cite_skills/observation.hpp>` resolve is
+# therefore `<prefix>/include/cite_skills`. Exporting `include` would export a
+# directory the headers are not in, which fails in exactly the same way as
+# exporting nothing while looking like it should work.
+ament_export_include_directories(include/${PROJECT_NAME})
+# `observation.hpp` and `approach.hpp` include geometry_msgs headers, so a
+# consumer needs geometry_msgs' include directories too. Exporting the
+# dependency is what stops that from being the consumer's problem to rediscover.
+ament_export_dependencies(geometry_msgs)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
 
   # Two linters in ament_lint_common are registered by hand rather than through
   # ament_lint_auto, because their defaults contradict conventions this
@@ -127,6 +157,14 @@ if(BUILD_TESTING)
   # so it runs headlessly in CI and still exercises the real binary.
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_skill_contract.py TIMEOUT 400)
+
+  # Whether another package can reach this one's headers at all. Every test above
+  # gets at them through `target_include_directories(... PRIVATE include)` on the
+  # SOURCE tree, which is the one path a consumer does not have — so all of them
+  # passed while `observation.hpp` was unreachable from outside the package. This
+  # one configures and compiles a throwaway consumer against the INSTALL space,
+  # which is the only way the difference shows up.
+  ament_add_pytest_test(downstream_include test/test_downstream_include.py TIMEOUT 300)
 
   # `Detect` against a running server, with a plain ROS publisher standing in for
   # the bridged beam. No simulator and no bridge — the bridge does not exist yet,
