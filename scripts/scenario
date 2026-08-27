@@ -23,13 +23,22 @@
 # still is, so be precise about what the seed actually buys.
 #
 # `gz sim --seed` calls `gz::math::Rand::Seed`. That covers sensor noise and the
-# transport RNG. It does NOT seed the physics solver, and it has nothing to do
-# with OMPL — the sampling-based planner is the stochastic component that decides
-# whether a run passes (ADR-0006), and MoveIt exposes no way to seed it at all.
+# transport RNG. It does NOT seed the physics solver.
 #
-# So a seeded run is not a reproducible run. Running pick_and_place four times
-# under one seed produced two distinct failure modes, each twice. Treat a passing
-# scenario as evidence about this run and not about the next one. See
+# ADR-0027 removed one of the two stochastic components and left the other. Every
+# arm now plans with Pilz by default — a trajectory generator, so the same request
+# yields the same trajectory, asserted in cite_skills' planning-pipeline launch
+# test — and OMPL is retained as the fallback for the motions Pilz refuses. OMPL
+# is still unseeded and still unseedable: MoveIt reaches no seeding entry point,
+# and ADR-0027 records why a seed would not help even if it did. So a run whose
+# motions were all answered by Pilz has one fewer source of variance than it used
+# to, and a run that fell back does not.
+#
+# A seeded run is still not a reproducible run, and the reason is now the physics
+# rather than the planner. Running pick_and_place four times under one seed
+# produced two distinct failure modes, each twice; that measurement predates
+# ADR-0027 and has not been repeated under it. Treat a passing scenario as
+# evidence about this run and not about the next one. See
 # docs/architecture/cross-cutting-testing.md for what is and is not guaranteed.
 
 # shellcheck source=scripts/_lib.sh
@@ -80,11 +89,20 @@ source_overlay
 info "Running scenario '${NAME}' on DDS domain ${ROS_DOMAIN_ID}"
 # Stated on every run rather than buried in a header nobody opens: the seed does
 # reach Gazebo now, but it seeds the wrong thing to make a run repeatable, so a
-# green run here still does not mean the next one is green. Removing these lines
-# requires OMPL to be seeded, not merely Gazebo.
+# green run here still does not mean the next one is green.
+#
+# The planner half of this warning narrowed with ADR-0027 and did not go away.
+# Pilz answers the motions it can, deterministically; OMPL answers the rest and is
+# unseeded and unseedable. Which of the two answered a given motion is in the run
+# log, so the last line says how to look rather than leaving the reader to assume
+# the good case. Removing these lines requires the physics solver to be seeded and
+# the OMPL fallback to be gone, not merely Gazebo to be seeded.
 warn "Seed ${CITE_PHYSICS_SEED} reaches 'gz sim --seed' only — this run is not reproducible."
 warn "  That seeds gz::math::Rand: sensor noise and transport RNG."
-warn "  It does NOT seed the physics solver, and OMPL is unseeded (ADR-0006)."
+warn "  It does NOT seed the physics solver."
+warn "  Planning is deterministic only where Pilz answered it (ADR-0027). The OMPL"
+warn "  fallback is unseeded and unseedable (ADR-0006); grep this run's log for"
+warn "  'planner fallback:' to see which motions took it."
 
 # The report is what lets the cycle and teardown questions be told apart after
 # the fact. It lands in workspace/log/ so that CI's existing artifact upload
