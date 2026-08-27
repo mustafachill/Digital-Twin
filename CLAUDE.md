@@ -39,16 +39,22 @@ repository is partway there. Check before assuming.
   [`docs/reference/toolchain.md`](docs/reference/toolchain.md). `./scripts/doctor` exits 0;
   run it to see the state of any machine.
 - **The L0 model and its generators are built and proven** (Phase 1.B). `model/` describes
-  the three-arm cell — seven asset types, fourteen instances, five stations; the seventh
+  the three-arm cell — seven asset types, **fifteen** instances, five stations; the seventh
   type is the reference work-piece, which has no instances on purpose (ADR-0030) — and
   `workspace/src/cite_generated/` holds everything derived from it: descriptions, the
   world, controller configuration, MoveIt configuration, the planning scene, static frames,
   process topology and the bring-up plan. That directory is **generated in its entirety and
   must never be hand-edited** (ADR-0021). `./scripts/validate-model` diffs it against a
   fresh generator run *and* regenerates in a second interpreter under a different hash seed
-  to prove the output is byte-identical; it exits 0. `tools/tests/` holds **222** tests at
+  to prove the output is byte-identical; it exits 0. `tools/tests/` holds **236** tests at
   this commit, counted by collection rather than by a run
   (`pytest tools/tests --collect-only -q`, 2026-08-27).
+  **This file said "fourteen instances" until 2026-08-27 and it was fifteen.**
+  `./scripts/validate-model` reports `7 type(s), 15 asset(s)` on this commit. The fifteenth
+  is `beam_pick`, added at `aef87e6`; the same addition falsified the count in this file, in
+  L0's status line, and in ADR-0027 — which is why ADR-0027's first correction ends with
+  *"do not state the cardinality of a generated collection in prose."* Ask
+  `./scripts/validate-model`; do not trust this sentence.
 - **Eight first-party packages exist**, and `workspace/src/external/` adds the twelve from
   `xarm_ros2`. `./scripts/build` is a blocking CI step. The eight are `cite_interfaces`,
   `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`,
@@ -197,6 +203,27 @@ repository is partway there. Check before assuming.
   registered before the runs**, and there is no directory for it in
   [`docs/measurements/`](docs/measurements/README.md). Treat them as the size of the
   evidence, not as a measurement of the defect.
+- **Motion is planned by Pilz.** ADR-0027 is implemented and merged: L0 declares the
+  pipeline choice and the limits, the generator emits `cell_a_arm_*_planning_pipelines.yaml`
+  per arm declaring both pipelines, and the L3 skill server asks for Pilz PTP and falls back
+  to OMPL **only** on a planning failure — never on an unreachable pose, and never when the
+  requested planner is a Cartesian one, where the shape of the path is the contract. The
+  files this file used to name, `cell_a_arm_*_ompl_planning.yaml`, were renamed and no
+  longer exist.
+  **What is proven:** an identical request returns a byte-identical trajectory from one
+  `move_group`, and a PTP path through a named object in the real generated planning scene
+  is refused — mutation-checked, and observed refusing a real path during `continuous_line`.
+  Pilz does not search the scene, so `ValidateSolution` is the sole environment-collision
+  gate, and that pair of tests is the **only** test in the repository that catches its
+  removal.
+  **What is not:** same seed, same trajectory *across runs*. And one residual is stated
+  rather than closed — the gate checks trajectory waypoints and interpolates nothing between
+  them, so an object thinner than one waypoint step can be missed.
+  **LIN is configured and usable on one motion shape only**, and nothing in L3 asks for it.
+  The measurement, the residual's arithmetic, and the fact that no error code tells a
+  collision refusal from a geometric one are all in
+  [ADR-0027](docs/adr/0027-pilz-planning-pipeline.md)'s 2026-08-27 correction. Read it
+  before wiring LIN into anything; do not restate its numbers here (P1).
 - **What does not work, stated plainly** (Phase 1.C/1.D, in progress):
   - **A grasp holds a position, not an orientation, and the two published residuals are
     different quantities.** Correcting the grasp-plane offset took rotations above 20° from
@@ -235,12 +262,12 @@ repository is partway there. Check before assuming.
     could tell them apart was a scenario that was itself supplying the command. A publisher
     of `ConveyorState` — in the simulation plugin and on the hardware drive, which is L1/L2
     work — is what closes it.
-  - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` reaches `gz sim --seed`, which
-    seeds sensor noise and nothing else — not the physics solver, not the planner. See
+  - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` still reaches only
+    `gz sim --seed`, which seeds sensor noise and **not the physics solver**. What has
+    changed is which part is stochastic: planning is no longer it wherever Pilz answers, and
+    physics still is. The OMPL fallback remains unseeded and unseedable. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
-    determinism.
-  - **ADR-0027's Pilz pipeline is decided and not implemented.** Every generated
-    `*_ompl_planning.yaml` still lists `planning_pipelines: [ompl]` and nothing else.
+    determinism, and do not upgrade the claim on the strength of the planner alone.
   - **Twelve links per arm use their visual mesh as collision geometry**, which §10 below
     names as a defect class. Real-time factor on the development host is 0.14. ADR-0028
     decides the fix and is still `Proposed`: `assets/` holds only its README and manifest.

@@ -9,6 +9,18 @@
   runs as a `ros2_control` controller ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md))
   and its stall is now the sole evidence that a part is held, no simulation plugin having
   survived to forge it ([ADR-0029](../adr/0029-simulated-grasping-by-friction.md)).
+  **Built:** the planning pipelines. Each arm's `move_group` loads Pilz and OMPL from a
+  generated `cell_a_arm_*_planning_pipelines.yaml` and plans with Pilz PTP by default
+  ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). A launch test drives the real
+  `move_group` against the real generated files and requires both pipelines to load, PTP to
+  plan, an identical request to return a byte-identical trajectory, and — the assertion this
+  layer's safety rests on — a PTP path through a **named** object in the real generated
+  planning scene to be refused, with its complement proving the refusal came from the scene.
+  Mutation-checked, and observed refusing a real path during `continuous_line`.
+  **Built with a stated residual:** that gate checks trajectory **waypoints** and
+  interpolates nothing between them, at Pilz's fixed 0.1 s sampling. An object thinner than
+  one waypoint step can lie between two checked states. The step, the arithmetic and the two
+  ways it can grow are in the ADR's 2026-08-27 correction; the number is not repeated here.
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
   **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
@@ -17,7 +29,7 @@
   **Not held:** the configured rate. The model asks for 150 Hz; `joint_states` was measured
   at roughly 21 Hz at a real-time factor of 0.14 (see
   [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
-- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [cross-cutting-safety.md](cross-cutting-safety.md)
+- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility
 
@@ -110,6 +122,36 @@ The obstacles MoveIt plans against and the obstacles in the simulator are genera
 the same source. They cannot disagree — which matters, because a planner with an
 incomplete scene generates confidently unsafe trajectories.
 
+**It matters more under Pilz than it did under OMPL.** A sampling planner treats the scene
+as something to route around; a trajectory generator treats it as something to be checked
+against after the fact. An object missing from the scene is a collision nobody planned
+around either way, but under Pilz there is one adapter between that object and a real
+motion rather than a search that never proposed the path.
+
+### Which planner plans, and what a refusal means
+
+Both pipelines are loaded per arm from L0; Pilz PTP plans, and OMPL answers only what Pilz
+refuses. The decision, its cost, and the measured limits of Pilz's LIN generator on this
+arm are [ADR-0027](../adr/0027-pilz-planning-pipeline.md) — read its 2026-08-27 correction
+before assuming a Cartesian path is available.
+
+Two consequences land in this layer.
+
+- **A refusal is a normal outcome to design for**, not an exception. L2 reports it; L4's
+  recovery has to tell "Pilz refused this straight path" from "the pose is unreachable",
+  and those are different result codes ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
+- **Nothing above L2 knows which planner answered.** The pipeline is named in the request
+  and resolved inside `move_group`, so the identical call plans in simulation and on
+  hardware. P2 is untouched by this, and any change that makes a skill branch on the
+  pipeline breaks it.
+- **No error code tells a collision refusal from a geometric one.** Both come back as the
+  generic `FAILURE`. The **only** discriminator is whether a trajectory is attached: a path
+  generated and then rejected by `ValidateSolution` carries the rejected trajectory, and a
+  path refused during generation carries none. A consumer must not read an attached
+  trajectory as a plan, and must not branch on the code. Both halves are pinned by tests,
+  and the enumeration showing nothing can execute a rejected trajectory today is in
+  [ADR-0027](../adr/0027-pilz-planning-pipeline.md).
+
 ## Failure modes
 
 | Failure | How it shows | Detection |
@@ -117,6 +159,9 @@ incomplete scene generates confidently unsafe trajectories.
 | Name differs between sim and hardware | Works in simulation, fails or misbehaves on hardware | Generation from L0; `safety-auditor`; parity check in `tester` |
 | Controller joint names ≠ description | Spawner times out; the error names the spawner, not the mismatch | `model-validator` interface matching |
 | Planning scene missing an obstacle | Confidently unsafe trajectory | `model-validator`; `safety-auditor` |
+| Pilz path crosses a scene obstacle and `ValidateSolution` does not refuse it | A straight line through a table, executed | `test_9_a`/`test_9_b` in `cite_skills` — the only test in the repository that catches removal of this gate ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)) |
+| Obstacle thinner than one waypoint step lies between two checked waypoints | A collision the gate never saw | **Nothing** — a stated residual of the 0.1 s sampling, not a defect with a fix pending ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)) |
+| A caller distinguishes refusals by MoveIt error code | A rejected trajectory treated as a plan | Nothing automatic — the codes are the same; see "Which planner plans" above for the only discriminator |
 | Command path bypassing the safety layer | Unexpected motion | `safety-auditor` — Critical, blocks merge |
 | Controller update rate not held under load | Missed deadlines; degraded tracking | `performance-engineer` |
 | Sim-only flag reachable on the hardware path | Limits disabled on a real arm | `safety-auditor` — Critical |
