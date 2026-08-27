@@ -218,6 +218,29 @@ it.
 `throw py::error_already_set()` — the way `convert_from_py` already does in the same file —
 this race is closed and the handler is dead weight. Delete it.
 
+**This condition has an automated detector, and it is a negative control.**
+`workspace/src/cite_runtime/test/spinning_probe.py` keeps the **pre-fix idiom alive** as a
+second mode — `rclpy.init()`, `rclpy.spin()`, `except KeyboardInterrupt: pass`, copied
+verbatim from `frame_server.main` as it stood at `f16ea98` — selected by a positional
+argument, `spinning_probe default`. `test_the_tripwire_still_breaks_the_idiom_it_replaced` in
+`test/test_shutdown_under_signal.py` drives that mode through the same SIGINT tripwire as the
+fixed one and asserts two things: that it exits non-zero, and that its stderr contains
+`Unable to convert call argument` — the traceback this chain produces and no other.
+
+So **nobody has to notice this by hand.** When upstream adds the `NULL` check, that test goes
+red, and its own docstring names the two ways that can happen: the tripwire has stopped
+placing the signal inside `convert_to_py`, or `convert_to_py` has learned to check the
+pointer it steals — the second being this removal condition met. Note that the *assertion
+message* names only the first, so a reader who sees it red must consult the docstring and
+this section rather than the failure text alone.
+
+The test earns its place twice over. It is also what stops the positive test —
+`test_sigint_inside_message_conversion_exits_cleanly` — from passing vacuously: a tripwire
+that had quietly stopped placing the signal would leave the clean-exit assertion green while
+proving nothing, and the only thing that can tell those two states apart is watching the same
+tripwire still break the idiom it is supposed to break. See
+[cross-cutting-testing.md](../architecture/cross-cutting-testing.md) for the pattern.
+
 **Not filed upstream by this project.** A search of the `ros2/rclpy` issue tracker on
 2026-08-27 for `convert_to_py`, `Unable to convert call argument` and `KeyboardInterrupt`
 surfaced no issue describing this chain; that is a survey, not a proof that none exists.
@@ -237,11 +260,20 @@ construction, or the construction itself raises `ExternalShutdownException`, del
 tolerance. Search for the code, not for line 757 and line 784 — those numbers are true of
 rclpy 7.1.11 and will drift.
 
+**This condition has no automated detector, unlike Compensation 1.** The two tests that cover
+the tolerance — `test_a_wait_set_that_fails_after_shutdown_is_a_shutdown` and
+`test_a_wait_set_that_fails_with_a_live_context_still_raises` — monkeypatch `rclpy.spin` to
+raise `RCLError`, so they assert that *our* clause stays exactly as narrow as it is written.
+They say nothing about the upstream ordering, and they will keep passing after upstream fixes
+it. This condition is checked by reading upstream, by hand, and there is currently nothing
+that will prompt anyone to.
+
 ## Consequences
 
 ### What this gets us
 - **One deletion site** for each compensation, so the removal conditions above are
-  executable rather than aspirational.
+  executable rather than aspirational — and for Compensation 1, a test that goes red when the
+  condition is met rather than a condition nobody rechecks.
 - **The dependency edge is visible.** A future Python node that wants this must add
   `<depend>cite_runtime</depend>`, which `rosdep`, the build and a reviewer can all see.
 - **`cite_facility` still is what its manifest says it is**, and `cite_interfaces` still
