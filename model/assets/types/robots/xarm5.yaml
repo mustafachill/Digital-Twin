@@ -158,6 +158,14 @@ asset_type:
       # error was sampled before choosing them, because that is only observable
       # under Gazebo and the change that introduced them was not permitted to run
       # a scenario. ADR-0036 records the campaign that replaces them.
+      #
+      # One step weaker than that, and the difference is not cosmetic: the vendor
+      # block was written for a controller declaring
+      # `command_interfaces: [position, velocity]`, and the block below is
+      # attached to one declaring `[position]`. Same arm, different control mode.
+      # The three POSITION tolerances transfer, because both configurations track
+      # position; `stopped_velocity_tolerance_rad_s` does not, and its own comment
+      # says why.
       constraints:
         # Seconds after the trajectory's end time to keep waiting for
         # `goal_tolerance_rad`. Never 0.0: at zero the controller waits forever
@@ -190,15 +198,27 @@ asset_type:
         # rad/s below which a joint counts as stopped at the goal. 0.0 disables
         # the check, and disabling it is the decision.
         #
-        # This is the one tolerance that is ALREADY armed on this cell:
-        # `get_segment_tolerances` assigns it to the goal state's velocity
-        # unconditionally and upstream defaults it to 0.01, not to zero. It has
-        # been harmless only because `goal_time` was 0.0, so a joint still
-        # creeping at the end kept the goal open instead of failing it. Setting
-        # `goal_time_s` above is what arms it — a joint that settles later than
-        # 0.5 s succeeds today and would begin aborting. UFACTORY ships 0.0 here,
-        # and following them keeps this block a POSITION detector rather than
-        # smuggling in a velocity one.
+        # THIS CHECK CANNOT FIRE ON THIS CELL AT ALL, whatever value stands here
+        # and whatever `goal_time_s` is, and the reason is the `command_interfaces`
+        # list twelve lines above. `get_segment_tolerances` does assign this to the
+        # goal state's velocity unconditionally, and upstream does default it to
+        # 0.01 rather than to zero — but `compute_error_for_joint` writes a
+        # velocity error only when `has_velocity_state_interface_ &&
+        # (has_velocity_command_interface_ || has_effort_command_interface_)`.
+        # This controller commands POSITION ONLY, so `state_error_.velocities`
+        # stays at the zeros it was sized to and `abs(0.0) > tolerance` is never
+        # true. An earlier version of this comment claimed the opposite; see
+        # ADR-0036's 2026-08-27 correction.
+        #
+        # Stating the vendor's explicit 0.0 anyway costs nothing and pre-empts the
+        # one change that would arm it. WHAT WOULD ARM IT is adding a `velocity`
+        # or an `effort` entry to `command_interfaces` above — nothing else does,
+        # and that is not hypothetical: UFACTORY's own xarm5_controllers.yaml
+        # commands `[position, velocity]`, so adopting the vendor's interface set
+        # makes this parameter live on the first run afterwards. Whoever makes
+        # that change owns deciding this number, because 0.01 would then start
+        # aborting a joint that settles a little late — a velocity flake in a
+        # block whose whole purpose is to detect a position error.
         stopped_velocity_tolerance_rad_s: 0.0
 
   planning:

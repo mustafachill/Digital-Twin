@@ -236,3 +236,128 @@ class TestTheDisabledCombinationsCannotBeWritten:
         )
         with pytest.raises(ModelError):
             artifacts(real_model)
+
+
+class TestTheVelocityCheckIsDeadOnThisCell:
+    """`stopped_velocity_tolerance` cannot fire here, and the record must say so.
+
+    ADR-0036's first version claimed the opposite in four places: that this was
+    the one goal-side check already armed, and that setting `goal_time` armed it.
+    Both are false for a controller that commands position alone.
+    `check_state_tolerance_per_joint` compares the tolerance against
+    `state_error_.velocities[i]`, and `compute_error_for_joint` writes that entry
+    only under `has_velocity_state_interface_ && (has_velocity_command_interface_
+    || has_effort_command_interface_)` — so with `command_interfaces: [position]`
+    it stays at the zero it was sized to and no tolerance can be exceeded.
+
+    The claim was prose, so nothing could catch it. These tests make the fact the
+    prose rests on a generated one instead.
+    """
+
+    def test_no_arm_commands_velocity_or_effort(self, real_model: Path) -> None:
+        # THE FACT THE WHOLE CORRECTION RESTS ON. If this fails, somebody has
+        # given an arm a velocity or effort command interface — a reasonable
+        # change, and also the single change that arms
+        # `stopped_velocity_tolerance` for the first time. UFACTORY's own
+        # xarm5_controllers.yaml commands [position, velocity], so this is a
+        # plausible direction rather than a hypothetical one. Whoever makes it
+        # owns deciding that tolerance: the upstream default is 0.01, not zero.
+        for arm in ARMS:
+            block = controller_block(real_model, arm)
+            assert set(block["command_interfaces"]) == {"position"}, arm
+            assert block["constraints"]["stopped_velocity_tolerance"] == 0.0, arm
+
+    def test_the_generated_comment_says_the_check_cannot_fire(self, real_model: Path) -> None:
+        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        assert "THIS CHECK CANNOT FIRE on this controller" in text
+        assert "THIS CHECK IS LIVE" not in text
+
+    def test_a_velocity_command_interface_flips_the_comment(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The direction that matters, and the one no fixed comment could get
+        # right: the generated file has to change its account of this tolerance
+        # when the model changes the interfaces the account depends on. Before
+        # the 2026-08-27 correction the template emitted one paragraph claiming
+        # the check was armed — wrong for the cell as it stands, and it would
+        # have stayed wrong in the other direction here.
+        edit_constraints(
+            edit_yaml,
+            real_model,
+            lambda c: c.__setitem__("command_interfaces", ["position", "velocity"]),
+        )
+        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        assert "THIS CHECK IS LIVE on this controller" in text
+        assert "THIS CHECK CANNOT FIRE" not in text
+
+    def test_an_effort_command_interface_also_flips_it(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # `has_effort_command_interface_` is the second disjunct upstream, and
+        # reading only the first is how this class of mistake happens.
+        edit_constraints(
+            edit_yaml,
+            real_model,
+            lambda c: c.__setitem__("command_interfaces", ["position", "effort"]),
+        )
+        assert (
+            "THIS CHECK IS LIVE on this controller"
+            in artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        )
+
+    def test_a_velocity_state_interface_alone_does_not_arm_it(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The conjunction, not the disjunction. A velocity STATE interface is
+        # what this cell already has, and on its own it arms nothing. Mistaking
+        # the two is exactly the reading that produced the false claim.
+        edit_constraints(
+            edit_yaml,
+            real_model,
+            lambda c: c.__setitem__("state_interfaces", ["position", "velocity"]),
+        )
+        assert (
+            "THIS CHECK CANNOT FIRE on this controller"
+            in artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        )
+
+
+class TestEveryControllerTypeIsClassified:
+    """A new controller type cannot slip the tolerance guard in silence.
+
+    `TRAJECTORY_CONTROLLER_TYPES` is an exact-match set, deliberately — a
+    substring test on a plugin name is the kind of rule that matches the wrong
+    thing quietly. But an exact-match set has its own silent failure: a type
+    declaring a trajectory controller under some other plugin name is not in the
+    set, is therefore never required to carry tolerances, and ships with them
+    disabled. That is the original ADR-0036 defect, reintroduced with no signal.
+
+    This is the signal. It does not guess which kind a new type is; it refuses to
+    let one exist without somebody saying.
+    """
+
+    def test_every_declared_controller_type_is_in_exactly_one_set(self, real_model: Path) -> None:
+        assert not (
+            gen.control.TRAJECTORY_CONTROLLER_TYPES & gen.control.NON_TRAJECTORY_CONTROLLER_TYPES
+        )
+        known = (
+            gen.control.TRAJECTORY_CONTROLLER_TYPES | gen.control.NON_TRAJECTORY_CONTROLLER_TYPES
+        )
+        # The TYPE is where the guard reads from — `_constraints_view` tests
+        # `controller.type` against the set — so the type is where an
+        # unclassified controller has to be caught, whether or not any instance
+        # of it is placed yet.
+        declared = {
+            controller.type
+            for asset_type in load(real_model).types
+            for controller in asset_type.controllers
+        }
+        unclassified = declared - known
+        assert not unclassified, (
+            f"controller type(s) {sorted(unclassified)} appear in model/ and in neither "
+            "TRAJECTORY_CONTROLLER_TYPES nor NON_TRAJECTORY_CONTROLLER_TYPES in "
+            "cite_tools/generate/control.py. Decide which: a type that executes whole "
+            "trajectories belongs in the first and must then declare a `constraints:` "
+            "block, or the generator ships it with every tolerance at the 0.0 that "
+            "disables the check (ADR-0036). Anything else belongs in the second."
+        )

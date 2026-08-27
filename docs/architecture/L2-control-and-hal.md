@@ -34,11 +34,27 @@
   **It is a detector, not a protective measure**, and it must not be cited as one: it
   reports after the fact, and what stops an arm driving into a fixture remains the vendor
   controller's torque limiting and physical guarding (charter §3.2).
-  **Two residuals are stated rather than implied.** The tolerance values are UFACTORY's own
+  **Four residuals are stated rather than implied.** The tolerance values are UFACTORY's own
   for the xArm 5, *copied* from the vendor configuration at the pinned commit and **not
   measured on this stack** — no healthy-run following error has been sampled, because that
-  is observable only under Gazebo. And the path tolerance detects a joint that is *held*,
-  not a graze that deflects the arm and lets it continue; that case is still invisible.
+  is observable only under Gazebo; ADR-0036's 2026-08-27 correction derives an expected
+  figure from the `gz_ros2_control` command conversion and that derivation is not a
+  measurement either. The provenance is also one step weaker than "the vendor's
+  configuration": the vendor block commands `[position, velocity]` and this cell commands
+  `[position]`. And the path tolerance detects a joint that is *held*, not a graze that
+  deflects the arm and lets it continue; that case is still invisible.
+  **`stopped_velocity_tolerance` cannot fire here at all**, and this document said nothing
+  about it while three other places said the opposite. `compute_error_for_joint` writes a
+  velocity error only when a velocity or effort *command* interface is present, so on this
+  cell the tolerance is compared against a hard zero whatever `goal_time` is. Adding such an
+  interface arms it for the first time, and the generated comment now follows the model
+  rather than asserting it — see ADR-0036's 2026-08-27 correction.
+  **What the detector reports cannot be told apart from a transport fault**, which is an
+  open finding rather than a residual. `PATH_TOLERANCE_VIOLATED` lives only in the
+  `FollowJointTrajectory` result, `moveit_simple_controller_manager` drops it into
+  `ExecutionStatus::ABORTED`, and L3 sees `CONTROL_FAILED` — the same value a malformed goal
+  or a stale header produces. L4 answers it with `RETRY_SAME`. The reasoning is in
+  `cite_orchestration/recovery_policy.hpp`, on the `EXECUTION_FAILED` branch.
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
   **Still enforced at planning only:** the acceleration and deceleration ceilings. ADR-0036

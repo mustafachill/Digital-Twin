@@ -28,7 +28,30 @@ SINGLE_JOINT_TYPES = frozenset({"position_controllers/GripperActionController"})
 #: mistrack one. Named as a set rather than tested by substring so that a new
 #: controller type is a deliberate addition here, in the place the rule is
 #: stated, rather than something a name happens to match.
+#:
+#: An exact-match set has one failure mode and it is silent: a type declaring, say,
+#: a vendor-namespaced trajectory controller is not in this set, is therefore not
+#: required to carry tolerances, and ships with them disabled — which is precisely
+#: the defect ADR-0036 exists to close, reintroduced with no signal. Substring
+#: matching does not fix that; it moves the silence to whichever name happens not
+#: to contain the substring. What closes it is
+#: `test_every_controller_type_is_classified` in
+#: `tools/tests/test_trajectory_constraints.py`: every controller type any asset
+#: type declares must appear in this set or in the one below, so a new type fails a
+#: test until somebody has said which of the two it is.
 TRAJECTORY_CONTROLLER_TYPES = frozenset({"joint_trajectory_controller/JointTrajectoryController"})
+
+#: Controller types that execute no whole trajectory, and so need no tolerances.
+#:
+#: This exists only so that the pair of sets is exhaustive over the model, which is
+#: what makes an unclassified type detectable. The generator branches on membership
+#: here in no code path; the test named above is its only reader.
+NON_TRAJECTORY_CONTROLLER_TYPES = frozenset(
+    {
+        "joint_state_broadcaster/JointStateBroadcaster",
+        "position_controllers/GripperActionController",
+    }
+)
 
 
 class MissingControlSpecError(Exception):
@@ -65,6 +88,20 @@ class _ConstraintsView:
     goal_time: str
     stopped_velocity_tolerance: str
     per_joint: tuple[_JointToleranceView, ...]
+    #: Whether `stopped_velocity_tolerance` can ever be exceeded on this
+    #: controller. That is a fact about its interfaces, not about the tolerance:
+    #: `compute_error_for_joint` writes a velocity error only under
+    #: `has_velocity_state_interface_ && (has_velocity_command_interface_ ||
+    #: has_effort_command_interface_)`, so a controller commanding position alone
+    #: compares every velocity tolerance against a hard zero, whatever `goal_time`
+    #: is.
+    #:
+    #: It exists to stop the generated comment asserting something the
+    #: configuration beside it contradicts. ADR-0036's first version claimed the
+    #: check was armed on this cell and that `goal_time` armed it; both were false,
+    #: and nothing caught it because the claim was prose. Deriving it here makes it
+    #: follow the model instead.
+    velocity_check_can_fire: bool
 
 
 @dataclass(frozen=True)
@@ -110,9 +147,12 @@ def _constraints_view(controller: object, asset: ResolvedAsset) -> _ConstraintsV
                 "type (ADR-0036)."
             )
         return None
+    commands = set(controller.command_interfaces)  # type: ignore[attr-defined]
+    states = set(controller.state_interfaces)  # type: ignore[attr-defined]
     return _ConstraintsView(
         goal_time=fmt_float(constraints.goal_time_s),
         stopped_velocity_tolerance=fmt_float(constraints.stopped_velocity_tolerance_rad_s),
+        velocity_check_can_fire="velocity" in states and bool(commands & {"velocity", "effort"}),
         per_joint=tuple(
             _JointToleranceView(
                 joint=joint,

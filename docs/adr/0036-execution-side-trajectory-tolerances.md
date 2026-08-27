@@ -1,6 +1,11 @@
 # ADR-0036: Detect a mistracked trajectory at execution, with tolerances declared in L0
 
-- **Status:** Proposed
+- **Status:** Proposed, corrected 2026-08-27. The decision stands in full — all four
+  values ship, from L0, identically on both backends. Three supporting claims do not:
+  that `stopped_velocity_tolerance` is armed on this cell and that `goal_time` arms it,
+  that the tolerances are the vendor's for this controller configuration, and that the
+  path tolerance's margin was established. See the section
+  "Correction — 2026-08-27" immediately below.
 - **Date:** 2026-08-27
 - **Deciders:** Coder agent, on a finding raised by `safety-auditor` while auditing ADR-0027
 - **Related:** [ADR-0005](0005-ros2-control-sim-real-boundary.md),
@@ -9,6 +14,112 @@
   [ADR-0027](0027-pilz-planning-pipeline.md),
   [cross-cutting-safety.md](../architecture/cross-cutting-safety.md),
   charter §3.2 and §4 (P1, P2, P5, P7)
+
+## Correction — 2026-08-27: `stopped_velocity_tolerance` cannot fire on this cell, the vendor block is transplanted across a configuration difference, and the path-tolerance margin was asserted rather than derived
+
+Three supporting claims below are wrong or unsupported. **The decision itself stands
+unchanged.** All four values still ship, still declared in L0, still identically on both
+backends; the schema still requires `goal_time_s` and `goal_tolerance_rad` to be strictly
+positive, and that requirement is still load-bearing for the reason the "interaction"
+section gives. Nothing that is generated changes. What changes is what this record says
+about why.
+
+**1. `stopped_velocity_tolerance` is not "the one goal-side check that is live today", and
+setting `goal_time` does not arm it.** The section
+"`stopped_velocity_tolerance` is already armed, and enabling `goal_time` arms it" is right
+that `get_segment_tolerances` assigns `goal_state_tolerance[i].velocity` unconditionally
+from a parameter that upstream defaults to `0.01` rather than to zero. It is wrong that the
+check can therefore fire. `JointTrajectoryController::compute_error_for_joint` writes the
+velocity error only under
+
+```cpp
+  if (
+    has_velocity_state_interface_ &&
+    (has_velocity_command_interface_ || has_effort_command_interface_))
+  {
+    error.velocities[index] = desired.velocities[index] - current.velocities[index];
+  }
+```
+
+— `joint_trajectory_controller` 4.40.1, the version installed in the container image. Every
+generated arm configuration in this cell declares `command_interfaces: [position]` and
+nothing else, so both disjuncts of the inner condition are false.
+`state_error_.velocities` is sized to `dof_` by `resize_joint_trajectory_point` and is never
+written after that, so the number `check_state_tolerance_per_joint` reads is always `0.0`
+and `abs(0.0) > tolerance` is false for every tolerance. **The velocity check is
+structurally dead on this cell, whatever `goal_time` is.** Enabling `goal_time` cannot arm
+it, and it would not have introduced a velocity-driven flake.
+
+Emitting the vendor's explicit `0.0` is still the right call, for a reason the original text
+did not give: it costs nothing, and it pre-empts the one change that would arm the check for
+the first time. **Adding a `velocity` or an `effort` *command* interface to this arm is what
+would arm `stopped_velocity_tolerance`** — nothing else does. That is not a hypothetical:
+the vendor's own configuration, quoted in Option D, commands position *and* velocity, so
+moving this arm onto the vendor's interface set is a plausible change and it would make this
+parameter live on the first run after it.
+
+**2. "The vendor's numbers for the vendor's arm" is true of the arm and not quite of the
+controller configuration.** `xarm_controller/config/xarm5_controllers.yaml` at the pinned
+commit declares `command_interfaces: [position, velocity]`. The generated configuration here
+declares `command_interfaces: [position]`. The tolerances were written for a controller that
+commands both, and they are being applied to one that commands position alone — the same
+arm, a different control mode. That does not invalidate the values: they bound *position*
+error, which both configurations track. It does mean the provenance is one step weaker than
+"the vendor's configuration for the vendor's arm", and correction 1 is the concrete
+consequence — the one number the vendor set with a live check behind it is the one that has
+no check behind it here.
+
+**3. "Loose enough that it cannot plausibly be the thing that fires on a healthy run" was an
+assertion with no arithmetic behind it.** The conclusion holds. The margin is roughly 14×,
+and it is worth writing down because the "revisit" section below asks for an observed peak
+"at least an order of magnitude below `trajectory_tolerance_rad`" and gives a reader nothing
+to compare against.
+
+Derived rather than measured, and only for the simulated backend. Under `gz_ros2_control`
+the position command interface is not a position servo: `GazeboSimSystem::write()` computes
+`error = (position - command) * update_rate` and issues
+`target_vel = -position_proportional_gain * error`, with the gain defaulting to `0.1` and
+this cell overriding nothing. With the model's `update_rate_hz: 150` that is a first-order
+lag of time constant `1 / (0.1 * 150) = 67 ms`. Tracking a constant-velocity segment, such a
+lag settles at a following error of `v * tau`. The fastest segment this cell can plan is the
+description's `velocity="3.14"` scaled by `default_velocity_scaling_factor: 0.35`, so
+`v = 1.10 rad/s` and the steady-state following error is about **73 mrad** — against a
+`trajectory_tolerance_rad` of `1.0`, a margin of about **14×**.
+
+Three things about that number, in the order they matter:
+
+- **It is simulation-only.** The 67 ms lag is a property of `gz_ros2_control`'s command
+  conversion, not of the arm. On hardware the plant is UFACTORY's own servo loop and this
+  arithmetic says nothing about it. The tolerance is still identical on both backends, which
+  is P2 and is not negotiable; what differs is that only one backend's healthy following
+  error has been estimated here, and neither has been measured.
+- **Pure transport delay is a much smaller term and is not the one to quote.** One control
+  period at `v = 1.10 rad/s` is `1.10 / 150 = 7.3 mrad`. The lag above dominates it by an
+  order of magnitude, so a margin computed from the control period alone would be optimistic
+  by that factor.
+- **All of it is in simulation time.** `gz_ros2_control` calls the controller manager at the
+  configured 150 Hz *in simulation time*; a real-time factor below 1 stretches wall-clock
+  and leaves every quantity above unchanged. Do not compute this margin from the ~21 Hz
+  wall-clock `joint_states` rate recorded in ADR-0028: mixing a wall-clock rate into a
+  simulation-time error is the failure class CLAUDE.md §10 names under "Time", and it
+  produces a plausible, wrong answer.
+
+This estimate does **not** discharge the campaign in "What we will have to revisit". It is
+what the first measurement should be checked against, not a substitute for taking it.
+
+**How these errors survived.** All three share one shape: a fact was read off the code that
+*sets* a value and never traced to the code that *reads* it. The
+`stopped_velocity_tolerance` claim was verified as far as `get_segment_tolerances`, which
+assigns the tolerance unconditionally — and stopped there, one call short of
+`compute_error_for_joint`, which decides whether there is ever an error to compare it
+against. The provenance claim compared the vendor's `constraints:` block to ours and did not
+read the six lines above it in the same file. The margin claim asserted a conclusion about
+following error without once computing a following error. Nothing in the change could have
+caught any of them: the launch test drives mock hardware, which mirrors commands to state,
+so its following error is identically zero — it can prove the tolerances are *read as two
+numbers*, and it cannot prove anything about what a real one would be. A configuration
+detector whose only evidence comes from a backend that cannot produce the error it detects
+is under-evidenced by construction, and that is the transferable part.
 
 ## Context
 
@@ -81,6 +192,8 @@ and the goal is aborted only in the `else if (!within_goal_time)` branch. So:
 They ship together, both non-zero, or neither ships.
 
 ### `stopped_velocity_tolerance` is already armed, and enabling `goal_time` arms it
+**[Corrected 2026-08-27 — see the Correction section above. Neither half of this heading
+is true of this cell.]**
 
 `get_segment_tolerances` assigns `goal_state_tolerance[i].velocity =
 constraints.stopped_velocity_tolerance` unconditionally, and that parameter defaults
@@ -88,11 +201,13 @@ to `0.01` rad/s rather than to zero. It is therefore the **one** goal-side check
 is live today. It has been harmless only because `goal_time` is `0.0`: a joint still
 creeping at the trajectory's end keeps the goal open rather than failing it, and in
 practice the joints settle and the goal succeeds.
+**[Corrected 2026-08-27 — see the Correction section above.]**
 
 Setting `goal_time` to a finite value changes that. A joint that settles at
 `t_end + 0.8 s` succeeds today and would abort at `t_end + 0.5 s`. Enabling
 `goal_time` without also deciding this parameter would introduce a *velocity*-driven
 flake while intending to add a *position* detector.
+**[Corrected 2026-08-27 — see the Correction section above.]**
 
 ### What is measurable within this change, and what is not
 
@@ -148,6 +263,10 @@ Chosen. The values have a real provenance — they are the arm vendor's numbers 
 arm vendor's arm, the same class of provenance the model already accepts for
 `max_reach_m` — and the path tolerance in particular is loose enough (1.0 rad ≈ 57°)
 that it cannot plausibly be the thing that fires on a healthy run.
+**[Corrected 2026-08-27 — see the Correction section above. The vendor block quoted here
+commands `[position, velocity]` where this cell commands `[position]`, and the margin
+claim in the second half was an assertion with no arithmetic behind it. Both survive
+correction; neither was established here.]**
 
 ## Decision
 
@@ -178,6 +297,10 @@ one alone is a defect rather than a partial feature.
   that never returns.
 - `stopped_velocity_tolerance` becomes a stated decision instead of an unread default
   that would have been silently armed by enabling `goal_time`.
+  **[Corrected 2026-08-27 — see the Correction section above. It becomes a stated
+  decision, which is worth doing; nothing would have armed it. What would arm it is a
+  `velocity` or `effort` command interface on this arm, and that is the change this
+  explicit `0.0` pre-empts.]**
 - Identical on both backends, from one generated file, so P2 holds by construction.
 
 ### What this costs us

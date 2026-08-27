@@ -127,4 +127,4 @@ not rewritten either.
 | [0033](0033-derive-the-index-standoff-from-the-workpiece.md) | Sense against the part's body, and derive an indexing beam's stand-off from it | Accepted |
 | [0034](0034-process-lifecycle-mechanism-in-cite-runtime.md) | Compensate two rclpy shutdown races, in a new `cite_runtime` package | Accepted |
 | [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted (corrected 2026-08-27) |
-| [0036](0036-execution-side-trajectory-tolerances.md) | Detect a mistracked trajectory at execution, with tolerances declared in L0 | Proposed |
+| [0036](0036-execution-side-trajectory-tolerances.md) | Detect a mistracked trajectory at execution, with tolerances declared in L0 | Proposed (corrected 2026-08-27) |

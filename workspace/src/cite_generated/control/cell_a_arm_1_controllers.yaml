@@ -90,11 +90,23 @@
       # than a report. The model's schema refuses zero for that reason.
       goal_time: 0.5
       # Joint velocity, rad/s, below which the arm counts as stopped at the goal.
-      # 0.0 disables the check, and that is deliberate: this is the ONE tolerance
-      # that is armed by default (upstream defaults it to 0.01, not to zero), and
-      # setting `goal_time` above is what would arm it. A joint that settles a
-      # little late would then abort a motion that is otherwise correct — a
-      # velocity flake in a block added to detect a position error.
+      # THIS CHECK CANNOT FIRE on this controller, whatever value stands below and
+      # whatever `goal_time` is, and the reason is `command_interfaces` above
+      # rather than the number. `get_segment_tolerances` does assign this to the
+      # goal state's velocity unconditionally, and upstream does default it to
+      # 0.01 rather than to zero — but `compute_error_for_joint` writes a velocity
+      # error only under `has_velocity_state_interface_ &&
+      # (has_velocity_command_interface_ || has_effort_command_interface_)`, and
+      # this controller commands neither velocity nor effort. `state_error_`'s
+      # velocities stay at the zeros they were sized to, so `abs(0.0) > tolerance`
+      # is never true. An earlier version of this comment said `goal_time` armed
+      # it; see ADR-0036's 2026-08-27 correction.
+      #
+      # Stating the value anyway costs nothing and pre-empts the one change that
+      # would arm it: adding `velocity` or `effort` to `command_interfaces` above.
+      # Whoever makes that change inherits this number, and the upstream 0.01 this
+      # line exists to override would then start aborting a joint that settles a
+      # little late.
       stopped_velocity_tolerance: 0.0
       arm_1_joint1:
         trajectory: 1.0

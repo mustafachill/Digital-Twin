@@ -354,17 +354,26 @@ class TrajectoryConstraints(Strict):
     #: Joint velocity, in rad/s, below which the arm counts as stopped at the
     #: goal. ``0.0`` disables the check.
     #:
-    #: Required with no default because it is the one goal-side tolerance that is
-    #: ALREADY armed. ``get_segment_tolerances`` assigns
+    #: Required with no default, and the reason is NOT the one an earlier version
+    #: of this docstring gave (ADR-0036's 2026-08-27 correction). It said this was
+    #: the one goal-side tolerance already armed, and that setting ``goal_time_s``
+    #: would arm it. Half of that is right: ``get_segment_tolerances`` does assign
     #: ``goal_state_tolerance[i].velocity = stopped_velocity_tolerance``
-    #: unconditionally, and that parameter defaults to ``0.01`` rather than to
-    #: zero — it has been harmless only because ``goal_time`` was ``0.0``, so a
-    #: joint still creeping at the end kept the goal open instead of failing it.
+    #: unconditionally, and the parameter does default to ``0.01`` rather than to
+    #: zero. The rest is false for any controller that commands position alone.
+    #: ``compute_error_for_joint`` writes a velocity error only under
+    #: ``has_velocity_state_interface_ && (has_velocity_command_interface_ ||
+    #: has_effort_command_interface_)``, so with ``command_interfaces:
+    #: [position]`` the error stays at the zeros it was sized to and no velocity
+    #: tolerance can ever be exceeded. ``goal_time_s`` does not change that.
     #:
-    #: Setting ``goal_time_s`` arms it. A joint that settles later than
-    #: ``goal_time_s`` succeeds today and would abort. Leaving this to its default
-    #: would mean shipping a VELOCITY-driven flake while intending to add a
-    #: POSITION detector, so the model states it rather than inheriting it.
+    #: It is required anyway, because the value has to be a decision the moment it
+    #: CAN fire, and the change that makes it fire is a ``velocity`` or ``effort``
+    #: entry in this controller's ``command_interfaces`` — nothing else. That is a
+    #: plausible change here: the vendor configuration these values were copied
+    #: from commands ``[position, velocity]``. Inheriting ``0.01`` silently on the
+    #: run after such a change would mean a VELOCITY-driven abort appearing inside
+    #: a block whose purpose is a POSITION detector, so the model states it.
     stopped_velocity_tolerance_rad_s: Annotated[float, Field(ge=0.0)]
 
 
