@@ -18,6 +18,13 @@ Gazebo, whose first instrument is a multi-robot xArm work cell.
 It is a *twin*, not a simulation: real hardware and the virtual model share one control
 interface, and the system continuously measures how far the model is from reality.
 
+It is also a **rebuild**. A first iteration (v1) was archived under `legacy/` and deleted at
+the end of Phase 1; it survives only in version control, and **its patterns are not
+precedent** — do not reintroduce them. What it taught is
+[`docs/reference/v1-lessons.md`](docs/reference/v1-lessons.md); why it was replaced rather
+than migrated is [ADR-0001](docs/adr/0001-rebuild-rather-than-migrate.md); the debt that
+forced the decision is charter §12.
+
 Full charter — identity, scope, architecture rationale, roadmap: **`what-we-are-doing.md`**.
 
 ## 2. Current state — read this before assuming anything exists
@@ -189,10 +196,6 @@ repository is partway there. Check before assuming.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this
   model does not transfer to the building, and no report should imply that it does.
-- **`legacy/` holds the previous iteration (v1).** It is reference material being replaced,
-  **not** a codebase to extend. Do not add features to it, fix its bugs, or treat its
-  patterns as precedent. It is excluded from the build by living outside `workspace/`, and
-  is deleted at the end of Phase 1. See `legacy/README.md` and charter §12.
 - **The documentation is written, and its status markers are now the thing to read.** Each
   document in `docs/architecture/` and `docs/interfaces/` carries `DESIGNED`, `PARTIAL` or
   `BUILT`, with the evidence named. `DESIGNED` means the contract the code must satisfy;

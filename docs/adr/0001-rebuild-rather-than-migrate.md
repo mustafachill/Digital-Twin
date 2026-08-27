@@ -2,7 +2,31 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Related:** charter §12, `legacy/README.md`
+- **Note:** 2026-08-27 — carried out; read the note section below before the body.
+- **Related:** charter §12, [`../reference/v1-lessons.md`](../reference/v1-lessons.md)
+
+## Note — 2026-08-27: the deletion this record scheduled has happened
+
+This is **not** a correction under [the convention](README.md#corrections). Nothing here
+was measured false; the decision was carried out, and two consequences written in the
+present tense are now discharged. The decided text below is left exactly as it stands.
+
+`legacy/` was deleted in commit `f16ea98`, removing 952 files. The tree remains in version
+control and is recoverable — `git show f16ea98^:legacy/<path>` — but no checkout contains
+it. Consequently:
+
+- The consequence *"Working xArm integration knowledge lives in `legacy/` and must be
+  deliberately re-derived rather than copied"* was paid rather than avoided. What was
+  carried forward is [`../reference/v1-lessons.md`](../reference/v1-lessons.md), written
+  from the tree at commit `d68838b` before the deletion; the vendor stack itself is pinned
+  by commit SHA in `external/cite.repos` and was never at risk.
+- The consequence *"A period where `legacy/` and the new tree coexist and could confuse a
+  newcomer"* has ended. Its stated mitigation, `legacy/README.md`, is gone with the tree;
+  `CLAUDE.md` §1 now carries the standing part — that v1's patterns are not precedent.
+- The `Related:` line above was repointed for the same reason: it named
+  `legacy/README.md` until this date.
+
+The charter records the deletion in §7 and §14 (v1.6).
 
 ## Context
 
