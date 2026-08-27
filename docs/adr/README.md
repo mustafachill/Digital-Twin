@@ -126,4 +126,4 @@ not rewritten either.
 | [0032](0032-index-the-belt.md) | Index the belt — stop it on the trigger that starts a station, restart it on `CompleteHandoff` | Accepted (corrected 2026-08-26 and 2026-08-27) |
 | [0033](0033-derive-the-index-standoff-from-the-workpiece.md) | Sense against the part's body, and derive an indexing beam's stand-off from it | Accepted |
 | [0034](0034-process-lifecycle-mechanism-in-cite-runtime.md) | Compensate two rclpy shutdown races, in a new `cite_runtime` package | Accepted |
-| [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted |
+| [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted (corrected 2026-08-27) |

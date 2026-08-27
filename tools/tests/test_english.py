@@ -2,11 +2,15 @@
 it must stay quiet about.
 
 P10 is a hard rule and nothing checked it until now. ADR-0035 records why the obvious
-instrument is unusable: a non-ASCII check fires on 89 of 89 Markdown files in this
-repository, because the prose is full of em dashes, box-drawing diagrams and degree signs. A
-gate that fires on legitimate content is a gate somebody switches off, so the false-positive
-tests below are not decoration — they are the reason the chosen signal is narrow, and they
-are what fails if a later change widens it back towards "no non-ASCII".
+instrument is unusable: a non-ASCII check fires on every Markdown file in this repository,
+because the prose is full of em dashes, box-drawing diagrams and degree signs. A gate that
+fires on legitimate content is a gate somebody switches off, so the false-positive tests
+below are not decoration — they are the reason the chosen signal is narrow, and they are
+what fails if a later change widens it back towards "no non-ASCII".
+
+The measured figures behind all of that live in ADR-0035 and are cited from here rather than
+repeated, per `CLAUDE.md` §2. A count restated in a test is a count that goes stale silently
+when the tree changes, which is the trap ADR-0027's correction records.
 
 Two things about how this file is written, both deliberate.
 
@@ -135,7 +139,8 @@ def test_a_turkish_document_is_reported(write: Writer, tmp_path: Path, signals: 
 
 def test_turkish_in_source_is_reported_too(write: Writer, tmp_path: Path, signals: Config) -> None:
     """The scope is every file in the remit, not only documentation. v1 leaked into launch
-    files, world files and configuration too — 17 files across seven extensions."""
+    files, world files and configuration too — see ADR-0035 for the spread of extensions
+    the corpus measurement found."""
     write("launch/lab.launch.py", "# Robotu ba\u015flat ve ba\u011fl\u0131 m\u0131 diye bak\n")
 
     problems, _ = check(tmp_path, signals)
@@ -520,8 +525,11 @@ def test_binary_content_is_not_mistaken_for_utf16(
     input, so a checker that simply tried it would report every mesh and every PNG in
     `assets/` as a text file in the wrong encoding — a gate firing on content nobody wrote,
     which is how gates get switched off."""
-    write("assets/scene.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x90\xde\xad\xbe\xef")
-    write("assets/mesh.stl", b"\x00" * 80 + b"\x03\x00\x00\x00" + b"\x9a\x99\x19\xbf\xff\xfe\x7f\x42")
+    png_header = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x90\xde\xad\xbe\xef"
+    binary_stl = b"\x00" * 80 + b"\x03\x00\x00\x00" + b"\x9a\x99\x19\xbf\xff\xfe\x7f\x42"
+
+    write("assets/scene.png", png_header)
+    write("assets/mesh.stl", binary_stl)
     write("model/grid.bin", b"\x00" * 256)
 
     problems, _ = check(tmp_path, signals)

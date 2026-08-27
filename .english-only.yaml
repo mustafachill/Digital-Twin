@@ -14,9 +14,12 @@
 # The signal.
 #
 # Deliberately NOT "non-ASCII". This repository's prose uses em dashes, box-drawing
-# diagrams, `°`, `±`, `×` and `→` throughout: measured at ADR-0035's base commit, a
-# non-ASCII check fires on 89 of 89 Markdown files and 83 of 97 Python files. A gate that
-# fires on every file in the repository is a gate that gets switched off.
+# diagrams, `°`, `±`, `×` and `→` throughout, so a non-ASCII check fires on essentially
+# every Markdown and Python file here — ADR-0035 has the counts. A gate that fires on every
+# file in the repository is a gate that gets switched off.
+#
+# The figures for all of this live in ADR-0035 and are cited rather than copied, per
+# CLAUDE.md §2: "cite a campaign; do not copy its numbers around".
 #
 # What is listed instead is characters that are specific to one natural language and cannot
 # be typography or mathematics. Each entry gives either an explicit list of `code_points` or
@@ -38,11 +41,12 @@ signals:
   # u-diaeresis belong to German, French, Hungarian and Swedish as much as to Turkish, and
   # to proper nouns — `docs/reference/literature.md` cites an author named Soderlund, spelt
   # with the diaeresis. Measured against the archived v1 tree at 13b94a7, adding them buys
-  # nothing: 17 first-party files contain one of the six below, 16 contain a shared
-  # diacritic, and the number containing a shared diacritic but none of the six is zero.
+  # no additional *file*: every first-party file carrying a shared diacritic also carries
+  # one of the six below. ADR-0035 holds that measurement and its line-level residual.
   #
-  # This catches Turkish written in Turkish. It does not catch Turkish written in ASCII —
-  # a real limit, measured and accepted in ADR-0035 rather than papered over with a word list.
+  # This catches Turkish written in Turkish. It does not catch Turkish written in ASCII, nor
+  # Turkish written with only the shared diacritics — both real limits, measured and
+  # accepted in ADR-0035 rather than papered over with a word list.
   turkish-specific letters:
     code_points: ["0131", "0130", "015F", "015E", "011F", "011E"]
 
@@ -52,8 +56,9 @@ signals:
   #
   # Greek is absent on purpose, and it is the one exclusion that is not obvious: theta for
   # yaw, rho for a correlation, alpha for a significance level and delta for a difference
-  # account for 34 occurrences here, every one of them mathematical notation in an ADR or a
-  # measurement campaign. Excluding the script is what keeps those legitimate.
+  # are used throughout the ADRs and the measurement campaigns, and every occurrence
+  # measured was mathematical notation. Excluding the script is what keeps those
+  # legitimate; ADR-0035 has the count.
   Cyrillic:
     range: ["0400", "04FF"]
   Hebrew:

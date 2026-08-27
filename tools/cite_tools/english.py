@@ -7,12 +7,15 @@ this a rule rather than an aspiration", and none was written. Review alone did n
 line last time — `docs/reference/v1-lessons.md` records the requirement written on
 2025-11-25 and violated seven days later.
 
-**The instrument is not "no non-ASCII".** That check fires on 89 of 89 Markdown files here,
-because this repository's prose is full of em dashes, box-drawing diagrams and `°`. What is
+**The instrument is not "no non-ASCII".** That check fires on every Markdown file in this
+repository, because the prose is full of em dashes, box-drawing diagrams and `°`. What is
 looked for instead is characters specific to one natural language, which cannot be
 typography or mathematics. ADR-0035 records the four candidates that were measured, what
-each fired on, and why this one was chosen; `.english-only.yaml` holds the signal itself,
-because a list of what exists is configuration and this module is mechanism (P5).
+each fired on, and why this one was chosen — **cite it rather than copying its figures
+here**, which is `CLAUDE.md` §2's "cite a campaign; do not copy its numbers around" and the
+rule ADR-0027's own correction was written to establish. `.english-only.yaml` holds the
+signal itself, because a list of what exists is configuration and this module is mechanism
+(P5).
 
 Which files are ours to check lives in `tree.py`, shared with `doclinks.py` rather than
 copied (P1). `git ls-files` was tried there first and rejected on evidence: it fails
@@ -36,8 +39,9 @@ from cite_tools.tree import our_files
 CONFIG_NAME = ".english-only.yaml"
 
 #: Read in one go, then whole-text-rejected before any line is examined. The naive form of
-#: this check — a Python loop over every character — took 15.7 s across this tree against
-#: 0.25 s for the compiled pattern, and a gate nobody minds running is part of the design.
+#: this check — a Python loop over every character — was measured two orders of magnitude
+#: slower than the compiled pattern, and a gate nobody minds running is part of the design.
+#: ADR-0035 holds both timings.
 _CHUNK_IS_BINARY = b"\x00"
 
 #: How many 16-bit units of a byte-order-mark-less file to test for the UTF-16 pattern.

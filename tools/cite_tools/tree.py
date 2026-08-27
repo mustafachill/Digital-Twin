@@ -146,10 +146,9 @@ def is_skipped_directory(relative: Path) -> bool:
     matched. This is what prunes `build/`, `.venv/`, `.claude/` and the rest at the moment
     the walk reaches them, which is where the pruning cost recorded on `our_files` is saved.
     """
-    return (
-        any(_is_skipped_directory_name(part) or part in SKIP_NAMES for part in relative.parts)
-        or _under_skipped_path(relative)
-    )
+    return any(
+        _is_skipped_directory_name(part) or part in SKIP_NAMES for part in relative.parts
+    ) or _under_skipped_path(relative)
 
 
 def our_files(root: Path) -> list[Path]:
