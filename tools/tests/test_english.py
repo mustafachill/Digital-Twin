@@ -368,6 +368,56 @@ def test_our_own_external_directory_is_still_scanned(
     ]
 
 
+def test_a_file_named_like_a_skipped_directory_is_still_checked(
+    write: Writer, tmp_path: Path, signals: Config
+) -> None:
+    """The regression that motivated splitting `is_skipped` from `is_skipped_directory`.
+
+    `Path.parts` includes the basename, so testing every part against `SKIP_DIRS` dropped
+    any *file* whose own name spelt a directory we skip. In this repository that was exactly
+    one tracked file — `scripts/build`, one of the documented `./scripts/*` entry points —
+    and the gate reported `652 files checked, no non-English content` and exited 0 over a
+    deliberate lapse sitting in it. `SKIP_DIRS` says where content is not ours; a file does
+    not become build output by sharing a directory's spelling.
+    """
+    write("scripts/build", TURKISH)
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == ["scripts/build:3: not English (turkish-specific letters)"]
+
+
+def test_directories_named_in_the_skip_list_are_still_pruned(
+    write: Writer, tmp_path: Path, signals: Config
+) -> None:
+    """The other half of that split, pinned so the fix cannot be over-applied. Narrowing the
+    *file* predicate must not narrow the *directory* one — these are build output and a
+    virtualenv, and they stay outside the remit whatever a sibling file is called."""
+    write("scripts/build", "# An English comment.\n")
+    write("build/generated.hpp", TURKISH)
+    write("workspace/src/cite_skills/build/moc_thing.cpp", TURKISH)
+    write("tools/node_modules/pkg/index.js", TURKISH)
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == []
+
+
+def test_a_git_worktree_pointer_file_is_not_checked(
+    write: Writer, tmp_path: Path, signals: Config
+) -> None:
+    """`.git` is a directory in an ordinary clone and a *file* in a `git worktree` checkout,
+    which is how this project runs its agents. It is git's plumbing in both shapes, holding
+    a machine-local absolute path in the second, so it is skipped by name rather than by
+    being a directory — see `SKIP_NAMES`. Narrowing the file predicate would otherwise have
+    pulled it into the walk."""
+    write(".git", f"gitdir: /somewhere/.git/worktrees/agent-1\n{TURKISH}")
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == []
+
+
 def test_a_file_that_is_written_but_not_staged_is_still_reported(
     write: Writer, tmp_path: Path, signals: Config
 ) -> None:

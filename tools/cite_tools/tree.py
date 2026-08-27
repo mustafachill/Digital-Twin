@@ -42,7 +42,6 @@ from pathlib import Path
 #: lint gate once, which is both slow and a report about files nobody wrote.
 SKIP_DIRS = {
     ".claude",
-    ".git",
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
@@ -52,6 +51,19 @@ SKIP_DIRS = {
     "install",
     "log",
     "node_modules",
+}
+
+#: Names skipped at any depth **whether they are a file or a directory**. This set holds
+#: exactly one entry, and the distinction from `SKIP_DIRS` is the reason it exists rather
+#: than being folded into it.
+#:
+#: In an ordinary clone `.git` is a directory and `SKIP_DIRS` would cover it. In a `git
+#: worktree` checkout — which is how this project runs its agents, as the module docstring
+#: records — `.git` is a **file** holding `gitdir: <absolute path>`. It is git's plumbing in
+#: both shapes: never ours to edit, machine-local in the second, and repairable by no commit.
+#: Matching it by name keeps it out of the walk either way.
+SKIP_NAMES = {
+    ".git",
 }
 
 #: Paths relative to the repository root, skipped at **exactly** that location.
@@ -78,11 +90,44 @@ SKIP_PATHS = {
 }
 
 
-def is_skipped(relative: Path) -> bool:
-    """True if a repository-relative path lies outside every checker's remit."""
-    if any(part in SKIP_DIRS for part in relative.parts):
-        return True
+def _under_skipped_path(relative: Path) -> bool:
+    """True if `relative` is one of the anchored `SKIP_PATHS`, or lies inside one."""
     return any(relative.is_relative_to(prefix) for prefix in SKIP_PATHS)
+
+
+def is_skipped(relative: Path) -> bool:
+    """True if a repository-relative **file** path lies outside every checker's remit.
+
+    `SKIP_DIRS` is matched against the path's *directories* — `relative.parts[:-1]` — and
+    deliberately not against its basename. `Path.parts` includes the basename, and testing
+    every part therefore drops any file whose own name happens to spell a directory we
+    skip. That is not hypothetical: it silently removed `scripts/build`, one of the
+    documented `./scripts/*` entry points, from the English-only gate, which reported
+    `652 files checked, no non-English content` and exited 0 over a file containing a
+    deliberate lapse. `SKIP_DIRS` says where content is not ours; a file is not a directory
+    because it shares a directory's spelling.
+
+    `doclinks.py` was unaffected in practice — it only ever passes `*.md` paths, and no
+    `SKIP_DIRS` entry ends in `.md` — so its output is unchanged by this distinction.
+    """
+    return (
+        any(part in SKIP_DIRS for part in relative.parts[:-1])
+        or any(part in SKIP_NAMES for part in relative.parts)
+        or _under_skipped_path(relative)
+    )
+
+
+def is_skipped_directory(relative: Path) -> bool:
+    """True if a repository-relative **directory** path lies outside every checker's remit.
+
+    The counterpart to `is_skipped`: here the basename *is* a directory name, so it must be
+    matched. This is what prunes `build/`, `.venv/`, `.claude/` and the rest at the moment
+    the walk reaches them, which is where the pruning cost recorded on `our_files` is saved.
+    """
+    return (
+        any(part in SKIP_DIRS | SKIP_NAMES for part in relative.parts)
+        or _under_skipped_path(relative)
+    )
 
 
 def our_files(root: Path) -> list[Path]:
@@ -92,12 +137,20 @@ def our_files(root: Path) -> list[Path]:
     `.git` and `.venv` before discarding them, which measured at 0.78 s against 0.28 s for
     the same answer here — and the gap grows with the size of the virtualenv, which is not
     something a lint gate's runtime should depend on.
+
+    The two filters ask different questions and must use the different predicates. Pruning
+    tests a directory, so `SKIP_DIRS` applies to its basename; the post-walk filter tests a
+    *file*, where it must not — see `is_skipped`. Pruning has already excluded everything
+    beneath a skipped directory by the time the second filter runs, so what remains for it
+    is the anchored `SKIP_PATHS` case: a plain file at exactly one of those locations.
     """
     found: list[Path] = []
     for parent, directories, names in os.walk(root):
         here = Path(parent)
         directories[:] = [
-            name for name in directories if not is_skipped((here / name).relative_to(root))
+            name
+            for name in directories
+            if not is_skipped_directory((here / name).relative_to(root))
         ]
         found.extend(here / name for name in names)
     return sorted(path for path in found if not is_skipped(path.relative_to(root)))
