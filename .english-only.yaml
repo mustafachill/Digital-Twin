@@ -1,0 +1,99 @@
+---
+# What the English-only check looks for, and where it is allowed not to look.
+#
+# CLAUDE.md §3 P10 requires everything in the repository to be in English, and §4 lists
+# non-English content among the standing prohibitions. ADR-0015 decided the rule and noted
+# that a lint rule "is what makes this a rule rather than an aspiration"; ADR-0035 decides
+# the instrument, the scope and the escape hatch below, and records what each candidate was
+# measured to fire on.
+#
+# This file is data and `tools/cite_tools/english.py` is mechanism (P5). Adding a language
+# is a row here, not a code change.
+
+# ---------------------------------------------------------------------------------------
+# The signal.
+#
+# Deliberately NOT "non-ASCII". This repository's prose uses em dashes, box-drawing
+# diagrams, `°`, `±`, `×` and `→` throughout: measured at ADR-0035's base commit, a
+# non-ASCII check fires on 89 of 89 Markdown files and 83 of 97 Python files. A gate that
+# fires on every file in the repository is a gate that gets switched off.
+#
+# What is listed instead is characters that are specific to one natural language and cannot
+# be typography or mathematics. Each entry gives either an explicit list of `code_points` or
+# an inclusive `range`, both written as hexadecimal strings.
+#
+# Code points rather than the letters themselves, throughout. Two reasons, and the first is
+# the smaller one: a dotless i and an i, or a dotted capital I and an I, are hard to tell
+# apart by eye, and a specification of characters should not rely on the reader
+# distinguishing them. The second is that it keeps this file — and the ADR and the tests
+# beside it — clear of the very signal they define, so that the check's own machinery needs
+# no exemption. The escape hatch below stays at the one entry that genuinely earns it.
+# ---------------------------------------------------------------------------------------
+signals:
+
+  # The six letters of the Turkish alphabet that no other language in common use writes:
+  # dotless i and dotted capital I, s-cedilla in both cases, and g-breve in both cases.
+  #
+  # The shared Latin-1 diacritics are deliberately absent. c-cedilla, o-diaeresis and
+  # u-diaeresis belong to German, French, Hungarian and Swedish as much as to Turkish, and
+  # to proper nouns — `docs/reference/literature.md` cites an author named Soderlund, spelt
+  # with the diaeresis. Measured against the archived v1 tree at 13b94a7, adding them buys
+  # nothing: 17 first-party files contain one of the six below, 16 contain a shared
+  # diacritic, and the number containing a shared diacritic but none of the six is zero.
+  #
+  # This catches Turkish written in Turkish. It does not catch Turkish written in ASCII —
+  # a real limit, measured and accepted in ADR-0035 rather than papered over with a word list.
+  turkish-specific letters:
+    code_points: ["0131", "0130", "015F", "015E", "011F", "011E"]
+
+  # Scripts that are not used to write English at all. Each is measured at zero occurrences
+  # in this tree, so each is free to add and none of them can be a false positive from
+  # typography.
+  #
+  # Greek is absent on purpose, and it is the one exclusion that is not obvious: theta for
+  # yaw, rho for a correlation, alpha for a significance level and delta for a difference
+  # account for 34 occurrences here, every one of them mathematical notation in an ADR or a
+  # measurement campaign. Excluding the script is what keeps those legitimate.
+  Cyrillic:
+    range: ["0400", "04FF"]
+  Hebrew:
+    range: ["0590", "05FF"]
+  Arabic:
+    range: ["0600", "06FF"]
+  Devanagari:
+    range: ["0900", "097F"]
+  Thai:
+    range: ["0E00", "0E7F"]
+  Hiragana:
+    range: ["3040", "309F"]
+  Katakana:
+    range: ["30A0", "30FF"]
+  CJK ideographs:
+    range: ["4E00", "9FFF"]
+  Hangul syllables:
+    range: ["AC00", "D7AF"]
+
+# ---------------------------------------------------------------------------------------
+# The escape hatch.
+#
+# One exact repository-relative path per entry, and a `reason` that is not optional. No
+# globs, no directory prefixes, and no inline suppression comment — an inline marker is the
+# easiest possible hatch to reach, and a rule whose hatch is easy to reach is not a rule.
+# The precedent is the teardown exemption in `tests/scenarios/continuous_line.py`, kept at
+# "one signal, one process name" and recorded in CLAUDE.md §2 as never having been widened.
+#
+# Two things keep this list from becoming a blanket. An entry whose file no longer contains
+# anything to exempt FAILS the gate and asks to be deleted, so the list cannot accumulate
+# dead permissions. And every run prints the exemptions it applied, so growth is visible on
+# every invocation rather than only at review time.
+# ---------------------------------------------------------------------------------------
+exemptions:
+
+  - path: docs/reference/v1-lessons.md
+    reason: >-
+      Quotes the original Turkish as primary-source evidence, each quotation carrying its
+      English rendering beside it, and the analysis turns on the Turkish grammar — the
+      document reasons explicitly about the unstated subject of one verb, and translates a
+      v1 section heading in place. This is the record of the violation P10 exists to
+      prevent, and rewriting the evidence in English would destroy the argument the
+      document exists to make. Two lines, both quotations.
