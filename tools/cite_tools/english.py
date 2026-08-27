@@ -258,11 +258,17 @@ def scan(text: str, config: Config) -> list[tuple[int, set[str]]]:
     ]
 
 
-def check(root: Path, config: Config | None = None) -> tuple[list[str], list[str]]:
-    """Report non-English content across the tracked tree.
+def check(
+    root: Path, config: Config | None = None, files: list[str] | None = None
+) -> tuple[list[str], list[str]]:
+    """Report non-English content across the tree.
 
     Returns `(problems, notes)`. `notes` carries the exemptions that were exercised, so
     every run shows the escape hatch being used rather than hiding it until review.
+
+    `files` lets a caller that already has the remit pass it in rather than have it walked
+    again. `main()` needs the count for its summary line, and walking a second time to
+    produce one integer measured at 12% of the gate's runtime.
     """
     config = config or load_config(root)
     exempt = {exemption.path: exemption for exemption in config.exemptions}
@@ -271,13 +277,19 @@ def check(root: Path, config: Config | None = None) -> tuple[list[str], list[str
     problems: list[str] = []
     notes: list[str] = []
 
-    for relative in files_to_check(root):
+    for relative in files_to_check(root) if files is None else files:
         path = root / relative
         try:
             raw = path.read_bytes()
-        except OSError:
-            # Declared in the manifest but absent from the working tree — a submodule that
-            # was never initialised, or a sparse checkout. Not this checker's business.
+        except OSError as exc:
+            # Reported for the same reason an undecodable file is. The walk listed this
+            # path a moment ago, so failing to read it now means a dangling symlink or a
+            # permission problem — not a file that is absent. (The comment here used to
+            # describe uninitialised submodules and sparse checkouts, which belonged to the
+            # `git ls-files` implementation this replaced: a manifest can name a path that
+            # is not on disk, a filesystem walk cannot.) Staying quiet would claim a
+            # coverage this run does not have.
+            problems.append(f"{relative}: cannot be read ({exc.strerror or exc})")
             continue
         # Before the binary test, which cannot tell the two apart: a UTF-16 file is text
         # that is not valid UTF-8, so it is reported like any other undecodable file rather
@@ -325,7 +337,8 @@ def main() -> int:
 
     try:
         config = load_config(root)
-        problems, notes = check(root, config)
+        files = files_to_check(root)
+        problems, notes = check(root, config, files)
     except ConfigError as exc:
         print(f"  {exc}")
         return 1
@@ -344,8 +357,7 @@ def main() -> int:
         print("  and expect a reviewer to read it. The instrument is ADR-0035.")
         return 1
 
-    count = len(files_to_check(root))
-    print(f"  {count} files checked, no non-English content outside {len(notes)} exemption(s)")
+    print(f"  {len(files)} files checked, no non-English content outside {len(notes)} exemption(s)")
     return 0
 
 

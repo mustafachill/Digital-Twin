@@ -153,6 +153,43 @@ def test_a_non_latin_script_is_reported(write: Writer, tmp_path: Path, signals: 
     assert problems == ["README.md:1: not English (Cyrillic)"]
 
 
+@pytest.mark.parametrize(
+    ("signal", "sample"),
+    [
+        # Each sample is one word in one script, written as escapes for the same reason the
+        # Turkish fixtures above are: this file must not trip the check it is testing. The
+        # first draft of this table used the literal characters and the gate reported nine
+        # findings in this very file, which is the design working.
+        ("Cyrillic", "\u041e\u0431\u0437\u043e\u0440"),
+        ("Hebrew", "\u05e1\u05e7\u05d9\u05e8\u05d4"),
+        ("Arabic", "\u0645\u0631\u0627\u062c\u0639\u0629"),
+        ("Devanagari", "\u0938\u092e\u0940\u0915\u094d\u0937\u093e"),
+        ("Thai", "\u0e01\u0e32\u0e23\u0e17\u0e1a\u0e17\u0e27\u0e19"),
+        ("Hiragana", "\u3053\u3046\u3058\u3087\u3046"),
+        ("Katakana", "\u30ed\u30dc\u30c3\u30c8"),
+        ("CJK ideographs", "\u673a\u5668\u4eba"),
+        ("Hangul syllables", "\ub85c\ubd07"),
+    ],
+)
+def test_every_declared_script_range_is_reported(
+    write: Writer, tmp_path: Path, signals: Config, signal: str, sample: str
+) -> None:
+    """One case per range in `.english-only.yaml`, because a range nothing exercises can be
+    deleted from the configuration without a test noticing — eight of the nine were in that
+    position. The Turkish signal was already pinned this way and is the pattern copied here:
+    removing it breaks several tests, which is what makes it hard to weaken by accident.
+
+    These are the scripts ADR-0035 calls "free to add": none is used to write English, so
+    unlike the Turkish letters no per-character judgement is involved, and unlike Greek none
+    of them can turn up as mathematical notation.
+    """
+    write("docs/notes.md", f"# Heading\n\n{sample}\n")
+
+    problems, _ = check(tmp_path, signals)
+
+    assert problems == [f"docs/notes.md:3: not English ({signal})"]
+
+
 def test_every_offending_line_is_named(write: Writer, tmp_path: Path, signals: Config) -> None:
     """One finding per line, so a reviewer sees the extent rather than the first instance."""
     write(
@@ -202,13 +239,24 @@ def test_cited_proper_nouns_are_not_a_lapse(write: Writer, tmp_path: Path, signa
 def test_the_repositorys_own_documentation_passes(signals: Config) -> None:
     """The strongest false-positive test available: the real tree, the real signal, no
     exemptions. Anything reported here is content that already survived review, so this is
-    the test that fails first if the signal is ever widened."""
+    the test that fails first if the signal is ever widened.
+
+    What is asserted is *which file* and *which signal*, not which lines. This pinned line
+    numbers 79 and 693 in a live 700-line document, which made inserting a paragraph above
+    them fail a test with nothing wrong — a test failing for a reason unrelated to what it
+    checks is one people learn to edit rather than read. The count is derived from the
+    document instead, so it still fails if a lapse appears anywhere else.
+    """
+    expected = len(scan((REPO_ROOT / QUOTING_DOCUMENT).read_text(encoding="utf-8"), signals))
+
     problems, _ = check(REPO_ROOT, signals)
 
-    assert problems == [
-        f"{QUOTING_DOCUMENT}:79: not English (turkish-specific letters)",
-        f"{QUOTING_DOCUMENT}:693: not English (turkish-specific letters)",
-    ]
+    assert len(problems) == expected
+    assert all(
+        problem.startswith(f"{QUOTING_DOCUMENT}:")
+        and problem.endswith(": not English (turkish-specific letters)")
+        for problem in problems
+    ), problems
 
 
 # --------------------------------------------------------------------------------------

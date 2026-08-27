@@ -53,6 +53,16 @@ SKIP_DIRS = {
     "node_modules",
 }
 
+#: Directory *suffixes*, matched at any depth. Packaging metadata, whose directory name is
+#: the distribution's — `cite_tools.egg-info` — so it cannot be listed by exact name without
+#: writing that name in a second place.
+#:
+#: This is here for the same reason `SKIP_PATHS` records for the vendor tree: an editable
+#: install writes five files under `tools/cite_tools.egg-info/`, so the walk answered 653 in
+#: a bootstrapped checkout against 648 tracked files on 2026-08-27 — the count moving with
+#: local build state, which is precisely the instability this module was extracted to end.
+SKIP_DIR_SUFFIXES = (".egg-info",)
+
 #: Names skipped at any depth **whether they are a file or a directory**. This set holds
 #: exactly one entry, and the distinction from `SKIP_DIRS` is the reason it exists rather
 #: than being folded into it.
@@ -85,14 +95,26 @@ SKIP_NAMES = {
 #: `external/patches/README.md` links to ADR-0008 and to the v1 lessons, and keeping links
 #: like those alive is the whole point of the link checker. Skipping a directory we own to
 #: avoid naming a directory we do not would be a checker quietly reducing its own coverage.
+#: `.env` is the per-machine environment file `./scripts/bootstrap` copies from
+#: `.env.example`. It is git-ignored, it differs on every machine, and it is the one file in
+#: the walk where a finding could be repaired by no commit and silenced by no shared
+#: exemption — the escape hatch takes an exact path in a *tracked* configuration file, which
+#: cannot describe a file that only exists on one laptop. Its tracked template
+#: `.env.example` is checked, and that is the copy a commit can act on.
 SKIP_PATHS = {
     Path("workspace/src/external"),
+    Path(".env"),
 }
 
 
 def _under_skipped_path(relative: Path) -> bool:
     """True if `relative` is one of the anchored `SKIP_PATHS`, or lies inside one."""
     return any(relative.is_relative_to(prefix) for prefix in SKIP_PATHS)
+
+
+def _is_skipped_directory_name(name: str) -> bool:
+    """True if a single path component names a directory outside every checker's remit."""
+    return name in SKIP_DIRS or name.endswith(SKIP_DIR_SUFFIXES)
 
 
 def is_skipped(relative: Path) -> bool:
@@ -111,7 +133,7 @@ def is_skipped(relative: Path) -> bool:
     `SKIP_DIRS` entry ends in `.md` — so its output is unchanged by this distinction.
     """
     return (
-        any(part in SKIP_DIRS for part in relative.parts[:-1])
+        any(_is_skipped_directory_name(part) for part in relative.parts[:-1])
         or any(part in SKIP_NAMES for part in relative.parts)
         or _under_skipped_path(relative)
     )
@@ -125,7 +147,7 @@ def is_skipped_directory(relative: Path) -> bool:
     the walk reaches them, which is where the pruning cost recorded on `our_files` is saved.
     """
     return (
-        any(part in SKIP_DIRS | SKIP_NAMES for part in relative.parts)
+        any(_is_skipped_directory_name(part) or part in SKIP_NAMES for part in relative.parts)
         or _under_skipped_path(relative)
     )
 
