@@ -3,6 +3,17 @@
 #
 #   ./scripts/scenario                 list available scenarios
 #   ./scripts/scenario pick_and_place  run one
+#   ./scripts/scenario bringup --teardown-advisory
+#                                      gate on the cycle only; still run and
+#                                      report the post-shutdown check
+#
+# --teardown-advisory exists for CI and is off by default, so an interactive run
+# keeps answering the strict question. It does not delete, skip or exempt the
+# post-shutdown assertion — that class still runs and still reports every bad
+# exit — it only stops an upstream teardown abort deciding the exit status. The
+# measurement behind it, and why exempting the offending process would be a guess
+# rather than a fix, is in the phase-split block in scripts/_lib.sh. A caller that
+# passes it owns surfacing what the teardown check found.
 #
 # SCENARIOS ARE NOT YET DETERMINISTIC, and the seed below does not make them so.
 #
@@ -51,6 +62,18 @@ NAME="$1"; shift
 SCENARIO="${SCENARIO_DIR}/${NAME}.py"
 [ -f "$SCENARIO" ] || die "No such scenario: ${NAME}  (run ./scripts/scenario to list)"
 
+# Parsed after the re-entry above rather than before it, so the flag survives the
+# hop into the container as an ordinary argument and is read once, on the side
+# that actually runs launch_test.
+TEARDOWN_POLICY="blocking"
+LAUNCH_TEST_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --teardown-advisory) TEARDOWN_POLICY="advisory" ;;
+        *) LAUNCH_TEST_ARGS+=("$arg") ;;
+    esac
+done
+
 [ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
 source_overlay
 
@@ -63,8 +86,48 @@ warn "Seed ${CITE_PHYSICS_SEED} reaches 'gz sim --seed' only — this run is not
 warn "  That seeds gz::math::Rand: sensor noise and transport RNG."
 warn "  It does NOT seed the physics solver, and OMPL is unseeded (ADR-0006)."
 
-if launch_test "$SCENARIO" "$@"; then
+# The report is what lets the cycle and teardown questions be told apart after
+# the fact. It lands in workspace/log/ so that CI's existing artifact upload
+# carries it without a second path to keep in step.
+JUNIT_DIR="${REPO_ROOT}/workspace/log"
+mkdir -p "$JUNIT_DIR"
+JUNIT_XML="${JUNIT_DIR}/scenario-${NAME}-$(date -u +%Y%m%dT%H%M%SZ).junit.xml"
+
+if launch_test --junit-xml="$JUNIT_XML" "$SCENARIO" \
+        ${LAUNCH_TEST_ARGS[@]+"${LAUNCH_TEST_ARGS[@]}"}; then
     ok "Scenario '${NAME}' passed"
-else
-    die "Scenario '${NAME}' failed"
+    exit 0
 fi
+
+# Failed. Say which phase failed before saying what it means, because the two
+# have been used to explain each other before.
+FAILURES="$(scenario_failed_cases "$JUNIT_XML" || true)"
+if [ -n "$FAILURES" ]; then
+    step "Failing assertions"
+    printf '%s\n' "$FAILURES" | while IFS="$(printf '\t')" read -r phase case_id summary; do
+        printf '  %-8s %s\n           %s\n' "$phase" "$case_id" "$summary"
+    done
+fi
+
+if VERDICT="$(scenario_verdict "$JUNIT_XML" "$TEARDOWN_POLICY")"; then
+    # Advisory, and reported rather than swallowed. The cycle — the assertion the
+    # phase item's acceptance claim rests on — passed; only the post-shutdown
+    # check failed, and that is the one currently dominated by an upstream abort
+    # in rclpy/rmw destruction that no exemption here can target (see _lib.sh).
+    warn "Scenario '${NAME}': the cycle passed and the post-shutdown check did not."
+    warn "  Reported, not gated, because --teardown-advisory was given."
+    warn "  This is NOT an exemption: every process was checked and the failures are above."
+    warn "  Report: ${JUNIT_XML}"
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        # Annotated so a first-party teardown regression is visible on the pull
+        # request itself. A check that only reports into a collapsed log is a
+        # check nobody reads, which would make this a quiet deletion of the
+        # assertion rather than a downgrade of it.
+        printf '::warning title=Scenario %s teardown::%s\n' \
+            "$NAME" "$(printf '%s' "$FAILURES" | tr '\n\t' '; ')"
+    fi
+    ok "Scenario '${NAME}' passed its cycle assertions"
+    exit 0
+fi
+
+die "Scenario '${NAME}' failed — ${VERDICT}"
