@@ -525,12 +525,23 @@ int main(int argc, char ** argv)
           // `continuous_line::_assert_the_line_started_the_belts` rather than
           // being covered by the harness that was standing in for it.
           //
-          // ONE PUBLICATION, NOT A LOOP. The COMMAND profile is reliable, so a
-          // subscriber that is already connected receives it; the bridge has been
-          // up since long before the topology arrived, which is what this line
-          // has just spent up to `topology_deadline_s` waiting for. A repeated
-          // send would be covering a discovery race that this ordering has
-          // already closed.
+          // ONE PUBLICATION, NOT A LOOP — AND IT IS NOT ENOUGH ON ITS OWN. This
+          // comment used to argue that it was: the COMMAND profile is reliable,
+          // the bridge has been up since long before the topology arrived, so a
+          // repeated send would only be covering a race this ordering had closed.
+          // That is wrong, and it was wrong in the direction that leaves three
+          // belts stationary. Reliability is a promise to subscribers this
+          // publisher has been MATCHED with, and the publishers were created a few
+          // lines above, inside this same callback: at this instant the matched
+          // count is zero and the message goes nowhere, no matter how long the
+          // bridge has been running. The scenario's own publisher — ten sends over
+          // a second — is what actually started the belts, and removing it is how
+          // this surfaced.
+          //
+          // What closes it is in `conveyor_index.hpp`: a subscriber appearing is
+          // an event, and the belt's current setpoint is sent when it does. So
+          // this call states the intent once, and the intent reaches whoever turns
+          // up. Still no retry and still no delay (P4).
           line.conveyors->run_all();
 
           const auto tick_period = std::chrono::milliseconds(
