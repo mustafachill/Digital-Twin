@@ -30,7 +30,7 @@ from cite_facility.artifacts import ArtifactError, generated_dir, model_hash
 from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
-import rclpy
+from cite_runtime import runtime
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 TOPIC = "/cite/facility/model_version"
@@ -106,16 +106,12 @@ def _generator_version() -> str:
 
 
 def main() -> None:
-    rclpy.init()
+    runtime.init()
     node = ModelInfo()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+        runtime.spin(node)
     finally:
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        runtime.shutdown(node)
 
 
 if __name__ == "__main__":

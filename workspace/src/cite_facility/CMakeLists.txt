@@ -4,6 +4,11 @@ project(cite_facility)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclpy REQUIRED)
+# Not used by any CMake target here — this package installs Python only. It is
+# required so that the dependency on cite_runtime is checked at configure time
+# instead of at import time, where a shared PYTHONPATH would satisfy it
+# silently and no manifest would record it. See ADR-0034.
+find_package(cite_runtime REQUIRED)
 
 ament_python_install_package(${PROJECT_NAME})
 
@@ -40,6 +45,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(artifacts test/test_artifacts.py)
   ament_add_pytest_test(topology_message test/test_topology_message.py)
   ament_add_pytest_test(planning_scene_loader test/test_planning_scene_loader.py)
+  # Asserts that the four nodes here still go through cite_runtime, and that the
+  # dependency is declared. The shutdown mechanism itself is tested where it now
+  # lives, in cite_runtime.
+  ament_add_pytest_test(runtime_adoption test/test_runtime_adoption.py)
 endif()
 
 ament_package()

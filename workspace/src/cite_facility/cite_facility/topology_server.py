@@ -44,7 +44,7 @@ from __future__ import annotations
 from cite_facility.artifacts import ArtifactError, topology
 from cite_interfaces.msg import LineTopology, StationEdge, StationTopology
 from cite_interfaces.qos import LATCHED
-import rclpy
+from cite_runtime import runtime
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 #: The L0 station types, mapped onto the message's constants. A type the model
@@ -170,16 +170,12 @@ def _to_message(document: dict) -> LineTopology:
 
 
 def main() -> None:
-    rclpy.init()
+    runtime.init()
     node = TopologyServer()
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+        runtime.spin(node)
     finally:
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        runtime.shutdown(node)
 
 
 if __name__ == "__main__":
