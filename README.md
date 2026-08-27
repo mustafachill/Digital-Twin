@@ -213,19 +213,26 @@ infra/docker/          container image and compose services
 external/              pinned third-party sources — never vendored
 scripts/               one command per task
 docs/                  architecture · ADRs · interfaces · operations · measurements · reference
-legacy/                superseded v1 — reference only, deleted at end of Phase 1
 ```
 
 The charter's [§7](./what-we-are-doing.md) describes the target structure in full.
 
-## A note on `legacy/`
+## The iteration before this one
 
-The project spent an extended R&D period before this rebuild. That work produced real
-knowledge and a codebase that could not be built from a clean clone by anyone. It is kept
-as reference, excluded from the build, and deleted at the end of Phase 1. Why it is being
-replaced rather than migrated is recorded in
-[ADR-0001](./docs/adr/0001-rebuild-rather-than-migrate.md), and several of this project's
-firmest rules exist because of specific ways it failed.
+This is a rebuild. The project spent an extended R&D period first, which produced real
+knowledge and a codebase that nobody could build from a clean clone. That tree was kept
+under `legacy/` for the length of the rebuild and **deleted at the end of Phase 1**; it is
+still in version control, so nothing is lost, but you will not find it in a checkout.
+
+Two documents carry it forward, and between them they are the reason several of this
+project's firmest rules exist:
+
+- [ADR-0001](./docs/adr/0001-rebuild-rather-than-migrate.md) — why it was replaced rather
+  than migrated.
+- [`docs/reference/v1-lessons.md`](./docs/reference/v1-lessons.md) — what it cost to learn,
+  written before the deletion and anchored to the code that proved each point. Six of its
+  failures were rediscovered independently by this rebuild, which is the strongest evidence
+  on the page that they are properties of the problem rather than of that tree.
 
 ## License
 

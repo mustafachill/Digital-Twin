@@ -17,8 +17,10 @@ If your tooling cannot follow a file reference, load `CLAUDE.md` explicitly.
    why every rule exists.
 2. `what-we-are-doing.md` is **protected** — it changes only by explicit decision of the
    project owner, never as a side effect of other work.
-3. `legacy/` holds a superseded first iteration. It is reference material, not a codebase
-   to extend, and it is deleted at the end of Phase 1. See `CLAUDE.md` §2.
+3. This repository is a **rebuild**. The superseded first iteration lived under `legacy/`
+   and was deleted at the end of Phase 1; it remains in version control. What it taught is
+   in `docs/reference/v1-lessons.md`. Do not reintroduce it or treat its patterns as
+   precedent.
 4. Everything in this repository is written in English.
 
 ## Related
