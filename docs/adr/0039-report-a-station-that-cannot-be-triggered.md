@@ -445,6 +445,12 @@ becomes a message that names the station and the belt.
   the dead end), or a re-observation of the pick point. Either is a new source of truth for
   the predicate and therefore a separate decision, taken on its own evidence. **This record
   does not take it, and naming the candidates is not proposing one.**
+  **It may already have been seen.** Of three `continuous_line` runs on 2026-08-28, the one
+  that failed did so with the work-piece parked on `cell_a__table_pick__surface` for the whole
+  420 s leg, and the run ended on the **ceiling** rather than on a `STALLED` message. That is
+  the shape this bullet predicts, at the station it applies to — and it is one run whose log
+  was not kept, so it is a coincidence worth someone's attention and **not** evidence. The
+  verification table says exactly what is and is not known about it.
 - **A published enum value that some consumers will not handle.** Every reader of
   `LineState.state` now has a fifth case. There is one first-party reader today — the
   scenario — and it is updated here; anything written later that switches on this field and
@@ -537,3 +543,6 @@ Added **2026-08-28**, in review of the implementing commit. Checked against bran
 | **What actually discriminates the `publish()` precedence** | Mutation, re-traced from the implementing commit's own claim | **The implementing commit overstated it.** Disabling the `publish()` precedence kills only the two message-level assertions in `AStationReturnedToATriggerNothingCanProduceIsReportedAndNotRunning`; that same test's direct `stalled()` assertion still passes. The discrimination that matters is real and lives elsewhere, in the right shape: deleting condition 4 is killed by `AnArrivalInFlightIsNotAStall`, deleting condition 2 by `AWorkingStationHoldsItsOwnBeltStoppedAndIsNotStalled` — both negative tests |
 | **How many `StalledLine` cases are negative** | Counted | **Six of the eight assert a non-stall**, not five as the implementing commit said. The two that assert a stall are `AStationReturnedToATriggerNothingCanProduceIsReportedAndNotRunning` and `ABeltNobodyHasEverCommandedIsItsOwnRefusal` |
 | The hand-edited `interfaces.baseline` matches a regenerated one | Reviewer regenerated under `CITE_WRITE_INTERFACE_BASELINE=1` and diffed | Byte-identical. The contract check still discriminates under four mutations |
+| A healthy line is never reported `STALLED` — at scenario scale, not only in a unit test | Two full `continuous_line` runs, 549 s and 572 s | **Zero** stall reports across both. Nine friction grasps per run, every one `stalled=true, reached_goal=false -> holding`; three cycles on each of the three arms; all beams firing. The predicate stayed quiet through every arrival |
+| **The blind spot has probably been seen, and this is one uncaptured run** | A third `continuous_line` run, the first of three, whose full log was not kept | **Suggestive, not measured.** The cycle failed with the work-piece at `(-0.475, -0.000, 0.625)` for all 747 samples across the full 420 s leg — that is `cell_a__table_pick__surface` (`(-0.475, 0.0, 0.6)`) plus half a 50 mm cube, so the piece never left `station_transfer_1`'s pick table. The run ended on the **leg ceiling**, not on a `STALLED` message. That is the exact shape this blind spot predicts, at the exact station it applies to. It is **not** proof: the log is gone, and "never picked" and "picked, failed, and closed the loop" are different faults that would look the same in the milestone data. Recorded because the coincidence is worth the next person's attention, not because it settles anything |
+| Verdicts across three runs at this commit | `./scripts/scenario continuous_line`, one machine, no thresholds registered in advance | **Cycle 2 of 3, teardown 3 of 3.** Runs 2 and 3 passed both phases. Run 1 failed the cycle as above and passed teardown. Three runs is the size of the evidence, not a campaign |
