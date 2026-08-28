@@ -49,12 +49,17 @@
   cell the tolerance is compared against a hard zero whatever `goal_time` is. Adding such an
   interface arms it for the first time, and the generated comment now follows the model
   rather than asserting it — see ADR-0036's 2026-08-27 correction.
-  **What the detector reports cannot be told apart from a transport fault**, which is an
-  open finding rather than a residual. `PATH_TOLERANCE_VIOLATED` lives only in the
+  **What the detector reports still cannot be told apart from a transport fault by its code,
+  and L3 stopped asking the code.** `PATH_TOLERANCE_VIOLATED` lives only in the
   `FollowJointTrajectory` result, `moveit_simple_controller_manager` drops it into
   `ExecutionStatus::ABORTED`, and L3 sees `CONTROL_FAILED` — the same value a malformed goal
-  or a stale header produces. L4 answers it with `RETRY_SAME`. The reasoning is in
-  `cite_orchestration/recovery_policy.hpp`, on the `EXECUTION_FAILED` branch.
+  or a stale header produces. That collapse is unchanged and unfixed upstream. What changed is
+  the discriminator: [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md)
+  makes [L3](L3-capabilities.md) ask the **arm** where it is, so a mistracked trajectory that
+  left the arm part-way is `MOTION_INTERRUPTED` and L4 answers `ESCALATE`, while an abort at
+  either endpoint stays `EXECUTION_FAILED` and keeps `RETRY_SAME`. Read `recovery_policy.hpp`
+  on both branches, not on `EXECUTION_FAILED` alone. **This document said L4 answers the case
+  with `RETRY_SAME`; that was true before ADR-0037 and is no longer.**
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
   **Still enforced at planning only:** the acceleration and deceleration ceilings. ADR-0036
@@ -68,7 +73,7 @@
   **Not held:** the configured rate. The model asks for 150 Hz; `joint_states` was measured
   at roughly 21 Hz at a real-time factor of 0.14 (see
   [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
-- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md), [cross-cutting-safety.md](cross-cutting-safety.md)
+- **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility
 
