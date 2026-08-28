@@ -76,11 +76,27 @@ else
 fi
 
 step "Shell"
-if have shellcheck; then
+# The pinned binary out of ${VENV}/ by path, never taken off PATH. WHICH linter
+# answers decides what this step means, and PATH answered differently on all
+# three machines this gate runs on — see the block on it in scripts/_lib.sh and
+# the pin in requirements/dev.txt.
+#
+# A refusal rather than a warning, and unlike the steps above it. Those still warn
+# on a missing tool because a missing ruff is an unbootstrapped laptop. A missing
+# linter here used to be that too, and was ALSO the container's steady state,
+# where "skipped" meant this gate reported success having read no shell script at
+# all. The pin removes the ambiguity, so the skip may go with it.
+if SHELL_GATE="$(assert_shellcheck_pinned "${VENV}/shellcheck" "$CITE_DEV_REQUIREMENTS")"; then
     # -x follows sourced files, so the `source=` directives in each script resolve
-    check shellcheck -x -P "${REPO_ROOT}" "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh
+    check "${VENV}/shellcheck" -x -P "${REPO_ROOT}" \
+        "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh
 else
-    warn "shellcheck not installed — skipped"
+    FAILED=1
+    err "Shell gate broken — ${SHELL_GATE}.
+  A gate that cannot say WHICH shellcheck answered is not a gate: the same
+  scripts are clean under one version and dirty under another, and that is
+  the defect this pin exists to remove.
+  Run ./scripts/bootstrap --host-only to install the pinned version."
 fi
 
 # -----------------------------------------------------------------------------

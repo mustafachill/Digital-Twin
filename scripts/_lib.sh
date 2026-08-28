@@ -13,6 +13,25 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/infra/docker/docker-compose.yml"
 
+# The three declaration files ./scripts/* reads by path. Named here so that a
+# caller can pass one explicitly without spelling the path a second time (P1) —
+# the functions below that take one of these take it as a required argument, so
+# that the value has a single home and the call site still says which file it
+# means.
+#
+# The three SC2034 suppressions are the correct answer and not a convenience:
+# these are consumed by every script that sources this file, which is a use the
+# linter cannot see from inside the file that defines them. `export` would silence
+# it too and is the wrong fix — it would push three repository paths into the
+# environment of every container, `gz` and `ros2` process these scripts launch,
+# for the sake of a warning.
+# shellcheck disable=SC2034
+CITE_VCS_MANIFEST="${REPO_ROOT}/external/cite.repos"
+# shellcheck disable=SC2034
+CITE_PATCH_DIR="${REPO_ROOT}/external/patches"
+# shellcheck disable=SC2034
+CITE_DEV_REQUIREMENTS="${REPO_ROOT}/requirements/dev.txt"
+
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'
     C_BLU=$'\033[34m'; C_DIM=$'\033[2m';  C_RST=$'\033[0m'
@@ -23,7 +42,12 @@ fi
 info()  { printf '%s==>%s %s\n' "$C_BLU" "$C_RST" "$*"; }
 ok()    { printf '%s  ok%s %s\n' "$C_GRN" "$C_RST" "$*"; }
 warn()  { printf '%swarn%s %s\n' "$C_YEL" "$C_RST" "$*" >&2; }
-die()   { printf '%serror%s %s\n' "$C_RED" "$C_RST" "$*" >&2; exit 1; }
+# `err` reports a failure and lets the caller keep going; `die` is the same
+# report followed by an exit. Split so that a gate which collects several
+# failures before refusing — ./scripts/lint does — can still say "error" rather
+# than "warn" about each one. A warning is what a SKIPPED check gets.
+err()   { printf '%serror%s %s\n' "$C_RED" "$C_RST" "$*" >&2; }
+die()   { err "$*"; exit 1; }
 step()  { printf '\n%s%s%s\n' "$C_DIM" "$*" "$C_RST"; }
 
 in_container() { [ -f /etc/cite-container ]; }
@@ -57,8 +81,9 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # Range 1-101: 0 is the ecosystem-wide default this exists to get away from, and
 # on Linux domains above 101 collide with the ephemeral port range.
 # -----------------------------------------------------------------------------
+# cite_domain_id <checkout-path>
 cite_domain_id() {
-    local key="${1:-$REPO_ROOT}" sum
+    local key="$1" sum
     # `cksum` is POSIX and identical on macOS and Linux; `md5sum` is neither.
     sum="$(printf '%s' "$key" | cksum | awk '{print $1}')"
     printf '%s' "$(( sum % 101 + 1 ))"
@@ -69,7 +94,7 @@ if [ -n "${ROS_DOMAIN_ID:-}" ]; then
     # value does not report it as an explicit choice by the developer.
     CITE_DOMAIN_SOURCE="${CITE_DOMAIN_SOURCE:-explicit}"
 else
-    ROS_DOMAIN_ID="$(cite_domain_id)"
+    ROS_DOMAIN_ID="$(cite_domain_id "$REPO_ROOT")"
     CITE_DOMAIN_SOURCE="derived from this checkout"
 fi
 export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE
@@ -119,8 +144,9 @@ export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE
 # `docker volume ls` is legible when something does go wrong; the hash is what
 # makes it unique, and two directories with the same basename still differ.
 # -----------------------------------------------------------------------------
+# cite_project_name <checkout-path>
 cite_project_name() {
-    local key="${1:-$REPO_ROOT}" slug sum
+    local key="$1" slug sum
     # `cksum` is POSIX and identical on macOS and Linux; `md5sum` is neither.
     sum="$(printf '%s' "$key" | cksum | awk '{print $1}')"
     # Compose accepts [a-z0-9_-] only, and must not start with a dash. Lowercase,
@@ -142,7 +168,7 @@ if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
     # mistaken for the derived value.
     CITE_PROJECT_SOURCE="${CITE_PROJECT_SOURCE:-explicit}"
 else
-    COMPOSE_PROJECT_NAME="$(cite_project_name)"
+    COMPOSE_PROJECT_NAME="$(cite_project_name "$REPO_ROOT")"
     CITE_PROJECT_SOURCE="derived from this checkout"
 fi
 export COMPOSE_PROJECT_NAME CITE_PROJECT_SOURCE
@@ -282,6 +308,95 @@ assert_lint_coverage() {
     if [ "${#without_linters[@]}" -gt 0 ]; then
         printf '%s of %s package(s) register no lint test at all: %s' \
             "${#without_linters[@]}" "$selected" "${without_linters[*]}"
+        return 1
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# The shell linter's version is a property of this repository, not of the machine.
+#
+# ./scripts/lint used to run `have shellcheck` and then whatever was on PATH.
+# That produced three different answers from one command:
+#
+#   host      shellcheck 0.11.0 from Homebrew — clean
+#   runner    whatever ubuntu-24.04 ships     — SC2119, SC2120, SC2015
+#   container nothing at all                  — "not installed — skipped", green
+#
+# The first CI run in this repository's history failed on the second column
+# while the first column, run by hand on the same commit, reported nothing. The
+# findings were real and trivial; the defect was that the gate could not agree
+# with itself. The container column is the worse half: it reported success while
+# checking no shell script at all, which is the failure this file already refuses
+# for the ROS linters.
+#
+# The fix is the ordinary one and needs no new mechanism. shellcheck is a linter,
+# so by requirements/README.md it is a layer-4 development dependency, declared
+# once in requirements/dev.txt and installed by pip into the tooling virtualenv —
+# beside ruff, mypy and yamllint. `shellcheck-py` ships the upstream binary,
+# sha256-pinned per platform, for every architecture this project runs on. Both
+# consumers of dev.txt already exist: ./scripts/bootstrap --host-only for the host
+# and the CI runner, and the Dockerfile for the container. So the pin lives in one
+# file (P1) and all three machines converge on it without a fifth place to look.
+#
+# The pin is READ from dev.txt rather than restated here, and asserted rather than
+# assumed: a stale virtualenv holds a shellcheck that runs perfectly and answers a
+# different question, which is precisely the state that has to be caught.
+# -----------------------------------------------------------------------------
+
+# pinned_version <package> <requirements-file> — the `==` pin, or empty.
+# The file is tested first: `set -o pipefail` is on, so letting sed fail on a
+# missing path would take the caller down with it instead of answering "no pin".
+pinned_version() {
+    [ -f "$2" ] || return 1
+    sed -n "s/^$1==\([^[:space:]#]*\).*/\1/p" "$2" | head -1
+}
+
+# The version implied by the shellcheck-py pin in <requirements-file>. That
+# distribution appends a packaging component to the upstream version it wraps, so
+# 0.11.0.1 means shellcheck 0.11.0.
+#
+# The name is spelled out mid-line here rather than starting the comment, because
+# a comment beginning with the linter's own name parses as a directive to it.
+shellcheck_pinned_version() {
+    local wrapper
+    wrapper="$(pinned_version shellcheck-py "$1")"
+    [ -n "$wrapper" ] || return 1
+    printf '%s' "${wrapper%.*}"
+}
+
+# The version a shellcheck binary reports about itself, e.g. 0.11.0.
+shellcheck_version() {
+    "$1" --version 2>/dev/null | sed -n 's/^version:[[:space:]]*//p' | head -1
+}
+
+# assert_shellcheck_pinned <binary> <requirements-file>
+#
+# Returns 0 when the binary at <binary> is exactly the version pinned in
+# <requirements-file>. Otherwise prints a diagnosis on stdout and returns 1 —
+# the same shape as assert_lint_coverage above, and for the same reason: the
+# states that matter are awkward to reproduce, so they are driven with fixtures
+# by scripts/_selftest.sh.
+#
+# "Not installed" and "installed at the wrong version" are both refusals, never
+# a skip. A shell gate that cannot tell clean from did-not-run is worse than no
+# gate, and one that cannot tell which shellcheck answered is the same defect
+# wearing a version number.
+assert_shellcheck_pinned() {
+    local sc="$1" requirements="$2" want got
+    if ! want="$(shellcheck_pinned_version "$requirements")"; then
+        printf '%s pins no shellcheck-py version, so no shell linter is declared' \
+            "$requirements"
+        return 1
+    fi
+    if [ ! -x "$sc" ]; then
+        printf 'shellcheck %s is pinned but not installed at %s' "$want" "$sc"
+        return 1
+    fi
+    got="$(shellcheck_version "$sc")"
+    if [ "$got" != "$want" ]; then
+        printf 'shellcheck %s is pinned but %s answered at %s' \
+            "$want" "${got:-an unreadable version}" "$sc"
         return 1
     fi
     return 0
@@ -485,8 +600,9 @@ scenario_verdict() {
 # unpinned, and a branch named `2.x` passed as pinned. The current entry passed
 # only because its SHA happens to begin with a digit.
 # -----------------------------------------------------------------------------
+# unpinned_manifest_entries <manifest> — callers pass "$CITE_VCS_MANIFEST".
 unpinned_manifest_entries() {
-    local manifest="${1:-${REPO_ROOT}/external/cite.repos}"
+    local manifest="$1"
     [ -f "$manifest" ] || return 0
     awk '
         # A repository key: indented, ends the line with a colon and nothing else.
@@ -520,9 +636,10 @@ unpinned_manifest_entries() {
 # that success and total failure can never again print the same sentence.
 # -----------------------------------------------------------------------------
 
-# declared_patches [dir] — every patch file, in the order bootstrap applies them.
+# declared_patches <dir> — every patch file, in the order bootstrap applies them.
+# Callers pass "$CITE_PATCH_DIR".
 declared_patches() {
-    local dir="${1:-${REPO_ROOT}/external/patches}"
+    local dir="$1"
     [ -d "$dir" ] || return 0
     find "$dir" -maxdepth 1 -type f -name '*.patch' 2>/dev/null | sort
 }

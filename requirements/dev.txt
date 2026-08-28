@@ -15,6 +15,23 @@ mypy==1.13.0                # static typing for the tooling layer
 yamllint==1.35.1            # YAML including the facility model and manifests
 pre-commit==4.0.1           # runs the above on commit
 
+# THE ONLY PLACE THE SHELL LINTER'S VERSION IS WRITTEN DOWN (P1).
+# `./scripts/lint` reads this pin, compares it to the binary it is about to run,
+# and refuses if they disagree — see assert_shellcheck_pinned in scripts/_lib.sh.
+#
+# shellcheck is not a Python program, but it is a linter, and requirements/README.md
+# gives linters exactly one home: layer 4, pip into the tooling virtualenv. This
+# distribution carries the upstream binary with a per-platform sha256, which is what
+# makes the pin mean the same thing on a macOS laptop, in the container and on the
+# GitHub runner. Before it existed the three disagreed: 0.11.0 from Homebrew, the
+# runner's own version, and nothing at all in the container — where the gate had
+# never once looked at a shell script while reporting success.
+#
+# The trailing component is shellcheck-py's own packaging revision; 0.11.0.1 wraps
+# shellcheck 0.11.0. Bump this and the whole project moves together, which is the
+# point.
+shellcheck-py==0.11.0.1     # shellcheck 0.11.0
+
 # Transitive, pinned deliberately: pre-commit -> virtualenv -> filelock.
 # 3.19.1 carried PYSEC-2026-1374 / -1375. Remove this pin once pre-commit's own
 # constraint floats past it on its own.

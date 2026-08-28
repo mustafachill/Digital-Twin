@@ -103,10 +103,118 @@ expect_fail "scripts/lint no longer passes --packages-skip-build-finished" \
             lint_script_uses_skip_flag
 
 # -----------------------------------------------------------------------------
+# assert_shellcheck_pinned — the shell gate's verdict must not depend on the
+# machine that ran it.
+#
+# The first CI run in this repository's history failed here, and the findings
+# were not the defect. `./scripts/lint` ran `have shellcheck` and then whatever
+# was on PATH, so one command gave three answers on the same commit: clean on the
+# host at 0.11.0, SC2119/SC2120/SC2015 on the runner at whatever ubuntu-24.04
+# ships, and "not installed — skipped", reported as success, in the container
+# where no shellcheck existed at all.
+#
+# So the interesting assertion is NOT that the scripts are clean — ./scripts/lint
+# answers that, and answers it about one version. It is that the gate either runs
+# the pinned version or refuses. Both halves are below, driven with stand-in
+# binaries, because reproducing the real states means installing three different
+# builds of the linter.
+# -----------------------------------------------------------------------------
+SC_FIXTURE="$(mktemp -d)"
+trap 'rm -rf "${SC_FIXTURE}"' EXIT
+
+# A stand-in shellcheck that reports whatever version it is told to, in the exact
+# shape the real one prints — the parsing is part of what is under test.
+fake_shellcheck() {  # fake_shellcheck <path> <version>
+    cat >"$1" <<EOF
+#!/bin/sh
+printf 'ShellCheck - shell script analysis tool\nversion: %s\n' "$2"
+EOF
+    chmod +x "$1"
+}
+
+# The fixture pins a version this project does NOT use, deliberately. Restating
+# the real pin here would put the value in a second place, which is the rule this
+# block's last case enforces.
+SC_REQ="${SC_FIXTURE}/dev.txt"
+printf 'ruff==0.7.4\nshellcheck-py==0.10.0.1     # shellcheck 0.10.0\n' >"$SC_REQ"
+
+expect_eq "the pinned shellcheck version is read from the requirements pin" \
+          "0.10.0" "$(shellcheck_pinned_version "$SC_REQ")"
+
+fake_shellcheck "${SC_FIXTURE}/matching" 0.10.0
+expect_ok   "the gate accepts a shellcheck at exactly the pinned version" \
+            assert_shellcheck_pinned "${SC_FIXTURE}/matching" "$SC_REQ"
+
+# THE CASE THIS WHOLE BLOCK EXISTS FOR. 0.9.0 is the family the CI runner had, and
+# it is a perfectly good shellcheck — it just answers a different question than the
+# pin does. Silently using it is how the same commit was clean locally and red in
+# CI, so the gate must refuse rather than run it.
+fake_shellcheck "${SC_FIXTURE}/older" 0.9.0
+expect_fail "the gate refuses a DIFFERENT shellcheck version rather than trusting it" \
+            assert_shellcheck_pinned "${SC_FIXTURE}/older" "$SC_REQ"
+SC_WHY="$(assert_shellcheck_pinned "${SC_FIXTURE}/older" "$SC_REQ" || true)"
+case "$SC_WHY" in
+    *0.10.0*0.9.0*) SELFTEST_PASS=$((SELFTEST_PASS + 1)) ;;
+    *) SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+       printf '  %sFAIL%s the refusal names both the pinned and the actual version\n' \
+              "$C_RED" "$C_RST" >&2
+       printf '        actual: %s\n' "$SC_WHY" >&2 ;;
+esac
+
+# Absence is a refusal too, not a skip. This is the container's old steady state,
+# where the shell gate reported success having read no shell script at all.
+expect_fail "an absent shellcheck is a refusal, not a skipped check" \
+            assert_shellcheck_pinned "${SC_FIXTURE}/not-installed" "$SC_REQ"
+
+# And a requirements file that pins nothing must not read as "any version will do".
+printf 'ruff==0.7.4\n' >"${SC_FIXTURE}/unpinned.txt"
+expect_fail "a requirements file with no shellcheck-py pin is a refusal" \
+            assert_shellcheck_pinned "${SC_FIXTURE}/matching" "${SC_FIXTURE}/unpinned.txt"
+
+# The pin this project actually ships has to be readable by the same code.
+expect_ok "requirements/dev.txt pins shellcheck-py" \
+          shellcheck_pinned_version "$CITE_DEV_REQUIREMENTS"
+
+# P1: the version is a value, and it lives in exactly one file. Scoped to the
+# directories that could USE it — a document naming the version in prose is
+# describing the pin, not being a second copy of it.
+sc_pin_stated_outside_requirements() {
+    local pin
+    pin="$(pinned_version shellcheck-py "$CITE_DEV_REQUIREMENTS")"
+    # No pin at all is not "exactly one place" either, and searching for the
+    # bare `shellcheck-py==` would answer about whatever fixture matched first.
+    [ -n "$pin" ] || return 0
+    grep -rlF --exclude='dev.txt' "shellcheck-py==${pin}" \
+        "${REPO_ROOT}/scripts" "${REPO_ROOT}/infra" \
+        "${REPO_ROOT}/.github" "${REPO_ROOT}/requirements" >/dev/null 2>&1
+}
+expect_fail "the shellcheck pin is written down in requirements/dev.txt alone (P1)" \
+            sc_pin_stated_outside_requirements
+
+# The gate must run the pinned binary out of the virtualenv by path. A `have`
+# probe followed by a bare invocation is PATH again, which IS the defect: it is
+# what gave three machines three verdicts on one commit. Comments stripped first —
+# the block above the step quotes the old form while explaining why it is gone.
+lint_script_body() {
+    grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/lint" || true
+}
+lint_script_probes_path_for_shellcheck() {
+    grep -qF 'have shellcheck' <<<"$(lint_script_body)"
+}
+lint_script_runs_shellcheck_from_venv() {
+    # shellcheck disable=SC2016  # the literal text is the point; it must not expand
+    grep -qF '${VENV}/shellcheck' <<<"$(lint_script_body)"
+}
+expect_fail "scripts/lint no longer takes shellcheck off PATH" \
+            lint_script_probes_path_for_shellcheck
+expect_ok   "scripts/lint runs the shellcheck installed from the pin" \
+            lint_script_runs_shellcheck_from_venv
+
+# -----------------------------------------------------------------------------
 # unpinned_manifest_entries — D-01. A SHA validator, not a spelling test.
 # -----------------------------------------------------------------------------
 FIXTURE="$(mktemp -d)"
-trap 'rm -rf "${FIXTURE}"' EXIT
+trap 'rm -rf "${SC_FIXTURE}" "${FIXTURE}"' EXIT
 
 cat >"${FIXTURE}/pinned.repos" <<'EOF'
 ---
@@ -161,7 +269,7 @@ esac
 
 # The manifest actually shipped must pass its own gate.
 expect_eq "external/cite.repos is fully pinned" \
-          "" "$(unpinned_manifest_entries)"
+          "" "$(unpinned_manifest_entries "$CITE_VCS_MANIFEST")"
 
 # -----------------------------------------------------------------------------
 # cite_domain_id — T-07. Deterministic per checkout, distinct between checkouts.
@@ -643,7 +751,7 @@ while IFS= read -r p; do
     [ -n "$p" ] || continue
     expect_eq "$(basename "$p") declares its target repository" \
               "found" "$( [ -n "$(patch_target_repo "$p")" ] && printf 'found' || printf 'missing' )"
-done < <(declared_patches)
+done < <(declared_patches "$CITE_PATCH_DIR")
 
 # -----------------------------------------------------------------------------
 # scenario_failed_cases / scenario_verdict — the phase split behind CI's scenario
@@ -657,7 +765,7 @@ done < <(declared_patches)
 # newlines as `&#10;` and quotes as `&quot;`.
 # -----------------------------------------------------------------------------
 JUNIT_TMP="$(mktemp -d)"
-trap 'rm -rf "${FIXTURE}" "${JUNIT_TMP}"' EXIT
+trap 'rm -rf "${SC_FIXTURE}" "${FIXTURE}" "${JUNIT_TMP}"' EXIT
 
 # NOTE THE ABSENT TRAILING NEWLINE, which is not a detail. `launch_test` ends
 # its report without one, and an earlier version of this helper added it — which
@@ -811,7 +919,7 @@ expect_fail "a checkout with no tools/ directory is refused" \
 # PYTHONPATH, which is how a wrong tree gets resolved in the first place.
 if have python3; then
     DECOY="$(mktemp -d)"
-    trap 'rm -rf "${FIXTURE}" "${JUNIT_TMP}" "${DECOY}" "${DECOY}.link"' EXIT
+    trap 'rm -rf "${SC_FIXTURE}" "${FIXTURE}" "${JUNIT_TMP}" "${DECOY}" "${DECOY}.link"' EXIT
     mkdir -p "${DECOY}/cite_tools"
     : > "${DECOY}/cite_tools/__init__.py"
 

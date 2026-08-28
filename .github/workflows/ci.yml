@@ -337,7 +337,7 @@ jobs:
         run: |
           # shellcheck source=scripts/_lib.sh
           source scripts/_lib.sh
-          unpinned="$(unpinned_manifest_entries)"
+          unpinned="$(unpinned_manifest_entries "$CITE_VCS_MANIFEST")"
           if [ -n "$unpinned" ]; then
             echo "$unpinned" | while read -r entry; do
               echo "::error file=external/cite.repos::Not pinned to a commit SHA: ${entry}"
