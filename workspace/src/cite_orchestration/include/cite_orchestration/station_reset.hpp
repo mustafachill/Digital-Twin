@@ -167,6 +167,12 @@ inline ResetOutcome reset_station(
   // reason as a side effect of the state change and destroy it before it could be
   // reported. The reason is captured above and cleared here, in that order.
   runtime.blocked_reason.clear();
+  // THE CODE GOES WITH THE PROSE, for `SetStationState`'s reason and not a
+  // different one: they are one fact stated twice, and a stale code beside a
+  // cleared reason is worse than neither — a consumer that reads the code would
+  // classify a station nobody has said anything about. This is the other place
+  // that clears the reason, so it is the other place that has to clear the code.
+  runtime.blocked_code = ResultCode::SUCCESS;
   runtime.state = StationState::STATE_WAITING;
   // The consecutive-failure count is the retry budget's spend, and an operator
   // acknowledging the block is the deliberate act that ends the run of failures it

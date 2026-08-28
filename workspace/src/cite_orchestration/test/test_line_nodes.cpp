@@ -847,6 +847,49 @@ TEST_F(RunningLine, TheLineGoesOnRunningAfterAStationEscalatesAndLatchesWhy)
     "through SetStationState would do";
 }
 
+TEST_F(RunningLine, ARootFailureNoStationClassifiedStillMakesTheRunFail)
+{
+  // THE ROUTE INTO THE FAULT BRANCH THAT LEAVES NOTHING BLOCKED, and it is an
+  // ordinary path rather than a contrived one. `RecoverFromFailure` on a RETRY
+  // verdict sets the station WAITING and returns SUCCESS, so the recover
+  // `Sequence` runs on to `ReleaseStationClaims` and `MoveToHome` — and a
+  // `MoveToHome` that fails there fails the Sequence, the Fallback, the Repeat and
+  // the subtree, failing the root `Parallel` with no station BLOCKED and none
+  // FAULTED.
+  //
+  // Before the fault branch that exited 1. With the branch and a latch taken only
+  // on the classified route it exited 0: the tick loop no longer ends, `AwaitReset`
+  // succeeds immediately because nothing is holding, `AwaitReArm` runs for ever,
+  // and the coordinator sits there reporting nothing wrong. That is a worse signal
+  // than the exit it replaced, and it is the shape this branch exists to make
+  // impossible.
+  //
+  // EXECUTION_FAILED rather than UNREACHABLE, because the policy answers the two
+  // differently and this test needs the RETRY: `RETRY_SAME` is what reaches
+  // `MoveToHome` at all.
+  arm_one_->fail_pick_with(ResultCode::EXECUTION_FAILED);
+  arm_one_->fail_move_to_with(ResultCode::EXECUTION_FAILED);
+
+  ASSERT_TRUE(run_until([this] {return line_.fault->latched;}))
+    << "the station subtree never failed, or the fault branch was never reached";
+
+  // NOTHING CLASSIFIED IT, and the latch says so rather than inventing a station.
+  EXPECT_TRUE(cite_orchestration::stations_holding_the_line(*line_.stations).empty())
+    << "a station is blocked, so this is the classified route and not the one under "
+    "test";
+  EXPECT_TRUE(line_.fault->station_id.empty());
+  EXPECT_FALSE(line_.fault->reason.empty())
+    << "the exit log has nothing to say about why the run failed";
+
+  // AND THE LINE IS STILL THERE. The root goes on returning RUNNING, which is what
+  // makes the exit status the only carrier the fault has left.
+  for (int tick = 0; tick < 20; ++tick) {
+    ASSERT_EQ(tick_once(), BT::NodeStatus::RUNNING)
+      << "the root stopped returning RUNNING, so the tick loop ends and this is no "
+      "longer the case the latch is needed for";
+  }
+}
+
 TEST_F(RunningLine, AStoppedLinePutsEveryBeltDown)
 {
   // THE P2 HALF, and the reason `StopAll` is not optional. In simulation the belts
@@ -938,6 +981,133 @@ TEST_F(RunningLine, TheResetIsAcceptedAndTheLineStillDoesNotRestart)
   EXPECT_NE(refusals.front().find("station_two"), std::string::npos) << refusals.front();
   EXPECT_NE(refusals.front().find("conveyor_fixture"), std::string::npos)
     << refusals.front();
+}
+
+/// The maintenance pass and the operator reset, over one expired handoff.
+///
+/// ADR-0038 decision 4 in a fixture. `LineMaintenance::expire_handoffs` used to
+/// write `STATE_BLOCKED` from outside the station's own tree, and nothing asserted
+/// either half of what stopping that changed. It needs the REAL `LineMaintenance`
+/// and the REAL `StationReset` — a test that reimplemented either would be
+/// asserting that two copies of a rule agree.
+///
+/// THE DEADLINE IS IN THE PAST, not waited for. The offer is made with a negative
+/// timeout, so the handoff is already expired on the first pass and nothing here
+/// is sequenced by a duration (P4).
+class HandoffExpiry : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    node_ = std::make_shared<rclcpp::Node>("handoff_expiry_test");
+    plan_ = cite_orchestration::plan_line(two_station_line());
+    ASSERT_TRUE(plan_.usable()) << (plan_.refusals.empty() ? "" : plan_.refusals.front());
+
+    line_.node = node_;
+    line_.registry = std::make_shared<WorkpieceRegistry>();
+    line_.ledger = std::make_shared<HandoffLedger>();
+    line_.arbiter = std::make_shared<ResourceArbiter>();
+    line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    line_.fault = std::make_shared<LineFault>();
+    line_.handoff_timeout = rclcpp::Duration::from_seconds(30.0);
+    line_.retry_budget = 1;
+
+    for (const auto & entry : plan_.stations) {
+      StationRuntime runtime;
+      runtime.capacity = entry.capacity;
+      runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+      (*line_.stations)[entry.id] = runtime;
+    }
+
+    maintenance_ = std::make_unique<LineMaintenance>(
+      line_, plan_, "/line_nodes_test/expiry/line/state");
+    tick_mutex_ = std::make_shared<std::mutex>();
+    reset_ = std::make_unique<StationReset>(
+      line_, plan_, "/line_nodes_test/expiry/line/reset_station", tick_mutex_);
+  }
+
+  /// Offer a handoff whose deadline has already passed.
+  std::string offer_already_expired()
+  {
+    if (line_.registry->admit("wp_1", "station_one", "station_one") !=
+      cite_orchestration::RegistryOutcome::OK)
+    {
+      return {};
+    }
+    return line_.ledger->offer(
+      *line_.registry, "wp_1", "station_one", "station_two", node_->get_clock()->now(),
+      rclcpp::Duration::from_seconds(-1.0));
+  }
+
+  StationRuntime & station(const std::string & id) {return (*line_.stations)[id];}
+
+  cite_interfaces::srv::ResetStation::Response reset(const std::string & station_id)
+  {
+    cite_interfaces::srv::ResetStation::Request request;
+    request.station_id = station_id;
+    cite_interfaces::srv::ResetStation::Response response;
+    reset_->handle(request, response);
+    return response;
+  }
+
+  rclcpp::Node::SharedPtr node_;
+  LinePlan plan_;
+  LineContext line_;
+  std::unique_ptr<LineMaintenance> maintenance_;
+  std::shared_ptr<std::mutex> tick_mutex_;
+  std::unique_ptr<StationReset> reset_;
+};
+
+TEST_F(HandoffExpiry, TheMaintenancePassRetiresTheHandoffAndWritesNoStationState)
+{
+  // ADR-0038 decision 4: `STATE_BLOCKED` has exactly one author, the station's own
+  // tree. The pass keeps its OUTCOME — the handoff is retired and the work-piece
+  // stays with whoever owned it, structurally — and gives up the state write.
+  ASSERT_FALSE(offer_already_expired().empty());
+  ASSERT_EQ(line_.ledger->live(), 1u);
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WORKING;
+
+  maintenance_->run();
+
+  ASSERT_EQ(line_.ledger->live(), 0u)
+    << "the handoff did not expire, so this test proves nothing about what the pass "
+    "does when one does";
+  EXPECT_EQ(station("station_one").state, cite_interfaces::msg::StationState::STATE_WORKING)
+    << "the maintenance pass wrote a station state, so STATE_BLOCKED has two authors "
+    "again and the value means two things";
+  EXPECT_TRUE(station("station_one").blocked_reason.empty())
+    << "the pass composed a reason for a station whose own tree has not said anything";
+  EXPECT_EQ(station("station_one").blocked_code, ResultCode::SUCCESS);
+
+  // Ownership is untouched, structurally: nothing in the expiry reaches the
+  // registry (ADR-0024 rule 3).
+  const auto owner = line_.registry->owner_of("wp_1");
+  ASSERT_TRUE(owner.has_value());
+  EXPECT_EQ(*owner, "station_one");
+}
+
+TEST_F(HandoffExpiry, AResetIsRefusedForAStationWhoseArmIsStillPlacing)
+{
+  // THE LIVE DEFECT DECISION 4 CLOSED, and it is the reason that decision is not a
+  // tidy-up. The expiry window opens at `OfferHandoff` (`line_station.xml:104`) and
+  // closes at `CompleteHandoff` (`:110`), and `PlaceAt` (`:108`) sits between them.
+  // So the pass could report a station BLOCKED while its arm was placing;
+  // `station_reset.hpp` tests only `state != STATE_BLOCKED`, so the operator reset
+  // ACCEPTED that station and cleared its `blocked_reason` mid-motion.
+  //
+  // With the pass writing no state the station stays WORKING, and the reset refuses
+  // it for the reason it refuses every station that is not blocked.
+  ASSERT_FALSE(offer_already_expired().empty());
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WORKING;
+  maintenance_->run();
+  ASSERT_EQ(line_.ledger->live(), 0u) << "the handoff never expired";
+
+  const auto answer = reset("station_one");
+  EXPECT_FALSE(answer.accepted)
+    << "a reset was accepted for a station whose arm is placing, because a handoff "
+    "clock ran out during the placement";
+  EXPECT_EQ(answer.result.code, ResultCode::PRECONDITION_FAILED);
+  EXPECT_EQ(answer.station_state, cite_interfaces::msg::StationState::STATE_WORKING);
 }
 
 /// The fault leaves on their own, over a station map and a ledger a test owns.
@@ -1057,14 +1227,52 @@ TEST_F(FaultBranch, OnFaultSettlesTheLedgerWithoutMovingAnything)
     "where the part is";
 }
 
-TEST_F(FaultBranch, OnFaultSaysSoWhenTheLineFailedAndNoStationWillSayWhy)
+TEST_F(FaultBranch, OnFaultLatchesEvenWhenNoStationWillSayWhy)
 {
   // A `Parallel` that failed with nothing blocked means a station subtree returned
-  // FAILURE without its recovery policy classifying anything. There is no reason to
-  // latch and this leaf must not invent one — and it must still return SUCCESS,
-  // because a FAILURE here would end the branch that exists to survive this.
+  // FAILURE without its recovery policy classifying anything. This leaf must not
+  // invent a reason, and it must still return SUCCESS — a FAILURE here would end
+  // the branch that exists to survive this.
+  //
+  // AND IT MUST STILL LATCH. This test asserted the opposite until 2026-08-27, and
+  // the behaviour it was asserting was the defect: with nothing latched, the tick
+  // loop no longer ends, `AwaitReset` succeeds immediately because nothing is
+  // holding, `AwaitReArm` runs for ever, and the coordinator sits there and exits
+  // 0. That is the "reports healthy, does nothing" shape the whole branch exists
+  // to make impossible, arriving through the exit code instead of through
+  // `LineState`.
   EXPECT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
-  EXPECT_FALSE(line_.fault->latched);
+  ASSERT_TRUE(line_.fault->latched)
+    << "a root failure nothing classified is not carried into the exit status, so the "
+    "coordinator hangs and the run returns 0";
+  EXPECT_TRUE(line_.fault->station_id.empty())
+    << "a station was named for a failure no station claimed";
+  EXPECT_EQ(line_.fault->result_code, ResultCode::SUCCESS)
+    << "a classification was invented for a failure nothing classified";
+  EXPECT_FALSE(line_.fault->reason.empty())
+    << "the exit log has nothing to say about why the run failed";
+}
+
+TEST_F(FaultBranch, TheFirstLatchIsTheOneKeptWhicheverRouteItCameBy)
+{
+  // The unclassified latch must not shadow a real one taken earlier, and must not
+  // be overwritten by a station that is blocked on a later tick. Ticked twice on
+  // purpose: the fault branch is a `Sequence`, so `OnFault` runs once per entry
+  // into it, but nothing in the shape guarantees it runs only once ever.
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  station("station_one").blocked_reason = "result code 9: escalate to an operator";
+  station("station_one").blocked_code = ResultCode::UNREACHABLE;
+  ASSERT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(line_.fault->station_id, "station_one");
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WAITING;
+  station("station_one").blocked_reason.clear();
+  station("station_one").blocked_code = ResultCode::SUCCESS;
+  EXPECT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(line_.fault->station_id, "station_one")
+    << "the latch was overwritten after the operator cleared the station, so the run "
+    "reports the last thing that happened to it rather than the fault it stopped on";
+  EXPECT_EQ(line_.fault->result_code, ResultCode::UNREACHABLE);
 }
 
 TEST_F(FaultBranch, StopAllCommandsEveryDeclaredBeltToAStandstill)

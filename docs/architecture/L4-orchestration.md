@@ -66,18 +66,31 @@
   `Sequence` of `OnFault → StopAll → AwaitReset → AwaitReArm` in `line_fault.hpp`. No leaf in
   it returns `FAILURE`, none takes a port, and none commands an arm; `StopAll` commands every
   declared belt to zero, which is `ConveyorIndex::stop()`'s first production caller. A
-  latched fault still exits 1, so a run in which a station escalated still fails CI.
+  latched fault still exits 1, so a run in which the line stopped still fails CI — and it is
+  latched on **either** route into the branch, the one where a station classified why and the
+  one where none did. Latching only the classified route left the second exiting 0 with the
+  coordinator hung in `AwaitReArm`, which is worse than the exit it replaced.
   **NONE OF IT IS A PROTECTIVE MEASURE.** What stops an arm is the vendor controller's
   torque limiting and the cell's physical guarding (charter §3.2). This is a state machine;
   what it buys is that the coordinator is still there to be asked a question, and that it
   stops commanding belts it has stopped supervising.
-  **What is proven about it, and what is not.** Ten tests: that a station's escalation
+  **What is proven about it, and what is not.** The tests — count them rather than trusting this sentence: that a station's escalation
   cancels a **sibling's** in-flight goal — the property `line_tree.hpp` had asserted in prose
   since the root tree existed, and which nothing tested — that the root goes on returning
   `RUNNING` afterwards, that the belts are put down, that the ADR-0037 reset is accepted on
   its happy path (which had never been reachable), and that the line then does **not**
   restart. Every one of them drives fake action servers that succeed because they are told
   to, so they prove sequence, ownership and the stop. **They prove no motion.**
+  Added on 2026-08-27, from review: that a root failure **no station classified** is latched
+  all the same — reached by failing `MoveToHome` on the retry path, which is the one route
+  into the branch that leaves nothing `BLOCKED` — that the first latch is the one kept, that
+  the maintenance pass retires an expired handoff and writes no station state, and that a
+  reset is refused for a station whose arm is still placing (ADR-0038 decision 4, which had
+  no test at all). **One thing here is asserted as source text and not driven:** the tick
+  loop's guard against a leaf that *throws*. An exception out of a `tick()` is
+  `std::terminate` out of `main` — worse than the exit that was removed — and the loop now
+  catches, halts the tree and exits 1; `test_recovery_ordering.py` asserts the guard is
+  present, and nothing asserts what it does, because the loop lives in `main`.
   **The line still stalls after a failed grasp**, and that is not what this closed. A retry
   returns a station to `AwaitTrigger` on a beam the part is already breaking, so no edge ever
   comes — observed on a `continuous_line` run at this commit, where `arm_1`'s gripper reached

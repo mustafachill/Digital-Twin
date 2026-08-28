@@ -39,6 +39,16 @@
 // scene and the reset service with it, which is the evidence a person needs in
 // order to say why the station stopped. A refusal is LOGGED, never returned.
 //
+// AND RETURNING IS NOT THE ONLY WAY OUT OF A LEAF. The rule above is necessary
+// and it is not sufficient: an exception thrown out of a `tick()` here — and
+// `StopAll` calls `publish()` once per belt, which can throw `RCLError` — walks
+// past every status the rule is about. Out of `main` that is `std::terminate`,
+// which is not the exit ADR-0038 removed but a signal death, and strictly worse
+// than it: nothing is halted, no goal is cancelled, and the exit status says
+// nothing about what happened. `line_orchestrator.cpp` catches around the tick so
+// that the way out is an orderly halt and a status of 1 rather than an abort.
+// SURVIVING an exception is a different question and ADR-0038 does not decide it.
+//
 // AND NO LEAF HERE MAY RETURN SUCCESS OUT OF THE LAST ONE, today. `AwaitReArm` is
 // RUNNING for ever on purpose: without a `<Repeat>` over the root `Fallback`, a
 // fault Sequence that returned SUCCESS would make the Fallback return SUCCESS,
@@ -64,6 +74,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include <cite_interfaces/msg/result_code.hpp>
 #include <cite_interfaces/msg/station_state.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
@@ -162,6 +173,14 @@ inline std::vector<std::string> rearm_refusals(
 /// A SYNC LEAF THAT ALWAYS SUCCEEDS. It is the first child of the fault Sequence
 /// and it must never be the reason the branch ends — see this file's header.
 ///
+/// IT LATCHES ON EVERY ROUTE INTO THIS BRANCH. Reaching it means the root
+/// `Parallel` returned FAILURE; the latch records that, and the station and code
+/// when a station owned it. Latching only the classified route would leave a root
+/// failure nothing carries into the exit status, because the tick loop no longer
+/// ends on one — which is the same "reports healthy, does nothing" shape this
+/// branch exists to make impossible, reached through the exit code instead of
+/// through `LineState`.
+///
 /// WHAT IT DOES NOT DO, and each absence is a decision:
 ///
 ///   * It writes no station state. The station that escalated is already BLOCKED
@@ -195,18 +214,44 @@ public:
   {
     const auto holding = stations_holding_the_line(*line_.stations);
 
-    if (line_.fault && !line_.fault->latched && !holding.empty()) {
-      // The FIRST one, and there can only be one: by the time this runs the
-      // `Parallel` has halted every sibling, so no second station can escalate
-      // behind it. The latch refuses a second write anyway, so what a run reports
-      // is the fault it stopped on and not the last thing that happened to it.
-      const std::string & station = holding.front();
-      const StationRuntime & runtime = line_.station(station);
+    // LATCHED ON EVERY ROUTE INTO THIS BRANCH, INCLUDING THE UNCLASSIFIED ONE.
+    // Reaching this leaf at all means the root `Parallel` returned FAILURE, and
+    // that is the whole of what the latch records: the tick loop no longer ends on
+    // it, so this is the only thing left that can carry a root failure into the
+    // exit status. Latching only the classified route left one way for the line to
+    // stop with `status` still 0 — `AwaitReset` succeeds immediately when nothing
+    // is holding, `AwaitReArm` then runs for ever, and the coordinator sits there
+    // reporting nothing wrong. That is the "reports healthy, does nothing" shape
+    // this branch exists to make impossible, arriving through the exit code.
+    //
+    // IT IS REACHABLE, and by an ordinary path rather than a contrived one:
+    // `RecoverFromFailure` on a retry verdict sets WAITING and returns SUCCESS, so
+    // the recover `Sequence` runs on to `MoveToHome` (`line_station.xml`), and a
+    // `MoveToHome` that fails there fails the Sequence, the Fallback, the Repeat
+    // and the subtree — with no station BLOCKED and none FAULTED.
+    if (line_.fault && !line_.fault->latched) {
       line_.fault->latched = true;
-      line_.fault->station_id = station;
-      line_.fault->result_code = runtime.blocked_code;
-      line_.fault->reason = runtime.blocked_reason;
       line_.fault->at = line_.now();
+      if (holding.empty()) {
+        // No reason is INVENTED. What is recorded is the only fact there is: the
+        // root failed and nothing classified it. The station id stays empty, which
+        // is what tells a reader that no station owned this.
+        line_.fault->station_id.clear();
+        line_.fault->result_code = cite_interfaces::msg::ResultCode::SUCCESS;
+        line_.fault->reason =
+          "the root tree failed and no station was blocked or faulted, so nothing "
+          "classified it";
+      } else {
+        // The FIRST one, and there can only be one: by the time this runs the
+        // `Parallel` has halted every sibling, so no second station can escalate
+        // behind it. The latch refuses a second write anyway, so what a run reports
+        // is the fault it stopped on and not the last thing that happened to it.
+        const std::string & station = holding.front();
+        const StationRuntime & runtime = line_.station(station);
+        line_.fault->station_id = station;
+        line_.fault->result_code = runtime.blocked_code;
+        line_.fault->reason = runtime.blocked_reason;
+      }
     }
 
     if (holding.empty()) {
@@ -218,7 +263,8 @@ public:
         logger(),
         "the line stopped and no station is blocked or faulted. A station subtree "
         "returned FAILURE without its recovery policy classifying anything, so there is "
-        "no reason to record");
+        "no reason to record — the fault is latched all the same, so the run still "
+        "exits non-zero");
     } else {
       for (const auto & station : holding) {
         const StationRuntime & runtime = line_.station(station);

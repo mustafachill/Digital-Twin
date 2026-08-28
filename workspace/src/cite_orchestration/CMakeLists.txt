@@ -160,7 +160,8 @@ if(BUILD_TESTING)
     ENV
       CITE_STATION_TREE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/line_station.xml
       CITE_STATION_CYCLE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/station_cycle.xml
-      CITE_LINE_TREE_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/cite_orchestration/line_tree.hpp)
+      CITE_LINE_TREE_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/cite_orchestration/line_tree.hpp
+      CITE_LINE_ORCHESTRATOR_SRC=${CMAKE_CURRENT_SOURCE_DIR}/src/line_orchestrator.cpp)
 
   # Indexing the belt (ADR-0032), against a real publisher and a real
   # subscription in one process. What is under test is a decision about EVENTS —

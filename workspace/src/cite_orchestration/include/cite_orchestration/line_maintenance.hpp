@@ -131,9 +131,19 @@ private:
   /// IT WRITES NO STATION STATE, and that is ADR-0038 decision 4 rather than an
   /// omission. `STATE_BLOCKED` has exactly one author now: the station's own tree.
   /// The expiry still reaches `LineState`, one tick later and through the station
-  /// that owns the fact — `AwaitHandoffConfirmed` sees the terminal handoff,
-  /// records `TIMEOUT`, and fails into the recovery branch, so the state arrives
-  /// with the code that caused it instead of with a sentence composed here.
+  /// that owns the fact, by ONE OF TWO ROUTES depending on where in its cycle the
+  /// station is when the deadline passes — and the routes have to be named
+  /// together, because the window this closed spans the boundary between them:
+  ///
+  ///   * BEFORE the transfer, `AwaitHandoffConfirmed` (`line_station.xml:106`)
+  ///     sees the terminal handoff.
+  ///   * AFTER it — the `PlaceAt` at `:108`, which is the window the paragraph
+  ///     below is about — the station is already past that leaf, and it is
+  ///     `CompleteHandoff` at `:110` that finds the handoff gone.
+  ///
+  /// Either way it records `TIMEOUT` and fails into the recovery branch, so the
+  /// state arrives with the code that caused it instead of with a sentence
+  /// composed here.
   ///
   /// WHAT THAT CLOSED, because it was a live defect and not a tidy-up. The expiry
   /// window opens at `OfferHandoff` and closes at `CompleteHandoff`, and `PlaceAt`

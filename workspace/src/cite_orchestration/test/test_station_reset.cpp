@@ -63,6 +63,9 @@ std::map<std::string, StationRuntime> blocked_line()
   StationRuntime one;
   one.state = StationState::STATE_BLOCKED;
   one.blocked_reason = kBlockedReason;
+  //: The same fact as a value, which is what a consumer that has to ACT on the
+  //: block reads instead of the sentence (ADR-0038).
+  one.blocked_code = ResultCode::SAFETY_BLOCKED;
   one.consecutive_failures = 3;
   stations["station_one"] = one;
 
@@ -92,6 +95,26 @@ TEST(StationResetTest, ABlockedStationReturnsToWaitingAndTheReasonIsEchoed)
   EXPECT_EQ(stations["station_one"].state, StationState::STATE_WAITING);
   EXPECT_TRUE(stations["station_one"].blocked_reason.empty())
     << "the reason must be cleared on the station, having been reported to the caller";
+}
+
+TEST(StationResetTest, TheCodeIsClearedWithTheReasonAndNotLeftBehindIt)
+{
+  // ONE FACT STATED TWICE, so both halves go together. `blocked_code` carries the
+  // classification the block was decided from and `blocked_reason` describes it;
+  // `SetStationState` clears both, and the invariant is written down beside it —
+  // a stale code beside a cleared reason is worse than neither, because a consumer
+  // that reads the code would classify a station nobody has said anything about.
+  // This is the OTHER place that clears the reason, so it is the other place that
+  // has to hold the invariant.
+  auto stations = blocked_line();
+  ASSERT_EQ(stations["station_one"].blocked_code, ResultCode::SAFETY_BLOCKED);
+
+  const ResetOutcome outcome = reset_station(stations, known(), "station_one");
+  ASSERT_TRUE(outcome.accepted);
+
+  EXPECT_EQ(stations["station_one"].blocked_code, ResultCode::SUCCESS)
+    << "the reset cleared the reason and left the code, so a station nobody has said "
+    "anything about still reads as classified";
 }
 
 TEST(StationResetTest, TheReasonIsClearedExplicitlyAndNotAsASideEffect)

@@ -1,7 +1,11 @@
 # ADR-0037: Classify an execution abort before any recovery motion is dispatched
 
-- **Status:** Accepted, 2026-08-27, by the project owner's decision. **Binding: violating it
-  is an `ESCALATE`, not a code-review finding.**
+- **Status:** Accepted, 2026-08-27, by the **orchestrator's** decision, on the evidence that
+  decisions 1-5 are implemented, merged at `c7557c8`, and passed three scenarios. **Binding:
+  violating it is an `ESCALATE`, not a code-review finding.**
+  *(Corrected 2026-08-27: this line first attributed the promotion to the project owner. It was
+  the orchestrator's call, and an over-claim about who decided is exactly what these records
+  must not carry.)*
   It was written before the change, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)), and every "will" below was a commitment rather than a
   description when it was written.

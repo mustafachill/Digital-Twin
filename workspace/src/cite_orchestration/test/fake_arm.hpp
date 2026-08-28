@@ -87,6 +87,16 @@ public:
   /// branch, and what the branch does on an ESCALATE was evidenced by nothing.
   void fail_pick_with(uint8_t code);
 
+  /// What this arm's `MoveTo` server answers from now on.
+  ///
+  /// It is how a station subtree is driven to FAILURE **without** anything
+  /// classifying why, which is the one route into the fault branch that leaves no
+  /// station BLOCKED or FAULTED: a retry verdict returns the station to WAITING
+  /// and SUCCESS, the recover `Sequence` walks on to `MoveToHome`, and a
+  /// `MoveToHome` that fails there fails the Sequence, the Fallback, the Repeat
+  /// and the subtree. `OnFault` has to latch that too, or the run exits 0.
+  void fail_move_to_with(uint8_t code);
+
   /// Hold every subsequent `detect` goal open, or stop holding.
   ///
   /// A HELD GOAL IS THE ONLY WAY TO OBSERVE A CANCELLATION. `line_tree.hpp` says

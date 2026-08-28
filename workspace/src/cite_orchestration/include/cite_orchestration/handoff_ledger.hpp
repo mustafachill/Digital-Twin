@@ -34,8 +34,11 @@
 //    have happened, and that predicate is what the behaviour tree gates on.
 // 3. A timeout is an outcome, not an expiry. `expire` moves a handoff to
 //    TIMED_OUT and hands the caller a record saying who still owns the piece.
-//    The upstream retains ownership — structurally, per rule 1 — and the line
-//    reports a blocked station.
+//    The upstream retains ownership — structurally, per rule 1 — and its own tree
+//    is what reports what that means for it. The maintenance pass writes no
+//    station state (ADR-0038 decision 4); this comment said it reported the
+//    station blocked, and that stopped being true when `STATE_BLOCKED` was given
+//    one author.
 // 4. Testable in isolation. Nothing here needs a second robot, a cell, or a ROS
 //    graph. A test issues a token and drives one side.
 //
@@ -256,9 +259,15 @@ public:
   ///
   /// Rule 3 in one call. The returned records name the station that still owns
   /// each work-piece — which is the upstream one, because nothing moved — so the
-  /// caller can report exactly that station blocked. A caller that had to work
+  /// caller can say exactly whose clock ran out. A caller that had to work
   /// out for itself who still owned the piece would be keeping a second copy of
   /// the answer.
+  ///
+  /// THE CALLER REPORTS NOTHING BLOCKED, and this comment used to say it did.
+  /// `STATE_BLOCKED` has one author — the station's own tree (ADR-0038 decision
+  /// 4) — so `LineMaintenance` logs the expiry and writes no state; the station
+  /// observes the terminal handoff itself, at `AwaitHandoffConfirmed` or at
+  /// `CompleteHandoff` depending on where in its cycle it is.
   std::vector<Handoff> expire(const rclcpp::Time & now)
   {
     std::vector<Handoff> timed_out;

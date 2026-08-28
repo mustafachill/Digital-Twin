@@ -84,16 +84,30 @@ public:
           return;
         }
         const std::lock_guard<std::mutex> lock(mutex_);
+        if (stopping_.load()) {
+          // The fixture is going away. Tested UNDER THE LOCK the destructor takes
+          // to empty `workers_`, and not before it: a goal accepted between the
+          // flag and the swap would otherwise re-populate the vector after it had
+          // been drained, and `~FixtureServer` would destroy it holding a joinable
+          // thread. Answered rather than dropped, so `rclcpp_action` is not left
+          // with an executing goal whose server is being destroyed.
+          handle->abort(answer());
+          return;
+        }
         workers_.emplace_back([this, handle]() {hold_until_it_ends(handle);});
       });
   }
 
   ~FixtureServer()
   {
-    stopping_.store(true);
     std::vector<std::thread> workers;
     {
+      // The flag and the swap under ONE lock, because the accepted-goal callback
+      // reads the flag under the same one. Setting it outside would leave the
+      // window this closes: accept sees "not stopping", the destructor drains,
+      // accept then pushes a thread into a vector that is about to be destroyed.
       const std::lock_guard<std::mutex> lock(mutex_);
+      stopping_.store(true);
       workers.swap(workers_);
     }
     for (auto & worker : workers) {
@@ -162,6 +176,9 @@ private:
   std::atomic<int> cancelled_{0};
   std::atomic<uint8_t> code_{ResultCode::SUCCESS};
   std::atomic<bool> holding_{false};
+  //: Atomic because the worker threads poll it without the lock, and WRITTEN
+  //: under `mutex_` because the accepted-goal callback reads it under the lock
+  //: that also guards `workers_` — the two decisions have to be one.
   std::atomic<bool> stopping_{false};
   std::mutex mutex_;
   std::vector<std::thread> workers_;
@@ -237,6 +254,8 @@ int FakeArm::detect_goals() const {return servers_->detect.accepted();}
 int FakeArm::detect_cancellations() const {return servers_->detect.cancelled();}
 
 void FakeArm::fail_pick_with(uint8_t code) {servers_->pick.set_code(code);}
+
+void FakeArm::fail_move_to_with(uint8_t code) {servers_->move_to.set_code(code);}
 
 void FakeArm::hold_detect(bool holding) {servers_->detect.hold(holding);}
 

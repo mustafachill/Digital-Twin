@@ -270,6 +270,47 @@ def test_the_fault_branch_consults_no_policy_because_it_is_downstream_of_one() -
     assert POLICY_LEAF not in _generated_fault_branch()
 
 
+def test_the_tick_loop_is_guarded_against_a_leaf_that_throws() -> None:
+    """Returning is not the only way out of a leaf.
+
+    The fault branch's rule is about statuses only. `line_fault.hpp` says no leaf
+    in it may return `FAILURE`, because a `FAILURE` ends the coordinator's tick
+    loop and reinstates the process exit ADR-0038 removes. That rule is necessary
+    and not sufficient: an exception thrown out of a `tick()` walks past every
+    status it is about, and `StopAll` calls `publish()` once per belt, which can
+    throw `RCLError`. Out of `main` an uncaught one is `std::terminate` — a signal
+    death, with nothing halted, no goal cancelled and an exit status that says
+    nothing, which is strictly worse than the exit that was removed.
+
+    Read as source text rather than driven, and that is a real limit on what this
+    proves: it asserts the guard is present, not that it behaves. The tick loop
+    lives in `main`, which no harness in this package can enter, so the behaviour
+    is unasserted and this is what stops the guard being deleted silently.
+    """
+    configured = os.environ.get("CITE_LINE_ORCHESTRATOR_SRC")
+    assert configured, (
+        "CITE_LINE_ORCHESTRATOR_SRC is unset. CMakeLists.txt sets it for this test, so "
+        "run it through ./scripts/test rather than invoking pytest on this file directly"
+    )
+    source = Path(configured).read_text()
+    loop = source.find("while (rclcpp::ok() && outcome == BT::NodeStatus::RUNNING)")
+    assert loop != -1, "the tick loop is no longer where this test can find it"
+
+    before = source[:loop]
+    guard = before.rfind("try {")
+    assert guard != -1, (
+        "the tick loop is not inside a try block, so an exception out of a leaf "
+        "terminates the process instead of halting the tree and exiting 1"
+    )
+    assert "catch" not in before[guard:], (
+        "the last try block before the tick loop is already closed, so the loop is "
+        "outside it and an exception out of a leaf still terminates the process"
+    )
+    assert "catch (const std::exception &" in source[loop:], (
+        "nothing catches what a leaf throws out of the tick loop"
+    )
+
+
 def test_the_nominal_cycle_still_clears_the_arm_before_it_works() -> None:
     # The other half of the change above: removing `MoveToHome` from the recover
     # branch is only safe because the nominal branch opens with it.

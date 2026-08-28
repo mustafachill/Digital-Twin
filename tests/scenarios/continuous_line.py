@@ -1175,6 +1175,24 @@ class TestCleanShutdown(unittest.TestCase):
         )
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
+        """No process of ours died in a way we cannot account for.
+
+        `line_orchestrator`'s 1 IS NOT ADDED TO THE ALLOWLIST, and that is a
+        decision rather than an oversight (ADR-0038). A run in which the line
+        stopped now returns 1 from a coordinator that stayed alive, so this check
+        fails on it — a second and weaker report of a failure
+        `_fail_if_the_line_has_stopped` has already made in flight, with the
+        station and the reason named. Weaker, but not wrong: what it reports is a
+        run that really did fail, and allowing 1 here would make this check accept
+        a coordinator that failed for any reason at all, which is the one thing it
+        is for.
+
+        SO IT IS NOT PART OF THE TEARDOWN-FLAKE ACCOUNTING in CLAUDE.md §2. Those
+        are processes dying in ways nothing explains; this is a process reporting
+        a failure the scenario has already reported. If it starts to look like
+        noise, the fix is that the in-flight check ends the run before teardown,
+        not a wider allowlist here.
+        """
         allowed = [0, launch_testing.asserts.EXIT_SIGINT]
         for info in proc_info:
             name = str(info.process_name)
