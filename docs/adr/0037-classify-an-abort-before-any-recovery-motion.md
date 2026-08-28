@@ -9,6 +9,12 @@
   and decision 8 was **wrong about the fixture** and is corrected below. The status stays
   `Proposed` until the branch merges — read "Corrections to this record" before treating any
   "will" here as a description of what was built.
+  **Amended 2026-08-27.** Correction 3's *decision* stands untouched; its *stated reason*
+  cited the process exit that [ADR-0038](0038-stop-the-line-without-ending-the-process.md)
+  replaces, and is restated in the section named "Amendment — 2026-08-27: correction 3's
+  stated reason, restated for the built fault branch", at the head of "Corrections to this
+  record". Nothing here was measured false, which is why this is an amendment and not a
+  correction.
 - **Date:** 2026-08-27
 - **Deciders:** Docs-writer agent, from findings raised independently by two agents while
   auditing the L4 recovery path after ADR-0036
@@ -710,6 +716,41 @@ Three things this record says are wrong or unstated, found while implementing it
 reviewing the implementation. They are corrected here rather than in the code, because in
 each case the code is right and this record is the copy that is out of date.
 
+### Amendment — 2026-08-27: correction 3's stated reason, restated for the built fault branch
+
+**This is an amendment, not a correction.** Nothing below was measured false. The decision in
+correction 3 — an escalating station keeps its claims — survives unchanged, and so does the
+premise it rests on. What is replaced is the *wording* of the reason, because it cites a
+mechanism that [ADR-0038](0038-stop-the-line-without-ending-the-process.md) changes, and a
+forward reference to a design becomes a description of a thing that exists.
+
+The premise is **preserved on purpose** by ADR-0038: the root `Parallel` still fails at
+`failure_count="1"`, still halts every sibling and so cancels their goals, and the fault
+branch then commands every belt to zero. Nothing runs alongside a blocked station either
+way. The reason now reads:
+
+> An escalating station keeps its claims because **the line stops around it** — the fault
+> branch holds every station and every belt — so the claim record stays true to where the arm
+> is standing, and starves nobody.
+
+**The conditional, which is what a future contributor will trip on.** If the line is ever
+allowed to keep other stations running past a block, **this decision does not survive.**
+There is one `ResourceArbiter`, stations share reach frames, and `Grant::QUEUED` is
+deliberately not a failure — `resource_arbiter.hpp:64-66` says *"A leaf that sees this
+returns RUNNING"* and `line_nodes.hpp:452-454` implements exactly that. A neighbour asking for
+a frame an escalated station still holds would therefore wait **silently and for ever**.
+Whoever proposes graceful degradation owes a replacement rule for what a blocked station does
+with its claims; reusing this one would be reusing a reason that has stopped being true.
+
+`line_station.xml:206-210` carries the pre-amendment wording verbatim. Correcting it is a
+code change and belongs with ADR-0038's implementation.
+
+**How this needed amending at all**, since it is the part that transfers: correction 3
+justified a decision by describing the mechanism that produced it *today*, rather than by
+naming the property the decision depends on. The property is "nothing else is running"; the
+mechanism was "the process exits". Tying a reason to a mechanism makes the reason stale the
+moment the mechanism is replaced, even when the decision is untouched.
+
 ### 1. `EXECUTION_FAILED` covers BOTH endpoints, not only the start
 
 Decision 2 narrows `EXECUTION_FAILED` to *"the command did not take effect and the arm did
@@ -795,6 +836,8 @@ this record exists to stop being made, about the same failure. Starving a neighb
 correct consequence and not a cost to work around, because an escalating station stops the
 line: its `FAILURE` fails the root `Parallel` today, and `L4-orchestration.md`'s designed
 `OnFault → StopAll → AwaitReset` stops it deliberately.
+**[Amended 2026-08-27 — see the Amendment section above. The decision stands; this reason is
+restated because ADR-0038 replaces the mechanism it cites.]**
 
 **This is not a protective measure.** `resource_arbiter.hpp` says of itself that it prevents
 deadlock and thrash and that relying on it for anything else is a defect. What is kept
