@@ -57,13 +57,33 @@
   any confirmation that a belt did what it was told: nothing publishes `ConveyorState`, so a
   belt that fails to stop or fails to restart is a stalled or a spilling line that L4 would
   not notice. The bridge carries a bare `std_msgs/Float64` each way.
-  **Also not built: the fault branch this document draws below.** The generated root tree is
-  a bare `Parallel` of station subtrees, so a station that escalates fails the root, ends the
-  tick loop and exits the process — which `simulation.launch.py`'s `_fatal_on_exit` turns
-  into a teardown of the whole cell, taking the evidence of the fault with it and leaving the
-  ADR-0037 reset service with no process to serve it. What is to be built instead, and why
-  resumption is gated on re-armability rather than on acknowledgement, is
-  [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md).
+  **Also built: the fault branch** ([ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md)).
+  The generated root tree was a bare `Parallel` of station subtrees, so a station that
+  escalated failed the root, ended the tick loop and exited the process — which
+  `simulation.launch.py`'s `_fatal_on_exit` turned into a teardown of the whole cell, taking
+  the evidence of the fault with it and leaving the ADR-0037 reset service with no process
+  to serve it. The root is now a plain `Fallback` over that unchanged `Parallel` and a fault
+  `Sequence` of `OnFault → StopAll → AwaitReset → AwaitReArm` in `line_fault.hpp`. No leaf in
+  it returns `FAILURE`, none takes a port, and none commands an arm; `StopAll` commands every
+  declared belt to zero, which is `ConveyorIndex::stop()`'s first production caller. A
+  latched fault still exits 1, so a run in which a station escalated still fails CI.
+  **NONE OF IT IS A PROTECTIVE MEASURE.** What stops an arm is the vendor controller's
+  torque limiting and the cell's physical guarding (charter §3.2). This is a state machine;
+  what it buys is that the coordinator is still there to be asked a question, and that it
+  stops commanding belts it has stopped supervising.
+  **What is proven about it, and what is not.** Ten tests: that a station's escalation
+  cancels a **sibling's** in-flight goal — the property `line_tree.hpp` had asserted in prose
+  since the root tree existed, and which nothing tested — that the root goes on returning
+  `RUNNING` afterwards, that the belts are put down, that the ADR-0037 reset is accepted on
+  its happy path (which had never been reachable), and that the line then does **not**
+  restart. Every one of them drives fake action servers that succeed because they are told
+  to, so they prove sequence, ownership and the stop. **They prove no motion.**
+  **The line still stalls after a failed grasp**, and that is not what this closed. A retry
+  returns a station to `AwaitTrigger` on a beam the part is already breaking, so no edge ever
+  comes — observed on a `continuous_line` run at this commit, where `arm_1`'s gripper reached
+  its commanded width with `stalled=false` and the station then waited out the scenario's
+  budget. ADR-0038 names that dead end and deliberately does not fix it: the resumption edge
+  is decision 5's other half and is a separate task.
 - **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [L3](L3-capabilities.md)
 
 ## Responsibility
@@ -123,14 +143,29 @@ One subtree per station, instantiated from L0 topology. **Keep trees shallow.** 
 nested tree is as hard to reason about as deeply nested conditionals, and the tooling does
 not save you.
 
-**The diagram above is the design, and only its `Parallel` of station subtrees is built.**
-The generated root is that `Parallel` and nothing else; `EmergencyHandling`, `OnFault`,
-`StopAll` and `AwaitReset` exist nowhere in the repository. What the fault branch is to
-contain, what "the line has stopped" means for each actuator, and why resumption is gated on
-re-armability rather than on the operator's acknowledgement are decided in
-[ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), which also records that
-`OnFault` is deliberately not adopted — the `Parallel`'s own `FAILURE` is the fault event.
-Read it before building any of these four; it is not restated here (P1).
+**The diagram above is the design, and the built shape differs from it in two ways.** The
+generated root is now a plain `Fallback` over that `Parallel` and a fault `Sequence` of
+`OnFault → StopAll → AwaitReset → AwaitReArm`
+([ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md)). `EmergencyHandling`
+does not exist and the nominal branch is not wrapped in a `Sequence` with a throughput
+monitor; throughput is accounted for in `LineMaintenance` instead. Read the ADR before
+touching any of the four leaves — what "the line has stopped" means for each actuator, and
+why resumption is gated on re-armability rather than on the operator's acknowledgement, are
+decided there and are not restated here (P1).
+
+**Two things in that ADR are not what was built, and the difference is the project owner's
+decision rather than the implementation's.** Decision 1 records `OnFault` as deliberately
+not adopted, on the grounds that the `Parallel`'s own `FAILURE` is the fault event; it is
+built, because the fault branch needs something to latch the station, the `ResultCode`, the
+reason and the time for the coordinator's exit status — the tick loop no longer carries that
+fact — and to settle the ledger before a handoff clock can expire through the fault and
+re-block a station an operator has already reset. Decision 1's fourth leaf, `AwaitReArm`,
+comes from decision 3. The ADR's own text on both points has not been amended.
+
+**What is deliberately absent** is the resumption edge: `AwaitReArm` never returns `SUCCESS`
+and nothing wraps the root `Fallback` in a `<Repeat>`. They land together or not at all
+(decision 5), and a test asserts the `Repeat`'s absence so that half of it cannot arrive on
+its own.
 
 ### Handoff is a negotiation with an owner
 
@@ -142,7 +177,12 @@ The replacement rules:
 1. **A work-piece has exactly one owner at any instant.** Ownership transfers atomically.
 2. **Both parties must confirm** before physical transfer begins.
 3. **A timeout has a defined outcome**, not merely an expiry: the upstream robot retains
-   ownership and the line reports a blocked station.
+   ownership, and the station's own tree reports what that means for it. The maintenance
+   pass that expires the handoff no longer writes the station's state — `STATE_BLOCKED` has
+   exactly one author, which is the station's tree (ADR-0038 decision 4). It got one because
+   the expiry window spans a `PlaceAt`, so the second author could report a station blocked
+   while its arm was placing, and the operator reset would accept a reset for it and destroy
+   the reason mid-motion.
 4. **A handoff is testable in isolation** in a scenario test.
 
 ### Shared workspace arbitration is authoritative
