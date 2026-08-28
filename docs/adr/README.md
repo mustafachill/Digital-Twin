@@ -130,3 +130,4 @@ not rewritten either.
 | [0036](0036-execution-side-trajectory-tolerances.md) | Detect a mistracked trajectory at execution, with tolerances declared in L0 | Proposed (corrected 2026-08-27) |
 | [0037](0037-classify-an-abort-before-any-recovery-motion.md) | Classify an execution abort before any recovery motion is dispatched | Accepted (amended 2026-08-27) |
 | [0038](0038-stop-the-line-without-ending-the-process.md) | Stop the line without ending the process, and gate resumption on re-armability | Proposed (amended 2026-08-27) |
+| [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28) |

@@ -458,6 +458,43 @@ inline LinePlan plan_line(const cite_interfaces::msg::LineTopology & topology)
     plan.refusals.push_back("the topology declares no transfer station, so nothing acts");
   }
 
+  // ONE BELT FEEDS AT MOST ONE STATION (ADR-0039 correction 4). Everything that
+  // indexes a belt assumes this and nothing checked it.
+  //
+  // `ConveyorIndex::index_on` returns SILENTLY when a belt is already indexed, so
+  // under a shared belt the second station's trigger would stop nothing. Two
+  // consequences, and the second is the one that made this worth two lines: that
+  // station would pick from a belt still running, and `stalled_stations` compares
+  // its per-topic `consumed` against the belt's `stop_edges` — a count that would
+  // never move for it. Condition 4 would never suppress, so the line would report
+  // STALLED continuously, and `continuous_line` now ABORTS on that. A sustained
+  // false positive with a misleading reason is worse than the silence it replaced.
+  //
+  // A REFUSAL RATHER THAN A RULE REWRITE, because it is a property of the plan and
+  // is answerable here, before the first tick — the same shape as the drive check
+  // in `line_orchestrator.cpp`. Today's model cannot express it, which is why this
+  // is proportionate: it stops a topology that would be misreported rather than
+  // widening a predicate for a case that does not exist. The neighbouring
+  // shared-TRIGGER case is deliberately NOT refused here; which station a consumed
+  // edge belonged to is not a question this plan can answer.
+  std::map<std::string, std::string> belt_fed_station;
+  for (const auto & station : plan.stations) {
+    if (station.inbound_via_asset_id.empty()) {
+      continue;
+    }
+    const auto claimed = belt_fed_station.find(station.inbound_via_asset_id);
+    if (claimed == belt_fed_station.end()) {
+      belt_fed_station[station.inbound_via_asset_id] = station.id;
+      continue;
+    }
+    plan.refusals.push_back(
+      "stations '" + claimed->second + "' and '" + station.id + "' are both fed by belt '" +
+      station.inbound_via_asset_id +
+      "'. A belt is indexed to a standstill on one station's sensor edge and started again by "
+      "that station's own handoff, so the second station would pick from a belt still running "
+      "and would be reported as unable to be triggered for as long as the line ran");
+  }
+
   // Resources, declared from the model rather than from a list in this file.
   //
   // Two kinds, each with its own kind of claimant, and the difference is worth

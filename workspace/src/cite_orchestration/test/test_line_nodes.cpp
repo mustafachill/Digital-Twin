@@ -47,6 +47,7 @@
 // is evidence for it.
 
 #include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -115,6 +116,11 @@ constexpr char kStateTopic[] = "/line_nodes_test/line/state";
 constexpr char kResetService[] = "/line_nodes_test/line/reset_station";
 constexpr char kBeltCommand[] = "/line_nodes_test/conveyor_fixture/command";
 constexpr double kBeltSpeed = 0.15;
+//: The stall detector's own beam, belt and state topic (ADR-0039). Separate from
+//: the running line's, so neither fixture can be reading the other's traffic.
+constexpr char kStallBeam[] = "/line_nodes_test/stall/beam/detection";
+constexpr char kStallBeltCommand[] = "/line_nodes_test/stall/conveyor_fixture/command";
+constexpr char kStallStateTopic[] = "/line_nodes_test/stall/line/state";
 
 StationTopology station(
   const std::string & id, uint8_t type, const std::string & actor = "",
@@ -169,6 +175,22 @@ LineTopology two_station_line()
   return topology;
 }
 
+/// The same line, sensing on its own beam.
+///
+/// `StalledLine` below drives the beam directly and must not have `RunningLine`'s
+/// edges land in it. The topology is otherwise untouched: what the rule is asked
+/// about is the SHAPE of the line, not the names in it.
+LineTopology stall_line()
+{
+  LineTopology topology = two_station_line();
+  for (auto & entry : topology.stations) {
+    if (!entry.trigger_topic.empty()) {
+      entry.trigger_topic = kStallBeam;
+    }
+  }
+  return topology;
+}
+
 SkillActionsByAsset actions_for(const std::vector<std::string> & assets)
 {
   SkillActionsByAsset actions;
@@ -202,6 +224,14 @@ protected:
       [this](std_msgs::msg::Float64::SharedPtr message) {
         const std::lock_guard<std::mutex> lock(belt_mutex_);
         belt_setpoints_.push_back(message->data);
+      });
+    // What the line says about itself, read back off the topic rather than composed
+    // here — the only place the rest of the system can see it.
+    states_ = node_->create_subscription<cite_interfaces::msg::LineState>(
+      kStateTopic, cite::qos::state(),
+      [this](cite_interfaces::msg::LineState::SharedPtr message) {
+        const std::lock_guard<std::mutex> lock(states_mutex_);
+        line_states_.push_back(*message);
       });
 
     executor_.add_node(node_);
@@ -322,6 +352,9 @@ protected:
       }
       const auto status = tree_->tickOnce();
       maintenance_->run();
+      if (report_every_tick_) {
+        report_the_line();
+      }
       if (conveyor_running_) {
         carry_on_conveyor();
       }
@@ -332,6 +365,39 @@ protected:
       std::this_thread::sleep_for(2ms);
     }
     return done();
+  }
+
+  /// Ask the line what it is, exactly where the coordinator asks it.
+  ///
+  /// `line_orchestrator`'s tick loop runs `tickOnce()`, then `maintenance.run()`,
+  /// then `maintenance.publish()`, all three inside one `lock_guard` on the tick
+  /// mutex. This is called from the same place in `run_until` for the same reason:
+  /// what a stall detector reports depends entirely on WHEN it is asked, so asking
+  /// it anywhere else would prove something about a schedule this coordinator does
+  /// not have.
+  ///
+  /// TWO SAMPLES, AND THE SYNCHRONOUS ONE IS THE ASSERTION. `stalled_stations` is
+  /// read directly because that is deterministic — every tick is sampled, nothing is
+  /// dropped, and a single false positive anywhere in the run is recorded. The
+  /// published `LineState` is collected too, because the precedence in `publish()`
+  /// is a second thing that could be wrong, but the STATE profile is `KeepLast(10)`
+  /// and a tick loop outruns a subscriber, so an absence there proves less. Said
+  /// plainly rather than left for a reader to assume the weaker check is the strong
+  /// one.
+  void report_the_line()
+  {
+    for (const auto & refusal :
+      cite_orchestration::stalled_stations(*line_.stations, line_.conveyors, line_.triggers))
+    {
+      stalls_sampled_.push_back(refusal);
+    }
+    maintenance_->publish();
+  }
+
+  std::vector<cite_interfaces::msg::LineState> reported_states() const
+  {
+    const std::lock_guard<std::mutex> lock(states_mutex_);
+    return line_states_;
   }
 
   /// Record who owns the first work-piece, every tick.
@@ -480,6 +546,16 @@ protected:
   std::set<std::string> announced_;
   bool conveyor_running_{false};
   int ticks_with_more_than_one_piece_{0};
+  //: Opt-in, like `conveyor_running_`. Publishing a `LineState` on every tick of
+  //: every test would be a cost the other tests do not need, and only one of them
+  //: is about what the line says while a part is arriving.
+  bool report_every_tick_{false};
+  rclcpp::Subscription<cite_interfaces::msg::LineState>::SharedPtr states_;
+  mutable std::mutex states_mutex_;
+  std::vector<cite_interfaces::msg::LineState> line_states_;
+  //: Every stall reason the predicate produced, at the coordinator's own sampling
+  //: point, across the whole run. Empty is the assertion.
+  std::vector<std::string> stalls_sampled_;
 };
 
 TEST_F(RunningLine, AWorkpieceIsAdmittedOnceAtTheStationFedByTheSource)
@@ -648,6 +724,87 @@ TEST_F(RunningLine, TheBeltStopsOnTheSensorEdgeAndRunsAgainOnTheCompletedHandoff
     EXPECT_TRUE(setpoint == 0.0 || setpoint == kBeltSpeed)
       << "the belt was commanded to " << setpoint
       << " m/s, which is neither a standstill nor its installed speed";
+  }
+}
+
+TEST_F(RunningLine, ALineIsNeverReportedStalledWhileAPartIsArriving)
+{
+  // THE OTHER LEG OF THE NEGATIVE DIRECTION, AND THE ONLY TEST THAT DRIVES IT.
+  //
+  // ADR-0039's condition 4 closes `edge arrives` -> `station takes it`, and every
+  // `StalledLine` case below is about that leg — each of them calls `take()`
+  // directly and writes station state by hand. NOTHING there exercises the second
+  // leg: `station takes it` -> `SetStationState` writes `WORKING`. In that interval
+  // a perfectly healthy station satisfies all four conditions at once — edge
+  // consumed, inbound belt still stopped, state still `WAITING` — and the counters
+  // do not save it.
+  //
+  // What saves it is an ambient invariant that no leaf, no tree and no comment used
+  // to state: `take()` and `publish()` are both on the tick thread with `publish()`
+  // after `tickOnce()` in the same critical section, and BT.CPP advances from
+  // `AwaitTrigger` to `SetStationState` within one tick. A `StatefulActionNode`
+  // inserted between the two leaves, a second `take()` caller or `publish()` on a
+  // timer breaks it — and then this predicate is a FALSE POSITIVE ON EVERY ARRIVAL,
+  // which `continuous_line` now aborts on. A refactor that does any of those
+  // compiles, passes every other test in this file, and fails here.
+  //
+  // MEASURED RATHER THAN ASSERTED, 2026-08-28, by mutating and re-running:
+  //   * `<Sequence name="nominal">` -> `<AsyncSequence>` in the shipped XML: 36/36
+  //     still passed. Setting `asynch_` alone does not make BT.CPP 4.9.0 yield
+  //     between two synchronous children, so that refactor is NOT one this breaks
+  //     on — the prediction from reading the library was wrong the safe way.
+  //   * `AwaitTrigger` holding the consumed edge and returning SUCCESS one tick
+  //     later: 35 passed, this one failed, on both of its assertions. That is the
+  //     hazard, and this is the only test in the package that sees it.
+  //
+  // ONE LEG OF THE INVARIANT IS REPRODUCED HERE RATHER THAN ASSERTED. `publish()`
+  // following `tickOnce()` on the tick thread lives in `line_orchestrator.cpp`'s
+  // `main`, which no unit test can drive; `report_the_line()` arranges it the way
+  // the coordinator arranges it. So moving `publish()` onto a timer IN THE
+  // COORDINATOR would not fail here. `test_recovery_ordering.py` is where that leg
+  // is held, by reading the source text — the same treatment the tick loop's
+  // exception guard already gets, and for the same reason.
+  //
+  // So this drives the SHIPPED XML through real arrivals — a real beam, a real
+  // `TriggerWatch`, the real `ConveyorIndex`, the real `LineMaintenance` — and asks
+  // the question exactly where the coordinator asks it.
+  line_.conveyors->run_all();  // as `line_orchestrator` does, before its first tick
+  conveyor_running_ = true;
+  report_every_tick_ = true;
+
+  // More than one piece, because one arrival could pass by luck of where the tick
+  // boundary fell. Each piece crosses the belt-fed station once, so this is several
+  // independent passes through the interval under test.
+  ASSERT_TRUE(run_until([this] {return line_.registry->completed() >= 2;}, 12000))
+    << "the line completed " << line_.registry->completed()
+    << " work-piece(s), so it never carried a part through the arrival this is about";
+
+  // Belt-and-braces on the premise: a run in which the belt was never stopped would
+  // pass the assertion below without ever entering the state it is about.
+  EXPECT_TRUE(belt_stopped_then_ran())
+    << "the belt was never stopped and started again, so no arrival was indexed and "
+       "conditions 1-3 were never simultaneously true";
+
+  EXPECT_TRUE(stalls_sampled_.empty())
+    << "the line was reported stalled " << stalls_sampled_.size()
+    << " time(s) while parts were arriving normally, first: "
+    << (stalls_sampled_.empty() ? std::string() : stalls_sampled_.front())
+    << ". Condition 4 closes the arrival window; what closes the window between a "
+       "station taking its edge and SetStationState writing WORKING is that both "
+       "happen on the tick thread inside one tickOnce(). Check whether a node between "
+       "AwaitTrigger and SetStationState now returns RUNNING, whether the Sequence "
+       "became asynchronous, or whether publish() moved off the tick thread";
+
+  // And the message the rest of the system reads says the same. Weaker than the
+  // sample above — the STATE profile is KeepLast(10) and this loop outruns a
+  // subscriber, so some publications are dropped — which is why it is the second
+  // assertion and not the first.
+  const auto states = reported_states();
+  ASSERT_FALSE(states.empty()) << "no LineState was ever delivered, so this half checks nothing";
+  for (const auto & message : states) {
+    EXPECT_NE(message.state, cite_interfaces::msg::LineState::STATE_STALLED)
+      << "a healthy arrival was published as STATE_STALLED, which continuous_line aborts on";
+    EXPECT_TRUE(message.stall_reasons.empty());
   }
 }
 
@@ -1441,6 +1598,360 @@ TEST_F(RecoveryLeaf, AFreshFailureAfterAConsumedOneIsStillTheOneActedOn)
   EXPECT_EQ(recover(), BT::NodeStatus::FAILURE);
   EXPECT_EQ(station().state, cite_interfaces::msg::StationState::STATE_FAULTED)
     << "a refusal the policy must never treat as a transient did not reach it";
+}
+
+/// A line that is running, and a line that only reports that it is (ADR-0039).
+///
+/// THE DEFECT, OBSERVED RATHER THAN PREDICTED. A work-piece fails the friction
+/// grasp; the station retries; its `Repeat` returns it to `AwaitTrigger` on a beam
+/// the part is already breaking, so no edge can ever arrive. The belt that would
+/// bring another part was stopped by that same edge and is started again only by
+/// `ResumeBelt`, reachable only after the trigger that will not come. And a line
+/// whose stations are all waiting published `STATE_RUNNING`, for ever.
+///
+/// IT DRIVES THE REAL THINGS. A real `ConveyorIndex` with a real drive, a real
+/// `TriggerWatch` on a real subscription, a real beam publisher, and the real
+/// `LineMaintenance` the coordinator runs — read back off the `LineState` topic,
+/// which is the only place the rest of the system can see what the line says about
+/// itself. A test that composed the message itself would be asserting that two
+/// copies of the precedence agree.
+///
+/// WHAT THE FIXTURE STANDS IN FOR, and only this: the one call `AwaitTrigger` makes
+/// to `TriggerWatch::take`. `RunningLine` above proves the leaf makes it; this
+/// controls WHEN, because the whole question is what the line reports in the
+/// interval between a part arriving and a station taking it.
+class StalledLine : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    node_ = std::make_shared<rclcpp::Node>("stalled_line_test");
+    beam_ = node_->create_publisher<DetectionEvent>(kStallBeam, cite::qos::event());
+    states_ = node_->create_subscription<cite_interfaces::msg::LineState>(
+      kStallStateTopic, cite::qos::state(),
+      [this](cite_interfaces::msg::LineState::SharedPtr message) {
+        const std::lock_guard<std::mutex> lock(states_mutex_);
+        line_states_.push_back(*message);
+      });
+    executor_.add_node(node_);
+    spinner_ = std::thread([this]() {executor_.spin();});
+
+    plan_ = cite_orchestration::plan_line(stall_line());
+    ASSERT_TRUE(plan_.usable()) << (plan_.refusals.empty() ? "" : plan_.refusals.front());
+
+    line_.node = node_;
+    line_.registry = std::make_shared<WorkpieceRegistry>();
+    line_.ledger = std::make_shared<HandoffLedger>();
+    line_.arbiter = std::make_shared<ResourceArbiter>();
+    line_.triggers = std::make_shared<TriggerWatch>(node_);
+    line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    line_.fault = std::make_shared<LineFault>();
+    line_.handoff_timeout = rclcpp::Duration::from_seconds(30.0);
+    line_.retry_budget = 1;
+
+    ConveyorDrivesByAsset drives;
+    drives["conveyor_fixture"] = ConveyorDrive{kStallBeltCommand, kBeltSpeed};
+    line_.conveyors = std::make_shared<ConveyorIndex>(node_, drives);
+
+    // Wired exactly as `line_orchestrator` wires it. Nothing below names a station
+    // or a belt: both come out of the plan, which came out of the topology.
+    for (const auto & entry : plan_.stations) {
+      StationRuntime runtime;
+      runtime.capacity = entry.capacity;
+      runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+      runtime.trigger_topic = entry.trigger_topic;
+      runtime.inbound_belt = entry.inbound_via_asset_id;
+      (*line_.stations)[entry.id] = runtime;
+      line_.conveyors->index_on(
+        entry.trigger_topic, entry.trigger_detection_state, entry.inbound_via_asset_id);
+      // `AwaitTrigger::onStart` does this in the running line. There is no tree
+      // here, so the fixture opens the subscription the leaf would have opened.
+      line_.triggers->watch(entry.trigger_topic);
+    }
+
+    maintenance_ = std::make_unique<LineMaintenance>(line_, plan_, kStallStateTopic);
+    ASSERT_TRUE(wait_for([this]() {return states_->get_publisher_count() > 0;}))
+      << "the state publisher and this test's subscriber never matched, so nothing "
+      "below could have read a LineState at all";
+
+    // The belts start, once, before anything else happens — as the coordinator
+    // starts them before its first tick. Without it every station reads as a belt
+    // that has never been commanded, which is a different refusal.
+    line_.conveyors->run_all();
+  }
+
+  void TearDown() override
+  {
+    executor_.cancel();
+    if (spinner_.joinable()) {
+      spinner_.join();
+    }
+  }
+
+  /// Poll until `done` holds. A failure deadline on a test's own clock (P4);
+  /// nothing under test is sequenced by it.
+  static bool wait_for(const std::function<bool()> & done)
+  {
+    const auto end = std::chrono::steady_clock::now() + 10s;
+    while (std::chrono::steady_clock::now() < end) {
+      if (done()) {
+        return true;
+      }
+      std::this_thread::sleep_for(2ms);
+    }
+    return done();
+  }
+
+  /// The station this line's rule can refuse on: a trigger and an inbound belt.
+  StationRuntime & belt_fed() {return (*line_.stations)["station_two"];}
+
+  /// Break the beam, and wait until the belt has been stopped by it.
+  ///
+  /// THE WAIT IS ON THE STANDSTILL AND THE ASSERTION IS ON THE COUNT, and swapping
+  /// them is a flake this helper used to have. `ConveyorIndex` increments
+  /// `stop_edges` and records the standstill in TWO critical sections, the count
+  /// first, so the only guarantee is one-directional: a reader that sees the belt
+  /// stopped has seen the edge counted, and a reader that sees the count has not
+  /// necessarily seen the standstill. This waited on the count and then asserted the
+  /// standstill — the unguaranteed direction — which the ordering it exists to prove
+  /// is exactly what made possible (ADR-0039 correction 1). Waiting on the later
+  /// write and asserting the earlier one is deterministic AND is the assertion.
+  ///
+  /// Not a duration, and nothing under test is sequenced by it: the belt is at its
+  /// installed speed when this is called, so a commanded standstill is this edge's.
+  /// Whether the STATION has learned of the edge is deliberately not waited for —
+  /// that interval is what one of the tests below is about.
+  void break_the_beam()
+  {
+    const uint64_t before = line_.conveyors->stop_edges("conveyor_fixture");
+    DetectionEvent event;
+    event.header.stamp = node_->get_clock()->now();
+    event.asset_id = "beam_fixture";
+    event.previous_state = DetectionEvent::STATE_CLEAR;
+    event.state = DetectionEvent::STATE_BLOCKED;
+    beam_->publish(event);
+    ASSERT_TRUE(
+      wait_for(
+        [this]() {
+          return line_.conveyors->commanded("conveyor_fixture").value_or(-1.0) == 0.0;
+        }))
+      << "the belt was never stopped by the beam, so this test proves nothing about "
+      "what happens after it is";
+    EXPECT_GT(line_.conveyors->stop_edges("conveyor_fixture"), before)
+      << "the belt was recorded at a standstill without the edge that stopped it being "
+      "counted. That is the ordering ADR-0039 condition 4 rests on, reversed: every "
+      "normal arrival would then read as a station that can never be triggered again";
+  }
+
+  /// The one call `AwaitTrigger` makes. False when no edge ever arrived.
+  bool take_the_edge()
+  {
+    return wait_for(
+      [this]() {
+        return line_.triggers->take(kStallBeam, DetectionEvent::STATE_BLOCKED).has_value();
+      });
+  }
+
+  /// Publish one `LineState` and read it back off the topic.
+  cite_interfaces::msg::LineState reported()
+  {
+    {
+      const std::lock_guard<std::mutex> lock(states_mutex_);
+      line_states_.clear();
+    }
+    maintenance_->publish();
+    EXPECT_TRUE(
+      wait_for(
+        [this]() {
+          const std::lock_guard<std::mutex> lock(states_mutex_);
+          return !line_states_.empty();
+        }))
+      << "no LineState arrived after publish()";
+    const std::lock_guard<std::mutex> lock(states_mutex_);
+    return line_states_.empty() ? cite_interfaces::msg::LineState{} : line_states_.back();
+  }
+
+  /// The rule, asked the way `LineMaintenance` asks it.
+  std::vector<std::string> stalled() const
+  {
+    return cite_orchestration::stalled_stations(
+      *line_.stations, line_.conveyors, line_.triggers);
+  }
+
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<DetectionEvent>::SharedPtr beam_;
+  rclcpp::Subscription<cite_interfaces::msg::LineState>::SharedPtr states_;
+  mutable std::mutex states_mutex_;
+  std::vector<cite_interfaces::msg::LineState> line_states_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spinner_;
+  LinePlan plan_;
+  LineContext line_;
+  std::unique_ptr<LineMaintenance> maintenance_;
+};
+
+TEST_F(StalledLine, AStationWaitingForAPartThatIsStillComingIsNotStalled)
+{
+  // THE NEGATIVE DIRECTION, AND IT IS THE ONE THAT MATTERS. Get this wrong and the
+  // signal is noise within a day: every station on this line spends most of its
+  // life exactly here, waiting on a beam with a running belt behind it.
+  EXPECT_TRUE(stalled().empty())
+    << "a station waiting for a part that is still coming was reported as one that "
+    "can never be triggered";
+
+  const auto message = reported();
+  EXPECT_EQ(message.state, cite_interfaces::msg::LineState::STATE_RUNNING);
+  EXPECT_TRUE(message.stall_reasons.empty());
+}
+
+TEST_F(StalledLine, AnArrivalInFlightIsNotAStall)
+{
+  // THE RACE THE COUNTERS EXIST FOR, made deterministic. The part has broken the
+  // beam, `ConveyorIndex` has stopped the belt, and the station has NOT yet taken
+  // the edge — which is true for a real interval of every normal arrival, because
+  // the station takes the edge on the TICK THREAD at `AwaitTrigger`, up to a tick
+  // period after the belt callback stopped the belt and longer while its subtree is
+  // elsewhere. (Not two subscriptions racing: both take the node's default
+  // MutuallyExclusive callback group and cannot overlap — ADR-0039 correction 2.
+  // The window is wider than a race, which makes condition 4 more necessary.) Every
+  // condition but the last is satisfied here, and reporting a stall on it would mean
+  // reporting one for every work-piece the line handles.
+  break_the_beam();
+  ASSERT_EQ(line_.conveyors->commanded("conveyor_fixture").value_or(-1.0), 0.0)
+    << "the belt was not at a standstill, so this is not the state under test";
+  ASSERT_EQ(line_.triggers->consumed(kStallBeam), 0u)
+    << "the station consumed the edge before the assertion, so the interval under "
+    "test was never entered";
+
+  EXPECT_TRUE(stalled().empty())
+    << "an arriving work-piece was reported as a station that can never be triggered";
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, AStationReturnedToATriggerNothingCanProduceIsReportedAndNotRunning)
+{
+  // THE DEFECT. The part arrived, the belt stopped, the station took the edge — and
+  // then the cycle failed and the retry put the station back at `AwaitTrigger` with
+  // the part still breaking the beam. No further edge can arrive, and nothing will
+  // start the belt.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge()) << "the station never received the edge";
+
+  // THE RETRY'S TRANSITION, DRIVEN RATHER THAN ASSUMED. This used to be a single
+  // `= STATE_WAITING`, which the fixture had already written in SetUp — so it read
+  // as driving the WORKING -> WAITING transition and drove nothing. The station goes
+  // WORKING when it takes the edge (`SetStationState state="2"`, the next leaf), and
+  // `RecoverFromFailure`'s retry branch puts it back to WAITING before the `Repeat`
+  // re-enters `AwaitTrigger`. Both writes are made here so the state under test is
+  // the one a retry actually leaves behind.
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_WORKING;
+  ASSERT_TRUE(stalled().empty())
+    << "a WORKING station was reported stalled, so the transition below proves nothing";
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_WAITING;
+
+  const auto refusals = stalled();
+  ASSERT_EQ(refusals.size(), 1u)
+    << "a station that can never be triggered again was not reported";
+  // The reason names the station and the belt, and it is derived rather than
+  // authored: neither string appears in this package's source.
+  EXPECT_NE(refusals.front().find("station_two"), std::string::npos) << refusals.front();
+  EXPECT_NE(refusals.front().find("conveyor_fixture"), std::string::npos)
+    << refusals.front();
+
+  const auto message = reported();
+  EXPECT_NE(message.state, cite_interfaces::msg::LineState::STATE_RUNNING)
+    << "the line reported itself healthy while no part could ever reach any station, "
+    "which is the whole of the defect";
+  EXPECT_EQ(message.state, cite_interfaces::msg::LineState::STATE_STALLED);
+  EXPECT_EQ(message.stall_reasons, refusals);
+
+  // IT COMMANDED NOTHING. The detector is a detector: the belt is still at the
+  // standstill the edge left it at, and no leaf, no plan and no gripper was touched.
+  EXPECT_EQ(line_.conveyors->commanded("conveyor_fixture").value_or(-1.0), 0.0)
+    << "something restarted the belt. That is the cheap fix ADR-0038 decision 5 "
+    "refuses: the retry's first physical act is Pick opening the gripper at the home "
+    "pose, dropping a part nothing has attached as an AttachedCollisionObject";
+}
+
+TEST_F(StalledLine, AWorkingStationHoldsItsOwnBeltStoppedAndIsNotStalled)
+{
+  // The other half of the negative direction, and the longest-lived one: a station
+  // holds its inbound belt stopped for its whole cycle, roughly two minutes, and
+  // starts it again itself at `ResumeBelt`. A rule that read the setpoint alone
+  // would report every station on the line, every cycle.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge());
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_WORKING;
+
+  EXPECT_TRUE(stalled().empty())
+    << "a station that is working, and will reach ResumeBelt, was reported stalled";
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, ABlockedStationStillOutranksAStall)
+{
+  // ADR-0038 decision 4 is not reopened by ADR-0039. `STATE_BLOCKED` keeps exactly
+  // one author — the station's own tree — so a stalled line whose station is also
+  // blocked reports BLOCKED, and the stall list stays empty rather than becoming a
+  // second route to the same value.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge());
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  belt_fed().blocked_reason = "the station's own tree said so";
+
+  const auto message = reported();
+  EXPECT_EQ(message.state, cite_interfaces::msg::LineState::STATE_BLOCKED);
+  EXPECT_TRUE(message.stall_reasons.empty())
+    << "a blocked line published stall reasons, so the two meanings are mixed on the "
+    "wire";
+  EXPECT_NE(
+    message.blocked_reason.find("the station's own tree said so"), std::string::npos);
+}
+
+TEST_F(StalledLine, ABeltThatIsRunningAgainClearsTheStallWithNothingRememberingTo)
+{
+  // ADR-0038 decision 3's self-clearing property, on this path too. The day a
+  // re-arm path exists it will start a belt, and this stops answering on its own
+  // because the setpoint it reads will not be a standstill. Nothing has to remember
+  // to delete a rule.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge());
+  ASSERT_FALSE(stalled().empty());
+
+  line_.conveyors->run(belt_fed().inbound_belt);
+
+  EXPECT_TRUE(stalled().empty());
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, ABeltNobodyHasEverCommandedIsItsOwnRefusal)
+{
+  // "Never commanded" and "commanded to a standstill" are different facts about the
+  // plant and `ConveyorIndex::commanded` keeps them apart on purpose. Both are
+  // stalls; they are diagnosed apart, so they are said apart.
+  ConveyorDrivesByAsset drives;
+  drives["conveyor_fixture"] = ConveyorDrive{kStallBeltCommand, kBeltSpeed};
+  const auto untouched = std::make_shared<ConveyorIndex>(node_, drives);
+
+  const auto refusals =
+    cite_orchestration::stalled_stations(*line_.stations, untouched, line_.triggers);
+  ASSERT_EQ(refusals.size(), 1u);
+  EXPECT_NE(refusals.front().find("never been commanded"), std::string::npos)
+    << "a belt nobody has spoken to was reported as a belt somebody stopped: "
+    << refusals.front();
+}
+
+TEST_F(StalledLine, AStationFedByATableIsSkippedByTheRuleRatherThanExemptedFromIt)
+{
+  // `station_one` has no inbound belt, so no belt can be the reason it cannot be
+  // triggered. It is skipped by the same condition that selects the others, and
+  // there is no name and no exception anywhere in the rule.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge());
+  for (const auto & refusal : stalled()) {
+    EXPECT_EQ(refusal.find("station_one"), std::string::npos)
+      << "a table-fed station was refused on a belt it does not have: " << refusal;
+  }
 }
 
 int main(int argc, char ** argv)

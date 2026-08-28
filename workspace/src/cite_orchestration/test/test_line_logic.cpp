@@ -795,6 +795,76 @@ TEST(LinePlanTest, AStationFedByABeltWithNoTriggerIsRefused)
   EXPECT_TRUE(named) << "the refusal does not name the belt that would never stop";
 }
 
+TEST(LinePlanTest, TwoStationsFedByOneBeltAreRefused)
+{
+  // ADR-0039 correction 4. Everything that indexes a belt assumes one belt feeds
+  // one station, and nothing checked it.
+  //
+  // `ConveyorIndex::index_on` returns SILENTLY for a belt already indexed, so the
+  // second station's trigger would stop nothing: it would pick from a running belt,
+  // and `stalled_stations` would compare its per-topic `consumed` against a
+  // `stop_edges` count that never moves for it. Condition 4 would never suppress,
+  // so the line would report STALLED CONTINUOUSLY — and `continuous_line` fails
+  // fast on STALLED, so a healthy line would end the run naming a station that is
+  // fine. A sustained false positive is worse than the silence it replaced.
+  //
+  // Refused where it is answerable: it is a property of the plan, so it is settled
+  // before the first tick rather than diagnosed from a wrong `LineState`.
+  LineTopology topology = cell_a_shaped();
+  for (auto & edge : topology.edges) {
+    if (edge.to_station_id == "station_transfer_3") {
+      // `station_transfer_2` is already fed by `conveyor_1`. Feed the next station
+      // from it as well, which today's model cannot express and a future one could.
+      edge.via_asset_id = "conveyor_1";
+    }
+  }
+
+  const LinePlan plan = cite_orchestration::plan_line(topology);
+  EXPECT_FALSE(plan.usable())
+    << "one belt feeding two stations was accepted, so the second station would pick "
+       "from a running belt and be reported unable to be triggered for the whole run";
+  ASSERT_FALSE(plan.refusals.empty());
+  bool named = false;
+  for (const auto & refusal : plan.refusals) {
+    named = named ||
+      (refusal.find("conveyor_1") != std::string::npos &&
+      refusal.find("station_transfer_2") != std::string::npos &&
+      refusal.find("station_transfer_3") != std::string::npos);
+  }
+  EXPECT_TRUE(named)
+    << "no refusal names the shared belt and both stations that would fight over it";
+}
+
+TEST(LinePlanTest, StationsFedByNoBeltAreNotAccusedOfSharingOne)
+{
+  // The negative direction of the rule above, and it is the one that rule can get
+  // wrong. "No inbound belt" is the EMPTY string, so two stations fed by something
+  // that does not carry SHARE it — and a uniqueness check written without the empty
+  // guard reports them as fighting over a belt that does not exist.
+  //
+  // `cell_a_shaped()` alone cannot show it: exactly one station is table-fed, so
+  // the empty key never collides. Clearing the carrier on the next edge produces
+  // the second one.
+  //
+  // THE PLAN IS STILL REFUSED, AND ON PURPOSE — that edge becomes a direct
+  // arm-to-arm handoff, which ADR-0031 refuses, and nothing here reopens that. So
+  // the assertion is on the CONTENT of the refusal list rather than on `usable()`:
+  // the shared-belt rule must add nothing to it. A test written against `usable()`
+  // would pass on the ADR-0031 refusal alone and prove nothing about this rule.
+  LineTopology topology = cell_a_shaped();
+  for (auto & edge : topology.edges) {
+    if (edge.to_station_id == "station_transfer_2") {
+      edge.via_asset_id.clear();
+    }
+  }
+
+  const LinePlan plan = cite_orchestration::plan_line(topology);
+  for (const auto & refusal : plan.refusals) {
+    EXPECT_EQ(refusal.find("are both fed by belt"), std::string::npos)
+      << "two stations fed by no belt were reported as sharing one: " << refusal;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plan to tree.
 // ---------------------------------------------------------------------------

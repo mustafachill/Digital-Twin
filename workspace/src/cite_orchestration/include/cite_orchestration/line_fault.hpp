@@ -112,57 +112,25 @@ inline std::vector<std::string> stations_holding_the_line(
 
 /// Why this line cannot be re-armed. Empty when nothing refuses.
 ///
-/// THE RULE, DERIVED AND NOT HARD-CODED (ADR-0038 decision 3): for every station
-/// that has a trigger topic and an inbound belt, if that belt's last commanded
-/// setpoint is a standstill, the line cannot be re-armed — because the station
-/// triggers on a beam BREAKING, and the only thing that can break its beam again
-/// is a part the stopped belt is not bringing.
+/// THE RULE IS `untriggerable_reason` (`line_nodes.hpp`), asked of every station.
+/// It used to be written out here, and it moved when a SECOND caller appeared:
+/// `LineMaintenance` asks the same question of a line that has NOT stopped
+/// (ADR-0039), and two copies of one sentence are two authors for one rule (P1).
+/// What is left here is the part that is this leaf's own — asking it of every
+/// station, on a line that has already stopped.
 ///
-/// Both halves are already data. The trigger topic and the inbound belt come from
-/// the topology by way of the plan; the setpoint is what `ConveyorIndex` last
-/// decided. Nothing here names a station, a belt or a speed.
-///
-/// IT CLEARS ITSELF. The day someone builds a path that re-arms a station — a
-/// belt restart that does not put a part on the floor, an operator jog that
-/// clears the pick point, a re-observation that lets a station start from where
-/// the part actually is — these refusals stop being produced on their own,
-/// because the setpoint read here will not be a standstill. Nothing has to
-/// remember to delete a rule.
-///
-/// A STATION FED BY A TABLE IS SKIPPED, and that is the rule working rather than
-/// an exception to it: nothing carries work to it, so no belt can be the reason it
-/// cannot be triggered. Today's model gives exactly one station that shape.
+/// TODAY IT ALWAYS REFUSES, and it refuses for a reason rather than by
+/// construction: `StopAll` has just commanded every belt to a standstill, so every
+/// belt-fed station's inbound belt reads zero. A station fed by a table is skipped,
+/// which is the rule working rather than an exception to it.
 inline std::vector<std::string> rearm_refusals(
   const std::map<std::string, StationRuntime> & stations,
   const std::shared_ptr<ConveyorIndex> & conveyors)
 {
   std::vector<std::string> refusals;
   for (const auto & [id, runtime] : stations) {
-    if (runtime.trigger_topic.empty() || runtime.inbound_belt.empty()) {
-      continue;
-    }
-    if (!conveyors) {
-      refusals.push_back(
-        "station '" + id + "' is fed by belt '" + runtime.inbound_belt +
-        "' and this line has no conveyor drives at all, so nothing can start it");
-      continue;
-    }
-    const auto setpoint = conveyors->commanded(runtime.inbound_belt);
-    if (!setpoint) {
-      // Never commanded is not the same fact as commanded to zero, and both are
-      // refusals. Said apart because they are diagnosed apart: one is a belt
-      // nobody has spoken to, the other is a belt somebody stopped.
-      refusals.push_back(
-        "station '" + id + "' waits on a break in beam '" + runtime.trigger_topic +
-        "', and belt '" + runtime.inbound_belt +
-        "' has never been commanded, so no part can arrive to break it");
-      continue;
-    }
-    if (*setpoint == 0.0) {
-      refusals.push_back(
-        "station '" + id + "' waits on a break in beam '" + runtime.trigger_topic +
-        "', and belt '" + runtime.inbound_belt +
-        "' is commanded to a standstill, so no part can arrive to break it");
+    if (const auto refusal = untriggerable_reason(id, runtime, conveyors)) {
+      refusals.push_back(*refusal);
     }
   }
   return refusals;

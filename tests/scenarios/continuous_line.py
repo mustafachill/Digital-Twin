@@ -436,6 +436,27 @@ class Fault(NamedTuple):
     reason: str
 
 
+#: The `LineState` values that mean no station will act again without a person.
+#:
+#: FAULTED and BLOCKED are ADR-0038's: the coordinator no longer exits when a
+#: station escalates, so a stopped line looks exactly like a slow one from out here
+#: unless the state is read.
+#:
+#: STALLED is ADR-0039's, and it is the one this scenario produced. A station that
+#: fails its grasp is retried onto a beam the part is already breaking, so no edge
+#: can ever arrive and the belt that would bring another part is stopped. Nothing
+#: escalates, so the two above never fire — the line used to report RUNNING and this
+#: scenario spent a full leg ceiling on it before accusing the milestone it happened
+#: to be waiting for.
+STOPPED_STATES = (LineState.STATE_BLOCKED, LineState.STATE_FAULTED, LineState.STATE_STALLED)
+
+STOPPED_STATE_NAMES = {
+    LineState.STATE_BLOCKED: "BLOCKED",
+    LineState.STATE_FAULTED: "FAULTED",
+    LineState.STATE_STALLED: "STALLED",
+}
+
+
 class Halt(NamedTuple):
     """The line as a whole reporting that it has stopped, and when."""
 
@@ -444,7 +465,7 @@ class Halt(NamedTuple):
     seconds: float
 
     def describe(self) -> str:
-        name = "FAULTED" if self.state == LineState.STATE_FAULTED else "BLOCKED"
+        name = STOPPED_STATE_NAMES.get(self.state, f"state={self.state}")
         return f"{name} at {self.seconds:.1f}s: {self.reason or 'no reason published'}"
 
 
@@ -529,13 +550,25 @@ class TestContinuousLine(unittest.TestCase):
     def _fail_if_the_line_has_stopped(self, what: str) -> None:
         """End the run now if the coordinator has published a stopped line.
 
-        BLOCKED and FAULTED both, because both mean the same thing to this
-        scenario: no station will act again without an operator, so nothing this
-        run is waiting for can happen. The distinction between them belongs to the
-        reset service, which decides what may be cleared and by whom.
+        BLOCKED, FAULTED and STALLED alike, because all three mean the same thing to
+        this scenario: no station will act again without a person, so nothing this
+        run is waiting for can happen. The distinctions between them belong
+        elsewhere — BLOCKED and FAULTED to the reset service, which decides what may
+        be cleared and by whom, and STALLED to nobody yet, because the re-arm path
+        that would clear one is deliberately not built (ADR-0038 decision 5).
         """
         if self._halt is None:
             return
+        if self._halt.state == LineState.STATE_STALLED:
+            self.fail(
+                f"the line stalled while waiting for {what}. {self._halt.describe()}\n"
+                "Nothing escalated and there is nothing for /cite/line/reset_station to "
+                "clear: a station was returned to a trigger nothing can produce, and the "
+                "belt that would carry it work is stopped (ADR-0039). The re-arm path "
+                "that would clear this is deliberately not built — see ADR-0038 "
+                "decision 5 before reaching for a belt restart, which drops the part the "
+                "gripper is still holding."
+            )
         self.fail(
             f"the line stopped while waiting for {what}. {self._halt.describe()}\n"
             "The coordinator is still running and still serving "
@@ -813,14 +846,20 @@ class TestContinuousLine(unittest.TestCase):
 
     def _on_line_state(self, message: LineState) -> None:
         self._line_states.append(message)
-        if self._halt is None and message.state in (
-            LineState.STATE_BLOCKED,
-            LineState.STATE_FAULTED,
-        ):
+        if self._halt is None and message.state in STOPPED_STATES:
             # The FIRST one. What stopped the line is what a person needs; what it
             # went on reporting afterwards is the same fact repeated several times
             # a second.
-            self._halt = Halt(message.state, message.blocked_reason, self._now())
+            #
+            # A stall carries its reasons in a different field, because it is a
+            # different fact: `blocked_reason` is what one station's tree said, and
+            # `stall_reasons` is what the line derived about stations whose trees
+            # have said nothing (ADR-0039). Both are prose for a person and neither
+            # is parsed.
+            reason = message.blocked_reason
+            if message.state == LineState.STATE_STALLED:
+                reason = "; ".join(message.stall_reasons) or "no reason published"
+            self._halt = Halt(message.state, reason, self._now())
         for station in message.stations:
             if station.state != StationState.STATE_FAULTED:
                 continue
@@ -1060,7 +1099,8 @@ class TestContinuousLine(unittest.TestCase):
                 f"workpieces_completed={last.workpieces_completed} (counted when the last "
                 "robot LET GO, not on arrival — see line_maintenance.hpp; context only, "
                 "never asserted on) "
-                f"blocked_reason={last.blocked_reason or 'none'}"
+                f"blocked_reason={last.blocked_reason or 'none'} "
+                f"stall_reasons={'; '.join(last.stall_reasons) or 'none'}"
             )
             lines += [
                 f"  station {s.station_id} ({s.actor_asset_id or 'no actor'}): "

@@ -77,6 +77,7 @@
 #ifndef CITE_ORCHESTRATION__CONVEYOR_INDEX_HPP_
 #define CITE_ORCHESTRATION__CONVEYOR_INDEX_HPP_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -262,6 +263,53 @@ public:
     return entry->second;
   }
 
+  /// How many sensor edges have stopped this belt.
+  ///
+  /// Monotonic, and it counts DECISIONS rather than transitions: `on_edge` commands
+  /// a standstill on every qualifying edge whether or not the belt was already
+  /// stopped, because this class cannot observe the plant and a cached "already
+  /// stopped" would be a belief rather than a fact. The count says the same thing
+  /// the command does.
+  ///
+  /// WHAT IT IS FOR, AND WHY THE ORDERING IN `on_edge` IS THE WHOLE OF IT
+  /// (ADR-0039). `LineMaintenance` asks whether a station is waiting on a trigger
+  /// nothing can produce, and "the belt that feeds it is stopped" is true for a few
+  /// milliseconds of EVERY normal arrival — the part breaks the beam, this class
+  /// stops the belt, and the station is still waiting until it takes the edge. What
+  /// separates the two is whether the station has consumed the edge that stopped the
+  /// belt, which is this count against `TriggerWatch::consumed`.
+  ///
+  /// So this is incremented BEFORE the standstill is recorded, and the guarantee that
+  /// buys is one-directional: any reader which sees the belt stopped also sees the edge
+  /// counted. The alternative ordering leaves a window in which a belt reads stopped and
+  /// no edge is recorded anywhere, and every normal arrival would fall into it.
+  ///
+  /// IT IS TWO CRITICAL SECTIONS AND NOT ONE, and this comment claimed otherwise until
+  /// 2026-08-28. `on_edge` increments under the lock, RELEASES it, and `command()` then
+  /// re-acquires it to write `commanded_`. So the intermediate state — edge counted, belt
+  /// not yet recorded as stopped — IS observable by a concurrent reader, and only the
+  /// converse is excluded. That is enough for the predicate, which reads the standstill
+  /// first and the count second; it is not enough for a caller that waits on the count
+  /// and then asserts the standstill, which is a race
+  /// (`test_line_nodes.cpp::StalledLine::break_the_beam` waits on the standstill for
+  /// exactly this reason).
+  ///
+  /// WHAT THE WINDOW ACTUALLY IS, because this comment had that wrong too. It is NOT two
+  /// subscription callbacks racing: `TriggerWatch` and this class both subscribe on the
+  /// same node with no callback group given, rclcpp puts both in the node's default group,
+  /// and a default group is `MutuallyExclusive` — so under the `MultiThreadedExecutor` the
+  /// two callbacks cannot run concurrently at all. The window is the gap between this
+  /// callback recording the standstill and the TICK THREAD next reaching `AwaitTrigger`,
+  /// which is up to `tick_period_ms` (50 by default) and longer whenever the station's
+  /// subtree is somewhere else in its cycle. That makes condition 4 MORE necessary than
+  /// the "milliseconds apart" sentence claimed, not less.
+  uint64_t stop_edges(const std::string & asset) const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto entry = stop_edges_.find(asset);
+    return entry == stop_edges_.end() ? 0u : entry->second;
+  }
+
   /// Every belt the model declared, in a stable order.
   std::vector<std::string> assets() const
   {
@@ -287,6 +335,13 @@ private:
       return;
     }
     for (const auto & asset : belts_for(topic, event.state)) {
+      {
+        // COUNTED BEFORE THE BELT IS STOPPED, and the order is the point — see
+        // `stop_edges()`. A reader that saw the standstill without the count would
+        // read every normal arrival as a station that can never be triggered again.
+        const std::lock_guard<std::mutex> lock(mutex_);
+        ++stop_edges_[asset];
+      }
       // A belt already stopped is commanded to stop again. That is a repeated
       // setpoint and not a state change, and it is cheaper than remembering a
       // state this node cannot observe: the command path has no confirmation,
@@ -376,6 +431,13 @@ private:
   //: "commanded to a standstill" are different, and only one of them is a
   //: decision.
   std::map<std::string, double> commanded_;
+  //: How many sensor edges have stopped each belt (ADR-0039). Written under this
+  //: lock and BEFORE `commanded_` is, but in a SEPARATE critical section — see
+  //: `stop_edges()`. So a reader that sees a belt stopped has seen the edge counted,
+  //: and a reader that sees the count has NOT necessarily seen the standstill.
+  //: Never reset: it is compared against another monotonic count, and a counter
+  //: somebody resets is a counter two readers disagree about.
+  std::map<std::string, uint64_t> stop_edges_;
 };
 
 }  // namespace cite_orchestration

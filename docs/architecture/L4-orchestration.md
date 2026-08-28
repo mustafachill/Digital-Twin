@@ -97,7 +97,32 @@
   its commanded width with `stalled=false` and the station then waited out the scenario's
   budget. ADR-0038 names that dead end and deliberately does not fix it: the resumption edge
   is decision 5's other half and is a separate task.
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [L3](L3-capabilities.md)
+  **Also built: the stall is now reported, for two of the three stations**
+  ([ADR-0039](../adr/0039-report-a-station-that-cannot-be-triggered.md)). The paragraph above
+  described the whole of it until 2026-08-28; the detection half is closed and the recovery
+  half is not, so read them apart. `LineState` gains `STATE_STALLED` and `string[]
+  stall_reasons`, and `LineMaintenance` publishes them when nothing is faulted or blocked and
+  a station is `IDLE` or `WAITING` on a trigger nothing can produce. The rule is the same
+  `untriggerable_reason` that `AwaitReArm` already applies, asked on the nominal path instead
+  of the fault path, so the two cannot answer differently and neither names an asset.
+  **`STATE_BLOCKED` keeps exactly one author** — ADR-0038 decision 4 is not reopened — and a
+  blocked line publishes no stall reasons. `continuous_line` fails fast on `STALLED` alongside
+  `BLOCKED` and `FAULTED`, so the run ends on the message naming the station and the belt
+  rather than on a 420 s leg ceiling accusing whichever milestone it was waiting for.
+  **IT COMMANDS NOTHING, AND A VISIBLE STALL IS NOT A FIXED STALL.** No belt is restarted,
+  nothing is planned, no gripper is touched, no station state is written. `AwaitReArm` still
+  keeps no `SUCCESS` edge; the line still dies, and now says so.
+  **Its blind spot is a station fed by a table, and that is one of the three.** The rule needs
+  a belt setpoint to read, and `station_transfer_1` has a trigger and no inbound belt — so the
+  same closed loop happens there and nothing reports it. What that station's failure would need
+  is a different fact (the beam's level rather than its edges, or a re-observation), which is a
+  separate decision ADR-0039 deliberately does not take. **Do not read this as closing the
+  "reports healthy, does nothing" class**; it closes it for two stations out of three.
+  Two supporting claims in ADR-0039 about *why* the predicate is safe were measured wrong on
+  2026-08-28 and are corrected in that record's Correction section — read it before changing
+  the predicate or the ordering in `conveyor_index.hpp`; the mechanism is there and is not
+  restated here (P1).
+- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [ADR-0039](../adr/0039-report-a-station-that-cannot-be-triggered.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 
