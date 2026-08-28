@@ -1,8 +1,15 @@
 # ADR-0040: Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand
 
-- **Status:** Proposed, 2026-08-28. Written before the implementation, which is the point
-  ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below was a commitment when it was
-  written; the section "What was measured on it" at the end is the only part written after.
+- **Status:** Proposed (corrected 2026-08-28), 2026-08-28. Written before the
+  implementation, which is the point ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below
+  was a commitment when it was written; the section "What was measured on it" at the end is
+  the only part written after.
+  **The decision stands and the implementation is unchanged.** Four supporting claims are
+  false or misleading — the mechanism that kills the velocity state, both unreachability
+  arguments in decision 2, and how one mutation row reads. See the section
+  "Correction — 2026-08-28: the velocity mechanism, two unreachability arguments, and how one
+  mutation row reads", immediately below. It stays `Proposed`: whether the charter records
+  this package is a user decision that has not been taken.
 - **Date:** 2026-08-28
 - **Deciders:** Coder agent, on the gap
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) records in its correction
@@ -15,6 +22,158 @@
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md),
   charter §4 (P1, P2, P4, P5, P6, P9)
+
+## Correction — 2026-08-28: the velocity mechanism, two unreachability arguments, and how one mutation row reads
+
+An architecture review and an independent reproduction went over this record after it was
+written. **The decision stands and not one line of the implementation changed.** Everything
+in "What was measured on it" reproduced — 21 packages, 9 ROS packages at 0 failures, six
+independent runs reading `0.000000000 rad/s` on every joint at the instant the result
+arrived, the instrument non-vacuous at 0.78-1.59 rad/s during the healthy motion, and all
+four mutation rows. What was wrong is the *reason* given in three places, and the way one
+measured row is presented. Four items follow; the last says how they survived.
+
+### 1. The generated arms do not declare a position-only command interface, and that is not why the velocity state is dead
+
+Context claims the velocity state is never written "with a position-only command interface —
+which is what every generated arm in this cell declares". Both halves are wrong.
+
+**The descriptions declare both.**
+`xarm_description/urdf/xarm5/xarm5.ros2_control.xacro` gives every joint a
+`<command_interface name="position">` *and* a `<command_interface name="velocity">` — lines
+31-38 for `joint1`, identically for the other four. The position-only declaration is in the
+**controller configuration**: `cite_generated/control/cell_a_arm_1_controllers.yaml` declares
+`command_interfaces: [position]` against `state_interfaces: [position, velocity]`.
+
+**The mechanism is not skipping.** Against `hardware_interface` 4.45.2,
+`generic_system.cpp:89-92` builds `skip_interfaces_` from the first
+`calculate_dynamics_ ? 3 : 1` entries of
+`standard_interfaces_ = {position, velocity, acceleration, effort}`. `calculate_dynamics_`
+defaults false, so **`skip_interfaces_ = {position}` and velocity is not skipped**. The
+loopback loop at line 500 tests membership at 502-507, does not `continue` for velocity, and
+because the description *does* declare a velocity command interface the `has_command` guard
+at 510 passes too — so `mirror_command_to_state` is called for velocity on every cycle.
+
+It writes nothing, and that is the real mechanism: **no controller ever writes the velocity
+command.** The JTC does not claim that interface, so the handle holds NaN, and
+`mirror_command_to_state` (the lambda at line 339) has an explicit NaN branch that returns
+without touching the state — `// NaN - do nothing. Command might not be set yet` at line 356.
+The velocity state therefore holds its initial value for the life of the process.
+
+**Same conclusion, different cause, and the difference is load-bearing.** As written, the
+record sends a future contributor to the description, where the problem is not. The
+condition that kills the channel is that **no controller claims the velocity command** — a
+controller-configuration property, reviewed in a different file from the one this record
+named. Adding `velocity` to any `command_interfaces:` list would revive the channel on plain
+mock hardware.
+
+**That would not defeat this fixture, and it is worth saying why rather than leaving a
+reader to assume either way.** `JointStopSystem::read` delegates to the base class and then
+overwrites the velocity state with its own first difference — deliberately last, so that it
+differentiates the clamped position — so a velocity command written by the base mirror is
+overwritten rather than obeyed. What such a change *would* silently alter is the Context
+argument above, that "sampling `/joint_states` velocity on the existing rig measures
+nothing", and any future rig built on plain `GenericSystem` that reads a velocity to decide
+something. The live instance of that hazard is the gripper's `stall_velocity_threshold`,
+which decides whether a part is held; it is now named in `cross-cutting-testing.md`'s list of
+what tests are not allowed to do.
+
+**And it is now measured rather than reasoned.** Plain `mock_components/GenericSystem`,
+commands **enabled**, no stops: the arm rotated the full 1.6 rad and finished at
+`+1.599999586` while the velocity channel read `0.000000 rad/s` across **1019 joint states**.
+That is the strongest evidence there is for decision 1's velocity requirement — the obvious
+way to answer question 2 would have returned "static" for a moving arm.
+
+### 2. The first unreachability argument is about the generator, not the model
+
+Decision 2 says the fixture's parameters "have no home in L0". The model already carries the
+field that repeals it.
+
+`model/schema/asset_instances.schema.json:191-218` gives `HardwareSelection` a free-form
+`params` map; `asset_type.schema.json`'s `HardwareBackend.instance_params` is its per-backend
+allowlist; `tools/cite_tools/validate/referential.py:237-243` already enforces one against
+the other; and `model/assets/types/robots/xarm5.yaml:90-92` **already declares
+`instance_params: [robot_ip, report_type]`** for the `real` backend, against Phase 2.
+
+What is true is narrower, and it belongs to the generator:
+`tools/cite_tools/generate/description.py:161` binds
+`instance.hardware.ros2_control_plugin` and nothing else, and `hardware.params` appears
+nowhere under `tools/cite_tools/generate/`. So the argument is a property of the
+**description generator**, one function away from being false — and the Phase 2 wiring that
+would falsify it is the reason `instance_params` exists at all.
+
+It is pinned now. `tools/tests/test_hardware_params_unbound.py` declares `hardware.params` on
+an arm and asserts the names and values reach no generated description, with the backend's
+own plugin string as a positive control proving the search is not blind. Phase 2 fails that
+test at the moment a reviewer needs to see it.
+
+### 3. The `BUILD_TESTING` argument is real in principle and inert in this repository
+
+Decision 2's second structural argument is correct about CMake and says nothing about any
+build this project performs. colcon defaults `BUILD_TESTING` to `ON`, and
+`grep -rn BUILD_TESTING scripts/ .github/ infra/` returns nothing. So in **every** build this
+repository performs, `cite_test_hardware`'s library is compiled, installed, and on
+`AMENT_PREFIX_PATH` for every controller manager the workspace starts — `./scripts/sim`
+included.
+
+**No `-DBUILD_TESTING=OFF` CI job was added, and that was a judgement rather than an
+omission.** Such a job would make this argument true of the configuration it tests and of no
+other, while the configuration everyone actually runs — including `./scripts/sim` — still has
+the class loadable. It would certify the safe build and leave the real one unexamined, which
+is a worse record than saying plainly that the argument is inert. The gate that matters in
+the build we perform already exists: `cite_test_hardware/test/test_unreachable.py`.
+
+**Of the three mechanisms decision 2 offers, exactly one is load-bearing today: the `on_init`
+refusal.** It is unconditional, fail-closed, runs in the build everyone performs, and is
+unit-tested with a passing control beside it (`cite_test_hardware/test/test_refusal.cpp`).
+The `test_unreachable.py` guard is a second real gate in that same build. The `BUILD_TESTING`
+argument is a third that currently carries no weight, and decision 2's ordering — which
+presents it as structural and the guard test as merely "checked" — has it backwards.
+
+### 4. The `disable_commands` mutation row reports one outcome; the run produced three failures
+
+The row is exact about what it claims and silent about the rest of the run. Under that
+mutation `test_1`'s control motion **also** aborts and classifies 2; `test_2` then fails with
+*"test 1 did not run; nothing was recorded"*; and `test_3` gives the quoted answer. Two
+separate `Position Error` aborts in one run, three failing assertions. Nothing in the
+classification claim is wrong — but the row reads as though one assertion moved, and a reader
+reproducing it should expect a three-failure red.
+
+**The `1.001344` following error in "The fixture does what it claims" is not a fingerprint.**
+Clean-tree runs gave 1.000007, 1.000769, 1.001173, 1.001787 and 1.001838; `1.001344`
+reproduces only under the `disable_commands` mutation. It is one sample of a spread, and no
+reader should treat it as a signature of anything.
+
+### How these survived
+
+Each is an inference checked in the wrong place, and none of them could fail.
+
+- **Item 1** was read off the controller configuration and attributed to the description,
+  because both say "position" and no assertion anywhere in the rig reads the description's
+  command-interface list. The conclusion was true for a different reason, so nothing ever
+  went red. The check that settles it — plain `GenericSystem` with commands enabled — was
+  never run precisely because the answer was already believed.
+- **Item 2** inferred an absence in L0 from the generator's binding table, without opening
+  the schema that the generator does not consult. An argument about what the model *cannot*
+  express was verified only in the code that consumes it.
+- **Item 3** described a CMake guard by what it would do in a configuration nobody selects,
+  and nobody grepped for whether it is ever selected.
+- **Item 4** recorded the assertion the mutation was aimed at and dropped the two it knocked
+  over on the way, which is what a mutation table invites unless it is written as a run log.
+
+The pattern in the first three is one thing: **a supporting claim was sited in the layer the
+author was already reading.** Only item 2 was cheap to convert into a test, and it now is.
+
+**Provenance, so no number above is read as more than it is.** The source citations —
+`xarm5.ros2_control.xacro`, `generic_system.cpp` at 4.45.2, the L0 schemas,
+`referential.py`, `description.py`, and the `BUILD_TESTING` grep — were re-verified against
+this checkout while writing this correction. The **run** figures were not re-run here: the
+1019-sample `GenericSystem` reproduction in item 1, the 13-run race measurement quoted in
+`test_abort_classification_launch.py`, and the three-failure account and following-error
+spread in item 4 are the reproducing agent's measurements, on one machine, with no
+thresholds registered in advance. They are recorded because they are the only measurements
+of these things that exist, not because they have been replicated.
+
 
 ## Context
 
@@ -57,6 +216,10 @@ twice over. Both reasons are read out of that file:
 `GenericSystem::read()` mirrors commands to states interface by interface; with a
 position-only command interface — which is what every generated arm in this cell declares —
 nothing ever writes velocity, so it holds its initial value for the life of the process.
+**[Corrected 2026-08-28 — see the Correction section above. The arms declare a velocity
+command interface too; what is position-only is the controller configuration, and the state
+stays dead because the velocity *command* is never written, not because the interface is
+skipped.]**
 
 The generated `JointTrajectoryController` configuration declares
 `state_interfaces: [position, velocity]`, so the controller and `joint_state_broadcaster`
@@ -186,9 +349,15 @@ worth being precise about which parts are structural and which are merely checke
   this repository is emitted by the generator from the facility model; the model has no
   concept of a hard stop at a joint angle, so a generated description cannot carry
   `stop_joint`, and a plugin that refuses to start without it cannot be a backend.
+  **[Corrected 2026-08-28 — see the Correction section above. L0 already has
+  `HardwareSelection.params` and its per-backend allowlist; the property is the description
+  generator's, and it is now pinned by `tools/tests/test_hardware_params_unbound.py`.]**
 - **Structural, second:** the library, its install rule and its pluginlib export all sit
   inside `if(BUILD_TESTING)`. A build with `-DBUILD_TESTING=OFF` produces a package
   containing no loadable class at all, so the class name does not resolve.
+  **[Corrected 2026-08-28 — see the Correction section above. No build this repository
+  performs sets it OFF, so the class is loadable in all of them; this argument is inert and
+  the `on_init` refusal is the one that is load-bearing.]**
 - **Checked, not structural:** the plugin class name appears nowhere in `model/`, nowhere in
   `workspace/src/cite_generated/`, and in no `launch/` directory. A hand edit that put it
   there would already be a Critical finding under ADR-0021 and would already fail
@@ -306,6 +475,8 @@ five runs, all four assertions passing in each, plus the post-shutdown check.
 - The abort is genuine and it is the controller's. `joint_trajectory_controller` logged
   `State tolerances failed for joint 0: Position Error: 1.001344, Position Tolerance:
   1.000000` mid-motion — the ADR-0036 path tolerance, at the value L0 declares.
+  **[Corrected 2026-08-28 — see the Correction section above. `1.001344` is one sample of a
+  spread, not a fingerprint, and it reproduces only under the `disable_commands` mutation.]**
 - L3 answered **`MOTION_INTERRUPTED` (10)**, with the classifier's `PART_WAY` wording rather
   than its unreadable-arm wording. That distinction is asserted, because `UNKNOWN` answers
   with the same code and is the opposite claim.
@@ -320,7 +491,7 @@ Two mutations, one run each, everything else identical:
 | Mutation | Result |
 |---|---|
 | Stops moved to ±100 rad, unreachable by the commanded motion | The same goal **succeeded** — `SUCCESS (0)`. Only the abort assertion failed. The abort in the baseline is the fixture's and not something ambient in the rig. |
-| Fixture replaced by `mock_components/GenericSystem` with `disable_commands: true` — the mechanism the existing rig uses | The same goal produced a genuine path-tolerance abort classified **`EXECUTION_FAILED` (2)**, *"the arm is still within its goal tolerance of the trajectory's first point"*. |
+| Fixture replaced by `mock_components/GenericSystem` with `disable_commands: true` — the mechanism the existing rig uses | The same goal produced a genuine path-tolerance abort classified **`EXECUTION_FAILED` (2)**, *"the arm is still within its goal tolerance of the trajectory's first point"*. **[Corrected 2026-08-28 — see the Correction section above. Exact as a classification claim, but the run fails three assertions, not one.]** |
 
 Two further mutations, on the guarantees rather than on the measurement:
 

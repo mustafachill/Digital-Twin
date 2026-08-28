@@ -496,14 +496,31 @@ class TestAnAbortReachesTheClassifier(unittest.TestCase):
         cls.recorder = _Samples(cls.node, TRAJECTORY_JOINTS)
         cls.client = ActionClient(cls.node, MoveTo, MANAGER.skills.move_to)
 
-        # THE RIG IS READY WHEN THREE THINGS EXIST, and each of them is an event
-        # rather than an elapsed time (P4). `ReadyToTest` fires as soon as the
-        # processes are spawned, which is well before the controller manager has
-        # activated anything: a goal sent then reaches move_group, finds no
+        # THE RIG IS READY WHEN THESE EXIST, and each is an event rather than an
+        # elapsed time (P4). `ReadyToTest` fires as soon as the processes are
+        # spawned, which is well before the controller manager has activated
+        # anything: a goal sent then reaches move_group, finds no
         # `follow_joint_trajectory` action server, and comes back CONTROL_FAILED
-        # with the arm still at the start — a perfect imitation of the abort this
-        # rig is supposed to produce, arriving from a rig that never produced one.
-        # That is the single most dangerous way this file could pass.
+        # with the arm still at the start.
+        #
+        # WHAT THAT RACE DOES, MEASURED RATHER THAN FEARED. An earlier version of
+        # this comment called it "a perfect imitation of the abort this rig is
+        # supposed to produce" and "the single most dangerous way this file could
+        # pass". It is neither. With BOTH waits removed and 13 runs — idle, 10
+        # burners, and 36 burners on 12 cores — the race hit 8 of 13 and produced
+        # a pass in NONE of them. It cannot produce one: it classifies
+        # EXECUTION_FAILED (2) where `test_3` demands MOTION_INTERRUPTED (10), it
+        # fails the 'part-way' detail assertion that separates PART_WAY from
+        # UNKNOWN, and it leaves the stopped joint where the arm started rather
+        # than at the +/-STOP_RAD the description declares — which `test_3` pins to
+        # six decimal places, and which only this fixture puts it at. Three
+        # independent guards, each red on its own.
+        #
+        # So these waits are NOT what stands between the race and a false pass.
+        # What they buy is a fast clean green in place of a confusing
+        # three-failure red, and that is reason enough to keep them — but do not
+        # cite them as a correctness guarantee. (13 runs, one machine, against the
+        # assertions as they now stand rather than as they were first drafted.)
         trajectory = ActionClient(
             cls.node, FollowJointTrajectory, MANAGER.trajectory_action)
         assert trajectory.wait_for_server(timeout_sec=STARTUP_CEILING_S), (

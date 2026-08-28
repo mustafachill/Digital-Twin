@@ -238,6 +238,19 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 - **Depend on execution order.** Each test starts from a known state.
 - **Command physical hardware.** Hardware verification requires explicit human
   authorization and is outside the automated suite.
+- **Read a grasp off mock hardware.** `GripperActionController` decides "held" from the
+  velocity state interface, via `stall_velocity_threshold` — and on
+  `mock_components/GenericSystem` that interface is never written, because no controller
+  claims the velocity *command*, so the loopback leaves it at its initial value and it reads
+  0.0 from the first cycle. A gripper controller stood up over that backend therefore
+  satisfies the stall threshold unconditionally and reports a successful grasp on empty air.
+  Since [ADR-0029](../adr/0029-simulated-grasping-by-friction.md) removed the attachment
+  plugin, `stalled=true, reached_goal=false -> holding` is the **only** evidence anywhere in
+  this project that a part is held, so this is the one place with no independent check to
+  catch it. Under Gazebo the velocity is real and the cell is fine. **No test does this
+  today, and none may**; the mechanism is in
+  [ADR-0040](../adr/0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md)'s
+  2026-08-28 correction.
 
 ## Running them
 

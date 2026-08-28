@@ -233,9 +233,18 @@ class DescriptionSpec(Strict):
 class HardwareBackend(Strict):
     """One selectable ``ros2_control`` backend for a type.
 
-    The plugin class string exists exactly once, here. That is what makes
-    'the only thing that differs is which plugin is loaded' (ADR-0005) true by
-    construction rather than by discipline.
+    The plugin class string is *authored* exactly once, here. Nothing else may
+    introduce one: every generated ``<ros2_control>`` block takes its plugin from
+    this field, which is what makes 'the only thing that differs is which plugin
+    is loaded' (ADR-0005) true by construction rather than by discipline.
+
+    One exception exists and it is deliberate. ``cite_bringup``'s
+    abort-classification launch test names the production plugin in order to
+    ASSERT against it before substituting a fixture, so that a change to this
+    field fails that rig loudly rather than silently stopping it substituting
+    anything (ADR-0040). That is a mirror, not a second home: it feeds no
+    description, and its whole purpose is to break when this field moves. A third
+    occurrence is a trend rather than another exception — treat it as one.
     """
 
     ros2_control_plugin: str
