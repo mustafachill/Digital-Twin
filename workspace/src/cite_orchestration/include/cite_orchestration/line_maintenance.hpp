@@ -25,8 +25,11 @@
 #define CITE_ORCHESTRATION__LINE_MAINTENANCE_HPP_
 
 #include <deque>
+#include <map>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -41,6 +44,89 @@ namespace cite_orchestration
 {
 
 using cite_interfaces::msg::LineState;
+
+/// The stations that are waiting on a trigger nothing can produce. Empty when none is.
+///
+/// THE DEFECT THIS EXISTS FOR, OBSERVED RATHER THAN PREDICTED (ADR-0039). A
+/// work-piece fails the friction grasp, the station retries, and its `Repeat`
+/// returns it to `AwaitTrigger` on a beam THE PART IS ALREADY BREAKING — so no edge
+/// can ever arrive, because `TriggerWatch::take` requires `previous_state != state`.
+/// The inbound belt was stopped by that same edge and is started again only by
+/// `ResumeBelt`, reachable only after `CompleteHandoff`, reachable only after the
+/// trigger that will not come. Closed loop. And a line whose stations are all
+/// waiting publishes `STATE_RUNNING`, so the line is permanently dead and reports
+/// itself healthy. That is the third time this repository has shipped "the system
+/// reported it was doing the thing and the thing was not happening"; ADR-0038 names
+/// the other two.
+///
+/// IT IS `AwaitReArm`'s QUESTION, ASKED ON THE NOMINAL PATH. The rule is the same
+/// `untriggerable_reason` (`line_nodes.hpp`), so the fault path and the running line
+/// cannot answer differently, and neither of them names an asset (P1, P5).
+///
+/// A STATE PREDICATE AND NOT A TIMEOUT (P4). Nothing below is a duration, a tick
+/// count or a deadline. A station WAITING for a part that is still coming is not
+/// stalled; a station that CANNOT be triggered is. Those are different questions and
+/// only the second is asked here.
+///
+/// THE THREE CONDITIONS BEYOND THE RULE, AND THE LAST ONE IS THE WHOLE OF THE
+/// NEGATIVE DIRECTION:
+///
+///   * The station is IDLE or WAITING. Those are the two states the tree writes
+///     while a station sits at its trigger — WAITING initially and after a retry
+///     verdict, IDLE at the end of a completed cycle. A WORKING station is one that
+///     will reach `ResumeBelt` and start its own belt again, and a BLOCKED or
+///     FAULTED one belongs to `LineState`'s higher precedence, not here.
+///   * Its inbound belt is at a commanded standstill, or was never commanded —
+///     `untriggerable_reason` above.
+///   * IT HAS ALREADY CONSUMED EVERY EDGE THAT STOPPED THAT BELT. Without this the
+///     detector fires on every work-piece the line ever handles: the first two
+///     conditions are both true for as long as it takes an arriving part's edge to
+///     reach the station, and the belt learns of that edge through a DIFFERENT
+///     subscription to the same topic, dispatched independently and under load
+///     milliseconds apart. `ConveyorIndex::stop_edges` counts the edges that stopped
+///     the belt and is incremented before the standstill is recorded, under the same
+///     lock; `TriggerWatch::consumed` counts the edges handed to a station. While an
+///     arrival is in flight the first exceeds the second and nothing is reported.
+///     After a retry has returned the station to its trigger they are equal, the
+///     belt is still stopped, and it is.
+///
+/// IT COMMANDS NOTHING. It reads a plan, a setpoint record and two counters. It does
+/// not restart a belt, plan, touch a gripper, write a station state, release a claim
+/// or move ownership — and the belt restart is exactly the fix this must not be read
+/// as being one line away from. ADR-0038 decision 5 and ADR-0039 decision 5 both say
+/// why: the retry's first physical act would be `Pick` OPENING THE GRIPPER at the
+/// home pose (`skill_server.cpp:937-940`), dropping a part that nothing has attached
+/// as an `AttachedCollisionObject`, so the planner does not know it is there.
+/// Re-arming is a decision about what is where, and it is not decided yet.
+inline std::vector<std::string> stalled_stations(
+  const std::map<std::string, StationRuntime> & stations,
+  const std::shared_ptr<ConveyorIndex> & conveyors,
+  const std::shared_ptr<TriggerWatch> & triggers)
+{
+  std::vector<std::string> stalled;
+  for (const auto & [id, runtime] : stations) {
+    if (runtime.state != StationState::STATE_IDLE &&
+      runtime.state != StationState::STATE_WAITING)
+    {
+      continue;
+    }
+    const auto reason = untriggerable_reason(id, runtime, conveyors);
+    if (!reason) {
+      continue;
+    }
+    if (triggers && conveyors &&
+      triggers->consumed(runtime.trigger_topic) <
+      conveyors->stop_edges(runtime.inbound_belt))
+    {
+      // An arrival is in flight: the edge that stopped this belt has not reached
+      // the station yet. Not stalled, and this is the branch that keeps the signal
+      // from being noise.
+      continue;
+    }
+    stalled.push_back(*reason);
+  }
+  return stalled;
+}
 
 /// Everything the tick loop does that is not ticking the tree.
 ///
@@ -108,13 +194,32 @@ public:
     } else if (any_blocked) {
       message.state = LineState::STATE_BLOCKED;
       message.blocked_reason = reason;
-    } else if (any_working) {
-      message.state = LineState::STATE_RUNNING;
     } else {
-      // Every station idle is still a running line — it is a line with nothing
-      // to do. STOPPED would say the coordinator is not ticking, which is a
-      // different and much more serious statement.
-      message.state = LineState::STATE_RUNNING;
+      // ASKED ONLY WHEN NOTHING IS FAULTED OR BLOCKED, and the order is ADR-0039
+      // decision 2 rather than an efficiency. `STATE_BLOCKED` has exactly one
+      // author — the station's own tree, by way of the state copied above
+      // (ADR-0038 decision 4) — and a stall that could outrank it would be a
+      // second author for it by another route.
+      const auto stalled = stalled_stations(*line_.stations, line_.conveyors, line_.triggers);
+      announce_the_stall(stalled);
+      if (!stalled.empty()) {
+        // ABOVE THE WORKING CASE, deliberately. A station that can never be
+        // triggered again will never be triggered again whether or not a neighbour
+        // is still finishing its current piece, and this line is serial, so that
+        // neighbour finishing is the last thing that will happen on it. A line that
+        // went on reporting RUNNING because one arm was still moving is exactly the
+        // report this value exists to stop.
+        message.state = LineState::STATE_STALLED;
+        message.stall_reasons = stalled;
+      } else if (any_working) {
+        message.state = LineState::STATE_RUNNING;
+      } else {
+        // Every station idle is still a running line — it is a line with nothing
+        // to do, and now a line that has been ASKED whether it could take any.
+        // STOPPED would say the coordinator is not ticking, which is a different
+        // and much more serious statement.
+        message.state = LineState::STATE_RUNNING;
+      }
     }
 
     const auto [cycle_time, throughput] = rates();
@@ -124,6 +229,47 @@ public:
   }
 
 private:
+  /// Say a stall out loud, once per distinct set of reasons.
+  ///
+  /// `LineState` is volatile and says of itself that it is a report of the present
+  /// rather than a record, so once a run is over nothing on the wire says the line
+  /// ever stalled. The log is what a person reads afterwards, and ADR-0038 already
+  /// settled the shape for `AwaitReArm`: a refusal that names the station and the
+  /// belt, and one that refuses SILENTLY is what would make the whole idea
+  /// unacceptable.
+  ///
+  /// ON CHANGE, NEVER ON A TIMER, for `AwaitReset`'s reason. This runs several
+  /// times a second; a line every publication would bury the stall under thousands
+  /// of copies of it, and a line on a period would be a schedule in a method whose
+  /// whole subject is not having one (P4).
+  void announce_the_stall(const std::vector<std::string> & stalled)
+  {
+    std::string stated;
+    for (const auto & refusal : stalled) {
+      stated += (stated.empty() ? "" : "; ") + refusal;
+    }
+    if (stated == announced_) {
+      return;
+    }
+    announced_ = stated;
+    if (stated.empty()) {
+      // A stall that cleared. It is said because the only thing that can clear one
+      // today is a belt somebody started, and nothing in this repository does that
+      // — so this line arriving is either the re-arm path being built or a hand on
+      // the command topic, and both are worth a person seeing.
+      RCLCPP_INFO(
+        line_.node->get_logger(),
+        "every station that could not be triggered can be again; the line is running");
+      return;
+    }
+    RCLCPP_WARN(
+      line_.node->get_logger(),
+      "the line reports RUNNING no longer: %s. Nothing here restarts anything — "
+      "re-arming is a decision about where the part is and is not wired (ADR-0038 "
+      "decision 5, ADR-0039)",
+      stated.c_str());
+  }
+
   /// Rule 3, applied. A handoff past its deadline is retired and the work-piece
   /// stays with the station that already owned it — structurally, because nothing
   /// touched the registry.
@@ -250,6 +396,10 @@ private:
   LinePlan plan_;
   rclcpp::Publisher<LineState>::SharedPtr publisher_;
   std::deque<rclcpp::Time> completions_;
+  //: The stall this pass has already said out loud, so it says each one once. It
+  //: is also cleared by a line that stops stalling, so a stall that comes back is
+  //: reported again rather than swallowed.
+  std::string announced_;
 };
 
 }  // namespace cite_orchestration

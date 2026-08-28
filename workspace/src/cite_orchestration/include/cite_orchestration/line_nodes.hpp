@@ -38,6 +38,7 @@
 #ifndef CITE_ORCHESTRATION__LINE_NODES_HPP_
 #define CITE_ORCHESTRATION__LINE_NODES_HPP_
 
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <memory>
@@ -135,19 +136,57 @@ public:
       const DetectionEvent event = queue.front();
       queue.pop_front();
       if (event.state == state && event.previous_state != event.state) {
+        ++consumed_[topic];
         return event;
       }
     }
     return std::nullopt;
   }
 
+  /// How many edges this watch has handed to a station, on `topic`.
+  ///
+  /// Monotonic, and it counts only the edges `take` RETURNED. An event popped and
+  /// discarded because it was the wrong transition never reached a station and is
+  /// not one, which keeps this the exact counterpart of
+  /// `ConveyorIndex::stop_edges` — that count is filtered by the same state.
+  ///
+  /// WHAT IT IS FOR (ADR-0039). `LineMaintenance` asks whether a station is waiting
+  /// on a trigger nothing can produce. Its inbound belt being stopped is not the
+  /// answer on its own: the belt is stopped for a few milliseconds of every normal
+  /// arrival, between the edge reaching `ConveyorIndex` and the station taking it
+  /// here. What separates a normal arrival from a station that will wait for ever
+  /// is whether the edge that stopped the belt has been consumed, and that is this
+  /// count against that one.
+  ///
+  /// A DROPPED EDGE SILENCES THAT QUESTION AT THAT STATION, FOR EVER. The queue
+  /// above is bounded and drops the oldest with a warning; a drop leaves this count
+  /// permanently behind the belt's, so the station is never reported stalled. The
+  /// failure is in the safe direction — silence, not a false alarm — and it is a
+  /// blind spot all the same.
+  ///
+  /// IT ASSUMES ONE STATION PER TOPIC. `take` is keyed on the topic and consumes
+  /// for whichever station asks first, so two stations sharing a beam would make
+  /// this count no longer be about either of them. Today's model gives every
+  /// station its own beam; a model that did not would need ADR-0039's rule
+  /// rewritten rather than tuned.
+  uint64_t consumed(const std::string & topic) const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto entry = consumed_.find(topic);
+    return entry == consumed_.end() ? 0u : entry->second;
+  }
+
 private:
   static constexpr std::size_t kMaxPending = 64;
 
   rclcpp::Node::SharedPtr node_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::map<std::string, rclcpp::Subscription<DetectionEvent>::SharedPtr> subscriptions_;
   std::map<std::string, std::deque<DetectionEvent>> pending_;
+  //: How many edges have been handed to a station, per topic (ADR-0039). Written
+  //: on the tick thread by `take` and read there too; the mutex is the queue's,
+  //: because the increment and the pop are one decision.
+  std::map<std::string, uint64_t> consumed_;
 };
 
 /// What one station is doing, as the line reports it.
@@ -183,6 +222,61 @@ struct StationRuntime
   std::string trigger_topic;
   std::string inbound_belt;
 };
+
+/// Why nothing can trigger this station, or nothing when something can.
+///
+/// THE RULE, DERIVED AND NOT HARD-CODED (ADR-0038 decision 3): a station that has a
+/// trigger topic and an inbound belt triggers on that beam BREAKING, and the only
+/// thing that can break it is a part the belt brings. So a belt at a standstill is a
+/// station that cannot be woken. Both halves are already data — the trigger topic and
+/// the inbound belt come from the topology by way of the plan, the setpoint is what
+/// `ConveyorIndex` last decided — and nothing below names a station, a belt or a speed.
+///
+/// A STATION FED BY A TABLE IS SKIPPED, and that is the rule working rather than an
+/// exception to it: nothing carries work to it, so no belt can be the reason it cannot
+/// be triggered. Today's model gives exactly one station that shape.
+///
+/// IT CLEARS ITSELF. The day someone builds a path that re-arms a station — a belt
+/// restart that does not put a part on the floor, an operator jog that clears the pick
+/// point, a re-observation that lets a station start from where the part actually is —
+/// this stops answering on its own, because the setpoint read here will not be a
+/// standstill. Nothing has to remember to delete a rule.
+///
+/// IT IS THE SETPOINT AND NOT THE BELT. `ConveyorIndex` says of itself that it knows
+/// only what L4 last decided; nothing publishes `ConveyorState`, so no belt on this
+/// line has ever confirmed anything. A caller that read the answer as the belt's speed
+/// would be making the mistake that whole file says it cannot make.
+///
+/// TWO CONSUMERS, ONE AUTHOR. `rearm_refusals` asks it of a line that has already
+/// stopped (ADR-0038); `stalled_stations` asks it of a line that has not (ADR-0039).
+/// One sentence, written once, so the two paths cannot answer differently.
+inline std::optional<std::string> untriggerable_reason(
+  const std::string & station_id, const StationRuntime & runtime,
+  const std::shared_ptr<ConveyorIndex> & conveyors)
+{
+  if (runtime.trigger_topic.empty() || runtime.inbound_belt.empty()) {
+    return std::nullopt;
+  }
+  if (!conveyors) {
+    return "station '" + station_id + "' is fed by belt '" + runtime.inbound_belt +
+           "' and this line has no conveyor drives at all, so nothing can start it";
+  }
+  const auto setpoint = conveyors->commanded(runtime.inbound_belt);
+  if (!setpoint) {
+    // Never commanded is not the same fact as commanded to zero, and both are
+    // refusals. Said apart because they are diagnosed apart: one is a belt
+    // nobody has spoken to, the other is a belt somebody stopped.
+    return "station '" + station_id + "' waits on a break in beam '" + runtime.trigger_topic +
+           "', and belt '" + runtime.inbound_belt +
+           "' has never been commanded, so no part can arrive to break it";
+  }
+  if (*setpoint == 0.0) {
+    return "station '" + station_id + "' waits on a break in beam '" + runtime.trigger_topic +
+           "', and belt '" + runtime.inbound_belt +
+           "' is commanded to a standstill, so no part can arrive to break it";
+  }
+  return std::nullopt;
+}
 
 /// The fault the line stopped on, latched.
 ///

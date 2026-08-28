@@ -77,6 +77,7 @@
 #ifndef CITE_ORCHESTRATION__CONVEYOR_INDEX_HPP_
 #define CITE_ORCHESTRATION__CONVEYOR_INDEX_HPP_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -262,6 +263,35 @@ public:
     return entry->second;
   }
 
+  /// How many sensor edges have stopped this belt.
+  ///
+  /// Monotonic, and it counts DECISIONS rather than transitions: `on_edge` commands
+  /// a standstill on every qualifying edge whether or not the belt was already
+  /// stopped, because this class cannot observe the plant and a cached "already
+  /// stopped" would be a belief rather than a fact. The count says the same thing
+  /// the command does.
+  ///
+  /// WHAT IT IS FOR, AND WHY THE ORDERING IN `on_edge` IS THE WHOLE OF IT
+  /// (ADR-0039). `LineMaintenance` asks whether a station is waiting on a trigger
+  /// nothing can produce, and "the belt that feeds it is stopped" is true for a few
+  /// milliseconds of EVERY normal arrival — the part breaks the beam, this class
+  /// stops the belt, and the station is still waiting until it takes the edge. What
+  /// separates the two is whether the station has consumed the edge that stopped the
+  /// belt, which is this count against `TriggerWatch::consumed`.
+  ///
+  /// So this is incremented BEFORE the standstill is recorded, under the same lock,
+  /// so that any reader which sees the belt stopped also sees the edge counted. The
+  /// alternative ordering leaves a window in which a belt reads stopped and no edge
+  /// is recorded anywhere — and that window is not theoretical: the trigger and the
+  /// belt stop are two SEPARATE subscriptions to one detection topic, dispatched
+  /// independently, and under load they can be milliseconds apart.
+  uint64_t stop_edges(const std::string & asset) const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto entry = stop_edges_.find(asset);
+    return entry == stop_edges_.end() ? 0u : entry->second;
+  }
+
   /// Every belt the model declared, in a stable order.
   std::vector<std::string> assets() const
   {
@@ -287,6 +317,13 @@ private:
       return;
     }
     for (const auto & asset : belts_for(topic, event.state)) {
+      {
+        // COUNTED BEFORE THE BELT IS STOPPED, and the order is the point — see
+        // `stop_edges()`. A reader that saw the standstill without the count would
+        // read every normal arrival as a station that can never be triggered again.
+        const std::lock_guard<std::mutex> lock(mutex_);
+        ++stop_edges_[asset];
+      }
       // A belt already stopped is commanded to stop again. That is a repeated
       // setpoint and not a state change, and it is cheaper than remembering a
       // state this node cannot observe: the command path has no confirmation,
@@ -376,6 +413,11 @@ private:
   //: "commanded to a standstill" are different, and only one of them is a
   //: decision.
   std::map<std::string, double> commanded_;
+  //: How many sensor edges have stopped each belt (ADR-0039). Written under the
+  //: same lock as `commanded_` and immediately before it, so the two are never
+  //: read out of step. Never reset: it is compared against another monotonic
+  //: count, and a counter somebody resets is a counter two readers disagree about.
+  std::map<std::string, uint64_t> stop_edges_;
 };
 
 }  // namespace cite_orchestration

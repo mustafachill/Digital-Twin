@@ -43,12 +43,14 @@ msg/LineState.msg
   uint8 STATE_PAUSED=2
   uint8 STATE_BLOCKED=3
   uint8 STATE_FAULTED=4
+  uint8 STATE_STALLED=5
   uint8 state
   StationState[] stations
   uint32 workpieces_completed
   float64 cycle_time_s
   float64 throughput_per_hour
   string blocked_reason
+  string[] stall_reasons
 msg/LineTopology.msg
   string TOPIC="/cite/line/topology"
   std_msgs/Header header

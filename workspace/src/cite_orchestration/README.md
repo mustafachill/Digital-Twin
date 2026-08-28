@@ -44,7 +44,7 @@ cell:
 | `line_tree.hpp` | plan to root tree |
 | `skill_nodes.hpp` | the leaves that call L3 |
 | `line_nodes.hpp` | the leaves that do not — triggers, custody, claims, handoff, recovery |
-| `line_maintenance.hpp` | expiring handoffs, confirming for a sink, counting arrivals, publishing `LineState`. It writes **no** station state (ADR-0038 decision 4) |
+| `line_maintenance.hpp` | expiring handoffs, confirming for a sink, counting arrivals, publishing `LineState`, and reporting a station that **cannot be triggered** (ADR-0039). It writes **no** station state (ADR-0038 decision 4) |
 | `line_fault.hpp` | what the line does once it has stopped (ADR-0038): the four fault leaves and the two rules they are derived from |
 | `station_reset.hpp` | the operator reset's preconditions and its one effect (ADR-0037) |
 
@@ -163,11 +163,43 @@ wrong.
 **The line does not resume, and that absence is a decision.** `AwaitReArm` has no `SUCCESS`
 edge and the root has no `<Repeat>`. Every recovery this line has returns a station to a state
 nothing can trigger it out of — the part is either still breaking the beam, which produces no
-edge, or already off the belt that is now stopped — and `LineMaintenance` publishes a line of
-stations all `WAITING` as `STATE_RUNNING`. A reset that re-entered the nominal branch would
-turn a process that exits 1 into a process that reports a healthy running line for ever. The
-`SUCCESS` edge and the `<Repeat>` land together when re-arming is built, and not before
-(ADR-0038 decision 5).
+edge, or already off the belt that is now stopped. The `SUCCESS` edge and the `<Repeat>` land
+together when re-arming is built, and not before (ADR-0038 decision 5).
+
+## The stall detector (ADR-0039)
+
+`AwaitReArm` asks whether a station could ever be triggered again, and it asks **only after
+the line has already stopped**. `LineMaintenance` now asks the same question of a line that has
+*not* stopped, so the condition is visible while the line is still notionally running.
+
+That is not a hypothetical. A work-piece that fails its grasp is retried onto a beam the part
+is already breaking, so no edge can ever arrive; the belt that would bring another part was
+stopped by that same edge and is started again only by `ResumeBelt`, reachable only after the
+trigger that will not come. Until this existed, a line in that state published `STATE_RUNNING`
+for ever — the third time this repository has shipped "the system reported it was doing the
+thing and the thing was not happening".
+
+`LineState` gains `STATE_STALLED` and `stall_reasons` for it. **`STATE_BLOCKED` keeps exactly
+one author** (ADR-0038 decision 4): a stall ranks strictly below it, and a blocked line
+publishes no stall reasons.
+
+**The rule is `untriggerable_reason` in `line_nodes.hpp`, and it is the same one `AwaitReArm`
+uses**, so the two paths cannot answer differently and neither names an asset. Three conditions
+are added on this path, and the last is the whole of the negative direction:
+
+- the station is `IDLE` or `WAITING` — a `WORKING` station will reach `ResumeBelt` itself;
+- its inbound belt is at a commanded standstill, or was never commanded;
+- **it has already consumed every edge that stopped that belt.** The belt and the station learn
+  of an arrival through two separate subscriptions to one topic, dispatched independently, so
+  the first two conditions hold for a real interval of *every* normal arrival.
+  `ConveyorIndex::stop_edges` and `TriggerWatch::consumed` are what separate an arrival in
+  flight from a station that will wait for ever.
+
+**It is a detector and it commands nothing.** No belt is restarted, nothing is planned, no
+gripper is touched, no station state is written. The belt restart is the fix this must not be
+read as being one line away from: the retry's first physical act is `Pick` opening the gripper
+at the home pose, dropping a part nothing has attached as an `AttachedCollisionObject`.
+**A visible stall is not a fixed stall.**
 
 **`StopAll` states an intent it cannot confirm.** Nothing publishes `ConveyorState`, so no belt
 answers. When something does, `StopAll` becomes a `StatefulActionNode` that runs until every
@@ -281,6 +313,7 @@ restated here.
 | the recovery branch fails every time | a leaf gave up without cancelling, so the next goal is rejected by a server still executing the old one |
 | a belt is stopped for ever | nothing confirms a belt's state. See the open-loop note above |
 | a station blocks and the line stops, but the process stays up | decided (ADR-0038). The fault branch holds; call `ResetStation`, and expect `AwaitReArm` to go on refusing afterwards |
+| `LineState` reports `STATE_STALLED` and nothing escalated | a station was returned to a trigger nothing can produce and its inbound belt is stopped (ADR-0039). `stall_reasons` names the station and the belt. There is nothing for `ResetStation` to clear, and no re-arm path exists — read ADR-0038 decision 5 before restarting a belt by hand |
 | the coordinator sits for ever after a reset, logging a refusal that names a station and a belt | `AwaitReArm`. Nothing re-arms a station yet; the refusal is the design saying so, not a bug to widen the gate around |
 | the coordinator exits 1 having logged that no station said why | a station subtree returned `FAILURE` without its recovery policy classifying anything. `OnFault` latches it so the run still fails; the defect is in that subtree |
 | a reset is refused with `HARDWARE_FAULT` on a station that is only blocked | some other station is faulted, which makes the line faulted |
@@ -297,7 +330,7 @@ restated here.
 | `test_conveyor_index` | which edge stops which belt, and which belt is left alone — against a real publisher and a real subscription, with the setpoint read back off the command topic |
 | `test_skill_goals` | what a leaf puts in a goal, read from the far side of the action. A leaf's whole job is turning ports into one typed goal, and `PickAt` once filled in a tool height where the action asks where the object is |
 | `test_skill_cancellation` | what a leaf does to a **server** when it gives up. Driven against a real action server, because a mock would test the wrong side of the boundary |
-| `test_line_nodes` | the same rules composed: a real tree, real in-process action servers and a real sensor publisher, driving two stations through a handoff — against the shipped `trees/line_station.xml`, read from the source tree rather than copied. It also drives the fault branch: that an escalation cancels a **sibling's** outstanding goal, that the root goes on returning `RUNNING`, that the belts are put down, that the reset is accepted and the line still does not restart, and that a root failure nothing classified is latched all the same |
+| `test_line_nodes` | the same rules composed: a real tree, real in-process action servers and a real sensor publisher, driving two stations through a handoff — against the shipped `trees/line_station.xml`, read from the source tree rather than copied. It also drives the fault branch: that an escalation cancels a **sibling's** outstanding goal, that the root goes on returning `RUNNING`, that the belts are put down, that the reset is accepted and the line still does not restart, and that a root failure nothing classified is latched all the same. Its `StalledLine` fixture drives the ADR-0039 detector against a real beam, a real belt and the real `LineMaintenance`, read back off the `LineState` topic — including the two negative cases that keep it from being noise: an arrival still in flight, and a station working with its own belt held stopped |
 | `test_detection_region.py` | the search region against the generated frames and topology |
 | `test_indexed_belts.py` | that the generated topology and the generated bring-up plan name the same set of belts. A belt in one and not the other is a cell that refuses to come up, or a belt stopped for ever |
 | `test_station_reset` | the operator reset's refusals, driven through the real `StationReset` handler: a faulted line refuses everything, an unblocked station is refused rather than quietly accepted, an unknown id invents no phantom station, and the cleared reason is captured before it is cleared |
