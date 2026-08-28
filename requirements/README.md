@@ -24,6 +24,30 @@ happen to live in a robotics repository. They import no `rclpy`, run on any
 operating system, and are what makes it possible to validate the facility model
 from a laptop that could never build the ROS stack.
 
+## A tool that is not written in Python
+
+Layer 4 is defined by **role**, not by implementation language: it is the tools a
+gate runs. `shellcheck` is a linter, so it belongs there, and it is declared in
+`dev.txt` as `shellcheck-py` — a distribution that carries the upstream binary
+with a per-platform sha256 rather than any Python code. That keeps it beside
+`ruff`, `mypy` and `yamllint`, installed by the same `pip` step into the same
+virtualenv, and reachable at `${venv}/bin/shellcheck`.
+
+The alternative was apt in the Dockerfile, and it is wrong here for a reason the
+first CI run in this repository made concrete. The host job runs on the runner
+with no container at all, so an apt pin would have reached one of the three
+machines this gate runs on and left the other two answering out of `PATH` — which
+is exactly what happened: 0.11.0 on the developer's host, whatever `ubuntu-24.04`
+ships on the runner, and nothing at all in the container, where the shell step
+reported success having read no script. A tool that only some of the machines get
+is not pinned.
+
+The rule that follows: **if a gate runs it, its version is a dependency, and it is
+declared in the layer that reaches every machine that runs the gate.** Layer 1 is
+right for what the ROS build needs, because only the container builds. Layer 4 is
+right for what `./scripts/lint` and `./scripts/test` need, because everything runs
+those.
+
 ## Vulnerability scanning
 
 ```bash

@@ -10,10 +10,18 @@ set +e   # a doctor reports problems, it does not exit on the first one
 
 PASS=0; FAIL=0; SKIP=0; WARN=0
 # `A && B || C` is not if-then-else — C also runs when A succeeds and B fails.
-# These helpers keep the report lines short without that trap.
+# These helpers keep the report lines short without that trap, which the detail
+# line below fell into anyway: `[ $# -ge 3 ] && eval "$3" || true` reads as "the
+# detail command, or nothing", and is really "the detail command, and swallow its
+# failure as well as the arity test's". Written out, so the two conditions stay
+# separate and the eval's own status is the only thing `|| true` forgives.
 check_have() {   # check_have <command> <label> [detail-command]
     if have "$1"; then
-        report pass "$2" "$( [ $# -ge 3 ] && eval "$3" || true )"
+        local detail=""
+        if [ "$#" -ge 3 ]; then
+            detail="$(eval "$3" || true)"
+        fi
+        report pass "$2" "$detail"
     else
         report fail "$2" "not found"
     fi
@@ -164,6 +172,16 @@ if [ -n "$CITE_PY" ] && [ -x "$CITE_PY" ]; then
         report fail "cite_tools" \
             "${CITE_TOOLS_WHERE} — run ./scripts/bootstrap --host-only here"
     fi
+    # Which shellcheck the shell gate will run, by version rather than by
+    # presence. `have shellcheck` was the old question and it is the wrong one:
+    # three machines each had a different one on PATH and the gate reported a
+    # different verdict on each. This asks the question ./scripts/lint asks.
+    SHELLCHECK_BIN="$(dirname "$CITE_PY")/shellcheck"
+    if SHELLCHECK_WHY="$(assert_shellcheck_pinned "$SHELLCHECK_BIN" "$CITE_DEV_REQUIREMENTS")"; then
+        report pass "shellcheck" "$(shellcheck_version "$SHELLCHECK_BIN") (pinned in requirements/dev.txt)"
+    else
+        report fail "shellcheck" "${SHELLCHECK_WHY} — run ./scripts/bootstrap --host-only"
+    fi
 else
     report fail "virtualenv" "missing — run ./scripts/bootstrap --host-only"
 fi
@@ -171,7 +189,7 @@ fi
 step "Repository"
 check_file "${REPO_ROOT}/CLAUDE.md"            "CLAUDE.md"
 check_file "${REPO_ROOT}/what-we-are-doing.md" "charter"
-check_file "${REPO_ROOT}/external/cite.repos"  "vcs manifest"
+check_file "$CITE_VCS_MANIFEST"                "vcs manifest"
 if [ -d "${REPO_ROOT}/model" ] && [ -n "$(ls -A "${REPO_ROOT}/model" 2>/dev/null)" ]; then
     report pass "L0 facility model" "present"
 else
@@ -233,7 +251,7 @@ step "Reproducibility"
 # The validator lives in _lib.sh and is shared with the CI supply-chain job (P1).
 # It used to be restated in both places as a starts-with-lowercase grep, and the
 # two copies were wrong in opposite directions — see unpinned_manifest_entries.
-UNPINNED="$(unpinned_manifest_entries)"
+UNPINNED="$(unpinned_manifest_entries "$CITE_VCS_MANIFEST")"
 if [ -n "$UNPINNED" ]; then
     report fail "manifest pinning" \
         "$(printf '%s\n' "$UNPINNED" | grep -c .) entry not pinned to a commit SHA (ADR-0008)"
@@ -260,7 +278,7 @@ if ! have git; then
     report skip "declared patches" "git not available to check them"
 else
     PATCHES=()
-    while IFS= read -r p; do PATCHES+=("$p"); done < <(declared_patches)
+    while IFS= read -r p; do PATCHES+=("$p"); done < <(declared_patches "$CITE_PATCH_DIR")
     if [ "${#PATCHES[@]}" -eq 0 ]; then
         report pass "declared patches" "none declared"
     else

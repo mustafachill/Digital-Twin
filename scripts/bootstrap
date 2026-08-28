@@ -106,7 +106,7 @@ setup_ros_workspace() {
         # which every later step reads as source that is simply already there.
         if ! git_without_enclosing_repo \
                 vcs import --recursive "${REPO_ROOT}/workspace/src" \
-                < "${REPO_ROOT}/external/cite.repos"; then
+                < "$CITE_VCS_MANIFEST"; then
             die "vcs import failed, so workspace/src/external is incomplete.
   Every declared patch and every build after this point would silently be
   missing the external source. Nothing further has run.
@@ -119,7 +119,7 @@ setup_ros_workspace() {
 
     step "Local patches"
     local patches=()
-    while IFS= read -r line; do patches+=("$line"); done < <(declared_patches)
+    while IFS= read -r line; do patches+=("$line"); done < <(declared_patches "$CITE_PATCH_DIR")
     if [ ${#patches[@]} -eq 0 ]; then
         ok "No patches to apply"
     else
