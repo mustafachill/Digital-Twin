@@ -306,10 +306,19 @@ That was wrong. Split by exit status the failures are **two families**, and with
 process identity predicts the family exactly: an **exit-1 family** of `rclpy` nodes, whose
 cause is established and fixed in
 [ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md); and a **signal
-family** of MoveIt-linked C++ processes that is **still unexplained**, one member of which is
-outside the single narrow exemption that exists. Run duration is retired as a predictor. The
-figures, their provenance and what remains unaccounted for are in
-[CLAUDE.md §2](../../CLAUDE.md) rather than here, so that one number has one home (P1).
+family** that is **still unexplained**, one member of which is outside the single narrow
+exemption that exists. Run duration is retired as a predictor. The figures, their provenance
+and what remains unaccounted for are in [CLAUDE.md §2](../../CLAUDE.md) rather than here, so
+that one number has one home (P1).
+
+**The signal family was described here as "MoveIt-linked C++ processes" until 2026-08-28, and
+that is withdrawn.** `parameter_bridge` links no MoveIt code and has been observed exiting on
+SIGSEGV at teardown. What replaced the description is a measurement rather than a better
+guess: [`../measurements/2026-08-27-teardown-signal-family/`](../measurements/2026-08-27-teardown-signal-family/results.md),
+whose thresholds were registered before its first trial. **Read its primary result before
+citing it — it is an inconclusive**, because the arm that had to reproduce the defect never
+did, so nothing there evidences a fix. Its `gdb` captures are the closest thing this project
+has to a mechanism for either process, and they characterise rather than explain.
 
 For the unexplained family, the position is unchanged: the exemption route stays closed, the
 fix named is a teardown coordinator in `cite_bringup` or a lifecycle-managed bridge, and the

@@ -1,0 +1,431 @@
+==> Running in container service 'dev': bash -lc cd /workspace/workspace && source install/setup.bash >/dev/null 2>&1; launch_test src/cite_skills/test/test_skill_contract.py
+[INFO] [launch]: All log files can be found below /home/cite/.ros/log/2026-08-27-15-09-51-426566-d26852a9c664-7
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [42]
+[INFO] [gdb-2]: process started with pid [69]
+[INFO] [skill_server-3]: process started with pid [70]
+[robot_state_publisher-1] [INFO] [1787843391.755868968] [cite.cell_a.arm_1.robot_state_publisher]: Robot initialized
+[gdb-2] 
+[gdb-2] This GDB supports auto-downloading debuginfo from the following URLs:
+[gdb-2]   <https://debuginfod.ubuntu.com>
+[gdb-2] Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+[gdb-2] Debuginfod has been disabled.
+[gdb-2] To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[gdb-2] SIGINT is used by the debugger.
+[gdb-2] Are you sure you want to change it? (y or n) [answered Y; input not from terminal]
+[gdb-2] warning: Error disabling address space randomization: Operation not permitted
+[skill_server-3] [WARN] [1787843391.834785093] [rcl.logging_rosout]: Publisher already registered for node name: 'skill_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.skill_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[skill_server-3] [INFO] [1787843391.839615177] [cite.cell_a.arm_1.skill_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00262579 seconds
+[skill_server-3] [INFO] [1787843391.839733010] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[skill_server-3] [INFO] [1787843391.839758385] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[skill_server-3] [INFO] [1787843391.898422177] [cite.cell_a.arm_1.skill_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[gdb-2] [Thread debugging using libthread_db enabled]
+[gdb-2] Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[gdb-2] [New Thread 0xffff98e0c860 (LWP 113)]
+[gdb-2] [New Thread 0xffff9840c860 (LWP 114)]
+[gdb-2] [New Thread 0xffff9660c860 (LWP 115)]
+[gdb-2] [New Thread 0xffff95c0c860 (LWP 116)]
+[gdb-2] [New Thread 0xffff9520c860 (LWP 117)]
+[gdb-2] [New Thread 0xffff9480c860 (LWP 118)]
+[gdb-2] [New Thread 0xffff93e0c860 (LWP 119)]
+[gdb-2] [New Thread 0xffff9340c860 (LWP 120)]
+[gdb-2] [New Thread 0xffff92a0c860 (LWP 121)]
+[gdb-2] [New Thread 0xffff9200c860 (LWP 122)]
+[gdb-2] [New Thread 0xffff9160c860 (LWP 123)]
+[gdb-2] [New Thread 0xffff90c0c860 (LWP 124)]
+[gdb-2] [New Thread 0xffff8be0c860 (LWP 125)]
+[gdb-2] [New Thread 0xffff8b40c860 (LWP 126)]
+[gdb-2] [WARN] [1787843392.206427760] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[gdb-2] [WARN] [1787843392.208888635] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[gdb-2] [INFO] [1787843392.221612469] [cite.cell_a.arm_1.move_group.moveit.ros.rdf_loader]: Loaded robot model in 0.0105794 seconds
+[gdb-2] [INFO] [1787843392.221714594] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[gdb-2] [INFO] [1787843392.221725385] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[gdb-2] [INFO] [1787843392.278336469] [cite.cell_a.arm_1.move_group.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[gdb-2] [New Thread 0xffff8a60c860 (LWP 127)]
+[gdb-2] [New Thread 0xffff89c0c860 (LWP 128)]
+[gdb-2] [INFO] [1787843392.474384927] [cite.cell_a.arm_1.move_group.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[gdb-2] [INFO] [1787843392.479010927] [cite.cell_a.arm_1.move_group.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[gdb-2] [INFO] [1787843392.501254885] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/attached_collision_object' for attached collision objects
+[gdb-2] [INFO] [1787843392.502153094] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[gdb-2] [New Thread 0xffff8920c860 (LWP 129)]
+[gdb-2] [INFO] [1787843392.502446010] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[gdb-2] [INFO] [1787843392.503067094] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/planning_scene'
+[gdb-2] [INFO] [1787843392.503089052] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[gdb-2] [INFO] [1787843392.503602510] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[gdb-2] [INFO] [1787843392.504083552] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[gdb-2] [WARN] [1787843392.504576552] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[gdb-2] [ERROR] [1787843392.504605594] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: No 3D sensor plugin(s) defined for octomap updates
+[gdb-2] [INFO] [1787843392.621850344] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[gdb-2] [INFO] [1787843392.625442885] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[gdb-2] [INFO] [1787843392.625465469] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[gdb-2] [INFO] [1787843392.628034344] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[gdb-2] [INFO] [1787843392.628056635] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[gdb-2] [INFO] [1787843392.629330927] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[gdb-2] [INFO] [1787843392.629352844] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[gdb-2] [INFO] [1787843392.630592302] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[gdb-2] [INFO] [1787843392.630614427] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[gdb-2] [INFO] [1787843392.631440510] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843392.632790719] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843392.632807010] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[gdb-2] [INFO] [1787843392.632994510] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[gdb-2] [INFO] [1787843392.632999802] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[gdb-2] [INFO] [1787843392.633010010] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[gdb-2] [INFO] [1787843392.633012469] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[gdb-2] [INFO] [1787843392.633020594] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[gdb-2] [INFO] [1787843392.633760635] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[gdb-2] [INFO] [1787843392.642925760] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[gdb-2] [INFO] [1787843392.642947927] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[gdb-2] [INFO] [1787843392.643265344] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[gdb-2] [INFO] [1787843392.665256302] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[gdb-2] [INFO] [1787843392.666097594] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843392.666176844] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843392.666180635] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[gdb-2] [INFO] [1787843392.666424052] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[gdb-2] [INFO] [1787843392.666562344] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[gdb-2] [INFO] [1787843392.666586635] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[gdb-2] [INFO] [1787843392.666604677] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[gdb-2] [INFO] [1787843392.666615760] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[gdb-2] [INFO] [1787843392.667556635] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[gdb-2] [INFO] [1787843392.668090760] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[gdb-2] [INFO] [1787843392.668117635] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[gdb-2] [INFO] [1787843392.668579260] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[gdb-2] [INFO] [1787843392.668596885] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[gdb-2] [INFO] [1787843392.668986177] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[gdb-2] [WARN] [1787843392.670108885] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[gdb-2] [INFO] [1787843392.700354302] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for arm_1_joint_trajectory_controller
+[gdb-2] [INFO] [1787843392.700409469] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: arm_1_gripper_controller will command a max effort of: 0
+[gdb-2] [INFO] [1787843392.702030552] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added GripperCommand controller for arm_1_gripper_controller
+[gdb-2] [New Thread 0xffff7fe0c860 (LWP 130)]
+[gdb-2] [INFO] [1787843392.702305552] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [INFO] [1787843392.702334427] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [INFO] [1787843392.702923344] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Trajectory execution is not managing controllers
+[gdb-2] [INFO] [1787843392.702940719] [cite.cell_a.arm_1.move_group]: MoveGroup debug mode is ON
+[gdb-2] [New Thread 0xffff7f40c860 (LWP 131)]
+[gdb-2] [INFO] [1787843392.725212427] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.executable]: 
+[gdb-2] 
+[gdb-2] ********************************************************
+[gdb-2] * MoveGroup using: 
+[gdb-2] *     - apply_planning_scene_service
+[gdb-2] *     - clear_octomap_service
+[gdb-2] *     - get_group_urdf
+[gdb-2] *     - load_geometry_from_file
+[gdb-2] *     - CartesianPathService
+[gdb-2] *     - execute_trajectory_action
+[gdb-2] *     - get_planning_scene_service
+[gdb-2] *     - kinematics_service
+[gdb-2] *     - move_action
+[gdb-2] *     - motion_plan_service
+[gdb-2] *     - query_planners_service
+[gdb-2] *     - state_validation_service
+[gdb-2] *     - save_geometry_to_file
+[gdb-2] ********************************************************
+[gdb-2] 
+[gdb-2] [INFO] [1787843392.725258510] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context using pipeline pilz_industrial_motion_planner
+[gdb-2] [INFO] [1787843392.725266552] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[gdb-2] [96mLoading 'move_group/ApplyPlanningSceneService'...[0m
+[gdb-2] [96mLoading 'move_group/ClearOctomapService'...[0m
+[gdb-2] [96mLoading 'move_group/GetUrdfService'...[0m
+[gdb-2] [96mLoading 'move_group/LoadGeometryFromFileService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupCartesianPathService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupGetPlanningSceneService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupKinematicsService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupMoveAction'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupPlanService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupQueryPlannersService'...[0m
+[gdb-2] [96mLoading 'move_group/MoveGroupStateValidationService'...[0m
+[gdb-2] [96mLoading 'move_group/SaveGeometryToFileService'...[0m
+[gdb-2] 
+[gdb-2] [92mYou can start planning now![0m
+[gdb-2] 
+[gdb-2] [New Thread 0xffff7ea0c860 (LWP 132)]
+[gdb-2] [New Thread 0xffff7e00c860 (LWP 133)]
+[gdb-2] [New Thread 0xffff7d60c860 (LWP 134)]
+[gdb-2] [New Thread 0xffff7cc0c860 (LWP 135)]
+[gdb-2] [New Thread 0xffff73e0c860 (LWP 136)]
+[gdb-2] [New Thread 0xffff7340c860 (LWP 137)]
+[gdb-2] [New Thread 0xffff72a0c860 (LWP 138)]
+[skill_server-3] [INFO] [1787843392.730186219] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm_1_xarm5.
+[skill_server-3] [INFO] [1787843392.730228094] [cite.cell_a.arm_1.skill_server]: planning for group 'arm_1_xarm5' with end effector 'arm_1_link_tcp' (planning frame 'arm_1_mount')
+[skill_server-3] [INFO] [1787843392.730233052] [cite.cell_a.arm_1.skill_server]: planner: pilz_industrial_motion_planner/PTP, falling back to ompl (its own default planner) (ADR-0027)
+[gdb-2] [New Thread 0xffff7200c860 (LWP 139)]
+[gdb-2] [New Thread 0xffff7160c860 (LWP 140)]
+[gdb-2] [New Thread 0xffff70c0c860 (LWP 141)]
+[gdb-2] [New Thread 0xffff67e0c860 (LWP 142)]
+[skill_server-3] [INFO] [1787843392.740988635] [cite.cell_a.arm_1.skill_server]: skills for arm_1 are accepting goals
+test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured (test_skill_contract.TestSkillContract.test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured) ... [skill_server-3] [WARN] [1787843392.903364386] [cite.cell_a.arm_1.skill_server]: rejecting a 'move_to' goal: 'grasp' still holds this arm. One arm runs one skill at a time — a second goal would share this arm's planner and its trajectory with the first. The caller that abandoned the earlier goal has to cancel it.
+[gdb-2] [INFO] [1787843392.954995594] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Received event 'stop'
+[skill_server-3] [INFO] [1787843393.007206177] [cite.cell_a.arm_1.skill_server]: gripper: commanded 0.0 mm, reached 88.9 mm, stalled=false, reached_goal=false, effort=0.0 -> empty
+ok
+test_2_a_cartesian_path_is_refused_rather_than_silently_replaced (test_skill_contract.TestSkillContract.test_2_a_cartesian_path_is_refused_rather_than_silently_replaced) ... [skill_server-3] [INFO] [1787843393.060544552] [cite.cell_a.arm_1.skill_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+ok
+test_3_a_reachable_pose_is_planned_to_rather_than_refused (test_skill_contract.TestSkillContract.test_3_a_reachable_pose_is_planned_to_rather_than_refused) ... [skill_server-3] [INFO] [1787843393.203873677] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[gdb-2] [INFO] [1787843393.205218552] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-3] [INFO] [1787843393.205657886] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[gdb-2] [New Thread 0xffff6740c860 (LWP 149)]
+[gdb-2] [INFO] [1787843393.207051386] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: executing..
+[gdb-2] [INFO] [1787843393.253610636] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[gdb-2] [INFO] [1787843393.253708761] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[gdb-2] [INFO] [1787843393.254257469] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843393.254324344] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[gdb-2] [WARN] [1787843393.254335094] [cite.cell_a.arm_1.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[gdb-2] [INFO] [1787843393.254351469] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[gdb-2] [INFO] [1787843393.254405386] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[gdb-2] [INFO] [1787843393.254938761] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[gdb-2] [INFO] [1787843393.255017011] [cite.cell_a.arm_1.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[gdb-2] [INFO] [1787843393.255136219] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[gdb-2] [INFO] [1787843393.256750761] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[gdb-2] [INFO] [1787843393.258610386] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[gdb-2] [INFO] [1787843393.259184511] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[gdb-2] [Thread 0xffff6740c860 (LWP 149) exited]
+[skill_server-3] [INFO] [1787843393.260311011] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-3] [INFO] [1787843393.260874594] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.00122587 seconds
+[gdb-2] [INFO] [1787843393.261709927] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[gdb-2] [INFO] [1787843393.261833677] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [INFO] [1787843393.261855052] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [INFO] [1787843393.261980386] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[skill_server-3] [INFO] [1787843393.261805011] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[gdb-2] [New Thread 0xffff6740c860 (LWP 151)]
+[gdb-2] [INFO] [1787843393.302240219] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[gdb-2] [INFO] [1787843393.302331344] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [INFO] [1787843393.302353677] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[gdb-2] [ERROR] [1787843393.302530386] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Action client not connected to action server: arm_1_joint_trajectory_controller/follow_joint_trajectory
+[gdb-2] [ERROR] [1787843393.302589927] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Failed to send trajectory part 1 of 1 to controller arm_1_joint_trajectory_controller
+[gdb-2] [INFO] [1787843393.302608594] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status ABORTED ...
+[gdb-2] [INFO] [1787843393.302670511] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: ABORTED
+[gdb-2] [Thread 0xffff6740c860 (LWP 151) exited]
+[skill_server-3] [INFO] [1787843393.303296677] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Execute request aborted
+[skill_server-3] [ERROR] [1787843393.304873594] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroupInterface::execute() failed or timeout reached
+ok
+test_3b_an_unreachable_pose_is_reported_as_unreachable (test_skill_contract.TestSkillContract.test_3b_an_unreachable_pose_is_reported_as_unreachable) ... ok
+test_4_a_transfer_without_a_rendezvous_token_is_refused (test_skill_contract.TestSkillContract.test_4_a_transfer_without_a_rendezvous_token_is_refused) ... ok
+test_5_a_transfer_carrying_nothing_is_refused (test_skill_contract.TestSkillContract.test_5_a_transfer_carrying_nothing_is_refused) ... ok
+test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out (test_skill_contract.TestSkillContract.test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out)
+A hold this arm cannot complete is refused before it moves. ... [skill_server-3] [INFO] [1787843394.168740553] [cite.cell_a.arm_1.skill_server]: gripper: commanded 0.0 mm, reached 48.0 mm, stalled=true, reached_goal=false, effort=10.0 -> holding
+ok
+test_7_a_transfer_is_cancellable_while_it_is_still_moving (test_skill_contract.TestSkillContract.test_7_a_transfer_is_cancellable_while_it_is_still_moving)
+Cancelling a transfer leaves the work-piece where it was. ... [skill_server-3] [INFO] [1787843394.402509303] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[gdb-2] [INFO] [1787843394.403108595] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-3] [INFO] [1787843394.403533886] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[gdb-2] [New Thread 0xffff6740c860 (LWP 159)]
+[gdb-2] [INFO] [1787843394.404610803] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: executing..
+[gdb-2] [INFO] [1787843394.432100845] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Received event 'stop'
+[gdb-2] [INFO] [1787843394.453967095] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[gdb-2] [INFO] [1787843394.454048511] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[gdb-2] [INFO] [1787843394.454743761] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[gdb-2] [INFO] [1787843394.454866970] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[gdb-2] [WARN] [1787843394.454887345] [cite.cell_a.arm_1.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[gdb-2] [INFO] [1787843394.454923220] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[gdb-2] [INFO] [1787843394.455190595] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[gdb-2] [INFO] [1787843394.455431178] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[gdb-2] [INFO] [1787843394.455481970] [cite.cell_a.arm_1.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[gdb-2] [INFO] [1787843394.455504053] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[gdb-2] [INFO] [1787843394.456556928] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[gdb-2] [INFO] [1787843394.458215678] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[gdb-2] [INFO] [1787843394.458335428] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-3] [INFO] [1787843394.458662720] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[gdb-2] [Thread 0xffff6740c860 (LWP 159) exited]
+[skill_server-3] [INFO] [1787843394.460022720] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000896042 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.815s
+
+OK
+[INFO] [skill_server-3]: sending signal 'SIGINT' to process[skill_server-3]
+[INFO] [gdb-2]: sending signal 'SIGINT' to process[gdb-2]
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[skill_server-3] [INFO] [1787843394.544510595] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1787843394.545223553] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[gdb-2] [INFO] [1787843394.545647595] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[skill_server-3] CITE_TRIPWIRE: use_count before return = 9
+[skill_server-3] CITE_TRIPWIRE: main returning
+[gdb-2] [Thread 0xffff7f40c860 (LWP 131) exited]
+[gdb-2] [Thread 0xffff67e0c860 (LWP 142) exited]
+[gdb-2] [Thread 0xffff70c0c860 (LWP 141) exited]
+[gdb-2] [Thread 0xffff7160c860 (LWP 140) exited]
+[gdb-2] [Thread 0xffff7e00c860 (LWP 133) exited]
+[gdb-2] [Thread 0xffff7ea0c860 (LWP 132) exited]
+[gdb-2] [Thread 0xffff7fe0c860 (LWP 130) exited]
+[gdb-2] [Thread 0xffff89c0c860 (LWP 128) exited]
+[gdb-2] [Thread 0xffff8a60c860 (LWP 127) exited]
+[gdb-2] [Thread 0xffff7200c860 (LWP 139) exited]
+[gdb-2] [Thread 0xffff7340c860 (LWP 137) exited]
+[gdb-2] [Thread 0xffff73e0c860 (LWP 136) exited]
+[gdb-2] [Thread 0xffff72a0c860 (LWP 138) exited]
+[gdb-2] [Thread 0xffff7cc0c860 (LWP 135) exited]
+[gdb-2] [Thread 0xffff7d60c860 (LWP 134) exited]
+[gdb-2] [Thread 0xffff95c0c860 (LWP 116) exited]
+[skill_server-3] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[skill_server-3]          at line 127 in ./src/class_loader.cpp
+[gdb-2] [INFO] [1787843394.569180095] [cite.cell_a.arm_1.move_group.moveit.ros.moveit_cpp]: Deleting MoveItCpp
+[gdb-2] 
+[gdb-2] Thread 1 "move_group" received signal SIGSEGV, Segmentation fault.
+[gdb-2] 0x0000ffff9d6d1384 in rclcpp::CallbackGroup::~CallbackGroup() () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] 
+[gdb-2] Thread 18 (Thread 0xffff8920c860 (LWP 129) "move_group"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0xaaaafbc619e4) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0xaaaafbc619e4) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xaaaafbc619e4, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c49f0 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0xaaaafb847ad0, cond=0xaaaafbc619b8) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_wait (cond=0xaaaafbc619b8, mutex=0xaaaafb847ad0) at ./nptl/pthread_cond_wait.c:627
+[gdb-2] #5  0x0000ffff9db89ba4 in planning_scene_monitor::PlanningSceneMonitor::scenePublishingThread() () from /opt/ros/jazzy/lib/libmoveit_planning_scene_monitor.so.2.12.4
+[gdb-2] #6  0x0000ffff9d2e1ae0 [PAC] in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+[gdb-2] #7  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #8  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 15 (Thread 0xffff8b40c860 (LWP 126) "move_group"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0xffff78000c0c) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0xffff78000c0c) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xffff78000c0c, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c49f0 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0xffff78000bb0, cond=0xffff78000be0) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_wait (cond=0xffff78000be0, mutex=0xffff78000bb0) at ./nptl/pthread_cond_wait.c:627
+[gdb-2] #5  0x0000ffff97664698 in eprosima::fastdds::dds::detail::WaitSetImpl::wait(std::vector<eprosima::fastdds::dds::Condition*, std::allocator<eprosima::fastdds::dds::Condition*> >&, eprosima::fastrtps::Time_t const&) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #6  0x0000ffff9766478c [PAC] in eprosima::fastdds::dds::WaitSet::wait(std::vector<eprosima::fastdds::dds::Condition*, std::allocator<eprosima::fastdds::dds::Condition*> >&, eprosima::fastrtps::Time_t) const () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff98f209d4 [PAC] in rmw_fastrtps_shared_cpp::__rmw_wait(char const*, rmw_subscriptions_s*, rmw_guard_conditions_s*, rmw_services_s*, rmw_clients_s*, rmw_events_s*, rmw_wait_set_s*, rmw_time_s const*) () from /opt/ros/jazzy/lib/librmw_fastrtps_shared_cpp.so
+[gdb-2] #8  0x0000ffff98f08cb0 [PAC] in ?? () from /opt/ros/jazzy/lib/librmw_fastrtps_shared_cpp.so
+[gdb-2] #9  0x0000ffff9d2e1ae0 [PAC] in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+[gdb-2] #10 0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #11 0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 14 (Thread 0xffff8be0c860 (LWP 125) "dds.udp.7003"):
+[gdb-2] #0  0x0000ffff9d12e3d8 in __libc_recvfrom (fd=16, buf=0xaaaafb8129b0, len=65500, flags=0, addr=..., addrlen=0xffff8be0bae8) at ../sysdeps/unix/sysv/linux/recvfrom.c:27
+[gdb-2] #1  0x0000ffff9759f5f4 in eprosima::fastdds::rtps::UDPChannelResource::Receive(unsigned char*, unsigned int, unsigned int&, eprosima::fastrtps::rtps::Locator_t&) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #2  0x0000ffff9759fac8 [PAC] in eprosima::fastdds::rtps::UDPChannelResource::perform_listen_operation(eprosima::fastrtps::rtps::Locator_t) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #3  0x0000ffff975a1ed4 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #4  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #5  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 13 (Thread 0xffff90c0c860 (LWP 124) "dds.shm.7003"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=<optimized out>, cancel=true, abstime=0xffff90c0b828, op=265, expected=0, futex_word=0xffff9da07120) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=<optimized out>, abstime=0xffff90c0b828, clockid=0, expected=0, futex_word=0xffff9da07120) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xffff9da07120, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0xffff90c0b828, private=<optimized out>) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0cde30 in do_futex_wait (sem=sem@entry=0xffff9da07120, abstime=abstime@entry=0xffff90c0b828, clockid=0) at ./nptl/sem_waitcommon.c:111
+[gdb-2] #4  0x0000ffff9d0cdef8 in __new_sem_wait_slow64 (sem=0xffff9da07120, abstime=0xffff90c0b828, clockid=0) at ./nptl/sem_waitcommon.c:183
+[gdb-2] #5  0x0000ffff974a68c4 in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #6  0x0000ffff9778d398 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff9778e030 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #8  0x0000ffff9778a45c [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #9  0x0000ffff97794444 [PAC] in void* eprosima::thread::ThreadProxy<eprosima::create_thread<eprosima::fastdds::rtps::SharedMemChannelResource::init_thread(eprosima::fastrtps::rtps::Locator_t const&, eprosima::fastdds::rtps::ThreadSettings const&)::{lambda()#1}, unsigned int>(eprosima::fastdds::rtps::SharedMemChannelResource::init_thread(eprosima::fastrtps::rtps::Locator_t const&, eprosima::fastdds::rtps::ThreadSettings const&)::{lambda()#1}, eprosima::fastdds::rtps::ThreadSettings const&, char const*, unsigned int)::{lambda()#1}>(void*) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #10 0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #11 0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 12 (Thread 0xffff9160c860 (LWP 123) "dds.asyn.0.0"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0xaaaafb69f250) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0xaaaafb69f250) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xaaaafb69f250, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c49f0 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0xaaaafb69f340, cond=0xaaaafb69f228) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_wait (cond=0xaaaafb69f228, mutex=0xaaaafb69f340) at ./nptl/pthread_cond_wait.c:627
+[gdb-2] #5  0x0000ffff9746886c in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #6  0x0000ffff976c01c0 [PAC] in void* eprosima::thread::ThreadProxy<eprosima::create_thread<eprosima::fastdds::rtps::FlowControllerImpl<eprosima::fastdds::rtps::FlowControllerSyncPublishMode, eprosima::fastdds::rtps::FlowControllerFifoSchedule>::initialize_async_thread<eprosima::fastdds::rtps::FlowControllerSyncPublishMode>()::{lambda()#1}, unsigned int, unsigned int>(eprosima::fastdds::rtps::FlowControllerImpl<eprosima::fastdds::rtps::FlowControllerSyncPublishMode, eprosima::fastdds::rtps::FlowControllerFifoSchedule>::initialize_async_thread<eprosima::fastdds::rtps::FlowControllerSyncPublishMode>()::{lambda()#1}, eprosima::fastdds::rtps::ThreadSettings const&, char const*, unsigned int, unsigned int)::{lambda()#1}>(void*) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #8  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 11 (Thread 0xffff9200c860 (LWP 122) "dds.udp.28167"):
+[gdb-2] #0  0x0000ffff9d12e3d8 in __libc_recvfrom (fd=12, buf=0xaaaafb6e1150, len=65500, flags=0, addr=..., addrlen=0xffff9200bae8) at ../sysdeps/unix/sysv/linux/recvfrom.c:27
+[gdb-2] #1  0x0000ffff9759f5f4 in eprosima::fastdds::rtps::UDPChannelResource::Receive(unsigned char*, unsigned int, unsigned int&, eprosima::fastrtps::rtps::Locator_t&) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #2  0x0000ffff9759fac8 [PAC] in eprosima::fastdds::rtps::UDPChannelResource::perform_listen_operation(eprosima::fastrtps::rtps::Locator_t) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #3  0x0000ffff975a1ed4 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #4  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #5  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 10 (Thread 0xffff92a0c860 (LWP 121) "dds.shm.28167"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=<optimized out>, cancel=true, abstime=0xffff92a0b828, op=265, expected=0, futex_word=0xffff9da58120) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=<optimized out>, abstime=0xffff92a0b828, clockid=0, expected=0, futex_word=0xffff9da58120) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xffff9da58120, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0xffff92a0b828, private=<optimized out>) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0cde30 in do_futex_wait (sem=sem@entry=0xffff9da58120, abstime=abstime@entry=0xffff92a0b828, clockid=0) at ./nptl/sem_waitcommon.c:111
+[gdb-2] #4  0x0000ffff9d0cdef8 in __new_sem_wait_slow64 (sem=0xffff9da58120, abstime=0xffff92a0b828, clockid=0) at ./nptl/sem_waitcommon.c:183
+[gdb-2] #5  0x0000ffff974a68c4 in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #6  0x0000ffff9778d398 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff9778e030 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #8  0x0000ffff9778a45c [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #9  0x0000ffff97794444 [PAC] in void* eprosima::thread::ThreadProxy<eprosima::create_thread<eprosima::fastdds::rtps::SharedMemChannelResource::init_thread(eprosima::fastrtps::rtps::Locator_t const&, eprosima::fastdds::rtps::ThreadSettings const&)::{lambda()#1}, unsigned int>(eprosima::fastdds::rtps::SharedMemChannelResource::init_thread(eprosima::fastrtps::rtps::Locator_t const&, eprosima::fastdds::rtps::ThreadSettings const&)::{lambda()#1}, eprosima::fastdds::rtps::ThreadSettings const&, char const*, unsigned int)::{lambda()#1}>(void*) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #10 0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #11 0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 9 (Thread 0xffff9340c860 (LWP 120) "dds.udp.28150"):
+[gdb-2] #0  0x0000ffff9d12e3d8 in __libc_recvfrom (fd=10, buf=0xaaaafb6d1160, len=65500, flags=0, addr=..., addrlen=0xffff9340bae8) at ../sysdeps/unix/sysv/linux/recvfrom.c:27
+[gdb-2] #1  0x0000ffff9759f5f4 in eprosima::fastdds::rtps::UDPChannelResource::Receive(unsigned char*, unsigned int, unsigned int&, eprosima::fastrtps::rtps::Locator_t&) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #2  0x0000ffff9759fac8 [PAC] in eprosima::fastdds::rtps::UDPChannelResource::perform_listen_operation(eprosima::fastrtps::rtps::Locator_t) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #3  0x0000ffff975a1ed4 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #4  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #5  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 8 (Thread 0xffff93e0c860 (LWP 119) "dds.udp.28166"):
+[gdb-2] #0  0x0000ffff9d12e3d8 in __libc_recvfrom (fd=9, buf=0xaaaafb6c1170, len=65500, flags=0, addr=..., addrlen=0xffff93e0bae8) at ../sysdeps/unix/sysv/linux/recvfrom.c:27
+[gdb-2] #1  0x0000ffff9759f5f4 in eprosima::fastdds::rtps::UDPChannelResource::Receive(unsigned char*, unsigned int, unsigned int&, eprosima::fastrtps::rtps::Locator_t&) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #2  0x0000ffff9759fac8 [PAC] in eprosima::fastdds::rtps::UDPChannelResource::perform_listen_operation(eprosima::fastrtps::rtps::Locator_t) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #3  0x0000ffff975a1ed4 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #4  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #5  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 7 (Thread 0xffff9480c860 (LWP 118) "dds.ev.0"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0xffff9480bea8, op=137, expected=0, futex_word=0xaaaafb6af618) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0xffff9480bea8, clockid=-76876264, expected=0, futex_word=0xaaaafb6af618) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xaaaafb6af618, expected=expected@entry=0, clockid=clockid@entry=1, abstime=abstime@entry=0xffff9480bea8, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c5010 in __pthread_cond_wait_common (abstime=0xffff9480bea8, clockid=1, mutex=0xaaaafb6ab7b0, cond=0xaaaafb6af5f0) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_clockwait64 (abstime=0xffff9480bea8, clockid=1, mutex=0xaaaafb6ab7b0, cond=0xaaaafb6af5f0) at ./nptl/pthread_cond_wait.c:691
+[gdb-2] #5  ___pthread_cond_clockwait64 (cond=0xaaaafb6af5f0, mutex=0xaaaafb6ab7b0, clockid=1, abstime=0xffff9480bea8) at ./nptl/pthread_cond_wait.c:679
+[gdb-2] #6  0x0000ffff974684fc in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff974696f4 [PAC] in eprosima::fastrtps::rtps::ResourceEvent::event_service() () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #8  0x0000ffff9746e594 [PAC] in ?? () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #9  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #10 0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 6 (Thread 0xffff9520c860 (LWP 117) "dds.shm.wdog"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0xffff9520bf28, op=137, expected=0, futex_word=0xaaaafb6b4a88) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0xffff9520bf28, clockid=-76854648, expected=0, futex_word=0xaaaafb6b4a88) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xaaaafb6b4a88, expected=expected@entry=0, clockid=clockid@entry=1, abstime=abstime@entry=0xffff9520bf28, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c5010 in __pthread_cond_wait_common (abstime=0xffff9520bf28, clockid=1, mutex=0xaaaafb6b4a90, cond=0xaaaafb6b4a60) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_clockwait64 (abstime=0xffff9520bf28, clockid=1, mutex=0xaaaafb6b4a90, cond=0xaaaafb6b4a60) at ./nptl/pthread_cond_wait.c:691
+[gdb-2] #5  ___pthread_cond_clockwait64 (cond=0xaaaafb6b4a60, mutex=0xaaaafb6b4a90, clockid=1, abstime=0xffff9520bf28) at ./nptl/pthread_cond_wait.c:679
+[gdb-2] #6  0x0000ffff97794278 in void* eprosima::thread::ThreadProxy<eprosima::create_thread<eprosima::fastdds::rtps::SharedMemWatchdog::SharedMemWatchdog()::{lambda()#1}>(eprosima::fastdds::rtps::SharedMemWatchdog::SharedMemWatchdog()::{lambda()#1}, eprosima::fastdds::rtps::ThreadSettings const&, char const*)::{lambda()#1}>(void*) () from /opt/ros/jazzy/lib/libfastrtps.so.2.14
+[gdb-2] #7  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #8  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 4 (Thread 0xffff9660c860 (LWP 115) "move_group"):
+[gdb-2] #0  0x0000ffff9d0c1d6c in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0xffff9660bf18, op=137, expected=0, futex_word=0xaaaafb61c9e8) at ./nptl/futex-internal.c:57
+[gdb-2] #1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0xffff9660bf18, clockid=-77477400, expected=0, futex_word=0xaaaafb61c9e8) at ./nptl/futex-internal.c:87
+[gdb-2] #2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0xaaaafb61c9e8, expected=expected@entry=0, clockid=clockid@entry=1, abstime=abstime@entry=0xffff9660bf18, private=private@entry=0) at ./nptl/futex-internal.c:139
+[gdb-2] #3  0x0000ffff9d0c5010 in __pthread_cond_wait_common (abstime=0xffff9660bf18, clockid=1, mutex=0xaaaafb61c990, cond=0xaaaafb61c9c0) at ./nptl/pthread_cond_wait.c:503
+[gdb-2] #4  ___pthread_cond_clockwait64 (abstime=0xffff9660bf18, clockid=1, mutex=0xaaaafb61c990, cond=0xaaaafb61c9c0) at ./nptl/pthread_cond_wait.c:691
+[gdb-2] #5  ___pthread_cond_clockwait64 (cond=0xaaaafb61c9c0, mutex=0xaaaafb61c990, clockid=1, abstime=0xffff9660bf18) at ./nptl/pthread_cond_wait.c:679
+[gdb-2] #6  0x0000ffff9b0a41cc in ?? () from /opt/ros/jazzy/lib/librcl_logging_spdlog.so
+[gdb-2] #7  0x0000ffff9d2e1ae0 [PAC] in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+[gdb-2] #8  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #9  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 3 (Thread 0xffff9840c860 (LWP 114) "move_group-ust"):
+[gdb-2] #0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+[gdb-2] #1  0x0000ffff9ab7992c in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+[gdb-2] #2  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #3  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 2 (Thread 0xffff98e0c860 (LWP 113) "move_group-ust"):
+[gdb-2] #0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+[gdb-2] #1  0x0000ffff9ab7992c in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+[gdb-2] #2  0x0000ffff9d0c582c [PAC] in start_thread (arg=0x0) at ./nptl/pthread_create.c:447
+[gdb-2] #3  0x0000ffff9d12b79c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+[gdb-2] 
+[gdb-2] Thread 1 (Thread 0xffff9dc73020 (LWP 91) "move_group"):
+[gdb-2] #0  0x0000ffff9d6d1384 in rclcpp::CallbackGroup::~CallbackGroup() () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #1  0x0000ffff9d6cc5ac [PAC] in ?? () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #2  0x0000ffff9d731b58 [PAC] in rclcpp::node_interfaces::NodeBase::~NodeBase() () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #3  0x0000ffff9d731c18 [PAC] in ?? () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #4  0x0000ffff9d6cc4d0 [PAC] in ?? () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #5  0x0000ffff9d7335c4 [PAC] in rclcpp::Node::~Node() () from /opt/ros/jazzy/lib/librclcpp.so
+[gdb-2] #6  0x0000ffff9cdb6c60 [PAC] in ?? () from /opt/ros/jazzy/lib/libmoveit_trajectory_execution_manager.so.2.12.4
+[gdb-2] #7  0x0000ffff9cda5900 [PAC] in trajectory_execution_manager::TrajectoryExecutionManager::~TrajectoryExecutionManager() () from /opt/ros/jazzy/lib/libmoveit_trajectory_execution_manager.so.2.12.4
+[gdb-2] #8  0x0000ffff9dc89c58 [PAC] in ?? () from /opt/ros/jazzy/lib/libmoveit_cpp.so.2.12.4
+[gdb-2] #9  0x0000ffff9dc89e60 [PAC] in moveit_cpp::MoveItCpp::~MoveItCpp() () from /opt/ros/jazzy/lib/libmoveit_cpp.so.2.12.4
+[gdb-2] #10 0x0000aaaacdae36f8 [PAC] in ?? ()
+[gdb-2] #11 0x0000aaaacdae0a68 [PAC] in main ()
+[INFO] [gdb-2]: process has finished cleanly [pid 69]
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 42]
+[INFO] [skill_server-3]: process has finished cleanly [pid 70]
+test_the_skill_server_exited_cleanly (test_skill_contract.TestCleanShutdown.test_the_skill_server_exited_cleanly) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK

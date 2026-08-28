@@ -1,0 +1,6 @@
+run=1 rc=0 seconds=40
+run=2 rc=1 seconds=93
+run=3 rc=0 seconds=40
+run=4 rc=0 seconds=44
+run=5 rc=0 seconds=35
+run=6 rc=1 seconds=1421
