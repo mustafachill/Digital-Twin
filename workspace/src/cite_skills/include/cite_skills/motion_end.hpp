@@ -238,11 +238,15 @@ inline bool end_is_named_by_moveit(int moveit_error_code)
 /// WHY THIS IS A FREE FUNCTION AND NOT A METHOD ON THE SERVER. It was a private
 /// method, and nothing tested it: the decision that chooses between retrying a
 /// station unattended and stopping it for an operator was reachable only by
-/// standing up `move_group` and provoking a real abort, which no fixture in this
-/// repository can do on demand. As a free function over the numbers it actually
-/// uses, every row of it is a unit test. What that still does NOT prove is that a
-/// real abort reaches it — see `test_motion_end.cpp` and ADR-0037's correction to
-/// decision 8.
+/// standing up `move_group` and provoking a real abort. As a free function over
+/// the numbers it actually uses, every row of it is a unit test.
+///
+/// THAT A REAL ABORT REACHES IT is a separate claim and is evidenced separately,
+/// by `cite_bringup/test/test_abort_classification_launch.py` (ADR-0040), which
+/// stops one joint part way along its trajectory under a real `move_group` and
+/// the real skill server. Read its module docstring for what that rig's perfect-
+/// follower plant does and does not establish before citing it for anything about
+/// an arm that decelerates.
 inline ExecutionFailure classify_execution_failure(
   int moveit_error_code, const std::vector<double> & current,
   const std::vector<double> & start, const std::vector<double> & goal, double tolerance_rad)

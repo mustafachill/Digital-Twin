@@ -48,6 +48,16 @@ if(BUILD_TESTING)
   # not for physics.
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_trajectory_constraints_launch.py TIMEOUT 300)
+
+  # ADR-0040. The gap ADR-0037 records against its own decision 8: no fixture
+  # drove a genuine abort into L3. This one does, through a real move_group and
+  # the real skill server, over `cite_test_hardware/JointStopSystem` — mock
+  # hardware with a pair of hard stops on one joint, so the arm comes to rest
+  # PART WAY along its trajectory rather than at its first point.
+  #
+  # It stands up a planner and a skill server for one arm and plans two motions,
+  # which is why the timeout is twice the one above. Still no Gazebo.
+  add_launch_test(test/test_abort_classification_launch.py TIMEOUT 600)
 endif()
 
 ament_package()

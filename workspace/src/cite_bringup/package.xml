@@ -60,6 +60,17 @@
   <test_depend>hardware_interface</test_depend>
   <test_depend>rclpy</test_depend>
   <test_depend>python3-yaml</test_depend>
+  <!-- ADR-0040's fixture: mock hardware with a pair of hard stops on one joint,
+       which is what lets a trajectory be aborted PART WAY along its path rather
+       than at its first point. A <test_depend> and never anything stronger — the
+       guard test in that package asserts exactly this. -->
+  <test_depend>cite_test_hardware</test_depend>
+  <!-- The abort-classification rig reads the arm's joint state and its tool pose
+       to decide what it observed. `cite_skills` and `moveit_ros_move_group` are
+       already exec dependencies above, because bring-up starts both. -->
+  <test_depend>sensor_msgs</test_depend>
+  <test_depend>geometry_msgs</test_depend>
+  <test_depend>tf2_ros</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

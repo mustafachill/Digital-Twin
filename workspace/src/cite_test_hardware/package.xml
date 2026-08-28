@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_test_hardware</name>
+  <version>0.1.0</version>
+  <description>
+    `ros2_control` test doubles. Nothing in here describes real hardware, and
+    nothing in here may be loaded by a production bring-up.
+
+    ADMISSION TEST, in the style of `cite_runtime` (ADR-0034), because a package
+    named for what tests need will otherwise accumulate whatever a test needed.
+    Something belongs here only if all four hold:
+
+      1. it is a `ros2_control` HARDWARE COMPONENT — a `SystemInterface`,
+         `ActuatorInterface` or `SensorInterface` plugin, and nothing else;
+      2. it exists to make a FAILURE reproducible on demand, not to stand in for
+         an arm that works;
+      3. it REFUSES TO INITIALISE unless it is given a parameter that has no home
+         in the L0 facility model, so that no generated description can load it;
+      4. it is depended on by NOTHING that is not a test.
+
+    ADR-0040 records the decision, what was weighed against it, and which parts of
+    "unreachable from a production launch path" are structural and which are
+    checked by a guard test.
+
+    THE WHOLE PACKAGE IS BUILT ONLY UNDER `BUILD_TESTING`. A build with testing
+    off installs an ament package containing no loadable class at all.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Declared as TEST dependencies rather than build dependencies, and that is
+       the package.xml half of the same statement CMakeLists.txt makes with
+       `if(BUILD_TESTING)`: this package contributes nothing to a build that is
+       not building tests. colcon still uses these for topological ordering, so
+       the ordering is correct either way. -->
+  <test_depend>hardware_interface</test_depend>
+  <test_depend>pluginlib</test_depend>
+  <test_depend>rclcpp</test_depend>
+  <test_depend>rclcpp_lifecycle</test_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

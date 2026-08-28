@@ -80,9 +80,11 @@ asset_type:
       # the physical gripper is bounded too — it is not, and the header says why.
       gripper_max_drive_rate_rad_s: instance.end_effector.max_drive_rate_rad_s
 
-  # The plugin class string exists exactly once, here. That is what makes
+  # The plugin class string is authored exactly once, here. That is what makes
   # ADR-0005's "the only thing that differs is which plugin is loaded" true by
-  # construction rather than by discipline.
+  # construction rather than by discipline. One test mirrors the value in order to
+  # assert against it rather than to supply it; `HardwareBackend` in
+  # tools/cite_tools/model/schema.py states that exception and its limit.
   hardware_backends:
     sim:
       ros2_control_plugin: gz_ros2_control/GazeboSimSystem

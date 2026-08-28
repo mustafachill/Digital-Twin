@@ -193,13 +193,26 @@ launch broadcasts SIGINT to every process in one event dispatch.
 ./scripts/test --packages-select cite_bringup
 ```
 
-Both are pytest and neither starts a process; they run in milliseconds.
+The first two are pytest and start no process; they run in milliseconds. The last two are
+`launch_testing` rigs that start real nodes, and neither of them runs Gazebo.
 
 * `test_plan.py` — the plan reader: what it accepts, and every error message it produces.
 * `test_simulation_launch.py` — the launch description itself: what it refuses to start and
   what it stops on. Both halves are needed and neither substitutes for the other — **a
   perfectly correct `require_hardware_opt_in` that nothing calls is exactly the defect this
   file exists to catch, and it is the defect that was there.**
+* `test_trajectory_constraints_launch.py` — that a real `joint_trajectory_controller` READS
+  the generated `constraints:` block and acts on those numbers (ADR-0036). Two controller
+  managers over mock hardware; no planner, no skill server.
+* `test_abort_classification_launch.py` — that a real abort reaches L3 and is classified
+  `MOTION_INTERRUPTED` (ADR-0040, closing the gap ADR-0037 records against its own decision
+  8). One arm, with a real `move_group` and the real skill server, over
+  `cite_test_hardware/JointStopSystem` — mock hardware with a pair of hard stops on one
+  joint, so the arm comes to rest **part way** along its trajectory rather than at its first
+  point. It also records the residual joint velocity at the moment the result arrives, which
+  is ADR-0037's outstanding measurement. **Read its module docstring before quoting a number
+  out of it:** the plant is a perfect follower, so what it measures is the commanded motion,
+  not a real arm's coasting.
 
 The bridge argument list is built by `_bridge_topics` rather than inline in the `Node`, so it
 can be read back: `launch_ros` hides a node's arguments behind a private attribute, and a test
