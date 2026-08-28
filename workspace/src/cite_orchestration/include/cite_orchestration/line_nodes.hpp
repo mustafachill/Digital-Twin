@@ -236,6 +236,18 @@ struct StationRuntime
 /// exception to it: nothing carries work to it, so no belt can be the reason it cannot
 /// be triggered. Today's model gives exactly one station that shape.
 ///
+/// AND THAT SENTENCE IS TRUE WITHOUT BEING THE WHOLE ANSWER. "The rule working" and
+/// "the caller can see the failure here" are different claims, and only the first is
+/// established. `station_transfer_1` in today's model HAS a trigger — the beam over the
+/// pick table — and no inbound belt, so it returns `nullopt` above and
+/// `stalled_stations` never reports it. The ADR-0039 closed loop happens there in
+/// exactly the same shape: a failed grasp, a retry back onto a beam the part is still
+/// breaking, no edge possible, and nothing that would bring a new part. So the detector
+/// is BLIND at that station, and it is one of the three. No belt setpoint exists to
+/// read there, so there is no correct answer to give from this rule; closing it needs a
+/// different fact and therefore a different decision. ADR-0039's Consequences names the
+/// candidates and takes none of them.
+///
 /// IT CLEARS ITSELF. The day someone builds a path that re-arms a station — a belt
 /// restart that does not put a part on the floor, an operator jog that clears the pick
 /// point, a re-observation that lets a station start from where the part actually is —

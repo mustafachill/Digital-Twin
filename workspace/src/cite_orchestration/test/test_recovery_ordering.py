@@ -311,6 +311,82 @@ def test_the_tick_loop_is_guarded_against_a_leaf_that_throws() -> None:
     )
 
 
+def test_the_line_state_is_published_on_the_tick_thread_after_the_tick() -> None:
+    """The leg of ADR-0039's stall predicate that no unit test can drive.
+
+    `stalled_stations` reports a station that is `IDLE` or `WAITING` with its
+    inbound belt stopped and every stopping edge already consumed. Condition 4
+    closes the interval between an edge arriving and the station taking it. It
+    does **not** close the interval between the station taking it and
+    `SetStationState` writing `WORKING` — in which a perfectly healthy station
+    satisfies all four conditions at once.
+
+    What closes that one is where `publish()` runs: on the tick thread, after
+    `tickOnce()` returns, inside the same `lock_guard`. So no publication can land
+    between `AwaitTrigger` taking the edge and the end of that tick, and BT.CPP
+    reaches `SetStationState` before the tick ends.
+
+    Move `publish()` onto a timer, or out of the locked section, and the predicate
+    becomes a false positive on **every arrival** — which `continuous_line` aborts
+    on, so a healthy line would fail the scenario naming a station that is fine.
+
+    `RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving` covers the tree
+    half of the invariant and is mutation-checked. It cannot cover this half: the
+    tick loop is in `main`, so that test arranges the ordering itself rather than
+    reading the coordinator's. Hence source text, and the same limit applies as to
+    the guard above — this asserts the ordering is written, not that it behaves.
+    """
+    configured = os.environ.get("CITE_LINE_ORCHESTRATOR_SRC")
+    assert configured, (
+        "CITE_LINE_ORCHESTRATOR_SRC is unset. CMakeLists.txt sets it for this test, so "
+        "run it through ./scripts/test rather than invoking pytest on this file directly"
+    )
+    source = Path(configured).read_text()
+    loop = source.find("while (rclcpp::ok() && outcome == BT::NodeStatus::RUNNING)")
+    assert loop != -1, "the tick loop is no longer where this test can find it"
+
+    # The body of the loop, up to the sleep that ends it. Everything asserted below
+    # has to be inside it, so the slice is the assertion's scope.
+    body_end = source.find("tree.sleep(tick_period)", loop)
+    assert body_end != -1, "the tick loop no longer ends on tree.sleep, so this slice is wrong"
+    body = source[loop:body_end]
+
+    lock = body.find("std::lock_guard<std::mutex> lock(*tick_mutex)")
+    tick = body.find("tree.tickOnce()")
+    publish = body.find("maintenance.publish()")
+    assert lock != -1, (
+        "the tick loop body no longer takes the tick mutex, so the tick and the report "
+        "are no longer one critical section (ADR-0039 correction 3)"
+    )
+    assert tick != -1, "the tick loop body no longer calls tickOnce()"
+    assert publish != -1, (
+        "the tick loop body no longer publishes LineState. If publication moved to a "
+        "timer it is off the tick thread, and ADR-0039's stall predicate can then be "
+        "sampled between a station consuming its edge and SetStationState writing "
+        "WORKING — a false positive on every arrival"
+    )
+    assert lock < tick < publish, (
+        "the order in the tick loop is no longer lock -> tickOnce -> publish. The stall "
+        "predicate is only safe when no publication can land between AwaitTrigger taking "
+        "an edge and the end of that same tick (ADR-0039 correction 3)"
+    )
+
+    # And the lock is STILL HELD at the publish. The `lock_guard` is scoped, so it is
+    # released by the brace that closes the block it was declared in: walk the depth
+    # from the lock to the publish and require it never to go negative.
+    depth = 0
+    for character in body[lock:publish]:
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            assert depth >= 0, (
+                "the block holding the tick mutex closes before LineState is published, "
+                "so the report is outside the critical section that makes it consistent "
+                "with the tick it describes"
+            )
+
+
 def test_the_nominal_cycle_still_clears_the_arm_before_it_works() -> None:
     # The other half of the change above: removing `MoveToHome` from the recover
     # branch is only safe because the nominal branch opens with it.

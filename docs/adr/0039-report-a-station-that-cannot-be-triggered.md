@@ -3,6 +3,12 @@
 - **Status:** Proposed. Written before the implementation, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below is a commitment, not a description.
   Nothing here is built at `70c6431`.
+  **Corrected 2026-08-28 — see the section "Correction — 2026-08-28" below, which every
+  reader must pass before the body.** Every decision here is implemented on branch
+  `feat/report-a-station-that-cannot-be-triggered` and is under review, not merged; decision
+  5's deliberate absences are still absent there. **Every decision stands.** What was wrong
+  was three supporting claims about *why* the predicate is safe, and one cost that was not
+  listed at all. The corrections make the case for condition 4 stronger, never weaker.
 - **Date:** 2026-08-27
 - **Deciders:** Coder agent, from the project owner's brief, against the defect
   [ADR-0038](0038-stop-the-line-without-ending-the-process.md) records in its Evidence
@@ -33,6 +39,146 @@ already defines is taken. **A new enum value on a published message is a typed-c
 decision (P3)**: it changes what `ros2 interface show` says, it moves the stored interface
 baseline, and it hands every present and future consumer a state they must decide what to do
 about. ADR-0010 says an interface is a versioned artefact; this changes one.
+
+## Correction — 2026-08-28: the mechanism sentences under decision 3, and a blind spot that was not listed as one
+
+Raised in review of the implementing commit. **The decision stands in full and no behaviour
+below changed because of any of it.** One behaviour *was* added — a new plan-time refusal,
+item 4 — and it is a refusal for a topology today's model cannot express.
+
+### 1. "Under the same lock" was one critical section too few
+
+Decision 3 says the count is incremented *"in the same callback, under the same lock, before
+the standstill is recorded"*. The first and third clauses are right; the second is not.
+`ConveyorIndex::on_edge` increments `stop_edges_` inside a scoped `lock_guard`, **releases
+it**, and `command()` then re-acquires the same mutex to write `commanded_`. There are two
+critical sections and the state between them is observable.
+
+What the ordering actually guarantees is **one-directional**: a reader that sees the belt at a
+standstill has necessarily seen the edge counted. The converse does not hold — a reader that
+sees the count has *not* necessarily seen the standstill. `stalled_stations` reads in the safe
+order (standstill first, count second) and is unaffected.
+
+**A test was tripping on exactly this.** `test_line_nodes.cpp`'s `break_the_beam` waited on
+`stop_edges > before` and then asserted `commanded == 0.0`, which is the unguaranteed
+direction: a latent flake in the test that exists to prove the ordering, caused by the
+ordering. It now waits on the standstill and asserts the count, which is the guaranteed
+direction and is therefore deterministic *and* an assertion of the ordering rather than a
+victim of it.
+
+### 2. The interval is not two subscription callbacks racing, and it is wider than that
+
+Decision 3 attributes the window to *"the two subscriptions to one detection topic, which are
+dispatched separately and can be milliseconds apart under load"*. There are indeed two
+subscriptions, and they **cannot be dispatched concurrently**. `TriggerWatch` and
+`ConveyorIndex` both call `create_subscription` on the same node with no callback group
+argument; rclcpp assigns the node's default group, and a node's default group is
+`MutuallyExclusive`. Under the `MultiThreadedExecutor` the two callbacks are serialised.
+
+The real interval is the gap between `ConveyorIndex` recording the standstill and the **tick
+thread** next reaching `AwaitTrigger` and taking the edge — up to `tick_period_ms` (50 by
+default), and longer whenever the station's subtree is elsewhere in its cycle.
+
+**The conclusion is understated by the original, not overstated.** The window is wider than
+"milliseconds apart", so condition 4 is *more* necessary than the record claimed.
+
+### 3. Condition 4 closes one direction, and an ambient invariant closes the other
+
+Decision 3 attributes the whole negative direction to the counters. They close *edge arrives →
+station takes it*. They say nothing about *station takes it → `SetStationState` writes
+`WORKING`*, and in **that** interval a perfectly healthy station satisfies all four
+conditions: edge consumed, belt still stopped, state still `WAITING`.
+
+What closes it is an invariant nothing in the tree states:
+
+1. `TriggerWatch::take` is called only from `AwaitTrigger::onRunning`, on the tick thread, and
+   `publish()` runs on that same thread after `tickOnce()` returns, inside the same
+   `lock_guard`. No publication can land between the take and the end of that tick.
+2. Within that one tick BT.CPP advances `AwaitTrigger` → `SetStationState`: the `idle`
+   `<Parallel success_count="1">` reaches its threshold inside the child loop that saw the
+   SUCCESS, and the enclosing node is a plain `<Sequence>` — whose early return on a child
+   SUCCESS is gated on `asynch_`, which `Sequence` does not set. **BehaviorTree.CPP 4.9.0**,
+   the version in this checkout.
+3. Nothing else calls `take()`.
+
+A `StatefulActionNode` inserted between the two leaves, a second `take()` caller, or
+`publish()` moved onto a timer breaks it, and the counters do **not** save the predicate — it
+becomes a false positive on **every arrival**, which `continuous_line` now aborts on. The
+invariant is now written out in the `stalled_stations` comment, and
+`RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving` drives the shipped XML through
+real arrivals and fails if it is lost. Before that test, nothing exercised this leg at all:
+all eight `StalledLine` cases call `take()` directly and set station state by hand.
+
+**One thing on that list was checked and does not belong on it, which is the argument for
+having the test rather than the reasoning.** Swapping the nominal `<Sequence>` for
+`<AsyncSequence>` — the first refactor this correction predicted would break the invariant —
+was applied to the shipped XML and the new test **still passed**. Setting `asynch_` is
+evidently not on its own sufficient to make BT.CPP 4.9.0 yield between two synchronous
+children; the early return is gated on more than the flag. So the prediction from reading the
+library was wrong in the *safe* direction, and the mutation that does kill the test is a leaf
+between the two that returns RUNNING once after consuming the edge — 1 of 36 cases failed, and
+it was this one. **The list above is a warning, not a verified enumeration**; what is verified
+is that the test discriminates.
+
+### 4. One belt feeding two stations was assumed, and is now refused
+
+The predicate compares `consumed(trigger_topic)` against `stop_edges(inbound_belt)`, which is
+a statement about one station only if one belt feeds one station. `ConveyorIndex::index_on`
+returns silently when a belt is already indexed, so under a shared belt the second station's
+`consumed` would grow against a `stop_edges` count that never moves: condition 4 would never
+suppress, and the line would report `STALLED` **continuously** — a sustained false positive
+that now aborts the scenario with a misleading reason. `plan_line` had no uniqueness check on
+`inbound_via_asset_id`.
+
+**Refused at plan time**, beside the existing "no `conveyor_assets` entry declares a drive for
+it" refusal it resembles: it is a plan property, it costs two lines, and it is checked before
+the first tick rather than diagnosed from a wrong `LineState`. Not reachable on today's model,
+which is exactly why a refusal is proportionate and a rewrite is not.
+
+This is deliberately **narrower** than the shared-*trigger-topic* cost already in Consequences,
+which stays a cost and not a refusal: which station a consumed edge belonged to is not a
+question the plan can answer.
+
+### 5. A cost that was missing: the detector is blind at a table-fed station
+
+Not a wrong sentence but an absent one, and it is the correction that most changes what a
+reader takes away. It is now stated in full as the first bullet of **What this costs us**.
+In short: `station_transfer_1` has a trigger and no inbound belt, so condition 1 skips it; the
+closed loop this record exists for happens there in the same shape and nothing reports it. The
+record, the package README and the implementing commit all describe the skip as "the rule
+working rather than an exception to it", which is true and is **not** the same sentence as
+"the detector can see this failure here". This change closes the class for **two stations out
+of three**.
+
+### 6. Two claims the implementing commit made about its own evidence
+
+Neither affects the code. Both are corrected in the verification table's 2026-08-28 block:
+the mutation the commit cited does not discriminate what it said it did (the discrimination
+that matters is real and lives in two other tests), and six of the eight `StalledLine` cases
+assert a non-stall, not five. The Consequences bullet saying the baseline is "regenerated"
+also disagreed with the commit saying it was hand-edited; review proved the two produce a
+byte-identical file, so nothing was wrong and the record now says which was done.
+
+### How these errors survived
+
+**Items 1, 2 and 3 share one cause: the prose was written from the design and never re-derived
+from the built code.** "Under the same lock" was true of the design intent and the
+implementation split it in two; "dispatched independently" was true of the *subscriptions*
+and false of their *dispatch*, which is a fact about rclcpp's default callback group that no
+line of this package states; and the ambient invariant in item 3 was relied on without ever
+being noticed, so it could not be written down or tested. None of the three was checkable from
+the record — each needed a second file read that the verification table did not require of
+itself, which is the discipline that table exists to enforce and did not.
+
+**Item 5 survived because a true sentence stood in for a different one.** "The rule working
+rather than an exception to it" is correct, defensible and answers a question nobody was
+asking. The question was whether the failure is *visible* at that station, and no sentence in
+the record was ever addressed to it.
+
+**Item 1 also shows the shape of the cheapest possible detection**: the test written to prove
+the ordering was itself written against the wrong direction of it. A test that asserts a
+guarantee should be derived from the guarantee's statement, not from the behaviour observed
+while writing it.
 
 ## Context
 
@@ -191,6 +337,9 @@ A station is stalled when **all** of these hold. Not one of them is a duration (
 
 1. It has a trigger topic and an inbound belt — the same gate `rearm_refusals()` applies, so
    a table-fed station is skipped by the rule working rather than by an exception to it.
+   **[Corrected 2026-08-28 — see the Correction section above, item 5. True, and it is not
+   the sentence a reader needs: the skip makes the detector blind at `station_transfer_1`,
+   one of the three. The cost is now listed under Consequences.]**
 2. Its state is `IDLE` or `WAITING` — the two states the tree writes while a station sits at
    its trigger. `WORKING` is a station that will reach `ResumeBelt`.
 3. Its inbound belt's last commanded setpoint is a standstill, or the belt has never been
@@ -202,6 +351,9 @@ all. Conditions 1-3 are true for several milliseconds of **every normal arrival*
 breaks the beam, `ConveyorIndex` stops the belt, and the station is still `WAITING` until it
 takes the edge and its next leaf writes `WORKING`. A detector without condition 4 would fire
 on every work-piece the line ever handles.
+**[Corrected 2026-08-28 — see the Correction section above, items 2 and 3. The interval is
+not "several milliseconds" but up to a tick period and longer, and condition 4 is not the
+whole of the negative direction: it closes one of two legs.]**
 
 It is expressed as two counters, each produced by the class that already produces the fact:
 
@@ -210,6 +362,10 @@ It is expressed as two counters, each produced by the class that already produce
   is recorded** — so any reader that sees the belt stopped also sees the edge counted. That
   ordering is what closes the window between the two subscriptions to one detection topic,
   which are dispatched separately and can be milliseconds apart under load.
+  **[Corrected 2026-08-28 — see the Correction section above, items 1 and 2. Two critical
+  sections, not one; the guarantee is one-directional and is the one this bullet names. The
+  two subscriptions share the node's default `MutuallyExclusive` callback group and cannot be
+  dispatched concurrently at all.]**
 - `TriggerWatch` counts, per topic, the matching edges it has handed to a station.
 
 Stalled requires `consumed >= stopped_on`. In the arrival window `consumed < stopped_on` and
@@ -268,12 +424,38 @@ becomes a message that names the station and the belt.
 
 ### What this costs us
 
+- **THE DETECTOR IS BLIND AT A TABLE-FED STATION, AND THAT IS ONE OF THE THREE.** *(Added
+  2026-08-28 — Correction item 5.)* Condition 1 skips a station with no inbound belt, and
+  every sentence in this record calls that "the rule working rather than an exception to it".
+  That is true, and it is a different sentence from *"the failure is visible here"*.
+  `station_transfer_1` in today's model **has a trigger** —
+  `/cite/cell_a/beam_pick/detection`, on `blocked` — and its inbound edge
+  (`station_infeed → station_transfer_1`) names no belt. The closed loop this record exists
+  for happens there in exactly the same shape: the grasp fails, the retry returns the station
+  to `AwaitTrigger` on a beam the part is still breaking, no edge is possible, and nothing
+  carries a new part to it. The line publishes `STATE_RUNNING` for ever, undetected. **It is
+  also the station the run that motivated this record failed at.** So what this change closes
+  is "reports healthy, does nothing" for **two stations out of three**, and a reader must not
+  close the class on it.
+  **No code change here is obviously right, which is why none was made.** The setpoint the
+  rule reads does not exist for a table: there is no belt that could be at a standstill, so
+  this rule has no correct answer to give. Closing it needs a **different fact**, and two are
+  available in principle — the beam's *level* rather than its edges (`TriggerWatch` records
+  only edges, and a station waiting at a trigger whose beam is already blocked is precisely
+  the dead end), or a re-observation of the pick point. Either is a new source of truth for
+  the predicate and therefore a separate decision, taken on its own evidence. **This record
+  does not take it, and naming the candidates is not proposing one.**
 - **A published enum value that some consumers will not handle.** Every reader of
   `LineState.state` now has a fifth case. There is one first-party reader today — the
   scenario — and it is updated here; anything written later that switches on this field and
   omits `STALLED` will treat a dead line as an unknown state.
 - **The interface baseline moves**, and `interfaces.baseline` is deliberately not
   self-updating. This change regenerates it, and the reason is this record.
+  **[Corrected 2026-08-28 — see the Correction section above, item 6. It was hand-edited for
+  the two added lines, not regenerated; the implementing commit said so and this bullet did
+  not. Review proved the hand-edited file byte-identical to one written by
+  `CITE_WRITE_INTERFACE_BASELINE=1`, so the artefact is right and only the two records
+  disagreed about the route.]**
 - **Two counters and two accessors** across `ConveyorIndex` and `TriggerWatch` — a further
   widening of two classes that had kept their state to themselves, for a predicate neither of
   them evaluates.
@@ -284,7 +466,18 @@ becomes a message that names the station and the belt.
 - **Two stations sharing one trigger topic would break condition 4.** `TriggerWatch::take` is
   per topic and consumes for whichever station asks first, so the two counters would no longer
   be about the same station. Today's model gives every station its own beam; a model that did
-  not would need this rule rewritten, not tuned.
+  not would need this rule rewritten, not tuned. *(2026-08-28: this one stays a cost and not
+  a refusal — which station a consumed edge belonged to is not a question the plan can
+  answer. The neighbouring case below is different and is refused.)*
+- **Two stations sharing one inbound belt is refused at plan time.** *(Added 2026-08-28 —
+  Correction item 4.)* Unlike the shared trigger this is a plan property, and its failure is
+  worse: `ConveyorIndex::index_on` returns silently for an already-indexed belt, so the second
+  station's `consumed` grows against a `stop_edges` count that never moves, condition 4 never
+  suppresses, and the line is reported `STALLED` **continuously** rather than in a window.
+  Since `continuous_line` now aborts on `STALLED`, that would be a scenario failure with a
+  misleading reason. `plan_line` names it beside the existing "no `conveyor_assets` entry
+  declares a drive for it" refusal. Today's model cannot produce it; the refusal exists so
+  that a model that could is stopped at bring-up rather than misreported at run time.
 - **It reports a stall a few seconds before the station reaches `AwaitTrigger`.** A station in
   the recover branch is `WAITING` with its belt stopped while `MoveToHome` runs. That is not a
   false positive — the station is already doomed by then — but a reader watching the log will
@@ -322,10 +515,25 @@ In the style of [`toolchain.md`](../reference/toolchain.md). Everything was chec
 | `commanded()` distinguishes never-commanded from commanded-to-zero | Read `conveyor_index.hpp` | Returns `std::optional<double>`; absent until the first command |
 | The station is `WAITING` when the retry re-enters `AwaitTrigger` | Read `line_nodes.hpp` `RecoverFromFailure` retry branch and `line_station.xml:248-264` | Retry sets `STATE_WAITING`, then `ReleaseStationClaims`, then `MoveToHome`, then the `Repeat` re-enters the nominal branch |
 | The station is `WORKING` in the same tick as a successful trigger | Read `line_station.xml:56-62` | `SetStationState state="2"` is the next child of the same `<Sequence>`, and a BT.CPP `SequenceNode` advances to it within one `tickOnce()` |
-| The trigger and the belt stop are two separate subscriptions to one topic | Read `line_nodes.hpp:99-116` and `conveyor_index.hpp:190-200` | Two `create_subscription` calls on the same topic and profile, dispatched independently. This is the window condition 4 closes |
+| The trigger and the belt stop are two separate subscriptions to one topic | Read `line_nodes.hpp:99-116` and `conveyor_index.hpp:190-200` | Two `create_subscription` calls on the same topic and profile, dispatched independently. This is the window condition 4 closes. **[Corrected 2026-08-28 — item 2. The two calls are real; "dispatched independently" is false, and this row is where that claim was accepted without reading the callback-group argument neither call passes.]** |
 | The tick loop publishes `LineState` after the tick, on a period | Read `line_orchestrator.cpp:612-626` | `tickOnce()`, then `maintenance.run()`, then `publish()` every `state_period_ms` (default 200), under the tick mutex |
 | `continuous_line` fails fast on `BLOCKED` and `FAULTED` only | Read `tests/scenarios/continuous_line.py` `_on_line_state`, `_fail_if_the_line_has_stopped` | Exact. A `RUNNING` stall is invisible to it, which is what ADR-0038's Evidence section observed |
 | `Pick` opens the gripper before approaching | Read `skill_server.cpp:937-940` | Exact, with the stated collision reason. Cited from ADR-0038, re-read here because decision 5 above rests on it |
 | The interface baseline is stored and not self-updating | Read `cite_interfaces/test/test_interface_contract.py` | Regeneration is behind `CITE_WRITE_INTERFACE_BASELINE=1` and the docstring asks for the reason in the commit message |
 | Two `continuous_line` runs showed the stall reporting `RUNNING` | **Not re-verified.** Taken from ADR-0038's Evidence section | **Reported, not measured here.** Two runs on one machine against `c6acacc`, with no pre-registered thresholds and no `docs/measurements/` directory. The mechanism is checkable and was checked; the run narrative is one person's report |
 | That the detector fires on the real defect in simulation | **Not verified when this record was written** | **Unverified.** It is what the implementation's `continuous_line` run is expected to show, and a run in which the grasp does not fail cannot show it at all |
+
+Added **2026-08-28**, in review of the implementing commit. Checked against branch
+`feat/report-a-station-that-cannot-be-triggered` unless stated.
+
+| Claim | How | Result |
+|---|---|---|
+| `station_transfer_1` has a trigger and no inbound belt, so the detector is blind there | Read `cite_generated/topology/cell_a_flow.yaml` | Exact. Trigger `/cite/cell_a/beam_pick/detection` on `blocked`; the edge `station_infeed → station_transfer_1` carries `via: null`. One of the three transfer stations |
+| The count and the standstill are two critical sections, not one | Read `conveyor_index.hpp` `on_edge` and `command` | Exact. `++stop_edges_[asset]` sits in a scoped `lock_guard` that is released before `command()` re-acquires the same mutex to write `commanded_` |
+| `TriggerWatch` and `ConveyorIndex` cannot dispatch concurrently | Read both `create_subscription` calls and `line_orchestrator.cpp:374-376,438-439` | Same node, no callback group argument at either call site, so both take the node's default group. rclcpp creates a node's default group `MutuallyExclusive`; the executor is a `MultiThreadedExecutor`. The two callbacks are serialised |
+| BT.CPP advances `AwaitTrigger → SetStationState` within one tick | Read `trees/line_station.xml` and BT.CPP 4.9.0 `ParallelNode` / `SequenceNode` | The `idle` `<Parallel success_count="1">` reaches its threshold inside the child loop, and the enclosing node is a plain `<Sequence>`, whose early return on a child SUCCESS is gated on `asynch_` — not set for `Sequence`. **This is an ambient property of a third-party library and a version bump can falsify it**, which is why item 3's test exists rather than this row |
+| That the new test discriminates | Mutation, twice, rebuilt and re-run each time | **`<Sequence>` → `<AsyncSequence>` in the shipped XML did NOT kill it** — 36/36 still passed, so `asynch_` alone does not produce the yield in 4.9.0 and the reasoning above was wrong in the safe direction. **Making `AwaitTrigger` hold the consumed edge and return SUCCESS one tick later DID**: 35 passed, 1 failed, and it was `ALineIsNeverReportedStalledWhileAPartIsArriving` — both the synchronous sample (2 stalls, naming `station_two` and `conveyor_fixture`) and the message-level `STATE_STALLED` assertion. Nothing else in the file moved |
+| `plan_line` had no uniqueness check on `inbound_via_asset_id` | Read `line_plan.hpp` at `bd8d639` | Exact. A shared inbound belt was accepted and `index_on` would have indexed it once, silently |
+| **What actually discriminates the `publish()` precedence** | Mutation, re-traced from the implementing commit's own claim | **The implementing commit overstated it.** Disabling the `publish()` precedence kills only the two message-level assertions in `AStationReturnedToATriggerNothingCanProduceIsReportedAndNotRunning`; that same test's direct `stalled()` assertion still passes. The discrimination that matters is real and lives elsewhere, in the right shape: deleting condition 4 is killed by `AnArrivalInFlightIsNotAStall`, deleting condition 2 by `AWorkingStationHoldsItsOwnBeltStoppedAndIsNotStalled` — both negative tests |
+| **How many `StalledLine` cases are negative** | Counted | **Six of the eight assert a non-stall**, not five as the implementing commit said. The two that assert a stall are `AStationReturnedToATriggerNothingCanProduceIsReportedAndNotRunning` and `ABeltNobodyHasEverCommandedIsItsOwnRefusal` |
+| The hand-edited `interfaces.baseline` matches a regenerated one | Reviewer regenerated under `CITE_WRITE_INTERFACE_BASELINE=1` and diffed | Byte-identical. The contract check still discriminates under four mutations |

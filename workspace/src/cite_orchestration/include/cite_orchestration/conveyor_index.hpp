@@ -279,12 +279,30 @@ public:
   /// separates the two is whether the station has consumed the edge that stopped the
   /// belt, which is this count against `TriggerWatch::consumed`.
   ///
-  /// So this is incremented BEFORE the standstill is recorded, under the same lock,
-  /// so that any reader which sees the belt stopped also sees the edge counted. The
-  /// alternative ordering leaves a window in which a belt reads stopped and no edge
-  /// is recorded anywhere — and that window is not theoretical: the trigger and the
-  /// belt stop are two SEPARATE subscriptions to one detection topic, dispatched
-  /// independently, and under load they can be milliseconds apart.
+  /// So this is incremented BEFORE the standstill is recorded, and the guarantee that
+  /// buys is one-directional: any reader which sees the belt stopped also sees the edge
+  /// counted. The alternative ordering leaves a window in which a belt reads stopped and
+  /// no edge is recorded anywhere, and every normal arrival would fall into it.
+  ///
+  /// IT IS TWO CRITICAL SECTIONS AND NOT ONE, and this comment claimed otherwise until
+  /// 2026-08-28. `on_edge` increments under the lock, RELEASES it, and `command()` then
+  /// re-acquires it to write `commanded_`. So the intermediate state — edge counted, belt
+  /// not yet recorded as stopped — IS observable by a concurrent reader, and only the
+  /// converse is excluded. That is enough for the predicate, which reads the standstill
+  /// first and the count second; it is not enough for a caller that waits on the count
+  /// and then asserts the standstill, which is a race
+  /// (`test_line_nodes.cpp::StalledLine::break_the_beam` waits on the standstill for
+  /// exactly this reason).
+  ///
+  /// WHAT THE WINDOW ACTUALLY IS, because this comment had that wrong too. It is NOT two
+  /// subscription callbacks racing: `TriggerWatch` and this class both subscribe on the
+  /// same node with no callback group given, rclcpp puts both in the node's default group,
+  /// and a default group is `MutuallyExclusive` — so under the `MultiThreadedExecutor` the
+  /// two callbacks cannot run concurrently at all. The window is the gap between this
+  /// callback recording the standstill and the TICK THREAD next reaching `AwaitTrigger`,
+  /// which is up to `tick_period_ms` (50 by default) and longer whenever the station's
+  /// subtree is somewhere else in its cycle. That makes condition 4 MORE necessary than
+  /// the "milliseconds apart" sentence claimed, not less.
   uint64_t stop_edges(const std::string & asset) const
   {
     const std::lock_guard<std::mutex> lock(mutex_);
@@ -413,10 +431,12 @@ private:
   //: "commanded to a standstill" are different, and only one of them is a
   //: decision.
   std::map<std::string, double> commanded_;
-  //: How many sensor edges have stopped each belt (ADR-0039). Written under the
-  //: same lock as `commanded_` and immediately before it, so the two are never
-  //: read out of step. Never reset: it is compared against another monotonic
-  //: count, and a counter somebody resets is a counter two readers disagree about.
+  //: How many sensor edges have stopped each belt (ADR-0039). Written under this
+  //: lock and BEFORE `commanded_` is, but in a SEPARATE critical section — see
+  //: `stop_edges()`. So a reader that sees a belt stopped has seen the edge counted,
+  //: and a reader that sees the count has NOT necessarily seen the standstill.
+  //: Never reset: it is compared against another monotonic count, and a counter
+  //: somebody resets is a counter two readers disagree about.
   std::map<std::string, uint64_t> stop_edges_;
 };
 

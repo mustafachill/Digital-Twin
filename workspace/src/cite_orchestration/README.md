@@ -189,11 +189,31 @@ are added on this path, and the last is the whole of the negative direction:
 
 - the station is `IDLE` or `WAITING` — a `WORKING` station will reach `ResumeBelt` itself;
 - its inbound belt is at a commanded standstill, or was never commanded;
-- **it has already consumed every edge that stopped that belt.** The belt and the station learn
-  of an arrival through two separate subscriptions to one topic, dispatched independently, so
-  the first two conditions hold for a real interval of *every* normal arrival.
-  `ConveyorIndex::stop_edges` and `TriggerWatch::consumed` are what separate an arrival in
-  flight from a station that will wait for ever.
+- **it has already consumed every edge that stopped that belt.** The first two conditions hold
+  from the moment `ConveyorIndex` stops the belt until the tick thread next reaches
+  `AwaitTrigger` — up to `tick_period_ms`, and longer while the subtree is elsewhere — so they
+  are true for a real interval of *every* normal arrival. `ConveyorIndex::stop_edges` and
+  `TriggerWatch::consumed` are what separate an arrival in flight from a station that will wait
+  for ever. That interval is **not** two subscription callbacks racing: both land in the node's
+  default callback group, which rclcpp makes `MutuallyExclusive`, so they cannot overlap at all.
+  The window is wider than a race, not narrower.
+
+**Condition 4 closes one direction and an ambient invariant closes the other.** It closes *edge
+arrives → station takes it*. What closes *station takes it → `SetStationState` writes `WORKING`*
+is that `take()` and `publish()` are both on the tick thread with `publish()` after `tickOnce()`
+inside the same `lock_guard`, and that BT.CPP advances from `AwaitTrigger` to `SetStationState`
+within one tick. That is stated in full in the `stalled_stations` comment, because a refactor
+that breaks it — an `AsyncSequence`, a leaf inserted between the two, `publish()` on a timer —
+turns this into a false positive on *every* arrival.
+
+**The detector is blind at a table-fed station, and that is one of the three.** The skip above
+is the rule working rather than an exception to it — but "the rule works" is not the same
+sentence as "the failure is visible here". `station_transfer_1` has a trigger and no inbound
+belt, so it is skipped; the same closed loop happens there and nothing reports it. What that
+station's failure would need is a fact this rule does not have — the beam's *level* rather than
+its edges, or a re-observation of the pick point — and taking either is a separate decision
+that ADR-0039 deliberately does not take. **This change closes "reports healthy, does nothing"
+for two stations out of three.**
 
 **It is a detector and it commands nothing.** No belt is restarted, nothing is planned, no
 gripper is touched, no station state is written. The belt restart is the fix this must not be

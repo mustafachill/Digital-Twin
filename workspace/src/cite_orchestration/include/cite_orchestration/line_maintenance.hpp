@@ -80,15 +80,45 @@ using cite_interfaces::msg::LineState;
 ///     `untriggerable_reason` above.
 ///   * IT HAS ALREADY CONSUMED EVERY EDGE THAT STOPPED THAT BELT. Without this the
 ///     detector fires on every work-piece the line ever handles: the first two
-///     conditions are both true for as long as it takes an arriving part's edge to
-///     reach the station, and the belt learns of that edge through a DIFFERENT
-///     subscription to the same topic, dispatched independently and under load
-///     milliseconds apart. `ConveyorIndex::stop_edges` counts the edges that stopped
-///     the belt and is incremented before the standstill is recorded, under the same
-///     lock; `TriggerWatch::consumed` counts the edges handed to a station. While an
-///     arrival is in flight the first exceeds the second and nothing is reported.
-///     After a retry has returned the station to its trigger they are equal, the
-///     belt is still stopped, and it is.
+///     conditions are both true from the moment `ConveyorIndex` stops the belt until
+///     the TICK THREAD next reaches `AwaitTrigger` and takes the edge — up to
+///     `tick_period_ms` (50 by default), and longer whenever the station's subtree is
+///     elsewhere in its cycle. `ConveyorIndex::stop_edges` counts the edges that
+///     stopped the belt and is incremented before the standstill is recorded (in a
+///     separate critical section — see `stop_edges()`, which is precise about what
+///     that ordering does and does not guarantee); `TriggerWatch::consumed` counts the
+///     edges handed to a station. While an arrival is in flight the first exceeds the
+///     second and nothing is reported. After a retry has returned the station to its
+///     trigger they are equal, the belt is still stopped, and it is.
+///
+///     THAT IS NOT THE ONLY WINDOW, AND THE COUNTERS DO NOT CLOSE THE SECOND ONE.
+///     Condition 4 closes `edge arrives` → `station takes it`. It says nothing about
+///     `station takes it` → `SetStationState` writes `WORKING`, and in THAT interval a
+///     perfectly healthy station satisfies all four conditions at once: it has consumed
+///     the edge, its belt is still stopped, and its state is still `WAITING`.
+///
+///     WHAT CLOSES IT IS AN AMBIENT INVARIANT, stated here because nothing else states
+///     it and a refactor that breaks it makes this a false positive on EVERY arrival —
+///     which `continuous_line` now aborts on. Three facts, all of which must hold:
+///       1. `TriggerWatch::take` is called only from `AwaitTrigger::onRunning`, which
+///          runs on the tick thread, and `publish()` below runs on that same thread
+///          after `tickOnce()` returns, inside the same `lock_guard`
+///          (`line_orchestrator.cpp`, the tick loop). So no publication can ever land
+///          BETWEEN the take and the end of that tick.
+///       2. Within that one tick BT.CPP advances from `AwaitTrigger` to
+///          `SetStationState`: the `idle` `<Parallel success_count="1">` returns SUCCESS
+///          in the child loop that saw it, and the enclosing plain `<Sequence>` goes
+///          straight on to its next child. BehaviorTree.CPP 4.9.0.
+///       3. Nothing else calls `take()`.
+///     Break any of them — a `StatefulActionNode` inserted between the two leaves, a
+///     second `take()` caller, or `publish()` moved onto a timer — and the counters will
+///     NOT save this. `RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving` is
+///     the test that catches it; it drives the shipped XML through real arrivals and
+///     samples this predicate where the coordinator samples it. **Do not trust that list
+///     without the test**: `<AsyncSequence>` was on it, was applied to the shipped XML,
+///     and the test still passed — `asynch_` alone does not make 4.9.0 yield between two
+///     synchronous children. Measured, 2026-08-28. The mutation that does kill the test
+///     is a leaf returning RUNNING once after the edge is consumed.
 ///
 /// IT COMMANDS NOTHING. It reads a plan, a setpoint record and two counters. It does
 /// not restart a belt, plan, touch a gripper, write a station state, release a claim
