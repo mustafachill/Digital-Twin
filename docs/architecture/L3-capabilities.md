@@ -26,11 +26,26 @@
   `--teardown-advisory` so the cycle gates and the post-shutdown check is reported. It is
   still **not reproducible** — a passing run is evidence about that run, not the next one —
   and the promotion is retracted by a cycle failure that the machine does not explain.
+  **Built, and this layer now answers a question it used to pass upwards unanswered:** an
+  execution abort is classified here, before [L4](L4-orchestration.md) dispatches any
+  recovery motion ([ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md)).
+  `classify_execution_failure` in `include/cite_skills/motion_end.hpp` is a free function
+  reading the plan and the joint state — never an L2 error code — so it holds for any robot
+  type (P9) and is identical on both backends (P2). It answers `MOTION_INTERRUPTED` when the
+  arm stopped part-way and is holding position, and `EXECUTION_FAILED` at either endpoint.
+  Every row of it, and `positions_in_trajectory_order` beside it, is unit-tested in
+  `test/test_motion_end.cpp`; it was a private method reachable by no test before this.
+  **Not proven, and it is a fixture gap rather than a wording one:** nothing in this
+  repository drives a *genuine* abort into this classifier. The launch test ADR-0037
+  originally named launches neither `move_group` nor a skill server, and mock hardware's
+  `disable_commands` freezes the arm at the trajectory's first point — which is the one
+  answer that is not `MOTION_INTERRUPTED`. Read that ADR's correction 2 before citing any
+  test as evidence for this path.
   **Not proven:** `MoveTo.Goal.cartesian_path` returns
   `NOT_IMPLEMENTED` ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
   **Not assertable:** how a part is oriented in the jaws — see "A grasp is evidenced by a
   stall" below.
-- **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [`../interfaces/README.md`](../interfaces/README.md)
+- **Related:** [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0010](../adr/0010-typed-ros-interfaces.md), [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [`../interfaces/README.md`](../interfaces/README.md)
 
 ## Responsibility
 
