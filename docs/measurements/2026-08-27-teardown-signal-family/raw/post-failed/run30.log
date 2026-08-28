@@ -1,0 +1,5 @@
+warn The container image does not exist yet and must be built first.
+warn This takes several minutes. Run ./scripts/bootstrap to do it explicitly,
+warn or wait while it happens now.
+==> Not a ROS environment — running 'scenario' inside the container
+Error response from daemon: container be1403696550fe3559b2aac8477ecc26ae93b1ac30ee11ee5c0a6cd59406c406 is not running

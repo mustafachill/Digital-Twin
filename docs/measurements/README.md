@@ -15,10 +15,19 @@ inspection of code.
 | [`2026-08-25-friction-grasp/`](2026-08-25-friction-grasp/results.md) | Is a friction grasp in `cell_a` repeatable enough to build a scenario on? | Repeatable in **position**, not in **orientation**. 84 trials. Decided [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). |
 | [`2026-08-25-grasp-plane-offset/`](2026-08-25-grasp-plane-offset/ANALYSIS.md) | Does the grasp-plane offset cause the twist? | It causes the **high mode** and not the rest. Rotations above 20°: 12/20 uncorrected, 0/20 corrected. Up to 18.7° of **roll about the pad-to-pad axis** survives correction. |
 | [`2026-08-26-conveyor-yaw-transfer/`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md) | What yaw does a work-piece carry when it reaches a downstream outfeed, and can the gripper pick it? | The belt changes the yaw by **nothing** (36 trials), and the pick succeeds anyway — 23/23 up to 30° — because **the jaws square the part up as they close**. 74 trials. Corrected [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md). |
+| [`2026-08-27-teardown-signal-family/`](2026-08-27-teardown-signal-family/results.md) | Does breaking the `SkillServer` reference cycle change the rate at which `skill_server` dies on a signal at teardown? | **Inconclusive, by its own rule 1.** The rig did not reproduce the defect at all in the pre-fix arm, so the clean post-fix arm evidences nothing. What did move is a leaked `class_loader` library, deterministically. 41 valid runs. |
 
 Read the second alongside the first: it corrects two of the first campaign's published
 readings, and the corrections are listed in its own *Corrections to the friction campaign*
 section.
+
+The fourth stands apart from the other three. It measures **the test rig's own teardown**
+rather than anything the cell does, and its headline is an **inconclusive** — the
+pre-registered decision rule fired, and the clean arm that followed was refused as evidence
+because the arm it had to be compared against never reproduced the defect. It is here for
+that reason and not in spite of it: a rule that only ever confirms is not a rule. It is also
+the campaign that was nearly lost, having been committed to a branch that went stale before
+it was published; its *Provenance and relocation* section records the move.
 
 ## The two residual rotations are different quantities
 
@@ -67,6 +76,11 @@ carry that, and neither disturbs the verdicts.
   was taken; a corrected one is a claim about code that never ran. The worked example is the
   2026-08-27 note in
   [`2026-08-26-conveyor-yaw-transfer/ANALYSIS.md`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md).
+  The rule also survives a **relocation**: the teardown campaign's harness resolves its input
+  paths relative to its own directory, which publishing it here changed, and the fix was a
+  dated note plus a reproduction command in
+  [`2026-08-27-teardown-signal-family/results.md`](2026-08-27-teardown-signal-family/results.md)
+  rather than a patched script.
 - **A campaign measures the simulator unless it says otherwise.** Nothing here evidences
   behaviour on the physical arm; the layout is `PROVISIONAL` and the physical scan is
   Phase 3 (charter §8).
@@ -75,12 +89,14 @@ carry that, and neither disturbs the verdicts.
   [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md).
 - **Do not restate a campaign's numbers elsewhere (P1).** Link to the directory. A number
   copied into a layer document is a number that will disagree with its source.
-- **What is not here is not measured.** Three campaigns exist at this commit. In
+- **What is not here is not measured.** Four campaigns exist at this commit. In
   particular, **nothing here measures the three-arm continuous line**: that it now completes
   is reported from scenario runs, with no thresholds registered in advance, and the status
   block in [CLAUDE.md §2](../../CLAUDE.md) says so. Nothing here measures the parked index
   position either, or whether the release-orientation residual accumulates over three
-  stations — the conveyor-yaw campaign names that last one as explicitly unmeasured.
+  stations — the conveyor-yaw campaign names that last one as explicitly unmeasured. And
+  **nothing here explains a teardown signal death**: the fourth campaign measured the rate
+  of one and did not reproduce it.
 - **Interleave, do not block.** The offset campaign established that the twist in this cell
   is a two-state process, so a comparison split into consecutive blocks samples the two
   states unevenly and misleads. Alternate conditions against one running cell.

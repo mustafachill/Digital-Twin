@@ -91,6 +91,13 @@ account of a flake; each was caught by someone re-running, never by someone read
   declares. The L4 coordinator is **off unless `line:=true`**, because it takes exclusive
   hold of each arm's skills. `./scripts/scenario bringup` asserts the bring-up and is a
   blocking CI gate, run twice per CI run.
+  **It is not a scenario that always passes, and until 2026-08-28 nothing said so.** Thirty
+  consecutive local runs at `de67d8b` — taken for another purpose and published as
+  [`docs/measurements/2026-08-27-teardown-signal-family/`](docs/measurements/2026-08-27-teardown-signal-family/results.md)
+  — include runs that failed `bringup`'s own `MoveTo` assertion, not merely its teardown
+  check. That campaign's note on the finding is explicit that it is **not a pre-registered
+  rate** and that whether it still happens is **unmeasured**. Treat a `bringup` failure as a
+  finding to investigate, not as a known flake to re-run past.
 - **Motion is planned by Pilz.** ADR-0027 is implemented and merged: L0 declares the
   pipeline choice and the limits, the generator emits `cell_a_arm_*_planning_pipelines.yaml`
   per arm declaring both pipelines, and the L3 skill server asks for Pilz PTP and falls back
@@ -221,26 +228,48 @@ account of a flake; each was caught by someone re-running, never by someone read
     upstream `rclpy` shutdown races, each link read in upstream source rather than inferred,
     each compensation carrying the condition for deleting it. **Read the ADR.** Restating the
     mechanism here would be the duplication P1 forbids.
-  - **Signal deaths — `move_group` (×3) and `skill_server` (×1), and still unexplained.** Both
-    MoveIt-linked C++. The stated hypothesis, and it is only a hypothesis: `skill_server` holds
-    a `shared_ptr<MoveGroupInterface>` constructed from its own node and
+  - **Signal deaths — `move_group` (×3) and `skill_server` (×1), and still unexplained.** The
+    two observed in `continuous_line` are both MoveIt-linked C++, and **"MoveIt-linked" is no
+    longer a description of the family**: the campaign below caught `parameter_bridge`, which
+    links no MoveIt code, exiting -11 at teardown. One event, and enough to retire the
+    characterisation.
+    **This family now has a campaign, and it is the citation for every figure that used to sit
+    in this bullet** —
+    [`docs/measurements/2026-08-27-teardown-signal-family/`](docs/measurements/2026-08-27-teardown-signal-family/results.md).
+    Thresholds were registered before the first trial and applied literally. Read it rather
+    than trusting the summary here; the numbers are deliberately not copied (P1).
+    **Its primary result is INCONCLUSIVE and must not be read as reassurance.**
+    `skill_server` did not exit -11 at all in the campaign's **pre-fix** arm, so the rig does
+    not reproduce the defect, and the campaign's own rule 1 refuses the clean post-fix arm as
+    evidence that anything was fixed. The `continuous_line` death remains un-reproduced and
+    un-explained; it is *rarer*, not *understood*. **This bullet said until 2026-08-28 that the
+    non-recurrence figure was "supplied rather than reproducible from this checkout". It is now
+    published with its logs and its analyser** — and note that it was measured at `de67d8b`,
+    not at this commit.
+    **The hypothesis gained a demonstration and did not gain a cause.** `skill_server` holds a
+    `shared_ptr<MoveGroupInterface>` constructed from its own node and
     `MoveGroupInterface::getNode()` returns a `shared_ptr` reference, so a reference cycle may
-    mean `~SkillServer` never runs. That is a **type-level observation, not a demonstrated
-    cause**; nothing has been instrumented to show the destructor is skipped.
+    mean `~SkillServer` never runs. This bullet said until 2026-08-28 that **nothing had been
+    instrumented to show the destructor is skipped. That is wrong** — the campaign instrumented
+    it under `gdb`, one run in each direction, and the destructor demonstrably does not run
+    while the cycle is intact. What is still **not** demonstrated is the part that matters: no
+    mechanism links a skipped destructor to a signal death, and the arm that would have tested
+    it never reproduced one.
     **`skill_server`'s -11 is outside the exemption and stays there.** The exemption in
-    `tests/scenarios/continuous_line.py` covers `move_group` and -11 and nothing else. The
-    tester reports the `skill_server` death has not recurred in 90 teardowns since — a figure
-    supplied rather than reproducible from this checkout, and one that makes it *rarer*, not
-    *explained*. `move_group`'s is characterised and upstream, with the stack. **No exemption
-    has been added or widened**, and widening one to cover `skill_server` would tolerate an
-    undemonstrated cause, which is the opposite of what the split bought.
+    `tests/scenarios/continuous_line.py` covers `move_group` and -11 and nothing else.
+    `move_group`'s is characterised and upstream, with the stack — the campaign's `gdb`
+    backtrace puts frame #11 in `move_group`'s own `main`. **No exemption has been added or
+    widened**, and widening one to cover `skill_server` would tolerate an undemonstrated cause,
+    which is the opposite of what the split bought.
   **Run duration is retired as a predictor.** Three `continuous_line` runs on one machine on
   2026-08-27 took **478.055 s (passed), 480.607 s (failed) and 497.710 s (failed)**. The
   longest did fail, so duration is not *uncorrelated* — but 2.5 s separating a pass from a fail
   rules it out as the mechanism. The comment in `tests/scenarios/continuous_line.py` still
   asserts the duration correlation and has not been updated. The superseded account also named
   `parameter_bridge` (-6) and `gz` (-9); those two are outside the set the split was measured
-  over and are not classified here.
+  over and are not classified here. `parameter_bridge` has since been observed on **both** -6
+  and -11 in the campaign cited above, each once — which is what removes "MoveIt-linked" from
+  the signal family's description, and is still two events rather than a rate.
 - **What does not work, stated plainly** (Phase 1.C/1.D, in progress). **None of these is an
   exit-criterion clause** — that list is the last bullet in this section, and it is separate.
   - **The line still stalls after a failed grasp, and the dead end is observed rather than
@@ -329,7 +358,9 @@ account of a flake; each was caught by someone re-running, never by someone read
   status line before believing its body.
 - **Measured evidence lives in [`docs/measurements/`](docs/measurements/README.md)**, one
   directory per campaign, each with its thresholds written down before the first trial. This is
-  what P8 looks like in practice. Cite a campaign; do not copy its numbers around.
+  what P8 looks like in practice. Cite a campaign; do not copy its numbers around. **A campaign
+  whose answer is "inconclusive" is published too** — the teardown one is, and its rule refused
+  a clean arm as evidence rather than banking it.
 - **Where Phase 1's exit criterion stands, and nothing above changes it.** **The clause-by-clause
   record is charter §8 and is not copied here** (P1) — it states which evidence closed which
   clause, at what strength, and what the closure does not cover. What belongs in a rulebook is

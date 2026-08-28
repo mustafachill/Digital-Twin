@@ -1,0 +1,297 @@
+==> Running in container service 'dev': bash -lc cd /workspace/workspace && source install/setup.bash >/dev/null 2>&1; launch_test src/cite_skills/test/test_skill_contract.py
+[INFO] [launch]: All log files can be found below /home/cite/.ros/log/2026-08-27-15-11-24-646140-a95c85092533-7
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [54]
+[INFO] [move_group-2]: process started with pid [55]
+[INFO] [gdb-3]: process started with pid [56]
+[robot_state_publisher-1] [INFO] [1787843484.905147845] [cite.cell_a.arm_1.robot_state_publisher]: Robot initialized
+[move_group-2] [WARN] [1787843484.924406428] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-2] [WARN] [1787843484.926269011] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-2] [INFO] [1787843484.930629345] [cite.cell_a.arm_1.move_group.moveit.ros.rdf_loader]: Loaded robot model in 0.00262117 seconds
+[move_group-2] [INFO] [1787843484.930710803] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[move_group-2] [INFO] [1787843484.930731303] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[gdb-3] SIGINT is used by the debugger.
+[gdb-3] Are you sure you want to change it? (y or n) [answered Y; input not from terminal]
+[gdb-3] warning: Error disabling address space randomization: Operation not permitted
+[move_group-2] [INFO] [1787843484.983061720] [cite.cell_a.arm_1.move_group.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[gdb-3] [Thread debugging using libthread_db enabled]
+[gdb-3] Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[move_group-2] [INFO] [1787843485.164258762] [cite.cell_a.arm_1.move_group.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-2] [INFO] [1787843485.165685553] [cite.cell_a.arm_1.move_group.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-2] [INFO] [1787843485.171944637] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/attached_collision_object' for attached collision objects
+[move_group-2] [INFO] [1787843485.172809262] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-2] [INFO] [1787843485.172904178] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[move_group-2] [INFO] [1787843485.173394970] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/planning_scene'
+[move_group-2] [INFO] [1787843485.173411053] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-2] [INFO] [1787843485.173778053] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-2] [INFO] [1787843485.174228637] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-2] [WARN] [1787843485.174460970] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[move_group-2] [ERROR] [1787843485.174475012] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: No 3D sensor plugin(s) defined for octomap updates
+[gdb-3] [New Thread 0xffffb9e0c860 (LWP 101)]
+[gdb-3] [New Thread 0xffffb940c860 (LWP 102)]
+[gdb-3] [New Thread 0xffffb800c860 (LWP 103)]
+[gdb-3] [New Thread 0xffffb760c860 (LWP 104)]
+[gdb-3] [New Thread 0xffffb6c0c860 (LWP 105)]
+[gdb-3] [New Thread 0xffffb620c860 (LWP 106)]
+[gdb-3] [New Thread 0xffffb580c860 (LWP 107)]
+[gdb-3] [New Thread 0xffffb4e0c860 (LWP 108)]
+[gdb-3] [New Thread 0xffffb440c860 (LWP 109)]
+[gdb-3] [New Thread 0xffffb3a0c860 (LWP 110)]
+[gdb-3] [New Thread 0xffffb300c860 (LWP 111)]
+[gdb-3] [New Thread 0xffffb260c860 (LWP 112)]
+[gdb-3] [New Thread 0xffffb1c0c860 (LWP 113)]
+[gdb-3] [New Thread 0xffffb120c860 (LWP 114)]
+[gdb-3] [New Thread 0xffffabe0c860 (LWP 115)]
+[gdb-3] [New Thread 0xffffab40c860 (LWP 116)]
+[gdb-3] [New Thread 0xffffaaa0c860 (LWP 117)]
+[gdb-3] [WARN] [1787843485.254391428] [rcl.logging_rosout]: Publisher already registered for node name: 'skill_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.skill_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[gdb-3] [New Thread 0xffffaa00c860 (LWP 118)]
+[gdb-3] [New Thread 0xffffa960c860 (LWP 119)]
+[gdb-3] [New Thread 0xffffa8c0c860 (LWP 120)]
+[gdb-3] [New Thread 0xffff9fe0c860 (LWP 121)]
+[gdb-3] [New Thread 0xffff9f40c860 (LWP 122)]
+[gdb-3] [New Thread 0xffff9ea0c860 (LWP 123)]
+[gdb-3] [New Thread 0xffff9e00c860 (LWP 124)]
+[gdb-3] [New Thread 0xffff9d60c860 (LWP 125)]
+[gdb-3] [New Thread 0xffff9cc0c860 (LWP 126)]
+[gdb-3] [New Thread 0xffff97e0c860 (LWP 127)]
+[gdb-3] [New Thread 0xffff9740c860 (LWP 128)]
+[gdb-3] [INFO] [1787843485.263272220] [cite.cell_a.arm_1.skill_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00691279 seconds
+[gdb-3] [INFO] [1787843485.263340553] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[gdb-3] [INFO] [1787843485.263348928] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[move_group-2] [INFO] [1787843485.291784595] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-2] [INFO] [1787843485.294783345] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-2] [INFO] [1787843485.294802928] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-2] [INFO] [1787843485.295590053] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[move_group-2] [INFO] [1787843485.295603512] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-2] [INFO] [1787843485.296026387] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[move_group-2] [INFO] [1787843485.296038012] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-2] [INFO] [1787843485.296425803] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[move_group-2] [INFO] [1787843485.296438512] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[move_group-2] [INFO] [1787843485.297016470] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843485.297432678] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843485.297443053] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1787843485.297550845] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1787843485.297554345] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1787843485.297562678] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1787843485.297565220] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1787843485.297572720] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1787843485.298133512] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1787843485.300952178] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1787843485.300967845] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1787843485.301305053] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1787843485.310188803] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[move_group-2] [INFO] [1787843485.310794887] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843485.310858512] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843485.310861887] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1787843485.310971803] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1787843485.310980178] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1787843485.310988970] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1787843485.311006845] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1787843485.311017720] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1787843485.311560637] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1787843485.311856262] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1787843485.311874220] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1787843485.312091095] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1787843485.312124970] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1787843485.312358137] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [WARN] [1787843485.313149012] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[gdb-3] [INFO] [1787843485.321578428] [cite.cell_a.arm_1.skill_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[move_group-2] [INFO] [1787843485.329545553] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for arm_1_joint_trajectory_controller
+[move_group-2] [INFO] [1787843485.329576720] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: arm_1_gripper_controller will command a max effort of: 0
+[move_group-2] [INFO] [1787843485.331063303] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added GripperCommand controller for arm_1_gripper_controller
+[move_group-2] [INFO] [1787843485.331188053] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1787843485.331216387] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1787843485.331968595] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Trajectory execution is not managing controllers
+[move_group-2] [INFO] [1787843485.331987970] [cite.cell_a.arm_1.move_group]: MoveGroup debug mode is ON
+[move_group-2] [INFO] [1787843485.341745387] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.executable]: 
+[move_group-2] 
+[move_group-2] ********************************************************
+[move_group-2] * MoveGroup using: 
+[move_group-2] *     - apply_planning_scene_service
+[move_group-2] *     - clear_octomap_service
+[move_group-2] *     - get_group_urdf
+[move_group-2] *     - load_geometry_from_file
+[move_group-2] *     - CartesianPathService
+[move_group-2] *     - execute_trajectory_action
+[move_group-2] *     - get_planning_scene_service
+[move_group-2] *     - kinematics_service
+[move_group-2] *     - move_action
+[move_group-2] *     - motion_plan_service
+[move_group-2] *     - query_planners_service
+[move_group-2] *     - state_validation_service
+[move_group-2] *     - save_geometry_to_file
+[move_group-2] ********************************************************
+[move_group-2] 
+[move_group-2] [INFO] [1787843485.341789512] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context using pipeline pilz_industrial_motion_planner
+[move_group-2] [INFO] [1787843485.341796512] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[move_group-2] [96mLoading 'move_group/ApplyPlanningSceneService'...[0m
+[move_group-2] [96mLoading 'move_group/ClearOctomapService'...[0m
+[move_group-2] [96mLoading 'move_group/GetUrdfService'...[0m
+[move_group-2] [96mLoading 'move_group/LoadGeometryFromFileService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupCartesianPathService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupGetPlanningSceneService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupKinematicsService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupMoveAction'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupPlanService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupQueryPlannersService'...[0m
+[move_group-2] [96mLoading 'move_group/MoveGroupStateValidationService'...[0m
+[move_group-2] [96mLoading 'move_group/SaveGeometryToFileService'...[0m
+[move_group-2] 
+[move_group-2] [92mYou can start planning now![0m
+[move_group-2] 
+[gdb-3] [New Thread 0xffff96a0c860 (LWP 142)]
+[gdb-3] [INFO] [1787843485.514803637] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm_1_xarm5.
+[gdb-3] [INFO] [1787843485.514866470] [cite.cell_a.arm_1.skill_server]: planning for group 'arm_1_xarm5' with end effector 'arm_1_link_tcp' (planning frame 'arm_1_mount')
+[gdb-3] [INFO] [1787843485.514872803] [cite.cell_a.arm_1.skill_server]: planner: pilz_industrial_motion_planner/PTP, falling back to ompl (its own default planner) (ADR-0027)
+[gdb-3] [INFO] [1787843485.553349678] [cite.cell_a.arm_1.skill_server]: skills for arm_1 are accepting goals
+test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured (test_skill_contract.TestSkillContract.test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured) ... [gdb-3] [New Thread 0xffff9600c860 (LWP 143)]
+[gdb-3] [WARN] [1787843485.781206970] [cite.cell_a.arm_1.skill_server]: rejecting a 'move_to' goal: 'grasp' still holds this arm. One arm runs one skill at a time — a second goal would share this arm's planner and its trajectory with the first. The caller that abandoned the earlier goal has to cancel it.
+[move_group-2] [INFO] [1787843485.835641262] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Received event 'stop'
+[gdb-3] [INFO] [1787843485.887424054] [cite.cell_a.arm_1.skill_server]: gripper: commanded 0.0 mm, reached 88.9 mm, stalled=false, reached_goal=false, effort=0.0 -> empty
+[gdb-3] [Thread 0xffff9600c860 (LWP 143) exited]
+ok
+test_2_a_cartesian_path_is_refused_rather_than_silently_replaced (test_skill_contract.TestSkillContract.test_2_a_cartesian_path_is_refused_rather_than_silently_replaced) ... [gdb-3] [New Thread 0xffff9560c860 (LWP 147)]
+[gdb-3] [INFO] [1787843485.943677554] [cite.cell_a.arm_1.skill_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[gdb-3] [Thread 0xffff9560c860 (LWP 147) exited]
+ok
+test_3_a_reachable_pose_is_planned_to_rather_than_refused (test_skill_contract.TestSkillContract.test_3_a_reachable_pose_is_planned_to_rather_than_refused) ... [gdb-3] [New Thread 0xffff9600c860 (LWP 148)]
+[gdb-3] [INFO] [1787843486.095665220] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-2] [INFO] [1787843486.097847012] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[gdb-3] [INFO] [1787843486.098430387] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-2] [INFO] [1787843486.099019762] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-2] [INFO] [1787843486.139029345] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-2] [INFO] [1787843486.139113262] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-2] [INFO] [1787843486.139627720] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843486.139691179] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-2] [WARN] [1787843486.139699512] [cite.cell_a.arm_1.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-2] [INFO] [1787843486.139716095] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-2] [INFO] [1787843486.139765595] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-2] [INFO] [1787843486.140188887] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-2] [INFO] [1787843486.140252137] [cite.cell_a.arm_1.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-2] [INFO] [1787843486.140340429] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-2] [INFO] [1787843486.141638429] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-2] [INFO] [1787843486.142472387] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-2] [INFO] [1787843486.142735595] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[gdb-3] [INFO] [1787843486.143319637] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[gdb-3] [INFO] [1787843486.145020012] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.00107117 seconds
+[gdb-3] [New Thread 0xffff9560c860 (LWP 151)]
+[move_group-2] [INFO] [1787843486.146338637] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-2] [INFO] [1787843486.146450304] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1787843486.146474762] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1787843486.146637304] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[gdb-3] [INFO] [1787843486.146442387] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-2] [INFO] [1787843486.198687470] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-2] [INFO] [1787843486.198787970] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1787843486.198808512] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [ERROR] [1787843486.198975595] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Action client not connected to action server: arm_1_joint_trajectory_controller/follow_joint_trajectory
+[move_group-2] [ERROR] [1787843486.199039554] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Failed to send trajectory part 1 of 1 to controller arm_1_joint_trajectory_controller
+[move_group-2] [INFO] [1787843486.199053679] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status ABORTED ...
+[move_group-2] [INFO] [1787843486.199184720] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: ABORTED
+[gdb-3] [INFO] [1787843486.199604470] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Execute request aborted
+[gdb-3] [ERROR] [1787843486.199834512] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroupInterface::execute() failed or timeout reached
+[gdb-3] [Thread 0xffff9560c860 (LWP 151) exited]
+[gdb-3] [Thread 0xffff9600c860 (LWP 148) exited]
+ok
+test_3b_an_unreachable_pose_is_reported_as_unreachable (test_skill_contract.TestSkillContract.test_3b_an_unreachable_pose_is_reported_as_unreachable) ... [gdb-3] [New Thread 0xffff9560c860 (LWP 153)]
+[gdb-3] [Thread 0xffff9560c860 (LWP 153) exited]
+ok
+test_4_a_transfer_without_a_rendezvous_token_is_refused (test_skill_contract.TestSkillContract.test_4_a_transfer_without_a_rendezvous_token_is_refused) ... [gdb-3] [New Thread 0xffff9600c860 (LWP 154)]
+[gdb-3] [Thread 0xffff9600c860 (LWP 154) exited]
+ok
+test_5_a_transfer_carrying_nothing_is_refused (test_skill_contract.TestSkillContract.test_5_a_transfer_carrying_nothing_is_refused) ... [gdb-3] [New Thread 0xffff9560c860 (LWP 155)]
+[gdb-3] [Thread 0xffff9560c860 (LWP 155) exited]
+ok
+test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out (test_skill_contract.TestSkillContract.test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out)
+A hold this arm cannot complete is refused before it moves. ... [gdb-3] [New Thread 0xffff9600c860 (LWP 157)]
+[gdb-3] [INFO] [1787843487.013327179] [cite.cell_a.arm_1.skill_server]: gripper: commanded 0.0 mm, reached 48.0 mm, stalled=true, reached_goal=false, effort=10.0 -> holding
+[gdb-3] [Thread 0xffff9600c860 (LWP 157) exited]
+[gdb-3] [New Thread 0xffff9560c860 (LWP 159)]
+[gdb-3] [Thread 0xffff9560c860 (LWP 159) exited]
+ok
+test_7_a_transfer_is_cancellable_while_it_is_still_moving (test_skill_contract.TestSkillContract.test_7_a_transfer_is_cancellable_while_it_is_still_moving)
+Cancelling a transfer leaves the work-piece where it was. ... [gdb-3] [New Thread 0xffff9600c860 (LWP 161)]
+[gdb-3] [INFO] [1787843487.297353929] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-2] [INFO] [1787843487.297956971] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Received event 'stop'
+[move_group-2] [INFO] [1787843487.298093179] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[gdb-3] [INFO] [1787843487.298905096] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-2] [INFO] [1787843487.299118346] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-2] [INFO] [1787843487.342039346] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-2] [INFO] [1787843487.342163346] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-2] [INFO] [1787843487.342409429] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-2] [INFO] [1787843487.342474346] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-2] [WARN] [1787843487.342486596] [cite.cell_a.arm_1.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-2] [INFO] [1787843487.342513013] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-2] [INFO] [1787843487.342571888] [cite.cell_a.arm_1.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-2] [INFO] [1787843487.342779263] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-2] [INFO] [1787843487.342824138] [cite.cell_a.arm_1.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-2] [INFO] [1787843487.342875596] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-2] [INFO] [1787843487.343497179] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-2] [INFO] [1787843487.346114304] [cite.cell_a.arm_1.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-2] [INFO] [1787843487.346446013] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[gdb-3] [INFO] [1787843487.347552221] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[gdb-3] [INFO] [1787843487.347773179] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.00033525 seconds
+[gdb-3] [Thread 0xffff9600c860 (LWP 161) exited]
+ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.530s
+
+OK
+[INFO] [gdb-3]: sending signal 'SIGINT' to process[gdb-3]
+[INFO] [move_group-2]: sending signal 'SIGINT' to process[move_group-2]
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[gdb-3] [INFO] [1787843487.413764679] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[move_group-2] [INFO] [1787843487.413841471] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-1] [INFO] [1787843487.414147929] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[gdb-3] [Thread 0xffff9740c860 (LWP 128) exited]
+[gdb-3] [Thread 0xffffabe0c860 (LWP 115) exited]
+[gdb-3] [Thread 0xffff96a0c860 (LWP 142) exited]
+[gdb-3] [Thread 0xffffa8c0c860 (LWP 120) exited]
+[gdb-3] [Thread 0xffff9f40c860 (LWP 122) exited]
+[gdb-3] [Thread 0xffffa960c860 (LWP 119) exited]
+[gdb-3] [Thread 0xffff97e0c860 (LWP 127) exited]
+[gdb-3] [Thread 0xffff9d60c860 (LWP 125) exited]
+[gdb-3] [Thread 0xffff9e00c860 (LWP 124) exited]
+[gdb-3] [Thread 0xffffaa00c860 (LWP 118) exited]
+[gdb-3] [Thread 0xffff9ea0c860 (LWP 123) exited]
+[gdb-3] [Thread 0xffffaaa0c860 (LWP 117) exited]
+[gdb-3] [Thread 0xffff9cc0c860 (LWP 126) exited]
+[gdb-3] [Thread 0xffff9fe0c860 (LWP 121) exited]
+[gdb-3] [Thread 0xffffab40c860 (LWP 116) exited]
+[move_group-2] [INFO] [1787843487.437644596] [cite.cell_a.arm_1.move_group.moveit.ros.moveit_cpp]: Deleting MoveItCpp
+[gdb-3] CITE_TRIPWIRE: use_count before return = 1
+[gdb-3] CITE_TRIPWIRE: main returning
+[gdb-3] CITE_TRIPWIRE: ~SkillServer entered
+[gdb-3] CITE_TRIPWIRE: ~SkillServer done
+[gdb-3] [Thread 0xffffb760c860 (LWP 104) exited]
+[move_group-2] Stack trace (most recent call last):
+[gdb-3] [Thread 0xffffb120c860 (LWP 114) exited]
+[gdb-3] [Thread 0xffffb620c860 (LWP 106) exited]
+[gdb-3] [Thread 0xffffb580c860 (LWP 107) exited]
+[gdb-3] [Thread 0xffffb4e0c860 (LWP 108) exited]
+[gdb-3] [Thread 0xffffb440c860 (LWP 109) exited]
+[gdb-3] [Thread 0xffffb3a0c860 (LWP 110) exited]
+[gdb-3] [Thread 0xffffb260c860 (LWP 112) exited]
+[gdb-3] [Thread 0xffffb1c0c860 (LWP 113) exited]
+[move_group-2] #15   Object "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1", at 0xffffffffffffffff, in 
+[gdb-3] [Thread 0xffffb300c860 (LWP 111) exited]
+[gdb-3] [Thread 0xffffb6c0c860 (LWP 105) exited]
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 54]
+[gdb-3] [Thread 0xffffb800c860 (LWP 103) exited]
+[gdb-3] [Thread 0xffffb9e0c860 (LWP 101) exited]
+[gdb-3] [Thread 0xffffbea8b020 (LWP 95) exited]
+[gdb-3] [Thread 0xffffb940c860 (LWP 102) exited]
+[gdb-3] [New process 95]
+[gdb-3] [Inferior 1 (process 95) exited normally]
+[INFO] [gdb-3]: process has finished cleanly [pid 56]
+[ERROR] [move_group-2]: process[move_group-2] failed to terminate '90' seconds after receiving 'SIGINT', escalating to 'SIGTERM'
+[INFO] [move_group-2]: sending signal 'SIGTERM' to process[move_group-2]
+[ERROR] [move_group-2]: process has died [pid 55, exit code -15, cmd '/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_c3jk_s_7 --params-file /tmp/launch_params_3xd_fiuf --params-file /tmp/launch_params_ybdd5lyr --params-file /tmp/launch_params_tajy76ez --params-file /tmp/launch_params_2k60o_64 -r /tf:=/tf -r /tf_static:=/tf_static'].
+test_the_skill_server_exited_cleanly (test_skill_contract.TestCleanShutdown.test_the_skill_server_exited_cleanly) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
