@@ -57,7 +57,14 @@
   any confirmation that a belt did what it was told: nothing publishes `ConveyorState`, so a
   belt that fails to stop or fails to restart is a stalled or a spilling line that L4 would
   not notice. The bridge carries a bare `std_msgs/Float64` each way.
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [L3](L3-capabilities.md)
+  **Also not built: the fault branch this document draws below.** The generated root tree is
+  a bare `Parallel` of station subtrees, so a station that escalates fails the root, ends the
+  tick loop and exits the process — which `simulation.launch.py`'s `_fatal_on_exit` turns
+  into a teardown of the whole cell, taking the evidence of the fault with it and leaving the
+  ADR-0037 reset service with no process to serve it. What is to be built instead, and why
+  resumption is gated on re-armability rather than on acknowledgement, is
+  [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md).
+- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 
@@ -115,6 +122,15 @@ LineCoordinator (root)
 One subtree per station, instantiated from L0 topology. **Keep trees shallow.** A deeply
 nested tree is as hard to reason about as deeply nested conditionals, and the tooling does
 not save you.
+
+**The diagram above is the design, and only its `Parallel` of station subtrees is built.**
+The generated root is that `Parallel` and nothing else; `EmergencyHandling`, `OnFault`,
+`StopAll` and `AwaitReset` exist nowhere in the repository. What the fault branch is to
+contain, what "the line has stopped" means for each actuator, and why resumption is gated on
+re-armability rather than on the operator's acknowledgement are decided in
+[ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), which also records that
+`OnFault` is deliberately not adopted — the `Parallel`'s own `FAILURE` is the fault event.
+Read it before building any of these four; it is not restated here (P1).
 
 ### Handoff is a negotiation with an owner
 
