@@ -20,15 +20,18 @@
 // fraction of its path on demand, and a fixture that could would be asserting
 // the simulator rather than the policy.
 //
-// WHAT NO TEST IN THIS REPOSITORY SHOWS, and ADR-0037 decision 8 said otherwise
-// until its correction: that a real abort reaches this classifier. The fixture
-// that decision names,
-// `cite_bringup/test/test_trajectory_constraints_launch.py`, drives
-// `FollowJointTrajectory` directly against mock hardware — no `move_group`, no
-// skill server — so its abort never enters L3, and the mistracking it injects
-// with `disable_commands` leaves the joint state at the trajectory's FIRST
-// point, which classifies AT_START. It cannot carry this assertion, and closing
-// that gap needs a fixture nobody has built.
+// WHAT NO TEST IN THIS FILE SHOWS: that a real abort reaches this classifier.
+// ADR-0037 decision 8 named `test_trajectory_constraints_launch.py` for that and
+// was wrong — it drives `FollowJointTrajectory` directly against mock hardware,
+// with no `move_group` and no skill server, so its abort never enters L3 at all,
+// and the mistracking it injects with `disable_commands` leaves the joint state
+// at the trajectory's FIRST point, which classifies AT_START.
+//
+// The fixture that does carry it is `cite_test_hardware/JointStopSystem`, driven
+// by `cite_bringup/test/test_abort_classification_launch.py` (ADR-0040): a pair
+// of hard stops on one joint, so the arm comes to rest PART WAY. That is a
+// launch test with a planner in it and it is not this file's job; what stays
+// here is the rule, tested as a rule.
 
 #include <cstdint>
 #include <limits>
@@ -173,14 +176,15 @@ TEST(MotionEndTest, ANonPositiveToleranceMatchesNothing)
 // --- The code L4 acts on, and the two axes that decide it (ADR-0037) ---------
 //
 // WHAT THESE DO NOT SHOW, said first because ADR-0037 decision 8 got it wrong.
-// They do not show that a real abort reaches this function. Nothing in this
-// repository does: the fixture decision 8 names,
-// `cite_bringup/test/test_trajectory_constraints_launch.py`, drives
-// `FollowJointTrajectory` directly against `mock_components/GenericSystem` — no
-// `move_group`, no skill server — so the abort it produces never enters L3 at
-// all, and its `disable_commands` injection freezes the joint state at the
-// trajectory's FIRST point, which is AT_START and therefore the one answer that
-// is not MOTION_INTERRUPTED. See that ADR's correction.
+// They do not show that a real abort reaches this function. That is evidenced by
+// `cite_bringup/test/test_abort_classification_launch.py` (ADR-0040) and nowhere
+// else — and NOT by `test_trajectory_constraints_launch.py`, which drives
+// `FollowJointTrajectory` directly against `mock_components/GenericSystem` with
+// no `move_group` and no skill server, and whose `disable_commands` injection
+// freezes the joint state at the trajectory's FIRST point. That is AT_START, the
+// one answer that is not MOTION_INTERRUPTED — demonstrated rather than reasoned
+// in ADR-0040's mutation table, by running the identical goal over that
+// mechanism and watching L3 answer EXECUTION_FAILED.
 //
 // What they do show is every row of the decision itself, which was reachable by
 // no test at all while it was a private method of the server.

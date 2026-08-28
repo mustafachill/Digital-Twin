@@ -35,12 +35,17 @@
   arm stopped part-way and is holding position, and `EXECUTION_FAILED` at either endpoint.
   Every row of it, and `positions_in_trajectory_order` beside it, is unit-tested in
   `test/test_motion_end.cpp`; it was a private method reachable by no test before this.
-  **Not proven, and it is a fixture gap rather than a wording one:** nothing in this
-  repository drives a *genuine* abort into this classifier. The launch test ADR-0037
-  originally named launches neither `move_group` nor a skill server, and mock hardware's
-  `disable_commands` freezes the arm at the trajectory's first point — which is the one
-  answer that is not `MOTION_INTERRUPTED`. Read that ADR's correction 2 before citing any
-  test as evidence for this path.
+  **Proven since 2026-08-28, and read the scope before citing it**
+  ([ADR-0040](../adr/0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md)).
+  `cite_bringup/test/test_abort_classification_launch.py` drives a genuine
+  `PATH_TOLERANCE_VIOLATED` abort through a real `move_group` and the real skill server and
+  asserts `MOTION_INTERRUPTED` with the `PART_WAY` wording — the wording matters, because
+  the unreadable-arm case answers with the same code. The hardware is
+  `cite_test_hardware/JointStopSystem`, mock hardware with a pair of hard stops on one
+  joint, which is what lets the arm come to rest *part way* rather than at the first point.
+  **What is still not proven:** the plant is a perfect follower with no dynamics, so nothing
+  here says what the classification does on an arm that decelerates, and nothing here runs
+  under Gazebo.
   **Not proven:** `MoveTo.Goal.cartesian_path` returns
   `NOT_IMPLEMENTED` ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
   **Not assertable:** how a part is oriented in the jaws — see "A grasp is evidenced by a

@@ -669,11 +669,17 @@ leaves in either order.
 
 ### What we will have to revisit
 
-- **Measure that the joint state is static when `execute()` returns.** Decision 3's "no
-  race" argument is reasoned. Sample the joint state at the moment `execute()` returns across
-  the ADR-0036 launch test's aborts and record the residual velocity. If it is not
-  negligible, the classification is sampling a moving quantity and the decision's central
-  advantage is gone.
+- **Measure that the joint state is static when `execute()` returns.**
+  **Taken on 2026-08-28 over three runs of ADR-0040's rig, and the answer there is yes** —
+  0.000000000 rad/s at the instant the result reached the caller, over a still window of
+  seven to eleven consecutive joint states, on a channel that read 2.0-2.6 rad/s during the
+  healthy motion in the same runs. The numbers and their scope are in ADR-0040's "What was
+  measured on it", and the scope is the point: that rig's plant is a perfect follower, so
+  what is established is that the *commanded* motion has stopped, not that a real arm has
+  stopped coasting. **This bullet is narrowed rather than closed.** The case decision 3's own
+  "Consequences" names — an abort a few milliseconds after motion begins, where a
+  DECELERATING arm is still within tolerance of the start — cannot be produced on a plant
+  with no deceleration, and remains unmeasured on either backend.
 - **Whether `MOTION_INTERRUPTED → ESCALATE` is the right severity** once there is a reset and
   a few weeks of aborts to look at. It may prove to warrant a bounded, operator-gated retry;
   that would be a new decision, not a widening of this one.
@@ -824,6 +830,24 @@ trajectory rather than at its start — `disable_commands` cannot, because it ne
 arm leave. That fixture does not exist and building it is not part of this change. Until it
 does, the claim "a real abort reaches the classifier" is untested, and no document may say
 otherwise.
+
+**Closed on 2026-08-28 by [ADR-0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md).**
+The paragraph above stands as the record of what was true when this ADR was implemented; it
+is no longer a description of the tree. `cite_test_hardware/JointStopSystem` is mock hardware
+with a pair of hard stops on one named joint, and
+`cite_bringup/test/test_abort_classification_launch.py` stands it up under a real
+`move_group` and the real skill server. A real abort now reaches
+`classify_execution_failure` and is answered `MOTION_INTERRUPTED`, with the `PART_WAY`
+wording rather than the unreadable-arm wording asserted so that `UNKNOWN` cannot pass for it.
+
+**Two things that paragraph got right and one it could not have known.** It was right that
+`disable_commands` produces the endpoint case — ADR-0040 demonstrates it rather than reasons
+it, by running the identical goal over that mechanism and watching L3 answer
+`EXECUTION_FAILED`, *"still within its goal tolerance of the trajectory's first point"*. It
+was right that the fixture had to reach L3 through `move_group` and a skill server. What it
+could not have known is that the same rig would be needed for the *velocity* measurement in
+"revisit" below, because on a position-only command interface no mock writes the velocity
+state at all.
 
 ### 3. What an escalating station does with its claims was changed and not declared
 
