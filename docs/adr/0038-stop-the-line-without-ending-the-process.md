@@ -3,6 +3,17 @@
 - **Status:** Proposed. Written before the implementation, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below is a commitment, not a description.
   Nothing in this record is built at `c7557c8`.
+  **Amended 2026-08-27, and one decision in it was reversed.** Decisions 1-4 and 6 are
+  implemented on branch `feat/stop-the-line-without-ending-the-process`, which is under
+  review and not merged; decision 5's two deliberate absences are still absent there.
+  **`OnFault`, which decision 1 records as deliberately not built, is built** — by the
+  project owner's decision, and as a *recorder* rather than as the condition leaf decision 1
+  argues against. What that changes, what it leaves untouched, and why the original objection
+  still stands against the node it was written about are in the section named "Amendment —
+  2026-08-27: `OnFault` is built, as a recorder rather than a condition", immediately after
+  this block. **Nothing here was measured false, which is why this is an amendment and not a
+  correction.** A second section after it records evidence for decision 5 and decides
+  nothing. The status stays `Proposed` until the branch merges.
 - **Date:** 2026-08-27
 - **Deciders:** Docs-writer agent, from an architect's audit of the L4 fault path at
   `c7557c8` after [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) landed
@@ -16,6 +27,132 @@
   [L4](../architecture/L4-orchestration.md),
   [cross-cutting-safety.md](../architecture/cross-cutting-safety.md),
   charter §3.2 and §4 (P2, P4, P5, P7)
+
+## Amendment — 2026-08-27: `OnFault` is built, as a recorder rather than a condition
+
+**This is an amendment and not a correction, and the difference is not a formality.** Nothing
+in this record was measured false. What happened is that **a decision in it was reversed by
+the implementation, on the project owner's authority**: the implementation brief was written
+from the architect's design and required `OnFault`, decision 1 below says `OnFault` is
+deliberately not built, and the brief was never reconciled against the record that had just
+been written from the same design. The project owner records that as their own error. The
+coder raised the contradiction instead of complying with the brief silently or deviating from
+it silently, which is why this is written now rather than found later.
+
+It is not a supersession either. The decision this record *is* — the line stops, the process
+lives, and resumption is gated on re-armability rather than on acknowledgement — is untouched,
+and so is every other decision in it. What changed is one leaf, and the fault branch built on
+that branch is `OnFault → StopAll → AwaitReset → AwaitReArm`.
+
+### The objection was sound about a condition leaf, and does not reach the node that exists
+
+Decision 1 refuses `OnFault` on the grounds that *"a separate condition leaf would have to
+observe the same station states the tree has just acted on, and would be a second author for
+the fact that a station escalated."* **That objection stands, against the leaf it was written
+about.** A condition that decided whether the line had faulted would be a second author for a
+fact the root `Parallel` has already established, and it should not be built.
+
+The node that exists is not that node. `OnFault` is a `BT::SyncActionNode` whose `tick()` has
+exactly one `return`, and it is `SUCCESS`: it decides nothing, refuses nothing, and cannot be
+the reason the fault branch ends. The `Parallel` remains the sole author of "a station
+escalated". `OnFault` is **the reader that writes the fact down**, and it has two jobs, both
+of which this record needed and left unassigned. The code is `line_fault.hpp` on the branch
+named in the status block; it is cited here and not restated (P1).
+
+### Job one — the exit status lost the fault, and this record removed the carrier without replacing it
+
+Decision 1 notices the first half and stops: *"It becomes unreachable through escalation and
+stays as the answer for a root that fails some other way."* It does not say what that costs.
+The tick loop is `while (rclcpp::ok() && outcome == BT::NodeStatus::RUNNING)`, and the fault
+branch is shaped never to return anything but `RUNNING` — so the loop now ends only when
+`rclcpp::ok()` goes false, `outcome` is not `FAILURE` when it does, and **a run in which a
+station escalated would exit 0**. That is a signal CI has today and would have lost silently.
+A fault that happened, and was acknowledged, still happened.
+
+Something has to carry it past the end of the tick loop. `OnFault` is that something: it
+latches, once, the station, the `ResultCode` `RecoverFromFailure` acted on, the reason and the
+time, and `main` reads the latch after the loop and exits 1. It has to be taken **in the leaf**
+rather than derived afterwards, because `SetStationState` clears `blocked_reason` as a side
+effect of a state change — the same side effect that already destroyed a reason mid-motion in
+decision 4's live defect.
+
+The sentence in decision 1 is not false. It is incomplete: it observed a signal becoming
+unreachable and did not ask what would replace it.
+
+### Job two — the handoff clock, and what decision 4 does and does not settle
+
+Decision 4 names the hazard — *"A handoff clock still running through the fault will expire
+during the fault and re-block a station the operator has already reset"* — and it does assign
+it: the maintenance pass stops writing `STATE_BLOCKED`, so an expiry during a fault can no
+longer block anybody. **That much this record already decides, and this amendment leaves it
+exactly as written.**
+
+What decision 4 does not retire is the clock itself. With that change alone the deadline goes
+on running while the line stands still, and whenever a station's tree next observes the
+handoff it observes one that timed out — during an interval in which nothing could have met
+it. `OnFault` settles the ledger instead: every live handoff is abandoned by the station that
+offered it, so the record says the handoff was called off because the line stopped, rather
+than that the downstream station was too slow.
+
+**Ownership does not move, structurally rather than carefully.** `HandoffLedger::abandon` sets
+the phase and touches the registry not at all, so the work-piece stays with whoever already
+owned it — ADR-0024 rule 3's outcome, reached by not doing anything.
+
+### `AwaitReArm` is a different case, and nothing here is against it
+
+The same report pairs `AwaitReArm` with `OnFault` as a leaf the built branch has and the
+design does not. **That is true of the diagram in
+[`L4-orchestration.md`](../architecture/L4-orchestration.md) and it is not true of this
+record.** Decision 1's own diagram lists `AwaitReArm`, and decision 3 is nothing but the
+argument for it. There is no text here to amend, and no decision was reversed.
+
+One piece of arithmetic does move with `OnFault`. Decision 3 calls `AwaitReArm` *"the fourth
+leaf"*, counting against L4's three-node design; in the built branch it is also the fourth
+leaf of the fault `Sequence`, so the phrase survives by a different route. *"Three new
+leaves"*, in the costs, does not: there are four.
+
+### How the record and the brief came apart, which is the part that transfers
+
+Two documents were derived from one design a few hours apart — this record and the
+implementation brief — and only one of them carried the single point on which the record had
+departed from that design. Prose copied from a common source diverges exactly the way a value
+copied into two places does, and it diverges more quietly, because nothing regenerates it and
+nothing diffs it. What caught it was a person reading both and refusing to choose silently.
+
+## Evidence — 2026-08-27: the dead end decision 5 refuses to create is already reachable
+
+Decision 5 declines to wire resumption because a reset that returned the stations to the
+nominal branch would produce a line that reports `STATE_RUNNING` and never moves again. That
+was written as a prediction about a shape that did not exist. **The same dead end has now been
+reached on the shape that does** — the retry path, which neither this record nor its
+implementation changes.
+
+Reported by the project owner on 2026-08-27, from two `continuous_line` runs against
+`c6acacc`. In one of them piece 1 completed end to end, all ten milestones; piece 2 then hit
+the documented friction-grasp failure; the station retried, returned to `AwaitTrigger` **on a
+beam the part was already breaking**, and waited out the 420 s leg ceiling. `LineState`
+reported `RUNNING` throughout.
+
+**Two runs on one machine, with no thresholds registered before them and no directory in
+[`docs/measurements/`](../measurements/README.md).** That is the size of the evidence, and it
+is recorded as evidence rather than as a prediction that came true.
+
+What is checkable in it was checked, at `c6acacc`, and holds. The station subtree is
+`Repeat[Fallback[nominal, recover]]`, so a completed recovery re-enters the cycle at
+`AwaitTrigger` (`line_station.xml:45-57`, `:224-240`); `AwaitTrigger` requires
+`previous_state != state`, so a part already breaking the beam produces no edge
+(`line_nodes.hpp:136`); the leg ceiling is `LEG_CEILING_S = 420.0`
+(`tests/scenarios/continuous_line.py:121`); and a line with no station faulted, blocked or
+working publishes `STATE_RUNNING` (`line_maintenance.hpp:113-118`). The run narrative itself
+is one person's report of two runs and is not re-verified here.
+
+**It strengthens decision 5 rather than weakening it.** The pathology decision 5 refused to
+create by wiring resumption is reachable today by a second route, and the fail-fast the
+implementation adds to `continuous_line` is not a guard against it: that fail-fast keys on
+`LineState` `BLOCKED` or `FAULTED`, and this stall publishes `RUNNING` — read from the
+branch's diff, not observed in these runs. Nothing escalated, so there was nothing for it to
+fire on, and staying quiet is correct behaviour rather than a hole in it. **The re-arm problem
+has two entrances**, and decision 5's other half is what closes either.
 
 ## The decision, in one line
 
@@ -223,6 +360,9 @@ Fallback  "line"
     └── AwaitReArm
 ```
 
+**[Amended 2026-08-27 — see the Amendment section above. The built branch has four leaves:
+`OnFault` runs first, ahead of `StopAll`.]**
+
 A station's `FAILURE` still fails the `Parallel` at `failure_count="1"`. The `Fallback` then
 advances to the fault `Sequence` and — this is the property the shape turns on —
 **never returns to the `Parallel`**, because `FallbackNode` carries `current_child_idx_`
@@ -242,6 +382,9 @@ scene stays loaded, and the reset service stays answerable.
 
 `line_orchestrator.cpp:602-608` keeps its `status = 1` on a root `FAILURE`. It becomes
 unreachable through escalation and stays as the answer for a root that fails some other way.
+**[Amended 2026-08-27 — see the Amendment section above. True as far as it goes, and
+incomplete: with escalation no longer ending the tick loop, nothing was left to carry a fault
+into the exit status at all. `OnFault` latches it and `main` reads the latch.]**
 
 **`OnFault` from the design diagram is deliberately not built.** The `Parallel` returning
 `FAILURE` *is* the fault event; a separate condition leaf would have to observe the same
@@ -249,6 +392,9 @@ station states the tree has just acted on, and would be a second author for the 
 station escalated. The diagram at
 [`L4-orchestration.md:104-113`](../architecture/L4-orchestration.md) is the design; this is
 the shape to build, and the difference is one node.
+**[Amended 2026-08-27 — see the Amendment section above. `OnFault` is built, by the project
+owner's decision. The objection stated here stands against a *condition* leaf and does not
+reach the recorder that was built, which returns `SUCCESS` and decides nothing.]**
 
 ### 2. What "the line has stopped" means, actuator by actuator
 
@@ -431,6 +577,8 @@ goal was cancelled, and that the `Parallel` is not re-entered, is part of this c
   `AwaitReArm` are `StatefulActionNode`s that can return `RUNNING` for ever. A leaf that never
   terminates is a shape this tree has not had at the root before, and it makes "the tree is
   RUNNING" stop meaning "the line is running".
+  **[Amended 2026-08-27 — see the Amendment section above. Four leaves: `OnFault` is built,
+  and it is a `SyncActionNode` like `StopAll`.]**
 - **A public reader on `ConveyorIndex::commanded_`.** A small widening of a class that has so
   far kept its plant state to itself, and one more consumer to consider whenever the
   publication path changes.
