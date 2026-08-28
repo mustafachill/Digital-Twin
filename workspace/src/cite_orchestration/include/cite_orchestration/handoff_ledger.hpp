@@ -290,6 +290,30 @@ public:
     return std::nullopt;
   }
 
+  /// Every handoff that has not yet reached a terminal phase.
+  ///
+  /// The records, not the count, and for one caller: the fault branch settles the
+  /// ledger when the line stops (ADR-0038), which means calling `abandon` on each
+  /// of them — and `abandon` names a party, deliberately, so the caller needs the
+  /// record rather than the token. Returned by value because the caller abandons
+  /// as it goes, and iterating a map while its entries change phase is a habit
+  /// worth not forming here.
+  ///
+  /// It is NOT a way to act on somebody else's handoff. `abandon` still checks
+  /// that the station named is a party to it, so what this widens is visibility
+  /// and not authority.
+  std::vector<Handoff> live_handoffs() const
+  {
+    std::vector<Handoff> open;
+    for (const auto & [token, handoff] : handoffs_) {
+      static_cast<void>(token);
+      if (!is_terminal(handoff.phase)) {
+        open.push_back(handoff);
+      }
+    }
+    return open;
+  }
+
   std::optional<Handoff> find(const std::string & token) const
   {
     const auto entry = handoffs_.find(token);

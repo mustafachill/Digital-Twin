@@ -80,6 +80,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -233,6 +234,33 @@ public:
 
   /// Command one belt to a standstill. False when the model declared no such belt.
   bool stop(const std::string & asset) {return declares(asset) ? command(asset, 0.0) : false;}
+
+  /// What this belt was last commanded to, or nothing when it never has been.
+  ///
+  /// THE DISTINCTION IS THE POINT, and it is why this returns an optional rather
+  /// than a double. "Not commanded yet" and "commanded to a standstill" are
+  /// different facts about the plant and only one of them is a decision — the
+  /// member's own comment says so, and a reader that flattened them would read a
+  /// belt nobody has spoken to as a belt somebody stopped.
+  ///
+  /// A READER, NOT A MEASUREMENT. This is what L4 last DECIDED, which is the only
+  /// thing this class knows: nothing publishes `ConveyorState`, so no belt on this
+  /// line has ever confirmed anything. A caller that treats the answer as the
+  /// belt's speed is making the mistake this whole file says it cannot make.
+  ///
+  /// Added for `AwaitReArm` (ADR-0038 decision 3), which asks whether a station
+  /// could ever be triggered again and answers it from the setpoint of the belt
+  /// that would carry work to it. That question needs the last decision and not a
+  /// measurement, which is why it can be answered at all today.
+  std::optional<double> commanded(const std::string & asset) const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    const auto entry = commanded_.find(asset);
+    if (entry == commanded_.end()) {
+      return std::nullopt;
+    }
+    return entry->second;
+  }
 
   /// Every belt the model declared, in a stable order.
   std::vector<std::string> assets() const

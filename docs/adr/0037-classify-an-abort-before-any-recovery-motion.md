@@ -1,14 +1,17 @@
 # ADR-0037: Classify an execution abort before any recovery motion is dispatched
 
-- **Status:** Proposed. It was written before the change, which is the point
+- **Status:** Accepted, 2026-08-27, by the project owner's decision. **Binding: violating it
+  is an `ESCALATE`, not a code-review finding.**
+  It was written before the change, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)), and every "will" below was a commitment rather than a
   description when it was written.
-  **That is no longer true of the whole record, and saying so is not the same as accepting
-  it.** Decisions 1-5 are implemented on branch `feat/classify-abort-before-recovery`;
-  decision 6 is deliberately undecided; decision 7 is an ordering that has been followed;
-  and decision 8 was **wrong about the fixture** and is corrected below. The status stays
-  `Proposed` until the branch merges — read "Corrections to this record" before treating any
-  "will" here as a description of what was built.
+  **That is no longer true of the whole record, and the status change does not make it
+  true.** Decisions 1-5 are implemented and merged at `c7557c8`, and three scenarios passed
+  on them — which is what the earlier status was waiting for when it said "Proposed until
+  the branch merges". Decision 6 is still **deliberately undecided**; decision 7 is an
+  ordering that has been followed; and decision 8 was **wrong about the fixture** and is
+  corrected below. Read "Corrections to this record" before treating any "will" here as a
+  description of what was built.
   **Amended 2026-08-27.** Correction 3's *decision* stands untouched; its *stated reason*
   cited the process exit that [ADR-0038](0038-stop-the-line-without-ending-the-process.md)
   replaces, and is restated in the section named "Amendment — 2026-08-27: correction 3's

@@ -73,6 +73,7 @@
 
 #include "behaviortree_cpp/bt_factory.h"
 #include "cite_orchestration/conveyor_index.hpp"
+#include "cite_orchestration/line_fault.hpp"
 #include "cite_orchestration/line_maintenance.hpp"
 #include "cite_orchestration/line_nodes.hpp"
 #include "cite_orchestration/line_plan.hpp"
@@ -92,6 +93,7 @@ using cite_orchestration::ConveyorDrivesByAsset;
 using cite_orchestration::ConveyorIndex;
 using cite_orchestration::HandoffLedger;
 using cite_orchestration::LineContext;
+using cite_orchestration::LineFault;
 using cite_orchestration::LineMaintenance;
 using cite_orchestration::LinePlan;
 using cite_orchestration::ResourceArbiter;
@@ -436,6 +438,11 @@ int main(int argc, char ** argv)
         line.triggers = std::make_shared<TriggerWatch>(node);
         line.conveyors = std::make_shared<ConveyorIndex>(node, drives);
         line.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+        // The one place a fault is recorded (ADR-0038). `OnFault` writes it when
+        // the line stops and this function reads it for the exit status, because
+        // once the fault branch exists a station escalating no longer ends the
+        // tick loop and the outcome below no longer carries that fact.
+        line.fault = std::make_shared<LineFault>();
         line.handoff_timeout = rclcpp::Duration::from_seconds(
           node->get_parameter("handoff_timeout_s").as_double());
         line.retry_budget =
@@ -448,6 +455,13 @@ int main(int argc, char ** argv)
           StationRuntime runtime;
           runtime.capacity = station.capacity;
           runtime.state = StationState::STATE_WAITING;
+          // What would wake this station up, and what carries work to it. Both
+          // come straight out of the plan, which came out of L0 — passed through
+          // rather than recomputed, so the belt a station indexes exists in one
+          // place (P1). `AwaitReArm` derives its refusal from the pair, which is
+          // what lets a leaf that names a station and a belt name neither in code.
+          runtime.trigger_topic = station.trigger_topic;
+          runtime.inbound_belt = station.inbound_via_asset_id;
           (*line.stations)[station.id] = runtime;
           // The stop half of indexing, bound to the sensor edge rather than to a
           // point in this station's cycle — see `conveyor_index.hpp` for why the
@@ -497,6 +511,13 @@ int main(int argc, char ** argv)
             "SetStationState", line);
           factory.registerNodeType<cite_orchestration::RecoverFromFailure>(
             "RecoverFromFailure", line);
+          // The fault branch (ADR-0038). Four leaves, no ports: they act on the
+          // whole line through the same `LineContext` every leaf above them uses,
+          // so the generated root names no station in them either.
+          factory.registerNodeType<cite_orchestration::OnFault>("OnFault", line);
+          factory.registerNodeType<cite_orchestration::StopAll>("StopAll", line);
+          factory.registerNodeType<cite_orchestration::AwaitReset>("AwaitReset", line);
+          factory.registerNodeType<cite_orchestration::AwaitReArm>("AwaitReArm", line);
 
           // The station subtree is a file a person wrote and reviewed; the root
           // tree above it is generated from the plan. That split is the whole
@@ -600,10 +621,39 @@ int main(int argc, char ** argv)
           maintenance.publish();
 
           if (outcome == BT::NodeStatus::FAILURE) {
+            // NO LONGER REACHED THROUGH AN ESCALATION (ADR-0038). A station that
+            // escalates fails the root `Parallel`, the `Fallback` advances to the
+            // fault branch, and no leaf there ever returns FAILURE — so this is
+            // now the answer for a root that fails some other way, and it is kept
+            // rather than deleted for exactly that case.
             RCLCPP_ERROR(
               node->get_logger(),
-              "the line stopped: a station escalated past its recovery policy. Its reason "
-              "is in the LineState published on %s.", line_state_topic.c_str());
+              "the root tree returned FAILURE, which the fault branch is shaped never to "
+              "do. Its reason is in the LineState published on %s.", line_state_topic.c_str());
+            status = 1;
+          }
+
+          // A LATCHED FAULT STILL EXITS 1, and this is the half of ADR-0038 that
+          // keeps it honest. The loop now ends only when `rclcpp::ok()` goes
+          // false, so a run in which a station escalated would otherwise return 0
+          // — CI would lose the signal it has today, and a fault that happened and
+          // was acknowledged still happened.
+          //
+          // It does NOT tear the cell down while the line is standing there:
+          // `_fatal_on_exit` fires on the coordinator's exit, and this is read
+          // after the loop has already ended for another reason. The window in
+          // which the arm, the part, the scene and the reset service survive is
+          // the whole run.
+          if (line.fault && line.fault->latched) {
+            RCLCPP_ERROR(
+              node->get_logger(),
+              "this run stopped the line: '%s' escalated with result code %u — %s. The "
+              "coordinator went on serving the reset; the exit status says the fault "
+              "happened.",
+              line.fault->station_id.c_str(),
+              static_cast<unsigned>(line.fault->result_code),
+              line.fault->reason.empty() ? "(no reason recorded)" :
+              line.fault->reason.c_str());
             status = 1;
           }
         }

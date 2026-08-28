@@ -30,6 +30,7 @@
 // opposite orders both finish. Where a literal is unavoidable it is one from the
 // L0 model, named as such.
 
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -158,6 +159,47 @@ SkillActionsByAsset fixture_actions()
     actions[asset] = skills;
   }
   return actions;
+}
+
+/// What is INSIDE the element with this tag and this `name`, opening and closing
+/// tags excluded.
+///
+/// DELIBERATELY CRUDE. What is under test is a shape a person reads off the
+/// generated XML; a full parser here would be a second implementation of the
+/// thing that has to be right, and the generator emits one element per line.
+std::string inside_of(
+  const std::string & xml, const std::string & element, const std::string & name)
+{
+  const std::size_t start = xml.find("<" + element + " name=\"" + name + "\"");
+  if (start == std::string::npos) {
+    return {};
+  }
+  const std::size_t opened = xml.find('>', start);
+  const std::size_t end = xml.find("</" + element + ">", start);
+  if (opened == std::string::npos || end == std::string::npos || opened >= end) {
+    return {};
+  }
+  return xml.substr(opened + 1, end - opened - 1);
+}
+
+/// The element names inside a section, in the order they are written.
+std::vector<std::string> elements_in(const std::string & section)
+{
+  std::vector<std::string> names;
+  for (std::size_t at = section.find('<'); at != std::string::npos;
+    at = section.find('<', at + 1))
+  {
+    std::size_t end = at + 1;
+    while (end < section.size() &&
+      (std::isalnum(static_cast<unsigned char>(section[end])) != 0 || section[end] == '_'))
+    {
+      ++end;
+    }
+    if (end > at + 1) {
+      names.push_back(section.substr(at + 1, end - at - 1));
+    }
+  }
+  return names;
 }
 
 }  // namespace
@@ -870,6 +912,125 @@ TEST(LineTreeTest, AMissingActionNameIsRefusedRatherThanComposed)
   EXPECT_TRUE(tree.xml.empty());
   ASSERT_FALSE(tree.refusals.empty());
   EXPECT_NE(tree.refusals.front().find("arm_2"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// The fault branch — ADR-0038. Read off the generated root, because the shape
+// IS the decision: every property below is delivered by which composite is
+// written and in what order, not by a value anybody could assert instead.
+// ---------------------------------------------------------------------------
+
+TEST(LineTreeTest, TheRootIsAPlainFallbackAndNeverAReactiveOne)
+{
+  // THE ONE SUBSTITUTION THAT BREAKS EVERYTHING, forbidden by a test rather than
+  // by a comment. A `ReactiveFallback` re-ticks child 0 on every tick, so it would
+  // restart the stations the `Parallel` has just cancelled, on the tick after
+  // cancelling them, for ever. A plain `Fallback` carries `current_child_idx_`
+  // across ticks and resets it only on SUCCESS, on exhausting its children, or on
+  // `halt()` — which is what makes "the stations stay stopped" true.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty()) << tree.refusals.front();
+
+  EXPECT_NE(tree.xml.find("<Fallback name=\"line\">"), std::string::npos)
+    << "the root is not a Fallback, so a station's FAILURE has nowhere to go but out of "
+       "the tree and into a process exit";
+  EXPECT_EQ(tree.xml.find("ReactiveFallback"), std::string::npos)
+    << "the root is a ReactiveFallback, which re-ticks the stations it has just "
+       "cancelled on the very next tick";
+  EXPECT_EQ(tree.xml.find("ReactiveSequence"), std::string::npos)
+    << "the fault branch is reactive, so its leaves would be re-run every tick and "
+       "OnFault would latch, and StopAll re-command, for ever";
+}
+
+TEST(LineTreeTest, TheStationsParallelIsUntouchedByTheFaultBranch)
+{
+  // The cancellation guarantee is a property of `failure_count="1"` being REACHED
+  // — `ParallelNode` halts its running children before returning FAILURE — and of
+  // nothing else. So the fault branch is added AROUND this element and never to
+  // it, and a counter changed here silently converts a line that stops into a line
+  // that goes on running past a station nobody has looked at.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty());
+
+  EXPECT_NE(
+    tree.xml.find("<Parallel name=\"stations\" success_count=\"-1\" failure_count=\"1\">"),
+    std::string::npos)
+    << "the stations Parallel is not the one this design leaves alone";
+
+  const std::string stations = inside_of(tree.xml, "Parallel", "stations");
+  ASSERT_FALSE(stations.empty());
+  const auto inside = elements_in(stations);
+  for (const auto & element : inside) {
+    EXPECT_EQ(element, "SubTree")
+      << "something other than a station subtree is inside the stations Parallel: "
+      << element;
+  }
+  EXPECT_EQ(inside.size(), plan.stations.size());
+}
+
+TEST(LineTreeTest, TheFaultBranchIsTheFourLeavesInTheOrderTheyMustRunIn)
+{
+  // ORDER IS THE DECISION HERE, exactly as it is in the station's recovery branch.
+  // `OnFault` must latch the reason before anything can clear it; `StopAll` must
+  // put the belts down before the branch settles into waiting; `AwaitReset` is
+  // acknowledgement and `AwaitReArm` is the different question of whether the line
+  // could run — and asking the second before the first would refuse a person the
+  // chance to answer the first.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty());
+
+  const std::string fault = inside_of(tree.xml, "Sequence", "fault");
+  ASSERT_FALSE(fault.empty()) << "the generated root has no fault branch at all, so a "
+    "station escalating still ends the process";
+  EXPECT_EQ(
+    elements_in(fault),
+    (std::vector<std::string>{"OnFault", "StopAll", "AwaitReset", "AwaitReArm"}));
+}
+
+TEST(LineTreeTest, NoLeafInTheFaultBranchTakesAPort)
+{
+  // A port here would be a station name, an asset name or a frame in a branch that
+  // acts on the whole line — and the station whose escalation stopped the line is
+  // not something a generator can know. These four read it off the runtime the
+  // tree has just finished writing, which is why a fourth arm still changes
+  // `model/` alone.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty());
+
+  const std::string fault = inside_of(tree.xml, "Sequence", "fault");
+  ASSERT_FALSE(fault.empty());
+  EXPECT_EQ(fault.find('='), std::string::npos)
+    << "a leaf in the fault branch carries an attribute, so the branch has started "
+       "depending on data: " << fault;
+}
+
+TEST(LineTreeTest, TheRootCarriesNoRepeatOverTheFaultBranch)
+{
+  // DELIBERATELY ABSENT (ADR-0038 decision 5), and asserted so that it is added
+  // once, on purpose, with `AwaitReArm`'s SUCCESS edge — rather than reached for
+  // by somebody who finds the line stopped and wants it to go. Without the SUCCESS
+  // edge a `Repeat` does nothing; with the SUCCESS edge and no `Repeat` the
+  // coordinator exits quietly with status 0. They are two lines and they are the
+  // last two lines.
+  //
+  // The `<Repeat num_cycles="-1">` inside `line_station.xml` is a DIFFERENT one —
+  // it is what makes a station cycle — and this looks only at the generated root.
+  const LinePlan plan = cite_orchestration::plan_line(cell_a_shaped());
+  ASSERT_TRUE(plan.usable());
+  const auto tree = cite_orchestration::line_tree_xml(plan, fixture_actions());
+  ASSERT_TRUE(tree.refusals.empty());
+
+  EXPECT_EQ(tree.xml.find("<Repeat"), std::string::npos)
+    << "the generated root wraps the Fallback in a Repeat while AwaitReArm can still "
+       "never return SUCCESS, so half of the resumption edge is in the tree";
 }
 
 int main(int argc, char ** argv)

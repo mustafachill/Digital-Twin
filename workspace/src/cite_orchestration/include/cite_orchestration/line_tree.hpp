@@ -20,6 +20,12 @@
 // assembled here, from data, while the station subtree itself stays a file that
 // a person reads and reviews (`trees/line_station.xml`).
 //
+// THE ROOT ALSO CARRIES THE FAULT BRANCH (ADR-0038), and it is generated here for
+// the opposite reason to the stations: it contains no data at all. Four leaves, no
+// ports, no names — what a stopped line does is the same whatever the model says,
+// so the branch is a fixed shape emitted beside the part that varies. The reasons
+// for the shape are at the bottom of this file, beside the string that emits it.
+//
 // THAT SPLIT IS THE WHOLE POINT. What a station DOES is written down once, by
 // hand, in one reviewable tree. HOW MANY there are, what each is called, which
 // arm serves it and what it is connected to is data, and appears nowhere in any
@@ -161,7 +167,7 @@ inline LineTree line_tree_xml(
     // wrapped in braces as a literal to write into the subtree's own blackboard.
     // So each station's subtree starts life knowing exactly what it is, and
     // knowing nothing about any other station.
-    body += "    <SubTree ID=\"" + detail::escaped(station_subtree_id) + "\"";
+    body += "        <SubTree ID=\"" + detail::escaped(station_subtree_id) + "\"";
     body += detail::attribute("name", station.id);
     body += detail::attribute("station", station.id);
     body += detail::attribute("asset", station.actor_asset_id);
@@ -220,15 +226,63 @@ inline LineTree line_tree_xml(
   // cancels the goal that leaf was waiting on. A line that stops leaves no arm
   // moving under a goal nobody is holding.
   //
+  // THAT CANCELLATION IS A PROPERTY OF `failure_count="1"` BEING REACHED, and of
+  // nothing else — not of the process exiting, and not of anything in the fault
+  // branch below. `ParallelNode` calls `resetChildren()` before returning FAILURE
+  // and `ControlNode::resetChildren()` halts every RUNNING child. So the Parallel
+  // is left exactly as it was when the fault branch was added (ADR-0038 decision
+  // 1), and `test_line_nodes.cpp` drives a station to FAILURE and asserts that a
+  // SIBLING's outstanding goal was cancelled — because until that test existed the
+  // guarantee was stated in this comment and asserted nowhere.
+  //
   // `success_count="-1"` — every station must finish for the line to finish, and
   // a station subtree does not finish: it repeats. So this Parallel stays RUNNING
   // for as long as the line runs, which is what "the line is running" means.
+  //
+  // THE ROOT IS A FALLBACK, AND A PLAIN ONE (ADR-0038 decision 1). When the
+  // Parallel fails, the Fallback advances to the fault Sequence and — this is the
+  // property the whole shape turns on — NEVER RETURNS TO THE PARALLEL, because
+  // `FallbackNode` carries `current_child_idx_` across ticks and resets it only on
+  // SUCCESS, on exhausting every child, or on `halt()`. The stations stay stopped
+  // for as long as the fault branch runs.
+  //
+  // A `ReactiveFallback` HERE WOULD BREAK EVERYTHING, which is why the difference
+  // is asserted by a test rather than left to this comment. It re-ticks child 0
+  // every tick, so it would restart the stations it has just cancelled, on the
+  // tick after cancelling them, for ever.
+  //
+  // THE FAULT BRANCH NEVER RETURNS FAILURE. `AwaitReset` and `AwaitReArm` are
+  // `StatefulActionNode`s that return RUNNING while their condition is unmet. A
+  // FAILURE there would fail the Sequence, fail the Fallback — both children
+  // having failed — end the coordinator's tick loop, and reinstate the process
+  // exit that takes the arm's pose, the part's position, the planning scene and
+  // the reset service down with it. The refusal is logged, not returned.
+  //
+  // NO `<Repeat num_cycles="-1">` OVER THIS FALLBACK, deliberately. It is what
+  // would make a fault Sequence that returned SUCCESS restart the stations, and it
+  // lands with `AwaitReArm`'s SUCCESS edge when re-arming is decided — two lines,
+  // and the last two lines, so that the shape does not change a second time
+  // (ADR-0038 decision 5). The `<Repeat>` inside `line_station.xml` is a different
+  // one and is not being deferred.
+  //
+  // NONE OF THE FOUR FAULT LEAVES TAKES A PORT. They act on the whole line through
+  // `LineContext`, which is already derived from L0, so a fourth arm still changes
+  // `model/` alone — and the station whose escalation stopped the line is read off
+  // the runtime rather than named in a generated attribute.
   tree.xml =
     "<root BTCPP_format=\"4\" main_tree_to_execute=\"" + detail::escaped(root_tree_id) + "\">\n"
     "  <BehaviorTree ID=\"" + detail::escaped(root_tree_id) + "\">\n"
-    "    <Parallel name=\"stations\" success_count=\"-1\" failure_count=\"1\">\n" +
+    "    <Fallback name=\"line\">\n"
+    "      <Parallel name=\"stations\" success_count=\"-1\" failure_count=\"1\">\n" +
     body +
-    "    </Parallel>\n"
+    "      </Parallel>\n"
+    "      <Sequence name=\"fault\">\n"
+    "        <OnFault />\n"
+    "        <StopAll />\n"
+    "        <AwaitReset />\n"
+    "        <AwaitReArm />\n"
+    "      </Sequence>\n"
+    "    </Fallback>\n"
     "  </BehaviorTree>\n"
     "</root>\n";
   return tree;

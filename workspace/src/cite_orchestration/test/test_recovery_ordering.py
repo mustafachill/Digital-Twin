@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Nothing moves before the recovery policy has chosen (ADR-0037).
+"""Nothing moves before the recovery policy has chosen (ADR-0037, ADR-0038).
 
 WHY THIS IS A TEST ABOUT ORDER. The defect it guards is not a wrong value, it is
 a wrong sequence. `line_station.xml` used to run `MoveToHome` as the first leaf
@@ -36,6 +36,7 @@ anything is commanded?
 
 import os
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ElementTree
 
 import pytest
@@ -205,6 +206,68 @@ def test_the_single_station_cycle_commands_nothing_when_it_gives_up() -> None:
         "the single-station recovery branch commands motion after a failure it has not "
         f"classified: {moving}"
     )
+
+
+def _generated_fault_branch() -> list[str]:
+    """Return the leaf names the root-tree generator emits into its fault branch.
+
+    Read out of `line_tree.hpp`, which is where the branch is written: the root
+    tree is generated in C++ and there is no shipped XML file to parse. The branch
+    is a fixed literal — it carries no data at all, which is asserted from the
+    other side in `test_line_logic.cpp` against the generated output — so reading
+    the literal and reading the output are the same set of names.
+
+    This lives here rather than in that gtest so that `MOTION_LEAVES` stays
+    written down once. Copying the set into C++ to assert the same rule would be a
+    value in two places, and the copy is the one that would go stale.
+    """
+    configured = os.environ.get("CITE_LINE_TREE_HEADER")
+    assert configured, (
+        "CITE_LINE_TREE_HEADER is unset. CMakeLists.txt sets it for this test, so run it "
+        "through ./scripts/test rather than invoking pytest on this file directly"
+    )
+    source = Path(configured).read_text()
+    block = re.search(r'<Sequence name=\\"fault\\">(.*?)</Sequence>', source, re.DOTALL)
+    assert block, (
+        "the root-tree generator emits no fault branch, so a station that escalates "
+        "still ends the coordinator's process (ADR-0038)"
+    )
+    return re.findall(r"<([A-Za-z_][A-Za-z0-9_]*)\s*/?>", block.group(1))
+
+
+def test_the_fault_branch_commands_no_motion() -> None:
+    """A stopped line commands no arm, and the belts are `StopAll`'s alone.
+
+    ADR-0038 decision 2: every station subtree that was RUNNING has already been
+    halted by the root `Parallel` before the first leaf of this branch runs, and
+    halting a skill leaf cancels its goal. So there is nothing left to stop, and
+    anything commanded here would be NEW motion after a failure the policy has
+    already refused to retry — the same defect `test_the_policy_is_the_first_leaf…`
+    guards one level down, at the point where there is no policy left to consult.
+
+    `ResumeBelt` is in `MOTION_LEAVES` and is the one that would look most
+    reasonable here: it is how a stopped belt is started, and a stopped line is
+    exactly where somebody will want to start one. It must not be here. A station
+    that failed may not have picked, so running its belt puts a work-piece on the
+    floor — and `AwaitReArm` refuses precisely because the belt is stopped, which
+    is a refusal, not a to-do list.
+    """
+    commanded = [leaf for leaf in _generated_fault_branch() if leaf in MOTION_LEAVES]
+    assert not commanded, (
+        "the fault branch commands motion on a line that has just stopped without "
+        f"anything classifying why: {commanded}"
+    )
+
+
+def test_the_fault_branch_consults_no_policy_because_it_is_downstream_of_one() -> None:
+    """`RecoverFromFailure` belongs to a station, and this branch is the line's.
+
+    The classification has already happened — it is what made the station return
+    FAILURE — and a second consultation here would be a second author for the
+    answer. `OnFault` reads the station's recorded code and reason rather than
+    re-deriving them, which is why it is a recorder and not a decider.
+    """
+    assert POLICY_LEAF not in _generated_fault_branch()
 
 
 def test_the_nominal_cycle_still_clears_the_arm_before_it_works() -> None:

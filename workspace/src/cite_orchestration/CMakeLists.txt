@@ -150,10 +150,17 @@ if(BUILD_TESTING)
   # a fresh trajectory before anything has asked whether the station is allowed
   # to move, and a test that only checked the final station state would pass with
   # the leaves in either order.
+  #
+  # It also reads the ROOT tree's fault branch (ADR-0038), and that one has no
+  # shipped XML file: the root is generated in C++, so the branch is read out of
+  # `line_tree.hpp` where it is written. The rule applied to it — that a stopped
+  # line commands nothing — is the same `MOTION_LEAVES` set, which is why the
+  # check is here rather than in a gtest that would need its own copy of the set.
   ament_add_pytest_test(test_recovery_ordering test/test_recovery_ordering.py
     ENV
       CITE_STATION_TREE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/line_station.xml
-      CITE_STATION_CYCLE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/station_cycle.xml)
+      CITE_STATION_CYCLE_XML=${CMAKE_CURRENT_SOURCE_DIR}/trees/station_cycle.xml
+      CITE_LINE_TREE_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/cite_orchestration/line_tree.hpp)
 
   # Indexing the belt (ADR-0032), against a real publisher and a real
   # subscription in one process. What is under test is a decision about EVENTS —

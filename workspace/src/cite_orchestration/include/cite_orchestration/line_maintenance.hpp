@@ -124,21 +124,40 @@ public:
   }
 
 private:
-  /// Rule 3, applied. A handoff past its deadline is retired, the work-piece
+  /// Rule 3, applied. A handoff past its deadline is retired and the work-piece
   /// stays with the station that already owned it — structurally, because nothing
-  /// touched the registry — and that station is reported blocked.
+  /// touched the registry.
+  ///
+  /// IT WRITES NO STATION STATE, and that is ADR-0038 decision 4 rather than an
+  /// omission. `STATE_BLOCKED` has exactly one author now: the station's own tree.
+  /// The expiry still reaches `LineState`, one tick later and through the station
+  /// that owns the fact — `AwaitHandoffConfirmed` sees the terminal handoff,
+  /// records `TIMEOUT`, and fails into the recovery branch, so the state arrives
+  /// with the code that caused it instead of with a sentence composed here.
+  ///
+  /// WHAT THAT CLOSED, because it was a live defect and not a tidy-up. The expiry
+  /// window opens at `OfferHandoff` and closes at `CompleteHandoff`, and `PlaceAt`
+  /// sits between them — so this pass could report a station BLOCKED while its arm
+  /// was placing, for as long as a `PlaceAt` takes. `station_reset.hpp` tests only
+  /// `state != STATE_BLOCKED`, so the operator reset would ACCEPT a reset for that
+  /// station and clear `blocked_reason` mid-motion. After this, `STATE_BLOCKED`
+  /// means one thing, which both that precondition and `AwaitReset` already assume.
+  ///
+  /// AND WHAT IT WOULD HAVE BROKEN. `AwaitReset` keys on the same state, so a
+  /// handoff clock still running through a fault would expire during it and
+  /// re-block a station the operator had already reset — holding the fault branch
+  /// open with no reason anybody could see. `OnFault` abandons every live handoff
+  /// for that reason; this pass no longer has a way to undo it.
   void expire_handoffs()
   {
     for (const auto & handoff : line_.ledger->expire(line_.now())) {
       RCLCPP_ERROR(
         line_.node->get_logger(),
-        "handoff %s of %s from %s to %s timed out. The upstream station keeps the "
-        "work-piece; it is reported blocked.",
+        "handoff %s of %s from %s to %s timed out. %s keeps the work-piece; its own tree "
+        "reports what that means for it.",
         handoff.token.c_str(), handoff.workpiece_id.c_str(),
-        handoff.from_station_id.c_str(), handoff.to_station_id.c_str());
-      auto & runtime = line_.station(handoff.from_station_id);
-      runtime.state = StationState::STATE_BLOCKED;
-      runtime.blocked_reason = "handoff to " + handoff.to_station_id + " timed out";
+        handoff.from_station_id.c_str(), handoff.to_station_id.c_str(),
+        handoff.from_station_id.c_str());
     }
   }
 

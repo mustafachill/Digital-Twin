@@ -50,6 +50,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <cite_interfaces/msg/detection_event.hpp>
+#include <cite_interfaces/msg/result_code.hpp>
 #include <cite_interfaces/msg/station_state.hpp>
 #include <cite_interfaces/qos.hpp>
 
@@ -150,6 +151,12 @@ private:
 };
 
 /// What one station is doing, as the line reports it.
+///
+/// It also carries the few facts ABOUT the station that a leaf acting on the
+/// whole line needs and cannot ask a port for — `capacity` has always been one of
+/// them, and `trigger_topic` and `inbound_belt` join it below. All three are
+/// copied out of the plan by whoever builds this map, which is the model's value
+/// passed through rather than a second author for it (P1).
 struct StationRuntime
 {
   uint8_t state{StationState::STATE_IDLE};
@@ -160,6 +167,47 @@ struct StationRuntime
   //: shared across the line would let one bad station exhaust another's.
   uint32_t consecutive_failures{0};
   std::string blocked_reason;
+  //: The `ResultCode` the block was decided from, kept as a CODE beside the prose
+  //: that describes it. `blocked_reason` is for a person and nothing parses it —
+  //: `ResultCode.msg` says as much of its own `detail` — so a consumer that has to
+  //: act on why a station stopped reads this instead. `OnFault` is that consumer:
+  //: it latches the classification the line stopped on, and a latch that had to
+  //: recover the code by reading the sentence would be parsing text to make a
+  //: decision, which `RecoverFromFailure` refuses to do one leaf earlier.
+  uint8_t blocked_code{cite_interfaces::msg::ResultCode::SUCCESS};
+  //: What the topology says would wake this station up, and what carries work to
+  //: it. Both empty for a station that has neither. `AwaitReArm` derives its
+  //: refusal from the pair (ADR-0038 decision 3): a station with a trigger and an
+  //: inbound belt can only ever be triggered again by a part the belt brings, so a
+  //: belt at a standstill is a station that will wait for ever.
+  std::string trigger_topic;
+  std::string inbound_belt;
+};
+
+/// The fault the line stopped on, latched.
+///
+/// WHY IT IS LATCHED AT ALL. Once the fault branch exists, a station escalating
+/// no longer ends the tick loop, so the coordinator's exit status can no longer
+/// be read off the tree's outcome. This is what carries the fact to `main`, which
+/// still exits 1 for a run in which a station escalated — a fault that happened
+/// and was acknowledged still happened, and CI keeps the signal it has today
+/// (ADR-0038).
+///
+/// FIRST ONLY. A second station cannot escalate after the first, because the
+/// `Parallel` has already halted every sibling by the time this is written; the
+/// latch refuses a second write anyway, so the recorded fault is the one the line
+/// stopped on rather than the last thing that happened to it.
+struct LineFault
+{
+  bool latched{false};
+  std::string station_id;
+  //: The classification `RecoverFromFailure` acted on, copied rather than
+  //: re-derived.
+  uint8_t result_code{cite_interfaces::msg::ResultCode::SUCCESS};
+  std::string reason;
+  //: Read from the node's clock, which honours `use_sim_time` like every other
+  //: time in this package.
+  rclcpp::Time at;
 };
 
 /// The single copies of everything L4 owns, handed to the leaves that need them.
@@ -181,6 +229,12 @@ struct LineContext
   //: to a question that must have one. Null when the zone has no conveyor, which
   //: `ResumeBelt` reads as "nothing to resume" rather than as an error.
   std::shared_ptr<ConveyorIndex> conveyors;
+  //: The fault the line stopped on, once it has stopped (ADR-0038). One copy, for
+  //: the same reason as everything above it: `OnFault` writes it and `main` reads
+  //: it for the exit status, and a second copy would be a second answer to "did
+  //: this run have a fault". Null in a fixture that does not exercise the fault
+  //: branch, which every leaf that touches it tolerates rather than assumes.
+  std::shared_ptr<LineFault> fault;
 
   //: How long a handoff may sit unconfirmed or unfinished. A FAILURE deadline
   //: with a defined outcome (ADR-0024 rule 3), never a schedule.
@@ -818,7 +872,15 @@ public:
     if (runtime.state != StationState::STATE_BLOCKED &&
       runtime.state != StationState::STATE_FAULTED)
     {
+      // The code goes with the prose, because they are one fact stated twice and
+      // a stale code beside a cleared reason is worse than neither: a consumer
+      // that reads the code would classify a station nobody has said anything
+      // about. This is also why `OnFault` reads `blocked_reason` off the runtime
+      // directly and does not route through this leaf (ADR-0038) — clearing is a
+      // side effect of the state change here, and the fault branch has to latch
+      // the reason before anything clears it.
       runtime.blocked_reason.clear();
+      runtime.blocked_code = cite_interfaces::msg::ResultCode::SUCCESS;
     }
     return BT::NodeStatus::SUCCESS;
   }
@@ -895,6 +957,12 @@ public:
 
     runtime.blocked_reason = std::string("result code ") + std::to_string(code) + ": " +
       describe(response);
+    // The same fact as a value, for a consumer that has to ACT on it rather than
+    // print it. `OnFault` latches this when the line stops, and a latch that
+    // recovered the number by reading the sentence above would be parsing text to
+    // make a decision — which is what this leaf refuses to do one statement
+    // earlier, and for the same reason.
+    runtime.blocked_code = static_cast<uint8_t>(code);
 
     switch (response) {
       case Recovery::NONE:
