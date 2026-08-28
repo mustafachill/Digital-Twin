@@ -65,6 +65,7 @@ import unittest
 
 from ament_index_python.packages import get_package_share_directory
 from control_msgs.action import FollowJointTrajectory
+from control_msgs.msg import JointTrajectoryControllerState
 from launch import LaunchDescription
 from launch_ros.actions import Node
 import launch_testing
@@ -72,7 +73,14 @@ import launch_testing.markers
 import pytest
 import rclpy
 from rclpy.action import ActionClient
+from rclpy.duration import Duration
 from rclpy.node import Node as RclpyNode
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
 from trajectory_msgs.msg import JointTrajectoryPoint
 import yaml
 
@@ -92,6 +100,19 @@ GOAL_CEILING_S = 60.0
 #: suite quick. Nothing is sequenced by it — every wait below is on an action
 #: result, never on a duration (P4).
 MOVE_DURATION_S = 2.0
+
+#: `JointTrajectoryController` publishes `~/controller_state` with
+#: `rclcpp::SystemDefaultsQoS()` — KEEP_LAST depth 10, RELIABLE, VOLATILE.
+#: Declared here rather than defaulted, because an incompatible profile
+#: subscribes silently and delivers nothing (CLAUDE.md §10), and this
+#: subscription is the gate the whole class waits on: getting it wrong would
+#: turn every run into a startup timeout rather than a visible mismatch.
+CONTROLLER_STATE_QOS = QoSProfile(
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=10,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    durability=QoSDurabilityPolicy.VOLATILE,
+)
 
 
 def _config_path(arm):
@@ -232,6 +253,32 @@ def generate_test_description():
     )
 
 
+class _Activation:
+    """Records that one arm's trajectory controller has reached ACTIVE.
+
+    `JointTrajectoryController::update()` ends with an unconditional
+    `publish_state()` (`joint_trajectory_controller.cpp` 4.40.1, the version in
+    the container image), and `controller_manager` calls `update()` only on a
+    controller that is ACTIVE. So one message on `controller_state` proves this
+    controller is active *and* running control cycles against its hardware —
+    which is the precondition a goal needs, and strictly more than "the action
+    server exists".
+    """
+
+    def __init__(self, node, arm):
+        self.arm = arm
+        self.seen = False
+        self.subscription = node.create_subscription(
+            JointTrajectoryControllerState,
+            f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/controller_state",
+            self._record,
+            CONTROLLER_STATE_QOS,
+        )
+
+    def _record(self, _message):
+        self.seen = True
+
+
 class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
     """The generated numbers, enforced by a real `JointTrajectoryController`."""
 
@@ -239,6 +286,49 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
     def setUpClass(cls):
         rclpy.init()
         cls.node = RclpyNode("trajectory_constraints_test")
+
+        # THE RIG IS READY WHEN BOTH CONTROLLERS ARE ACTIVE, and that is an
+        # event rather than an elapsed time (P4).
+        #
+        # `ReadyToTest` fires as soon as the processes are spawned; each spawner
+        # then loads, configures and activates its controller, which took ~4 s
+        # on the CI runner. `ActionClient.wait_for_server()` does NOT bridge that
+        # gap, and this is the whole defect: `joint_trajectory_controller` 4.40.1
+        # creates its `follow_joint_trajectory` server in `on_configure`, so the
+        # server is discoverable while the controller is still INACTIVE, and
+        # `goal_received_callback` then rejects on its very first check —
+        #
+        #     if (get_lifecycle_state().id() == ...PRIMARY_STATE_INACTIVE)
+        #       "Can't accept new action goals. Controller is not running."
+        #       return rclcpp_action::GoalResponse::REJECT;
+        #
+        # An action rejection carries no reason to the client, so all the test
+        # could see was a bare `handle.accepted == False`. On CI run 33200891048
+        # the goal reached arm_2 10.6 ms before its "Activating controllers"
+        # line; on an idle machine the same goal lands after activation and
+        # everything passes. That is the entire "intermittent, load-correlated"
+        # behaviour this file carried — a race with the spawner, not with any
+        # earlier test, and not specific to arm_2: reproducing it under CPU
+        # contention failed on arm_1 too.
+        waiters = [_Activation(cls.node, arm) for arm in (TRACKING_ARM, STUCK_ARM)]
+        deadline = cls.node.get_clock().now() + Duration(seconds=STARTUP_CEILING_S)
+        while not all(w.seen for w in waiters):
+            if cls.node.get_clock().now() >= deadline:
+                break
+            rclpy.spin_once(cls.node, timeout_sec=0.1)
+
+        missing = [w.arm for w in waiters if not w.seen]
+        # Destroyed either way: at 150 Hz per arm these would otherwise deliver
+        # 300 messages a second into every `spin_until_future_complete` below,
+        # adding load to the very contention that produced the defect.
+        for waiter in waiters:
+            cls.node.destroy_subscription(waiter.subscription)
+
+        assert not missing, (
+            f"{', '.join(missing)} published no controller_state within "
+            f"{STARTUP_CEILING_S}s, so its trajectory controller never reached "
+            "ACTIVE and nothing below could have measured a tolerance."
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -251,9 +341,13 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
             FollowJointTrajectory,
             f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/follow_joint_trajectory",
         )
+        # Kept for the clear message it gives if the server is absent outright.
+        # It is NOT what makes a goal safe to send: this server is created in
+        # `on_configure`, so it answers while the controller is still INACTIVE
+        # and rejects everything. `setUpClass` holds that gate.
         self.assertTrue(
             client.wait_for_server(timeout_sec=STARTUP_CEILING_S),
-            f"{arm} never offered follow_joint_trajectory — its controller never activated",
+            f"{arm} never offered follow_joint_trajectory — its controller never configured",
         )
         return client
 
