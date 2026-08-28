@@ -436,6 +436,18 @@ class Fault(NamedTuple):
     reason: str
 
 
+class Halt(NamedTuple):
+    """The line as a whole reporting that it has stopped, and when."""
+
+    state: int
+    reason: str
+    seconds: float
+
+    def describe(self) -> str:
+        name = "FAULTED" if self.state == LineState.STATE_FAULTED else "BLOCKED"
+        return f"{name} at {self.seconds:.1f}s: {self.reason or 'no reason published'}"
+
+
 class Journey(NamedTuple):
     """What one work-piece was observed to do."""
 
@@ -469,6 +481,7 @@ class TestContinuousLine(unittest.TestCase):
         self._belts: dict[str, tuple[float, float]] = {}
         self._beams: list[Beam] = []
         self._faults: list[Fault] = []
+        self._halt: Halt | None = None
         self._line_states: list[LineState] = []
         self._samples: list[Sample] = []
         self._subscriptions: list[object] = []
@@ -493,14 +506,43 @@ class TestContinuousLine(unittest.TestCase):
         `is not None` rather than truthiness, for the reason `pick_and_place`
         gives: a measurement of exactly 0.0 is a good answer, and reading it as
         "not ready yet" produces a timeout that accuses the wrong component.
+
+        IT ALSO FAILS FAST ON A STOPPED LINE, and that half is not optional
+        (ADR-0038). The coordinator no longer exits when a station escalates — it
+        stays alive serving the reset, which is the point — so a faulted line now
+        looks exactly like a slow one from out here, and every remaining milestone
+        would wait its full ceiling before anything said why. That is a slower and
+        strictly worse signal than the exit code this scenario used to get for
+        free. The `LineState` the coordinator publishes says it in one field, so
+        the run ends on the message rather than on the budget.
         """
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
         result = predicate()
+        self._fail_if_the_line_has_stopped(what)
         while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
+            self._fail_if_the_line_has_stopped(what)
             result = predicate()
         self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
         return result
+
+    def _fail_if_the_line_has_stopped(self, what: str) -> None:
+        """End the run now if the coordinator has published a stopped line.
+
+        BLOCKED and FAULTED both, because both mean the same thing to this
+        scenario: no station will act again without an operator, so nothing this
+        run is waiting for can happen. The distinction between them belongs to the
+        reset service, which decides what may be cleared and by whom.
+        """
+        if self._halt is None:
+            return
+        self.fail(
+            f"the line stopped while waiting for {what}. {self._halt.describe()}\n"
+            "The coordinator is still running and still serving "
+            "/cite/line/reset_station — a stopped line no longer ends the process "
+            "(ADR-0038), which is why this scenario has to read the state rather than "
+            "wait for an exit."
+        )
 
     def _workpiece_xyz(self) -> tuple[float, float, float] | None:
         """Ask the simulator where the work-piece is.
@@ -771,6 +813,14 @@ class TestContinuousLine(unittest.TestCase):
 
     def _on_line_state(self, message: LineState) -> None:
         self._line_states.append(message)
+        if self._halt is None and message.state in (
+            LineState.STATE_BLOCKED,
+            LineState.STATE_FAULTED,
+        ):
+            # The FIRST one. What stopped the line is what a person needs; what it
+            # went on reporting afterwards is the same fact repeated several times
+            # a second.
+            self._halt = Halt(message.state, message.blocked_reason, self._now())
         for station in message.stations:
             if station.state != StationState.STATE_FAULTED:
                 continue
@@ -1020,6 +1070,8 @@ class TestContinuousLine(unittest.TestCase):
             ]
         else:
             lines.append("no LineState was ever received")
+        if self._halt is not None:
+            lines.append(f"the line reported itself stopped: {self._halt.describe()}")
         if self._samples:
             furthest = max(self._samples, key=lambda s: s.x)
             highest = max(self._samples, key=lambda s: s.z)
@@ -1123,6 +1175,24 @@ class TestCleanShutdown(unittest.TestCase):
         )
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
+        """No process of ours died in a way we cannot account for.
+
+        `line_orchestrator`'s 1 IS NOT ADDED TO THE ALLOWLIST, and that is a
+        decision rather than an oversight (ADR-0038). A run in which the line
+        stopped now returns 1 from a coordinator that stayed alive, so this check
+        fails on it — a second and weaker report of a failure
+        `_fail_if_the_line_has_stopped` has already made in flight, with the
+        station and the reason named. Weaker, but not wrong: what it reports is a
+        run that really did fail, and allowing 1 here would make this check accept
+        a coordinator that failed for any reason at all, which is the one thing it
+        is for.
+
+        SO IT IS NOT PART OF THE TEARDOWN-FLAKE ACCOUNTING in CLAUDE.md §2. Those
+        are processes dying in ways nothing explains; this is a process reporting
+        a failure the scenario has already reported. If it starts to look like
+        noise, the fix is that the in-flight check ends the run before teardown,
+        not a wider allowlist here.
+        """
         allowed = [0, launch_testing.asserts.EXIT_SIGINT]
         for info in proc_info:
             name = str(info.process_name)

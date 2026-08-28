@@ -204,10 +204,34 @@
              and the one a `MOTION_INTERRUPTED` abort has just contradicted.
 
              Starving the neighbour is the CORRECT consequence and not a cost to
-             work around. An escalating station stops the line: its FAILURE fails
+             work around, and THE REASON HAS BEEN RESTATED (ADR-0037's amendment
+             of 2026-08-27, delivered by ADR-0038). This comment used to justify
+             the decision by the mechanism it produced today — "its FAILURE fails
              the root `Parallel`, and `L4-orchestration.md`'s designed
-             `OnFault -> StopAll -> AwaitReset` stops it deliberately. There is no
-             station left running to be starved.
+             `OnFault -> StopAll -> AwaitReset` stops it deliberately". That was a
+             forward reference to a design, and the branch it pointed at now
+             exists, so the sentence had stopped being true in the tense it was
+             written in. The decision is untouched; only its stated reason is:
+
+               An escalating station keeps its claims because THE LINE STOPS
+               AROUND IT — the fault branch holds every station and every belt —
+               so the claim record stays true to where the arm is standing, and
+               starves nobody.
+
+             The property is "nothing else is running", and it is preserved on
+             purpose: the root `Parallel` still fails at `failure_count="1"`,
+             still halts every sibling and so cancels their goals, and the fault
+             branch then commands every belt to zero. There is no station left
+             running to be starved.
+
+             AND THE CONDITIONAL, because it is what a future contributor will
+             trip on. If the line is ever allowed to keep other stations running
+             past a block, THIS DECISION DOES NOT SURVIVE. There is one
+             `ResourceArbiter`, stations share reach frames, and `Grant::QUEUED`
+             is deliberately not a failure — a neighbour asking for a frame an
+             escalated station still holds would wait silently and for ever.
+             Whoever proposes graceful degradation owes a replacement rule for
+             what a blocked station does with its claims.
 
              NONE OF THIS IS A PROTECTIVE MEASURE. `resource_arbiter.hpp` says of
              itself that it prevents deadlock and thrash and that relying on it

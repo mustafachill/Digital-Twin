@@ -48,11 +48,14 @@ namespace cite_orchestration_test
 /// The prefix every fixture in these tests advertises under.
 extern const char * const kFixturePrefix;
 
-/// The four actions one arm's skill server serves, all succeeding immediately.
+/// The four actions one arm's skill server serves, succeeding immediately unless
+/// a test asks for otherwise.
 ///
 /// Immediate rather than slow: a server that took time would make the tests
 /// slower without making them stricter, because what is under test is sequence
-/// and ownership rather than duration.
+/// and ownership rather than duration. `hold_detect` is the one exception, and it
+/// exists because a cancellation can only be observed on a goal that is still
+/// running.
 class FakeArm
 {
 public:
@@ -83,6 +86,38 @@ public:
   /// fixture: every server succeeds, so the tree never leaves its nominal
   /// branch, and what the branch does on an ESCALATE was evidenced by nothing.
   void fail_pick_with(uint8_t code);
+
+  /// What this arm's `MoveTo` server answers from now on.
+  ///
+  /// It is how a station subtree is driven to FAILURE **without** anything
+  /// classifying why, which is the one route into the fault branch that leaves no
+  /// station BLOCKED or FAULTED: a retry verdict returns the station to WAITING
+  /// and SUCCESS, the recover `Sequence` walks on to `MoveToHome`, and a
+  /// `MoveToHome` that fails there fails the Sequence, the Fallback, the Repeat
+  /// and the subtree. `OnFault` has to latch that too, or the run exits 0.
+  void fail_move_to_with(uint8_t code);
+
+  /// Hold every subsequent `detect` goal open, or stop holding.
+  ///
+  /// A HELD GOAL IS THE ONLY WAY TO OBSERVE A CANCELLATION. `line_tree.hpp` says
+  /// in prose that a station's FAILURE halts its SIBLINGS and so cancels the goal
+  /// each was waiting on, and the whole design of the fault branch rests on that
+  /// — but every server here answers immediately, so no sibling ever had an
+  /// outstanding goal for the halt to reach and the property was asserted nowhere.
+  /// A held goal gives the test one, and `detect_cancellations` is where it is
+  /// counted.
+  ///
+  /// `detect` rather than another action because it is the first skill in a
+  /// station's cycle, so a station reaches it without needing anything else to
+  /// have succeeded first.
+  void hold_detect(bool holding);
+
+  /// How many `detect` goals this arm saw cancelled through to the end.
+  ///
+  /// Counted on the SERVER side. The claim is that the tree's halt reached the far
+  /// side of the action; a client-side count would be the leaf agreeing with
+  /// itself.
+  int detect_cancellations() const;
 
 private:
   struct Servers;

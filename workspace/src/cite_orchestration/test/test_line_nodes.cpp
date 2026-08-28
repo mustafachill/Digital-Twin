@@ -67,11 +67,13 @@
 
 #include "gtest/gtest.h"
 #include "behaviortree_cpp/bt_factory.h"
+#include "cite_orchestration/line_fault.hpp"
 #include "cite_orchestration/line_maintenance.hpp"
 #include "cite_orchestration/line_nodes.hpp"
 #include "cite_orchestration/line_plan.hpp"
 #include "cite_orchestration/line_tree.hpp"
 #include "cite_orchestration/skill_nodes.hpp"
+#include "cite_orchestration/station_reset.hpp"
 #include "fake_arm.hpp"
 
 namespace
@@ -88,11 +90,13 @@ using cite_orchestration::ConveyorDrivesByAsset;
 using cite_orchestration::ConveyorIndex;
 using cite_orchestration::HandoffLedger;
 using cite_orchestration::LineContext;
+using cite_orchestration::LineFault;
 using cite_orchestration::LineMaintenance;
 using cite_orchestration::LinePlan;
 using cite_orchestration::ResourceArbiter;
 using cite_orchestration::SkillActions;
 using cite_orchestration::SkillActionsByAsset;
+using cite_orchestration::StationReset;
 using cite_orchestration::StationRuntime;
 using cite_orchestration::TriggerWatch;
 using cite_orchestration::WorkpieceRegistry;
@@ -106,6 +110,9 @@ constexpr char kStateTopic[] = "/line_nodes_test/line/state";
 //: The belt `station_two` picks from, and the speed its drive is installed at.
 //: Both are what the model would supply; the test reads the setpoint back off the
 //: topic rather than comparing a constant against itself.
+//: The operator control, served somewhere private for the reason every other
+//: fixture name here is: `colcon` runs packages concurrently on one ROS domain.
+constexpr char kResetService[] = "/line_nodes_test/line/reset_station";
 constexpr char kBeltCommand[] = "/line_nodes_test/conveyor_fixture/command";
 constexpr double kBeltSpeed = 0.15;
 
@@ -209,6 +216,10 @@ protected:
     line_.arbiter = std::make_shared<ResourceArbiter>();
     line_.triggers = std::make_shared<TriggerWatch>(node_);
     line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    // Where the fault branch records what the line stopped on (ADR-0038). The
+    // coordinator reads it for its exit status; here it is what a test reads to
+    // see that `OnFault` latched the classification rather than re-deriving it.
+    line_.fault = std::make_shared<LineFault>();
     line_.handoff_timeout = rclcpp::Duration::from_seconds(30.0);
     line_.retry_budget = 1;
 
@@ -225,6 +236,12 @@ protected:
     for (const auto & entry : plan_.stations) {
       StationRuntime runtime;
       runtime.capacity = entry.capacity;
+      // Wired exactly as `line_orchestrator` wires it: what would wake this
+      // station up and what carries work to it, both straight out of the plan.
+      // `AwaitReArm` derives its refusal from the pair, so a fixture that left
+      // them empty would make that leaf silently find nothing to refuse on.
+      runtime.trigger_topic = entry.trigger_topic;
+      runtime.inbound_belt = entry.inbound_via_asset_id;
       (*line_.stations)[entry.id] = runtime;
       line_.conveyors->index_on(
         entry.trigger_topic, entry.trigger_detection_state, entry.inbound_via_asset_id);
@@ -257,6 +274,10 @@ protected:
     factory.registerNodeType<cite_orchestration::SetStationState>("SetStationState", line_);
     factory.registerNodeType<cite_orchestration::RecoverFromFailure>(
       "RecoverFromFailure", line_);
+    factory.registerNodeType<cite_orchestration::OnFault>("OnFault", line_);
+    factory.registerNodeType<cite_orchestration::StopAll>("StopAll", line_);
+    factory.registerNodeType<cite_orchestration::AwaitReset>("AwaitReset", line_);
+    factory.registerNodeType<cite_orchestration::AwaitReArm>("AwaitReArm", line_);
 
     const auto generated = cite_orchestration::line_tree_xml(plan_, actions_for({"arm_1",
           "arm_2"}));
@@ -270,6 +291,11 @@ protected:
     factory.registerBehaviorTreeFromText(generated.xml);
     tree_ = std::make_unique<BT::Tree>(factory.createTree("Line"));
     maintenance_ = std::make_unique<LineMaintenance>(line_, plan_, kStateTopic);
+    // The real operator control (ADR-0037), driven through its real handler. Its
+    // happy path has never been reachable: until the fault branch existed the
+    // process was gone by the time anybody could call it.
+    tick_mutex_ = std::make_shared<std::mutex>();
+    reset_ = std::make_unique<StationReset>(line_, plan_, kResetService, tick_mutex_);
   }
 
   void TearDown() override
@@ -394,6 +420,47 @@ protected:
     return false;
   }
 
+  /// One tick of the line, and what the root tree answered.
+  ///
+  /// `run_until` hides the status because most tests are about what the line did;
+  /// this exposes it, because the fault branch's central property is that the
+  /// root goes on returning RUNNING after a station has escalated.
+  BT::NodeStatus tick_once()
+  {
+    const auto status = tree_->tickOnce();
+    maintenance_->run();
+    observe();
+    return status;
+  }
+
+  /// Ask the real reset service's real handler to clear a station.
+  cite_interfaces::srv::ResetStation::Response reset(const std::string & station)
+  {
+    cite_interfaces::srv::ResetStation::Request request;
+    request.station_id = station;
+    cite_interfaces::srv::ResetStation::Response response;
+    reset_->handle(request, response);
+    return response;
+  }
+
+  /// Has the belt been run and then stopped, in that order?
+  ///
+  /// The mirror of `belt_stopped_then_ran`, and the order is again the whole
+  /// assertion: what is under test is that a running belt was put down by the
+  /// fault branch, which a belt that was never started could not show.
+  bool belt_ran_then_stopped() const
+  {
+    bool ran = false;
+    for (const double setpoint : belt_setpoints()) {
+      if (setpoint == kBeltSpeed) {
+        ran = true;
+      } else if (ran && setpoint == 0.0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   rclcpp::Node::SharedPtr node_;
   std::unique_ptr<FakeArm> arm_one_;
   std::unique_ptr<FakeArm> arm_two_;
@@ -407,6 +474,8 @@ protected:
   LineContext line_;
   std::unique_ptr<BT::Tree> tree_;
   std::unique_ptr<LineMaintenance> maintenance_;
+  std::shared_ptr<std::mutex> tick_mutex_;
+  std::unique_ptr<StationReset> reset_;
   std::vector<std::string> owners_;
   std::set<std::string> announced_;
   bool conveyor_running_{false};
@@ -672,6 +741,602 @@ TEST_F(RunningLine, AStationThatIsAllowedToRetryGivesItsFramesBackFirst)
       }))
     << "a station the policy allowed to retry never released the frames it reached into, so "
     "the leaf that releases them is unreachable on both answers rather than on one";
+}
+
+// ---------------------------------------------------------------------------
+// The fault branch, on the running line — ADR-0038.
+// ---------------------------------------------------------------------------
+
+TEST_F(RunningLine, AStationEscalatingCancelsASiblingsOutstandingGoal)
+{
+  // THE PROPERTY THE WHOLE DESIGN RESTS ON, AND THE ONE NOTHING ASSERTED.
+  // `line_tree.hpp` has said in prose since the root tree existed that a station
+  // failing halts its SIBLINGS, and that halting a skill leaf cancels the goal it
+  // was waiting on — "a line that stops leaves no arm moving under a goal nobody
+  // is holding". Every test of the escalation until now looked only at the station
+  // that escalated, and every fake server answered immediately, so no sibling ever
+  // had an outstanding goal for a halt to reach.
+  //
+  // It rests on two properties of BehaviorTree.CPP that this repository asserts
+  // nowhere else: a `ParallelNode` halts its running children BEFORE returning
+  // FAILURE, and a plain `Fallback` does not re-tick a child that has failed. Both
+  // were read from the 4.9.1 source for ADR-0038 and both hold; an upstream change
+  // to either would break the line's cancellation guarantee silently, which is
+  // what this is here to stop.
+  //
+  // The staging is deliberate rather than incidental. Both arms hold their
+  // `detect` goal, so both stations park with a goal outstanding; then only
+  // `arm_1` is released, so `station_one` alone walks on to the `PickAt` that
+  // fails. Without that, the two stations race and the test would pass or fail on
+  // which of them reached its leaf first.
+  arm_one_->hold_detect(true);
+  arm_two_->hold_detect(true);
+  arm_one_->fail_pick_with(ResultCode::UNREACHABLE);
+
+  // THE BEAM IS NOT FIRED UNTIL THE STATION IS LISTENING, and waiting for the
+  // MATCH rather than for a duration is this project's own lesson: reliable
+  // delivery is a promise to subscribers a publisher has been matched with, and
+  // `AwaitTrigger` creates its subscription on its first tick — so an edge
+  // published before then reaches nobody, however reliable the profile. Two
+  // subscribers, because `ConveyorIndex` watches the same topic for the belt.
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return arm_one_->detect_goals() >= 1 && beam_->get_subscription_count() >= 2;
+      }))
+    << "the first station never reached its Detect, or the second never began watching "
+    "its beam";
+
+  fire_beam();
+  ASSERT_TRUE(run_until([this] {return arm_two_->detect_goals() >= 1;}))
+    << "the sibling never reached its Detect, so there was no outstanding goal for a "
+    "halt to cancel";
+  ASSERT_EQ(arm_two_->detect_cancellations(), 0)
+    << "the sibling's goal was cancelled before anything had failed";
+
+  arm_one_->hold_detect(false);
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].state ==
+               cite_interfaces::msg::StationState::STATE_BLOCKED;
+      }))
+    << "the station never escalated, so nothing ever failed the root Parallel";
+
+  EXPECT_GE(arm_two_->detect_cancellations(), 1)
+    << "a station escalated and its SIBLING's outstanding goal was never cancelled, so "
+    "the line stopped with an arm still moving under a goal nobody is holding";
+}
+
+TEST_F(RunningLine, TheLineGoesOnRunningAfterAStationEscalatesAndLatchesWhy)
+{
+  // ADR-0038's decision in one test. The station's FAILURE fails the root
+  // `Parallel`, the `Fallback` advances to the fault branch, and no leaf there
+  // returns FAILURE — so the root stays RUNNING, the tick loop does not end, and
+  // the coordinator is still there to be asked a question. Before this, the same
+  // FAILURE reached the tick loop, the process exited 1, and `_fatal_on_exit` took
+  // the arm's pose, the part's position, the planning scene and the reset service
+  // down with it.
+  arm_one_->fail_pick_with(ResultCode::UNREACHABLE);
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].state ==
+               cite_interfaces::msg::StationState::STATE_BLOCKED;
+      }))
+    << "the station never escalated";
+
+  for (int tick = 0; tick < 20; ++tick) {
+    ASSERT_EQ(tick_once(), BT::NodeStatus::RUNNING)
+      << "the root tree stopped returning RUNNING after a station escalated, so the "
+      "coordinator's tick loop ends and the process exits — which is exactly what the "
+      "fault branch exists to remove";
+  }
+
+  ASSERT_TRUE(line_.fault->latched)
+    << "nothing recorded the fault, so the coordinator would exit 0 for a run in which "
+    "a station escalated and CI would lose the signal it has today";
+  EXPECT_EQ(line_.fault->station_id, "station_one");
+  EXPECT_EQ(line_.fault->result_code, ResultCode::UNREACHABLE)
+    << "the latched classification is not the one the policy acted on";
+  // Copied, not composed: the station's own recorded reason, which is what an
+  // operator reading the exit will be shown.
+  EXPECT_EQ(line_.fault->reason, (*line_.stations)["station_one"].blocked_reason);
+  EXPECT_FALSE(line_.fault->reason.empty())
+    << "the reason was destroyed on its way into the latch, which is what routing it "
+    "through SetStationState would do";
+}
+
+TEST_F(RunningLine, ARootFailureNoStationClassifiedStillMakesTheRunFail)
+{
+  // THE ROUTE INTO THE FAULT BRANCH THAT LEAVES NOTHING BLOCKED, and it is an
+  // ordinary path rather than a contrived one. `RecoverFromFailure` on a RETRY
+  // verdict sets the station WAITING and returns SUCCESS, so the recover
+  // `Sequence` runs on to `ReleaseStationClaims` and `MoveToHome` — and a
+  // `MoveToHome` that fails there fails the Sequence, the Fallback, the Repeat and
+  // the subtree, failing the root `Parallel` with no station BLOCKED and none
+  // FAULTED.
+  //
+  // Before the fault branch that exited 1. With the branch and a latch taken only
+  // on the classified route it exited 0: the tick loop no longer ends, `AwaitReset`
+  // succeeds immediately because nothing is holding, `AwaitReArm` runs for ever,
+  // and the coordinator sits there reporting nothing wrong. That is a worse signal
+  // than the exit it replaced, and it is the shape this branch exists to make
+  // impossible.
+  //
+  // EXECUTION_FAILED rather than UNREACHABLE, because the policy answers the two
+  // differently and this test needs the RETRY: `RETRY_SAME` is what reaches
+  // `MoveToHome` at all.
+  arm_one_->fail_pick_with(ResultCode::EXECUTION_FAILED);
+  arm_one_->fail_move_to_with(ResultCode::EXECUTION_FAILED);
+
+  ASSERT_TRUE(run_until([this] {return line_.fault->latched;}))
+    << "the station subtree never failed, or the fault branch was never reached";
+
+  // NOTHING CLASSIFIED IT, and the latch says so rather than inventing a station.
+  EXPECT_TRUE(cite_orchestration::stations_holding_the_line(*line_.stations).empty())
+    << "a station is blocked, so this is the classified route and not the one under "
+    "test";
+  EXPECT_TRUE(line_.fault->station_id.empty());
+  EXPECT_FALSE(line_.fault->reason.empty())
+    << "the exit log has nothing to say about why the run failed";
+
+  // AND THE LINE IS STILL THERE. The root goes on returning RUNNING, which is what
+  // makes the exit status the only carrier the fault has left.
+  for (int tick = 0; tick < 20; ++tick) {
+    ASSERT_EQ(tick_once(), BT::NodeStatus::RUNNING)
+      << "the root stopped returning RUNNING, so the tick loop ends and this is no "
+      "longer the case the latch is needed for";
+  }
+}
+
+TEST_F(RunningLine, AStoppedLinePutsEveryBeltDown)
+{
+  // THE P2 HALF, and the reason `StopAll` is not optional. In simulation the belts
+  // stop by accident today — the coordinator exits, the launch tears the cell
+  // down, Gazebo dies. On a physical line the belt is a VFD taking a setpoint, and
+  // a setpoint PERSISTS: the coordinator exits, nothing publishes zero, and the
+  // belts keep running with nobody supervising them. Identical command path,
+  // divergent consequence.
+  //
+  // Read off the command topic, which is the only place the rest of the system can
+  // see what L4 decided. The belt is STARTED first, exactly as the coordinator
+  // starts it before the first tick, so what this shows is a running belt being
+  // put down rather than a belt that was never moving.
+  //
+  // The beam is deliberately not fired: indexing would stop this belt for its own
+  // reason, and a test that could not tell the two apart would pass with `StopAll`
+  // deleted.
+  line_.conveyors->run_all();
+  arm_one_->fail_pick_with(ResultCode::UNREACHABLE);
+
+  ASSERT_TRUE(run_until([this] {return belt_ran_then_stopped();}))
+    << "the belt was commanded " << belt_setpoints().size()
+    << " time(s) and never went running-then-stopped, so a line that has stopped "
+    "supervising its belts is still commanding them to run";
+
+  EXPECT_DOUBLE_EQ(belt_setpoints().back(), 0.0);
+  EXPECT_EQ(arm_two_->move_to_goals(), 0)
+    << "the fault branch commanded an arm. Every station's goal was already cancelled "
+    "by the Parallel, so anything sent here is new motion after a failure the policy "
+    "refused to retry";
+}
+
+TEST_F(RunningLine, TheResetIsAcceptedAndTheLineStillDoesNotRestart)
+{
+  // THE HAPPY PATH THE ADR-0037 RESET HAS NEVER HAD. It shipped one commit before
+  // the fault branch, and there was no window in which to call it: the service
+  // existed and the process that served it was already gone.
+  //
+  // And then the second half, which is the whole of ADR-0038 decision 3. The reset
+  // is ACKNOWLEDGEMENT — a person looked. It says nothing about whether the line
+  // can run, and it must not put the stations back: every recovery this line has
+  // returns a station to a state nothing can trigger it out of, and
+  // `LineMaintenance` publishes a line of stations that will wait for ever as
+  // STATE_RUNNING. A reset that re-entered the nominal branch would convert a
+  // process that exits 1 into a process that reports a healthy running line.
+  line_.conveyors->run_all();
+  arm_one_->fail_pick_with(ResultCode::UNREACHABLE);
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].state ==
+               cite_interfaces::msg::StationState::STATE_BLOCKED;
+      }))
+    << "the station never escalated";
+  ASSERT_TRUE(run_until([this] {return belt_ran_then_stopped();}))
+    << "the fault branch never reached StopAll";
+
+  const auto answer = reset("station_one");
+  EXPECT_TRUE(answer.accepted)
+    << "the reset was refused on the one path it exists for: " << answer.result.detail;
+  EXPECT_EQ(answer.station_state, cite_interfaces::msg::StationState::STATE_WAITING);
+  EXPECT_FALSE(answer.cleared_reason.empty())
+    << "the reset cleared a reason that was not there, so the evidence the operator "
+    "was shown had already been destroyed";
+
+  // `AwaitReset` stops being the blocker. Its predicate is exactly the reset's
+  // precondition, which is what having one author for STATE_BLOCKED buys.
+  EXPECT_TRUE(cite_orchestration::stations_holding_the_line(*line_.stations).empty());
+
+  const int arm_one_goals = arm_one_->detect_goals();
+  const int arm_two_goals = arm_two_->detect_goals();
+  for (int tick = 0; tick < 200; ++tick) {
+    ASSERT_EQ(tick_once(), BT::NodeStatus::RUNNING)
+      << "the fault branch ended. A SUCCESS out of it exits the coordinator quietly "
+      "with status 0; a FAILURE reinstates the process exit";
+  }
+  EXPECT_EQ(arm_one_->detect_goals(), arm_one_goals)
+    << "the line re-entered its nominal branch after a reset, so it is now waiting for "
+    "a trigger nothing can produce while reporting STATE_RUNNING";
+  EXPECT_EQ(arm_two_->detect_goals(), arm_two_goals);
+
+  // AND IT SAYS WHY, naming the station and the belt. A leaf that refused silently
+  // would be the cost ADR-0038 says would make this unacceptable.
+  const auto refusals =
+    cite_orchestration::rearm_refusals(*line_.stations, line_.conveyors);
+  ASSERT_EQ(refusals.size(), 1u)
+    << "the re-arm rule found " << refusals.size()
+    << " refusal(s); this fixture has exactly one belt-fed sensor-triggered station";
+  EXPECT_NE(refusals.front().find("station_two"), std::string::npos) << refusals.front();
+  EXPECT_NE(refusals.front().find("conveyor_fixture"), std::string::npos)
+    << refusals.front();
+}
+
+/// The maintenance pass and the operator reset, over one expired handoff.
+///
+/// ADR-0038 decision 4 in a fixture. `LineMaintenance::expire_handoffs` used to
+/// write `STATE_BLOCKED` from outside the station's own tree, and nothing asserted
+/// either half of what stopping that changed. It needs the REAL `LineMaintenance`
+/// and the REAL `StationReset` — a test that reimplemented either would be
+/// asserting that two copies of a rule agree.
+///
+/// THE DEADLINE IS IN THE PAST, not waited for. The offer is made with a negative
+/// timeout, so the handoff is already expired on the first pass and nothing here
+/// is sequenced by a duration (P4).
+class HandoffExpiry : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    node_ = std::make_shared<rclcpp::Node>("handoff_expiry_test");
+    plan_ = cite_orchestration::plan_line(two_station_line());
+    ASSERT_TRUE(plan_.usable()) << (plan_.refusals.empty() ? "" : plan_.refusals.front());
+
+    line_.node = node_;
+    line_.registry = std::make_shared<WorkpieceRegistry>();
+    line_.ledger = std::make_shared<HandoffLedger>();
+    line_.arbiter = std::make_shared<ResourceArbiter>();
+    line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    line_.fault = std::make_shared<LineFault>();
+    line_.handoff_timeout = rclcpp::Duration::from_seconds(30.0);
+    line_.retry_budget = 1;
+
+    for (const auto & entry : plan_.stations) {
+      StationRuntime runtime;
+      runtime.capacity = entry.capacity;
+      runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+      (*line_.stations)[entry.id] = runtime;
+    }
+
+    maintenance_ = std::make_unique<LineMaintenance>(
+      line_, plan_, "/line_nodes_test/expiry/line/state");
+    tick_mutex_ = std::make_shared<std::mutex>();
+    reset_ = std::make_unique<StationReset>(
+      line_, plan_, "/line_nodes_test/expiry/line/reset_station", tick_mutex_);
+  }
+
+  /// Offer a handoff whose deadline has already passed.
+  std::string offer_already_expired()
+  {
+    if (line_.registry->admit("wp_1", "station_one", "station_one") !=
+      cite_orchestration::RegistryOutcome::OK)
+    {
+      return {};
+    }
+    return line_.ledger->offer(
+      *line_.registry, "wp_1", "station_one", "station_two", node_->get_clock()->now(),
+      rclcpp::Duration::from_seconds(-1.0));
+  }
+
+  StationRuntime & station(const std::string & id) {return (*line_.stations)[id];}
+
+  cite_interfaces::srv::ResetStation::Response reset(const std::string & station_id)
+  {
+    cite_interfaces::srv::ResetStation::Request request;
+    request.station_id = station_id;
+    cite_interfaces::srv::ResetStation::Response response;
+    reset_->handle(request, response);
+    return response;
+  }
+
+  rclcpp::Node::SharedPtr node_;
+  LinePlan plan_;
+  LineContext line_;
+  std::unique_ptr<LineMaintenance> maintenance_;
+  std::shared_ptr<std::mutex> tick_mutex_;
+  std::unique_ptr<StationReset> reset_;
+};
+
+TEST_F(HandoffExpiry, TheMaintenancePassRetiresTheHandoffAndWritesNoStationState)
+{
+  // ADR-0038 decision 4: `STATE_BLOCKED` has exactly one author, the station's own
+  // tree. The pass keeps its OUTCOME — the handoff is retired and the work-piece
+  // stays with whoever owned it, structurally — and gives up the state write.
+  ASSERT_FALSE(offer_already_expired().empty());
+  ASSERT_EQ(line_.ledger->live(), 1u);
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WORKING;
+
+  maintenance_->run();
+
+  ASSERT_EQ(line_.ledger->live(), 0u)
+    << "the handoff did not expire, so this test proves nothing about what the pass "
+    "does when one does";
+  EXPECT_EQ(station("station_one").state, cite_interfaces::msg::StationState::STATE_WORKING)
+    << "the maintenance pass wrote a station state, so STATE_BLOCKED has two authors "
+    "again and the value means two things";
+  EXPECT_TRUE(station("station_one").blocked_reason.empty())
+    << "the pass composed a reason for a station whose own tree has not said anything";
+  EXPECT_EQ(station("station_one").blocked_code, ResultCode::SUCCESS);
+
+  // Ownership is untouched, structurally: nothing in the expiry reaches the
+  // registry (ADR-0024 rule 3).
+  const auto owner = line_.registry->owner_of("wp_1");
+  ASSERT_TRUE(owner.has_value());
+  EXPECT_EQ(*owner, "station_one");
+}
+
+TEST_F(HandoffExpiry, AResetIsRefusedForAStationWhoseArmIsStillPlacing)
+{
+  // THE LIVE DEFECT DECISION 4 CLOSED, and it is the reason that decision is not a
+  // tidy-up. The expiry window opens at `OfferHandoff` (`line_station.xml:104`) and
+  // closes at `CompleteHandoff` (`:110`), and `PlaceAt` (`:108`) sits between them.
+  // So the pass could report a station BLOCKED while its arm was placing;
+  // `station_reset.hpp` tests only `state != STATE_BLOCKED`, so the operator reset
+  // ACCEPTED that station and cleared its `blocked_reason` mid-motion.
+  //
+  // With the pass writing no state the station stays WORKING, and the reset refuses
+  // it for the reason it refuses every station that is not blocked.
+  ASSERT_FALSE(offer_already_expired().empty());
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WORKING;
+  maintenance_->run();
+  ASSERT_EQ(line_.ledger->live(), 0u) << "the handoff never expired";
+
+  const auto answer = reset("station_one");
+  EXPECT_FALSE(answer.accepted)
+    << "a reset was accepted for a station whose arm is placing, because a handoff "
+    "clock ran out during the placement";
+  EXPECT_EQ(answer.result.code, ResultCode::PRECONDITION_FAILED);
+  EXPECT_EQ(answer.station_state, cite_interfaces::msg::StationState::STATE_WORKING);
+}
+
+/// The fault leaves on their own, over a station map and a ledger a test owns.
+///
+/// `RunningLine` above proves the branch is reached and that the line stays alive.
+/// This proves the properties that only exist in states the running fixture cannot
+/// be steered into on demand — a handoff still open at the instant the line stops
+/// is the one that matters, and arranging it through the tree would mean holding
+/// one station in a skill while another failed two leaves later. `RecoveryLeaf`
+/// below is here for the same reason and says so.
+class FaultBranch : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    node_ = std::make_shared<rclcpp::Node>("fault_branch_test");
+    line_.node = node_;
+    line_.registry = std::make_shared<WorkpieceRegistry>();
+    line_.ledger = std::make_shared<HandoffLedger>();
+    line_.arbiter = std::make_shared<ResourceArbiter>();
+    line_.stations = std::make_shared<std::map<std::string, StationRuntime>>();
+    line_.fault = std::make_shared<LineFault>();
+
+    ConveyorDrivesByAsset drives;
+    drives["conveyor_fixture"] = ConveyorDrive{"/fault_branch_test/conveyor/command", 0.2};
+    line_.conveyors = std::make_shared<ConveyorIndex>(node_, drives);
+
+    StationRuntime upstream;
+    upstream.state = cite_interfaces::msg::StationState::STATE_WAITING;
+    (*line_.stations)["station_one"] = upstream;
+
+    StationRuntime downstream;
+    downstream.state = cite_interfaces::msg::StationState::STATE_WAITING;
+    downstream.trigger_topic = "/fault_branch_test/beam/detection";
+    downstream.inbound_belt = "conveyor_fixture";
+    (*line_.stations)["station_two"] = downstream;
+
+    config_.blackboard = BT::Blackboard::create();
+  }
+
+  StationRuntime & station(const std::string & id) {return (*line_.stations)[id];}
+
+  BT::NodeStatus on_fault()
+  {
+    cite_orchestration::OnFault leaf("OnFault", config_, line_);
+    return leaf.executeTick();
+  }
+
+  BT::NodeStatus stop_all()
+  {
+    cite_orchestration::StopAll leaf("StopAll", config_, line_);
+    return leaf.executeTick();
+  }
+
+  rclcpp::Node::SharedPtr node_;
+  LineContext line_;
+  BT::NodeConfig config_;
+};
+
+TEST_F(FaultBranch, OnFaultRecordsTheClassificationAndDestroysNothing)
+{
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  station("station_one").blocked_reason = "result code 9: escalate to an operator";
+  station("station_one").blocked_code = ResultCode::UNREACHABLE;
+  line_.arbiter->declare_resource("frame_pick_1", 1);
+  ASSERT_EQ(
+    line_.arbiter->request("frame_pick_1", "station_one"), cite_orchestration::Grant::GRANTED);
+
+  ASSERT_EQ(on_fault(), BT::NodeStatus::SUCCESS)
+    << "OnFault returned something other than SUCCESS, which fails the fault Sequence "
+    "and reinstates the process exit";
+
+  EXPECT_TRUE(line_.fault->latched);
+  EXPECT_EQ(line_.fault->station_id, "station_one");
+  EXPECT_EQ(line_.fault->result_code, ResultCode::UNREACHABLE);
+  EXPECT_EQ(line_.fault->reason, "result code 9: escalate to an operator");
+
+  // IT COMMANDS NOTHING AND GIVES NOTHING UP. The station is still standing in the
+  // frame it reached into (ADR-0037 correction 3, as amended by ADR-0038), and its
+  // state and reason are its own tree's to write.
+  EXPECT_EQ(station("station_one").state, cite_interfaces::msg::StationState::STATE_BLOCKED);
+  EXPECT_EQ(station("station_one").blocked_reason, "result code 9: escalate to an operator")
+    << "the reason was cleared as a side effect, which is what routing the latch "
+    "through SetStationState would do";
+  EXPECT_TRUE(line_.arbiter->holds("frame_pick_1", "station_one"));
+}
+
+TEST_F(FaultBranch, OnFaultSettlesTheLedgerWithoutMovingAnything)
+{
+  // WHY THE LEDGER HAS TO BE SETTLED, and it is not tidiness. A handoff clock left
+  // running through the fault expires during it; `LineMaintenance` retires it and
+  // the upstream station's own tree then reports itself blocked AGAIN, after the
+  // operator has already reset it — holding `AwaitReset` open for a reason nobody
+  // could see, because the reset they performed was the last thing they did.
+  ASSERT_EQ(
+    line_.registry->admit("wp_1", "station_one", "station_one"),
+    cite_orchestration::RegistryOutcome::OK);
+  const std::string token = line_.ledger->offer(
+    *line_.registry, "wp_1", "station_one", "station_two",
+    node_->get_clock()->now(), rclcpp::Duration::from_seconds(120.0));
+  ASSERT_FALSE(token.empty());
+  ASSERT_EQ(line_.ledger->live(), 1u);
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  ASSERT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+
+  EXPECT_EQ(line_.ledger->live(), 0u)
+    << "a handoff clock is still running through the fault, so it will expire during it "
+    "and re-block a station the operator has already reset";
+
+  // OWNERSHIP IS UNTOUCHED, structurally: abandoning does not reach the registry,
+  // so the work-piece stays with whoever already had it (ADR-0024 rule 3).
+  const auto owner = line_.registry->owner_of("wp_1");
+  ASSERT_TRUE(owner.has_value());
+  EXPECT_EQ(*owner, "station_one")
+    << "settling the ledger moved a work-piece, so the line's record no longer says "
+    "where the part is";
+}
+
+TEST_F(FaultBranch, OnFaultLatchesEvenWhenNoStationWillSayWhy)
+{
+  // A `Parallel` that failed with nothing blocked means a station subtree returned
+  // FAILURE without its recovery policy classifying anything. This leaf must not
+  // invent a reason, and it must still return SUCCESS — a FAILURE here would end
+  // the branch that exists to survive this.
+  //
+  // AND IT MUST STILL LATCH. This test asserted the opposite until 2026-08-27, and
+  // the behaviour it was asserting was the defect: with nothing latched, the tick
+  // loop no longer ends, `AwaitReset` succeeds immediately because nothing is
+  // holding, `AwaitReArm` runs for ever, and the coordinator sits there and exits
+  // 0. That is the "reports healthy, does nothing" shape the whole branch exists
+  // to make impossible, arriving through the exit code instead of through
+  // `LineState`.
+  EXPECT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+  ASSERT_TRUE(line_.fault->latched)
+    << "a root failure nothing classified is not carried into the exit status, so the "
+    "coordinator hangs and the run returns 0";
+  EXPECT_TRUE(line_.fault->station_id.empty())
+    << "a station was named for a failure no station claimed";
+  EXPECT_EQ(line_.fault->result_code, ResultCode::SUCCESS)
+    << "a classification was invented for a failure nothing classified";
+  EXPECT_FALSE(line_.fault->reason.empty())
+    << "the exit log has nothing to say about why the run failed";
+}
+
+TEST_F(FaultBranch, TheFirstLatchIsTheOneKeptWhicheverRouteItCameBy)
+{
+  // The unclassified latch must not shadow a real one taken earlier, and must not
+  // be overwritten by a station that is blocked on a later tick. Ticked twice on
+  // purpose: the fault branch is a `Sequence`, so `OnFault` runs once per entry
+  // into it, but nothing in the shape guarantees it runs only once ever.
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  station("station_one").blocked_reason = "result code 9: escalate to an operator";
+  station("station_one").blocked_code = ResultCode::UNREACHABLE;
+  ASSERT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+  ASSERT_EQ(line_.fault->station_id, "station_one");
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WAITING;
+  station("station_one").blocked_reason.clear();
+  station("station_one").blocked_code = ResultCode::SUCCESS;
+  EXPECT_EQ(on_fault(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(line_.fault->station_id, "station_one")
+    << "the latch was overwritten after the operator cleared the station, so the run "
+    "reports the last thing that happened to it rather than the fault it stopped on";
+  EXPECT_EQ(line_.fault->result_code, ResultCode::UNREACHABLE);
+}
+
+TEST_F(FaultBranch, StopAllCommandsEveryDeclaredBeltToAStandstill)
+{
+  ASSERT_TRUE(line_.conveyors->run("conveyor_fixture"));
+  ASSERT_TRUE(line_.conveyors->commanded("conveyor_fixture").has_value());
+  ASSERT_GT(*line_.conveyors->commanded("conveyor_fixture"), 0.0);
+
+  EXPECT_EQ(stop_all(), BT::NodeStatus::SUCCESS);
+  EXPECT_DOUBLE_EQ(*line_.conveyors->commanded("conveyor_fixture"), 0.0);
+}
+
+TEST_F(FaultBranch, AwaitResetHoldsWhileAnyStationIsBlockedOrFaultedAndNeverFails)
+{
+  // NEVER FAILURE, on any input. Asserted rather than left to the leaf's comment,
+  // because the cost of a FAILURE here is not a wrong answer — it is the process
+  // exit that destroys the evidence the operator was coming to read.
+  cite_orchestration::AwaitReset leaf("AwaitReset", config_, line_);
+  EXPECT_EQ(leaf.executeTick(), BT::NodeStatus::SUCCESS)
+    << "nothing is blocked, so the acknowledgement gate has nothing to wait for";
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_BLOCKED;
+  cite_orchestration::AwaitReset blocked("AwaitReset", config_, line_);
+  EXPECT_EQ(blocked.executeTick(), BT::NodeStatus::RUNNING);
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_FAULTED;
+  EXPECT_EQ(blocked.executeTick(), BT::NodeStatus::RUNNING)
+    << "a faulted station does not hold the line, so the branch would advance past a "
+    "cell that cannot be commanded at all";
+
+  station("station_one").state = cite_interfaces::msg::StationState::STATE_WAITING;
+  EXPECT_EQ(blocked.executeTick(), BT::NodeStatus::SUCCESS);
+}
+
+TEST_F(FaultBranch, AwaitReArmRefusesForADerivedReasonAndNeverPasses)
+{
+  // The rule is derived from the plan and the belts, so it names a station and a
+  // belt that appear nowhere in `line_fault.hpp`. A station fed by a table is
+  // SKIPPED — that is the rule working, not an exception to it — which is why
+  // `station_one` never appears below.
+  ASSERT_TRUE(line_.conveyors->run("conveyor_fixture"));
+  EXPECT_TRUE(cite_orchestration::rearm_refusals(*line_.stations, line_.conveyors).empty())
+    << "the belt is running and the rule still refuses, so it is not reading the "
+    "setpoint at all";
+
+  ASSERT_EQ(stop_all(), BT::NodeStatus::SUCCESS);
+  const auto refusals = cite_orchestration::rearm_refusals(*line_.stations, line_.conveyors);
+  ASSERT_EQ(refusals.size(), 1u);
+  EXPECT_NE(refusals.front().find("station_two"), std::string::npos) << refusals.front();
+  EXPECT_NE(refusals.front().find("conveyor_fixture"), std::string::npos) << refusals.front();
+  EXPECT_EQ(refusals.front().find("station_one"), std::string::npos)
+    << "a station fed by a table was refused for the state of a belt that does not feed "
+    "it: " << refusals.front();
+
+  // AND IT NEVER PASSES, in either state. The SUCCESS edge is deliberately not
+  // built (ADR-0038 decision 5): without a `<Repeat>` over the root `Fallback`, a
+  // SUCCESS here makes the Fallback return SUCCESS and the coordinator exit
+  // quietly with status 0. The two land together or not at all.
+  cite_orchestration::AwaitReArm leaf("AwaitReArm", config_, line_);
+  EXPECT_EQ(leaf.executeTick(), BT::NodeStatus::RUNNING);
+  ASSERT_TRUE(line_.conveyors->run("conveyor_fixture"));
+  EXPECT_EQ(leaf.executeTick(), BT::NodeStatus::RUNNING)
+    << "the re-arm gate passed. Nothing re-arms a station yet, and a fault branch that "
+    "returns SUCCESS without a Repeat above it exits the coordinator with status 0";
 }
 
 /// The recovery leaf on its own, on a blackboard nothing else is writing.

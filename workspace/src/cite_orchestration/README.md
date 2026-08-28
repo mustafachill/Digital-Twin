@@ -44,7 +44,9 @@ cell:
 | `line_tree.hpp` | plan to root tree |
 | `skill_nodes.hpp` | the leaves that call L3 |
 | `line_nodes.hpp` | the leaves that do not — triggers, custody, claims, handoff, recovery |
-| `line_maintenance.hpp` | expiring handoffs, confirming for a sink, counting arrivals, publishing `LineState` |
+| `line_maintenance.hpp` | expiring handoffs, confirming for a sink, counting arrivals, publishing `LineState`. It writes **no** station state (ADR-0038 decision 4) |
+| `line_fault.hpp` | what the line does once it has stopped (ADR-0038): the four fault leaves and the two rules they are derived from |
+| `station_reset.hpp` | the operator reset's preconditions and its one effect (ADR-0037) |
 
 ## Interfaces
 
@@ -104,12 +106,72 @@ the tick loop holds across a whole tick, so a reset lands *between* ticks, and t
 given its own callback group so that waiting on it cannot sit in front of the trigger
 subscriptions that tell stations a part has arrived.
 
-**Its production reachability is open, and this is stated rather than implied.** A station that
-escalates returns `FAILURE`, the root `Parallel` carries `failure_count="1"`, and
-`line_orchestrator`'s tick loop exits — so today the process ends at the moment the reset
-becomes relevant. Making the line survive one station's escalation is a change to line-wide
-failure semantics that ADR-0037 does not decide, and it is not made here. The service, its
-refusals and its tests are complete and are exercised directly.
+**It is reachable in production now, and it was not when it shipped.** This paragraph used to
+say the opposite, and every clause of it: that a station's escalation ended the tick loop, so
+the process ended at the moment the reset became relevant, and that making the line survive one
+station's escalation was a change ADR-0037 did not decide and did not make. ADR-0038 decided it
+and the fault branch below makes it — the coordinator stays up and goes on serving
+`ResetStation` after a station has escalated, which is the window this service never had.
+`test_line_nodes`'s `TheResetIsAcceptedAndTheLineStillDoesNotRestart` drives that path through
+the shipped tree.
+
+**Accepting a reset is still not restarting the line.** The station returns to `STATE_WAITING`
+and the line stays on the fault branch, because `AwaitReArm` asks the different question and
+refuses. See below.
+
+## The fault branch (ADR-0038)
+
+A station that escalates fails the root `Parallel` at `failure_count="1"`. That was the end of
+the process: the tick loop stopped, `line_orchestrator` returned 1, and `simulation.launch.py`'s
+`_fatal_on_exit` tore the whole cell down with it — the arm's pose, the part's position, the
+planning scene and the reset service, all inside seconds of the fault that produced them.
+
+The root tree is now a plain `Fallback` over that **unchanged** `Parallel` and a fault
+`Sequence`, generated in `line_tree.hpp` and implemented in `line_fault.hpp`:
+
+```
+Fallback  "line"
+├── Parallel "stations"  success_count="-1" failure_count="1"    <-- unchanged
+└── Sequence "fault"
+    └── OnFault → StopAll → AwaitReset → AwaitReArm
+```
+
+| Leaf | What it does |
+|---|---|
+| `OnFault` | records. Latches the station, its `ResultCode`, its reason and the time, and abandons every live handoff so a clock left running through the fault cannot expire during it. Writes no station state, releases no claim, commands nothing |
+| `StopAll` | commands every declared belt to zero — `ConveyorIndex::stop()`'s first production caller |
+| `AwaitReset` | `RUNNING` while any station is `BLOCKED` or `FAULTED`. The same predicate the reset's own precondition uses. No deadline, deliberately: waiting for a person must not have one |
+| `AwaitReArm` | asks whether any station could ever be triggered again, and refuses with the station and the belt named. Derived from the plan and the last commanded setpoint, so it names nothing in code |
+
+**No leaf in it returns `FAILURE`, and none may.** A `FAILURE` fails the `Sequence`, fails the
+`Fallback`, ends the tick loop, and reinstates the exit this removed. Refusals are logged. Nor
+may one throw: an exception out of a `tick()` is `std::terminate` out of `main`, which is worse
+than the exit — so the tick loop catches, halts the tree, and exits 1 rather than aborting.
+Whether the coordinator should *survive* an exception is not decided anywhere and is not
+decided here.
+
+**None of it is a protective measure.** What stops an arm is the vendor controller's torque
+limiting and the cell's physical guarding (charter §3.2). This is a state machine; what it buys
+is that the coordinator is still there to be asked a question, and that it stops commanding
+belts it has stopped supervising.
+
+**A latched fault still exits 1**, so a run in which the line stopped still fails, and it exits
+1 whether or not a station classified why — a root failure nothing classified is latched too,
+because it is the one way left for the line to stop with the coordinator reporting nothing
+wrong.
+
+**The line does not resume, and that absence is a decision.** `AwaitReArm` has no `SUCCESS`
+edge and the root has no `<Repeat>`. Every recovery this line has returns a station to a state
+nothing can trigger it out of — the part is either still breaking the beam, which produces no
+edge, or already off the belt that is now stopped — and `LineMaintenance` publishes a line of
+stations all `WAITING` as `STATE_RUNNING`. A reset that re-entered the nominal branch would
+turn a process that exits 1 into a process that reports a healthy running line for ever. The
+`SUCCESS` edge and the `<Repeat>` land together when re-arming is built, and not before
+(ADR-0038 decision 5).
+
+**`StopAll` states an intent it cannot confirm.** Nothing publishes `ConveyorState`, so no belt
+answers. When something does, `StopAll` becomes a `StatefulActionNode` that runs until every
+belt's *measured* speed is zero — an event, not a duration.
 
 ## Indexing the belt (ADR-0032)
 
@@ -218,7 +280,9 @@ restated here.
 | a station waits for a trigger that never comes | the `LATCHED` topology or the `EVENT` trigger never arrived. A volatile publisher on either would connect silently and deliver nothing |
 | the recovery branch fails every time | a leaf gave up without cancelling, so the next goal is rejected by a server still executing the old one |
 | a belt is stopped for ever | nothing confirms a belt's state. See the open-loop note above |
-| a station blocks and the process exits before a reset can reach it | one station's `ESCALATE` still fails the root `Parallel`. See the reset section above |
+| a station blocks and the line stops, but the process stays up | decided (ADR-0038). The fault branch holds; call `ResetStation`, and expect `AwaitReArm` to go on refusing afterwards |
+| the coordinator sits for ever after a reset, logging a refusal that names a station and a belt | `AwaitReArm`. Nothing re-arms a station yet; the refusal is the design saying so, not a bug to widen the gate around |
+| the coordinator exits 1 having logged that no station said why | a station subtree returned `FAILURE` without its recovery policy classifying anything. `OnFault` latches it so the run still fails; the defect is in that subtree |
 | a reset is refused with `HARDWARE_FAULT` on a station that is only blocked | some other station is faulted, which makes the line faulted |
 
 ## Tests
@@ -233,11 +297,11 @@ restated here.
 | `test_conveyor_index` | which edge stops which belt, and which belt is left alone — against a real publisher and a real subscription, with the setpoint read back off the command topic |
 | `test_skill_goals` | what a leaf puts in a goal, read from the far side of the action. A leaf's whole job is turning ports into one typed goal, and `PickAt` once filled in a tool height where the action asks where the object is |
 | `test_skill_cancellation` | what a leaf does to a **server** when it gives up. Driven against a real action server, because a mock would test the wrong side of the boundary |
-| `test_line_nodes` | the same rules composed: a real tree, real in-process action servers and a real sensor publisher, driving two stations through a handoff — against the shipped `trees/line_station.xml`, read from the source tree rather than copied |
+| `test_line_nodes` | the same rules composed: a real tree, real in-process action servers and a real sensor publisher, driving two stations through a handoff — against the shipped `trees/line_station.xml`, read from the source tree rather than copied. It also drives the fault branch: that an escalation cancels a **sibling's** outstanding goal, that the root goes on returning `RUNNING`, that the belts are put down, that the reset is accepted and the line still does not restart, and that a root failure nothing classified is latched all the same |
 | `test_detection_region.py` | the search region against the generated frames and topology |
 | `test_indexed_belts.py` | that the generated topology and the generated bring-up plan name the same set of belts. A belt in one and not the other is a cell that refuses to come up, or a belt stopped for ever |
 | `test_station_reset` | the operator reset's refusals, driven through the real `StationReset` handler: a faulted line refuses everything, an unblocked station is refused rather than quietly accepted, an unknown id invents no phantom station, and the cleared reason is captured before it is cleared |
-| `test_recovery_ordering.py` | that `RecoverFromFailure` is the first leaf of the recovery branch and no motion leaf precedes it, read out of the shipped XML. A test of the final station state would pass with the leaves in either order |
+| `test_recovery_ordering.py` | that `RecoverFromFailure` is the first leaf of the recovery branch and no motion leaf precedes it, read out of the shipped XML. A test of the final station state would pass with the leaves in either order. It reads the generated fault branch out of `line_tree.hpp` under the same `MOTION_LEAVES` set, and asserts the tick loop is guarded against a leaf that throws |
 
 **These tests move no arm.** They use fake action servers that succeed because they are told
 to, so what they prove is **sequence and ownership**, not motion. Motion is evidenced only by
