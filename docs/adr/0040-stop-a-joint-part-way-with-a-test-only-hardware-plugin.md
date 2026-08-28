@@ -10,6 +10,12 @@
   "Correction — 2026-08-28: the velocity mechanism, two unreachability arguments, and how one
   mutation row reads", immediately below. It stays `Proposed`: whether the charter records
   this package is a user decision that has not been taken.
+  **That decision has since been taken — 2026-08-28, charter v1.8 (§7, §14).** The package is
+  **not** added to §7's tree; instead §7 now records that its `workspace/src/` tree is the
+  *production* structure and that test-only packages are deliberately outside it, with this
+  record cited as the reason the fixture cannot be a backend. The status line above is left
+  as its author wrote it: flipping `Proposed` is this record's owner's call, not the charter
+  edit's.
 - **Date:** 2026-08-28
 - **Deciders:** Coder agent, on the gap
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) records in its correction

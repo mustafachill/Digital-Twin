@@ -29,8 +29,10 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 
 ## 2. Current state — read this before assuming anything exists
 
-The project is in **Phase 1 of a rebuild**. The charter describes the target; the
-repository is partway there. Check before assuming.
+**Phase 1 of the rebuild is closed**, as of 2026-08-28: charter §8 records its exit
+criterion MET, and records in the same place what that closure rests on and what it does
+not cover. Nothing below is retired by the closure — the gap list is still the gap list.
+The charter describes the target; the repository is partway there. Check before assuming.
 
 **Every count below names the command that reproduces it, and every figure names who
 measured it and over how many runs.** That is what P7 costs, and this section is where it is
@@ -60,18 +62,27 @@ account of a flake; each was caught by someone re-running, never by someone read
   collection in prose."*
   `tools/tests/` holds **302** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-27).
-- **Eight first-party packages exist**, and `workspace/src/external/` adds the twelve from
-  `xarm_ros2`. `./scripts/build` is a blocking CI step. The eight are `cite_interfaces`,
-  `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`, `cite_skills`,
-  `cite_orchestration` and `cite_simulation`. `cite_runtime` holds process-lifecycle
+- **Nine first-party packages exist**, and `workspace/src/external/` adds the twelve from
+  `xarm_ros2`. `./scripts/build` is a blocking CI step. Eight of the nine are
+  `cite_interfaces`, `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`,
+  `cite_skills`, `cite_orchestration` and `cite_simulation`. The ninth is
+  **`cite_test_hardware`, which is test-only and deliberately not in charter §7's tree**:
+  §7 is the production structure, and the package is barred from production use by its own
+  `on_init` rather than by convention
+  ([ADR-0040](docs/adr/0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md),
+  charter v1.8). So `cite_test_hardware` appearing on disk and not in §7's tree is the rule,
+  not drift.
+  `cite_runtime` holds process-lifecycle
   mechanism only — signals, shutdown, spin-and-exit for `rclpy` nodes — and exists rather
   than a helper landing in `cite_interfaces`
   ([ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md), charter v1.7).
   **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`, `cite_control` and
-  `cite_hardware` do not exist**; those six plus the eight above are the fourteen charter §7
-  lists. `./scripts/doctor`'s `workspace/src` line counts every `package.xml` beneath it, so
-  it reads **8** before `./scripts/bootstrap` has imported the manifest — measured on macOS
-  in this checkout on 2026-08-27 — and 20 after.
+  `cite_hardware` do not exist**; those six plus the eight named above are the fourteen
+  charter §7 lists. `./scripts/doctor`'s `workspace/src` line counts every `package.xml`
+  beneath it, so it reads **9** before `./scripts/bootstrap` has imported the manifest —
+  measured on macOS in this checkout on 2026-08-28. **The post-import count is not measured
+  at this commit**: the last measured figure is the **20 packages** `./scripts/build`
+  reported in CI at `60eb4a5`, which is three commits back and predates `cite_test_hardware`.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -190,11 +201,16 @@ account of a flake; each was caught by someone re-running, never by someone read
     **1 of 3**. Both failures were teardown-only. **The cycle figure replicated and the
     teardown figure did not** — "the line works" and "the scenario is green" are not the same
     claim.
-  - Most recent run, one run: **3 of 3** work-pieces carried end to end, all four beams firing
-    at every station, all nine grasps reporting a genuine friction stall, and cycle and
+  - Most recent local run, one run: **3 of 3** work-pieces carried end to end, all four beams
+    firing at every station, all nine grasps reporting a genuine friction stall, and cycle and
     teardown passing separately. It is better than anything above it. **The tester's own
     reading is that it is one good sample and not a new baseline**, and that is how it is
     recorded here. Do not promote a gate on it.
+  - **CI run `33158091922`, 2026-08-28, one run — the only one ever taken off a developer
+    machine, and it failed the cycle: 1 of 3.** Teardown passed. Details, and why a failed
+    advisory step sits inside a green workflow, are in the exit-criterion bullet at the end of
+    this section. **This is the first `continuous_line` result nobody's local environment could
+    have flattered**, and it disagrees with every local set above.
 - **The teardown flake is two failure families, and process identity predicts the family
   exactly.** What this file said until 2026-08-27 — four undifferentiated processes, identity
   not predictive, run duration the only candidate predictor, cause unestablished — was wrong
@@ -314,42 +330,34 @@ account of a flake; each was caught by someone re-running, never by someone read
 - **Measured evidence lives in [`docs/measurements/`](docs/measurements/README.md)**, one
   directory per campaign, each with its thresholds written down before the first trial. This is
   what P8 looks like in practice. Cite a campaign; do not copy its numbers around.
-- **Where Phase 1's exit criterion actually stands, and nothing above changes it.** The charter
-  states it in one sentence (§8, Phase 1); this is the clause-by-clause status. Three clauses
-  are demonstrated and one is blocked for a reason that is not technical. The volume of work
-  recorded above is not progress against the blocked clause.
-  - **"On a clean machine, `git clone` followed by a single bootstrap command produces a running
-    three-robot line"** — the clone-to-green half is **walked and passing**. Reported by the
-    project owner on 2026-08-27, from a fresh clone of the remote into an empty directory rather
-    than a worktree, **with zero deviations**: both vendor patches applied, `./scripts/doctor`
-    reported **23 passed, 0 failed**, `./scripts/build` finished **19 packages** — a figure from
-    before `cite_runtime` existed, so read it as 19 at that commit and not as the count today —
-    and `test` and `lint` were both clean. Both previously-recorded clean-clone defects are gone.
-    **What that walk did *not* include is launching the cell from the clean clone**: it ran to
-    `lint`. *One measurement on one machine, not a campaign.*
-  - **"…that executes a continuous, sensor-driven pick-and-transfer cycle"** — measured, and it
-    is the least-settled claim in this file. See the `continuous_line` bullet above, including
-    that a harness had been starting the belts and that the best figure is a single run.
-  - **"The entire cell layout is changeable by editing the facility model alone"** —
-    **demonstrated.** Reported by the project owner on 2026-08-27: a pedestal was moved 50 mm in
-    L0 and the tree regenerated. Five generated artifacts changed — the bring-up plan, the scene
-    description, the static TF table, the planning-scene object and the model hash — the arm
-    anchored to that pedestal followed it, and **nothing outside `model/` and `cite_generated/`
-    changed at all.** *One measurement on one machine, and it moved one asset — it is not a proof
-    that every asset type propagates.*
-  - **"CI is green" — CANNOT BE VERIFIED, AND NOT FOR A TECHNICAL REASON.** Triggering the
-    workflow on 2026-08-27 returned *"The job was not started because recent account payments
-    have failed or your spending limit needs to be increased"*, and **all three jobs —
-    `host-tooling`, `ros-workspace`, `supply-chain` — were refused before starting**. That is an
-    **account-level block on the GitHub Actions runner**, not a build failure, not a test failure,
-    and not evidence of anything about the code. Nothing may be inferred about CI's colour from
-    it in either direction: the last known CI state is not this commit's. **Do not record this
-    clause as met, and do not record it as a technical gap.** It is unblocked by billing, and
-    until then the clause is open — unchanged by everything else in this section.
-  - **"Every architectural decision is written down"** — `./scripts/doctor`'s `ADR index` line
-    reported **38 records, all indexed** in this checkout on 2026-08-27, the newest being
-    [ADR-0038](docs/adr/0038-stop-the-line-without-ending-the-process.md). `ls docs/adr/[0-9]*.md`
-    returns **39** because the glob also matches `0000-template.md`; both numbers are right and
+- **Where Phase 1's exit criterion stands, and nothing above changes it.** **The clause-by-clause
+  record is charter §8 and is not copied here** (P1) — it states which evidence closed which
+  clause, at what strength, and what the closure does not cover. What belongs in a rulebook is
+  the part that changes how you read everything else in this section:
+  - **The criterion is MET as of 2026-08-28 and that is not a green light.** It closed on CI run
+    `33158091922`, one run, no thresholds registered in advance, at commit `60eb4a5`. **Inside
+    that green run the advisory `continuous_line` step failed** — 1 of 3 work-pieces, a station
+    stopped while `LineState` still read healthy. That silence is the blind spot ADR-0039
+    records at that station; what stopped the piece is **not** established, and is consistent
+    with the dead end ADR-0038 records as deliberately unfixed. A workflow whose conclusion is
+    `success` is therefore not a statement that every scenario passed. **Never cite "CI is
+    green" as evidence that a capability works; cite the step that gates it.**
+  - **The clean-clone walk of 2026-08-27 demonstrated clone-to-green, not a running line.** It
+    ran `doctor` (23 passed, 0 failed), `build` (19 packages, before `cite_runtime` existed),
+    `test` and `lint`, all clean, from a fresh clone of the remote with zero deviations — and
+    **stopped at `lint` without launching the cell**. The clone-to-running-cell half is
+    evidenced by the CI run above, which brought the cell up twice from a checkout, and by
+    nothing else.
+  - **The cycle clause is the least-settled of them**, and the CI failure above is now part of
+    its record. See the `continuous_line` bullet above, including that a harness had been
+    starting the belts and that the best local figure is a single run.
+  - **"Every architectural decision is written down" is the one clause the charter records as
+    unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
+    `ADR index` line reported **40 records, all indexed** in this checkout on 2026-08-28, the
+    newest being
+    [ADR-0040](docs/adr/0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md).
+    `ls docs/adr/[0-9]*.md` returns **41** because the glob also matches `0000-template.md`;
+    both numbers are right and
     they count different things, so name the command with the number. The breakdown of corrected,
     amended and superseded records is the table in
     [`docs/adr/README.md`](docs/adr/README.md) and is deliberately not copied here — `doctor`

@@ -5,8 +5,8 @@
 | | |
 |---|---|
 | **Owner** | Center for Innovation, Technology and Entrepreneurship (CITE), Sam Houston State University |
-| **Document version** | 1.7 |
-| **Date** | 2026-08-27 |
+| **Document version** | 1.8 |
+| **Date** | 2026-08-28 |
 | **Status** | Active — this is the authoritative source of truth |
 
 ---
@@ -362,7 +362,7 @@ proved each point; why it was replaced rather than migrated is **ADR-0001**. The
 remains in version control, as §12 says — it is removed from the working tree, not from the
 repository's history.
 
-Two conventions in the tree above have their reasoning recorded rather than restated here:
+Three conventions in the tree above have their reasoning recorded rather than restated here:
 
 - **`cite_generated/` is committed, not built.** Generated artifacts live in git and are
   verified against a fresh generator run, which is what makes hand-editing one detectable
@@ -370,6 +370,20 @@ Two conventions in the tree above have their reasoning recorded rather than rest
 - **QoS profiles are a library inside `cite_interfaces`, not a table each node copies.** An
   incompatible publisher/subscriber pair connects silently and delivers nothing, so the
   profiles are code with one definition rather than prose with many. See **ADR-0025**.
+- **The `workspace/src/` tree above is the *production* structure. Packages that exist only
+  to test it are deliberately not listed in it.** The first of them is `cite_test_hardware`,
+  a `ros2_control` `SystemInterface` whose purpose is to make a fault happen on demand, and
+  it is barred from production use by construction rather than by convention: its `on_init`
+  refuses to initialise without a parameter that has nowhere to be declared in the L0 model,
+  so it cannot be selected as the backend for an arm. What it is for, and why the fixture had
+  to be a package rather than a flag on an existing one, is **ADR-0040**.
+  **So `workspace/src/` contains a package this tree does not list, and that difference is
+  this rule rather than drift.** `./scripts/doctor` counts every `package.xml` on disk, so its
+  count answers what *exists*; this tree answers what is *production*, and the two are not
+  meant to match. The next test-only fixture belongs outside this tree for the same
+  reason. The precedent runs the other way only for production code: `cite_runtime` was added
+  to this tree by explicit decision (**ADR-0034**, §14 v1.7) because it ships inside the
+  running system, which a test fixture does not.
 
 ### 7.1 Naming and namespace convention
 
@@ -393,23 +407,30 @@ Each phase has a hard **exit criterion**. A phase is not complete because the ca
 
 *The rebuild. Everything correct, from zero. This phase produces the platform that every later phase stands on.*
 
-**All five sub-phases are complete. The exit criterion is OPEN.** Those are two different
-claims and this section keeps them apart. A sub-phase closes when its work exists and has
-been measured; the phase closes when the exit criterion is demonstrated, and one of its
-clauses currently cannot be attempted at all. Each sub-phase below keeps its original text —
-that is the record of what the phase reached for — with a note beneath it stating what was
-actually delivered wherever the two differ. Where a note gives a figure, it also gives who
-measured it and over how many runs, because this phase repeatedly had "it passes" overturned
-by measurement.
+**All five sub-phases are complete, and the exit criterion is MET as of 2026-08-28.** Those
+were two separate claims for most of this phase and this section still keeps them apart: a
+sub-phase closes when its work exists and has been measured; the phase closes when the exit
+criterion is demonstrated. The last clause to close was "CI is green", which had been blocked
+at the account level rather than by anything in the code. **The clause table below records
+what closed it and what that green run contains — including a scenario that failed inside
+it.** Read both halves; a run that is green and a system that works are not the same
+statement, and this phase has been wrong in that exact way before. Each sub-phase below keeps
+its original text — that is the record of what the phase reached for — with a note beneath it
+stating what was actually delivered wherever the two differ. Where a note gives a figure, it
+also gives who measured it and over how many runs, because this phase repeatedly had "it
+passes" overturned by measurement.
 
 **1.A — Toolchain and repository foundation — COMPLETE**
 Ubuntu 24.04 / Jazzy / Harmonic baseline stood up. Docker and devcontainer images. External dependencies declared in a manifest with pinned revisions and reviewable patches. `rosdep` complete. CI pipeline building and testing headlessly. Repository restructured per §7. Coding standards, linting, and formatting enforced automatically. Early verification of xArm support on the target stack.
 
 > *Delivered as written.* `xarm_ros2` is pinned to a commit SHA and was built and driven
 > against this stack rather than inspected — the verification table is in
-> `docs/reference/toolchain.md`. **One qualification:** "CI pipeline building and testing
-> headlessly" means the workflow is written and its jobs are defined, not that it has been
-> observed to pass. See the exit criterion's CI clause below.
+> `docs/reference/toolchain.md`. **The qualification this note used to carry is discharged.**
+> It said that "CI pipeline building and testing headlessly" meant the workflow was written
+> and its jobs defined, not that it had been observed to pass. The workflow has now been
+> observed: run `33158091922` on 2026-08-28 executed every job to completion and all three
+> concluded `success`. What that run contains, and what it does not cover, is the CI clause
+> below.
 
 **1.B — Architecture and contracts — COMPLETE**
 The facility model schema and validator. Generators from L0 to worlds, descriptions, controller configs, and launch graphs. All interface packages defined and reviewed *before* the implementations that use them. Lifecycle and namespace conventions established. Architecture Decision Records written for every choice in §6.
@@ -467,40 +488,72 @@ Per-layer architecture documentation. Interface reference. Onboarding guide that
 > *Delivered.* Every architecture and interface document carries a `DESIGNED` / `PARTIAL` /
 > `BUILT` marker, which `./scripts/doctor` checks for presence, so a specification cannot be
 > read as a description. The onboarding guide was walked from a fresh clone rather than
-> reviewed — see the exit criterion's first clause. **"Enforced" is enforced by the local
-> quality gate, not yet by an observed CI run**; the same CI clause applies.
+> reviewed — see the exit criterion's first clause. **"Enforced" now means enforced by an
+> observed CI run and not only by the local quality gate:** run `33158091922` ran the build,
+> the ROS linters, the tests and all three simulation-in-the-loop scenarios on a runner that
+> had never seen this project. **One run, taken three commits back on `main`** — the CI
+> clause below states both limits.
 
 > **Exit criterion:** On a clean machine, `git clone` followed by a single bootstrap command produces a running three-robot line in Gazebo Harmonic that executes a continuous, sensor-driven pick-and-transfer cycle. CI is green. The entire cell layout is changeable by editing the facility model alone. Every architectural decision is written down.
 
-**Exit criterion status — OPEN, as of 2026-08-27.** Phase 1 is **not closed**. Its clauses are
-broken out below so that what was measured is distinguishable from what was inferred, and so
-that the one failing clause is not mistaken for a defect in the code.
+**Exit criterion status — MET, as of 2026-08-28.** Phase 1 is **closed**. Its clauses stay
+broken out below so that what was measured remains distinguishable from what was inferred,
+and so that closing the phase does not quietly upgrade any single clause's evidence. **Every
+clause is carried at the strength of the evidence that closed it, and none of that evidence
+is a campaign.** The fifth clause is not closable as stated and is recorded that way rather
+than waved through; the phase is closed on the four that are answerable.
 
 | Clause | Status | On what evidence |
 |---|---|---|
-| Clean machine; clone plus one bootstrap command; a running line | **Demonstrated** | Walked by the project owner from a fresh clone of the remote — not a worktree — with no deviation from the documented steps: `./scripts/doctor` 23 passed / 0 failed, both vendor patches verified present in the imported vendor tree, `./scripts/build` 19 packages, `./scripts/test` clean, in-container `./scripts/lint` clean across all eight linter labels. **One walk, on one machine.** |
-| A continuous, sensor-driven pick-and-transfer cycle | **Demonstrated; not characterised** | 3 of 4 runs completed. The run that did not failed when `ros2 run ros_gz_sim create` timed out spawning a work-piece — a harness failure. **No run failed for a line defect.** A further verification was in flight when this was written and its result is not recorded here. Four runs on one machine with no pre-registered thresholds is a demonstration, **not a reliability figure**. |
+| Clean machine; clone plus one bootstrap command; a running line | **Demonstrated — by the CI run, not by the manual walk** | Two pieces of evidence, and they are not the same claim. **The manual walk** (project owner, 2026-08-27, one machine) went from a fresh clone of the remote — not a worktree — with no deviation from the documented steps: `./scripts/doctor` 23 passed / 0 failed, both vendor patches verified present in the imported vendor tree, `./scripts/build` 19 packages, `./scripts/test` clean, in-container `./scripts/lint` clean across all eight linter labels. **That walk stopped at `lint` and never launched the cell**, so what it demonstrates is clone-to-green, not a running line — this row used to cite it for the whole clause and that overstated it. **What demonstrates the clause is CI run `33158091922`:** on a runner that had never seen this project, `actions/checkout` → image build → `./scripts/bootstrap` → `./scripts/build` reporting `Summary: 20 packages finished` → ROS linters → tests → `./scripts/scenario bringup` twice, both reporting `ok Scenario 'bringup' passed`, unattended and headless. That is a clean machine to a running three-arm cell in Gazebo Harmonic. **One run**; its limits are in the CI row below. |
+| A continuous, sensor-driven pick-and-transfer cycle | **Demonstrated; not characterised** | 3 of 4 runs completed. The run that did not failed when `ros2 run ros_gz_sim create` timed out spawning a work-piece — a harness failure. **No run failed for a line defect.** A further verification was in flight when this was written and its result is not recorded here. Four runs on one machine with no pre-registered thresholds is a demonstration, **not a reliability figure**. **The CI run that closed the clause below did not reproduce this one:** its `continuous_line` carried 1 of 3 work-pieces and failed. That is the only time this cycle has ever run on a machine nobody prepared, and it failed — which is why this row says *not characterised* and must not be read as more. |
 | The entire cell layout is changeable by editing the facility model alone | **Demonstrated** | A pedestal was moved 50 mm in L0 and the tree regenerated: five generated artifacts changed, the arm anchored to that pedestal followed it, and **nothing outside `model/` and `workspace/src/cite_generated/` changed at all**. This is P1 and **ADR-0004** exercised rather than asserted. |
-| **CI is green** | **UNVERIFIED — and not currently verifiable** | An account-level block; see below. |
+| **CI is green** | **MET — and the green run contains a failed scenario** | Run `33158091922`, on `main`, 2026-08-28: conclusion `success`, all three jobs `success`. Inside it, the advisory `continuous_line` step **failed**. Both halves are the record; see below. |
 | Every architectural decision is written down | **Cannot be closed as stated** | The record is complete and self-consistent — `./scripts/doctor` checks that every ADR on disk is indexed and every ADR reference resolves. But "every decision" is a universal that no check establishes, and there is a known counter-instance: **ADR-0031 records that its own decision existed only in a commit message until the documentation pass after the fact.** Read this clause as *the decisions we know of are recorded*, which is what the evidence supports. |
 
-**Why the CI clause is open.** It is an **account-level block, not a technical result.** Every
-workflow run in this repository's history — three, the most recent dispatched against
-`feature/phase-1` on 2026-08-27 — was refused before any step executed, with the message:
+**How the CI clause was met, and what its meeting contains.** Both paragraphs below are the
+clause. Neither is the whole of it.
 
-> The job was not started because recent account payments have failed or your spending limit
-> needs to be increased. Please check the 'Billing & plans' section in your settings
+**The run.** `33158091922`, triggered by a push to `main` on 2026-08-28, 42 minutes,
+conclusion **`success`**. `Host tooling (lint, types, model)` and `Supply chain` had each
+executed once before, earlier the same day; **`ROS workspace (build, test)` had never run at
+all**, and it did — image build, `./scripts/bootstrap`, a 20-package build, the ROS linters,
+the tests, and all three simulation-in-the-loop scenarios, on a runner that had never seen
+this project. That is what
+the clause asked for, and what the earlier account-level block had made unattemptable rather
+than failing. Of the eight runs preceding it, **seven were refused before any step executed**
+— for failed payments or a spending limit — and recorded zero steps; the eighth, earlier the
+same day, executed and failed in host tooling, which skipped the ROS job by `needs:`. So
+`33158091922` is the **only run in this repository's history in which the ROS workspace job
+has executed a step at all**. The repository is public at the time of writing; that its
+visibility is what lifted the block is the project owner's account and is not verified here.
 
-Both jobs that were not skipped recorded **zero steps**; the third `needs:` one of them and was
-skipped in consequence. **No step of this workflow has ever run in this repository.**
+**And the green run contains a failed scenario.** Inside it, `continuous_line` failed:
 
-That cuts both ways and both halves matter. Nothing here is evidence that the code fails CI — a
-reader must not draw that inference. Nothing here is evidence that it passes either, and the
-local quality gate is not a substitute: it runs on one machine, on a tree that machine prepared,
-which is the whole of what CI exists to not be.
+> `piece 1: complete, 10/10` — `piece 2: STOPPED after 2/10 milestones, waiting on
+> on_link(station_transfer_1: cell_a__conveyor_1__infeed) for 420s` — `pieces 3..3 were not
+> fed: the line had already stalled` — `error Scenario 'continuous_line' failed — 1 cycle
+> assertion(s) failed`
 
-**What would settle it:** the workflow running to completion. Nothing in the repository needs to
-change first; the billing block does.
+That step carries `continue-on-error: true`, so it reported success to the job and the
+workflow passed. **The workflow's green is therefore honest about what it gates and silent
+about what it does not**, and the clause is met exactly as it reads and not one word further:
+the blocking steps passed, and one advisory step failed on a real stall. The last `LineState`
+of that run read `state=1` with `stall_reasons=none` while `station_transfer_1` held
+`occupancy=1/1, workpiece=wp_000002` — a station stopped, and a line reporting itself
+healthy. **That silence is the blind spot ADR-0039 records at exactly that station**, which
+is measured. What stopped the piece is not: the run is consistent with the failed-grasp dead
+end **ADR-0038** records as deliberately unfixed, and the log does not establish it. Read
+both records before deciding whether a future failure is this one; their mechanisms are
+theirs and are not repeated here.
+
+**What this run does not carry.** It ran at commit `60eb4a5`. Three commits have landed on
+`main` since, and they add a ninth package, `cite_test_hardware` (§7, **ADR-0040**), which no
+completed CI run has yet built — a run against `a90b05f` was in flight when this was written
+and its result is **not** recorded here. And it is **one run**: no thresholds were registered
+in advance, nothing about it is a reliability figure, and a second green run would be worth
+more than any sentence in this paragraph. The clause is "CI is green", not "CI is green
+repeatably" — closing the first does not close the second, and Phase 2 inherits it.
 
 ---
 
@@ -664,6 +717,7 @@ The project underwent an extended R&D period before this charter. That work prod
 
 | Version | Date | Change |
 |---|---|---|
+| 1.8 | 2026-08-28 | **Phase 1 is closed: §8 records the exit criterion as MET.** The clause that had been open was "CI is green", and it was open for a reason outside the code — until that morning, every workflow run in this repository's history had been refused at the account level before a step executed, and the `ROS workspace (build, test)` job had never executed a step at all. Run `33158091922`, pushed to `main` on 2026-08-28, concluded `success` with all three jobs green, and the `ROS workspace (build, test)` job executed for the first time in this repository: image build, bootstrap, a 20-package build, the ROS linters, the tests, and all three simulation-in-the-loop scenarios. **The clause is recorded as met together with what its meeting contains.** Inside that green run the advisory `continuous_line` step **failed**, carrying 1 of 3 work-pieces and leaving a station stopped while `LineState` reported the line healthy — the blind spot **ADR-0039** records at that station and the dead end **ADR-0038** records as deliberately unfixed. The step is `continue-on-error`, so the workflow passed and the failure is real; §8 states both in one breath, because either half alone is a false reading. Two other clauses were corrected in the same pass rather than upgraded: clause 1 no longer rests on the manual clean-clone walk, which stopped at `lint` and never launched the cell, but on the CI run, which brought the three-arm cell up twice from a checkout on a machine that had never seen the project; and clause 2 records that the same run's `continuous_line` failed, being the only time that cycle has run outside a machine someone prepared. The fifth clause is untouched and still recorded as unclosable as stated. §8 also states what the run does not carry: one run, no thresholds registered in advance, at commit `60eb4a5`, three commits behind `main` and predating the ninth package. **§7 gains a third convention: its `workspace/src/` tree is the *production* structure, and packages that exist only to test it are deliberately not listed in it.** The first is `cite_test_hardware`, a `ros2_control` `SystemInterface` that cannot be selected as an arm's backend because its `on_init` refuses without a parameter the L0 model has nowhere to declare (**ADR-0040**). This is the opposite disposition to v1.7's, and deliberately: `cite_runtime` entered the tree because it ships inside the running system, which a test fixture does not. Written down so that a reader who counts more packages on disk than in the tree finds the rule rather than a drift. No change to scope, architecture, technology baseline, or the phases beyond 1. |
 | 1.7 | 2026-08-27 | §7 gains `cite_runtime`, a package holding process-lifecycle mechanism only — signal handling and shutdown for `rclpy` nodes, with no domain knowledge and no in-project dependencies. It exists because a shutdown helper had to live somewhere and neither existing candidate was right: `cite_interfaces` holds interfaces and their delivery contract, and ADR-0025's closing clause named a helper landing there as the signal to reopen by amendment rather than let the package widen gradually — which is what this entry is; `cite_facility` describes itself as runtime access to artifacts generated from L0, which a signal handler is not. Recorded with the two upstream `rclpy` races it compensates for, and the condition for deleting each, in **ADR-0034**. One package added to the §7 tree. No change to scope, architecture, technology baseline, or roadmap. |
 | 1.6 | 2026-08-27 | **Phase 1's record closed.** §8 marks sub-phases 1.A through 1.E complete, each with a note naming what was delivered and, where a figure is given, who measured it and over how many runs. **1.D is marked complete with one phrase explicitly not delivered as written:** "real handoff negotiation between robots" reaches for a direct arm-to-arm crossing, and what exists is conveyor-mediated, with L4 refusing a direct edge at plan time rather than leaving it unimplemented (ADR-0031 and its 2026-08-26 correction). The phrase is left standing and the divergence recorded beside it, rather than the phase being redefined to match what was built. **§8's exit criterion stays OPEN.** Three clauses are demonstrated — the clean-clone walk, the continuous sensor-driven cycle, and the layout being changeable from L0 alone — each with the size and limits of its evidence stated. The **CI clause is unverified and not currently verifiable**: every workflow run in this repository's history was refused at the account level before any step executed, for failed payments or a spending limit, which is a billing block and not a test result; the workflow running to completion is what would settle it. The fifth clause, "every architectural decision is written down", is recorded as unclosable as stated, since it is a universal and ADR-0031 is a known counter-instance. §7 removes `legacy/` from the repository tree, the v1 workspace having been deleted at the end of Phase 1 as that tree said it would be and after its lessons were captured in `docs/reference/v1-lessons.md`; the tree remains in version control. No change to scope, architecture, technology baseline, or the phases beyond 1. |
 | 1.5 | 2026-08-25 | §7 brought back in line with the workspace. Added `cite_generated/`, which now exists and holds every artifact derived from L0 — descriptions, world, controller configuration, MoveIt configuration, static frames, process topology, bring-up plan and the planning scene. Corrected the description of `cite_facility/`, which had described something narrower than the package became: it is an L0–L1 **runtime** package that serves the generated model version, the frame and namespace plan and the process topology as a typed `LineTopology` message, and loads the generated planning scene into MoveIt — the generators themselves live in `tools/`, as the same tree already stated. Added pointers to ADR-0021 (generated artifacts are committed and verified against a fresh generator run) and ADR-0025 (the QoS profiles ship as a library inside `cite_interfaces`), because §7 is where a reader looks for the reasoning behind those two entries. No change to scope, architecture, technology baseline, or roadmap. |
