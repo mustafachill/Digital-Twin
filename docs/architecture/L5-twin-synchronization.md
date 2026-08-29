@@ -5,7 +5,7 @@
   `TwinMode`, `SetMode`, `DivergenceMetrics`, `ModelVersion` — and every asset instance in
   L0 carries a `registration` block, currently `unregistered` for all three arms. Nothing
   consumes any of it.
-- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
+- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
 
 ## Responsibility
 
@@ -47,13 +47,55 @@ transform, and twin health.
 | `SHADOW` | commanded | follows physical state | L1 |
 | `VALIDATED` | commanded | commanded in parallel; divergence measured; virtual does not actuate | L2 |
 | `CLOSED_LOOP` | commanded after virtual validation gates it | validates first | L3 |
+| `VIRTUAL_LEAD` | follows the virtual side and actuates; nothing gates it first | commanded — this is where an operator's command enters | — |
+
+**`VIRTUAL_LEAD`'s empty Level cell is the claim, not an omission.** It carries L3's
+*direction* — virtual → real — without the *validation gate* that defines L3 in charter §2
+and in the `CLOSED_LOOP` row above. A mode says where commands enter and where they land; a
+level says where information flows from and what was proven before it did, and the two are
+not the same axis. **Nothing in this project may cite this mode's existence as a maturity
+claim** ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29;
+[ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2, which
+carries the reasoning and the rejected alternative). In Phase 2.A the far side is a second
+simulation rather than hardware, so the level is L0 whichever mode is in force.
+
+**Two documents carry the gate. Five define an L3, and the gap between those numbers is
+what nearly falsified the argument.** Charter §2 and the `CLOSED_LOOP` row above are the two
+that name the validation gate, and ADR-0011's amendment and ADR-0041 Decision 2 both rest on
+exactly those two. **Neither record surveyed the other three, and all three defined L3 by
+data flow alone:** [`docs/onboarding/glossary.md`](../onboarding/glossary.md), which said
+*"gates **or** commands"* while its own opening claims that when it conflicts with any other
+use in the repository, **it** wins; [`standards-alignment.md`](standards-alignment.md),
+whose table classifies on Kritzinger's flow-automation axis; and ADR-0011's own level table,
+which that record already names as not closing the argument. The first two were corrected on
+2026-08-29 and now cite charter §2 instead of paraphrasing it.
+
+**The conclusion held; the inventory did not** — so what a later change owes this argument is
+a re-count, not a re-reading. `grep -rn 'Closed loop\|CLOSED_LOOP' docs
+what-we-are-doing.md` is the instrument; it also returns `CLOSED_LOOP` as a mode name and
+"closed loop" in ADR-0038 and ADR-0039 meaning an L4 control-flow dead end, so the hits are
+sorted by hand rather than counted. Every hit that defines the **level** must either carry
+the gate or say which axis it is classifying on. If one is ever left carrying the direction
+alone, ADR-0011's amendment fails and this mode has to be re-argued.
 
 Mode is **explicit, observable at runtime, and gated.** It is never reachable by a default
 parameter, an environment variable, or a launch-argument default. A system that can enter
 `REAL` because someone forgot to pass an argument is a system that will.
 
-`safety-auditor` audits every transition. `SIM` → `REAL` and entry to `CLOSED_LOOP` are the
-two that matter most.
+`safety-auditor` audits every transition. `SIM` → `REAL`, entry to `CLOSED_LOOP`, and entry
+to `VIRTUAL_LEAD` **against a real far side** are the three that matter most. **The
+criterion the three share is stated once, in
+[cross-cutting-safety.md](cross-cutting-safety.md)** — a transition qualifies when it places
+physical actuation under an authority that was not previously commanding it — and this list
+cites it rather than restating it, so that a fourth candidate can be judged against a
+criterion instead of compared to these three.
+**None of the three is refused at the point of transition today.**
+`require_hardware_opt_in` and `CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is
+that the stack could not have started with a physical backend; `SetMode.srv`'s header
+commits the L5 server that will eventually serve this transition to applying the same check
+there, and no such server exists. See
+[cross-cutting-safety.md](cross-cutting-safety.md), which carries the same three and the
+same residual.
 
 ### Divergence measurement is the point
 
@@ -108,6 +150,24 @@ time base produces divergence numbers that look plausible and mean nothing.
   budget.
 - **What `CLOSED_LOOP` validation actually checks** before permitting physical execution.
   This is the crux of L3-level maturity and deserves its own ADR when Phase 5 approaches.
+- **Whether divergence is defined under `VIRTUAL_LEAD`.** Both sides move, so the metric is
+  in principle computable — but nothing mirrors back, and `DivergenceMetrics.msg` enumerates
+  `SHADOW` and `VALIDATED` as modes it is meaningful in without claiming the list is
+  complete. Whether `valid` is true in this mode is undecided; ADR-0041 does not decide it
+  and neither does this document. Until it is decided, the message's general rule governs —
+  `valid` is false whenever the mode makes divergence undefined — and that rule answers the
+  question conservatively rather than pre-empting it.
+- **Whether the far side's backend should be observable alongside the mode.** The other two
+  dangerous transitions are self-identifying from the requested value alone: `REAL` and
+  `CLOSED_LOOP` mean physical actuation whoever asks. **`VIRTUAL_LEAD` does not.** Its
+  danger condition is *against a real far side*, which is a per-(asset, side) backend fact,
+  and `TwinMode` carries no such field — so an operator watching `/cite/twin/mode` cannot
+  tell "the arm is driving a second simulation" from "the arm is about to move a physical
+  arm". This is filed, not decided: whether the backend belongs on `TwinMode`, on a separate
+  topic, or nowhere is open. What is **not** open is that the `SetMode` server, when it
+  exists, must resolve the far side's backend per asset before it decides the transition —
+  and for a facility-wide request that means every asset. See
+  [cross-cutting-safety.md](cross-cutting-safety.md) and `SetMode.srv`'s header.
 - **Multiple physical assets, partially twinned.** With one real arm and two simulated,
   what does a facility-level divergence number even mean? Probably per-asset metrics with
   no aggregate — but it needs deciding rather than defaulting.

@@ -148,6 +148,7 @@ msg/TwinMode.msg
   uint8 MODE_SHADOW=2
   uint8 MODE_VALIDATED=3
   uint8 MODE_CLOSED_LOOP=4
+  uint8 MODE_VIRTUAL_LEAD=5
   std_msgs/Header header
   string asset_id
   uint8 mode

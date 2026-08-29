@@ -22,13 +22,15 @@ Never set it in a shell profile, a Dockerfile, a launch default, or CI. It exist
 reaching hardware requires a conscious act, and putting it in a profile destroys the only
 protection it provides.
 
-**Two honest qualifications about today's state.** The guard is
-`require_explicit_hardware_opt_in()` in `scripts/_lib.sh`; **no script calls it yet**, so
-the rule currently holds only because nothing in the repository can command an arm at all.
-And `./scripts/enter hardware` opens a privileged container with host networking and `/dev`
-passthrough **after printing a warning, without checking the variable** — so it reaches the
-lab network whether or not the variable is set. Both must be closed before the first Phase 2
-motion, and neither is a reason to treat the rule as optional in the meantime.
+**The honest qualification about today's state is about *when* the rule binds, not
+whether anything enforces it.** Two guards do, and both are covered by tests; their names,
+locations and coverage are in
+[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)'s Status bullet and are
+not repeated here. What that bullet does not say, and what an operator needs: **both refuse
+before the stack starts — one at the shell, one at bring-up — and neither refuses a mode
+transition.** No server implements `SetMode` yet (CLAUDE.md §2), so nothing in the
+repository refuses one. That gap must be closed before the first Phase 2 motion, and it is
+not a reason to treat the rule as optional in the meantime.
 
 ## Before any physical motion
 
@@ -58,6 +60,33 @@ Every session. Not once per week.
 Under [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md) the same code runs in both
 places, so step 1 is genuinely predictive. That is the entire point of the architecture,
 and skipping it discards the benefit the project was built to provide.
+
+### `VIRTUAL_LEAD` collapses step 1, and you have to restore it deliberately
+
+**The ladder above works because running in `SIM` and running on hardware are different
+operator acts.** You start a different thing, and the difference is visible to you at the
+moment you do it. Step 1 protects you because you cannot perform it by accident when you
+meant step 3.
+
+`VIRTUAL_LEAD` removes that difference **by construction**. You command the simulated cell
+and the far side follows and actuates: same scene, same gesture, same command path. The
+only thing deciding whether an arm moves in the room is a per-(asset, side) backend fact
+one layer down, which nothing in front of you shows
+([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2).
+**In Phase 2.B nothing on the operator's side changes shape — and that is precisely what
+ADR-0041 says Phase 2.A exists to guarantee.** The guarantee and the hazard are the same
+property, so do not expect a later change to remove the one and keep the other.
+
+When the mode in force is `VIRTUAL_LEAD`:
+
+1. **Establish the rehearsal by checking the far side's backend, not by your own gesture.**
+   "I ran it in simulation" says nothing until you know which side the command reached.
+   Read the backend. Do not infer it from what you did.
+2. A facility-wide `SetMode(VIRTUAL_LEAD)` — `TwinMode`'s `asset_id` empty — asks that
+   question of **every** asset at once. With one physical arm and two simulated ones, two
+   arms answering "simulated" is not an answer for the third; see
+   [`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md).
+3. Steps 3 and 4 above are unchanged, and they apply the moment any far side is real.
 
 ## During operation
 

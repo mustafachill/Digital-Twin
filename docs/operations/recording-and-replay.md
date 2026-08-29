@@ -42,7 +42,7 @@ the bag:
 |---|---|
 | Facility model version | A run against yesterday's layout is not comparable to today's |
 | Software version (commit) | Behaviour changes between commits |
-| Operating mode | An L1 run and an L2 run mean different things |
+| Operating mode | It determines what the numbers in the bag **are**, and it is not a maturity level. The reason is stated once, in [L6](../architecture/L6-data-and-telemetry.md), and cited here rather than repeated. |
 | Physics seed (simulation) | Reproducibility |
 | Registration transform (hardware) | Divergence is meaningless without it |
 
