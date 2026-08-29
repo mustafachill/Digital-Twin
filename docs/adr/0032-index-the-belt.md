@@ -349,7 +349,11 @@ work is prohibited.
 Take the speed-ups already decided or proposed: Pilz point-to-point planning
 ([ADR-0027](0027-pilz-planning-pipeline.md)), convex-hull collision meshes
 ([ADR-0028](0028-convex-hull-collision-meshes.md)), and a better real-time factor than the
-0.14 the development host manages.
+0.14 recorded for the development host — which
+[`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)
+since established is that host confined to about one CPU core, not what it manages
+unconstrained. **The parenthetical is the only part this corrects; the rejection below turns
+on a factor of roughly 160 and is unaffected.**
 
 Rejected as a *solution*, kept as improvements. The gap between a sub-second window and a
 100 s cycle is a factor of roughly 160. Every one of these makes indexing cheaper; none of

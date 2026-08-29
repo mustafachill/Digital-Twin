@@ -58,12 +58,19 @@ SPAWN_DROP_M = 0.005
 #: a hang fails the run with a diagnosis instead of blocking CI indefinitely.
 #:
 #: Their basis, because a bare number tells the next reader nothing: they were
-#: chosen against a Linux workstation running near real time. Measured real-time
-#: factor on the macOS development host is about 0.14 — `joint_states` arrives at
-#: roughly 21 Hz against a configured 150 Hz — so a cycle that takes 110 s there
-#: has been observed at 315-420 s here, which is the whole of CYCLE_CEILING_S.
-#: A timeout on this host is therefore evidence of a slow machine at least as
-#: often as it is evidence of a hang, and the failure message says so.
+#: chosen against a Linux workstation running near real time, and then against the
+#: much slower figure the macOS development host was recorded at. That figure holds
+#: only under a condition — roughly one CPU core — stated once, with its
+#: measurement, in `docs/architecture/cross-cutting-testing.md` under "Wall-clock
+#: ceilings". The 315-420 s cycle observed here against a 110 s workstation cycle
+#: belongs to that starved condition: at a full CPU allocation the same cycle was
+#: measured far below it
+#: (`docs/measurements/2026-08-29-real-time-factor-conditions/`).
+#:
+#: CYCLE_CEILING_S is therefore not a generous ceiling that happens to be large.
+#: It is sized for the starved condition, where its margin is about 1.2, and below
+#: roughly 1.2 cores this scenario times out with nothing broken. Diagnose the
+#: host's CPU allocation before the code, and do not widen this to absorb it.
 BRING_UP_CEILING_S = 300.0
 CYCLE_CEILING_S = 420.0
 
@@ -478,7 +485,12 @@ class TestPickAndPlace(unittest.TestCase):
                             summary=(
                                 f"did not finish within CYCLE_CEILING_S={CYCLE_CEILING_S:.0f}s "
                                 "and was killed. On a host whose real-time factor is well "
-                                "below 1.0 this is as likely to mean 'slow' as 'hung'"
+                                "below 1.0 this is as likely to mean 'slow' as 'hung': this "
+                                "ceiling's margin is about 1.2 when the cell has roughly one "
+                                "CPU core, so check what this container was allocated and "
+                                "what else held the host before suspecting motion. See "
+                                "docs/architecture/cross-cutting-testing.md, 'Wall-clock "
+                                "ceilings'"
                             ),
                             stdout=stdout,
                             stderr=stderr,

@@ -17,12 +17,13 @@ inspection of code.
 | [`2026-08-26-conveyor-yaw-transfer/`](2026-08-26-conveyor-yaw-transfer/ANALYSIS.md) | What yaw does a work-piece carry when it reaches a downstream outfeed, and can the gripper pick it? | The belt changes the yaw by **nothing** (36 trials), and the pick succeeds anyway — 23/23 up to 30° — because **the jaws square the part up as they close**. 74 trials. Corrected [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md). |
 | [`2026-08-27-teardown-signal-family/`](2026-08-27-teardown-signal-family/results.md) | Does breaking the `SkillServer` reference cycle change the rate at which `skill_server` dies on a signal at teardown? | **Inconclusive, by its own rule 1.** The rig did not reproduce the defect at all in the pre-fix arm, so the clean post-fix arm evidences nothing. What did move is a leaked `class_loader` library, deterministically. 41 valid runs. |
 | [`2026-08-28-second-world-cost/`](2026-08-28-second-world-cost/ANALYSIS.md) | Can two simulations coexist on one host, what does the second cost, and what dominates the step? | Two coexist, and **`ROS_DOMAIN_ID` is not what keeps them apart** — Gazebo transport needs `GZ_PARTITION`. A second world costs about a quarter of a world. Collision geometry is **34 % of the step**, and hulls buy **1.5x**. The headline ratio is **refused by the campaign's own validity rule**. |
+| [`2026-08-29-real-time-factor-conditions/`](2026-08-29-real-time-factor-conditions/ANALYSIS.md) | What real-time factor does this cell achieve, under what condition, and is the recorded 0.14 wrong? | **Conditional, not wrong.** It reproduces on this host — both halves of the recorded pair together — when the cell is confined to about **one CPU core**; unconfined it idles above real time. Bring-up and load are rejected as the condition. No ceiling is too tight or too loose, and Gazebo's own `real_time_factor` field **over-reports by up to 4.15x under starvation**. 18 cells. |
 
 Read the second alongside the first: it corrects two of the first campaign's published
 readings, and the corrections are listed in its own *Corrections to the friction campaign*
 section.
 
-The fourth stands apart from the other three. It measures **the test rig's own teardown**
+The teardown campaign stands apart from the rest. It measures **the test rig's own teardown**
 rather than anything the cell does, and its headline is an **inconclusive** — the
 pre-registered decision rule fired, and the clean arm that followed was refused as evidence
 because the arm it had to be compared against never reproduced the defect. It is here for
@@ -90,7 +91,8 @@ carry that, and neither disturbs the verdicts.
   [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md).
 - **Do not restate a campaign's numbers elsewhere (P1).** Link to the directory. A number
   copied into a layer document is a number that will disagree with its source.
-- **What is not here is not measured.** Four campaigns exist at this commit. In
+- **What is not here is not measured.** The table above is the list; count it there rather
+  than trusting a number in this sentence, which was wrong within a day of being written. In
   particular, **nothing here measures the three-arm continuous line**: that it now completes
   is reported from scenario runs, with no thresholds registered in advance, and the status
   block in [CLAUDE.md §2](../../CLAUDE.md) says so. Nothing here measures the parked index

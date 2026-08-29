@@ -70,9 +70,13 @@
   **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
   instance in L0, and a plan naming a non-simulated backend is refused at the ROS boundary
   unless `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`).
-  **Not held:** the configured rate. The model asks for 150 Hz; `joint_states` was measured
-  at roughly 21 Hz at a real-time factor of 0.14 (see
-  [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
+  **Held, and this document said otherwise until 2026-08-29:** the configured rate. The model
+  asks for 150 Hz and `joint_states` was measured at or above it on an idle cell — the world
+  is unthrottled, so the rate runs slightly above the configured one. The roughly 21 Hz this
+  entry recorded as a capability gap is the same host **confined to about one CPU core**, a
+  condition neither this document nor ADR-0028 stated; it is a fact about a starved machine
+  and not about the control stack. Figures:
+  [`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
 - **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility

@@ -216,7 +216,10 @@ measurement and should be re-taken on the target machine.
   campaign is measuring, so landing half 1 mid-campaign invalidates its baseline and the
   audit would have to start again. The sequencing is: the audit completes, then the throttle
   lands, then the ceilings are re-derived against 1.0. Not the other order, and not both at
-  once.
+  once. **[2026-08-29: that campaign has published —
+  [`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
+  It changed no ceiling and found none too tight or too loose, so the first step of the
+  sequencing above is done and its §3 table is the baseline to re-derive against.]**
 - **How much slower, on this project's own development host, is not known** — and that is a
   gap in the tree rather than in this record. The tree records RTF **0.14** with
   `joint_states` at roughly 21 Hz; the campaign measured **1.097** and 158 Hz on an idle cell
@@ -224,6 +227,13 @@ measurement and should be re-taken on the target machine.
   section records that the figure in the tree carries **no condition and no machine**, so
   neither number can be used to predict what throttling costs here. Re-measuring it with its
   condition written down is the campaign's own recommendation and it is cheap.
+  **[2026-08-29, and this bullet's premise no longer holds: that re-measurement is
+  [`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
+  which reproduced 0.14 with its condition — the cell confined to about one CPU core — and
+  measured the same host unconfined. So the two figures do not contradict each other and both
+  are usable: at a full allocation this host free-runs above 1.0 and the bound stated two
+  bullets above applies to it; at one core it is far below 1.0, where a throttle is a ceiling
+  and costs nothing. Cite that campaign for either figure rather than this bullet.]**
 - **A new requirement that something has to check.** "Both sides sustain >= 1.0 concurrently"
   is a claim about a running pair, and nothing measures it today. Under P6 and P8 the
   requirement is not met until a scenario or a CI step answers it, and this record is not that
