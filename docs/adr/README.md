@@ -95,7 +95,7 @@ not rewritten either.
 | [0001](0001-rebuild-rather-than-migrate.md) | Rebuild rather than migrate the v1 workspace | Accepted |
 | [0002](0002-ros2-jazzy.md) | Target ROS 2 Jazzy | Accepted |
 | [0003](0003-gazebo-harmonic.md) | Target Gazebo Harmonic | Accepted |
-| [0004](0004-facility-model-single-source-of-truth.md) | Generate all artifacts from one facility model | Accepted |
+| [0004](0004-facility-model-single-source-of-truth.md) | Generate all artifacts from one facility model | Accepted (amended 2026-08-29) |
 | [0005](0005-ros2-control-sim-real-boundary.md) | Use ros2_control as the simulation/hardware boundary | Accepted |
 | [0006](0006-moveit2-motion-planning.md) | Use MoveIt 2 for motion planning | Accepted |
 | [0007](0007-behaviour-trees-for-orchestration.md) | Orchestrate with behaviour trees | Accepted |
@@ -133,5 +133,5 @@ not rewritten either.
 | [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28) |
 | [0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md) | Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand | Proposed (corrected 2026-08-28) |
 | [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed |
-| [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Proposed |
+| [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted |
 | [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed |

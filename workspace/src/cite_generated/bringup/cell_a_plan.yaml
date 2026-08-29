@@ -19,6 +19,33 @@ plan:
   static_frames: package://cite_generated/frames/cell_a_static_tf.yaml
   topology: package://cite_generated/topology/cell_a_flow.yaml
 
+  # The sides this zone runs, and the Gazebo transport partition each one runs
+  # in. One side on an untwinned zone; two where the zone declares
+  # `twin.sides: pair` (ADR-0041).
+  #
+  # `ROS_DOMAIN_ID` does not isolate Gazebo transport, and that was MEASURED
+  # rather than suspected: two `gz sim` servers in one container on separate ROS
+  # domains produced two publishers on one world's stats topic and two
+  # subscribers on one belt's command topic, so a single conveyor setpoint would
+  # have started both cells' belts with nothing logged. What kept the measured
+  # pairs apart was the container hostname, which gz-transport derives its
+  # default partition from — an accident of one deployment, invisible at runtime,
+  # and gone the moment two sides share a container or a network namespace
+  # (ADR-0042).
+  #
+  # Emitted here rather than computed at launch because a partition is a NAME, in
+  # the same class as every other name this plan carries: emitting it means a
+  # reviewer sees it in a diff and ./scripts/validate-model checks it. Bring-up
+  # refuses to start a side whose process environment does not carry the value
+  # named here — never a warning, because what it guards against produces no
+  # symptom.
+  #
+  # A developer attaching `gz topic -e` to a running side must set the same
+  # GZ_PARTITION or the topic list comes back empty rather than wrong.
+  sides:
+    - name: plant
+      gz_partition: cite/cell_a/plant
+
   controller_managers:
     - asset: arm_1
       node: /cite/cell_a/arm_1/controller_manager

@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
+from cite_tools.model import ids
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.schema import FlowEdge
@@ -40,6 +41,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _pose_frames_resolve(model)
     findings += _no_pose_cycles(model)
     findings += _hardware_backends_exist(model)
+    findings += _paired_zone_has_no_physical_plant(model)
     findings += _configuration_matches_category(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
@@ -49,13 +51,16 @@ def check(model: FacilityModel) -> list[Finding]:
 
 def _duplicate_ids(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
-    for label, ids in (
+    # `identifiers` rather than `ids`, which is the module this file imports for
+    # `SIMULATION_BACKEND`; the loop variable used to shadow it harmlessly and
+    # stopped being harmless the moment anything below wanted the module.
+    for label, identifiers in (
         ("asset", [a.id for a in model.assets]),
         ("asset type", [t.id for t in model.types]),
         ("zone", [z.id for z in model.zones]),
         ("station", [s.id for s in model.stations]),
     ):
-        for value, count in sorted(Counter(ids).items()):
+        for value, count in sorted(Counter(identifiers).items()):
             if count > 1:
                 findings.append(
                     error(
@@ -224,15 +229,30 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         if not backends:
             continue
         chosen = asset.hardware.backend
-        if chosen not in backends:
+        # Both sides, because a backend is selected per (asset, side) and a
+        # counterpart that names a plugin its type does not declare fails at
+        # bring-up on the far side rather than here (ADR-0041, Decision 3). The
+        # counterpart is checked under its own key so the message names the
+        # field that is wrong; a `None` falls back to `backend`, which is the
+        # value already checked on the line above.
+        unknown = [
+            (field, value)
+            for field, value in (
+                ("backend", chosen),
+                ("counterpart_backend", asset.hardware.counterpart_backend),
+            )
+            if value is not None and value not in backends
+        ]
+        for field, value in unknown:
             findings.append(
                 error(
                     "unknown-backend",
-                    f"assets.{asset.id}.hardware.backend",
-                    f"type {asset_type.id!r} declares no backend named {chosen!r}",
+                    f"assets.{asset.id}.hardware.{field}",
+                    f"type {asset_type.id!r} declares no backend named {value!r}",
                     f"Declared backends: {', '.join(sorted(backends))}.",
                 )
             )
+        if chosen not in backends:
             continue
         allowed = set(backends[chosen].instance_params)
         for key in sorted(set(asset.hardware.params) - allowed):
@@ -244,6 +264,56 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
                     f"Declared parameters: {', '.join(sorted(allowed)) or '(none)'}.",
                 )
             )
+    return findings
+
+
+def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
+    """A twinned zone may not put a physical machine on its PLANT side.
+
+    A schema cannot say this: `twin.sides` is a zone fact and `hardware.backend`
+    is an asset fact, so the two live in different documents and only a
+    cross-document check reaches both.
+
+    WHY THIS PARTICULAR CELL OF THE CROSS PRODUCT IS CLOSED. A physical plant
+    with a simulated counterpart and a simulated plant with a physical
+    counterpart describe the same two machines, and they are genuinely different
+    to this tool — they emit different bring-up plans, different controller
+    configurations and a different MODEL_HASH. Being different is not being
+    wanted. `plant` is by construction the side `./scripts/sim`, all three
+    scenarios and every Phase 1 artifact already address, so `backend: real`
+    under `twin.sides: pair` would point the whole existing test suite at a
+    physical cell — behind an opt-in that is a BRING-UP refusal rather than a
+    per-command one. Charter §8 scopes Phase 2 as one physical arm and two
+    simulated ones, which is the other encoding by construction, so this one also
+    buys nothing (ADR-0041, Decision 3).
+
+    A physical machine on a paired zone is a ``counterpart_backend``. 2.B may
+    reopen this with an argument; leaving it expressible by omission is a
+    different thing.
+    """
+    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
+    findings: list[Finding] = []
+    for asset in model.assets:
+        if asset.zone not in paired:
+            continue
+        if asset.hardware.backend == ids.SIMULATION_BACKEND:
+            continue
+        findings.append(
+            error(
+                "physical-plant-on-paired-zone",
+                f"assets.{asset.id}.hardware.backend",
+                f"zone {asset.zone!r} declares twin.sides: pair, so its plant side must be "
+                f"{ids.SIMULATION_BACKEND!r}, not {asset.hardware.backend!r}",
+                "`plant` is the side ./scripts/sim, every scenario and every Phase 1 "
+                "artifact already address, so this would silently point the whole existing "
+                "test suite at a physical cell — behind an opt-in that refuses at bring-up "
+                "rather than per command. Write the physical machine as "
+                f"`counterpart_backend: {asset.hardware.backend}` and leave `backend: "
+                f"{ids.SIMULATION_BACKEND}`; that is the same two machines, it is what "
+                "charter §8's Phase 2 scopes, and it is the encoding MODE_VIRTUAL_LEAD "
+                "describes (ADR-0041, Decision 3).",
+            )
+        )
     return findings
 
 

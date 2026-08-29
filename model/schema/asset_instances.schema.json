@@ -197,6 +197,19 @@
           "title": "Backend",
           "type": "string"
         },
+        "counterpart_backend": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Counterpart Backend"
+        },
         "params": {
           "additionalProperties": {
             "anyOf": [

@@ -46,6 +46,16 @@ SIMULATION_BACKEND = "sim"
 HARDWARE_OPT_IN_ENV = "CITE_ALLOW_HARDWARE"
 HARDWARE_OPT_IN_VALUE = "1"
 
+#: The Gazebo transport partition, as gz-transport itself reads it. Every process
+#: that speaks that transport — `gz sim`, `parameter_bridge`, `ros_gz_sim create`
+#: — must be started with this set to the value the plan names for its side.
+#:
+#: `ROS_DOMAIN_ID` does not isolate Gazebo transport and this variable is what
+#: does (ADR-0042). What isolated the pairs that have been measured was the
+#: container hostname, which gz-transport derives its default from — an accident
+#: of one deployment that evaporates the moment two sides share a container.
+GZ_PARTITION_ENV = "GZ_PARTITION"
+
 
 class PlanError(Exception):
     """The bring-up plan is missing, malformed, or references something absent."""
@@ -60,10 +70,36 @@ class HardwareNotPermittedError(PlanError):
     """
 
 
+class GazeboPartitionMissingError(PlanError):
+    """A side is about to start Gazebo processes without its declared partition.
+
+    A `PlanError` for the same reason `HardwareNotPermittedError` is, and a
+    refusal rather than a warning for a sharper one: what it guards against
+    produces no symptom. Two servers sharing a partition connect silently and one
+    belt setpoint drives both cells, with nothing logged at either end. A warning
+    about that would be read once and then never again (ADR-0042).
+    """
+
+
 @dataclass(frozen=True)
 class ControllerRef:
     name: str
     stage: int
+
+
+@dataclass(frozen=True)
+class Side:
+    """One side of the zone, and the Gazebo transport partition it runs in.
+
+    An untwinned zone still has a side, and it is still named and still
+    partitioned. A partition that appeared only when someone paired a cell would
+    be untested on every run that does not, which is the arrangement ADR-0042
+    rejected — the isolation was already working by accident, and an accident
+    that only fails under the configuration nobody has run yet is the worst kind.
+    """
+
+    name: str
+    gz_partition: str
 
 
 @dataclass(frozen=True)
@@ -161,6 +197,11 @@ class ControllerManager:
     asset: str
     node: str
     backend: str
+    #: What the counterpart side of this asset loads, or `None` where the zone
+    #: has no counterpart. The plan states it only on a paired zone, and states
+    #: it for every asset there, so `None` means "there is no such side" and
+    #: never "the model left the key out" (ADR-0041, Decision 3).
+    counterpart_backend: str | None
     hosted_by: str
     description_topic: str
     description: Path
@@ -242,6 +283,11 @@ class Plan:
     scene: Path
     static_frames: Path
     topology: Path
+    #: Every side this zone runs, in the order the generator emitted them, the
+    #: first of which is always the plant. Never empty — `load` refuses a plan
+    #: with no sides rather than defaulting one, because a defaulted partition is
+    #: the thing ADR-0042 forbids.
+    sides: tuple[Side, ...]
     controller_managers: tuple[ControllerManager, ...]
     conveyors: tuple[Conveyor, ...]
     sensors: tuple[Sensor, ...]
@@ -299,6 +345,8 @@ def load(path: Path) -> Plan:
     plan = document["plan"]
     if not isinstance(plan, dict):
         raise PlanError(f"{path}: `plan:` must be a mapping, not {_kind(plan)}")
+
+    sides = _sides(plan, path)
 
     managers = tuple(
         _manager(entry, index)
@@ -366,10 +414,92 @@ def load(path: Path) -> Plan:
         scene=resolve_uri(_require(plan, "scene", "plan")),
         static_frames=resolve_uri(_require(plan, "static_frames", "plan")),
         topology=resolve_uri(_require(plan, "topology", "plan")),
+        sides=sides,
         controller_managers=managers,
         conveyors=conveyors,
         sensors=sensors,
         detection=detection,
+    )
+
+
+def _sides(plan: object, path: Path) -> tuple[Side, ...]:
+    """Read the zone's sides, refusing anything that would leave one unpartitioned.
+
+    Three refusals, and each names a way the isolation could be lost silently
+    rather than a way the file could be untidy:
+
+    * **no sides at all** — a plan generated before ADR-0042, or one hand-edited
+      to remove the block. Defaulting a partition here would put the derivation
+      in two places, which is the failure the emission exists to prevent;
+    * **an empty partition** — a side that would fall back to gz-transport's own
+      `<HOSTNAME>:<USERNAME>` default, which is exactly the accident the decision
+      replaced;
+    * **two sides sharing one partition** — the measured defect itself, written
+      down: two servers on one partition see each other's topics, and one belt
+      command starts both cells' belts.
+    """
+    entries = _sequence(plan, "sides")
+    sides = tuple(
+        Side(
+            name=str(_require(entry, "name", f"side {index}")),
+            gz_partition=str(_require(entry, "gz_partition", f"side {index}")),
+        )
+        for index, entry in enumerate(entries)
+    )
+    if not sides:
+        raise GazeboPartitionMissingError(
+            f"{path}: the plan declares no `sides:`, so nothing says which Gazebo "
+            "transport partition this zone runs in. ROS_DOMAIN_ID does not isolate "
+            "Gazebo transport (ADR-0042), and the partition is generated from L0 — "
+            "run ./scripts/validate-model --write, then ./scripts/build."
+        )
+    for side in sides:
+        if not side.gz_partition.strip():
+            raise GazeboPartitionMissingError(
+                f"{path}: side {side.name!r} names an empty gz_partition. An unset "
+                "partition falls back to gz-transport's <HOSTNAME>:<USERNAME> default, "
+                "which is the deployment accident ADR-0042 replaced."
+            )
+    partitions = [s.gz_partition for s in sides]
+    if len(set(partitions)) != len(partitions):
+        shared = sorted({p for p in partitions if partitions.count(p) > 1})
+        raise GazeboPartitionMissingError(
+            f"{path}: sides share the Gazebo partition(s) {', '.join(shared)}. Two "
+            "servers on one partition subscribe to each other's topics, so one belt "
+            "setpoint would start both cells' belts with nothing logged."
+        )
+    return sides
+
+
+def require_gz_partition(side: Side, environ: Mapping[str, str]) -> None:
+    """Refuse to start a side whose process environment lacks its own partition.
+
+    ``environ`` is the environment the caller is about to hand to the Gazebo
+    processes, not the launching shell's. That is the sharper question, and it is
+    the one that catches the failure that actually happens: a stale generated
+    tree is caught earlier by `./scripts/validate-model`, while this catches the
+    launch path that dropped the value on its way into the process (ADR-0042).
+
+    A refusal rather than a warning, and never a default. What a missing
+    partition produces is not an error but silence — two cells that discover each
+    other's topics and act on each other's commands, with every ROS-side
+    instrument this project has reporting clean isolation at the same moment.
+    """
+    carried = environ.get(GZ_PARTITION_ENV)
+    if carried == side.gz_partition:
+        return
+    if carried is None:
+        raise GazeboPartitionMissingError(
+            f"side {side.name!r} would start its Gazebo processes with no "
+            f"{GZ_PARTITION_ENV}. The plan names {side.gz_partition!r}; without it "
+            "gz-transport falls back to <HOSTNAME>:<USERNAME>, and two sides sharing a "
+            "container then share every Gazebo topic silently (ADR-0042)."
+        )
+    raise GazeboPartitionMissingError(
+        f"side {side.name!r} would start its Gazebo processes with "
+        f"{GZ_PARTITION_ENV}={carried!r}, but the plan names {side.gz_partition!r}. "
+        "The partition is generated from L0 and is the one name that decides which "
+        "cell a belt command reaches; it may not be overridden per run."
     )
 
 
@@ -400,15 +530,36 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
 
     ``environ`` is passed in rather than read from `os` here, so that the refusal
     can be tested without mutating the process that tests it.
+
+    EVERY SIDE, not only the plant. A backend is selected per (asset, side), so a
+    twinned zone can name a physical machine on its counterpart while its plant
+    stays simulated — which is exactly what Phase 2.B is (ADR-0041, Decision 3),
+    and what `MODE_VIRTUAL_LEAD` describes. Reading only `backend` here would let
+    the far side become physical behind a gate that never looked at it. The
+    reverse case — a physical plant on a paired zone — cannot reach this
+    function: the L0 validator refuses to generate a plan that names one.
     """
-    hardware = tuple(m for m in plan.controller_managers if m.backend != SIMULATION_BACKEND)
+    # Keyed by the plan field the value came from rather than by a side name:
+    # which side `counterpart_backend` describes is stated once, in the plan's
+    # own `sides:` block and in L0 behind it, and repeating it here would be a
+    # third place the pair of names lives.
+    hardware = tuple(
+        (manager, field, backend)
+        for manager in plan.controller_managers
+        for field, backend in (
+            ("backend", manager.backend),
+            ("counterpart_backend", manager.counterpart_backend),
+        )
+        if backend is not None and backend != SIMULATION_BACKEND
+    )
     if not hardware:
         return
     if environ.get(HARDWARE_OPT_IN_ENV) == HARDWARE_OPT_IN_VALUE:
         return
 
     named = ", ".join(
-        f"{m.asset} (backend {m.backend!r})" for m in sorted(hardware, key=lambda m: m.asset)
+        f"{manager.asset} ({field} {backend!r})"
+        for manager, field, backend in sorted(hardware, key=lambda row: (row[0].asset, row[1]))
     )
     raise HardwareNotPermittedError(
         f"zone {plan.zone!r} declares a hardware backend for {named}, and "
@@ -427,6 +578,7 @@ def _manager(entry: object, index: int) -> ControllerManager:
         asset=asset,
         node=_require(entry, "node", where),
         backend=_require(entry, "backend", where),
+        counterpart_backend=_optional(entry, "counterpart_backend"),
         hosted_by=_require(entry, "hosted_by", where),
         description_topic=_require(entry, "description_topic", where),
         description=resolve_uri(_require(entry, "description", where)),

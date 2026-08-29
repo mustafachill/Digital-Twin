@@ -25,6 +25,19 @@ ROOT = "cite"
 #: The facility root frame, tied to the surveyed physical origin (L5).
 WORLD_FRAME = "cite_world"
 
+#: The one backend id that cannot reach a physical machine. Every other value
+#: names a `ros2_control` plugin that drives real hardware.
+#:
+#: Here rather than spelled at each call site because three separate rules turn
+#: on it — a controller manager is hosted inside the Gazebo process for this
+#: backend and runs its own node otherwise, `use_sim_time` is derived from it,
+#: and a paired zone may not name anything else on its plant side — and a fourth
+#: statement of the string would be the value-in-two-places P1 forbids.
+#: `cite_bringup.plan.SIMULATION_BACKEND` is the one unavoidable second
+#: statement: it is a different build unit that cannot import this one, and it
+#: reads the value out of the generated plan rather than deciding it.
+SIMULATION_BACKEND = "sim"
+
 #: Separates the three parts of a flattened TF frame name. Doubled so that a
 #: link name containing a single underscore stays unambiguous.
 FRAME_SEP = "__"
@@ -35,6 +48,23 @@ RESERVED_SCOPES = ("facility", "twin", "line")
 
 #: `lower_snake_case`: no hyphens, no camel case, no leading digit.
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
+
+#: The side of a twin pair the untwinned model already describes — the one that
+#: exists whether or not the twin does, and that every Phase 1 artifact, scenario
+#: and script already addresses.
+PLANT_SIDE = "plant"
+
+#: The side that exists only where the zone declares ``twin.sides: pair``.
+COUNTERPART_SIDE = "counterpart"
+
+#: Both, in the order they are emitted. Defined structurally — by which side the
+#: untwinned model describes — and NOT by which side is being commanded
+#: (ADR-0041, Decision 3). That is what makes the partition below safe to derive:
+#: a name that moved with `TwinMode` would change the transport partition when an
+#: operator changed mode, which is the silent cross-talk ADR-0042 exists to
+#: remove. It is also why the index is not `virtual`/`physical` — those are
+#: backends, and a Phase 2.A pair has two simulated sides.
+SIDES = (PLANT_SIDE, COUNTERPART_SIDE)
 
 
 class InvalidIdentifierError(ValueError):
@@ -90,6 +120,35 @@ def scope(reserved: str, name: str) -> str:
     for part in name.split("/"):
         validate_identifier(part, kind="interface name part")
     return f"/{ROOT}/{reserved}/{name}"
+
+
+def partition(zone: str, side: str) -> str:
+    """`cite/<zone>/<side>` — the Gazebo transport partition one side runs in.
+
+    Not a ROS name, and deliberately built here anyway. `ROS_DOMAIN_ID` does not
+    isolate Gazebo transport at all: two `gz sim` servers in one container on
+    separate ROS domains were measured with two publishers on one world's stats
+    topic and two subscribers on one belt's command topic, so a single conveyor
+    setpoint would have started both cells' belts with nothing logged
+    (ADR-0042). What kept the measured pairs apart was the container hostname,
+    which gz-transport derives its default partition from — an accident of one
+    deployment, with two terms either of which can silently stop differing.
+
+    So the partition is stated explicitly, and it is stated once. A hand-typed
+    partition is a value in two places and is one typo away from re-creating that
+    defect with the same silence, which is why this is a name like every other
+    name in this system rather than a string in a launch file.
+
+    No leading slash, and only lowercase letters, digits, underscores and
+    slashes: a partition is prefixed to every Gazebo topic name, and
+    gz-transport validates it as a namespace.
+    """
+    validate_identifier(zone, kind="zone")
+    if side not in SIDES:
+        raise InvalidIdentifierError(
+            f"{side!r} is not a side of a twin pair. Expected one of {SIDES}."
+        )
+    return f"{ROOT}/{zone}/{side}"
 
 
 def frame(zone: str, asset_id: str, link: str) -> str:

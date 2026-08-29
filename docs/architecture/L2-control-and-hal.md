@@ -72,7 +72,11 @@
   unless `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`).
   **Held, and this document said otherwise until 2026-08-29:** the configured rate. The model
   asks for 150 Hz and `joint_states` was measured at or above it on an idle cell — the world
-  is unthrottled, so the rate runs slightly above the configured one. The roughly 21 Hz this
+  was unthrottled when that was measured, so the rate ran slightly above the configured one.
+  **The world is throttled to real time as of
+  [ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)**, which is a ceiling on how
+  fast the server may run; what the rate is under it has not been re-measured, and nobody
+  should assume it is either the same or lower without taking the figure again. The roughly 21 Hz this
   entry recorded as a capability gap is the same host **confined to about one CPU core**, a
   condition neither this document nor ADR-0028 stated; it is a fact about a starved machine
   and not about the control stack. Figures:

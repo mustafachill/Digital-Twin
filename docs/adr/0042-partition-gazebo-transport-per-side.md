@@ -1,9 +1,17 @@
 # ADR-0042: Partition Gazebo transport per side, explicitly and never by default
 
-- **Status:** Proposed — **nothing implemented.** At `f1f914f` nothing in this repository
-  sets `GZ_PARTITION`: a grep over the whole tree returns only the campaign's own harness
-  and write-up. Promoted to `Accepted` by the change that derives a partition per side and
-  makes a missing one a bring-up failure (P7).
+- **Status:** Accepted — **promoted 2026-08-29 by the change that implemented it**, on the
+  condition this record set for itself: the partition is derived from the zone and the side
+  name, emitted into the generated bring-up plan, and a side whose process environment does
+  not carry it is refused at bring-up rather than warned about.
+  **When written this record was `Proposed` and nothing was implemented**, and that sentence
+  is kept rather than replaced: at `f1f914f` nothing in this repository set `GZ_PARTITION`,
+  and a grep over the whole tree returned only the campaign's own harness and write-up.
+  **What promotion does NOT claim.** Nothing has ever brought two sides up. The partitions
+  the generator emits for a `pair` are untested against a running counterpart, because there
+  is no counterpart launch yet; what is tested is that they are derived, that they differ,
+  that a plan without them is refused, and that every Gazebo-transport process in the one
+  launch that exists carries the one the plan names.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, on decision rule **D1** of
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
