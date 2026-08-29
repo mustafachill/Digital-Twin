@@ -1,0 +1,93 @@
+[
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link1.stl",
+    "rel": "xarm5/visual/link1.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link1.stl",
+    "hull_sha256": "64fcc62218423e5bf028fd73301370eeedc10bb433224ed72bcaab6db9123382"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link2.stl",
+    "rel": "xarm5/visual/link2.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link2.stl",
+    "hull_sha256": "89e6c1b9ee982d4f44516acdc9bb0073d426ac2419dcb2bc689b82e6d050b041"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link3.stl",
+    "rel": "xarm5/visual/link3.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link3.stl",
+    "hull_sha256": "53536de78ce511b128dc489c944f6ae987868a389205823f80641e002cfbebf0"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link4.stl",
+    "rel": "xarm5/visual/link4.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link4.stl",
+    "hull_sha256": "afaf9d739baea9f00435d02f12d959c1cf9faa93ba31ad9449def899f139e214"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link5.stl",
+    "rel": "xarm5/visual/link5.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link5.stl",
+    "hull_sha256": "6ec44578a4501294214fb809b4f1b8a62619c9877ff6f64e86fae36da9dd3245"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/xarm5/visual/link_base.stl",
+    "rel": "xarm5/visual/link_base.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link_base.stl",
+    "hull_sha256": "3efcbfcc7a3cea72cab79af8bab707a4b0ef0b76fcd1155ba6a245b51886b184"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/base_link.stl",
+    "rel": "gripper/xarm/base_link.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/base_link.stl",
+    "hull_sha256": "36d9819f07c3ed7bf103eab41107899e66d72dd1751dc401c66c605e1ce00b3f"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/left_finger.stl",
+    "rel": "gripper/xarm/left_finger.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_finger.stl",
+    "hull_sha256": "da925816f31675cd3d1984ca165eaa0e93ffb3d98c25250bbc983ee9c65efd55"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/left_inner_knuckle.stl",
+    "rel": "gripper/xarm/left_inner_knuckle.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_inner_knuckle.stl",
+    "hull_sha256": "2a051065961f8d9b1d02e66b9953b3b3be14b330530ca18052b59275799b1a8f"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/left_outer_knuckle.stl",
+    "rel": "gripper/xarm/left_outer_knuckle.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_outer_knuckle.stl",
+    "hull_sha256": "bc85284a7c9539e2d4820a6746c4a637b159cd236a44316a06f20d8c9fefb67e"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/right_finger.stl",
+    "rel": "gripper/xarm/right_finger.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_finger.stl",
+    "hull_sha256": "be22212187486c25ecf43c4c627486885df8787863dacefccf76933ba664efe5"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/right_inner_knuckle.stl",
+    "rel": "gripper/xarm/right_inner_knuckle.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_inner_knuckle.stl",
+    "hull_sha256": "ce265ddd4b0baf5d74572f41eadf8f4e3ce17ba7a1bcdd20aced43d962d2077b"
+  },
+  {
+    "path": "/workspace/workspace/install/xarm_description/share/xarm_description/meshes/gripper/xarm/right_outer_knuckle.stl",
+    "rel": "gripper/xarm/right_outer_knuckle.stl",
+    "was_symlink": true,
+    "link_target": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_outer_knuckle.stl",
+    "hull_sha256": "147b042e260070220878bd0b391c2146ebde63ce64369c859cc6a6a8719a6d1e"
+  }
+]

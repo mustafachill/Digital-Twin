@@ -1,0 +1,38 @@
+date: 2026-08-29T01:00:14Z
+commit: a8f1e3d7a52e2c9c96617aca6c808b136ea0282e
+branch: worktree-agent-a0d19ad1ef96bb655
+main: a8f1e3d7a52e2c9c96617aca6c808b136ea0282e
+uname: Darwin Mustafas-MacBook-Pro-2.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:34 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6041 arm64
+docker: 28.5.1 ncpu=12 mem=8217751552
+--- containers running at this moment ---
+--- docker stats ---
+date: 2026-08-29T05:07:22Z
+commit: 57ffd2026126e9b7318e6746d4e3405c8cc882ac
+branch: worktree-agent-a0d19ad1ef96bb655
+main: a8f1e3d7a52e2c9c96617aca6c808b136ea0282e
+uname: Darwin Mustafas-MacBook-Pro-2.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:34 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6041 arm64
+docker: 28.5.1 ncpu=12 mem=8217751552
+--- containers running at this moment ---
+supabase_db_turf-on-landing public.ecr.aws/supabase/postgres:17.6.1.155
+supabase_studio_turf-on-landing public.ecr.aws/supabase/studio:2026.08.03-sha-022b374
+supabase_pg_meta_turf-on-landing public.ecr.aws/supabase/postgres-meta:v0.96.8
+supabase_storage_turf-on-landing public.ecr.aws/supabase/storage-api:v1.68.1
+supabase_rest_turf-on-landing public.ecr.aws/supabase/postgrest:v14.15
+supabase_realtime_turf-on-landing public.ecr.aws/supabase/realtime:v2.124.2
+supabase_inbucket_turf-on-landing public.ecr.aws/supabase/mailpit:v1.30.2
+supabase_auth_turf-on-landing public.ecr.aws/supabase/gotrue:v2.195.0
+supabase_kong_turf-on-landing public.ecr.aws/supabase/kong:2.8.1
+supabase_vector_turf-on-landing public.ecr.aws/supabase/vector:0.53.0-alpine
+supabase_analytics_turf-on-landing public.ecr.aws/supabase/logflare:1.50.1
+--- docker stats ---
+supabase_db_turf-on-landing 14.77% 124MiB / 7.653GiB
+supabase_studio_turf-on-landing 0.03% 235.2MiB / 7.653GiB
+supabase_pg_meta_turf-on-landing 0.22% 164.6MiB / 7.653GiB
+supabase_storage_turf-on-landing 56.11% 332.8MiB / 7.653GiB
+supabase_rest_turf-on-landing 0.04% 125.4MiB / 7.653GiB
+supabase_realtime_turf-on-landing 0.24% 267.6MiB / 7.653GiB
+supabase_inbucket_turf-on-landing 0.00% 9.617MiB / 7.653GiB
+supabase_auth_turf-on-landing 0.02% 10.89MiB / 7.653GiB
+supabase_kong_turf-on-landing 0.02% 97.81MiB / 7.653GiB
+supabase_vector_turf-on-landing 0.00% 856KiB / 7.653GiB
+supabase_analytics_turf-on-landing 59.74% 629.9MiB / 7.653GiB

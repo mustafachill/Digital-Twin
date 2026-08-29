@@ -1,0 +1,15 @@
+{
+  "xarm5/visual/link1.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link1.stl",
+  "xarm5/visual/link2.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link2.stl",
+  "xarm5/visual/link3.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link3.stl",
+  "xarm5/visual/link4.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link4.stl",
+  "xarm5/visual/link5.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link5.stl",
+  "xarm5/visual/link_base.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/xarm5/visual/link_base.stl",
+  "gripper/xarm/base_link.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/base_link.stl",
+  "gripper/xarm/left_finger.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_finger.stl",
+  "gripper/xarm/left_inner_knuckle.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_inner_knuckle.stl",
+  "gripper/xarm/left_outer_knuckle.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/left_outer_knuckle.stl",
+  "gripper/xarm/right_finger.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_finger.stl",
+  "gripper/xarm/right_inner_knuckle.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_inner_knuckle.stl",
+  "gripper/xarm/right_outer_knuckle.stl": "symlink:/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes/gripper/xarm/right_outer_knuckle.stl"
+}

@@ -1,0 +1,16 @@
+{
+  "label": "SOLO_3",
+  "started_wall": 1787976242.8878155,
+  "domain_id": "41",
+  "gz_partition": null,
+  "sample_seconds": 120.0,
+  "ready": false,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 0
+  },
+  "ready_after_s": 39.7784698009491,
+  "launch_returncode": 1,
+  "finished_wall": 1787976282.6663413
+}

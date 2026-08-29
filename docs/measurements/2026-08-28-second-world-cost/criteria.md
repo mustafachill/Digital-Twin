@@ -7,7 +7,7 @@
   counterpart as two independent simulations. Nobody knows what the second one costs, or
   whether two can coexist on one host at all. An architect's design is blocked on that.
 - **Related:** [L5](../../architecture/L5-twin-synchronization.md),
-  [ADR-0028](../../adr/0028-generate-convex-hull-collision-meshes.md),
+  [ADR-0028](../../adr/0028-convex-hull-collision-meshes.md),
   [ADR-0011](../../adr/0011-twin-maturity-model-and-modes.md),
   charter section 4 (P7, P8)
 
@@ -129,7 +129,7 @@ comparable to the effect it is meant to size. This rule fires before any interpr
 
 ### Q3.1 — The collision-geometry A/B, the highest-value single result here
 
-[ADR-0028](../../adr/0028-generate-convex-hull-collision-meshes.md) has been `Proposed`
+[ADR-0028](../../adr/0028-convex-hull-collision-meshes.md) has been `Proposed`
 since 2026-08-25 and decides that twelve links per arm should stop colliding against their
 rendering mesh. It records that the claim it improves real-time factor **is earned by
 re-measuring, not by asserting**. This is that measurement.

@@ -1,0 +1,2 @@
+==> Running in container service 'dev': bash -lc exec python3 /workspace/docs/measurements/2026-08-28-second-world-cost/harness/cell_run.py --label PAIR_2_A --out /workspace/docs/measurements/2026-08-28-second-world-cost/raw          --sample-seconds 120 --ready-file /workspace/docs/measurements/2026-08-28-second-world-cost/raw/gate/PAIR_2_A.ready --start-gate /workspace/docs/measurements/2026-08-28-second-world-cost/raw/gate/PAIR_2.go
+

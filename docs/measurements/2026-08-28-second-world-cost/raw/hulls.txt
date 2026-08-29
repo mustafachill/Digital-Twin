@@ -1,0 +1,4 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-28-second-world-cost/harness/make_hulls.py --source /workspace/workspace/install/xarm_description/share/xarm_description/meshes --dest /workspace/docs/measurements/2026-08-28-second-world-cost/raw/hulls --subdir xarm5/visual --subdir gripper/xarm
+{"files": 13, "total_vendor_triangles": 100888, "total_hull_triangles": 10190}
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-28-second-world-cost/harness/swap_meshes.py record --install-meshes /workspace/workspace/install/xarm_description/share/xarm_description/meshes --state /workspace/docs/measurements/2026-08-28-second-world-cost/raw/mesh_swap_state.json --reference /workspace/docs/measurements/2026-08-28-second-world-cost/raw/mesh_reference.json --subdir xarm5/visual --subdir gripper/xarm
+{"recorded": 13}
