@@ -1,0 +1,25 @@
+[
+  {
+    "label": "world_only",
+    "stats": {
+      "window_sim_s": 1364.1109999999999,
+      "window_real_s": 119.883503013,
+      "rtf_window": 11.378638142164379,
+      "n_samples": 1199,
+      "rtf_reported_median": 11.267605633802816,
+      "rtf_reported_min": 0.01892319167331123,
+      "rtf_reported_max": 15.594541910331383,
+      "wall_gap_max_s": 0.13595819473266602
+    },
+    "wall_s": 120.0894627571106,
+    "cpu_cores": 1.8400448709386552,
+    "rss_total_b": 126664704
+  },
+  {
+    "label": "world_paused",
+    "stats": null,
+    "wall_s": 120.06452798843384,
+    "cpu_cores": 0.1280977842305065,
+    "rss_total_b": 126795776
+  }
+]

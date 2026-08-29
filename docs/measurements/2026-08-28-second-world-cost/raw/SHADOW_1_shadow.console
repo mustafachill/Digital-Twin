@@ -1,0 +1,2 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-28-second-world-cost/harness/shadow_side.py --label SHADOW_1_shadow --out /workspace/docs/measurements/2026-08-28-second-world-cost/raw --plant-domain 41 --sample-seconds 120 --gate /workspace/docs/measurements/2026-08-28-second-world-cost/raw/gate/SHADOW_1.go
+{"cpu_cores_used": 0.08649930070707286, "rss_total_b": 79368192, "messages_relayed": {"arm_1": 18973, "arm_2": 18973, "arm_3": 18973}}

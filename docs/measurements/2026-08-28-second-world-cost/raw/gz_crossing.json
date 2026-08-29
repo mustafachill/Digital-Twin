@@ -1,0 +1,224 @@
+[
+  {
+    "arm": "shared_partition",
+    "partition_1": null,
+    "partition_2": null,
+    "first_ready": true,
+    "second_ready": true,
+    "seen_from_first": {
+      "topics": [
+        "/cite/cell_a/beam_c1_out/detection",
+        "/cite/cell_a/beam_c2_out/detection",
+        "/cite/cell_a/beam_c3_out/detection",
+        "/cite/cell_a/beam_pick/detection",
+        "/cite/cell_a/conveyor_1/command",
+        "/cite/cell_a/conveyor_1/state",
+        "/cite/cell_a/conveyor_2/command",
+        "/cite/cell_a/conveyor_2/state",
+        "/cite/cell_a/conveyor_3/command",
+        "/cite/cell_a/conveyor_3/state",
+        "/clock",
+        "/gazebo/resource_paths",
+        "/stats",
+        "/world/cell_a/clock",
+        "/world/cell_a/dynamic_pose/info",
+        "/world/cell_a/light_config",
+        "/world/cell_a/material_color",
+        "/world/cell_a/pose/info",
+        "/world/cell_a/scene/deletion",
+        "/world/cell_a/scene/info",
+        "/world/cell_a/state",
+        "/world/cell_a/stats"
+      ],
+      "/world/cell_a/stats": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.WorldStatistics",
+          "tcp://192.168.48.2:37665, gz.msgs.WorldStatistics"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.WorldStatistics\n  tcp://192.168.48.2:37665, gz.msgs.WorldStatistics\nNo subscribers on topic [/world/cell_a/stats]"
+      },
+      "/world/cell_a/clock": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Clock",
+          "tcp://192.168.48.2:37665, gz.msgs.Clock"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Clock\n  tcp://192.168.48.2:37665, gz.msgs.Clock\nNo subscribers on topic [/world/cell_a/clock]"
+      },
+      "/cite/cell_a/conveyor_1/command": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Double",
+          "tcp://192.168.48.2:37665, gz.msgs.Double"
+        ],
+        "raw": "No publishers on topic [/cite/cell_a/conveyor_1/command]\nSubscribers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Double\n  tcp://192.168.48.2:37665, gz.msgs.Double"
+      },
+      "/cite/cell_a/beam_pick/detection": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Boolean",
+          "tcp://192.168.48.2:37665, gz.msgs.Boolean"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Boolean\n  tcp://192.168.48.2:37665, gz.msgs.Boolean\nNo subscribers on topic [/cite/cell_a/beam_pick/detection]"
+      }
+    },
+    "seen_from_second": {
+      "topics": [
+        "/cite/cell_a/beam_c1_out/detection",
+        "/cite/cell_a/beam_c2_out/detection",
+        "/cite/cell_a/beam_c3_out/detection",
+        "/cite/cell_a/beam_pick/detection",
+        "/cite/cell_a/conveyor_1/command",
+        "/cite/cell_a/conveyor_1/state",
+        "/cite/cell_a/conveyor_2/command",
+        "/cite/cell_a/conveyor_2/state",
+        "/cite/cell_a/conveyor_3/command",
+        "/cite/cell_a/conveyor_3/state",
+        "/clock",
+        "/gazebo/resource_paths",
+        "/stats",
+        "/world/cell_a/clock",
+        "/world/cell_a/dynamic_pose/info",
+        "/world/cell_a/light_config",
+        "/world/cell_a/material_color",
+        "/world/cell_a/pose/info",
+        "/world/cell_a/scene/deletion",
+        "/world/cell_a/scene/info",
+        "/world/cell_a/state",
+        "/world/cell_a/stats"
+      ],
+      "/world/cell_a/stats": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.WorldStatistics",
+          "tcp://192.168.48.2:37665, gz.msgs.WorldStatistics"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.WorldStatistics\n  tcp://192.168.48.2:37665, gz.msgs.WorldStatistics\nNo subscribers on topic [/world/cell_a/stats]"
+      },
+      "/world/cell_a/clock": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Clock",
+          "tcp://192.168.48.2:37665, gz.msgs.Clock"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Clock\n  tcp://192.168.48.2:37665, gz.msgs.Clock\nNo subscribers on topic [/world/cell_a/clock]"
+      },
+      "/cite/cell_a/conveyor_1/command": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Double",
+          "tcp://192.168.48.2:37665, gz.msgs.Double"
+        ],
+        "raw": "No publishers on topic [/cite/cell_a/conveyor_1/command]\nSubscribers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Double\n  tcp://192.168.48.2:37665, gz.msgs.Double"
+      },
+      "/cite/cell_a/beam_pick/detection": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:42035, gz.msgs.Boolean",
+          "tcp://192.168.48.2:37665, gz.msgs.Boolean"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:42035, gz.msgs.Boolean\n  tcp://192.168.48.2:37665, gz.msgs.Boolean\nNo subscribers on topic [/cite/cell_a/beam_pick/detection]"
+      }
+    }
+  },
+  {
+    "arm": "distinct_partition",
+    "partition_1": "cite_plant",
+    "partition_2": "cite_virtual",
+    "first_ready": true,
+    "second_ready": true,
+    "seen_from_first": {
+      "topics": [
+        "/cite/cell_a/beam_c1_out/detection",
+        "/cite/cell_a/beam_c2_out/detection",
+        "/cite/cell_a/beam_c3_out/detection",
+        "/cite/cell_a/beam_pick/detection",
+        "/cite/cell_a/conveyor_1/command",
+        "/cite/cell_a/conveyor_1/state",
+        "/cite/cell_a/conveyor_2/command",
+        "/cite/cell_a/conveyor_2/state",
+        "/cite/cell_a/conveyor_3/command",
+        "/cite/cell_a/conveyor_3/state",
+        "/clock",
+        "/gazebo/resource_paths",
+        "/stats",
+        "/world/cell_a/clock",
+        "/world/cell_a/dynamic_pose/info",
+        "/world/cell_a/light_config",
+        "/world/cell_a/material_color",
+        "/world/cell_a/pose/info",
+        "/world/cell_a/scene/deletion",
+        "/world/cell_a/scene/info",
+        "/world/cell_a/state",
+        "/world/cell_a/stats"
+      ],
+      "/world/cell_a/stats": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:36461, gz.msgs.WorldStatistics"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:36461, gz.msgs.WorldStatistics\nNo subscribers on topic [/world/cell_a/stats]"
+      },
+      "/world/cell_a/clock": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:36461, gz.msgs.Clock"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:36461, gz.msgs.Clock\nNo subscribers on topic [/world/cell_a/clock]"
+      },
+      "/cite/cell_a/conveyor_1/command": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:36461, gz.msgs.Double"
+        ],
+        "raw": "No publishers on topic [/cite/cell_a/conveyor_1/command]\nSubscribers [Address, Message Type]:\n  tcp://192.168.48.2:36461, gz.msgs.Double"
+      },
+      "/cite/cell_a/beam_pick/detection": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:36461, gz.msgs.Boolean"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:36461, gz.msgs.Boolean\nNo subscribers on topic [/cite/cell_a/beam_pick/detection]"
+      }
+    },
+    "seen_from_second": {
+      "topics": [
+        "/cite/cell_a/beam_c1_out/detection",
+        "/cite/cell_a/beam_c2_out/detection",
+        "/cite/cell_a/beam_c3_out/detection",
+        "/cite/cell_a/beam_pick/detection",
+        "/cite/cell_a/conveyor_1/command",
+        "/cite/cell_a/conveyor_1/state",
+        "/cite/cell_a/conveyor_2/command",
+        "/cite/cell_a/conveyor_2/state",
+        "/cite/cell_a/conveyor_3/command",
+        "/cite/cell_a/conveyor_3/state",
+        "/clock",
+        "/gazebo/resource_paths",
+        "/stats",
+        "/world/cell_a/clock",
+        "/world/cell_a/dynamic_pose/info",
+        "/world/cell_a/light_config",
+        "/world/cell_a/material_color",
+        "/world/cell_a/pose/info",
+        "/world/cell_a/scene/deletion",
+        "/world/cell_a/scene/info",
+        "/world/cell_a/state",
+        "/world/cell_a/stats"
+      ],
+      "/world/cell_a/stats": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:34279, gz.msgs.WorldStatistics"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:34279, gz.msgs.WorldStatistics\nNo subscribers on topic [/world/cell_a/stats]"
+      },
+      "/world/cell_a/clock": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:34279, gz.msgs.Clock"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:34279, gz.msgs.Clock\nNo subscribers on topic [/world/cell_a/clock]"
+      },
+      "/cite/cell_a/conveyor_1/command": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:34279, gz.msgs.Double"
+        ],
+        "raw": "No publishers on topic [/cite/cell_a/conveyor_1/command]\nSubscribers [Address, Message Type]:\n  tcp://192.168.48.2:34279, gz.msgs.Double"
+      },
+      "/cite/cell_a/beam_pick/detection": {
+        "publisher_lines": [
+          "tcp://192.168.48.2:34279, gz.msgs.Boolean"
+        ],
+        "raw": "Publishers [Address, Message Type]:\n  tcp://192.168.48.2:34279, gz.msgs.Boolean\nNo subscribers on topic [/cite/cell_a/beam_pick/detection]"
+      }
+    }
+  }
+]

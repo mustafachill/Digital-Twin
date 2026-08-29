@@ -1,0 +1,17 @@
+==> Running in container service 'dev': bash -lc export GZ_SIM_SYSTEM_PLUGIN_PATH=/opt/ros/jazzy/lib:${GZ_SIM_SYSTEM_PLUGIN_PATH:-};
+gz sim -s -r -v 1 /workspace/workspace/src/cite_generated/worlds/cell_a.sdf >/tmp/gz.log 2>&1 &
+for i in $(seq 1 60); do gz topic --list 2>/dev/null | grep -q /world/cell_a/stats && break; sleep 1; done
+sleep 25
+echo "HOSTNAME=$(hostname)"
+echo "GZ_PARTITION=${GZ_PARTITION:-<unset>}"
+gz topic --info -t /world/cell_a/stats
+gz topic --info -t /cite/cell_a/conveyor_1/command
+kill %1 2>/dev/null; wait 2>/dev/null
+HOSTNAME=7154c4af0351
+GZ_PARTITION=<unset>
+Publishers [Address, Message Type]:
+  tcp://192.168.48.2:42711, gz.msgs.WorldStatistics
+No subscribers on topic [/world/cell_a/stats]
+No publishers on topic [/cite/cell_a/conveyor_1/command]
+Subscribers [Address, Message Type]:
+  tcp://192.168.48.2:42711, gz.msgs.Double

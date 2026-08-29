@@ -1,0 +1,98 @@
+{
+  "meshes": [
+    {
+      "mesh": "xarm5/visual/link1.stl",
+      "vendor_triangles": 3760,
+      "hull_triangles": 1084,
+      "vendor_bytes": 188084,
+      "hull_bytes": 54284
+    },
+    {
+      "mesh": "xarm5/visual/link2.stl",
+      "vendor_triangles": 26118,
+      "hull_triangles": 2248,
+      "vendor_bytes": 1305984,
+      "hull_bytes": 112484
+    },
+    {
+      "mesh": "xarm5/visual/link3.stl",
+      "vendor_triangles": 8824,
+      "hull_triangles": 1692,
+      "vendor_bytes": 441284,
+      "hull_bytes": 84684
+    },
+    {
+      "mesh": "xarm5/visual/link4.stl",
+      "vendor_triangles": 7659,
+      "hull_triangles": 1412,
+      "vendor_bytes": 383034,
+      "hull_bytes": 70684
+    },
+    {
+      "mesh": "xarm5/visual/link5.stl",
+      "vendor_triangles": 2596,
+      "hull_triangles": 380,
+      "vendor_bytes": 129884,
+      "hull_bytes": 19084
+    },
+    {
+      "mesh": "xarm5/visual/link_base.stl",
+      "vendor_triangles": 2464,
+      "hull_triangles": 324,
+      "vendor_bytes": 123284,
+      "hull_bytes": 16284
+    },
+    {
+      "mesh": "gripper/xarm/base_link.stl",
+      "vendor_triangles": 24227,
+      "hull_triangles": 2110,
+      "vendor_bytes": 1211434,
+      "hull_bytes": 105584
+    },
+    {
+      "mesh": "gripper/xarm/left_finger.stl",
+      "vendor_triangles": 4852,
+      "hull_triangles": 204,
+      "vendor_bytes": 242684,
+      "hull_bytes": 10284
+    },
+    {
+      "mesh": "gripper/xarm/left_inner_knuckle.stl",
+      "vendor_triangles": 7324,
+      "hull_triangles": 166,
+      "vendor_bytes": 366284,
+      "hull_bytes": 8384
+    },
+    {
+      "mesh": "gripper/xarm/left_outer_knuckle.stl",
+      "vendor_triangles": 444,
+      "hull_triangles": 100,
+      "vendor_bytes": 22284,
+      "hull_bytes": 5084
+    },
+    {
+      "mesh": "gripper/xarm/right_finger.stl",
+      "vendor_triangles": 4852,
+      "hull_triangles": 204,
+      "vendor_bytes": 242684,
+      "hull_bytes": 10284
+    },
+    {
+      "mesh": "gripper/xarm/right_inner_knuckle.stl",
+      "vendor_triangles": 7324,
+      "hull_triangles": 166,
+      "vendor_bytes": 366284,
+      "hull_bytes": 8384
+    },
+    {
+      "mesh": "gripper/xarm/right_outer_knuckle.stl",
+      "vendor_triangles": 444,
+      "hull_triangles": 100,
+      "vendor_bytes": 22284,
+      "hull_bytes": 5084
+    }
+  ],
+  "total_vendor_triangles": 100888,
+  "total_hull_triangles": 10190,
+  "reduction": 9.900686947988223
+}

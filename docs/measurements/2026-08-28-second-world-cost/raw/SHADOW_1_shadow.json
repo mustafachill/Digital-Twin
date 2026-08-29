@@ -1,0 +1,26 @@
+{
+  "label": "SHADOW_1_shadow",
+  "virtual_domain": 87,
+  "plant_domain": 41,
+  "receiving_at_start": {
+    "arm_1": 34,
+    "arm_2": 32,
+    "arm_3": 32
+  },
+  "messages_relayed": {
+    "arm_1": 18973,
+    "arm_2": 18973,
+    "arm_3": 18973
+  },
+  "wall_s": 120.00097012519836,
+  "cpu_by_pid": {
+    "7": {
+      "comm": "python3",
+      "cpu_s": 10.38,
+      "cmd": "python3 /workspace/docs/measurements/2026-08-28-second-world-cost/harness/shadow_side.py --label SHADOW_1_shadow --out /workspace/docs/measurements/2026-08-28-second-world-cost/raw --plant-domain 41 --sample-seconds 120 --gate /workspace/do"
+    }
+  },
+  "cpu_total_s": 10.38,
+  "cpu_cores_used": 0.08649930070707286,
+  "rss_total_b": 79368192
+}
