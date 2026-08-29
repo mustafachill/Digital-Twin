@@ -1,8 +1,44 @@
 # ADR-0011: Adopt the twin maturity model and operating modes
 
-- **Status:** Accepted
+- **Status:** Accepted — **amended 2026-08-29, and the amendment adds a mode without
+  touching a level.** The five maturity levels below, their mapping to the literature and
+  the commitment that follows them are unchanged and still bind. What changed is the mode
+  set: [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md) adds a sixth
+  operating mode, and the sentence naming five modes is qualified in place. See the section
+  named "Amendment — 2026-08-29: a sixth operating mode, and no sixth level" below.
 - **Date:** 2026-08-24
-- **Related:** ADR-0005, ADR-0016, charter §2, `docs/architecture/L5-twin-synchronization.md`
+- **Related:** ADR-0005, ADR-0016,
+  [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)
+  (added by the 2026-08-29 amendment), charter §2,
+  `docs/architecture/L5-twin-synchronization.md`
+
+## Amendment — 2026-08-29: a sixth operating mode, and no sixth level
+
+**This is an amendment, not a correction.** Nothing in this record was measured false and
+nothing in it is withdrawn. The Decision below defines five maturity levels and then states
+that L5 exposes them as five operating modes. The first half stands. The second half was
+not wide enough, and Phase 2.A is what found the gap.
+
+The operating mode a Phase 2.A pair needs is: **an operator commands the virtual side, the
+far side follows and actuates, and nothing mirrors back.** None of the five expresses it.
+`SIM` and `REAL` each idle one side. `SHADOW` and `VALIDATED` are defined by a flow *from*
+the physical side. `CLOSED_LOOP` has the direction but is defined by the validation gate in
+front of it, which this flow does not have. So `TwinMode` gains
+**`MODE_VIRTUAL_LEAD = 5`**, decided by the project owner and specified in
+[ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2, which
+carries the reasoning, the gating and the rejected alternative. It is **cited and not
+restated** (P1).
+
+**No level is added, moved, or claimed.** The mode carries L3's *direction* without L3's
+*validation gate*, and the level table below is the definition that matters: a claim about
+this system still has to name a level, and the existence of a mode is not a level. In
+Phase 2.A there is no physical side at all, so the level is L0 whichever mode is in force.
+
+**How this needed amending at all.** This record derived a mode set from a maturity ladder,
+and the two are not the same axis: a level is defined by where information *flows from*, and
+a mode is defined by where commands *enter and land*. Four of the five modes happened to
+coincide with a level, which made the two look like one axis until Phase 2.A asked for a
+flow no level names. A mode set derived from a level set is complete only by accident.
 
 ## Context
 
@@ -53,8 +89,9 @@ Five levels, and every claim about the system must name one:
 | L4 | Predictive | virtual ahead of real | functional *predictive/prescriptive* |
 
 L5 exposes these as runtime **operating modes**: `SIM`, `REAL`, `SHADOW`, `VALIDATED`,
-`CLOSED_LOOP`. Mode is explicit, observable at runtime, and gated — never a default that
-can be reached by accident.
+`CLOSED_LOOP`. **[Amended 2026-08-29 — a sixth mode, `VIRTUAL_LEAD`, was added; see the
+Amendment section above.]** Mode is explicit, observable at runtime, and gated — never a
+default that can be reached by accident.
 
 **Commitment: reach L2 with rigor, then L3, and architect so that L4 needs no
 re-foundation.** L2 is the level that matters most. A shadow whose error nobody measures

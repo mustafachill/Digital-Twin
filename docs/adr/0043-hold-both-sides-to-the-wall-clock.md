@@ -190,7 +190,28 @@ measurement and should be re-taken on the target machine.
   the generator's existing comment names, and this decision accepts it.
 - **Every wall-clock ceiling in the scenario suite is justified against a real-time factor**
   (`tests/scenarios/bringup.py`, quoted in ADR-0028), so the change that lands this must
-  revisit them rather than discovering them by timeout.
+  revisit them rather than discovering them by timeout. **The four names to revisit, so that
+  nobody finds them by watching a job time out:** `BRING_UP_CEILING_S`, `CYCLE_CEILING_S`,
+  `LEG_CEILING_S` and `SKILL_CEILING_S`. They live in three files — `SKILL_CEILING_S` in
+  `tests/scenarios/bringup.py`, `CYCLE_CEILING_S` in `tests/scenarios/pick_and_place.py`,
+  `LEG_CEILING_S` in `tests/scenarios/continuous_line.py` — and `BRING_UP_CEILING_S` is
+  declared separately in all three and does not carry the same value in all three, so it is
+  three constants wearing one name and must be revisited three times.
+- **The regression is bounded, and the bound is small enough to state.** A throttle is a
+  *ceiling*, so on a machine already below 1.0 it changes nothing at all and no ceiling moves.
+  Where a machine free-runs above 1.0, wall time grows by exactly the factor it was
+  free-running at, so the growth is bounded by that machine's own free-running real-time
+  factor. **The largest this project has ever observed is 1.663**, on the campaign host, idle,
+  under hull collision geometry; with the vendor meshes the scenarios actually run today it
+  was 1.097. Both are the campaign's figures and neither is a prediction for another machine —
+  but the shape of the answer is settled: a scenario cannot become more than its host's
+  free-running factor slower, and cannot become slower at all below 1.0.
+- **This must not land while the ceiling audit is in flight.** A campaign is auditing the
+  scenario wall-clock ceilings as this is written. Throttling changes the quantity that
+  campaign is measuring, so landing half 1 mid-campaign invalidates its baseline and the
+  audit would have to start again. The sequencing is: the audit completes, then the throttle
+  lands, then the ceilings are re-derived against 1.0. Not the other order, and not both at
+  once.
 - **How much slower, on this project's own development host, is not known** — and that is a
   gap in the tree rather than in this record. The tree records RTF **0.14** with
   `joint_states` at roughly 21 Hz; the campaign measured **1.097** and 158 Hz on an idle cell
@@ -220,3 +241,26 @@ measurement and should be re-taken on the target machine.
   environment variable to make a slow job finish.
 - **When something measures RTF under load.** Every figure here is from an idle cell, and item
   4 is the reason this list is not the last word.
+- **If the friction-grasp re-run says that hulls break the grasp.** Item 1 above rests on
+  [ADR-0028](0028-convex-hull-collision-meshes.md), and that record's 2026-08-29 amendment
+  gates its own promotion on a measurement that **can fail**: the friction-grasp campaign must
+  be re-run under hull collision geometry, and no grasp has ever been attempted under one. A
+  convex hull fills the space between the gripper fingers, and grasping in this cell is held
+  by friction alone ([ADR-0029](0029-simulated-grasping-by-friction.md)), so the contact
+  surface *is* the mechanism. **If that re-run fails, the only demonstrated path to "both
+  sides sustain 1.0" on a machine of the campaign host's class is gone** — the pair meeting
+  the condition met it with hulls, and the same pair with vendor meshes missed it.
+  Two fallbacks, named now so that the answer is not improvised then:
+  1. **Per-link geometry for the fingers, hulls everywhere else.** This is ADR-0028's own
+     stated answer to the concavity biting — *"per-link geometry for the fingers, not
+     abandoning hulls elsewhere"* — and the fingers are a small fraction of the twelve links
+     the reduction comes from, so most of the speed should survive. **Should** is the right
+     word: nothing has measured a mixed-geometry cell, and this fallback is a plan rather than
+     a result.
+  2. **A faster machine.** Without hulls the requirement in item 1 is at least 1.16x the
+     campaign host's per-core throughput, reaching 1.0 with no margin — and item 4 says a
+     machine sized at no margin will not hold 1.0 through a working run. So this fallback is a
+     hardware budget with an unmeasured top-up, not a substitution.
+  If neither is available, **this record's requirement still stands and 2.A waits for a
+  machine that meets it.** The requirement is not relaxed to fit the host; that is
+  [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)'s standing instruction.

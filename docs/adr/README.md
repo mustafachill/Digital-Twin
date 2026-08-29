@@ -102,7 +102,7 @@ not rewritten either.
 | [0008](0008-external-dependencies-via-vcstool.md) | Consume external sources via a pinned manifest | Accepted |
 | [0009](0009-docker-primary-environment.md) | Make Docker the primary environment | Accepted |
 | [0010](0010-typed-ros-interfaces.md) | Require typed ROS interfaces | Accepted |
-| [0011](0011-twin-maturity-model-and-modes.md) | Adopt the twin maturity model and operating modes | Accepted |
+| [0011](0011-twin-maturity-model-and-modes.md) | Adopt the twin maturity model and operating modes | Accepted (amended 2026-08-29) |
 | [0012](0012-large-asset-storage.md) | Store large assets by manifest, not Git LFS | Accepted |
 | [0013](0013-host-agnostic-tooling.md) | Keep a host-agnostic tooling layer | Accepted |
 | [0014](0014-monorepo.md) | Use a monorepo | Accepted |
@@ -119,7 +119,7 @@ not rewritten either.
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted (corrected 2026-08-27) |
 | [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26 and 2026-08-27) |
-| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed (amended 2026-08-29) |
+| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed (amended and corrected 2026-08-29) |
 | [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
 | [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |

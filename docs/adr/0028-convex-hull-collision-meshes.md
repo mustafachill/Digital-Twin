@@ -16,8 +16,15 @@
   measured cost and never correctness, and this record's own warning about the gripper's
   filled concavity is still untested. What promotion now additionally requires is in the
   section named "Amendment — 2026-08-29: the re-measurement landed, and the promotion gate
-  is stated", immediately after this block. **Nothing here was measured false**, which is
-  why this is an amendment and not a correction.
+  is stated", below.
+  **Corrected on the same day, for a different claim.** The decision stands entire and so
+  does every argument for it. What does not stand is the *form* of one supporting figure: the
+  Context section states real-time factor on the development host as **0.14**, flatly, with no
+  condition and no machine, and a campaign on a host of that class could not reproduce it. See
+  the section named "Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact
+  and carries no condition", immediately after this block. **The urgency the figure was cited
+  for survives the correction** — it is re-established by the campaign, on figures the
+  campaign did register.
 - **Date:** 2026-08-25
 - **Deciders:** Project owner, on the real-time-factor measurement from the Phase 1.C review wave
 - **Related:** [ADR-0004](0004-facility-model-single-source-of-truth.md),
@@ -29,6 +36,53 @@
   [L1](../architecture/L1-description-and-assets.md), [`../../assets/README.md`](../../assets/README.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   CLAUDE.md §10, charter §4 (P1, P5, P8)
+
+## Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact and carries no condition
+
+**What is wrong is the claim's form, not necessarily its number.** The Context section below
+says *"Real-time factor on the development host is **0.14**"* — present tense, a machine class
+rather than a machine, and no statement of what the cell was doing at the time. Read as
+written it is a reproducible property of anyone's development host. It is not one.
+
+The campaign [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md)
+measured an idle three-arm cell on a host of that class and **could not reproduce it**; its
+*"An absolute, and a contradiction"* section records the gap as a factor of **7.8** and states
+plainly that **the figure in the tree carries no condition and no machine**. The campaign is
+equally plain that it **does not replace the number**, because it did not measure the same
+thing: the two halves of the recorded figure — the real-time factor and the `joint_states`
+rate — are internally consistent with each other, so whatever produced them was a genuinely
+much slower configuration. A different Mac, a different Docker CPU allocation, or a cell that
+was not idle. **The record does not say which, and neither does this correction.**
+
+**No number is substituted here, deliberately.** A campaign is re-measuring the development
+host's real-time factor with its condition written down, and this record must not front-run
+it. Until that lands, the correct way to cite the figure is *"0.14 was recorded, under a
+condition nobody wrote down, and does not reproduce"* — never *"the development host runs at
+0.14"*.
+
+**What survives, and it is the part the decision rested on.** The urgency this record claimed
+is not weakened. It is now carried by figures the campaign *did* register: collision geometry
+is a material contributor on a pre-registered A/B (`G` in the band `1.25 <= G < 2.0`), the
+geometry counts in the Context section were independently recomputed and reproduced exactly,
+and a pair of cells misses real time with vendor meshes and meets it with hulls. **The
+decision, all four parts of it, and the amendment's promotion gate are untouched.** So is the
+observation that every wall-clock ceiling in the scenario suite was chosen against 0.14 —
+that is a fact about how the ceilings were written, and it stays true whatever the figure was.
+
+**This qualification travels with the number.** It applies wherever 0.14 appears in this
+record, including the two places that use it as a re-measurement baseline; those read
+correctly as "the figure recorded in the tree", not as a measured property of a machine.
+
+**How the error survived review.** The figure entered as an observation on one machine on one
+day and was written down as a present-tense property of "the development host" — one sentence,
+no condition, no date, no machine. From there it was quoted into `CLAUDE.md` and into
+`tests/scenarios/bringup.py`, where it became load-bearing for every wall-clock ceiling in the
+suite, and each quotation made it look better attested than it was. Nobody could have
+challenged it by reading, because the sentence contained nothing to challenge: **a measurement
+with no condition attached cannot be contradicted, only re-taken.** The transferable rule is
+the one this project already applies to campaign results and had not yet applied to a figure
+in prose — state who measured it, on what machine, doing what, and over how many runs, or do
+not state it.
 
 ## Amendment — 2026-08-29: the re-measurement landed, and the promotion gate is stated
 
@@ -158,7 +212,8 @@ Three links per arm carry no geometry at all — `link_eef`, `link_tcp`, and the
 Real-time factor on the development host is **0.14** — `/cite/cell_a/arm_1/joint_states`
 arrives at roughly **21 Hz** against the **150 Hz** the model configures
 (`xarm5.yaml: control.update_rate_hz: 150`, generated into
-`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`). The figure is
+`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`).
+**[Corrected 2026-08-29 — see the Correction section above.]** The figure is
 recorded in the tree at `tests/scenarios/bringup.py`, where every wall-clock ceiling in the
 bring-up scenario is justified against it.
 
