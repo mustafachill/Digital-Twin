@@ -15,11 +15,50 @@ plan:
   static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
   topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml
 
+  # The sides this zone runs, and the Gazebo transport partition each one runs
+  # in. One side on an untwinned zone; two where the zone declares
+  # `twin.sides: pair` (ADR-0041).
+  #
+  # `ROS_DOMAIN_ID` does not isolate Gazebo transport, and that was MEASURED
+  # rather than suspected: two `gz sim` servers in one container on separate ROS
+  # domains produced two publishers on one world's stats topic and two
+  # subscribers on one belt's command topic, so a single conveyor setpoint would
+  # have started both cells' belts with nothing logged. What kept the measured
+  # pairs apart was the container hostname, which gz-transport derives its
+  # default partition from — an accident of one deployment, invisible at runtime,
+  # and gone the moment two sides share a container or a network namespace
+  # (ADR-0042).
+  #
+  # Emitted here rather than computed at launch because a partition is a NAME, in
+  # the same class as every other name this plan carries: emitting it means a
+  # reviewer sees it in a diff and ./scripts/validate-model checks it. Bring-up
+  # refuses to start a side whose process environment does not carry the value
+  # named here — never a warning, because what it guards against produces no
+  # symptom.
+  #
+  # A developer attaching `gz topic -e` to a running side must set the same
+  # GZ_PARTITION or the topic list comes back empty rather than wrong.
+  sides:
+{% for side in sides %}
+    - name: {{ side.name }}
+      gz_partition: {{ side.gz_partition }}
+{% endfor %}
+
   controller_managers:
 {% for manager in managers %}
     - asset: {{ manager.asset }}
       node: {{ manager.node }}
       backend: {{ manager.backend }}
+{% if manager.counterpart_backend %}
+      # What the counterpart side of this asset loads. Present only on a paired
+      # zone, and carrying the fallback already applied: an instance that writes
+      # no `counterpart_backend` in L0 loads the same plugin on both sides, so
+      # this states the backend of a side that exists rather than repeating a key
+      # the model left out (ADR-0041, Decision 3). The hardware opt-in reads
+      # every side's backend, so a physical counterpart refuses to start without
+      # it exactly as a physical plant would.
+      counterpart_backend: {{ manager.counterpart_backend }}
+{% endif %}
       # `simulator` means the controller manager is created inside the Gazebo
       # process by gz_ros2_control, so there is no separate process to wait on —
       # the spawner's service-availability wait is the synchronisation point.

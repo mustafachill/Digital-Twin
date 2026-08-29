@@ -198,6 +198,29 @@ Then suspect collision geometry. A dense visual mesh reused as collision geometr
 first-rank cause of a collapsed real-time factor. `model-validator` catches it;
 `performance-engineer` measures it.
 
+### `gz topic -l` lists nothing while the cell is plainly running
+
+Not a fault. Every Gazebo process in a bring-up is started in an explicit transport
+partition, taken from the generated plan
+([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md)), and a `gz` client started
+without the same partition sees an empty transport rather than an error. This is the one
+ergonomic cost of that decision, and it is deliberate: `ROS_DOMAIN_ID` does not isolate
+Gazebo transport at all, and what used to isolate two cells was the container hostname —
+an accident that disappears the moment two sides share a container.
+
+Take the value from the plan rather than typing it, then use `gz` as before:
+
+```bash
+export GZ_PARTITION="$(./scripts/enter dev python3 -c '
+from cite_bringup.plan import default_plan_path, load
+print(load(default_plan_path()).sides[0].gz_partition)')"
+gz topic -l
+```
+
+If bring-up itself refuses with a message naming `GZ_PARTITION` or `sides:`, that is not this
+problem: the plan is stale or was hand-edited. Run `./scripts/validate-model --write`, then
+`./scripts/build`.
+
 ### Bring-up fails on the second attempt
 
 Orphaned processes from the first.

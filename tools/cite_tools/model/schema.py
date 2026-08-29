@@ -809,7 +809,61 @@ class HardwareSelection(Strict):
     """
 
     backend: Identifier
+    #: What the COUNTERPART side of this instance loads, where the two sides
+    #: differ. Absent means the same backend as ``backend`` (ADR-0041,
+    #: Decision 3).
+    #:
+    #: ``backend`` is a scalar with no side index: it says which plugin *this
+    #: instance* loads, and in a twin pair this instance exists on both sides. So
+    #: a backend is selected per (asset, side), and the only thing ever written
+    #: per asset is a side that DIFFERS from the plant — which is a genuine
+    #: per-asset fact. 2.A writes nothing here at all: the zone says ``pair``,
+    #: both sides are ``sim`` because the plant is.
+    #:
+    #: This one may have a fallback where ``backend`` may not, and the fallback
+    #: is what preserves that field's property rather than weakening it: **no
+    #: omitted key can produce a non-sim value anywhere**, because the value it
+    #: falls back to is itself required and explicit. A counterpart becomes
+    #: physical only by someone writing it, and the bring-up refusal in
+    #: `cite_bringup.plan.require_hardware_opt_in` then fires on it.
+    counterpart_backend: Identifier | None = None
     params: dict[str, str | bool | int | float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _counterpart_defaults_to_the_plant(self) -> HardwareSelection:
+        """Apply the fallback at load, so the two spellings are one model.
+
+        ``counterpart_backend: sim`` written out and ``counterpart_backend``
+        omitted describe the same facility, by the definition of the fallback, so
+        they must be the same loaded model — and `model_hash` is why that matters
+        rather than being tidiness. The hash is taken over this object graph and
+        identifies *the facility that was described*; without this, one facility
+        would carry two identities depending on how explicitly it was written,
+        and an L6 recording stamped with one would not match the other.
+
+        Every other optional field in this schema already has that property for
+        free, because pydantic materialises a literal default. This one cannot
+        have a literal default — the value it falls back to is a sibling field —
+        which is the whole reason it needs a validator instead.
+
+        The authored model still shows the distinction, which is where ADR-0041
+        wanted it: an untwinned instance writes nothing, and ``git diff`` shows
+        exactly the assets whose counterpart differs.
+        """
+        if self.counterpart_backend is None:
+            return self.model_copy(update={"counterpart_backend": self.backend})
+        return self
+
+    @property
+    def effective_counterpart_backend(self) -> str:
+        """The backend the counterpart side loads.
+
+        Reads through the normalisation above rather than repeating it, and
+        exists so that a consumer never has to decide what a `None` means — after
+        validation there is no `None` here, and the ``or`` is a type-narrowing
+        formality rather than a second statement of the rule.
+        """
+        return self.counterpart_backend or self.backend
 
 
 class EndEffectorSelection(Strict):
@@ -973,6 +1027,38 @@ class ZoneBounds(Strict):
     max_m: Triple
 
 
+class TwinSpec(Strict):
+    """Whether this zone is modelled as one cell or as a twinned pair.
+
+    ADR-0041's Decision 3, and it is a ZONE fact written once rather than an
+    asset fact written per instance. In Phase 2.A the counterpart is a complete
+    second simulation of the cell, so its world contains every asset whether or
+    not anyone wanted that asset twinned; "arm_1 is paired but conveyor_1 is not"
+    has no meaning there, and writing the same deployment fact on fifteen
+    instances is P1 at a different granularity.
+
+    There is deliberately no ``counterpart`` field and no ``none`` sentinel.
+    Twinned is DERIVED — an asset is twinned exactly when its zone declares a
+    second side — because a sentinel is a way of making an untwinned asset
+    declare that it is untwinned, and it crosses with `HardwareSelection` to give
+    one physical situation two encodings.
+
+    The two sides are named ``plant`` and ``counterpart``, structurally: `plant`
+    is the side the untwinned model already describes and that every Phase 1
+    artifact, scenario and script already addresses, and `counterpart` is the
+    side that exists only where the zone is a `pair`. Nothing in that naming
+    moves when `TwinMode` moves, which is what makes it safe to derive a Gazebo
+    transport partition from (ADR-0042). The names themselves are mechanism and
+    live in `cite_tools.model.ids`, never here.
+    """
+
+    #: Required, with no default, for the same reason `HardwareSelection.backend`
+    #: is: this decides how many machines the model describes, and a second cell
+    #: must not appear because a key was omitted. The churn that costs is one
+    #: line in one file, which is what moving the fact to zone scope bought.
+    sides: Literal["single", "pair"]
+
+
 class Zone(Strict):
     """A named region. Zones partition; they do not nest.
 
@@ -983,6 +1069,7 @@ class Zone(Strict):
     id: Identifier
     name: str
     bounds: ZoneBounds
+    twin: TwinSpec
 
 
 # --------------------------------------------------------------------------- #

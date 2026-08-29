@@ -925,3 +925,118 @@ class TestGraspPolicyReachesTheBringUpPlan:
             controllers = yaml.safe_load(produced[f"control/cell_a_{asset}_controllers.yaml"])
             gripper = controllers[f"/cite/cell_a/{asset}/{asset}_gripper_controller"]
             assert gripper["ros__parameters"]["allow_stalling"] is True
+
+
+class TestTwinSidesAndTheGazeboPartition:
+    """What pairing a zone changes, and — more importantly — what it does not.
+
+    ADR-0041 accepts that `twin.sides` is read by generators and therefore that
+    pairing produces a committed `cite_generated/` diff and a new `MODEL_HASH`.
+    That is only acceptable if the untwinned case is left exactly where it was,
+    so the first two tests below are the regression the whole L0 change rests on:
+    introducing the field, and writing `counterpart_backend` where it agrees with
+    `backend`, must change nothing at all.
+    """
+
+    @staticmethod
+    def _pair(model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            model / "facility/zones.yaml",
+            lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+        )
+
+    def test_writing_the_counterpart_backend_it_already_has_changes_nothing(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # `counterpart_backend` absent means the same value as `backend`, and
+        # this is that sentence made mechanical: fifteen instances that say so
+        # explicitly generate the same bytes as fifteen that stay silent. The
+        # property matters because it is what lets the field be optional without
+        # the omission meaning something different from the value.
+        before = artifacts(real_model)
+
+        def annotate(document: dict) -> None:
+            for asset in document["assets"]:
+                asset["hardware"]["counterpart_backend"] = asset["hardware"]["backend"]
+
+        for instances in sorted((real_model / "assets/instances").glob("*.yaml")):
+            edit_yaml(instances, annotate)
+
+        assert artifacts(real_model) == before
+
+    def test_an_untwinned_zone_says_nothing_about_a_counterpart(self, real_model: Path) -> None:
+        # No artifact mentions a side the zone does not have. This is what makes
+        # the `single` output the same output it was before the field existed,
+        # apart from the one partition line ADR-0042 deliberately adds.
+        blob = "\n".join(artifacts(real_model).values())
+        assert "counterpart" not in blob
+
+    def test_only_the_bring_up_plan_carries_a_partition(self, real_model: Path) -> None:
+        # A partition is a bring-up fact, not a description or a world fact. If
+        # it ever appears elsewhere it is a second statement of the same name.
+        carrying = sorted(
+            path for path, text in artifacts(real_model).items() if "gz_partition" in text
+        )
+        assert carrying == ["bringup/cell_a_plan.yaml"]
+
+    def test_an_untwinned_zone_still_declares_one_partitioned_side(self, real_model: Path) -> None:
+        # Never defaulted, and never absent. A partition that appeared only when
+        # someone paired a cell would be untested on every run that does not.
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        assert plan["sides"] == [
+            {"name": ids.PLANT_SIDE, "gz_partition": ids.partition("cell_a", ids.PLANT_SIDE)}
+        ]
+
+    def test_pairing_a_zone_emits_a_second_side_with_its_own_partition(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        self._pair(real_model, edit_yaml)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        assert [side["name"] for side in plan["sides"]] == list(ids.SIDES)
+        partitions = [side["gz_partition"] for side in plan["sides"]]
+        # The entire decision reduces to this inequality: two sides that shared a
+        # partition would subscribe to each other's belt commands with nothing
+        # logged at either end.
+        assert len(set(partitions)) == 2
+
+    def test_pairing_a_zone_changes_the_model_hash(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Accepted rather than avoided: `twin.sides` DESCRIBES the system, in the
+        # same class as adding a fourth arm, so it costs a regeneration. The
+        # runtime knob is `TwinMode`, which regenerates nothing. This test is the
+        # tripwire on that distinction — if pairing ever stops changing the hash,
+        # something has started deriving a second side outside the model.
+        before = gen.model_hash(load(real_model))
+        self._pair(real_model, edit_yaml)
+        assert gen.model_hash(load(real_model)) != before
+
+    def test_a_paired_zone_states_every_asset_backend_on_both_sides(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # With the fallback already applied, so the plan describes the sides that
+        # exist rather than repeating a key the model left out. `require_hardware_
+        # opt_in` reads these, which is how a physical counterpart is refused
+        # without a second gate.
+        self._pair(real_model, edit_yaml)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        for manager in plan["controller_managers"]:
+            assert manager["counterpart_backend"] == manager["backend"]
+
+    def test_a_physical_counterpart_reaches_the_plan(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # Phase 2.B as a data change: one key on the arm that acquired hardware,
+        # and nothing else in the model moves.
+        self._pair(real_model, edit_yaml)
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: d["assets"][0]["hardware"].__setitem__("counterpart_backend", "real"),
+        )
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        physical = {
+            m["asset"]: m["counterpart_backend"]
+            for m in plan["controller_managers"]
+            if m["counterpart_backend"] != "sim"
+        }
+        assert physical == {"arm_1": "real"}

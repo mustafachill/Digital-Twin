@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cite_tools.generate import Artifact
+from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.model.schema import ControlSpec
 from cite_tools.model.units import fmt_float
@@ -231,7 +232,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             namespace=asset.namespace,
             update_rate=control.update_rate_hz,
             enforce_command_limits=_yaml_scalar(control.enforce_command_limits),
-            use_sim_time="true" if asset.instance.hardware.backend == "sim" else "false",
+            use_sim_time=(
+                "true" if asset.instance.hardware.backend == ids.SIMULATION_BACKEND else "false"
+            ),
             controllers=[_view(c, asset) for c in asset.controllers],
         )
         artifacts.append(Artifact(f"control/{cell.zone}_{asset.id}_controllers.yaml", text))

@@ -32,11 +32,16 @@ from pathlib import Path
 import re
 from types import ModuleType
 
-from cite_bringup.plan import HARDWARE_OPT_IN_ENV, load, resolve_uri
+from cite_bringup.plan import (
+    GZ_PARTITION_ENV,
+    HARDWARE_OPT_IN_ENV,
+    load,
+    resolve_uri,
+)
 from launch import LaunchContext
 from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
-from launch.utilities import perform_substitutions
+from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import StateTransition
 from lifecycle_msgs.msg import TransitionEvent
@@ -874,3 +879,120 @@ def test_the_skill_servers_are_given_those_parameters(
     assert namespaces == {
         m.node.rsplit("/", 1)[0] for m in _plan().controller_managers
     }
+
+
+# --- Every Gazebo-transport process is started in the plan's partition --------
+#
+# The half of ADR-0042 that cannot be checked next door. `require_gz_partition`
+# is correct and useless if the environment it approves is not the environment
+# the processes are actually given — which is the same defect shape this file
+# was written for: a `require_hardware_opt_in` that nothing called, and a shell
+# gate that guarded one command.
+#
+# The failure being prevented has no symptom. A bridge or a spawner started
+# outside the server's partition sees an empty transport: the spawn service is
+# simply not there, and a belt topic carries nothing, with no error at either
+# end. Two servers sharing one partition is worse — they connect, and one belt
+# setpoint drives both cells.
+
+#: The packages in this launch whose processes speak the Gazebo transport.
+#: `gz sim` itself is matched on its command instead, because it is an
+#: `ExecuteProcess` rather than a `Node`.
+GZ_TRANSPORT_PACKAGES = ("ros_gz_sim", "ros_gz_bridge")
+
+
+def _package(context: LaunchContext, action: ExecuteProcess) -> str | None:
+    """Read the ROS package a `Node` action runs from, or None for a bare process.
+
+    `node_package` hands back whatever was passed to `Node(package=...)`, which
+    here is a plain string; it is normalised anyway so that a substitution — a
+    `LaunchConfiguration`, say — would still be read rather than crashing this
+    helper into a false negative.
+    """
+    package = getattr(action, "node_package", None)
+    if package is None:
+        return None
+    return perform_substitutions(context, normalize_to_list_of_substitutions(package))
+
+
+def _environment(context: LaunchContext, action: ExecuteProcess) -> dict[str, str]:
+    pairs = action.additional_env or []
+    return {
+        perform_substitutions(context, list(name)): perform_substitutions(
+            context, list(value)
+        )
+        for name, value in pairs
+    }
+
+
+def _gz_transport_processes(
+    context: LaunchContext, actions: list
+) -> list[ExecuteProcess]:
+    found = []
+    for process in _processes(actions):
+        package = _package(context, process)
+        if package is not None:
+            # A `Node`. Its command cannot be performed before execution — it
+            # reads `context.locals.ros_specific_arguments`, which launch sets up
+            # on the way in — so the package is the only thing readable here.
+            if package in GZ_TRANSPORT_PACKAGES:
+                found.append(process)
+        elif _command(context, process)[:2] == ["gz", "sim"]:
+            found.append(process)
+    return found
+
+
+def test_every_gazebo_process_carries_the_partition_the_plan_names(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    plan = load(Path(resolve_uri(GENERATED_PLAN)))
+    expected = plan.sides[0].gz_partition
+
+    actions = module._bring_up(context)
+    carriers = _gz_transport_processes(context, actions)
+
+    # The server, the bridge, the scene spawn, and one spawn per arm. Counted so
+    # that a process added later without the partition fails here rather than
+    # discovering an empty transport at run time.
+    assert len(carriers) == 3 + len(plan.controller_managers)
+    for process in carriers:
+        assert _environment(context, process).get(GZ_PARTITION_ENV) == expected
+
+
+def test_the_partition_does_not_depend_on_the_launching_shell(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    # A partition exported by hand must not reach the processes: it is generated
+    # from L0 and is the one name that decides which cell a belt command lands
+    # in, so a per-run override would be a second statement of it.
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    monkeypatch.setenv(GZ_PARTITION_ENV, "somewhere_else")
+    plan = load(Path(resolve_uri(GENERATED_PLAN)))
+
+    actions = module._bring_up(context)
+
+    for process in _gz_transport_processes(context, actions):
+        assert (
+            _environment(context, process).get(GZ_PARTITION_ENV)
+            == plan.sides[0].gz_partition
+        )
+
+
+def test_a_plan_with_no_partition_refuses_to_bring_the_cell_up(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    # A bring-up failure, not a warning. What a missing partition produces is
+    # silence, and a warning about silence is read once and then never again.
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    document = copy.deepcopy(_document())
+    del document["plan"]["sides"]
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+    _use(module, monkeypatch, path)
+
+    actions = module._bring_up(context)
+
+    assert "Shutdown" in _kinds(actions)
+    assert not _processes(actions), "nothing may be started on the way to refusing"
+    assert "sides" in _refusal(actions, context)

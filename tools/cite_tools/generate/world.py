@@ -33,9 +33,35 @@ from cite_tools.render import environment
 #: generated constant rather than a launch argument someone can vary per run.
 STEP_SIZE_S = 0.001
 
-#: Unthrottled. Scenarios are graded on outcomes and wall-clock bounds, not on
-#: matching real time, and throttling would only make them slower.
-REAL_TIME_FACTOR = 0.0
+#: Throttled to the wall clock. SDFormat's own default, restored: this used to be
+#: `0.0` — unthrottled — on the reasoning that scenarios are graded on outcomes
+#: and wall-clock bounds rather than on matching real time, so throttling would
+#: only make them slower. ADR-0043 supersedes that reasoning. It is sound for ONE
+#: simulation graded on outcomes and does not survive a second simulation that
+#: has to agree with the first about what time it is: two free-running sides were
+#: measured at 0.888 and 0.698 in the same wall-clock window, with nothing wrong
+#: on either, and at real-time factor `r` a sim clock falls behind by `(1 - r)`
+#: seconds per second without bound. Past the first twenty-odd milliseconds that
+#: deficit dominates mirroring latency entirely, so a divergence metric taken
+#: across two unthrottled sides measures the clocks and not the cell.
+#:
+#: A CEILING, NOT A FLOOR, and the distinction is the whole reason this is safe
+#: to land alone. SDFormat calls it a *target* speedup factor: it bounds how fast
+#: a server may run and cannot make a slow one faster. On a machine already below
+#: real time it changes nothing; where a machine free-runs above real time it
+#: gives that headroom back as wall time, bounded by that machine's own
+#: free-running factor. That every scenario's wall-clock ceiling still has margin
+#: under it was audited before this landed — see
+#: `docs/measurements/2026-08-29-real-time-factor-conditions/` — and no ceiling
+#: moved.
+#:
+#: The other half of ADR-0043 — that both sides SUSTAIN 1.0 concurrently — is a
+#: requirement on the machine answered by measurement, and nothing measures it
+#: yet. Do not read this constant as that guarantee. When something does measure
+#: it, `Δ sim_time / Δ real_time` over a stated window is the method; Gazebo's
+#: own `real_time_factor` field over-reports under CPU starvation and
+#: `cross-cutting-testing.md` forbids it.
+REAL_TIME_FACTOR = 1.0
 
 GROUND_SIZE_M = 40.0
 

@@ -28,13 +28,17 @@ from cite_bringup.plan import (
     ARM_KEYS,
     ControllerManager,
     ControllerRef,
+    GazeboPartitionMissingError,
     GRIPPER_KEYS,
+    GZ_PARTITION_ENV,
     HARDWARE_OPT_IN_ENV,
     HardwareNotPermittedError,
     load,
     PlanError,
+    require_gz_partition,
     require_hardware_opt_in,
     resolve_uri,
+    Side,
 )
 import pytest
 import yaml
@@ -104,6 +108,9 @@ def test_stage_grouping_is_deterministic() -> None:
         asset="arm_1",
         node="/cite/cell_a/arm_1/controller_manager",
         backend="sim",
+        # No counterpart: this manager stands for an untwinned zone, which is
+        # what `None` means here — never "the key was left out".
+        counterpart_backend=None,
         hosted_by="simulator",
         description_topic="/robot_description",
         description=Path("/dev/null"),
@@ -159,6 +166,7 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
             "scene": "package://cite_generated/description/cell_a_scene.urdf.xacro",
             "static_frames": "package://cite_generated/frames/cell_a_static_tf.yaml",
             "topology": "package://cite_generated/topology/cell_a_flow.yaml",
+            "sides": [{"name": "plant", "gz_partition": "cite/cell_a/plant"}],
             "controller_managers": [
                 {
                     "asset": "arm_1",
@@ -523,3 +531,162 @@ def test_an_arm_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path) ->
     plan = load(_written(tmp_path, document))
     assert "arm_goal_tolerance_rad" not in plan.controller_managers[0].arm
     assert plan.controller_managers[1].arm["arm_goal_tolerance_rad"] > 0.0
+
+
+# --- The Gazebo transport partition -------------------------------------------
+#
+# `ROS_DOMAIN_ID` does not isolate Gazebo transport. Two `gz sim` servers in one
+# container on separate ROS domains were measured with two publishers on one
+# world's stats topic and two subscribers on one belt's command topic, so one
+# conveyor setpoint would have started both cells' belts — with nothing logged,
+# and with every ROS-side instrument this project has reporting clean isolation
+# at the same moment (ADR-0042). What kept the measured pairs apart was the
+# container hostname, which gz-transport derives its default partition from.
+#
+# These are the tests that make the replacement structural rather than
+# conventional. The defect is invisible at runtime and cannot occur at all on a
+# hardware side, so no amount of running the cell will surface it.
+
+
+def test_the_generated_plan_names_a_partitioned_side() -> None:
+    plan = load(_generated())
+    assert plan.sides
+    assert all(side.gz_partition for side in plan.sides)
+
+
+def test_the_partition_carried_by_the_environment_is_accepted() -> None:
+    side = load(_generated()).sides[0]
+    require_gz_partition(side, {GZ_PARTITION_ENV: side.gz_partition})
+
+
+def test_a_side_started_without_a_partition_is_refused() -> None:
+    side = load(_generated()).sides[0]
+    with pytest.raises(GazeboPartitionMissingError) as raised:
+        require_gz_partition(side, {})
+    message = str(raised.value)
+    assert GZ_PARTITION_ENV in message
+    # The refusal must name the value that was expected. "Partition missing"
+    # leaves the reader with nothing to set it to.
+    assert side.gz_partition in message
+
+
+def test_a_side_started_with_the_wrong_partition_is_refused() -> None:
+    # Not the same failure as an absent one, and worth its own answer: an
+    # exported GZ_PARTITION that disagrees with the plan puts the server
+    # somewhere the plan does not describe, which is how a developer debugging
+    # two sides in one shell would produce two cells on one transport.
+    side = load(_generated()).sides[0]
+    with pytest.raises(GazeboPartitionMissingError) as raised:
+        require_gz_partition(side, {GZ_PARTITION_ENV: "somewhere_else"})
+    assert "somewhere_else" in str(raised.value)
+
+
+def test_a_plan_with_no_sides_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
+    # A plan generated before this existed, or hand-edited to remove the block.
+    # Defaulting a partition here would put the derivation in a second place,
+    # which is the failure the emission exists to prevent.
+    document = _document()
+    del document["plan"]["sides"]
+    with pytest.raises(GazeboPartitionMissingError, match="no `sides:`"):
+        load(_written(tmp_path, document))
+
+
+def test_a_side_with_an_empty_partition_is_refused(tmp_path: Path) -> None:
+    document = _document()
+    document["plan"]["sides"][0]["gz_partition"] = "  "
+    with pytest.raises(GazeboPartitionMissingError, match="empty gz_partition"):
+        load(_written(tmp_path, document))
+
+
+def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
+    # The measured defect itself, written down. Two servers on one partition see
+    # each other's topics, and one belt command drives both cells.
+    document = _document()
+    shared = document["plan"]["sides"][0]["gz_partition"]
+    document["plan"]["sides"].append({"name": "counterpart", "gz_partition": shared})
+    with pytest.raises(GazeboPartitionMissingError, match="share the Gazebo partition"):
+        load(_written(tmp_path, document))
+
+
+def test_a_paired_plan_keeps_its_two_partitions_apart(tmp_path: Path) -> None:
+    document = _document()
+    document["plan"]["sides"].append(
+        {"name": "counterpart", "gz_partition": "cite/cell_a/counterpart"}
+    )
+    plan = load(_written(tmp_path, document))
+    assert [side.name for side in plan.sides] == ["plant", "counterpart"]
+    assert len({side.gz_partition for side in plan.sides}) == 2
+
+
+def test_the_partition_refusal_is_a_plan_error() -> None:
+    # simulation.launch.py catches PlanError and turns it into a message plus a
+    # Shutdown. A partition refusal that escaped as something else would surface
+    # as a traceback naming the launch machinery.
+    assert issubclass(GazeboPartitionMissingError, PlanError)
+
+
+def test_a_side_is_named_as_well_as_partitioned() -> None:
+    # The name is what a second side's launch will select on, and it comes from
+    # the plan rather than from whoever starts it.
+    side = load(_generated()).sides[0]
+    assert isinstance(side, Side)
+    assert side.name
+
+
+# --- A hardware backend on the counterpart side -------------------------------
+
+
+def _with_counterpart_backend(document: dict, backend: str) -> dict:
+    document = copy.deepcopy(document)
+    for manager in document["plan"]["controller_managers"]:
+        manager["counterpart_backend"] = "sim"
+    document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
+    document["plan"]["sides"].append(
+        {"name": "counterpart", "gz_partition": "cite/cell_a/counterpart"}
+    )
+    return document
+
+
+def test_a_simulated_counterpart_needs_no_opt_in(tmp_path: Path) -> None:
+    # Phase 2.A: both sides simulated, so nothing is gated and the gate must not
+    # fire on the mere presence of a counterpart.
+    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "sim")))
+    require_hardware_opt_in(plan, {})
+
+
+def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) -> None:
+    # This is Phase 2.B arriving. A backend is selected per (asset, side), so a
+    # gate that read only `backend` would let the far side become physical
+    # without ever looking at it (ADR-0041, Decision 2).
+    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "real")))
+    with pytest.raises(HardwareNotPermittedError) as raised:
+        require_hardware_opt_in(plan, {})
+    message = str(raised.value)
+    assert "arm_2" in message
+    assert "counterpart_backend" in message
+    assert HARDWARE_OPT_IN_ENV in message
+
+
+def test_a_physical_counterpart_starts_with_the_opt_in(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "real")))
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
+
+
+def test_an_unknown_counterpart_backend_is_refused_rather_than_allowed(
+    tmp_path: Path,
+) -> None:
+    # The same allowlist as the plant side. A backend nobody anticipated must not
+    # be treated as simulation on either side.
+    plan = load(
+        _written(tmp_path, _with_counterpart_backend(_document(), "mock_components"))
+    )
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {})
+
+
+def test_an_untwinned_plan_states_no_counterpart_backend() -> None:
+    # `None` here means "there is no such side", never "the model left the key
+    # out": the generator writes the key for every asset of a paired zone and for
+    # none of an untwinned one.
+    plan = load(_generated())
+    assert all(m.counterpart_backend is None for m in plan.controller_managers)

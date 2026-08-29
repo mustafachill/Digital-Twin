@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import os
 
+from cite_bringup.gz import gz_environment
 from cite_bringup.plan import (
     default_plan_path,
     load,
@@ -159,6 +160,13 @@ def _bring_up(context: LaunchContext) -> list:
         # gets commanded is identical either way; it simply may not begin by
         # accident (cross-cutting-safety.md).
         require_hardware_opt_in(plan, os.environ)
+        # The environment every Gazebo-transport process in this launch is
+        # started with. Built once, from the plan, and checked before a single
+        # process is described — so the refusal answers the question that
+        # actually matters, which is not "did someone export a partition" but
+        # "does the environment this launch is about to hand to `gz sim` carry
+        # the partition the plan names" (ADR-0042).
+        gz_env = gz_environment(plan)
         seed = _seed(os.environ)
     except PlanError as exc:
         # Fail here, with the reason, rather than launching a partial system that
@@ -180,9 +188,9 @@ def _bring_up(context: LaunchContext) -> list:
             os.path.join("/opt/ros", os.environ.get("ROS_DISTRO", "jazzy"), "lib"),
         ),
     ]
-    actions += _simulator(plan, headless=headless, seed=seed)
-    actions += _scene(plan)
-    actions += _arms(plan)
+    actions += _simulator(plan, headless=headless, seed=seed, gz_env=gz_env)
+    actions += _scene(plan, gz_env)
+    actions += _arms(plan, gz_env)
     actions += _facility(plan)
     controller_actions, last_spawner = _controllers(plan)
     actions += controller_actions
@@ -254,7 +262,9 @@ def _seed(environ: dict) -> str | None:
         ) from exc
 
 
-def _simulator(plan: Plan, *, headless: bool, seed: str | None) -> list:
+def _simulator(
+    plan: Plan, *, headless: bool, seed: str | None, gz_env: dict[str, str]
+) -> list:
     gz_args = ["-s", "-r", "-v", "2"] if headless else ["-r", "-v", "2"]
     if seed is not None:
         gz_args += ["--seed", seed]
@@ -262,6 +272,7 @@ def _simulator(plan: Plan, *, headless: bool, seed: str | None) -> list:
 
     simulator = ExecuteProcess(
         cmd=["gz", "sim", *gz_args],
+        additional_env=gz_env,
         output="screen",
         # An orphaned `gz sim` holds ports and names, and the *next* bring-up then
         # fails pointing nowhere useful. Tearing the whole launch down when the
@@ -271,7 +282,7 @@ def _simulator(plan: Plan, *, headless: bool, seed: str | None) -> list:
         sigkill_timeout="15",
     )
 
-    return [simulator, _bridge(plan)]
+    return [simulator, _bridge(plan, gz_env)]
 
 
 #: `/clock` from Gazebo into ROS. The one bridged name that is not in the plan,
@@ -291,7 +302,7 @@ GZ_TO_ROS = "{topic}@{ros_type}[{gz_type}"
 ROS_TO_GZ = "{topic}@{ros_type}]{gz_type}"
 
 
-def _bridge(plan: Plan) -> Node:
+def _bridge(plan: Plan, gz_env: dict[str, str]) -> Node:
     """Carry the simulation-fidelity aids across the Gazebo/ROS boundary.
 
     The belts and the beams are Gazebo system plugins. They publish and subscribe
@@ -332,6 +343,10 @@ def _bridge(plan: Plan) -> Node:
         name="gz_bridge",
         arguments=list(arguments),
         remappings=list(remappings),
+        # The bridge is a gz-transport participant like the server is: without
+        # the partition it subscribes to a different transport namespace and
+        # carries nothing, with no error at either end.
+        additional_env=gz_env,
         output="screen",
     )
 
@@ -378,7 +393,7 @@ def _bridge_topics(plan: Plan) -> tuple[tuple[str, ...], tuple[tuple[str, str], 
     return tuple(arguments), tuple(remappings)
 
 
-def _scene(plan: Plan) -> list:
+def _scene(plan: Plan, gz_env: dict[str, str]) -> list:
     """Publish and spawn the static half of the cell: pedestals, tables, belts.
 
     The description is published TRANSIENT_LOCAL (the LATCHED profile), which is
@@ -401,6 +416,10 @@ def _scene(plan: Plan) -> list:
         executable="create",
         name="spawn_scene",
         arguments=["-topic", "robot_description", "-name", f"{plan.zone}_scene"],
+        # `create` calls the world's spawn SERVICE over gz-transport, so it needs
+        # the same partition the server was started in or the service is simply
+        # not there to call.
+        additional_env=gz_env,
         output="screen",
         # `create` exiting non-zero means the scene is not in the world. Every
         # controller spawner after it would then wait out its full deadline on a
@@ -412,7 +431,7 @@ def _scene(plan: Plan) -> list:
     return [publisher, spawn]
 
 
-def _arms(plan: Plan) -> list:
+def _arms(plan: Plan, gz_env: dict[str, str]) -> list:
     """Publish and spawn each arm as its own model.
 
     One Gazebo model per arm, because gz_ros2_control attaches to a model and the
@@ -457,6 +476,7 @@ def _arms(plan: Plan) -> list:
                     "-x", str(x), "-y", str(y), "-z", str(z),
                     "-R", str(roll), "-P", str(pitch), "-Y", str(yaw),
                 ],
+                additional_env=gz_env,
                 output="screen",
                 on_exit=_fatal_on_exit(f"spawning {manager.asset}"),
             )

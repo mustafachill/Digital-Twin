@@ -33,6 +33,13 @@ class _ManagerView:
     asset: str
     node: str
     backend: str
+    #: What the counterpart side of this asset loads, or ``None`` on a zone that
+    #: has no counterpart. Emitted only where a second side exists, so a `single`
+    #: zone's plan says nothing about a side it does not have — and, because the
+    #: fallback is applied here rather than in the template, the plan states the
+    #: backend of every side that exists whether or not the model wrote it
+    #: (ADR-0041, Decision 3).
+    counterpart_backend: str | None
     hosted_by: str
     description_topic: str
     description: str
@@ -339,12 +346,15 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             asset=asset.id,
             node=f"{asset.namespace}/controller_manager",
             backend=asset.instance.hardware.backend,
+            counterpart_backend=(
+                asset.instance.hardware.effective_counterpart_backend if cell.is_paired else None
+            ),
             # A simulated backend's controller manager is created inside the
             # Gazebo process, so there is no separate process to wait on; a real
             # backend runs its own ros2_control_node. The distinction is what
             # lets a mixed fleet be a configuration rather than a special case.
             hosted_by="simulator"
-            if asset.instance.hardware.backend == "sim"
+            if asset.instance.hardware.backend == ids.SIMULATION_BACKEND
             else "ros2_control_node",
             # gz_ros2_control's controller manager inherits the plugin's
             # namespace, so it subscribes to <ns>/robot_description rather than
@@ -430,6 +440,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
         .get_template("bringup/plan.yaml.j2")
         .render(
             cell=cell,
+            sides=cell.sides,
             managers=managers,
             conveyors=conveyors,
             sensors=sensors,

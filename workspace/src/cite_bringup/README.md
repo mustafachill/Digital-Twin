@@ -100,8 +100,12 @@ busy working.
 
 | Environment variable | Effect |
 |---|---|
-| `CITE_ALLOW_HARDWARE=1` | permits a plan naming a non-`sim` backend to start |
+| `CITE_ALLOW_HARDWARE=1` | permits a plan naming a non-`sim` backend, on either side, to start |
 | `CITE_PHYSICS_SEED` | passed to `gz sim --seed`; a malformed value is refused, not ignored |
+
+`GZ_PARTITION` is **not** in that table on purpose: it is not a knob. The launch sets it on
+every Gazebo process from the plan, and exporting a different value in your shell does not
+reach them — see "The Gazebo transport partition" below.
 
 **`CITE_PHYSICS_SEED` does not make a scenario reproducible, and must not be described as
 doing so.** The physics solver is seeded by nothing. What the flag does and does not buy is
@@ -111,11 +115,64 @@ which is how seven copies of that argument drifted apart.
 [`cross-cutting-testing.md`](../../../docs/architecture/cross-cutting-testing.md) records
 what a scenario may therefore assert.
 
+## The Gazebo transport partition
+
+Every process here that speaks the Gazebo transport — `gz sim`, `parameter_bridge`, and each
+`ros_gz_sim create` — is started with `GZ_PARTITION` set to the value the plan names for the
+side being brought up. `plan.py::require_gz_partition` refuses to start a side whose process
+environment does not carry it, and that is a **bring-up failure, not a warning**.
+
+**The launch graph is not the only thing that starts such a process, and that gap is what
+`gz.py` exists to close.** The scenario harness starts its own — `ros2 run ros_gz_sim create`
+to place a work-piece, `gz model -p` to read where it went, `gz service` to remove it — and
+bring-up cannot refuse a process it never started. `gz.py` is the one place that answers
+"what environment does a Gazebo-transport process get?": `gz_environment` builds it and is
+what `simulation.launch.py` uses, and `run(argv, zone=..., timeout=...)` is the door every
+other caller goes through. Nothing may build that environment a second time — the partition
+is a name derived from L0, and a second construction of it is a value in two places (P1).
+That nothing in `tests/` goes around the door is checked by
+`tests/scenarios/guards/test_gz_calls_carry_the_partition.py`, which scans source rather than
+trusting care.
+
+The reason is measured rather than defensive:
+[ADR-0042](../../../docs/adr/0042-partition-gazebo-transport-per-side.md) records two `gz sim`
+servers in one container on **separate ROS domains** producing two publishers on one world's
+stats topic and two subscribers on one belt's command topic — so a single conveyor setpoint
+would have started both cells' belts, with nothing logged and with every ROS-side instrument
+reporting clean isolation at the same moment. `ROS_DOMAIN_ID` does not isolate Gazebo
+transport; what kept the measured pairs apart was the container hostname, which gz-transport
+derives its default partition from.
+
+**What this costs you at a terminal.** A command that used to work now returns nothing
+instead of an error: `gz topic -l`, `gz topic -e`, and `gz service` attached to a running cell
+list an empty transport unless you set the same partition first. Take it from the plan rather
+than typing it:
+
+```bash
+export GZ_PARTITION="$(./scripts/enter dev python3 -c '
+from cite_bringup.plan import default_plan_path, load
+print(load(default_plan_path()).sides[0].gz_partition)')"
+```
+
+Be precise about what an unpartitioned command does, because it is not what a terminal
+usually teaches you to expect. `gz model --list` against a running cell it cannot reach
+prints `Service call to [/gazebo/worlds] timed out` and **exits 0**; `ros2 run ros_gz_sim
+create` does not exit at all until something kills it. Neither is an error you can branch on,
+which is why the answer is a door rather than a convention.
+
 ## The hardware gate
 
 `plan.py::require_hardware_opt_in` refuses a plan that declares any backend other than `sim`
 unless `CITE_ALLOW_HARDWARE=1` is set, and `simulation.launch.py` calls it before it builds
 anything.
+
+It reads **every side's** backend, not only the plant's. A backend is selected per (asset,
+side), so a twinned zone can name a physical machine on its counterpart while its plant stays
+simulated — which is what Phase 2.B is
+([ADR-0041](../../../docs/adr/0041-virtual-counterpart-is-a-second-full-simulation.md),
+Decision 3) — and a gate that read only `backend` would let the far side become physical
+without ever looking at it. The reverse case cannot reach this gate at all: the L0 validator
+refuses to generate a plan whose paired zone names a non-`sim` plant.
 
 It is an **allowlist**, not a denylist: `sim` is the one backend that cannot reach a physical
 machine, so a backend nobody anticipated is refused rather than permitted.
@@ -175,6 +232,9 @@ started cell.
 | `no bring-up plan at <path>` | the plan is generated. Run `./scripts/validate-model --write`, then `./scripts/build` |
 | `<uri>: package X is not on the ament index` | the workspace was not built, or the overlay not sourced |
 | `zone 'cell_a' declares a hardware backend for ...` | the opt-in gate. Confirm the cell is clear, then set `CITE_ALLOW_HARDWARE=1` deliberately — see [`safety-procedures.md`](../../../docs/operations/safety-procedures.md) |
+| `the plan declares no ``sides:``` | a plan generated before ADR-0042, or hand-edited. Run `./scripts/validate-model --write`, then `./scripts/build` |
+| `side 'plant' would start its Gazebo processes with no GZ_PARTITION` | the launch built the process environment without it. Not something a user sets — see "The Gazebo transport partition" above |
+| `sides share the Gazebo partition(s) ...` | two sides on one partition would subscribe to each other's belt commands. The partition is generated; regenerate rather than editing the plan |
 | `controller manager for X lists no controllers` | bring-up would report success having activated nothing |
 | a sensor names one topic for both its level and its events | the bridge would publish `std_msgs/Bool` on the topic a station reads `DetectionEvent` from |
 | a zone declares sensors and no `detection:` block | the beams would be bridged into ROS and read by nobody |

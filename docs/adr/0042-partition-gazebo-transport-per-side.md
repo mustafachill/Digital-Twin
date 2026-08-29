@@ -1,9 +1,24 @@
 # ADR-0042: Partition Gazebo transport per side, explicitly and never by default
 
-- **Status:** Proposed — **nothing implemented.** At `f1f914f` nothing in this repository
-  sets `GZ_PARTITION`: a grep over the whole tree returns only the campaign's own harness
-  and write-up. Promoted to `Accepted` by the change that derives a partition per side and
-  makes a missing one a bring-up failure (P7).
+- **Status:** Accepted (corrected 2026-08-29) — **promoted 2026-08-29 by the change that
+  implemented it**, on the
+  condition this record set for itself: the partition is derived from the zone and the side
+  name, emitted into the generated bring-up plan, and a side whose process environment does
+  not carry it is refused at bring-up rather than warned about.
+  **That last clause held for the launch graph only.** The scenario harness starts a second
+  class of gz-transport process that was neither refused nor partitioned, and it failed
+  silently; the decision and clauses 1 and 2 stand, the scope claimed for clause 3 did not,
+  and both classes are covered now. See the section
+  "Correction — 2026-08-29: the refusal was structural for the launch graph only, and a
+  second class of Gazebo process was neither refused nor partitioned", below.
+  **When written this record was `Proposed` and nothing was implemented**, and that sentence
+  is kept rather than replaced: at `f1f914f` nothing in this repository set `GZ_PARTITION`,
+  and a grep over the whole tree returned only the campaign's own harness and write-up.
+  **What promotion does NOT claim.** Nothing has ever brought two sides up. The partitions
+  the generator emits for a `pair` are untested against a running counterpart, because there
+  is no counterpart launch yet; what is tested is that they are derived, that they differ,
+  that a plan without them is refused, and that every Gazebo-transport process in the one
+  launch that exists carries the one the plan names.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, on decision rule **D1** of
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
@@ -18,6 +33,98 @@
   [`naming-and-namespaces.md`](../architecture/naming-and-namespaces.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §8 and §10, charter §4 (P1, P2, P7)
+
+## Correction — 2026-08-29: the refusal was structural for the launch graph only, and a second class of Gazebo process was neither refused nor partitioned
+
+**What was wrong.** This record was promoted to `Accepted` on the condition, stated in its
+own status line, that "a side whose process environment does not carry it is refused at
+bring-up rather than warned about". Bring-up does refuse, and correctly — but **that
+guarantee reaches only the processes the launch graph starts.** A second class of
+gz-transport process exists and was outside it: the scenario harness starts its own. At the
+moment of promotion `grep -rn GZ_PARTITION tests/` returned **zero hits**, and
+`tests/scenarios/pick_and_place.py` and `tests/scenarios/continuous_line.py` between them
+started seven Gazebo commands — two `ros2 run ros_gz_sim create` spawns, two `gz model -p`
+pose reads, two `gz model --list` diagnostics and one `gz service` removal — every one of
+them with a bare inherited environment. None was refused. None was partitioned. Each failed
+silently, which is precisely the outcome this record exists to prevent.
+
+**How it presented, and what was measured.** `pick_and_place` and `continuous_line` both hung
+at their work-piece spawn: `subprocess.TimeoutExpired` on `ros2 run ros_gz_sim create` after
+120 s, reproduced 3 runs of 3, with `pick_and_place` a blocking CI step. A controlled A/B
+against one live cell, one variable, taken twice — by the tester who found it and again by
+the fixer on `cb51c80` — settles the mechanism:
+
+| Command, against a running cell | Result |
+|---|---|
+| `ros2 run ros_gz_sim create -file …` (no partition) | `TimeoutExpired`, 45 s, nothing spawned |
+| the same, with `GZ_PARTITION=cite/cell_a/plant` | `Entity creation successful`, rc=0, 0.5 s |
+| `gz model --list` (no partition) | `Service call to [/gazebo/worlds] timed out`, **rc=0** |
+| the same, with the partition | the five models of the world, rc=0 |
+
+Read the third row before the second. `gz model --list` **exits 0** having reached no world
+at all. Had only the spawn been fixed, the scenarios would have stopped hanging and started
+passing vacuously: the pose reads are how both of them verify that a work-piece physically
+moved, and unpartitioned they answer nothing while reporting success.
+
+**What survives, unchanged.** The decision. Option D is still the right one and every
+argument for it stands: `ROS_DOMAIN_ID` does not isolate Gazebo transport, the container
+hostname is an accident rather than a design, and a hand-typed partition is a value in two
+places. Decision clauses 1 and 2 are also unchanged and were never in doubt — the partition
+is derived from L0, emitted into the generated plan, checked by `./scripts/validate-model`,
+and bring-up refuses a launch environment that does not carry it. **What was wrong was the
+scope claimed for clause 3, not the decision.**
+
+**What now covers the second class.** Two mechanisms, and they are deliberately different
+kinds of structural, because the two paths can be held to different things:
+
+- **One door.** `cite_bringup/cite_bringup/gz.py` is the single statement of what environment
+  a Gazebo-transport process is given. `gz_environment` moved there out of
+  `simulation.launch.py`, so the launch graph and the harness now ask the same function; the
+  harness reaches it through `run(argv, zone=…, timeout=…)`, which derives the partition from
+  the generated plan through `ids.partition`'s emitted value and never types one. Unit-tested
+  in `cite_bringup/test/test_gz.py`.
+- **A gate, not care.** `tests/scenarios/guards/test_gz_calls_carry_the_partition.py` parses
+  every Python file under `tests/` and fails if any call passes an argument vector beginning
+  with a Gazebo-transport command to anything other than that door. It reads the list of such
+  commands out of `gz.py` rather than keeping a second copy, and it is mutation-checked
+  against a crafted call that goes around the helper.
+
+**The residual, stated rather than left to be found.** The two are not equally strong and
+saying so is the point. The launch path refuses **at run time**, on the environment it is
+about to hand over. The harness path is gated **at source-scan time**, and it cannot refuse
+at run time, because a harness process has no bring-up to refuse it. An argv assembled at
+run time, or a command passed as a shell string, is invisible to that scan; neither exists in
+`tests/` today, and the guard counts the call sites it did find so that a rewrite into that
+shape moves a number instead of producing silence. Two further paths are outside both
+mechanisms and are named here so nobody re-derives them: the published campaign harnesses
+under `docs/measurements/` run `gz topic -e` unpartitioned and, being records, are not
+rewritten — anyone re-running one on this branch gets an empty stream; and the developer
+running a Gazebo command by hand is served only by documentation, in this package's README
+and in `docs/operations/troubleshooting.md`, exactly as this record's cost section said they
+would have to be.
+
+**Does it stay `Accepted`? Yes — argued against the promotion condition rather than assumed.**
+The condition had three clauses; two were met at promotion and remain met, and the third was
+met for one of the two classes of Gazebo process this repository starts. It is now met for
+both, each with a test, which is what `Accepted` means here. Reverting to `Proposed` would
+be the wrong record: it would say the derivation and the emission are unbuilt, and they are
+built, committed and diffed on every `./scripts/validate-model`. Superseding would be wrong
+for the reason `docs/adr/README.md` gives — the decision is not what turned out wrong, a
+supporting claim about its reach was. What is not claimed, then or now: nothing has ever
+brought two sides up.
+
+**How the error survived, which is the part that transfers.** It was not overlooked. This
+record's own cost section names it — "every path that starts or attaches to a Gazebo process
+has to carry it — `scripts/sim`, `scripts/scenario`, the launch graph, and anything a
+developer runs by hand" — and even says the campaign's harness had to set the partition on
+every probe for that reason. The cost was written down, and then the promotion was taken
+without checking that anything had paid it. **A cost section is not a checklist and was read
+as though it were one.** What let it through is that the evidence offered for promotion was
+the launch graph's own test — six processes, verified from `/proc/<pid>/environ`, every run —
+and that test is exhaustive over the set it enumerates and silent about the set it does not.
+A test that enumerates its subjects can only ever answer for the subjects it enumerates; the
+question "what else starts one of these?" has to be asked of the tree, not of the test. It
+now is, by a check that reads the tree.
 
 ## Context
 
@@ -174,6 +281,7 @@ Three parts, and all three are required for the decision to mean anything:
 3. **Structural, not conventional.** The refusal lives in code with a test, because the
    defect is invisible at runtime and because it cannot occur at all on the 2.B side, so no
    amount of running the real cell will surface it.
+   **[Corrected 2026-08-29 — see the Correction section above.]**
 
 **The cost was measured and is nil.** `PAIRGZ_1` brought both cells fully up with distinct
 partitions at RTF **0.872** and **0.877**, against **0.863** and **0.869** for the same pair
@@ -190,6 +298,9 @@ do not, and that does not depend on the speed of the machine.
 - **Deployment freedom.** One container, two containers, a shared network namespace or bare
   metal all behave the same. That matters because the target machine is not this development
   host and the deployment has not been chosen.
+  **[Corrected 2026-08-29 — see the Correction section above.]** True of the processes the
+  launch graph starts. The scenario harness's own processes behaved the same everywhere for
+  the opposite reason — they carried no partition anywhere — and reached the world nowhere.
 - **A whole class of silent cross-talk removed before anything is built on top of it.** The
   campaign found it before there was a line to be confused by it; the same defect discovered
   during a `continuous_line` run would have presented as a belt that started for no reason.

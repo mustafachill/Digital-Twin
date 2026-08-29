@@ -14,3 +14,10 @@ zones:
       # and enough height for an arm at full extension.
       min_m: [-1.000, -1.200, 0.000]
       max_m: [6.800, 0.800, 2.500]
+    # Whether this zone is modelled as one cell or as a twinned pair (ADR-0041).
+    # `single` is Phase 1 as it stands. `pair` covers both 2.A, where the
+    # counterpart is a second simulation, and 2.B, where it is the physical cell
+    # — this line does not change when that happens; a `counterpart_backend:` on
+    # the asset that acquired hardware does.
+    twin:
+      sides: single

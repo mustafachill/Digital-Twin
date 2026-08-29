@@ -10,8 +10,17 @@ its use elsewhere in the repository, this file wins and the other use is a defec
 | **L0 — Virtual model** | A simulation with no automated link to physical reality. Kritzinger's *digital model*. |
 | **L1 — Shadow** | Physical state automatically drives the virtual model. One direction. Kritzinger's *digital shadow*. |
 | **L2 — Validated** | L1, plus continuous measurement of the divergence between model and reality. **Our refinement** — the literature does not draw this line. |
-| **L3 — Closed loop** | Automated bidirectional flow; the virtual side gates or commands the physical. Kritzinger's *digital twin*. |
+| **L3 — Closed loop** | Automated bidirectional flow in which **the virtual side's validation gates physical execution**. Charter §2 is the definition and this row quotes it: *"Behaviour is validated in simulation and then commands the physical system."* Kritzinger's *digital twin*. |
 | **L4 — Predictive** | The virtual side runs ahead of the physical: what-if scenarios, prediction, optimization. |
+
+> **The L3 row quotes charter §2 rather than paraphrasing it, and that is deliberate.** It
+> read *"the virtual side gates **or commands** the physical"* until 2026-08-29. The
+> disjunction dropped the validation gate — which is not an optional half of the definition
+> but the whole of what separates L3 from a direction — and combined with this file's
+> priority clause above it would have handed a reader the authority to enter the
+> `VIRTUAL_LEAD` operating mode at L3. **A mode is never a maturity claim**
+> ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29;
+> [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2).
 
 > **Do not use "Mirror".** An earlier charter draft used it for L1 and "Shadow" for L2,
 > which collided with the literature. Renamed in charter v1.2. If you find `MIRROR`
@@ -19,7 +28,10 @@ its use elsewhere in the repository, this file wins and the other use is a defec
 
 ## Operating modes
 
-Runtime modes at L5, corresponding to the levels above.
+Runtime modes at L5. **They do not correspond one-to-one to the levels above.** Four of them
+happen to coincide with a level; `REAL` and `VIRTUAL_LEAD` do not, and a mode is never a
+maturity claim. `docs/architecture/L5-twin-synchronization.md`'s table is the one that
+carries the level each mode sits at.
 
 | Mode | Physical | Virtual |
 |---|---|---|
@@ -28,6 +40,11 @@ Runtime modes at L5, corresponding to the levels above.
 | `SHADOW` | commanded | follows physical |
 | `VALIDATED` | commanded | commanded in parallel, divergence measured, does not actuate |
 | `CLOSED_LOOP` | commanded after virtual validation | validates first |
+| `VIRTUAL_LEAD` | follows the virtual side and actuates, with nothing gating it first | commanded — where an operator's command enters |
+
+`VIRTUAL_LEAD` is `CLOSED_LOOP` without the validation gate and `SHADOW` with the arrow
+reversed ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
+Decision 2). **No node implements any mode** — `cite_twin` does not exist (CLAUDE.md §2).
 
 ## Architecture
 

@@ -1,5 +1,24 @@
 {
   "$defs": {
+    "TwinSpec": {
+      "additionalProperties": false,
+      "description": "Whether this zone is modelled as one cell or as a twinned pair.\n\nADR-0041's Decision 3, and it is a ZONE fact written once rather than an\nasset fact written per instance. In Phase 2.A the counterpart is a complete\nsecond simulation of the cell, so its world contains every asset whether or\nnot anyone wanted that asset twinned; \"arm_1 is paired but conveyor_1 is not\"\nhas no meaning there, and writing the same deployment fact on fifteen\ninstances is P1 at a different granularity.\n\nThere is deliberately no ``counterpart`` field and no ``none`` sentinel.\nTwinned is DERIVED — an asset is twinned exactly when its zone declares a\nsecond side — because a sentinel is a way of making an untwinned asset\ndeclare that it is untwinned, and it crosses with `HardwareSelection` to give\none physical situation two encodings.\n\nThe two sides are named ``plant`` and ``counterpart``, structurally: `plant`\nis the side the untwinned model already describes and that every Phase 1\nartifact, scenario and script already addresses, and `counterpart` is the\nside that exists only where the zone is a `pair`. Nothing in that naming\nmoves when `TwinMode` moves, which is what makes it safe to derive a Gazebo\ntransport partition from (ADR-0042). The names themselves are mechanism and\nlive in `cite_tools.model.ids`, never here.",
+      "properties": {
+        "sides": {
+          "enum": [
+            "single",
+            "pair"
+          ],
+          "title": "Sides",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sides"
+      ],
+      "title": "TwinSpec",
+      "type": "object"
+    },
     "Zone": {
       "additionalProperties": false,
       "description": "A named region. Zones partition; they do not nest.\n\nNesting would change every name in the system, so `naming-and-namespaces.md`\nrule 6 puts it behind an ADR.",
@@ -15,12 +34,16 @@
         "name": {
           "title": "Name",
           "type": "string"
+        },
+        "twin": {
+          "$ref": "#/$defs/TwinSpec"
         }
       },
       "required": [
         "id",
         "name",
-        "bounds"
+        "bounds",
+        "twin"
       ],
       "title": "Zone",
       "type": "object"

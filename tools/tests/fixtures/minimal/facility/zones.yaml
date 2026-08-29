@@ -7,3 +7,5 @@ zones:
       kind: aabb
       min_m: [-1.0, -1.2, 0.0]
       max_m: [6.8, 0.8, 2.5]
+    twin:
+      sides: single

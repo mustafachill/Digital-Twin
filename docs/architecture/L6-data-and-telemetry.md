@@ -56,7 +56,7 @@ is stamped with:
 |---|---|
 | Facility model version | A run against yesterday's layout is not comparable to today's |
 | Software version | Behaviour changes between commits |
-| Operating mode | An L1 run and an L2 run mean different things |
+| Operating mode | It determines what the numbers in the bag **are** — which side was commanded, which side actuated, and whether divergence was defined at all. **Never read it as a maturity level**: a mode is not a level, and a bag whose metadata is read as one is a maturity claim made by a file ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29). |
 | Physics seed (simulation) | Reproducibility |
 | Registration transform (hardware) | Divergence is meaningless without it |
 

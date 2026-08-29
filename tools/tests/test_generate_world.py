@@ -194,3 +194,41 @@ class TestTheGeneratorRefusesRatherThanGuesses:
         object.__setattr__(cell, "workpiece_models", ())
         with pytest.raises(world.WorldError, match="carry volume"):
             world.generate(cell)
+
+
+class TestTheWorldIsHeldToTheWallClock:
+    """ADR-0043 half 1: the generated world declares a real-time factor of 1.0.
+
+    It used to declare `0`, which is Gazebo's unthrottled value and overrides
+    SDFormat's own default of 1.0. That was sound for ONE simulation graded on
+    outcomes and does not survive a second one that has to agree with the first
+    about what time it is: two free-running sides were measured at 0.888 and
+    0.698 in the same wall-clock window with nothing wrong on either, and a clock
+    deficit accumulates without bound while a transport latency does not.
+
+    A CEILING, not a floor, and nothing here may be read as saying the machine
+    holds it. That is ADR-0043's second half, it is answered by measurement, and
+    nothing measures it yet.
+    """
+
+    def test_the_world_declares_a_throttled_factor(self, cell) -> None:
+        physics = world_xml(cell).find("physics")
+        assert physics is not None
+        assert float(physics.findtext("real_time_factor")) == 1.0
+
+    def test_it_is_not_unthrottled(self, cell) -> None:
+        # `0` is Gazebo's "as fast as you can", and it is the value this
+        # replaced. Named separately from the assertion above because it is the
+        # regression that matters: a future edit reaching for "make CI faster"
+        # lands exactly here.
+        physics = world_xml(cell).find("physics")
+        assert physics is not None
+        assert physics.findtext("real_time_factor").strip() not in ("0", "0.0")
+
+    def test_the_step_size_is_untouched(self, cell) -> None:
+        # Throttling changes how fast wall time is consumed, never how the
+        # physics is integrated. A scenario's results depend on the step size,
+        # so a change here would be a change to what is being measured.
+        physics = world_xml(cell).find("physics")
+        assert physics is not None
+        assert float(physics.findtext("max_step_size")) == 0.001
