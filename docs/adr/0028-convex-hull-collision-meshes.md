@@ -86,8 +86,11 @@ not state it.
 
 ## Amendment — 2026-08-29: the re-measurement landed, and the promotion gate is stated
 
-**This is an amendment, not a correction.** Nothing in this record was measured false. Two
-things changed around it: the re-measurement the record itself demanded was carried out and
+**This is an amendment, not a correction.** Nothing in this record was measured false, and
+the correction above does not contradict that: what it repairs is the *form* of one figure —
+stated flatly, with no condition and no machine — and not the truth of any claim this
+amendment rests on. The two sections are about different things and both stand. Two
+things changed around this record: the re-measurement the record itself demanded was carried out and
 supports the decision, and one clause of the status block — the condition for promotion — is
 tightened as a result. The decision is untouched: collision geometry for vendor-described
 links is a convex hull, generated as a project asset from the vendor's visual mesh and bound

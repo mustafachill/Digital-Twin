@@ -190,13 +190,18 @@ measurement and should be re-taken on the target machine.
   the generator's existing comment names, and this decision accepts it.
 - **Every wall-clock ceiling in the scenario suite is justified against a real-time factor**
   (`tests/scenarios/bringup.py`, quoted in ADR-0028), so the change that lands this must
-  revisit them rather than discovering them by timeout. **The four names to revisit, so that
-  nobody finds them by watching a job time out:** `BRING_UP_CEILING_S`, `CYCLE_CEILING_S`,
-  `LEG_CEILING_S` and `SKILL_CEILING_S`. They live in three files — `SKILL_CEILING_S` in
-  `tests/scenarios/bringup.py`, `CYCLE_CEILING_S` in `tests/scenarios/pick_and_place.py`,
-  `LEG_CEILING_S` in `tests/scenarios/continuous_line.py` — and `BRING_UP_CEILING_S` is
-  declared separately in all three and does not carry the same value in all three, so it is
-  three constants wearing one name and must be revisited three times.
+  revisit them rather than discovering them by timeout. **Ask
+  `grep -rn '^[A-Z_]*CEILING_S = ' tests/scenarios/` for the list rather than trusting this
+  sentence** — at this commit it returns **six names in eight declarations**, across three
+  files. `BRING_UP_CEILING_S`, `DELIVERY_CEILING_S`, `TRAJECTORY_CEILING_S` and
+  `SKILL_CEILING_S` in `tests/scenarios/bringup.py`; `BRING_UP_CEILING_S` and
+  `CYCLE_CEILING_S` in `tests/scenarios/pick_and_place.py`; `BRING_UP_CEILING_S` and
+  `LEG_CEILING_S` in `tests/scenarios/continuous_line.py`. **`BRING_UP_CEILING_S` is three
+  constants wearing one name** — it is declared separately in each file and does not carry
+  the same value in all three — so it is revisited three times, not once. All four in
+  `bringup.py` sit under one comment block, and that block is where the 0.14 figure is
+  recorded in the tree, so they are the four whose stated basis the correction to
+  [ADR-0028](0028-convex-hull-collision-meshes.md) bears on directly.
 - **The regression is bounded, and the bound is small enough to state.** A throttle is a
   *ceiling*, so on a machine already below 1.0 it changes nothing at all and no ceiling moves.
   Where a machine free-runs above 1.0, wall time grows by exactly the factor it was

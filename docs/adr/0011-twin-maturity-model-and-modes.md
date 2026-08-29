@@ -30,9 +30,22 @@ carries the reasoning, the gating and the rejected alternative. It is **cited an
 restated** (P1).
 
 **No level is added, moved, or claimed.** The mode carries L3's *direction* without L3's
-*validation gate*, and the level table below is the definition that matters: a claim about
-this system still has to name a level, and the existence of a mode is not a level. In
-Phase 2.A there is no physical side at all, so the level is L0 whichever mode is in force.
+*validation gate*: a claim about this system still has to name a level, and the existence of
+a mode is not a level. In Phase 2.A there is no physical side at all, so the level is L0
+whichever mode is in force.
+
+**That argument does not close on the table below, and saying so is the point of this
+paragraph.** The L3 row gives the data flow — `virtual → real` — and nothing else. **The
+validation gate is not in it.** Read on this record alone, `MODE_VIRTUAL_LEAD` against a real
+far side *is* an L3 flow, and the amendment would be claiming a level while denying it. What
+carries the gate is charter §2, whose L3 row reads *"Behaviour is validated in simulation and
+then commands the physical system"*, and
+`docs/architecture/L5-twin-synchronization.md`'s mode table, whose `CLOSED_LOOP` row is
+*"commanded after virtual validation gates it"* against level L3. **This amendment rests on
+those two documents and not on the table below**, and the charter change that names the mode
+must land with it rather than after it, or the level distinction it depends on is not written
+down anywhere binding. If either document is ever read as putting the direction alone at L3,
+this amendment fails and the mode has to be re-argued.
 
 **How this needed amending at all.** This record derived a mode set from a maturity ladder,
 and the two are not the same axis: a level is defined by where information *flows from*, and

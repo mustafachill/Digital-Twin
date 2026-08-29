@@ -177,9 +177,33 @@ opt-in is.
 implements it to applying the same check at the transition. That commitment is now
 load-bearing for this mode. It is the existing one, and this record adds nothing to it.
 
-**It is not a maturity claim, and it moves none.** Charter §2 and ADR-0011 define L3 as
-virtual → real **with the behaviour validated in simulation first**; this mode has the
-direction and not the gate, so it is not L3 and no document may cite it as L3. In 2.A there is
+**And the residual is exactly why the safety document has to be re-decided rather than
+merely extended.** [`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)
+line 98 reads *"`SIM` → `REAL` and entry to `CLOSED_LOOP` are the two most dangerous state
+changes in the system"*, and the same sentence is in
+[`L5-twin-synchronization.md`](../architecture/L5-twin-synchronization.md) line 55 and in
+`SetMode.srv`'s header. Against a real far side this mode is **`CLOSED_LOOP` minus the
+gate, aimed at the same arm** — so on those documents' own criterion it is a third such
+transition, and arguably ahead of one of the two. Because the opt-in binds at bring-up and
+not at the transition, the list is currently the only place a reader would learn to treat
+the transition as dangerous at all. **The implementing change owes that sentence a
+revision, in all three places.** This record does not make it: the mode does not exist yet,
+and a safety document naming a constant no interface defines would be the same false
+attestation P7 exists to prevent.
+
+**It is not a maturity claim, and it moves none.** L3 is virtual → real **with the behaviour
+validated in simulation first**; this mode has the direction and not the gate, so it is not
+L3 and no document may cite it as L3.
+**Where that definition of L3 lives is worth being exact about, because ADR-0011's own level
+table does not carry it.** That table's L3 row gives the data flow — `virtual → real` — and
+nothing else, so on ADR-0011 alone this argument does not close. It closes on charter §2,
+whose L3 row reads *"Behaviour is validated in simulation and then commands the physical
+system"*, and on
+[`L5-twin-synchronization.md`](../architecture/L5-twin-synchronization.md)'s mode table, whose
+`CLOSED_LOOP` row is *"commanded after virtual validation gates it"* against level L3. Two
+documents, one of them not protected. **If either is ever read as putting the direction alone
+at L3, this record's central claim fails and must be re-argued rather than repeated.**
+In 2.A there is
 no physical side at all, so the level is unchanged at L0 — see *What 2.A cannot claim* below,
 which stays true word for word after this decision.
 
@@ -222,9 +246,10 @@ draft's own hazard note warned about, and the note's own instruction applies: *"
 implementation finds that one is derivable from the other, then one of the two should not
 exist."* `twin.counterpart` is the one that should not exist.
 
-**The decision: a backend is selected per (asset, side), the two sides are named, and an asset
-is twinned exactly when a second side is present.** Two facts, at two scopes, because they are
-two different facts.
+**The decision: a backend is selected per (asset, side), the two sides are named, an asset is
+twinned exactly when a second side is present, and a paired zone may not have a physical
+plant.** Two facts, at two scopes, because they are two different facts — and then one
+refusal, because the cross product leaves a cell alive that nobody wants.
 
 **1. Whether a zone runs as a pair is a zone fact, and it is written once.**
 
@@ -298,6 +323,15 @@ to have, and it is why the side index is not `virtual`/`physical`: those are bac
   already pays a commit for that. The alternative — deriving the second side's plan in launch
   code — puts the shape of a bring-up plan into Python, which is the generated launch graph
   `CLAUDE.md` §4 prohibits, and P5 puts values in data.
+
+  **The test that decides which side of that line a field falls on, stated once so it can be
+  reused:** *if changing it requires a regeneration to take effect, it **describes** the
+  system; if a service call flips it, it **runs** the system.* `twin.sides` is the first;
+  `TwinMode` is the second. And `twin.sides` is not a new class of field — `hardware.backend`
+  is **already** an L0 field that generators read and that already produces a committed
+  `cite_generated/` diff whenever it changes. `twin.sides` is the same class of fact one
+  scope up, so the commit it costs is a cost this project already pays and has already
+  accepted, not a new one introduced here.
   **The reopening trigger is named:** if anyone proposes a launch argument or an environment
   variable that turns pairing on without regenerating, that is a value in two places and it
   must be argued here rather than added — the same ground [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s
@@ -322,12 +356,50 @@ to have, and it is why the side index is not `virtual`/`physical`: those are bac
   that L0 describes the modelled system rather than only the building.** That is listed under
   *What we will have to revisit* rather than done here.
 
-**What this record still does not settle**, stated so nobody reads it as settled: whether
-`{backend: real, counterpart_backend: sim}` — a physical plant with a simulated counterpart —
-is a deployment this project will ever run. It is expressible, and under the structural
-definition of `plant` above it is a *different* deployment from `{sim, real}` rather than a
-second encoding of it. 2.B as scoped does not need it. If both encodings are ever found
-describing one deployment, that is a finding and not a coincidence to code around.
+**A third clause, and it closes a door rather than opening one: `backend: real` is refused
+while `twin.sides: pair`.**
+
+The rejected draft's cross product left one cell alive that this record has to dispose of:
+`{backend: real, counterpart_backend: sim}` — a physical *plant* with a simulated
+counterpart, against `{backend: sim, counterpart_backend: real}` for the same two machines.
+
+**They are genuinely different, and the reason is in the generator rather than in the naming.**
+An earlier draft of this clause argued the difference from the definition of `plant` above —
+that it is the side the untwinned model already describes. That argument is circular and is
+withdrawn: it identifies a side by which field holds it, so it relabels the two encodings
+without excluding either. What actually separates them is that **they emit different committed
+generated trees**, at two call sites that both branch on this one field:
+
+- `tools/cite_tools/generate/bringup.py:346` sets `hosted_by` to `simulator` for a `sim`
+  backend and to `ros2_control_node` otherwise. Its own comment states the consequence: a
+  simulated backend's controller manager is created **inside the Gazebo process**, so there is
+  no separate process to wait on, while a real one runs its own node. So the two encodings
+  disagree about which side has a process to sequence bring-up against.
+- `tools/cite_tools/generate/control.py:234` derives `use_sim_time` from the same field, so
+  they disagree about which side's controllers run on simulated time.
+
+Add [ADR-0042](0042-partition-gazebo-transport-per-side.md)'s zero-server clause and they also
+disagree about which side starts a `gz sim` at all. Those are different bring-up plans,
+different controller configurations and a different `MODEL_HASH`; `./scripts/validate-model`
+would diff them. **That is the evidence, and it is what the claim needed** — a definition
+cannot do this work and should not have been asked to.
+
+**Being different is not being wanted, and this one is refused.** Under encoding B the plant
+*is* the hardware, and `plant` is by construction the side that `./scripts/sim`, all three
+scenarios and every Phase 1 artifact already address. So `backend: real` under
+`twin.sides: pair` would silently point the whole existing test suite at a physical cell,
+behind the same single opt-in that guards the far less alarming encoding — and the opt-in is a
+bring-up refusal rather than a per-command one (Decision 2). It also buys nothing: charter §8's
+Phase 2 is scoped as one physical arm and two simulated ones, which **is** encoding A by
+construction, and encoding A is also what `MODE_VIRTUAL_LEAD` describes.
+
+**So the schema refuses it:** a zone declaring `twin.sides: pair` may not contain an asset
+whose `hardware.backend` is anything but `sim`. A physical machine on a paired zone is a
+`counterpart_backend`. This costs nothing today — no instance in the model has ever named a
+non-`sim` backend — and it is a clause of this decision rather than a revisit item, because a
+configuration nobody wants is cheapest to remove before anything can produce it. **2.B may
+reopen it**, with an argument and a reason, which is a different thing from leaving it
+expressible by omission.
 
 ## Consequences
 
@@ -341,7 +413,8 @@ describing one deployment, that is a finding and not a coincidence to code aroun
   **Command routing is exercised as a mode**, which is what makes that claim true rather
   than aspirational: 2.A routes on `TwinMode` through `SetMode.srv`, inside the gated,
   observable transition path `cross-cutting-safety.md` requires, and not through a second
-  field set beside it (Decision 2).- **The hardware-facing failure modes have somewhere to be rehearsed.** A counterpart that
+  field set beside it (Decision 2).
+- **The hardware-facing failure modes have somewhere to be rehearsed.** A counterpart that
   is a full `ros2_control` stack can fail to activate a controller, abort a trajectory, and
   violate a tolerance. An echo cannot do any of those, so a system built against an echo
   would meet all three for the first time with a real arm in the room.
@@ -468,16 +541,40 @@ and nothing in this project may cite the mode's existence as one.
   exactly the thing it was made for, and that must be written down rather than absorbed.
 - **When the inconclusive ratio is re-measured**, on a target machine, with thresholds
   registered in advance. Nothing above is a reproduction claim.
-- **When ADR-0011 and charter §8 are amended for the sixth mode.** ADR-0011's five-mode set
-  and charter §8's Phase 2 scope sentence, which names four modes, both predate
-  `MODE_VIRTUAL_LEAD` and both have to name it. Neither is edited by this record: the
-  charter is protected and changes only by explicit owner decision with a version bump
-  (charter §12), and ADR-0011 takes an amendment rather than a supersession because its
-  five levels, their literature mapping and its commitment are all untouched.
-- **When `twin.sides` tests ADR-0004's wording.** Decision 3 places in L0 a fact about the
-  modelled deployment rather than about the building, which is not what ADR-0004 says L0
-  is for. Either that record is amended to say L0 describes the modelled system, or a
-  better home is found for the one key. Do not settle it by leaving the two documents
-  disagreeing.
+- **When the mode set is extended, in every place it is written down — and it is written
+  down in more places than anyone would guess.** `grep -rn CLOSED_LOOP docs
+  workspace/src/cite_interfaces what-we-are-doing.md` finds them, and that command is the
+  instrument rather than this list. At this commit it reaches **nine enumerations of the
+  mode set**:
+  `cite_interfaces/msg/TwinMode.msg`, the definition itself;
+  `cite_interfaces/test/interfaces.baseline`, the frozen contract;
+  [`docs/interfaces/README.md`](../interfaces/README.md), which copies the constant block
+  verbatim as its worked example of an enumeration;
+  [`L5-twin-synchronization.md`](../architecture/L5-twin-synchronization.md)'s five-row mode
+  table, which also carries the level each mode sits at;
+  [`docs/onboarding/glossary.md`](../onboarding/glossary.md)'s mode table;
+  [ADR-0011](0011-twin-maturity-model-and-modes.md), amended by this change and the only one
+  of the nine already done; and **three separate places in the charter** — §3.1's scope
+  table, §5's L5 mode table, and §8's Phase 2 scope sentence.
+  **Plus three dangerous-transition lists, which need a decision and not a paste** —
+  `cross-cutting-safety.md` line 98, `L5-twin-synchronization.md` line 55, and
+  `SetMode.srv`'s header — for the reason given beside Decision 2's gating paragraph.
+  The charter is protected and changes only by explicit owner decision with a version bump
+  (charter §12); ADR-0011 took an amendment rather than a supersession because its five
+  levels, their literature mapping and its commitment are all untouched.
+  **That one enumeration needs twelve locations in nine files to agree is itself a finding**,
+  and it is P1's shape at the level of prose: a set defined once in `TwinMode.msg` and
+  re-typed everywhere else cannot be kept true by care. Nothing in `./scripts/lint` checks
+  it, and nothing in this record proposes that it should — but whoever adds the seventh mode
+  should read this bullet before deciding that by hand is good enough.
+- **When `twin.sides` tests ADR-0004's wording, which must be *before or with* the schema
+  change and never after.** Decision 3 places in L0 a fact about the modelled deployment
+  rather than about the building, which is not what ADR-0004 says L0 is for. Either that
+  record is amended to say L0 describes the modelled system, or a better home is found for
+  the one key. The sequencing is not a preference: ADR-0004 is `Accepted`, so violating it
+  is an `ESCALATE` rather than a review finding, and while this record is `Proposed` no
+  violation exists — **the change that lands the schema is the change that creates one.** So
+  the amendment ships in that commit or ahead of it. Do not settle it by leaving the two
+  documents disagreeing, and do not settle it afterwards.
 - **If a future Gazebo parallelises the physics step**, which the campaign names as the
   condition under which its core-count conclusion changes.
