@@ -20,11 +20,13 @@
   **Corrected on the same day, for a different claim.** The decision stands entire and so
   does every argument for it. What does not stand is the *form* of one supporting figure: the
   Context section states real-time factor on the development host as **0.14**, flatly, with no
-  condition and no machine, and a campaign on a host of that class could not reproduce it. See
-  the section named "Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact
-  and carries no condition", immediately after this block. **The urgency the figure was cited
-  for survives the correction** — it is re-established by the campaign, on figures the
-  campaign did register.
+  condition and no machine. See the section named "Correction — 2026-08-29: the 0.14 real-time
+  factor is stated as a fact and carries no condition", immediately after this block, **and
+  its settlement note of the same day** — the figure does reproduce on a host of this class,
+  under a condition (about one CPU core) that no record stated, and **collision geometry is
+  not that condition.** **The urgency the figure was cited for survives the correction** — it
+  is re-established by the campaign, on figures the campaign did register, and no longer rests
+  on 0.14 at all.
 - **Date:** 2026-08-25
 - **Deciders:** Project owner, on the real-time-factor measurement from the Phase 1.C review wave
 - **Related:** [ADR-0004](0004-facility-model-single-source-of-truth.md),
@@ -83,6 +85,41 @@ with no condition attached cannot be contradicted, only re-taken.** The transfer
 the one this project already applies to campaign results and had not yet applied to a figure
 in prose — state who measured it, on what machine, doing what, and over how many runs, or do
 not state it.
+
+### Settled the same day: the figure reproduces, under a condition, and the condition is CPU
+
+**The campaign this section was waiting for has landed and it answers the paragraph above
+rather than replacing it:**
+[`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
+Its pre-registered verdict is **CONDITIONAL, not "does not reproduce"**. The recorded pair —
+the real-time factor and the `joint_states` rate — reproduces on a host of this class, **both
+halves together and by two independent instruments, when the cell is confined to about one CPU
+core.** Unconfined, that host idles slightly above real time. Bring-up and load were tested as
+candidates and rejected.
+
+**The three guesses this section offered are not all closed.** "A different Docker CPU
+allocation" is confirmed as *sufficient*; "a cell that was not idle" is measured and rejected;
+and whether the recorded figure actually came from an allocation or from contention on a shared
+host is registered by the campaign as unestablished and unestablishable from here. The figures
+are cited, not copied (P1); the one place in the tree that states the figure **with** its
+condition is [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) under
+"Wall-clock ceilings".
+
+**The citation form prescribed above is superseded.** Cite it as *"0.14 was recorded, and
+reproduces on that host confined to about one CPU core"*. *"The development host runs at
+0.14"* stays as wrong as it was.
+
+**What this changes in this record is one attribution, and it is this record's own.** The
+Context section below heads the figure *"The measurement that gives it urgency"*. **Collision
+geometry is not why that host reached 0.14 — a one-core allocation is**, so the figure is not
+evidence for hulls and never was, and the heading now says so. The same applies to the
+*"What we will have to revisit"* clause *"if 0.14 does not move materially, the bottleneck is
+elsewhere"*: it must be read against the **second-world campaign's** measured hull effect,
+which the amendment below already reports against its pre-registered band, and never against
+this figure. Nothing else moves. **The decision, all four of its parts, the status and the
+promotion gate are untouched** — the case for hulls rests on the second-world campaign's
+measured cost of collision geometry and on its pair of cells that misses real time with vendor
+meshes and meets it with hulls, both of them cited in the amendment below.
 
 ## Amendment — 2026-08-29: the re-measurement landed, and the promotion gate is stated
 
@@ -210,15 +247,19 @@ Three links per arm carry no geometry at all — `link_eef`, `link_tcp`, and the
 `arm_N_mount` link the generator emits — leaving thirteen with geometry. Of those,
 **twelve** collide against a rendering mesh and one, `link5`, against a 260-triangle proxy.
 
-### The measurement that gives it urgency
+### The measurement this record was written from, which is not the measurement that gives it urgency
 
-Real-time factor on the development host is **0.14** — `/cite/cell_a/arm_1/joint_states`
-arrives at roughly **21 Hz** against the **150 Hz** the model configures
-(`xarm5.yaml: control.update_rate_hz: 150`, generated into
-`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`).
-**[Corrected 2026-08-29 — see the Correction section above.]** The figure is
-recorded in the tree at `tests/scenarios/bringup.py`, where every wall-clock ceiling in the
-bring-up scenario is justified against it.
+**[Corrected 2026-08-29 — heading included; see the Correction section above and its
+settlement note.]** This record was written from a real-time factor of **0.14** on the
+development host, with `/cite/cell_a/arm_1/joint_states` at roughly **21 Hz** against the
+**150 Hz** the model configures (`xarm5.yaml: control.update_rate_hz: 150`, generated into
+`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`). That pair is
+**a fact about that host confined to about one CPU core** and **not about collision geometry**,
+so it is not what gives this record its urgency and this heading used to claim it was. What
+does is the second-world campaign's measured cost of collision geometry, cited in the
+amendment above. The recorded figure is also in the tree at `tests/scenarios/bringup.py`,
+where every wall-clock ceiling in the bring-up scenario is justified against it — those
+ceilings are wall clock, so that dependence is real and is unaffected by the correction.
 
 That is the load context in which `move_group` overran launch's **5 s** SIGINT default and
 was killed mid-teardown, recording `-15` — the truncation rather than whatever the process
@@ -330,8 +371,11 @@ real-time factor is earned by re-measuring RTF and `joint_states` frequency agai
 - Contact geometry that a physics solver can actually evaluate, in place of 98,292 triangles
   per arm of rendering detail — the failure CLAUDE.md §10 names, removed at its cause.
 - Headroom on the measurement that currently governs every wall-clock ceiling in the
-  scenario suite. Ceilings chosen against RTF 0.14 exist because of this, and they are the
-  reason a slow machine and a hung machine look alike today.
+  scenario suite. **[Corrected 2026-08-29: the ceilings were chosen against RTF 0.14, but not
+  *because of* collision geometry — that figure is the development host confined to about one
+  CPU core. See the Correction section's settlement note.]** They remain the reason a slow
+  machine and a hung machine look alike today, and hulls buy real headroom against that on the
+  second-world campaign's figures.
 - A collision surface fit for a planner that refuses rather than searches (ADR-0027).
 - A validator that fires on vendor descriptions, which is the majority of the links in the
   cell and all of the ones that move.
@@ -360,7 +404,10 @@ real-time factor is earned by re-measuring RTF and `joint_states` frequency agai
   abandoning hulls elsewhere.
 - **When the RTF re-measurement lands.** If 0.14 does not move materially, the bottleneck is
   elsewhere — three controller managers at 150 Hz, or the physics step itself — and this
-  record must not be cited as having fixed it.
+  record must not be cited as having fixed it. **[2026-08-29: two campaigns have landed and
+  this clause must not be evaluated against 0.14 at all. Read it against the second-world
+  campaign's measured hull effect, reported against its pre-registered band in the amendment
+  above; the 0.14 figure is a starved-CPU condition and collision geometry cannot move it.]**
 - **When the Phase 3 facility scan arrives.** Scanned geometry is far heavier than any of
   this, and the decimation and level-of-detail policy in `assets/README.md` will need to say
   how a scanned collision representation is produced. This pipeline should be the one that

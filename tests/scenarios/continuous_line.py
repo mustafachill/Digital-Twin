@@ -111,9 +111,13 @@ SPAWN_DROP_M = 0.005
 #: a stalled line fails the run with a diagnosis instead of blocking CI.
 #:
 #: Their basis: `pick_and_place` measures one station's pick-and-place cycle
-#: against a ceiling of 420 s, chosen for a macOS development host whose measured
-#: real-time factor is about 0.14. A milestone here is at most one such cycle, so
-#: the same number is the right ceiling for one — and applying it per milestone
+#: against a ceiling of 420 s, chosen for the macOS development host under the
+#: condition that figure holds in — roughly one CPU core, stated once with its
+#: measurement in `docs/architecture/cross-cutting-testing.md` under "Wall-clock
+#: ceilings" and measured in
+#: `docs/measurements/2026-08-29-real-time-factor-conditions/`. A milestone here
+#: is at most one such cycle, so the same number is the right ceiling for one —
+#: and applying it per milestone
 #: rather than per piece is deliberate: a line that stalls fails at the milestone
 #: it stalled on, after one leg's worth of waiting, and the message names that
 #: milestone instead of a whole piece's budget having quietly expired.
@@ -168,10 +172,13 @@ DROP_MARGIN_M = WORKPIECE_SIZE / 2.0
 #: `DetectionEvent`s on a keep-all subscription, which cannot miss one; what is
 #: sampled is where the piece IS, and the briefest of those is `on_link` — a
 #: 1.200 m belt at 0.150 m/s, so 8 s of simulated time, plus the margin at each
-#: end. At the development host's measured real-time factor of 0.14 that is about
-#: 57 s of wall clock and over a hundred samples; on a host running at 1.0 it is
-#: still sixteen. Both are far from a coin toss, which is what the number has to
-#: buy.
+#: end. At a real-time factor of 0.14 — the development host confined to about one
+#: CPU core, see "Wall-clock ceilings" in
+#: `docs/architecture/cross-cutting-testing.md` — that is about 57 s of wall clock
+#: and over a hundred samples; on a host running at 1.0 it is still sixteen. Both
+#: are far from a coin toss, which is what the number has to buy. This is a floor
+#: argument and a faster host only adds samples, so the condition does not disturb
+#: it.
 #:
 #: Not faster, because each sample is a `gz model -p` — a process and a transport
 #: node per sample — and there is nothing left to buy above the dwell times above.

@@ -81,11 +81,14 @@ TRACKING_TOLERANCE_RAD = 0.05
 #: a hang fails the run with a diagnosis instead of blocking CI indefinitely.
 #:
 #: Their basis, because a bare number tells the next reader nothing: they were
-#: chosen against a Linux workstation running near real time. Measured real-time
-#: factor on the macOS development host is about 0.14 — `joint_states` arrives at
-#: roughly 21 Hz against a configured 150 Hz — so a timeout here is evidence of a
-#: slow machine at least as often as it is evidence of a hang. Raise them for a
-#: slower host rather than reading a timeout as a defect.
+#: chosen against a Linux workstation running near real time, and then against the
+#: much slower figure the macOS development host was recorded at. That figure holds
+#: only under a condition — roughly one CPU core — which is stated once, with its
+#: measurement, in `docs/architecture/cross-cutting-testing.md` under "Wall-clock
+#: ceilings"; the figures are in
+#: `docs/measurements/2026-08-29-real-time-factor-conditions/`. Read it before
+#: reading a timeout here as a defect: these are wall-clock ceilings, so a starved
+#: host hits them with nothing broken. Do not widen one to make a starved host pass.
 BRING_UP_CEILING_S = 240.0
 DELIVERY_CEILING_S = 30.0
 TRAJECTORY_CEILING_S = 60.0

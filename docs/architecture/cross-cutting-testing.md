@@ -118,6 +118,44 @@ is what the seed exists for: a fixed seed so that a failure reproduces instead o
 coin flip, because a non-deterministic scenario test is worse than no test — it trains
 people to re-run until green.
 
+### Wall-clock ceilings, and the machine condition they were sized for
+
+**This is the one place in the tree that states the development host's real-time factor with
+its condition; everywhere else cites the campaign.** Every ceiling in `tests/scenarios/` is
+wall clock — the scenario observer nodes deliberately do not set `use_sim_time`, and
+`continuous_line.Sample`'s docstring gives the reason — so every one of them scales inversely
+with real-time factor, and a timeout is as much a statement about the host as about the code.
+
+The figure those ceilings were written against — real-time factor about **0.14**, with
+`joint_states` at roughly **21 Hz** against the configured 150 Hz — is **conditional, not
+wrong.** It reproduces on the macOS development host, both halves of it together and by two
+independent instruments, when the cell is confined to about **one CPU core**. Unconfined on
+that same host the cell idles slightly above real time and `joint_states` runs at or above
+its configured rate; an idle cell wants about four cores and gets no faster above that. Load
+costs roughly 40 %, not a factor of seven, and bring-up is not a slow phase. Every figure,
+the CPU curve they sit on, and the measured margin of each ceiling are in
+[`../measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)
+and are cited rather than copied (P1).
+
+**The flake class this creates, which nothing in the tree named before.** That campaign found
+no ceiling too tight and none too loose at a full allocation — but the margins are wall clock,
+so they shrink with the host. `pick_and_place`'s `CYCLE_CEILING_S` falls to a margin of about
+**1.2 under the one-core condition and fails below it**: below roughly 1.2 cores
+`pick_and_place` times out **with nothing broken**. Before looking for a motion bug, check
+what the container was allocated and what else was holding the host. **Never answer such a
+timeout by widening a ceiling** — a ceiling sized for a starved machine can no longer catch a
+hang on a healthy one, and that is the signal being spent.
+
+**Do not measure real-time factor with Gazebo's own `real_time_factor` field.** It is a
+smoothed estimate and it does not degrade with the thing it reports: under CPU starvation it
+over-reports by up to a factor of four, and the two numbers disagree inside the same message.
+The trap is specific — at half a core that field prints a value within rounding distance of
+the recorded 0.14 while the cell is actually running at a twenty-fifth of real time, so a
+reader trusting it would "confirm" the figure under a condition four times worse. Measure
+`Δ sim_time / Δ real_time` from `/world/<zone>/stats` over a stated window instead, and state
+the machine, its CPU allocation, what else was running and what the cell was doing. The
+campaign's §4 is the recipe.
+
 ### Measuring in this cell: interleave, never block
 
 This follows from the paragraphs above rather than softening them — the cell is still not
@@ -335,4 +373,5 @@ demonstrated is how an assertion stops being able to fail.
 | QoS mismatch untested | Silent no-op in production (v1's handoff) | Message-delivery assertion |
 | Coverage of the happy path only | Cancellation and recovery untested | `reviewer`; scenario review |
 | Slow suite | People stop running it locally | `performance-engineer`; CI duration tracking |
+| Wall-clock ceiling met on a starved host | A scenario times out with nothing broken | Check the container's CPU allocation before the code; see "Wall-clock ceilings" above |
 | Test disabling a safety check | A real limit disabled on a real arm | `safety-auditor` — Critical |

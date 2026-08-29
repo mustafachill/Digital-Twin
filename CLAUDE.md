@@ -270,6 +270,23 @@ account of a flake; each was caught by someone re-running, never by someone read
   over and are not classified here. `parameter_bridge` has since been observed on **both** -6
   and -11 in the campaign cited above, each once — which is what removes "MoveIt-linked" from
   the signal family's description, and is still two events rather than a rate.
+- **The recorded real-time factor of 0.14 is conditional, and the condition is roughly one CPU
+  core.** It is not wrong: it reproduces on the development host — both halves of the recorded
+  pair, RTF and the `joint_states` rate, together and by two independent instruments — when the
+  cell is confined to about one core. Unconfined, the same host idles slightly **above** real
+  time and holds the configured `joint_states` rate. Bring-up is rejected as the condition and
+  so is load. Every figure is
+  [`docs/measurements/2026-08-29-real-time-factor-conditions/`](docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md);
+  **the one place in the tree that states the figure with its condition is
+  [`docs/architecture/cross-cutting-testing.md`](docs/architecture/cross-cutting-testing.md)
+  under "Wall-clock ceilings"**, and everything else cites it rather than restating it (P1) —
+  six copies of an unconditioned number is how the omission survived for five days.
+  Two consequences to carry: **every scenario ceiling is wall clock**, so a starved host times a
+  scenario out with nothing broken and **no ceiling may be widened to absorb that**; and
+  **Gazebo's own `real_time_factor` field over-reports under CPU starvation by up to a factor of
+  four**, printing a number close to 0.14 while the cell runs at a twenty-fifth of real time.
+  Measure `Δ sim_time / Δ real_time` from the world's stats topic over a stated window; never
+  quote that field.
 - **What does not work, stated plainly** (Phase 1.C/1.D, in progress). **None of these is an
   exit-criterion clause** — that list is the last bullet in this section, and it is separate.
   - **The line still stalls after a failed grasp, and the dead end is observed rather than
@@ -346,8 +363,12 @@ account of a flake; each was caught by someone re-running, never by someone read
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
     determinism, and do not upgrade the claim on the strength of the planner alone.
   - **Twelve links per arm use their visual mesh as collision geometry**, which §10 below names
-    as a defect class. Real-time factor on the development host is 0.14. ADR-0028 decides the
-    fix and is still `Proposed`: `assets/` holds only its README and manifest.
+    as a defect class. **The 0.14 real-time factor used to be quoted here and is not what makes
+    this urgent** — a one-core allocation is what produced that figure, not collision geometry;
+    see the bullet above and ADR-0028's 2026-08-29 correction. What the case now rests on is
+    the second-world campaign's measured cost of collision geometry, cited in ADR-0028 rather
+    than copied. ADR-0028 decides the fix and is still `Proposed`: `assets/` holds only its
+    README and manifest.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.

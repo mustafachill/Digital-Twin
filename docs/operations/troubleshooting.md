@@ -175,15 +175,28 @@ be impossible, so if you see it, that is a defect in bring-up.
 Suspect `use_sim_time`. One node on the wall clock and another on the simulation clock
 produces exactly this family of symptoms, all of them pointing away from the cause.
 
-### The simulation is slow
+### The simulation is slow, or a scenario timed out
+
+**Check what the container was allocated before you check the code.** Every wall-clock
+ceiling in `tests/scenarios/` scales inversely with real-time factor, and this cell wants
+several CPU cores; starve it and a scenario times out with nothing broken. The figure, its
+condition and the flake class are stated once — in
+[`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) under
+*Wall-clock ceilings* — and measured in
+[`../measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
+**Never answer such a timeout by widening a ceiling**, and do not read Gazebo's own
+`real_time_factor` field to decide: on a starved host it over-reports badly.
+
+Look at the CPU allocation the container runtime gives its Linux VM, and at what else was
+holding the host while the run was in flight. Then:
 
 ```bash
 gz sim --versions      # confirm Harmonic
 ```
 
-Then suspect collision geometry. A dense visual mesh reused as collision geometry is the
-most common cause of a collapsed real-time factor by a wide margin. `model-validator`
-catches it; `performance-engineer` measures it.
+Then suspect collision geometry. A dense visual mesh reused as collision geometry is a
+first-rank cause of a collapsed real-time factor. `model-validator` catches it;
+`performance-engineer` measures it.
 
 ### Bring-up fails on the second attempt
 
