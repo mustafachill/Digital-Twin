@@ -68,7 +68,6 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import unittest
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
@@ -80,6 +79,7 @@ import pytest
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup.gz import run as gz_run
 from cite_interfaces.msg import DetectionEvent, LineState, StationState
 from cite_interfaces.qos import COMMAND, EVENT, STATE
 from launch import LaunchDescription
@@ -592,12 +592,7 @@ class TestContinuousLine(unittest.TestCase):
         under test is that an object physically moved. `gz model -p` prints the
         pose as bracketed, space-separated triples, position first.
         """
-        result = subprocess.run(
-            ["gz", "model", "-m", self.workpiece, "-p"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = gz_run(["gz", "model", "-m", self.workpiece, "-p"], zone=ZONE, timeout=30)
         number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
         triples = re.findall(rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout)
         if not triples:
@@ -950,7 +945,7 @@ class TestContinuousLine(unittest.TestCase):
     def _spawn_workpiece(self, at: tuple[float, float, float]) -> None:
         sdf_path = Path(f"/tmp/cite_{self.workpiece}.sdf")
         sdf_path.write_text(_workpiece_sdf(self.workpiece))
-        created = subprocess.run(
+        created = gz_run(
             [
                 "ros2",
                 "run",
@@ -967,8 +962,7 @@ class TestContinuousLine(unittest.TestCase):
                 "-z",
                 str(at[2]),
             ],
-            capture_output=True,
-            text=True,
+            zone=ZONE,
             timeout=120,
         )
         self.assertEqual(created.returncode, 0, created.stderr)
@@ -982,9 +976,7 @@ class TestContinuousLine(unittest.TestCase):
             # A missing work-piece is a setup failure, not a result. Say which,
             # with the evidence, rather than leaving the reader to decide whether
             # the line failed or the part was never there.
-            listing = subprocess.run(
-                ["gz", "model", "--list"], capture_output=True, text=True, timeout=30
-            )
+            listing = gz_run(["gz", "model", "--list"], zone=ZONE, timeout=30)
             raise AssertionError(
                 f"{exc}\n--- create stdout ---\n{created.stdout[-2000:]}\n"
                 f"--- create stderr ---\n{created.stderr[-2000:]}\n"
@@ -999,7 +991,7 @@ class TestContinuousLine(unittest.TestCase):
         name the model declares. Waited on as a condition — the piece is gone when
         the simulator stops reporting a pose for it — rather than slept on.
         """
-        subprocess.run(
+        gz_run(
             [
                 "gz",
                 "service",
@@ -1014,8 +1006,7 @@ class TestContinuousLine(unittest.TestCase):
                 "--req",
                 f'name: "{self.workpiece}" type: MODEL',
             ],
-            capture_output=True,
-            text=True,
+            zone=ZONE,
             timeout=60,
         )
         self._spin_until(

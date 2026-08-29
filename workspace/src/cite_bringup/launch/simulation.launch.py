@@ -48,16 +48,14 @@ from __future__ import annotations
 
 import os
 
+from cite_bringup.gz import gz_environment
 from cite_bringup.plan import (
     default_plan_path,
-    GZ_PARTITION_ENV,
     load,
     Plan,
     PlanError,
-    require_gz_partition,
     require_hardware_opt_in,
     resolve_uri,
-    Side,
 )
 from cite_interfaces.msg import LineState
 from launch import LaunchContext, LaunchDescription
@@ -168,7 +166,7 @@ def _bring_up(context: LaunchContext) -> list:
         # actually matters, which is not "did someone export a partition" but
         # "does the environment this launch is about to hand to `gz sim` carry
         # the partition the plan names" (ADR-0042).
-        gz_env = _gz_environment(plan)
+        gz_env = gz_environment(plan)
         seed = _seed(os.environ)
     except PlanError as exc:
         # Fail here, with the reason, rather than launching a partial system that
@@ -232,32 +230,6 @@ def _bring_up(context: LaunchContext) -> list:
         )
     )
     return actions
-
-
-def _gz_environment(plan: Plan) -> dict[str, str]:
-    """Build the environment every Gazebo-transport process in this launch is given.
-
-    One dictionary, applied to `gz sim`, to `parameter_bridge` and to every
-    `ros_gz_sim create` — because all three speak the Gazebo transport, and a
-    partition that reaches only the server leaves the bridge and the spawners
-    discovering a different one. gz_ros2_control needs nothing: its controller
-    managers are created inside the server's own process.
-
-    Which side this launch brings up is the PLANT, structurally: it is the side
-    the untwinned model describes and the side every scenario and `./scripts/sim`
-    already address (ADR-0041, Decision 3). Bringing a counterpart up is a
-    separate launch and is not built yet; when it is, it takes the second entry
-    of the same list rather than a second rule.
-    """
-    plant: Side = plan.sides[0]
-    environment = {GZ_PARTITION_ENV: plant.gz_partition}
-    # Checked on the dictionary just built, and that is the point: this is the
-    # value the processes below will actually be started with, so the check binds
-    # to the launch path rather than to the shell that invoked it. A future edit
-    # that builds this environment from somewhere else, or renames the key, is
-    # refused here instead of producing two cells that quietly share a transport.
-    require_gz_partition(plant, environment)
-    return environment
 
 
 def _seed(environ: dict) -> str | None:

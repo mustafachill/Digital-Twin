@@ -33,6 +33,12 @@ if(BUILD_TESTING)
   # The plan reader is pure logic with no ROS runtime, so it is unit-tested here
   # rather than exercised only by bringing the whole cell up.
   ament_add_pytest_test(plan test/test_plan.py)
+  # ADR-0042 obliged every path that starts a Gazebo process to carry the
+  # partition, and the promotion covered only the launch graph. The scenario
+  # harness starts its own, and until this module existed they carried nothing
+  # and hung at the work-piece spawn. One door, tested here; that nothing goes
+  # around it is tests/scenarios/guards/.
+  ament_add_pytest_test(gz test/test_gz.py)
   # The launch description itself: what it refuses to start, and what it stops
   # on. A correct check that nothing calls is the defect this catches, and it is
   # the one that was there.

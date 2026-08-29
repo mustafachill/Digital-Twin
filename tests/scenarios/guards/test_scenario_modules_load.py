@@ -63,6 +63,7 @@ ROS_PROVIDED = frozenset(
         "action_msgs",
         "ament_index_python",
         "builtin_interfaces",
+        "cite_bringup",
         "cite_interfaces",
         "control_msgs",
         "controller_manager_msgs",
