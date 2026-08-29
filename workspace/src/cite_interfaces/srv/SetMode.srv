@@ -5,10 +5,19 @@
 # /cite/twin/mode, which is where a caller watches it complete.
 #
 # SIM -> REAL, entry to CLOSED_LOOP, and entry to VIRTUAL_LEAD against a real far
-# side are the three transitions that matter most. VIRTUAL_LEAD is on that list on
-# the same criterion as the other two and not by analogy: it is CLOSED_LOOP minus
-# the validation gate, aimed at the same arm (ADR-0041 Decision 2). Where the far
-# side is a simulated counterpart, entering it can move nothing physical.
+# side are the three transitions that matter most. The criterion the three share is
+# stated once, in docs/architecture/cross-cutting-safety.md: a transition qualifies
+# when it places physical actuation under an authority that was not previously
+# commanding it. VIRTUAL_LEAD meets it with nothing interposed — it is CLOSED_LOOP
+# minus the validation gate, aimed at the same arm (ADR-0041 Decision 2).
+#
+# Whether entering VIRTUAL_LEAD can move anything physical is a PER-ASSET fact.
+# Where that asset's far side is a simulated counterpart, entering the mode moves
+# nothing physical for that asset. This request is not always per-asset: TwinMode
+# carries asset_id with "empty for facility-wide", and charter §8 states the
+# system runs with one physical arm and two simulated ones. So a facility-wide
+# SetMode(VIRTUAL_LEAD) is dangerous if ANY single asset's far side is real, and
+# two assets answering "simulated" is not an answer for the third.
 #
 # What enforces the hardware opt-in today, stated exactly, because this file used
 # to state a guarantee that no code provided:
@@ -25,8 +34,10 @@
 # NOTHING enforces it on this service, because no server implements it: the L5
 # twin package does not exist yet (CLAUDE.md §2). The server that eventually does
 # must apply the same check to any transition that commands physical hardware —
-# VIRTUAL_LEAD included, which is the one with the least in front of it — and
-# until it exists this interface is a contract and not a guarantee (P7).
+# VIRTUAL_LEAD included, which is the one with nothing interposed — and until it
+# exists this interface is a contract and not a guarantee (P7). For a facility-wide
+# request that server has to resolve the far-side backend of every asset before it
+# can decide the transition; see cross-cutting-safety.md and the L5 open question.
 
 uint8 mode                  # one of TwinMode.MODE_*
 string reason               # recorded; required, so every transition has a why

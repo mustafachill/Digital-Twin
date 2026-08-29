@@ -97,11 +97,32 @@ away.
 
 `SIM` → `REAL`, entry to `CLOSED_LOOP`, and entry to `VIRTUAL_LEAD` **against a real far
 side** are the three most dangerous state changes in the system
-([L5](L5-twin-synchronization.md)). `VIRTUAL_LEAD` is on this list on the same criterion as
-the other two rather than by analogy: it is `CLOSED_LOOP` minus the validation gate, aimed
-at the same arm ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
-Decision 2). Where the far side is a simulated counterpart, entering it can move nothing
-physical.
+([L5](L5-twin-synchronization.md)).
+
+**The criterion this list is built on**, written down because a fourth candidate has to be
+*judged* rather than found to resemble the other three: a transition belongs here when it
+**places physical actuation under an authority that was not previously commanding it.**
+`SIM` → `REAL` hands the physical arm to a command path that had been reaching only the
+model. Entry to `CLOSED_LOOP` hands it to the virtual side, behind a validation gate. Entry
+to `VIRTUAL_LEAD` hands it to the virtual side with nothing interposed — it is
+`CLOSED_LOOP` minus the validation gate, aimed at the same arm
+([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2).
+The third entry is therefore on this list on the same criterion as the other two, and not
+by analogy.
+
+**Whether entering `VIRTUAL_LEAD` can move anything physical is a per-asset fact, and a
+facility-wide transition is not that question asked once.** Where *a given asset's* far
+side is a simulated counterpart, entering the mode moves nothing physical **for that
+asset** — which is what makes the mode reachable in Phase 2.A at all. But `TwinMode`
+carries `asset_id` with *empty for facility-wide*, and charter §8 states that the system
+runs with one physical arm and two simulated ones, so a **mixed cell is the planned state
+and not an edge case**. **A facility-wide `SetMode(VIRTUAL_LEAD)` is dangerous if any
+single asset's far side is real**, and two assets answering "simulated" is not an answer
+for the third. Never read this mode's safety off the cell as a whole.
+
+**The third entry is also the only one that is not self-identifying from the requested
+value**, and that is filed as an open question rather than answered here — see
+[L5](L5-twin-synchronization.md)'s open questions.
 
 - Explicit and gated. Never reachable through a default parameter, an environment
   variable, or a launch-argument default.
@@ -109,18 +130,17 @@ physical.
 - `CITE_ALLOW_HARDWARE=1` required before anything can command physical hardware, with the
   cell confirmed clear.
 
-**Where that opt-in binds, stated exactly, because this list is currently the only thing
-that teaches a reader to treat these transitions as dangerous at all.**
-`require_hardware_opt_in` in `cite_bringup/plan.py` refuses to start a plan naming a
-non-`sim` backend unless `CITE_ALLOW_HARDWARE` is exactly `1`, and `./scripts/enter
-hardware` refuses the same way at the shell boundary. **Both bind at bring-up, not at the
-transition.** What they buy is that the stack could not have started with a physical
-backend; neither is a per-command refusal, and **nothing refuses a mode transition today**,
-because no server implements `SetMode` — `cite_twin` does not exist (CLAUDE.md §2). That
-service's own header commits the L5 server that eventually serves it to applying the same
-check at the transition, and for `VIRTUAL_LEAD` that commitment is the whole of the
-transition-time story. Do not read the three above as gated at the point of transition, and
-do not answer this paragraph by inventing a second definition of what a hardware opt-in is.
+**When that opt-in binds — the part this list needs, and the only part not already above.**
+The two guards, where they live and that both carry tests are in this document's Status
+bullet, and are deliberately not restated here (P1). What that bullet does not say is *when*
+they take effect: **both refuse before the stack starts — one at the shell boundary, one at
+bring-up — and neither refuses a transition.** What they buy is that the stack could not
+have **started** with a physical backend. Neither is a per-command refusal, and **nothing
+refuses a mode transition today**, because no server implements `SetMode` — `cite_twin` does
+not exist (CLAUDE.md §2). That service's own header commits the L5 server that eventually
+serves it to applying the same check at the transition, and for `VIRTUAL_LEAD` that
+commitment is the whole of the transition-time story. Do not read the three above as gated
+at the point of transition.
 
 ## Multi-robot workspaces
 

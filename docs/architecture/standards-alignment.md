@@ -123,6 +123,15 @@ onto it as follows.
 | **L3** Closed loop | bidirectional, automated | Digital Twin | Prescriptive |
 | **L4** Predictive | virtual ahead of real | Digital Twin | Predictive / Prescriptive |
 
+**The `Data flow` column is Kritzinger's axis, not a definition of our levels.** Kritzinger
+classifies by degree of information-flow automation and asks nothing about validation, so
+the L3 row above reads *bidirectional, automated* and stops there. **That is not what admits
+something to CITE L3.** Charter §2 is the definition — *"Behaviour is validated in
+simulation and then commands the physical system"* — and the validation gate it names is
+exactly what an operating mode carrying the direction alone does not have. Do not read this
+table as admitting anything to L3 on flow direction
+([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29).
+
 **L2 is our own refinement.** Kritzinger's classification asks whether information flows
 automatically; it does not ask whether the model is *correct*. We separate those, because
 a shadow whose divergence nobody measures is an assertion. L2 is the level at which the
