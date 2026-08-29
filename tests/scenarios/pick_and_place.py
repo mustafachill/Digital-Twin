@@ -32,6 +32,7 @@ import launch_testing.markers
 import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup.gz import run as gz_run
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -259,12 +260,7 @@ class TestPickAndPlace(unittest.TestCase):
         so the first numeric triple is the position. The header's `[ XYZ (m) ]`
         contains no numbers and therefore does not match.
         """
-        result = subprocess.run(
-            ["gz", "model", "-m", WORKPIECE, "-p"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = gz_run(["gz", "model", "-m", WORKPIECE, "-p"], zone=ZONE, timeout=30)
         number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
         triples = re.findall(rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout)
         if not triples:
@@ -323,7 +319,7 @@ class TestPickAndPlace(unittest.TestCase):
         )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
         sdf_path.write_text(_workpiece_sdf())
-        created = subprocess.run(
+        created = gz_run(
             [
                 "ros2",
                 "run",
@@ -340,8 +336,7 @@ class TestPickAndPlace(unittest.TestCase):
                 "-z",
                 str(spawn[2]),
             ],
-            capture_output=True,
-            text=True,
+            zone=ZONE,
             timeout=120,
         )
         self.assertEqual(created.returncode, 0, created.stderr)
@@ -354,9 +349,7 @@ class TestPickAndPlace(unittest.TestCase):
             # A missing work-piece is a setup failure, not a result. Say which,
             # with the evidence, rather than leaving the reader to guess whether
             # the arm failed or the box was never there.
-            listing = subprocess.run(
-                ["gz", "model", "--list"], capture_output=True, text=True, timeout=30
-            )
+            listing = gz_run(["gz", "model", "--list"], zone=ZONE, timeout=30)
             raise AssertionError(
                 f"{exc}\n"
                 f"--- ros_gz_sim create stdout ---\n{created.stdout[-2000:]}\n"

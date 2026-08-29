@@ -122,6 +122,18 @@ Every process here that speaks the Gazebo transport — `gz sim`, `parameter_bri
 side being brought up. `plan.py::require_gz_partition` refuses to start a side whose process
 environment does not carry it, and that is a **bring-up failure, not a warning**.
 
+**The launch graph is not the only thing that starts such a process, and that gap is what
+`gz.py` exists to close.** The scenario harness starts its own — `ros2 run ros_gz_sim create`
+to place a work-piece, `gz model -p` to read where it went, `gz service` to remove it — and
+bring-up cannot refuse a process it never started. `gz.py` is the one place that answers
+"what environment does a Gazebo-transport process get?": `gz_environment` builds it and is
+what `simulation.launch.py` uses, and `run(argv, zone=..., timeout=...)` is the door every
+other caller goes through. Nothing may build that environment a second time — the partition
+is a name derived from L0, and a second construction of it is a value in two places (P1).
+That nothing in `tests/` goes around the door is checked by
+`tests/scenarios/guards/test_gz_calls_carry_the_partition.py`, which scans source rather than
+trusting care.
+
 The reason is measured rather than defensive:
 [ADR-0042](../../../docs/adr/0042-partition-gazebo-transport-per-side.md) records two `gz sim`
 servers in one container on **separate ROS domains** producing two publishers on one world's
@@ -141,6 +153,12 @@ export GZ_PARTITION="$(./scripts/enter dev python3 -c '
 from cite_bringup.plan import default_plan_path, load
 print(load(default_plan_path()).sides[0].gz_partition)')"
 ```
+
+Be precise about what an unpartitioned command does, because it is not what a terminal
+usually teaches you to expect. `gz model --list` against a running cell it cannot reach
+prints `Service call to [/gazebo/worlds] timed out` and **exits 0**; `ros2 run ros_gz_sim
+create` does not exit at all until something kills it. Neither is an error you can branch on,
+which is why the answer is a door rather than a convention.
 
 ## The hardware gate
 
