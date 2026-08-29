@@ -1,0 +1,121 @@
+{
+  "label": "CYCLE_1",
+  "mode": "scenario",
+  "command": [
+    "/workspace/scripts/scenario",
+    "pick_and_place",
+    "--teardown-advisory"
+  ],
+  "warmup_s": 30.0,
+  "window_s": 120.0,
+  "expected_control_hz": 150.0,
+  "started_wall": 1787989398.56929,
+  "marks": [
+    {
+      "name": "launch_start",
+      "wall": 1787989398.57219
+    },
+    {
+      "name": "ready",
+      "wall": 1787989428.9362202
+    },
+    {
+      "name": "window_open",
+      "wall": 1787989458.9370222
+    },
+    {
+      "name": "window_close",
+      "wall": 1787989509.3870935
+    },
+    {
+      "name": "torn_down",
+      "wall": 1787989509.3883061
+    }
+  ],
+  "ready": true,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 3
+  },
+  "joint_state_rates": {
+    "arm_1": {
+      "topic_hz_last": 107.758,
+      "topic_hz_all": [
+        61.112,
+        63.13,
+        68.364,
+        66.667,
+        69.259,
+        67.13,
+        69.623,
+        67.059,
+        66.771,
+        69.416,
+        67.223,
+        69.688,
+        67.263,
+        67.243,
+        70.0,
+        68.224,
+        71.687,
+        72.115,
+        68.913,
+        70.411,
+        72.134,
+        96.215,
+        107.298,
+        113.596,
+        107.73,
+        107.781,
+        113.859,
+        107.758
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_1/joint_states",
+        "count": 231,
+        "span_s": 2.0034806728363037,
+        "hz": 114.80020901543898,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 11.55
+      }
+    }
+  },
+  "window": {
+    "rtf_window": 0.582122768567006,
+    "window_sim_s": 19.522,
+    "window_real_s": 33.535881182000004,
+    "wall_span_s": 33.535595178604126,
+    "n_samples": 261,
+    "rtf_reported_median": 0.6460123595084621,
+    "rtf_reported_min": 0.009061124105115455,
+    "rtf_reported_max": 1.1889418892762198,
+    "wall_gap_max_s": 0.20135736465454102
+  },
+  "cpu": {
+    "by_pid": {
+      "24": {
+        "comm": "gz-transport-to",
+        "cpu_s": 0.25999999999999995,
+        "cmd": "/opt/ros/jazzy/opt/gz_transport_vendor/libexec/gz/transport13/gz-transport-topic -e -t /world/cell_a/stats"
+      },
+      "65": {
+        "comm": "python3",
+        "cpu_s": 0.15999999999999992,
+        "cmd": "/usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 89 --rmw-implementation rmw_fastrtps_cpp"
+      }
+    },
+    "total_s": 0.4199999999999999,
+    "cores_used": 0.008325548236095485,
+    "rss_total_b": 104742912,
+    "rss_by_comm": {
+      "tini": 1028096,
+      "python3": 90521600,
+      "gz-transport-to": 13193216
+    }
+  },
+  "launch_returncode": 0,
+  "stats_restarts": 0,
+  "n_stats_samples": 695,
+  "finished_wall": 1787989509.3931787
+}

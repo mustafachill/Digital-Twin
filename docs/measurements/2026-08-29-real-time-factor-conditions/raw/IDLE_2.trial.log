@@ -1,0 +1,7 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label IDLE_2 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode sim --scenario pick_and_place
+Exception ignored in: <function _after_fork at 0xffff9c658680>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1697, in _after_fork
+    thread._stop()
+TypeError: 'Event' object is not callable
+{"label": "IDLE_2", "ready": true, "window": {"rtf_window": 1.0683058436057316, "window_sim_s": 161.335, "window_real_s": 151.019486569, "wall_span_s": 151.02077531814575, "n_samples": 1504, "rtf_reported_median": 1.0868584682034121, "rtf_reported_min": 0.1729604973790431, "rtf_reported_max": 1.2808197246237591, "wall_gap_max_s": 0.10516238212585449}, "launch_returncode": 1}

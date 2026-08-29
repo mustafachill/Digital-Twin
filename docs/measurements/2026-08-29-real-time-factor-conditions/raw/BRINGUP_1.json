@@ -1,0 +1,82 @@
+{
+  "label": "BRINGUP_1",
+  "mode": "scenario",
+  "command": [
+    "/workspace/scripts/scenario",
+    "bringup",
+    "--teardown-advisory"
+  ],
+  "warmup_s": 30.0,
+  "window_s": 120.0,
+  "expected_control_hz": 150.0,
+  "started_wall": 1787992127.5493557,
+  "marks": [
+    {
+      "name": "launch_start",
+      "wall": 1787992127.5521948
+    },
+    {
+      "name": "ready",
+      "wall": 1787992157.3639946
+    },
+    {
+      "name": "window_open",
+      "wall": 1787992187.3664234
+    },
+    {
+      "name": "window_close",
+      "wall": 1787992237.7658877
+    },
+    {
+      "name": "torn_down",
+      "wall": 1787992237.7665105
+    }
+  ],
+  "ready": true,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 3
+  },
+  "joint_state_rates": {
+    "arm_1": {
+      "topic_hz_last": null,
+      "topic_hz_all": [],
+      "counted": {
+        "topic": "/cite/cell_a/arm_1/joint_states",
+        "count": 0,
+        "span_s": null,
+        "hz": null,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 0.0
+      }
+    }
+  },
+  "window": null,
+  "cpu": {
+    "by_pid": {
+      "24": {
+        "comm": "gz-transport-to",
+        "cpu_s": 0.26000000000000006,
+        "cmd": "/opt/ros/jazzy/opt/gz_transport_vendor/libexec/gz/transport13/gz-transport-topic -e -t /world/cell_a/stats"
+      },
+      "65": {
+        "comm": "python3",
+        "cpu_s": 0.10999999999999999,
+        "cmd": "/usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 89 --rmw-implementation rmw_fastrtps_cpp"
+      }
+    },
+    "total_s": 0.37000000000000005,
+    "cores_used": 0.00734162924585084,
+    "rss_total_b": 104349696,
+    "rss_by_comm": {
+      "tini": 1032192,
+      "python3": 90124288,
+      "gz-transport-to": 13193216
+    }
+  },
+  "launch_returncode": 0,
+  "stats_restarts": 0,
+  "n_stats_samples": 302,
+  "finished_wall": 1787992237.7708387
+}

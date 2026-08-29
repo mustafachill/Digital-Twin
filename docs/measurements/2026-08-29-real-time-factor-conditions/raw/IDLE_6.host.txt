@@ -1,0 +1,45 @@
+[trial] cite containers before: 0
+=== IDLE_6 before ===
+2026-08-29T07:09:39Z
+ 2:09  up 5 days,  7:46, 2 users, load averages: 8.88 9.29 11.59
+docker: 12 CPUs, 8217751552 bytes, 28.5.1
+supabase_db_turf-on-landing	0.33%	143MiB / 7.653GiB
+supabase_studio_turf-on-landing	0.02%	256MiB / 7.653GiB
+supabase_pg_meta_turf-on-landing	0.37%	149.2MiB / 7.653GiB
+supabase_storage_turf-on-landing	0.04%	189.3MiB / 7.653GiB
+supabase_rest_turf-on-landing	0.10%	141.8MiB / 7.653GiB
+supabase_realtime_turf-on-landing	0.39%	253MiB / 7.653GiB
+supabase_inbucket_turf-on-landing	1.52%	24.95MiB / 7.653GiB
+supabase_auth_turf-on-landing	0.00%	26.5MiB / 7.653GiB
+supabase_kong_turf-on-landing	0.01%	101.7MiB / 7.653GiB
+supabase_vector_turf-on-landing	0.01%	56.44MiB / 7.653GiB
+supabase_analytics_turf-on-landing	1.65%	624.8MiB / 7.653GiB
+Images 22.29GB reclaimable 13.84GB (62%)
+Containers 32.87MB reclaimable 24.58kB (0%)
+Local Volumes 16.36GB reclaimable 16.06GB (98%)
+Build Cache 3.36GB reclaimable 3.36GB
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 452.1G     37.9G    391.2G   9% /
+[trial] gz-like processes left in container: ==> Running in container service 'dev': bash -lc pgrep -a "gz|ruby|move_group" | wc -l
+0
+=== IDLE_6 after ===
+2026-08-29T07:13:17Z
+ 2:13  up 5 days,  7:50, 2 users, load averages: 9.02 9.02 10.92
+docker: 12 CPUs, 8217751552 bytes, 28.5.1
+supabase_db_turf-on-landing	0.31%	143.3MiB / 7.653GiB
+supabase_studio_turf-on-landing	0.00%	256MiB / 7.653GiB
+supabase_pg_meta_turf-on-landing	0.28%	149.2MiB / 7.653GiB
+supabase_storage_turf-on-landing	0.00%	189.4MiB / 7.653GiB
+supabase_rest_turf-on-landing	0.07%	141.8MiB / 7.653GiB
+supabase_realtime_turf-on-landing	0.21%	252.8MiB / 7.653GiB
+supabase_inbucket_turf-on-landing	0.00%	24.86MiB / 7.653GiB
+supabase_auth_turf-on-landing	1.33%	26.63MiB / 7.653GiB
+supabase_kong_turf-on-landing	0.01%	101.7MiB / 7.653GiB
+supabase_vector_turf-on-landing	0.02%	56.29MiB / 7.653GiB
+supabase_analytics_turf-on-landing	1.41%	624.9MiB / 7.653GiB
+Images 22.29GB reclaimable 13.84GB (62%)
+Containers 32.87MB reclaimable 24.58kB (0%)
+Local Volumes 16.36GB reclaimable 16.06GB (98%)
+Build Cache 3.36GB reclaimable 3.36GB
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 452.1G     37.9G    391.2G   9% /

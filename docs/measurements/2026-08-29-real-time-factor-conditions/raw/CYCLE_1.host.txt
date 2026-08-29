@@ -1,0 +1,45 @@
+[trial] cite containers before: 0
+=== CYCLE_1 before ===
+2026-08-29T07:43:14Z
+ 2:43  up 5 days,  8:20, 2 users, load averages: 6.05 6.49 7.18
+docker: 12 CPUs, 8217751552 bytes, 28.5.1
+supabase_db_turf-on-landing	0.31%	145.1MiB / 7.653GiB
+supabase_studio_turf-on-landing	0.00%	256.1MiB / 7.653GiB
+supabase_pg_meta_turf-on-landing	5.69%	149.6MiB / 7.653GiB
+supabase_storage_turf-on-landing	0.02%	190MiB / 7.653GiB
+supabase_rest_turf-on-landing	0.09%	141.8MiB / 7.653GiB
+supabase_realtime_turf-on-landing	0.13%	253.1MiB / 7.653GiB
+supabase_inbucket_turf-on-landing	0.00%	25.01MiB / 7.653GiB
+supabase_auth_turf-on-landing	0.02%	26.58MiB / 7.653GiB
+supabase_kong_turf-on-landing	0.01%	101.9MiB / 7.653GiB
+supabase_vector_turf-on-landing	0.03%	56.73MiB / 7.653GiB
+supabase_analytics_turf-on-landing	2.14%	629.3MiB / 7.653GiB
+Images 22.29GB reclaimable 13.84GB (62%)
+Containers 32.87MB reclaimable 24.58kB (0%)
+Local Volumes 16.36GB reclaimable 16.06GB (98%)
+Build Cache 3.36GB reclaimable 3.36GB
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 452.1G     37.9G    391.2G   9% /
+[trial] gz-like processes left in container: ==> Running in container service 'dev': bash -lc pgrep -a "gz|ruby|move_group" | wc -l
+0
+=== CYCLE_1 after ===
+2026-08-29T07:45:15Z
+ 2:45  up 5 days,  8:22, 2 users, load averages: 5.04 6.16 6.96
+docker: 12 CPUs, 8217751552 bytes, 28.5.1
+supabase_db_turf-on-landing	0.58%	144.7MiB / 7.653GiB
+supabase_studio_turf-on-landing	0.00%	256.1MiB / 7.653GiB
+supabase_pg_meta_turf-on-landing	0.38%	149.5MiB / 7.653GiB
+supabase_storage_turf-on-landing	0.00%	190.1MiB / 7.653GiB
+supabase_rest_turf-on-landing	0.09%	141.8MiB / 7.653GiB
+supabase_realtime_turf-on-landing	0.44%	253.2MiB / 7.653GiB
+supabase_inbucket_turf-on-landing	0.82%	26.51MiB / 7.653GiB
+supabase_auth_turf-on-landing	0.00%	26.58MiB / 7.653GiB
+supabase_kong_turf-on-landing	0.02%	101.9MiB / 7.653GiB
+supabase_vector_turf-on-landing	0.09%	56.64MiB / 7.653GiB
+supabase_analytics_turf-on-landing	1.09%	623.9MiB / 7.653GiB
+Images 22.29GB reclaimable 13.84GB (62%)
+Containers 32.87MB reclaimable 24.58kB (0%)
+Local Volumes 16.36GB reclaimable 16.06GB (98%)
+Build Cache 3.36GB reclaimable 3.36GB
+Filesystem                Size      Used Available Use% Mounted on
+overlay                 452.1G     37.9G    391.2G   9% /

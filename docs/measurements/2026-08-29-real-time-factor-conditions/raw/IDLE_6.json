@@ -1,0 +1,295 @@
+{
+  "label": "IDLE_6",
+  "mode": "sim",
+  "command": [
+    "/workspace/scripts/sim",
+    "--headless"
+  ],
+  "warmup_s": 30.0,
+  "window_s": 120.0,
+  "expected_control_hz": 150.0,
+  "started_wall": 1787987382.559222,
+  "marks": [
+    {
+      "name": "launch_start",
+      "wall": 1787987382.5619195
+    },
+    {
+      "name": "ready",
+      "wall": 1787987409.5664723
+    },
+    {
+      "name": "window_open",
+      "wall": 1787987439.566556
+    },
+    {
+      "name": "window_close",
+      "wall": 1787987590.6077163
+    },
+    {
+      "name": "torn_down",
+      "wall": 1787987591.1500344
+    }
+  ],
+  "ready": true,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 3
+  },
+  "joint_state_rates": {
+    "arm_1": {
+      "topic_hz_last": 148.324,
+      "topic_hz_all": [
+        146.148,
+        149.435,
+        148.731,
+        148.783,
+        148.978,
+        148.189,
+        145.458,
+        148.36,
+        148.082,
+        145.418,
+        146.435,
+        149.341,
+        149.169,
+        148.574,
+        149.02,
+        147.969,
+        148.6,
+        148.718,
+        149.861,
+        149.66,
+        148.717,
+        149.709,
+        149.101,
+        148.615,
+        149.393,
+        148.456,
+        148.324
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_1/joint_states",
+        "count": 2761,
+        "span_s": 18.6175217628479,
+        "hz": 148.24744319663984,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 138.05
+      }
+    },
+    "arm_2": {
+      "topic_hz_last": 148.559,
+      "topic_hz_all": [
+        142.829,
+        149.637,
+        148.92,
+        148.38,
+        150.075,
+        149.629,
+        148.822,
+        147.351,
+        149.308,
+        147.855,
+        147.006,
+        149.804,
+        145.176,
+        144.824,
+        147.862,
+        148.984,
+        147.753,
+        147.589,
+        149.286,
+        150.235,
+        149.398,
+        149.341,
+        149.047,
+        148.084,
+        148.071,
+        148.43,
+        148.559
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_2/joint_states",
+        "count": 2592,
+        "span_s": 17.700037956237793,
+        "hz": 146.38386688243727,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 129.6
+      }
+    },
+    "arm_3": {
+      "topic_hz_last": 148.024,
+      "topic_hz_all": [
+        96.49,
+        95.402,
+        140.13,
+        145.611,
+        142.258,
+        146.949,
+        146.133,
+        147.145,
+        148.13,
+        149.21,
+        148.812,
+        149.431,
+        147.632,
+        149.311,
+        147.521,
+        148.619,
+        147.606,
+        148.678,
+        147.628,
+        148.078,
+        149.415,
+        149.657,
+        148.229,
+        149.283,
+        148.345,
+        148.024
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_3/joint_states",
+        "count": 2703,
+        "span_s": 18.352513074874878,
+        "hz": 147.2277932170018,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 135.15
+      }
+    }
+  },
+  "window": {
+    "rtf_window": 1.0296950162135685,
+    "window_sim_s": 155.423,
+    "window_real_s": 150.940810194,
+    "wall_span_s": 150.9431653022766,
+    "n_samples": 1503,
+    "rtf_reported_median": 1.034082319157099,
+    "rtf_reported_min": 0.01404825680168479,
+    "rtf_reported_max": 1.2673596589281686,
+    "wall_gap_max_s": 0.10385608673095703
+  },
+  "cpu": {
+    "by_pid": {
+      "7": {
+        "comm": "python3",
+        "cpu_s": 0.09000000000000001,
+        "cmd": "python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label IDLE_6 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode sim --scenario pick_and_place"
+      },
+      "24": {
+        "comm": "gz-transport-to",
+        "cpu_s": 0.52,
+        "cmd": "/opt/ros/jazzy/opt/gz_transport_vendor/libexec/gz/transport13/gz-transport-topic -e -t /world/cell_a/stats"
+      },
+      "25": {
+        "comm": "ros2",
+        "cpu_s": 0.24,
+        "cmd": "/usr/bin/python3 /opt/ros/jazzy/bin/ros2 launch cite_bringup simulation.launch.py headless:=true"
+      },
+      "66": {
+        "comm": "python3",
+        "cpu_s": 0.24,
+        "cmd": "/usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 89 --rmw-implementation rmw_fastrtps_cpp"
+      },
+      "120": {
+        "comm": "ruby",
+        "cpu_s": 295.02,
+        "cmd": "gz sim -s -r -v 2 /workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_a.sdf"
+      },
+      "121": {
+        "comm": "parameter_bridg",
+        "cpu_s": 22.87,
+        "cmd": "/opt/ros/jazzy/lib/ros_gz_bridge/parameter_bridge /clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock /cite/cell_a/conveyor_1/command@std_msgs/msg/Float64]gz.msgs.Double /cite/cell_a/conveyor_1/state@std_msgs/msg/Float64[gz.msgs.Double /cite/cell_"
+      },
+      "122": {
+        "comm": "robot_state_pub",
+        "cpu_s": 8.7,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=scene_description_publisher --params-file /tmp/launch_params_9gad6sdn"
+      },
+      "124": {
+        "comm": "robot_state_pub",
+        "cpu_s": 10.78,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_3zqobrqj -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "126": {
+        "comm": "robot_state_pub",
+        "cpu_s": 9.57,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_yuljup8_ -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "128": {
+        "comm": "robot_state_pub",
+        "cpu_s": 10.04,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_bzgxtgua -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "132": {
+        "comm": "python3",
+        "cpu_s": 30.209999999999997,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/frame_server.py --ros-args -r __node:=frame_server -r __ns:=/cite/facility --params-file /tmp/launch_params_kf0c7684 --params-file /tmp/launch_params_nhl9qp3d -r /tf_stati"
+      },
+      "135": {
+        "comm": "python3",
+        "cpu_s": 30.189999999999998,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/model_info.py --ros-args -r __node:=model_info -r __ns:=/cite/facility --params-file /tmp/launch_params_ak0j_j0o --params-file /tmp/launch_params_48iqy680"
+      },
+      "138": {
+        "comm": "python3",
+        "cpu_s": 30.270000000000003,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/topology_server.py --ros-args -r __node:=topology_server -r __ns:=/cite/facility --params-file /tmp/launch_params_gjnlz9ky --params-file /tmp/launch_params_9w_m7xbu"
+      },
+      "153": {
+        "comm": "move_group",
+        "cpu_s": 33.07,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_xmq1t8d8 --params-file /tmp/launch_params_v53a293q --params-file /tmp/launch_params_sul_e1mj -"
+      },
+      "174": {
+        "comm": "move_group",
+        "cpu_s": 34.1,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_8cehboub --params-file /tmp/launch_params_n1_1y71w --params-file /tmp/launch_params_c676hcw0 -"
+      },
+      "187": {
+        "comm": "move_group",
+        "cpu_s": 33.89,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_t74pofxn --params-file /tmp/launch_params_mtox63rl --params-file /tmp/launch_params_2mehookg -"
+      },
+      "197": {
+        "comm": "detection_serve",
+        "cpu_s": 15.49,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/detection_server --ros-args -r __node:=detection_server -r __ns:=/cite/cell_a/detection --params-file /tmp/launch_params_fsbvr9x2 -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "788": {
+        "comm": "skill_server",
+        "cpu_s": 20.200000000000003,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_gz20n3bz --params-file /tmp/launch_params_c5n2cpdi --params-file /tmp/laun"
+      },
+      "789": {
+        "comm": "skill_server",
+        "cpu_s": 20.44,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_4da2y1_y --params-file /tmp/launch_params_oyxgbupd --params-file /tmp/laun"
+      },
+      "790": {
+        "comm": "skill_server",
+        "cpu_s": 20.28,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_9eq2bidw --params-file /tmp/launch_params_r5ucbte8 --params-file /tmp/laun"
+      }
+    },
+    "total_s": 626.21,
+    "cores_used": 4.145995377749237,
+    "rss_total_b": 1899151360,
+    "rss_by_comm": {
+      "tini": 1032192,
+      "python3": 335642624,
+      "gz-transport-to": 13062144,
+      "ros2": 87339008,
+      "ruby": 431767552,
+      "parameter_bridg": 61083648,
+      "robot_state_pub": 170332160,
+      "move_group": 477020160,
+      "detection_serve": 46252032,
+      "skill_server": 275619840
+    }
+  },
+  "launch_returncode": 1,
+  "stats_restarts": 0,
+  "n_stats_samples": 1941,
+  "finished_wall": 1787987591.151807
+}

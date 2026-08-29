@@ -1,0 +1,7 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label CPULOW_1 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode sim --window-s 760 --hz-seconds 20
+Exception ignored in: <function _after_fork at 0xffff9b448680>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1697, in _after_fork
+    thread._stop()
+TypeError: 'Event' object is not callable
+{"label": "CPULOW_1", "ready": true, "window": {"rtf_window": 0.4798550524962575, "window_sim_s": 364.658, "window_real_s": 759.933646844, "wall_span_s": 759.9410357475281, "n_samples": 7173, "rtf_reported_median": 0.9513996515974475, "rtf_reported_min": 0.008642261111417767, "rtf_reported_max": 1.2892130256927263, "wall_gap_max_s": 0.2048642635345459}, "launch_returncode": 1}

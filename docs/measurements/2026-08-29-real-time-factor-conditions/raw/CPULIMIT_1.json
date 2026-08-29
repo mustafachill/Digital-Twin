@@ -1,0 +1,296 @@
+{
+  "label": "CPULIMIT_1",
+  "mode": "sim",
+  "command": [
+    "/workspace/scripts/sim",
+    "--headless"
+  ],
+  "warmup_s": 30.0,
+  "window_s": 760.0,
+  "expected_control_hz": 150.0,
+  "started_wall": 1787987659.5138435,
+  "marks": [
+    {
+      "name": "launch_start",
+      "wall": 1787987659.5164263
+    },
+    {
+      "name": "ready",
+      "wall": 1787987683.4060466
+    },
+    {
+      "name": "window_open",
+      "wall": 1787987713.406279
+    },
+    {
+      "name": "window_close",
+      "wall": 1787988473.4130027
+    },
+    {
+      "name": "torn_down",
+      "wall": 1787988474.6111321
+    }
+  ],
+  "ready": true,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 3
+  },
+  "joint_state_rates": {
+    "arm_1": {
+      "topic_hz_last": 158.985,
+      "topic_hz_all": [
+        156.662,
+        158.279,
+        157.509,
+        157.124,
+        157.745,
+        154.976,
+        156.96,
+        156.824,
+        159.261,
+        158.633,
+        158.176,
+        159.558,
+        158.064,
+        156.731,
+        158.002,
+        157.981,
+        158.25,
+        158.289,
+        159.422,
+        159.034,
+        159.47,
+        159.091,
+        157.93,
+        157.894,
+        158.873,
+        157.909,
+        158.285,
+        157.451,
+        158.985
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_1/joint_states",
+        "count": 2906,
+        "span_s": 18.525412559509277,
+        "hz": 156.81162244933836,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 145.3
+      }
+    },
+    "arm_2": {
+      "topic_hz_last": 159.593,
+      "topic_hz_all": [
+        157.768,
+        157.512,
+        154.639,
+        159.072,
+        157.038,
+        158.851,
+        158.886,
+        159.06,
+        158.143,
+        155.955,
+        157.763,
+        156.81,
+        158.072,
+        152.054,
+        157.06,
+        159.547,
+        158.373,
+        159.071,
+        158.997,
+        156.111,
+        157.021,
+        158.381,
+        158.02,
+        158.764,
+        158.571,
+        159.593
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_2/joint_states",
+        "count": 2752,
+        "span_s": 17.470632553100586,
+        "hz": 157.46424702360125,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 137.6
+      }
+    },
+    "arm_3": {
+      "topic_hz_last": 150.912,
+      "topic_hz_all": [
+        157.161,
+        157.628,
+        158.683,
+        159.552,
+        159.255,
+        160.292,
+        160.05,
+        159.719,
+        160.273,
+        157.362,
+        156.907,
+        157.307,
+        154.671,
+        158.263,
+        157.567,
+        159.002,
+        158.301,
+        159.297,
+        159.997,
+        148.439,
+        155.928,
+        155.453,
+        157.081,
+        157.068,
+        147.958,
+        150.912
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_3/joint_states",
+        "count": 2805,
+        "span_s": 18.225470304489136,
+        "hz": 153.850625150087,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 140.25
+      }
+    }
+  },
+  "window": {
+    "rtf_window": 0.9339983873932364,
+    "window_sim_s": 709.683,
+    "window_real_s": 759.8332176790001,
+    "wall_span_s": 759.8390650749207,
+    "n_samples": 7549,
+    "rtf_reported_median": 1.0911562874062015,
+    "rtf_reported_min": 0.008905139065812976,
+    "rtf_reported_max": 1.2801360016488152,
+    "wall_gap_max_s": 0.1795344352722168
+  },
+  "cpu": {
+    "by_pid": {
+      "7": {
+        "comm": "python3",
+        "cpu_s": 0.51,
+        "cmd": "python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label CPULIMIT_1 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode sim --window-s 760 --hz-seconds 20"
+      },
+      "24": {
+        "comm": "gz-transport-to",
+        "cpu_s": 2.91,
+        "cmd": "/opt/ros/jazzy/opt/gz_transport_vendor/libexec/gz/transport13/gz-transport-topic -e -t /world/cell_a/stats"
+      },
+      "25": {
+        "comm": "ros2",
+        "cpu_s": 0.68,
+        "cmd": "/usr/bin/python3 /opt/ros/jazzy/bin/ros2 launch cite_bringup simulation.launch.py headless:=true"
+      },
+      "66": {
+        "comm": "python3",
+        "cpu_s": 0.74,
+        "cmd": "/usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 89 --rmw-implementation rmw_fastrtps_cpp"
+      },
+      "120": {
+        "comm": "ruby",
+        "cpu_s": 1311.8400000000001,
+        "cmd": "gz sim -s -r -v 2 /workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_a.sdf"
+      },
+      "121": {
+        "comm": "parameter_bridg",
+        "cpu_s": 100.41,
+        "cmd": "/opt/ros/jazzy/lib/ros_gz_bridge/parameter_bridge /clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock /cite/cell_a/conveyor_1/command@std_msgs/msg/Float64]gz.msgs.Double /cite/cell_a/conveyor_1/state@std_msgs/msg/Float64[gz.msgs.Double /cite/cell_"
+      },
+      "122": {
+        "comm": "robot_state_pub",
+        "cpu_s": 35.11,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=scene_description_publisher --params-file /tmp/launch_params_s6gl0ikz"
+      },
+      "124": {
+        "comm": "robot_state_pub",
+        "cpu_s": 39.1,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_c8cjtkiy -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "126": {
+        "comm": "robot_state_pub",
+        "cpu_s": 42.93000000000001,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_oeqxqelm -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "128": {
+        "comm": "robot_state_pub",
+        "cpu_s": 36.099999999999994,
+        "cmd": "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_54zxm0zp -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "130": {
+        "comm": "python3",
+        "cpu_s": 134.7,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/frame_server.py --ros-args -r __node:=frame_server -r __ns:=/cite/facility --params-file /tmp/launch_params_fltcrxvz --params-file /tmp/launch_params_zqfsl6bc -r /tf_stati"
+      },
+      "131": {
+        "comm": "python3",
+        "cpu_s": 138.67000000000002,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/model_info.py --ros-args -r __node:=model_info -r __ns:=/cite/facility --params-file /tmp/launch_params_sja4mh08 --params-file /tmp/launch_params_uur17kzi"
+      },
+      "132": {
+        "comm": "python3",
+        "cpu_s": 138.62,
+        "cmd": "python3 /workspace/workspace/install/cite_facility/lib/cite_facility/topology_server.py --ros-args -r __node:=topology_server -r __ns:=/cite/facility --params-file /tmp/launch_params_6ayhyfi7 --params-file /tmp/launch_params_to3ytbo3"
+      },
+      "148": {
+        "comm": "move_group",
+        "cpu_s": 137.05,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_yw4ol_0k --params-file /tmp/launch_params_1mzy280_ --params-file /tmp/launch_params_qeu4z_ug -"
+      },
+      "159": {
+        "comm": "move_group",
+        "cpu_s": 156.89,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_n1l287g_ --params-file /tmp/launch_params_634vrlqb --params-file /tmp/launch_params_y8j399xg -"
+      },
+      "162": {
+        "comm": "move_group",
+        "cpu_s": 159.26,
+        "cmd": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_3stgug87 --params-file /tmp/launch_params_hmha2sgg --params-file /tmp/launch_params_lv149lp1 -"
+      },
+      "163": {
+        "comm": "detection_serve",
+        "cpu_s": 71.38000000000001,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/detection_server --ros-args -r __node:=detection_server -r __ns:=/cite/cell_a/detection --params-file /tmp/launch_params_vkg86rdw -r /tf:=/tf -r /tf_static:=/tf_static"
+      },
+      "788": {
+        "comm": "skill_server",
+        "cpu_s": 93.10000000000001,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_r6gax3j4 --params-file /tmp/launch_params_wo5fcmsj --params-file /tmp/laun"
+      },
+      "789": {
+        "comm": "skill_server",
+        "cpu_s": 93.13000000000001,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_2 --params-file /tmp/launch_params_jno2lgm3 --params-file /tmp/launch_params_4wmf2qje --params-file /tmp/laun"
+      },
+      "790": {
+        "comm": "skill_server",
+        "cpu_s": 93.08000000000001,
+        "cmd": "/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_3 --params-file /tmp/launch_params_j4btl7_l --params-file /tmp/launch_params_4mkm9jeh --params-file /tmp/laun"
+      }
+    },
+    "total_s": 2786.21,
+    "cores_used": 3.666042172803371,
+    "rss_total_b": 1904459776,
+    "rss_by_comm": {
+      "tini": 1032192,
+      "python3": 340135936,
+      "gz-transport-to": 13176832,
+      "ros2": 87281664,
+      "ruby": 432349184,
+      "parameter_bridg": 63799296,
+      "robot_state_pub": 170065920,
+      "move_group": 476356608,
+      "detection_serve": 45772800,
+      "skill_server": 274489344
+    }
+  },
+  "launch_returncode": 1,
+  "stats_restarts": 0,
+  "n_stats_samples": 7978,
+  "finished_wall": 1787988474.616595
+}

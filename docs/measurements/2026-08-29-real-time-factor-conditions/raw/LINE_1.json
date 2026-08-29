@@ -1,0 +1,126 @@
+{
+  "label": "LINE_1",
+  "mode": "scenario",
+  "command": [
+    "/workspace/scripts/scenario",
+    "continuous_line",
+    "--teardown-advisory"
+  ],
+  "warmup_s": 30.0,
+  "window_s": 120.0,
+  "expected_control_hz": 150.0,
+  "started_wall": 1787989839.8508205,
+  "marks": [
+    {
+      "name": "launch_start",
+      "wall": 1787989839.854887
+    },
+    {
+      "name": "ready",
+      "wall": 1787989873.7031345
+    },
+    {
+      "name": "window_open",
+      "wall": 1787989903.7042046
+    },
+    {
+      "name": "window_close",
+      "wall": 1787990371.6412585
+    },
+    {
+      "name": "torn_down",
+      "wall": 1787990371.6437626
+    }
+  ],
+  "ready": true,
+  "active_controllers_per_arm": {
+    "arm_1": 3,
+    "arm_2": 3,
+    "arm_3": 3
+  },
+  "joint_state_rates": {
+    "arm_1": {
+      "topic_hz_last": 67.529,
+      "topic_hz_all": [
+        73.765,
+        68.676,
+        68.572,
+        66.085,
+        68.046,
+        66.108,
+        66.135,
+        68.757,
+        66.516,
+        69.085,
+        66.319,
+        68.579,
+        66.178,
+        66.334,
+        68.384,
+        65.694,
+        68.776,
+        67.023,
+        67.234,
+        69.663,
+        66.722,
+        69.641,
+        67.102,
+        66.964,
+        68.445,
+        66.074,
+        69.419,
+        67.529
+      ],
+      "counted": {
+        "topic": "/cite/cell_a/arm_1/joint_states",
+        "count": 1245,
+        "span_s": 18.60857391357422,
+        "hz": 66.8509046301797,
+        "wall_seconds": 20.0,
+        "hz_over_requested_window": 62.25
+      }
+    }
+  },
+  "window": {
+    "rtf_window": 0.670170484713025,
+    "window_sim_s": 313.176,
+    "window_real_s": 467.307956921,
+    "wall_span_s": 467.31441855430603,
+    "n_samples": 4014,
+    "rtf_reported_median": 0.6648750500318475,
+    "rtf_reported_min": 0.009151691547873821,
+    "rtf_reported_max": 1.236158119457376,
+    "wall_gap_max_s": 0.21166300773620605
+  },
+  "cpu": {
+    "by_pid": {
+      "7": {
+        "comm": "python3",
+        "cpu_s": 0.48000000000000004,
+        "cmd": "python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label LINE_1 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode scenario --scenario continuous_line"
+      },
+      "24": {
+        "comm": "gz-transport-to",
+        "cpu_s": 2.1999999999999997,
+        "cmd": "/opt/ros/jazzy/opt/gz_transport_vendor/libexec/gz/transport13/gz-transport-topic -e -t /world/cell_a/stats"
+      },
+      "65": {
+        "comm": "python3",
+        "cpu_s": 0.5399999999999999,
+        "cmd": "/usr/bin/python3 -c from ros2cli.daemon.daemonize import main; main() --name ros2-daemon --ros-domain-id 89 --rmw-implementation rmw_fastrtps_cpp"
+      }
+    },
+    "total_s": 3.2199999999999998,
+    "cores_used": 0.006881290219089958,
+    "rss_total_b": 108994560,
+    "rss_by_comm": {
+      "tini": 1032192,
+      "python3": 94765056,
+      "gz-transport-to": 13197312
+    }
+  },
+  "launch_returncode": 0,
+  "stats_restarts": 0,
+  "n_stats_samples": 4466,
+  "finished_wall": 1787990371.6454794
+}

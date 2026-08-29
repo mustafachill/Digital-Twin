@@ -1,0 +1,13 @@
+Sat Aug 29 08:12:37 UTC 2026
+ 3:12  up 5 days,  8:49, 2 users, load averages: 8.34 7.08 6.96
+supabase_db_turf-on-landing	2.78%
+supabase_studio_turf-on-landing	0.00%
+supabase_pg_meta_turf-on-landing	0.38%
+supabase_storage_turf-on-landing	1.17%
+supabase_rest_turf-on-landing	0.09%
+supabase_realtime_turf-on-landing	0.42%
+supabase_inbucket_turf-on-landing	0.00%
+supabase_auth_turf-on-landing	0.02%
+supabase_kong_turf-on-landing	0.01%
+supabase_vector_turf-on-landing	1.00%
+supabase_analytics_turf-on-landing	2.33%

@@ -1,0 +1,7 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label BRINGUP_2 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode scenario --scenario bringup
+Exception ignored in: <function _after_fork at 0xffff83358680>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1697, in _after_fork
+    thread._stop()
+TypeError: 'Event' object is not callable
+{"label": "BRINGUP_2", "ready": true, "window": null, "launch_returncode": 0}

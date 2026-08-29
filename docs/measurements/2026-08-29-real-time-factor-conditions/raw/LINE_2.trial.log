@@ -1,0 +1,7 @@
+==> Running in container service 'dev': python3 /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/harness/rtf_probe.py --label LINE_2 --out /workspace/docs/measurements/2026-08-29-real-time-factor-conditions/raw --mode scenario --scenario continuous_line
+Exception ignored in: <function _after_fork at 0xffffb3938680>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1697, in _after_fork
+    thread._stop()
+TypeError: 'Event' object is not callable
+{"label": "LINE_2", "ready": true, "window": {"rtf_window": 0.692186062133961, "window_sim_s": 300.053, "window_real_s": 433.486047198, "wall_span_s": 433.48957681655884, "n_samples": 3781, "rtf_reported_median": 0.6684679650097128, "rtf_reported_min": 0.009001467239159983, "rtf_reported_max": 1.2304542344852025, "wall_gap_max_s": 0.20825409889221191}, "launch_returncode": 0}
