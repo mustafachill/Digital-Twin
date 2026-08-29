@@ -5,7 +5,7 @@
   `TwinMode`, `SetMode`, `DivergenceMetrics`, `ModelVersion` — and every asset instance in
   L0 carries a `registration` block, currently `unregistered` for all three arms. Nothing
   consumes any of it.
-- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
+- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
 
 ## Responsibility
 
@@ -47,13 +47,35 @@ transform, and twin health.
 | `SHADOW` | commanded | follows physical state | L1 |
 | `VALIDATED` | commanded | commanded in parallel; divergence measured; virtual does not actuate | L2 |
 | `CLOSED_LOOP` | commanded after virtual validation gates it | validates first | L3 |
+| `VIRTUAL_LEAD` | follows the virtual side and actuates; nothing gates it first | commanded — this is where an operator's command enters | — |
+
+**`VIRTUAL_LEAD`'s empty Level cell is the claim, not an omission.** It carries L3's
+*direction* — virtual → real — without the *validation gate* that defines L3 in charter §2
+and in the `CLOSED_LOOP` row above. A mode says where commands enter and where they land; a
+level says where information flows from and what was proven before it did, and the two are
+not the same axis. **Nothing in this project may cite this mode's existence as a maturity
+claim** ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29;
+[ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 2, which
+carries the reasoning and the rejected alternative). In Phase 2.A the far side is a second
+simulation rather than hardware, so the level is L0 whichever mode is in force. ADR-0011's
+amendment rests on the `CLOSED_LOOP` row above carrying the gate: **if that row is ever
+rewritten to give the direction alone, the amendment fails and the mode has to be
+re-argued.**
 
 Mode is **explicit, observable at runtime, and gated.** It is never reachable by a default
 parameter, an environment variable, or a launch-argument default. A system that can enter
 `REAL` because someone forgot to pass an argument is a system that will.
 
-`safety-auditor` audits every transition. `SIM` → `REAL` and entry to `CLOSED_LOOP` are the
-two that matter most.
+`safety-auditor` audits every transition. `SIM` → `REAL`, entry to `CLOSED_LOOP`, and entry
+to `VIRTUAL_LEAD` **against a real far side** are the three that matter most —
+`VIRTUAL_LEAD` because it is `CLOSED_LOOP` minus the gate, aimed at the same arm.
+**None of the three is refused at the point of transition today.**
+`require_hardware_opt_in` and `CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is
+that the stack could not have started with a physical backend; `SetMode.srv`'s header
+commits the L5 server that will eventually serve this transition to applying the same check
+there, and no such server exists. See
+[cross-cutting-safety.md](cross-cutting-safety.md), which carries the same three and the
+same residual.
 
 ### Divergence measurement is the point
 
@@ -108,6 +130,10 @@ time base produces divergence numbers that look plausible and mean nothing.
   budget.
 - **What `CLOSED_LOOP` validation actually checks** before permitting physical execution.
   This is the crux of L3-level maturity and deserves its own ADR when Phase 5 approaches.
+- **Whether divergence is defined under `VIRTUAL_LEAD`.** Both sides move, so the metric is
+  in principle computable — but nothing mirrors back, and `DivergenceMetrics.msg` names only
+  `SHADOW` and `VALIDATED` as the modes it is meaningful in. Whether `valid` is true in this
+  mode is undecided; ADR-0041 does not decide it and neither does this document.
 - **Multiple physical assets, partially twinned.** With one real arm and two simulated,
   what does a facility-level divergence number even mean? Probably per-asset metrics with
   no aggregate — but it needs deciding rather than defaulting.

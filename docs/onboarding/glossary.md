@@ -19,7 +19,10 @@ its use elsewhere in the repository, this file wins and the other use is a defec
 
 ## Operating modes
 
-Runtime modes at L5, corresponding to the levels above.
+Runtime modes at L5. **They do not correspond one-to-one to the levels above.** Four of them
+happen to coincide with a level; `REAL` and `VIRTUAL_LEAD` do not, and a mode is never a
+maturity claim. `docs/architecture/L5-twin-synchronization.md`'s table is the one that
+carries the level each mode sits at.
 
 | Mode | Physical | Virtual |
 |---|---|---|
@@ -28,6 +31,11 @@ Runtime modes at L5, corresponding to the levels above.
 | `SHADOW` | commanded | follows physical |
 | `VALIDATED` | commanded | commanded in parallel, divergence measured, does not actuate |
 | `CLOSED_LOOP` | commanded after virtual validation | validates first |
+| `VIRTUAL_LEAD` | follows the virtual side and actuates, with nothing gating it first | commanded — where an operator's command enters |
+
+`VIRTUAL_LEAD` is `CLOSED_LOOP` without the validation gate and `SHADOW` with the arrow
+reversed ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
+Decision 2). **No node implements any mode** — `cite_twin` does not exist (CLAUDE.md §2).
 
 ## Architecture
 

@@ -4,7 +4,11 @@
 # permitted now or it is not. The transition itself is observable on
 # /cite/twin/mode, which is where a caller watches it complete.
 #
-# SIM -> REAL and entry to CLOSED_LOOP are the two transitions that matter most.
+# SIM -> REAL, entry to CLOSED_LOOP, and entry to VIRTUAL_LEAD against a real far
+# side are the three transitions that matter most. VIRTUAL_LEAD is on that list on
+# the same criterion as the other two and not by analogy: it is CLOSED_LOOP minus
+# the validation gate, aimed at the same arm (ADR-0041 Decision 2). Where the far
+# side is a simulated counterpart, entering it can move nothing physical.
 #
 # What enforces the hardware opt-in today, stated exactly, because this file used
 # to state a guarantee that no code provided:
@@ -13,10 +17,16 @@
 #     CITE_ALLOW_HARDWARE=1 is set — cite_bringup/plan.py, require_hardware_opt_in.
 #   * ./scripts/enter hardware refuses the same way, at the shell boundary.
 #
+# Both bind at BRING-UP and not at the transition. What they buy is that the stack
+# could not have started with a physical backend; neither is a per-command refusal,
+# so neither refuses any transition this service carries. Do not read the list above
+# as saying these three are gated at the point of transition — they are not.
+#
 # NOTHING enforces it on this service, because no server implements it: the L5
 # twin package does not exist yet (CLAUDE.md §2). The server that eventually does
-# must apply the same check to any transition that commands physical hardware,
-# and until it exists this interface is a contract and not a guarantee (P7).
+# must apply the same check to any transition that commands physical hardware —
+# VIRTUAL_LEAD included, which is the one with the least in front of it — and
+# until it exists this interface is a contract and not a guarantee (P7).
 
 uint8 mode                  # one of TwinMode.MODE_*
 string reason               # recorded; required, so every transition has a why
