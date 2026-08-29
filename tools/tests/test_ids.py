@@ -100,3 +100,47 @@ class TestSeparation:
             "arm_1",
             "link_base",
         ]
+
+
+class TestGazeboPartition:
+    """The one name that is not a ROS name, and the reason it is built here.
+
+    `ROS_DOMAIN_ID` does not isolate Gazebo transport: two servers in one
+    container on separate domains were measured with two publishers on one
+    world's stats topic and two subscribers on one belt's command topic
+    (ADR-0042). The partition is what does isolate them, so it is a name like
+    every other name in this system rather than a string in a launch file.
+    """
+
+    def test_the_plant_side_of_a_zone(self) -> None:
+        assert ids.partition("cell_a", ids.PLANT_SIDE) == "cite/cell_a/plant"
+
+    def test_the_counterpart_side_of_a_zone(self) -> None:
+        assert ids.partition("cell_a", ids.COUNTERPART_SIDE) == "cite/cell_a/counterpart"
+
+    def test_the_two_sides_of_one_zone_differ(self) -> None:
+        # The whole decision reduces to this. Two sides that agreed on a
+        # partition would subscribe to each other's belt commands, silently.
+        assert ids.partition("cell_a", ids.PLANT_SIDE) != ids.partition(
+            "cell_a", ids.COUNTERPART_SIDE
+        )
+
+    def test_the_same_side_of_two_zones_differs(self) -> None:
+        assert ids.partition("cell_a", ids.PLANT_SIDE) != ids.partition("cell_b", ids.PLANT_SIDE)
+
+    def test_a_side_that_is_not_a_side_is_refused(self) -> None:
+        # `virtual` and `physical` are backends, not sides: a Phase 2.A pair has
+        # two simulated sides, and a side name that moved with the backend or
+        # with TwinMode would change the transport partition at runtime.
+        with pytest.raises(ids.InvalidIdentifierError):
+            ids.partition("cell_a", "virtual")
+
+    def test_a_partition_is_a_valid_gz_transport_namespace(self) -> None:
+        # gz-transport prefixes the partition to every topic name and validates
+        # it as a namespace: lowercase, digits, underscores and slashes, no
+        # leading slash and no empty segment.
+        import re
+
+        for side in ids.SIDES:
+            value = ids.partition("cell_a", side)
+            assert re.fullmatch(r"[a-z0-9_]+(/[a-z0-9_]+)*", value), value

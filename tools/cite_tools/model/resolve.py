@@ -87,6 +87,19 @@ class ResolvedAsset:
 
 
 @dataclass(frozen=True)
+class ResolvedSide:
+    """One side of the zone, with the Gazebo transport partition it runs in.
+
+    A `single` zone has one side and it is the plant, so this is never empty: a
+    partition that appeared only when someone paired a cell would be untested on
+    every run that does not (ADR-0042).
+    """
+
+    name: str
+    gz_partition: str
+
+
+@dataclass(frozen=True)
 class ResolvedStation:
     id: str
     zone: str
@@ -111,10 +124,23 @@ class ResolvedCell:
     zone_bounds: Aabb
     assets: tuple[ResolvedAsset, ...]
     stations: tuple[ResolvedStation, ...]
+    #: The sides this zone runs, derived from ``twin.sides`` rather than declared
+    #: (ADR-0041, Decision 3). One entry for a `single` zone, two for a `pair`.
+    sides: tuple[ResolvedSide, ...] = ()
     #: Types not placed as instances — an end effector is fitted to an arm rather
     #: than standing somewhere, so it has a type but no pose.
     unplaced_types: tuple[AssetType, ...] = ()
     workpiece_models: tuple[str, ...] = ()
+
+    @property
+    def is_paired(self) -> bool:
+        """Whether this zone is twinned. Derived from the number of sides.
+
+        Read through rather than restated: `twin.sides` decides how many sides
+        `resolve` builds, so anything that asks "is this twinned" asks the same
+        collection the partitions come from, and the two cannot disagree.
+        """
+        return len(self.sides) > 1
 
     def end_effector_type(self, type_id: str) -> AssetType | None:
         return next(
@@ -411,6 +437,15 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         if s.zone == zone_id
     )
 
+    # `single` yields one side and `pair` yields two, in `ids.SIDES` order. The
+    # count is the only thing L0 states; which sides exist and what they are
+    # called is mechanism, so the names are read from `ids` and never authored.
+    side_count = 1 if zone.twin.sides == "single" else len(ids.SIDES)
+    sides = tuple(
+        ResolvedSide(name=name, gz_partition=ids.partition(zone_id, name))
+        for name in ids.SIDES[:side_count]
+    )
+
     return ResolvedCell(
         facility_id=model.facility.id,
         facility_name=model.facility.name,
@@ -418,6 +453,7 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         zone_bounds=Aabb(min_m=zone.bounds.min_m, max_m=zone.bounds.max_m),
         assets=tuple(sorted(assets, key=lambda a: a.id)),
         stations=stations,
+        sides=sides,
         unplaced_types=tuple(sorted(model.types, key=lambda t: t.id)),
         workpiece_models=tuple(sorted(model.facility.workpiece_models)),
     )

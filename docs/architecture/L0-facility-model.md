@@ -39,7 +39,33 @@
   `tools/cite_tools/validate/geometric.py` refuses a non-zero authored offset so a fitted
   constant cannot re-enter the model
   ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)).
-- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)
+  **L0 now says whether a zone is twinned, and what each side of an asset loads.** A zone
+  declares `twin: {sides: single | pair}` — required, with no default — and an instance may
+  declare `hardware.counterpart_backend`, which when absent means the same backend as
+  `hardware.backend`
+  ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), Decision 3).
+  There is no `counterpart` field and no `none` sentinel: **twinned is derived** from
+  `sides == pair`. Two consequences to carry rather than rediscover. First, no omitted key
+  can produce a non-`sim` value anywhere, because the value `counterpart_backend` falls back
+  to is itself required and explicit. Second, `twin.sides` is read by the generators, so
+  pairing a zone produces a committed `cite_generated/` diff and a new `MODEL_HASH` — which
+  is accepted, and rests on pairing not being a runtime mode: the runtime knob is `TwinMode`
+  and it regenerates nothing. A launch argument or an environment variable that turned
+  pairing on without regenerating is the reopening trigger ADR-0041 names, not an
+  optimisation.
+  **One configuration is refused rather than left expressible:** a zone declaring
+  `twin.sides: pair` may not contain an asset whose `hardware.backend` is anything but
+  `sim`. `plant` is the side `./scripts/sim`, every scenario and every Phase 1 artifact
+  already address, so that encoding would point the existing suite at a physical cell behind
+  a bring-up refusal rather than a per-command one. The same two machines are written as
+  `counterpart_backend`. It is a cross-document rule — the zone holds one half and the
+  instance the other — so it lives in `cite_tools.validate.referential`, as
+  `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it.
+  **What is NOT built:** nothing brings a second side up. `twin.sides: pair` today emits the
+  counterpart's Gazebo transport partition and each asset's counterpart backend into the
+  bring-up plan, and nothing else — no second world, no second controller manager, no second
+  set of node names. Do not read a paired model as a running pair.
+- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md)
 
 ## Responsibility
 

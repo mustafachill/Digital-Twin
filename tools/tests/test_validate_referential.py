@@ -154,3 +154,94 @@ def test_a_workpiece_naming_a_fixture(real_model: Path, edit_yaml: Callable) -> 
 
 def test_the_real_model_resolves_its_workpieces(real_model: Path) -> None:
     assert rules(real_model) == set()
+
+
+# --- A paired zone may not put a physical machine on its plant side ----------
+#
+# ADR-0041's Decision 3 closes one cell of the cross product deliberately. It is
+# a cross-DOCUMENT rule — `twin.sides` is on the zone and `hardware.backend` is
+# on the instance — which is why no schema can express it and it lives here.
+
+
+def _pair_the_zone(model: Path, edit_yaml: Callable) -> None:
+    edit_yaml(
+        model / "facility/zones.yaml",
+        lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+    )
+
+
+def test_a_paired_zone_alone_is_valid(minimal_model: Path, edit_yaml: Callable) -> None:
+    # Pairing a zone whose assets are all simulated is the Phase 2.A shape and
+    # must pass on its own: the refusal below has to fire on the backend, not on
+    # the pairing.
+    _pair_the_zone(minimal_model, edit_yaml)
+    assert rules(minimal_model) == set()
+
+
+def test_a_physical_plant_on_a_paired_zone_is_refused(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__("hardware", {"backend": "real"}),
+    )
+    assert "physical-plant-on-paired-zone" in rules(minimal_model)
+
+
+def test_the_refusal_says_which_encoding_to_use_instead(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # A message that only says "refused" leaves the author with a configuration
+    # they cannot express, when in fact the same two machines are expressible —
+    # the refusal exists to move them to the other encoding, not to forbid them.
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__("hardware", {"backend": "real"}),
+    )
+    findings = referential.check(load(minimal_model))
+    refusal = next(f for f in findings if f.rule == "physical-plant-on-paired-zone")
+    assert "counterpart_backend: real" in (refusal.hint or "")
+
+
+def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The refusal is a property of PAIRING, not a second hardware gate. An
+    # untwinned zone with a real backend is the single-sided case, guarded at
+    # bring-up by the opt-in, which is where that gate belongs.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__("hardware", {"backend": "real"}),
+    )
+    assert "physical-plant-on-paired-zone" not in rules(minimal_model)
+
+
+def test_a_physical_counterpart_on_a_paired_zone_is_allowed(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # This is Phase 2.B as charter section 8 scopes it — one physical arm, the
+    # rest simulated — and it is the encoding that must stay expressible.
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "real"}
+        ),
+    )
+    assert rules(minimal_model) == set()
+
+
+def test_a_counterpart_backend_the_type_does_not_declare_is_refused(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # Same class of error as an unknown `backend`, and it would otherwise fail at
+    # bring-up on the far side rather than here.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "hydraulic"}
+        ),
+    )
+    assert "unknown-backend" in rules(minimal_model)
