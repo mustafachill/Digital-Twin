@@ -119,7 +119,7 @@ not rewritten either.
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted (corrected 2026-08-27) |
 | [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26 and 2026-08-27) |
-| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed |
+| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed (amended 2026-08-29) |
 | [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
 | [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |
@@ -132,3 +132,6 @@ not rewritten either.
 | [0038](0038-stop-the-line-without-ending-the-process.md) | Stop the line without ending the process, and gate resumption on re-armability | Proposed (amended 2026-08-27) |
 | [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28) |
 | [0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md) | Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand | Proposed (corrected 2026-08-28) |
+| [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed |
+| [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Proposed |
+| [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed |
