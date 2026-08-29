@@ -4,7 +4,8 @@
   is **INCONCLUSIVE by this campaign's own validity rule V2**, and is reported beside a
   paired-block figure that is labelled as the deviation it is.
 - **Campaign:** `2026-08-28-second-world-cost`. Thresholds in
-  [`criteria.md`](criteria.md), written and frozen before the first trial.
+  [`criteria.md`](criteria.md), written before the first trial and frozen at commit
+  `57ffd20`. Deviation 6 records exactly when that commit landed relative to the runs.
 - **Data:** [`raw/`](raw). Harness and reproduction command: [`harness/`](harness/README.md).
 - **Related:** [ADR-0028](../../adr/0028-convex-hull-collision-meshes.md),
   [L5](../../architecture/L5-twin-synchronization.md),
@@ -13,8 +14,9 @@
   Darwin 25.5.0 on arm64, Docker Desktop 28.5.1 with **12 CPUs and 7.653 GiB**. Every
   unrelated container on the machine was stopped for the whole measurement window and
   restarted afterwards; `raw/host.txt` records an empty `docker ps` at the start.
-- **Runs:** 5 SOLO, 5 PAIR (10 cells), 5 HULL, 1 PAIRGZ (2 cells), 1 SHADOW pair, 1 world
-  ablation, 2 Gazebo-transport crossing arms, 1 latency rig of 20,000 samples. One further
+- **Runs:** 5 SOLO, 5 PAIR (10 cells), 5 HULL, 1 PAIRHULL (2 cells), 1 PAIRGZ (2 cells),
+  1 SHADOW pair, 1 world ablation, 2 Gazebo-transport crossing arms, 1 cross-container
+  crossing probe, 1 latency rig of 20,000 samples. One further
   SOLO attempt failed bring-up and is kept as `raw/ABORTED_SOLO_3.json`; see
   *Threats to validity*.
 
