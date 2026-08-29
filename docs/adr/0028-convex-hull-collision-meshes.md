@@ -4,15 +4,173 @@
   `assets/` contains only `README.md` and `manifest.yaml`, no `assets/meshes/` directory has
   been created, and the L0 schema has no field through which a collision mesh could be bound
   to a vendor-described type. Promoted to `Accepted` by the change that lands the first hull
-  and its binding (P7).
+  and its binding (P7). **[Amended 2026-08-29: that condition is necessary and is no longer
+  sufficient — see the amendment section named below.]**
+  **Amended 2026-08-29, and the amendment tightens the promotion condition rather than the
+  decision.** The re-measurement this record demanded now exists and supports it: it is the
+  campaign
+  [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+  whose §3.1 lands in the pre-registered band *"material but not dominant"* and whose §5
+  shows a pair missing real time with vendor meshes and meeting it with hulls.
+  **The status does not move, for a reason this record already contains:** the campaign
+  measured cost and never correctness, and this record's own warning about the gripper's
+  filled concavity is still untested. What promotion now additionally requires is in the
+  section named "Amendment — 2026-08-29: the re-measurement landed, and the promotion gate
+  is stated", below.
+  **Corrected on the same day, for a different claim.** The decision stands entire and so
+  does every argument for it. What does not stand is the *form* of one supporting figure: the
+  Context section states real-time factor on the development host as **0.14**, flatly, with no
+  condition and no machine, and a campaign on a host of that class could not reproduce it. See
+  the section named "Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact
+  and carries no condition", immediately after this block. **The urgency the figure was cited
+  for survives the correction** — it is re-established by the campaign, on figures the
+  campaign did register.
 - **Date:** 2026-08-25
 - **Deciders:** Project owner, on the real-time-factor measurement from the Phase 1.C review wave
 - **Related:** [ADR-0004](0004-facility-model-single-source-of-truth.md),
   [ADR-0012](0012-large-asset-storage.md), [ADR-0020](0020-facility-model-conventions.md),
   [ADR-0021](0021-generated-artifacts-are-committed.md),
   [ADR-0027](0027-pilz-planning-pipeline.md),
+  [ADR-0029](0029-simulated-grasping-by-friction.md),
+  [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md) (added by the 2026-08-29 amendment),
   [L1](../architecture/L1-description-and-assets.md), [`../../assets/README.md`](../../assets/README.md),
+  [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   CLAUDE.md §10, charter §4 (P1, P5, P8)
+
+## Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact and carries no condition
+
+**What is wrong is the claim's form, not necessarily its number.** The Context section below
+says *"Real-time factor on the development host is **0.14**"* — present tense, a machine class
+rather than a machine, and no statement of what the cell was doing at the time. Read as
+written it is a reproducible property of anyone's development host. It is not one.
+
+The campaign [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md)
+measured an idle three-arm cell on a host of that class and **could not reproduce it**; its
+*"An absolute, and a contradiction"* section records the gap as a factor of **7.8** and states
+plainly that **the figure in the tree carries no condition and no machine**. The campaign is
+equally plain that it **does not replace the number**, because it did not measure the same
+thing: the two halves of the recorded figure — the real-time factor and the `joint_states`
+rate — are internally consistent with each other, so whatever produced them was a genuinely
+much slower configuration. A different Mac, a different Docker CPU allocation, or a cell that
+was not idle. **The record does not say which, and neither does this correction.**
+
+**No number is substituted here, deliberately.** A campaign is re-measuring the development
+host's real-time factor with its condition written down, and this record must not front-run
+it. Until that lands, the correct way to cite the figure is *"0.14 was recorded, under a
+condition nobody wrote down, and does not reproduce"* — never *"the development host runs at
+0.14"*.
+
+**What survives, and it is the part the decision rested on.** The urgency this record claimed
+is not weakened. It is now carried by figures the campaign *did* register: collision geometry
+is a material contributor on a pre-registered A/B (`G` in the band `1.25 <= G < 2.0`), the
+geometry counts in the Context section were independently recomputed and reproduced exactly,
+and a pair of cells misses real time with vendor meshes and meets it with hulls. **The
+decision, all four parts of it, and the amendment's promotion gate are untouched.** So is the
+observation that every wall-clock ceiling in the scenario suite was chosen against 0.14 —
+that is a fact about how the ceilings were written, and it stays true whatever the figure was.
+
+**This qualification travels with the number.** It applies wherever 0.14 appears in this
+record, including the two places that use it as a re-measurement baseline; those read
+correctly as "the figure recorded in the tree", not as a measured property of a machine.
+
+**How the error survived review.** The figure entered as an observation on one machine on one
+day and was written down as a present-tense property of "the development host" — one sentence,
+no condition, no date, no machine. From there it was quoted into `CLAUDE.md` and into
+`tests/scenarios/bringup.py`, where it became load-bearing for every wall-clock ceiling in the
+suite, and each quotation made it look better attested than it was. Nobody could have
+challenged it by reading, because the sentence contained nothing to challenge: **a measurement
+with no condition attached cannot be contradicted, only re-taken.** The transferable rule is
+the one this project already applies to campaign results and had not yet applied to a figure
+in prose — state who measured it, on what machine, doing what, and over how many runs, or do
+not state it.
+
+## Amendment — 2026-08-29: the re-measurement landed, and the promotion gate is stated
+
+**This is an amendment, not a correction.** Nothing in this record was measured false, and
+the correction above does not contradict that: what it repairs is the *form* of one figure —
+stated flatly, with no condition and no machine — and not the truth of any claim this
+amendment rests on. The two sections are about different things and both stand. Two
+things changed around this record: the re-measurement the record itself demanded was carried out and
+supports the decision, and one clause of the status block — the condition for promotion — is
+tightened as a result. The decision is untouched: collision geometry for vendor-described
+links is a convex hull, generated as a project asset from the vendor's visual mesh and bound
+to the robot type in L0.
+
+### The re-measurement this record demanded
+
+The Decision section ends: *"No status improves on the strength of this record ... the claim
+that this improves real-time factor is earned by re-measuring RTF and `joint_states`
+frequency against the 0.14 / ~21 Hz baseline, not by asserting that hulls are faster."*
+
+That re-measurement is
+[`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+whose Q3.1 is a pre-registered A/B on this exact substitution. It is **cited and not restated**
+(P1); read it rather than this summary. Four of its results bear on this record:
+
+- **The geometry count in the Context section above is confirmed by independent
+  recomputation.** The campaign's harness recomputed the hulls from the same STLs rather than
+  quoting this record, and reproduced its numbers exactly: **98,292 triangles** across the
+  twelve links, **9,810** in their hulls, a **10.0x** reduction.
+- **`G = RTF(hull) / RTF(vendor)` fell in the pre-registered band `1.25 <= G < 2.0`**, on both
+  the ratio-of-medians figure the campaign registered and the within-block figure it reports
+  beside it. The band's reading, written before the first trial, is *"collision geometry is a
+  material but not dominant contributor. Hulls help; something else also has to move."* The
+  campaign's decision rule was deliberately written so that it could disappoint this record,
+  and it did not — but neither did it promote hulls to the cause of the problem.
+- **The ablation says how much else there is.** Collision geometry is a third of the whole
+  step; the arms dominate it; and the majority of the arms' cost survives hulls. This record's
+  *"What we will have to revisit"* clause — *"if 0.14 does not move materially, the bottleneck
+  is elsewhere"* — therefore fires **partly**: the figure moves materially, and the bottleneck
+  is also still elsewhere. Both halves are true and the record must not be cited for only one.
+- **The strongest evidence yet, and it is a Phase 2 result rather than a Phase 1 one.** With
+  vendor collision meshes a *pair* of cells misses real time; with hulls the same pair on the
+  same machine, in the same run design, meets it. That is the difference between failing and
+  meeting the condition
+  [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md) sets, bought with geometry rather than
+  with hardware. **It is one run**, and the campaign labels it as one.
+
+### What the campaign does not license
+
+**It measured what a hull costs. It never measured what a hull breaks.**
+
+That limit was registered in `criteria.md` §8 *before* the first trial and repeated unchanged
+in the write-up afterwards: **no grasp was attempted under hull geometry.** This record's
+*"What we will have to revisit"* already names the case — the gripper fingers are the links
+whose exact geometry decides whether a part fits, and they are the links a convex hull
+approximates worst — and it remains untested. Grasping in this cell is held by friction alone
+with no simulation aid ([ADR-0029](0029-simulated-grasping-by-friction.md)), so the contact
+surface *is* the mechanism, and a real-time-factor result cannot say anything about it.
+
+**A speed result is not a licence to ship geometry.**
+
+### The promotion gate, stated so that whoever lands the first hull cannot miss it
+
+The status block said promotion follows "the change that lands the first hull and its
+binding". **That is necessary and is not sufficient.** ADR-0028 moves to `Accepted` only when
+**both** hold:
+
+1. **The first hull and its L0 binding exist**, as the status block already required — the
+   `tools/` pipeline stage, the asset with provenance in `assets/manifest.yaml`, the L0 field,
+   and `_collision_is_not_a_visual_mesh` extended to the `xacro_macro` provider. All four
+   parts of the Decision, not the first one.
+2. **The friction-grasp campaign has been re-run against hull collision geometry and its
+   result published** —
+   [`docs/measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+   is the campaign to repeat, and the question it must answer is whether the hull geometry
+   changes grasp behaviour. Its thresholds are already written down, which is what makes the
+   comparison meaningful.
+
+Until both hold, hulls may be generated, measured and reviewed, and this record stays
+`Proposed`. **No document may cite the speed result as having settled this decision**, and no
+change may promote the status on the strength of a real-time-factor figure alone.
+
+### How this needed amending at all
+
+The part that transfers: this record set its own promotion condition in terms of the *work*
+(landing a hull and its binding) while stating its principal risk in terms of an *unmeasured
+behaviour* (the filled concavity). Those are not the same test, and a condition written
+against the work would have been satisfied by a change that never asked the question the
+record itself raised. A promotion condition has to name the measurement, not the commit.
 
 ## Context
 
@@ -57,7 +215,8 @@ Three links per arm carry no geometry at all — `link_eef`, `link_tcp`, and the
 Real-time factor on the development host is **0.14** — `/cite/cell_a/arm_1/joint_states`
 arrives at roughly **21 Hz** against the **150 Hz** the model configures
 (`xarm5.yaml: control.update_rate_hz: 150`, generated into
-`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`). The figure is
+`cite_generated/control/cell_a_arm_*_controllers.yaml` as `update_rate: 150`).
+**[Corrected 2026-08-29 — see the Correction section above.]** The figure is
 recorded in the tree at `tests/scenarios/bringup.py`, where every wall-clock ceiling in the
 bring-up scenario is justified against it.
 
