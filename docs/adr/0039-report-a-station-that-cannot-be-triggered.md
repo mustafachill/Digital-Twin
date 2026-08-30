@@ -9,6 +9,12 @@
   5's deliberate absences are still absent there. **Every decision stands.** What was wrong
   was three supporting claims about *why* the predicate is safe, and one cost that was not
   listed at all. The corrections make the case for condition 4 stronger, never weaker.
+  **Amended 2026-08-29 — see the section "Amendment — 2026-08-29: the blind spot has been
+  measured, and the fault it hides is not the one the record assumed", which sits above the
+  correction so that the newest state is met first.** Nothing was measured false and no
+  decision moves; the 2026-08-28 correction stands exactly as written. What is new is
+  evidence: three CI runs, with logs, at the station correction item 5 names — and a
+  measured contrast at a belt-fed station that shows what the coverage gap costs.
 - **Date:** 2026-08-27
 - **Deciders:** Coder agent, from the project owner's brief, against the defect
   [ADR-0038](0038-stop-the-line-without-ending-the-process.md) records in its Evidence
@@ -39,6 +45,72 @@ already defines is taken. **A new enum value on a published message is a typed-c
 decision (P3)**: it changes what `ros2 interface show` says, it moves the stored interface
 baseline, and it hands every present and future consumer a state they must decide what to do
 about. ADR-0010 says an interface is a versioned artefact; this changes one.
+
+## Amendment — 2026-08-29: the blind spot has been measured, and the fault it hides is not the one the record assumed
+
+**This is an amendment and not a correction, and the difference is load-bearing here.**
+Nothing in this record or in the 2026-08-28 correction below was measured false, and the
+correction is left exactly as it stands. What this section adds is evidence for the cost
+correction item 5 introduced, and one fact about that cost that nothing here anticipated.
+
+### The uncaptured run's ambiguity stands, and a different branch has now been captured
+
+The 2026-08-28 verification table's second-to-last row records a `continuous_line` run whose
+log was not kept, in which the work-piece sat on `cell_a__table_pick__surface` for the whole
+420 s leg, and it refuses to call that proof because *"'never picked' and 'picked, failed, and
+closed the loop' are different faults that would look the same in the milestone data"*.
+
+**That row is not being corrected.** For the shape it was written about — a piece that never
+leaves the pick table — the two really are indistinguishable, and the row was right to say so.
+
+What has happened since is that the *other* branch has been captured three times, on CI
+runners, with logs. All three have the identical signature, recorded in
+[CLAUDE.md §2](../../CLAUDE.md): the piece reaches milestone 2 of 10,
+`lifted(station_transfer_1: cell_a__table_pick__surface)`, never reaches milestone 3,
+`on_link(station_transfer_1: cell_a__conveyor_1__infeed)`, and the leg expires on the ceiling
+with `station_transfer_1` reporting `WAITING`, occupancy 1/1, the piece still assigned to it,
+and `LineState` reading `RUNNING` with `blocked_reason=none stall_reasons=none`.
+
+**In this branch the milestone data does distinguish the two faults**, and by the instrument
+the row doubted: `lifted` is *measured*, not reported — `tests/scenarios/continuous_line.py`
+computes `sample.z - frame_z > LIFTED_M` — so a piece that reaches it demonstrably rose off
+the pick frame. **The grasp held.** The three runs then leave the part at the same pose to the
+millimetre for the rest of the leg — `(-0.001, 0.273, 1.201)`, `(-0.001, 0.273, 1.201)` and
+`(-0.001, 0.274, 1.201)` — which is the arm's own home region and not the pick table:
+`pedestal_1` stands at `(0.000, -0.300, 0.000)` and is 0.600 m tall with `arm_1` on its `top`
+frame, while `table_pick` is at `(-0.475, 0.000, 0.000)`. The observed x is within 1 mm of the
+arm's base x and 474 mm from the table's.
+
+So the fault this blind spot hides at `station_transfer_1` is **not** the failed-grasp dead end
+this record's Context section assumes it is. The grasp succeeded; the *gripper's result*
+timed out on a wall-clock deadline, the retry's `MoveToHome` carried the part off the beam,
+and the station returned to `AwaitTrigger` on a beam that had gone clear and stayed clear.
+[ADR-0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) is the trigger and
+[ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) is the L4 defect. **This
+record's predicate is silent for both**, and for the same structural reason: no belt, nothing
+to read.
+
+### The contrast that shows the detector works and its coverage does not
+
+In a local run the same fault class occurred at **`station_transfer_3`**, which is belt-fed
+(`cell_a_flow.yaml`, `via: conveyor_2`). This record's detector fired **0.341 s later**, with
+a named reason, and aborted the run.
+
+Same fault, **diagnosed in a third of a second at a belt-fed station and silent for 420 s at
+the table-fed one.** Correction item 5 says this change closes the class *"for two stations
+out of three"*; that sentence now has a measurement behind it instead of an inference, and it
+is the strongest evidence in this record that the decision was right and its coverage is
+partial. **One local run, reported by the investigation and not re-measured here.**
+
+### What this amendment does not do
+
+It does not close the blind spot.
+[ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) decision 2 proposes a
+predicate that needs no belt — a station `IDLE` or `WAITING` while it still owns a work-piece
+and still names a `current_workpiece_id` — and that closes **one failure shape** at the
+table-fed station, not the class. The candidates correction item 5 names and declines to
+choose between (the beam's *level* rather than its edges, or a re-observation of the pick
+point) are still uncommitted, and neither is taken by that record either.
 
 ## Correction — 2026-08-28: the mechanism sentences under decision 3, and a blind spot that was not listed as one
 

@@ -129,10 +129,12 @@ not rewritten either.
 | [0035](0035-check-the-english-only-rule-by-character-signal.md) | Check the English-only rule by character signal, across the repository | Accepted (corrected 2026-08-27) |
 | [0036](0036-execution-side-trajectory-tolerances.md) | Detect a mistracked trajectory at execution, with tolerances declared in L0 | Proposed (corrected 2026-08-27) |
 | [0037](0037-classify-an-abort-before-any-recovery-motion.md) | Classify an execution abort before any recovery motion is dispatched | Accepted (amended 2026-08-27) |
-| [0038](0038-stop-the-line-without-ending-the-process.md) | Stop the line without ending the process, and gate resumption on re-armability | Proposed (amended 2026-08-27) |
-| [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28) |
+| [0038](0038-stop-the-line-without-ending-the-process.md) | Stop the line without ending the process, and gate resumption on re-armability | Proposed (amended 2026-08-27 and 2026-08-29) |
+| [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28, amended 2026-08-29) |
 | [0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md) | Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand | Proposed (corrected 2026-08-28) |
 | [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed (corrected 2026-08-29) |
 | [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted (corrected 2026-08-29) |
 | [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29) |
 | [0044](0044-one-ros-domain-per-side-identical-names.md) | Give each side of a twin pair its own ROS domain, and keep both sides' names byte-identical | Proposed |
+| [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed |
+| [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed |

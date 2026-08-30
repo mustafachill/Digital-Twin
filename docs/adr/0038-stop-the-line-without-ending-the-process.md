@@ -14,6 +14,13 @@
   this block. **Nothing here was measured false, which is why this is an amendment and not a
   correction.** A second section after it records evidence for decision 5 and decides
   nothing. The status stays `Proposed` until the branch merges.
+  **Amended again 2026-08-29 — see the section "Amendment — 2026-08-29: the dead end has a
+  second door, and the retry destroys its own trigger", which sits above the 2026-08-27
+  amendment so that the newest state is met first.** Nothing was measured false and no
+  decision moves; both 2026-08-27 sections stand exactly as written. What is new is that the
+  dead end the Evidence section records has been reached three times in CI from the *other*
+  side — the grasp held and the recovery carried the part away — which strengthens decision 5
+  and is decided in [ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md).
 - **Date:** 2026-08-27
 - **Deciders:** Docs-writer agent, from an architect's audit of the L4 fault path at
   `c7557c8` after [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) landed
@@ -27,6 +34,77 @@
   [L4](../architecture/L4-orchestration.md),
   [cross-cutting-safety.md](../architecture/cross-cutting-safety.md),
   charter §3.2 and §4 (P2, P4, P5, P7)
+
+## Amendment — 2026-08-29: the dead end has a second door, and the retry destroys its own trigger
+
+**An amendment and not a correction.** Nothing in this record was measured false. The Evidence
+section below records the dead end reached by a **failed grasp**, and every checkable link in
+it still holds. What is new is that the *same* dead end has now been reached three times, on CI
+runners, from the other side — and the difference between the two entrances changes what any
+future re-arm path has to answer.
+
+### The two doors, side by side
+
+The Evidence section's door: the grasp fails, the part is never lifted, it stands at the pick
+point **still breaking** the beam, the station retries, and a beam that is already blocked
+produces no edge. The arm holds nothing.
+
+The second door: **the grasp holds.** What fails is the gripper's *result*, on a wall-clock
+deadline supervising a simulation-time process
+([ADR-0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md)). `Pick` returns
+`TIMEOUT`, `recovery_policy.hpp` answers `RETRY_SAME`, and the recovery's own `MoveToHome`
+carries the part **off** the beam — which clears and then stays clear, because nothing carries
+a new part to a table-fed station. The station retries onto a beam that can produce no edge,
+and **the arm is holding the work-piece.**
+
+| | Failed-grasp door (Evidence, below) | Second door |
+|---|---|---|
+| The grasp | failed | held |
+| The beam's terminal level | blocked | clear |
+| The arm | empty | **holding the work-piece** |
+| The station | re-enters `AwaitTrigger`, no edge possible | re-enters `AwaitTrigger`, no edge possible |
+| `LineState` | `RUNNING` | `RUNNING` |
+| ADR-0039's detector | silent — the station is table-fed | silent — the station is table-fed |
+
+**Identical in the four rows that decide whether it is the same defect, different in the three
+that decide what a fix would have to do.** One needs a part cleared off a beam; the other needs
+a part taken out of a gripper.
+
+### Why this strengthens decision 5 rather than dating it
+
+Decision 5 refuses to wire resumption because re-arming is *"a decision about what is where —
+where the part is, whether the gripper holds one, whether the beam is broken"*, and it names
+the hazard: the retry begins with `MoveToHome` carrying whatever the arm holds, and `Pick`'s
+first physical act is to open the gripper, so a naive re-arm drops a part at the home pose.
+
+Through the second door **that is no longer a prediction about a hypothetical state.** It is
+the state the station is observably in for the rest of the leg, at a pose the three runs agree
+on to the millimetre. The record's own worked example has been photographed.
+
+Two further consequences for whoever eventually builds the re-arm path:
+
+- **A fix keyed on the beam being blocked does not catch this one.** The second door leaves
+  the beam clear. Any re-arm rule stated in terms of "the part is still at the pick point" is
+  a rule about one of the two doors.
+- **The gripper holds a part nothing in the system has recorded as held.** `Pick` returns
+  `TIMEOUT` without setting `holding_`, so L3's own `holding_` is false and no
+  `AttachedCollisionObject` exists either. That half is L3's and is decided in
+  [ADR-0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) decision 4.
+
+### What is decided about it, and where
+
+Nothing here. [ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) takes the
+decision: a station that still holds its work-piece may not re-enter `AwaitTrigger`, and the
+same fact is published through ADR-0039's `STATE_STALLED`. **Decision 5 is untouched by it** —
+`AwaitReArm` still refuses, and nothing gains a `SUCCESS` edge.
+
+### The evidence, and its size
+
+Three CI runs at three commits, recorded with their identifiers in
+[CLAUDE.md §2](../../CLAUDE.md) and not copied here (P1). No thresholds were registered in
+advance and there is no directory in [`docs/measurements/`](../measurements/README.md). What
+is checkable in the mechanism was checked and is in
+[ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)'s verification table.
 
 ## Amendment — 2026-08-27: `OnFault` is built, as a recorder rather than a condition
 
