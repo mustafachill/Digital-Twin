@@ -32,9 +32,9 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 **Phase 1 of the rebuild is closed**, as of 2026-08-28: charter §8 records its exit
 criterion MET, and records in the same place what that closure rests on and what it does
 not cover. Nothing below is retired by the closure — the gap list is still the gap list.
-**Phase 2 has since split into 2.A and 2.B (charter v1.9, 2026-08-29) and the first pieces
-of 2.A are in the tree; nothing has ever brought a pair up.** The charter describes the
-target; the repository is partway there. Check before assuming.
+**Phase 2 has since split into 2.A and 2.B (charter v1.9, 2026-08-29) and 2.A's mechanism is
+in the tree: a pair has come up, three times on one machine, covered by no test.** The charter
+describes the target; the repository is partway there. Check before assuming.
 
 **Every count below names the command that reproduces it, and every figure names who
 measured it and over how many runs.** That is what P7 costs, and this section is where it is
@@ -384,8 +384,8 @@ account of a flake; each was caught by someone re-running, never by someone read
   four**, printing a number close to 0.14 while the cell runs at a twenty-fifth of real time.
   Measure `Δ sim_time / Δ real_time` from the world's stats topic over a stated window; never
   quote that field.
-- **Phase 2 has split into 2.A and 2.B, and the first pieces of 2.A are in the tree.
-  Nothing has ever brought a pair up.** Charter v1.9 (2026-08-29) records the split: 2.A
+- **Phase 2 has split into 2.A and 2.B, and 2.A's bring-up mechanism is built: a pair has come
+  up.** Charter v1.9 (2026-08-29) records the split: 2.A
   pairs the plant with a **virtual counterpart** — a second full simulation of the same cell,
   modelled as if it were physical — and 2.B replaces that stand-in with the real cell. The
   charter also records that **2.A closes no clause of the Phase 2 exit criterion and produces
@@ -394,55 +394,111 @@ account of a flake; each was caught by someone re-running, never by someone read
   **What landed:** ADR-0041's decision 3 as a zone-level `twin: {sides: single | pair}`,
   required with no default, plus an optional per-asset `hardware.counterpart_backend`;
   ADR-0042 as a Gazebo transport partition derived per side and emitted into the generated
-  bring-up plan; ADR-0043's first half as `real_time_factor: 1.0` in the generated world; and
-  `TwinMode/MODE_VIRTUAL_LEAD = 5` in `cite_interfaces`.
+  bring-up plan; ADR-0043's first half as `real_time_factor: 1.0` in the generated world;
+  `TwinMode/MODE_VIRTUAL_LEAD = 5` in `cite_interfaces`; and, on 2026-08-30, ADR-0044 clause 4's
+  domain refusal, ADR-0047's readiness witness and pair supervisor, and the `--pair` flag that
+  reaches them.
   **What a paired model is not, and this is the part to carry.** `model/facility/zones.yaml`
   declares `sides: single` today, so nothing in this repository is paired. Set it to `pair`
   and the generated plan gains **one more `sides:` entry — carrying the counterpart's
   partition *and* its `domain_offset` — and a `counterpart_backend:` line per controller
   manager. That is all it gains** — no second world, no second controller manager, no second
-  set of node names, no second launch. **The offset is emitted for every side, including a
+  set of node names, and **no second launch file**: a counterpart is the same
+  `simulation.launch.py` started again in another environment, so there is nothing here for
+  pairing to add. **The offset is emitted for every side, including a
   `single` zone's plant**, which is why it is not a thing pairing adds: an isolation that
   appeared only when someone paired a cell would be untested on every run that does not
   (ADR-0042, ADR-0044 clause 4). **Ask the plan for the shape rather than reading it out of
   this paragraph** — an exhaustive list of what a change does not do is a claim with an expiry
   date, and this sentence has already expired once.
-  `cite_bringup/gz.py` addresses **the side named `plant`**, by name and not by position, and
-  says in its own docstring that "bringing a counterpart up is a separate launch and is not
-  built yet". ADR-0041 and ADR-0043 are still `Proposed` for exactly that reason.
+  `cite_bringup/gz.py` addresses **a side by name and never by position**. This file quoted
+  that module's docstring until 2026-08-30 for the sentence "bringing a counterpart up is a
+  separate launch and is not built yet"; **`grep -n "not built yet"` on that file now returns
+  nothing**, and the separate launch exists. A quotation of another file is a claim about that
+  file and goes stale exactly as a count does.
+  **A pair comes up, and what is evidenced is the mechanism and the two isolations — nothing
+  more.** `./scripts/sim --pair` starts two independent `ros2 launch` processes through
+  `cite_bringup.pair`: the same `simulation.launch.py` twice, each given its own `side:=` and
+  its own `ROS_DOMAIN_ID`, joined on a token each side prints once its own readiness witness has
+  seen every skill and detection action server the plan declares answering **on that side's
+  domain**. Nothing sequences them, because there is no order to impose (ADR-0047). The
+  supervisor holds no ROS context, and an import-graph test — one that resolves first-party
+  packages and relative imports, after three bypasses were found in a walk that did not — is
+  what makes that a fact rather than a promise. A side that ends ends the pair, naming the side
+  and its status; a pair that never joins fails on a ceiling saying that side never announced
+  **and** never exited, which fired on its first real cause: an installed program without its
+  executable bit, a failure `launch` reports on its own logger without emitting `ProcessExited`,
+  so no gate saw it and nothing else would have.
+  **The evidence is three runs on one machine, reported by the implementing agent of `b3b7b66`
+  and not re-taken by review.** Both isolations were read back **at runtime** rather than off
+  the launch file: `/clock` with **one** publisher on each domain where a merged graph would
+  show two; **22** Gazebo topics per partition under byte-identical names, one stats publisher
+  each at different endpoints; and **41** nodes per domain, every name this project forms
+  present once on each. That is P2 demonstrated — on one machine, three times, by the agent that
+  wrote it.
+  **What a pair is not, and none of this is a fidelity claim.** 2.A produces no fidelity number
+  at all, because both sides run the same L0 model and the same solver. **No paired scenario
+  exists, and none can take today's shape**: `launch_test` with `IncludeLaunchDescription` puts
+  the launch inside the test process, which holds one context on one domain, so two sides cannot
+  be included there, and `./scripts/scenario` addresses the plant. **So nothing automated brings
+  a pair up** — a regression in the witness, the token or either side's bring-up would not fail
+  CI. And because the shipped model is `single`, as above, **`./scripts/sim --pair` refuses on a
+  clean checkout** rather than inventing a second side: reproducing the run means editing L0 and
+  regenerating, which moves `MODEL_HASH`. Two hazards are recorded in `cite_bringup/pair.py` rather than fixed — a
+  signal handler's `Queue.put` can deadlock the supervisor against its own join, with the ceiling
+  unable to fire because the stuck call is what enforces it; and `READY_CEILING_S` is stated
+  rather than derived from the ceilings a side's own gate chain carries.
+  **ADR-0041 and ADR-0047 were promoted on this and ADR-0043 and ADR-0044 were not**, each on
+  the condition it wrote for itself. Read those four status blocks rather than this paragraph
+  before assuming which way any of them went.
   **A checkout now claims two domains, not one, and every checkout's domain changed the day
   that landed.** `scripts/_lib.sh` allocates an odd base per checkout and the counterpart takes
   the even number above it, so no counterpart can land on another checkout's plant — parity,
   not luck. A cell launched before that change and a shell entered after it are on different
   domains, and the shell finds an empty graph; it is one-time and moves no committed artifact.
-  `./scripts/enter`, `./scripts/sim` and `./scripts/scenario` all land on the **plant**, which
-  is the side every script here addresses; `./scripts/doctor` prints that domain and says which
-  side it is. `docs/operations/troubleshooting.md` has the recipe for resolving any side's
+  `./scripts/enter`, `./scripts/scenario` and `./scripts/sim` **without `--pair`** all land on
+  the **plant**, which is the side every script here addresses; `./scripts/sim --pair` starts
+  both sides and leaves the invoking shell on the plant's domain. `./scripts/doctor` prints that
+  domain and says which side it is. `docs/operations/troubleshooting.md` has the recipe for resolving any side's
   domain from the plan, and `docs/onboarding/getting-started.md` states the allocation.
   **The plan carries an offset and never an absolute domain** — one derived from the deployment
   differs in every clone and breaks `./scripts/validate-model`'s byte-identity check; one
   derived from the model is identical in every clone and lets two checkouts of one commit
   discover each other. `cite_bringup.plan.resolve_domain_id` is the one place base and offset
-  are added. **The refusal ADR-0044 clause 4 owes is not built**: nothing yet refuses a side
+  are added, and **the refusal ADR-0044 clause 4 owes is built**: `require_domain` refuses a side
   whose process environment does not carry the domain the plan resolves for it, the way
-  `require_gz_partition` refuses a missing partition. **`MODE_VIRTUAL_LEAD` is vocabulary
-  only**: `grep -rn MODE_VIRTUAL_LEAD workspace/src` reaches the message, the interface
+  `require_gz_partition` refuses a missing partition, with the base arriving on its own channel
+  `CITE_DOMAIN_BASE` so that the plant's half compares two independently sourced values instead
+  of the tautology `env == env + 0`. **ADR-0044 is nevertheless still `Proposed`, for a reason
+  it names itself**: its promotion condition also requires a source scan over `tests/` that
+  fails when a harness enters a ROS graph outside one stated door, that guard does not exist,
+  and `grep -n rclpy.init tests/scenarios/*.py` still returns three bare calls.
+  **`MODE_VIRTUAL_LEAD` is vocabulary only**: `grep -rn MODE_VIRTUAL_LEAD workspace/src` reaches the message, the interface
   baseline and one comment — nothing routes on it, `SetMode` has no server, and `cite_twin`
   does not exist.
-  **The throttle is a ceiling, measured once, and not published.** SDFormat's
-  `real_time_factor` bounds how fast a server may run and cannot make a slow one faster, so it
-  binds only where the cell has spare capacity. The implementing agent measured it on one
-  machine, two runs per scenario, **with no thresholds registered in advance and no directory
-  in [`docs/measurements/`](docs/measurements/README.md)** — so **these figures are not
-  reproducible from this checkout and were not re-taken for this file**: an idle cell at
-  **0.9961** throttled against **1.094** unthrottled, and, under load, a cycle at
-  **0.574 / 0.586** and a line at **0.657 / 0.656**, each within a few per cent of the
-  unthrottled figure the RTF campaign holds for the same scenario. So it is a no-op under load
-  on that machine and binds only on an idle cell. **ADR-0043's other half — that two sides
-  sustain 1.0 concurrently — is unmeasured**, and no scenario ceiling was changed. **ADR-0043's
-  status line still reads "nothing implemented" and describes `REAL_TIME_FACTOR = 0.0`**, which
-  the tree falsifies; its promotion condition wants both halves, so `Proposed` may still be
-  right, but do not read that sentence as a statement about the world file.
+  **The throttle is a ceiling, and ADR-0043's other half is now measured and NOT MET.**
+  SDFormat's `real_time_factor` bounds how fast a server may run and cannot make a slow one
+  faster, so it binds only where the cell has spare capacity: on the machine that measured it,
+  it is at or near a no-op under load and binds only on an idle cell.
+  **Both sets of figures live in
+  [ADR-0043](docs/adr/0043-hold-both-sides-to-the-wall-clock.md) — half 1's in its 2026-08-29
+  correction, the pair's in its 2026-08-30 one — and are deliberately not copied here (P1).**
+  What belongs in this file is their strength and their verdict. Each was taken by the
+  implementing agent of the change that produced it, on **one machine**, with **no thresholds
+  registered in advance** and **no directory in
+  [`docs/measurements/`](docs/measurements/README.md)**; neither was re-taken for this file, and
+  neither is a campaign — a campaign's thresholds are written before its first trial, and these
+  have none, which is why they are recorded in a decision record instead of being dressed as
+  one. **The verdict: both sides of the pair fell short of the 1.0 ADR-0043 requires, by about
+  the margin
+  [`2026-08-28-second-world-cost`](docs/measurements/2026-08-28-second-world-cost/ANALYSIS.md)
+  predicted for vendor collision meshes, on a different host and with the throttle now in the
+  world.** So half 2 is a **measured gap in the
+  machine** rather than an open question, and ADR-0043 stays `Proposed` for that reason and no
+  longer for the "unmeasurable today" one it used to give. **No scenario ceiling was changed and
+  none may be widened to absorb this.** The lever the campaign names is
+  [ADR-0028](docs/adr/0028-convex-hull-collision-meshes.md)'s hulls, still `Proposed`, with
+  `assets/` still holding only its README and its manifest.
   **The sharpest lesson of that work is a defect class, not a decision.** Every process the
   launch graph starts carried the partition; the scenario harness started its own and carried
   none, so both cycle scenarios hung at their work-piece spawn — and an unpartitioned
@@ -652,9 +708,9 @@ account of a flake; each was caught by someone re-running, never by someone read
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **46 records, all indexed** in this checkout on 2026-08-29 — it
-    said 43 earlier the same day, and 40 before that — the newest being
-    [ADR-0046](docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md).
+    `ADR index` line reported **48 records, all indexed** in this checkout on 2026-08-30 — it
+    said 46 the day before, 43 earlier that day, and 40 before that — the newest being
+    [ADR-0048](docs/adr/0048-refuse-a-counterpart-the-generator-cannot-build.md).
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
     also matches `0000-template.md`; both numbers are right and
     they count different things, so name the command with the number. **This figure moves
@@ -777,7 +833,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/test` | Host tooling tests, then unit + integration + launch tests |
 | `./scripts/lint` | Linters and type checks |
 | `./scripts/format` | Apply formatting in place |
-| `./scripts/sim [--headless]` | Launch the simulated cell |
+| `./scripts/sim [--headless] [--pair]` | Launch the simulated cell. `--pair` brings both sides of a twin pair up under the pair supervisor, implies `--headless`, and requires an L0 model that declares `twin: {sides: pair}` |
 | `./scripts/validate-model` | L0 schema validation + generator dry-run. Runs anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name]` | Headless simulation-in-the-loop scenario; no argument lists them |

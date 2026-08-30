@@ -1,6 +1,15 @@
 # ADR-0041: Build the Phase 2.A virtual counterpart as a second full simulation
 
-- **Status:** Proposed (corrected 2026-08-29) — the split and the target operating mode are
+- **Status:** Accepted (corrected 2026-08-29 and 2026-08-30) — **promoted 2026-08-30 by the
+  change that first brought a pair up under bring-up's own control** (`b3b7b66`), which is the
+  condition this record set for itself. `./scripts/sim --pair` starts two independent
+  `ros2 launch` processes through `cite_bringup.pair`, each running the whole of
+  `simulation.launch.py` on its own ROS domain and in its own Gazebo partition — so the
+  counterpart is a complete second simulation by construction rather than by intent, which is
+  Decision 1. **A second correction sits above the first**; see the section
+  "Correction — 2026-08-30: a pair has come up, Decision 1 is built, and this record is
+  promoted", below, for what promotion does and does not claim.
+  The split and the target operating mode are
   the project owner's decisions and are recorded here rather than argued. **Decision 2 and
   Decision 3 are both built, and this record went on saying nothing in it was.**
   `MODE_VIRTUAL_LEAD=5` is in `TwinMode.msg` with the interface baseline regenerated, and L0
@@ -13,16 +22,17 @@
   **nothing has ever brought a pair up.** The Decision itself — that the 2.A counterpart is a
   complete second simulation — is entirely unbuilt. What Decisions 2 and 3 bought is
   vocabulary and schema: a mode nothing routes on, and a field that makes a pair
-  *expressible*.
+  *expressible*. **[Corrected 2026-08-30 — see the Correction section above.]**
   **When written this record was `Proposed` and nothing was implemented**, and that sentence
   is kept rather than replaced: at `f1f914f` nothing in the tree launched a second cell,
   `cite_twin` did not exist and [L5](../architecture/L5-twin-synchronization.md) was marked
   `DESIGNED`, `TwinMode` carried five modes and no sixth, the L0 schema had no `twin:` block
   and `hardware.backend` was a scalar with no side index. **Three of those six clauses still
   hold**: nothing launches a second cell, `cite_twin` does not exist, and L5 is still
-  `DESIGNED`.
-  Every "will" and "must" below is a commitment rather than a description, **except where the
-  correction section marks one as met.**
+  `DESIGNED`. **[Corrected 2026-08-30 — two of the three still hold; a second cell is
+  launched. See the Correction section above.]**
+  Every "will" and "must" below is a commitment rather than a description, **except where
+  either correction section marks one as met.**
 - **Date:** 2026-08-29
 - **Deciders:** Project owner — the Phase 2.A / 2.B split, the target operating mode, and
   the decision to express it as a sixth `TwinMode` constant reachable in 2.A (Decision 2).
@@ -30,6 +40,10 @@
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   which was run to size the decision before the design fixed its shape.
 - **Related:** [ADR-0011](0011-twin-maturity-model-and-modes.md),
+  [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md) (the pair that promoted
+  this record),
+  [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) (which narrows Decision 3
+  until the generator emits per-side artifacts),
   [ADR-0004](0004-facility-model-single-source-of-truth.md),
   [ADR-0005](0005-ros2-control-sim-real-boundary.md),
   [ADR-0010](0010-typed-ros-interfaces.md),
@@ -40,6 +54,67 @@
   [L5](../architecture/L5-twin-synchronization.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   charter §2 (maturity levels), charter §8 (Phase 2), charter §4 (P1, P2, P5, P7, P8)
+
+## Correction — 2026-08-30: a pair has come up, Decision 1 is built, and this record is promoted
+
+**What was wrong.** Three claims, all in the status block, all falsified by `b3b7b66`:
+*"nothing has ever brought a pair up"*; *"the Decision itself — that the 2.A counterpart is a
+complete second simulation — is entirely unbuilt"*; and, in the list of clauses said to survive
+from the original block, *"nothing launches a second cell"*. The other two clauses in that list
+still hold: `cite_twin` does not exist (`ls workspace/src`) and
+[L5](../architecture/L5-twin-synchronization.md) is still `DESIGNED`.
+
+**What is true, established against the tree rather than taken from a report.** The counterpart
+is not a second thing that had to be built — it is `simulation.launch.py` given
+`side:=counterpart`, so it is the same complete cell in a different environment. That is held
+in the tree by `test_the_counterpart_takes_the_other_partition_and_the_other_domain`
+(`cite_bringup/test/test_simulation_launch.py`), which asserts the counterpart's Gazebo
+processes carry the counterpart's partition while every name the launch builds stays the plant's
+byte for byte, and by `test_the_counterpart_started_on_the_plants_domain_refuses` beside it.
+What was **observed rather than tested** is the pair itself: the implementing agent of `b3b7b66`
+reports three runs on one machine, with 22 Gazebo topics per partition under byte-identical
+names, 41 nodes per domain, and `/clock` carrying one publisher on each domain where a merged
+graph would show two. **Review did not re-take it and no test covers it.**
+
+**Why this promotes the record.** The condition was *"the change that first brings a pair up
+under bring-up's own control"*, and the phrase excluded the one prior instance: the
+[second-world-cost](../measurements/2026-08-28-second-world-cost/ANALYSIS.md) campaign brought
+two cells up from a shell script of its own. `./scripts/sim --pair` is bring-up's own —
+`cite_bringup.pair` reads the generated plan, resolves each side's domain through
+`resolve_domain_id`, and starts the project's own launch twice
+([ADR-0047](0047-two-independent-launches-joined-not-sequenced.md), promoted on the same
+change). Options A and B — a kinematic echo and a replayed trajectory — are not merely still
+rejected; the tree now contains the thing that was chosen instead of them.
+
+**What promotion does NOT claim.**
+- **Nothing automated brings a pair up.** The evidence for the run is three hand-taken runs on
+  one machine. ADR-0047's status block carries the same residual and names what would close it.
+- **The counterpart is byte-identical to the plant, and that is a gap rather than a design.**
+  The generator emits one artifact set and hands it to both sides, so "modelled as if it were
+  physical" is not what exists today. That is
+  [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md)'s clause 2, still
+  unimplemented, and its clause 1 refusal is not built either.
+- **No fidelity number, and 2.A produces none** — both sides run the same L0 model and the same
+  solver, so agreement between them is agreement of a thing with itself. Charter §8 scopes this.
+- **L5 is untouched.** Nothing mirrors, nothing measures divergence, `SetMode` has no server and
+  `MODE_VIRTUAL_LEAD` still routes nothing. Every open question this record left for L5 is open.
+- **The machine does not hold the pair to real time.**
+  [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s half 2 has now been measured on a pair
+  and is **not met**; its 2026-08-30 correction carries the figures and this record does not
+  copy them.
+- **The shipped model is `single`.** `model/facility/zones.yaml` declares `twin: {sides: single}`,
+  so a pair requires an L0 edit that moves `MODEL_HASH`. This record makes a pair the decided
+  shape; it does not make the repository paired.
+
+**How the error survived.** The same way the 2026-08-29 one did, one layer up: the branch that
+falsified this record was reviewed against [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)
+and [ADR-0044](0044-one-ros-domain-per-side-identical-names.md), the records it was written from,
+and this one was read as background. **A record is falsified by the branch that satisfies it, and
+that branch's reviewers are looking at a different record.** The check that would have caught it
+is mechanical and cheap: grep the tree for the sentence the change makes false — here,
+"has ever brought a pair up", which stood in **four ADRs and twice in `CLAUDE.md`**, six
+occurrences at the commit before this correction. Two of the six are only found by a search that
+tolerates a line wrap, which is the usual reason a stale sentence survives a grep.
 
 ## Correction — 2026-08-29: Decisions 2 and 3 are implemented, and the status line still said nothing was
 
@@ -97,6 +172,9 @@ generated plan's `sides:` block carrying the counterpart's Gazebo partition, and
 controller manager, no second set of node names and no second launch.** `cite_bringup/gz.py`
 takes `plan.sides[0]` and runs the plant. So the pair is expressible, hashed and validated,
 and it has never been brought up. That is the promotion condition, and it is not close.
+**[Corrected 2026-08-30 — the pair has since been brought up and this record is promoted; see
+the 2026-08-30 Correction section above. An earlier correction is not exempt from being
+corrected.]**
 
 **How the error survived.** The implementing change knew this record's status was right — its
 own commit message says *"ADR-0041 and ADR-0043 stay Proposed, since nothing brings a pair

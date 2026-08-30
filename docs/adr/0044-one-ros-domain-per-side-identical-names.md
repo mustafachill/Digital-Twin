@@ -1,6 +1,18 @@
 # ADR-0044: Give each side of a twin pair its own ROS domain, and keep both sides' names byte-identical
 
-- **Status:** Proposed — **nothing in this record is implemented.** At `29068d4`:
+- **Status:** Proposed (corrected 2026-08-30) — **clause 4 is built, a pair has come up on two
+  domains, and this record went on saying nothing in it was implemented.** See the section
+  "Correction — 2026-08-30: clause 4 is built and a pair has come up; the promotion condition
+  is still not met", below.
+  **The record stays `Proposed`, and for one named reason rather than for want of a pair.**
+  The promotion condition in this block requires, in addition to the launch-graph test, *"the
+  ROS analogue of `tests/scenarios/guards/test_gz_calls_carry_the_partition.py`"* — a source
+  scan over `tests/` that fails when a harness enters a ROS graph other than through one stated
+  door. **That guard does not exist**, and the three bare `rclpy.init()` call sites this block
+  names below are still bare. The condition was written that way on purpose, so it is honoured
+  as written.
+  **When written this record was `Proposed` and nothing was implemented**, and that sentence is
+  kept rather than replaced. At `29068d4`:
   `ROS_DOMAIN_ID` is one value for the whole checkout, derived from the checkout path by
   `cite_domain_id` in [`scripts/_lib.sh`](../../scripts/_lib.sh) and handed to the container
   by [`infra/docker/docker-compose.yml`](../../infra/docker/docker-compose.yml).
@@ -24,7 +36,8 @@
   **no domain** (`workspace/src/cite_generated/bringup/cell_a_plan.yaml`); `model/facility/zones.yaml`
   declares `twin.sides: single`, so the list has one entry; `cite_bringup.gz.gz_environment`
   takes `plan.sides[0]` and says in its own docstring that "bringing a counterpart up is a
-  separate launch and is not built yet"; and `cite_twin` does not exist.
+  separate launch and is not built yet" **[Corrected 2026-08-30 — see the Correction section
+  above.]**; and `cite_twin` does not exist.
   Every "will" and "must" below is a commitment, not a description.
   **Promoted to `Accepted` by the change that first brings two sides up on two domains under
   bring-up's own control, with a test that a side's processes carry the domain the plan
@@ -70,6 +83,8 @@
   and the second-side emission bullet this record unblocks),
   [ADR-0042](0042-partition-gazebo-transport-per-side.md),
   [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md),
+  [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md) (which answers this
+  record's deferral and implements clause 4 alongside it),
   [ADR-0011](0011-twin-maturity-model-and-modes.md),
   [ADR-0004](0004-facility-model-single-source-of-truth.md),
   [ADR-0005](0005-ros2-control-sim-real-boundary.md),
@@ -79,6 +94,84 @@
   [`qos-profiles.md`](../interfaces/qos-profiles.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §8 and §10, charter §4 (P1, P2, P5, P7) and §8
+
+## Correction — 2026-08-30: clause 4 is built and a pair has come up; the promotion condition is still not met
+
+**What was wrong.** Two things, and they fail in opposite directions.
+
+1. *"Nothing in this record is implemented."* False since `d046320` and `b83163f`. Clause 4's
+   refusal exists, both sides of a pair have started on their own domains, and a reader taking
+   the status line at face value would have concluded that `require_domain`,
+   `CITE_DOMAIN_BASE` and `resolve_domain_id` were still open work.
+2. *"`cite_bringup.gz.gz_environment` takes `plan.sides[0]` and says in its own docstring that
+   'bringing a counterpart up is a separate launch and is not built yet'."* **That sentence is
+   no longer in `gz.py`** — `grep -n "not built yet" workspace/src/cite_bringup/cite_bringup/gz.py`
+   returns nothing — and the function is addressed by side name rather than by index. This
+   record quotes it **twice**, in this block and in *Context*, and both quotations are now
+   citations of text that does not exist. A quotation is a claim about another file and goes
+   stale exactly as a count does.
+
+**What is true, established against the tree rather than taken from a report.**
+
+| Claim in the status block | State at this commit | Established by |
+|---|---|---|
+| "the generated plan carries no domain offset" | **false** — every side carries one | `grep -n -A4 'sides:' workspace/src/cite_generated/bringup/cell_a_plan.yaml` |
+| "`CITE_DOMAIN_BASE` appears nowhere" | **false** — it is the base's own channel | `grep -rn CITE_DOMAIN_BASE scripts workspace/src/cite_bringup` |
+| "nothing refuses a side that is not on its own domain" | **false** — `require_domain` does, at the launch boundary | `grep -n 'def require_domain' workspace/src/cite_bringup/cite_bringup/plan.py` |
+| "`gz.py` says a counterpart bring-up is not built yet" | **false** — the sentence is gone and the launch exists | `grep -n 'not built yet' workspace/src/cite_bringup/cite_bringup/gz.py` |
+| "`cite_twin` does not exist" | **still true** | `ls workspace/src` |
+
+**What holds clause 4 now.** `require_domain(plan, side, environ)` refuses a side whose process
+environment does not carry the domain the plan resolves for it, in the same place and manner as
+`require_gz_partition`; `resolve_domain_id` is the single addition of base and offset and is
+where the `1..101` band is enforced; and the base arrives on `CITE_DOMAIN_BASE` rather than
+being read back out of `ROS_DOMAIN_ID`, which is what stops the plant's half reducing to
+`env == env + 0`. That last point is held by a test of its own —
+`test_an_unset_base_is_refused_rather_than_read_from_the_ambient_domain` in
+`cite_bringup/test/test_plan.py` — and the refusal is held at the launch boundary by
+`test_a_side_on_a_domain_that_is_not_its_own_refuses_to_start`,
+`test_a_side_started_without_a_base_refuses_to_start` and
+`test_the_counterpart_started_on_the_plants_domain_refuses` in `test_simulation_launch.py`.
+**The first of the two additional promotion bullets is therefore met**: the check is a run-time
+refusal on the launch path, of the same shape as the partition's.
+
+**What has been observed once, and at what strength.** The implementing agent of `b3b7b66`
+reports a pair up three times on one machine, with `/clock` carrying **one** publisher on each
+domain where a merged graph would show two, and **41 nodes per domain with every name this
+project forms present once on each** — which is clause 1 and clause 4 demonstrated together.
+**Review did not re-take it, no test covers it and no CI step runs it**, and the committed model
+declares `twin: {sides: single}`, so the run is not reproducible from a clean checkout without an
+L0 edit that moves `MODEL_HASH`. Three runs on one machine is the size of that evidence.
+
+**Why this record still stays `Proposed`, in its own words.** The promotion condition in the
+status block does not stop at a launch-graph test. It names a second class of process — a
+harness that calls `rclpy.init()` and takes whatever `ROS_DOMAIN_ID` the invoking shell carries
+— and requires *"a source scan over `tests/` that fails when a harness enters a ROS graph other
+than through the one stated door, counting the call sites it found so that a rewrite moves a
+number instead of producing silence."* At this commit:
+
+- `ls tests/scenarios/guards/` holds four guards and **none of them is that one**;
+- `grep -n rclpy.init tests/scenarios/*.py` still returns three bare calls, at
+  `bringup.py:120`, `pick_and_place.py:218` and `continuous_line.py:502`;
+- and **no stated door exists for a harness to enter a ROS graph through**, so the guard cannot
+  be written before something is built for it to point at.
+
+The line numbers are worth noting on their own: the status block cites `continuous_line.py:495`
+and the call is now at **502**. Nothing moved the call; the file grew above it. **A line citation
+is a claim with an expiry date**, which is the same lesson `9233766` recorded one commit before
+the pair landed.
+
+**What survives.** Every clause of the decision, unchanged. Clauses 1, 2 and 4 are now built and
+exercised; clause 3 is untested because L5 does not exist; clause 5's operator rule holds and
+`./scripts/sim --pair` is the one command that addresses both sides rather than the plant.
+
+**How the error survived.** The change that implemented clause 4 was reviewed against
+[ADR-0047](0047-two-independent-launches-joined-not-sequenced.md), which is the record that
+*needed* clause 4, and this record was read as a dependency rather than as a document with a
+status. That is the same shape as ADR-0041's and ADR-0043's corrections: **a record is falsified
+by the branch that satisfies it, and the branch's own reviewers are looking at the record it
+satisfies.** The transferable part is that a status block quoting another file's text owes that
+quote a grep, exactly as a count owes a command.
 
 ## Context
 
@@ -744,7 +837,9 @@ counterpart, not after.
   second side needs its own launch process with its own `ROS_DOMAIN_ID`, sequenced by something
   above both. `gz.py`'s docstring already anticipates this — "bringing a counterpart up is a
   separate launch and is not built yet" — and this record is what makes that the decided shape
-  rather than an implementation note.
+  rather than an implementation note. **[Corrected 2026-08-30 — see the Correction section
+  above: that sentence is no longer in `gz.py`, and the separate launch it anticipated is
+  built.]**
 
   **The one-line shortcut fails silently and indefinitely, and naming that is the whole point of
   this bullet.** Because the counterpart's processes *do* come up under `additional_env=`, the
