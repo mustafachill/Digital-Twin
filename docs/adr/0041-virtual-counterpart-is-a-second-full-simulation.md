@@ -1,13 +1,28 @@
 # ADR-0041: Build the Phase 2.A virtual counterpart as a second full simulation
 
-- **Status:** Proposed — the split and the target operating mode are the project owner's
-  decisions and are recorded here rather than argued; **nothing in this record is
-  implemented.** At `f1f914f` nothing in the tree launches a second cell, `cite_twin` does
-  not exist and [L5](../architecture/L5-twin-synchronization.md) is marked `DESIGNED`,
-  `TwinMode` carries five modes and no sixth, the L0 schema has no `twin:` block and
-  `hardware.backend` is a scalar with no side index.
-  Every "will" and "must" below is a commitment, not a description. Promoted to `Accepted`
-  by the change that first brings a pair up under bring-up's own control (P7).
+- **Status:** Proposed (corrected 2026-08-29) — the split and the target operating mode are
+  the project owner's decisions and are recorded here rather than argued. **Decision 2 and
+  Decision 3 are both built, and this record went on saying nothing in it was.**
+  `MODE_VIRTUAL_LEAD=5` is in `TwinMode.msg` with the interface baseline regenerated, and L0
+  carries `twin.sides` on the zone and an optional `hardware.counterpart_backend` on the
+  instance, with `backend: real` refused under `sides: pair`. See the section
+  "Correction — 2026-08-29: Decisions 2 and 3 are implemented, and the status line still said
+  nothing was", below.
+  **The record stays `Proposed`, and that is a finding rather than an oversight.** It is
+  promoted by the change that first brings a pair up under bring-up's own control (P7), and
+  **nothing has ever brought a pair up.** The Decision itself — that the 2.A counterpart is a
+  complete second simulation — is entirely unbuilt. What Decisions 2 and 3 bought is
+  vocabulary and schema: a mode nothing routes on, and a field that makes a pair
+  *expressible*.
+  **When written this record was `Proposed` and nothing was implemented**, and that sentence
+  is kept rather than replaced: at `f1f914f` nothing in the tree launched a second cell,
+  `cite_twin` did not exist and [L5](../architecture/L5-twin-synchronization.md) was marked
+  `DESIGNED`, `TwinMode` carried five modes and no sixth, the L0 schema had no `twin:` block
+  and `hardware.backend` was a scalar with no side index. **Three of those six clauses still
+  hold**: nothing launches a second cell, `cite_twin` does not exist, and L5 is still
+  `DESIGNED`.
+  Every "will" and "must" below is a commitment rather than a description, **except where the
+  correction section marks one as met.**
 - **Date:** 2026-08-29
 - **Deciders:** Project owner — the Phase 2.A / 2.B split, the target operating mode, and
   the decision to express it as a sixth `TwinMode` constant reachable in 2.A (Decision 2).
@@ -25,6 +40,74 @@
   [L5](../architecture/L5-twin-synchronization.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   charter §2 (maturity levels), charter §8 (Phase 2), charter §4 (P1, P2, P5, P7, P8)
+
+## Correction — 2026-08-29: Decisions 2 and 3 are implemented, and the status line still said nothing was
+
+**What was wrong.** One sentence, and it is the first thing a reader of this record meets:
+*"nothing in this record is implemented."* It was true when written and it stopped being true
+at `de39e66` and `94561bf`, which implemented Decisions 2 and 3 and left this record
+untouched. A reader taking the status line at face value would conclude that
+`MODE_VIRTUAL_LEAD` and `twin.sides` do not exist and that adding them was still open work.
+Both are in the tree, tested, and load-bearing for other documents.
+
+**What is true, established against the tree rather than taken from a report.** Each claim
+with the command that shows it:
+
+| Claim in the status line | State at this commit | Established by |
+|---|---|---|
+| "`TwinMode` carries five modes and no sixth" | **false** — six | `cat workspace/src/cite_interfaces/msg/TwinMode.msg` |
+| "the L0 schema has no `twin:` block" | **false** — `twin` is a required zone key | `grep -n twin model/schema/zones.schema.json model/facility/zones.yaml` |
+| "`hardware.backend` is a scalar with no side index" | **false** — an optional `counterpart_backend` sits beside it | `grep -rn counterpart_backend model/schema/asset_instances.schema.json` |
+| "nothing in the tree launches a second cell" | **still true** | `grep -rn 'counterpart\|sides' workspace/src/cite_bringup/launch/` returns nothing |
+| "`cite_twin` does not exist" and "L5 is marked `DESIGNED`" | **still true** | `ls workspace/src/`; `head -3 docs/architecture/L5-twin-synchronization.md` |
+
+**Decision 2 is met in full, including the two debts this record named for its implementer.**
+The constant is in `cite_interfaces/msg/TwinMode.msg` with the wording this record specified
+plus the maturity and danger caveats; `cite_interfaces/test/interfaces.baseline` carries
+`uint8 MODE_VIRTUAL_LEAD=5`, so the baseline regeneration this record called *"a conscious,
+reviewed step rather than a silent one"* was taken. The three dangerous-transition lists were
+re-decided rather than left naming two transitions —
+[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md),
+[`L5-twin-synchronization.md`](../architecture/L5-twin-synchronization.md) and
+`SetMode.srv`'s header each now name entry to `VIRTUAL_LEAD` against a real far side as the
+third, and each states that the refusal behind it binds at bring-up rather than at the
+transition. [ADR-0011](0011-twin-maturity-model-and-modes.md) took the amendment this
+record said it would need.
+
+**Decision 3 is met in full, all three clauses.** `model/facility/zones.yaml` carries
+`twin: {sides: single}`, required with no default in `model/schema/zones.schema.json`;
+`hardware.counterpart_backend` is optional on an instance and falls back to `backend` at
+load, so writing it where it agrees and omitting it are one model and one `MODEL_HASH`; and
+the refusal is `physical-plant-on-paired-zone` in
+`tools/cite_tools/validate/referential.py`, which is a cross-document rule and therefore lives
+in the referential validator rather than in the schema. Every existing instance is untouched,
+as this record required — ask `./scripts/validate-model` for the count rather than this
+sentence.
+
+**What survives, and it is most of the record.** The Decision — that the 2.A counterpart is a
+complete second simulation — is untouched and unbuilt. Every argument for it stands, the
+measured costs stand as the campaign licenses them, and *What 2.A cannot claim* stands word
+for word: 2.A is still at maturity level L0 and no number it produces is a fidelity result.
+
+**What `twin.sides: pair` actually does today, stated because the correction must not read as
+a promotion.** `pair` is consumed by exactly one generator — `tools/cite_tools/generate/`
+contains one reader of it, `bringup.py` — and it emits two things: a second entry in the
+generated plan's `sides:` block carrying the counterpart's Gazebo partition, and a
+`counterpart_backend` on each controller manager. **It emits no second world, no second
+controller manager, no second set of node names and no second launch.** `cite_bringup/gz.py`
+takes `plan.sides[0]` and runs the plant. So the pair is expressible, hashed and validated,
+and it has never been brought up. That is the promotion condition, and it is not close.
+
+**How the error survived.** The implementing change knew this record's status was right — its
+own commit message says *"ADR-0041 and ADR-0043 stay Proposed, since nothing brings a pair
+up"* — and drew the wrong conclusion from it: that a record which stays `Proposed` needs no
+edit. But the status block asserted two independent things, *this is not binding yet* and
+*none of this exists yet*, and only the first was still true. Nothing checks the second.
+`./scripts/doctor` verifies that every ADR is indexed and that every referenced ADR exists;
+no instrument in this repository reads an ADR's prose against the tree, and none can. The
+transferable part is narrow and mechanical: **a status block that names specific absences at
+a specific commit is a claim with an expiry date, and the change that falsifies one of those
+absences is the change that owes the edit** — whether or not it also promotes the record.
 
 ## Context
 
@@ -131,7 +214,10 @@ follows and actuates, and nothing mirrors back** — has no value in the publish
 **The project owner's decision is to add it as a mode, and to make it reachable in 2.A.**
 The constant, to be added to
 [`cite_interfaces/msg/TwinMode.msg`](../../workspace/src/cite_interfaces/msg/TwinMode.msg)
-by a later change:
+by a later change: **[Corrected 2026-08-29 — see the Correction section above.]** **That
+change is `de39e66`; the constant is in the file, carrying this wording plus the maturity and
+danger caveats the paragraphs below require. Read `TwinMode.msg` for the text that is binding — the block here is what was
+specified, not what shipped.**
 
 ```
 uint8 MODE_VIRTUAL_LEAD=5   # virtual commanded; the far side follows and actuates.
@@ -189,7 +275,10 @@ not at the transition, the list is currently the only place a reader would learn
 the transition as dangerous at all. **The implementing change owes that sentence a
 revision, in all three places.** This record does not make it: the mode does not exist yet,
 and a safety document naming a constant no interface defines would be the same false
-attestation P7 exists to prevent.
+attestation P7 exists to prevent. **[Corrected 2026-08-29 — see the Correction section
+above.]** **The mode exists and the revision was made: `cross-cutting-safety.md`, `L5-twin-synchronization.md` and `SetMode.srv`'s header each
+name a third dangerous transition, and each states that the refusal behind it binds at
+bring-up rather than at the transition.**
 
 **It is not a maturity claim, and it moves none.** L3 is virtual → real **with the behaviour
 validated in simulation first**; this mode has the direction and not the gate, so it is not
@@ -218,7 +307,8 @@ changes only by explicit owner decision with a version bump (charter §12).
 **The implementing change owes the interface baseline.** Adding a constant is additive at the
 wire level, but `cite_interfaces/test/interfaces.baseline` enumerates every constant of every
 interface, so the regeneration is a conscious, reviewed step rather than a silent one. That is
-what the baseline is for.
+what the baseline is for. **[2026-08-29: paid. `cite_interfaces/test/interfaces.baseline`
+carries `uint8 MODE_VIRTUAL_LEAD=5`.]**
 
 ### Decision 3 — one backend selection per (asset, side), with "twinned" derived rather than declared
 
@@ -556,6 +646,10 @@ and nothing in this project may cite the mode's existence as one.
   [ADR-0011](0011-twin-maturity-model-and-modes.md), amended by this change and the only one
   of the nine already done; and **three separate places in the charter** — §3.1's scope
   table, §5's L5 mode table, and §8's Phase 2 scope sentence.
+  **[Corrected 2026-08-29 — see the Correction section above.]** **All nine are done, as of
+  charter v1.9 — this bullet is now a record of what the sixth mode cost rather than a list
+  of open work.** It is left in
+  place because the seventh mode will pay it again.
   **Plus three dangerous-transition lists, which need a decision and not a paste** —
   `cross-cutting-safety.md` line 98, `L5-twin-synchronization.md` line 55, and
   `SetMode.srv`'s header — for the reason given beside Decision 2's gating paragraph.
@@ -564,8 +658,13 @@ and nothing in this project may cite the mode's existence as one.
   levels, their literature mapping and its commitment are all untouched.
   **That one enumeration needs twelve locations in nine files to agree is itself a finding**,
   and it is P1's shape at the level of prose: a set defined once in `TwinMode.msg` and
-  re-typed everywhere else cannot be kept true by care. Nothing in `./scripts/lint` checks
-  it, and nothing in this record proposes that it should — but whoever adds the seventh mode
+  re-typed everywhere else cannot be kept true by care.
+  **[Corrected 2026-08-29 — see the Correction section above.]** **Twelve is an undercount,
+  and the grep named above is why: charter v1.9 records a thirteenth location,
+  `DivergenceMetrics.msg`, which constrains the mode set in prose naming no constant and is
+  therefore invisible to a `CLOSED_LOOP` grep, and a fourteenth in a file already counted.
+  The instrument this bullet recommends does not find every site it is recommended for.**
+  Nothing in `./scripts/lint` checks it, and nothing in this record proposes that it should — but whoever adds the seventh mode
   should read this bullet before deciding that by hand is good enough.
 - **When `twin.sides` tests ADR-0004's wording, which must be *before or with* the schema
   change and never after.** Decision 3 places in L0 a fact about the modelled deployment
@@ -576,5 +675,7 @@ and nothing in this project may cite the mode's existence as one.
   violation exists — **the change that lands the schema is the change that creates one.** So
   the amendment ships in that commit or ahead of it. Do not settle it by leaving the two
   documents disagreeing, and do not settle it afterwards.
+  **[2026-08-29: settled, and in the required order. `94561bf` landed the schema and amended
+  ADR-0004 in the same commit; its index row reads `Accepted (amended 2026-08-29)`.]**
 - **If a future Gazebo parallelises the physics step**, which the campaign names as the
   condition under which its core-count conclusion changes.

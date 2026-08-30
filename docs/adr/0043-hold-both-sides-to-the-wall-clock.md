@@ -1,11 +1,20 @@
 # ADR-0043: Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently
 
-- **Status:** Proposed — **nothing implemented.** At `f1f914f`
-  `tools/cite_tools/generate/world.py` sets `REAL_TIME_FACTOR = 0.0` and the generated
-  `workspace/src/cite_generated/worlds/cell_a.sdf` carries `<real_time_factor>0</real_time_factor>`;
-  nothing anywhere measures a real-time factor during a run, let alone two concurrently.
-  Promoted to `Accepted` by the change that generates a throttled factor and lands the
-  concurrent measurement (P7).
+- **Status:** Proposed (corrected 2026-08-29) — **half 1 is implemented, half 2 is not, and
+  this record went on saying neither was.** `tools/cite_tools/generate/world.py` sets
+  `REAL_TIME_FACTOR = 1.0` and the generated `workspace/src/cite_generated/worlds/cell_a.sdf`
+  carries `<real_time_factor>1</real_time_factor>`. See the section
+  "Correction — 2026-08-29: half 1 is implemented and measured, and the status line still said
+  nothing was", below.
+  **The record stays `Proposed` because half 2 is not merely unmeasured — it is unmeasurable
+  today.** Promotion needs the *concurrent* measurement of both sides sustaining 1.0, a
+  concurrent measurement needs two sides, and nothing has ever brought a pair up
+  ([ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)). Nothing in the tree
+  measures a real-time factor during a run at all; the figures in the correction below were
+  taken by hand, off a published campaign's method, and no CI step or scenario asserts one.
+  **When written this record was `Proposed` and nothing was implemented**, and that sentence
+  is kept rather than replaced: at `f1f914f` `world.py` set `REAL_TIME_FACTOR = 0.0` and the
+  generated world carried `<real_time_factor>0</real_time_factor>`.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, from the requirement derived in §5 of
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md)
@@ -17,11 +26,92 @@
   [L5](../architecture/L5-twin-synchronization.md),
   [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+  [`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
   charter §4 (P1, P4, P6, P8)
+
+## Correction — 2026-08-29: half 1 is implemented and measured, and the status line still said nothing was
+
+**What was wrong.** *"Nothing implemented"*, together with the two specific facts it rested
+on. Both are now false. `94561bf` set `REAL_TIME_FACTOR = 1.0` and regenerated the world, and
+left this record untouched. A reader meeting the status line would conclude that the throttle
+was still an open proposal and that the tree still free-runs. It does not.
+
+**What is true, established against the tree rather than taken from a report.**
+
+| Claim in the status line | State at this commit | Established by |
+|---|---|---|
+| "`world.py` sets `REAL_TIME_FACTOR = 0.0`" | **false** — `1.0` | `grep -n 'REAL_TIME_FACTOR = ' tools/cite_tools/generate/world.py` |
+| "`cell_a.sdf` carries `<real_time_factor>0</real_time_factor>`" | **false** — `1` | `grep -n real_time_factor workspace/src/cite_generated/worlds/cell_a.sdf` |
+| "nothing anywhere measures a real-time factor during a run" | **still true** | `grep -rn real_time_factor workspace/ tools/ tests/` finds the generator, its template and the generated world, and no measurement |
+| "let alone two concurrently" | **still true, and blocked** | nothing brings a pair up — ADR-0041's correction |
+
+The constant's comment was rewritten in the same change rather than left contradicting the
+value it justifies, and it carries the warning this record needs it to carry: that half 2 is
+a requirement on the machine, that nothing measures it, and that Gazebo's own
+`real_time_factor` field is not the instrument for it.
+
+**Half 1 was a prediction and is now a result, and the two halves of that result have
+different weight.** This record predicted a bounded regression: a throttle is a ceiling, so it
+costs nothing below 1.0 and gives back headroom above it. That prediction is borne out, with
+one caveat named under the table.
+
+| Condition | Throttled | Unthrottled comparator |
+|---|---|---|
+| Idle cell | **0.9961** | **1.094** |
+| `pick_and_place` | **0.574 / 0.586** | **0.582** |
+| `continuous_line` | **0.657 / 0.656** | **0.681** |
+
+**Read the right-hand column's provenance before using it.** `0.582` and `0.681` are
+[`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)'s
+published CYCLE and LINE medians, over 3 and 2 runs, with thresholds registered before the
+first trial. `1.094` is from the same campaign but from a different table — it is the first
+12-CPU window of its CPU curve, an idle cell at full allocation, and **not** its IDLE
+condition median, which is 1.060 over six trials. Cite the campaign for any of the three.
+
+**The left-hand column is not a campaign and must not be cited as one.** The three throttled
+figures were taken by the change that landed half 1, on one machine, **two runs per
+scenario**, with **no thresholds registered in advance** and **no directory under
+[`docs/measurements/`](../measurements/README.md)**. They are recorded in `29068d4`'s commit
+message and nowhere else. They are the size of the evidence, not a published result, and a
+second machine has never been asked.
+
+**What they do support, stated no more strongly than that, and with the one place the
+agreement is imperfect named.** Under load the throttled figures sit on top of the
+unthrottled ones: the cycle's 0.574 / 0.586 straddles the campaign's 0.582 median, one run
+inside its 0.578 - 0.607 range and one 0.004 below it. The line's 0.657 / 0.656 is **below**
+the campaign's 0.670 - 0.692 range, by about 2 %, and it is not honest to call that identical
+— with two runs against two and no pre-registered band, it is also not a difference this
+evidence can attribute to the throttle rather than to the host. The mechanism is not in doubt
+either way: under load this cell runs at roughly 0.58 and 0.67, far below the 1.0 ceiling, so a
+ceiling has nothing to bind on there — which is this record's own argument, not an inference
+from the table. What the table adds is that the idle row is where the ceiling does bind, and
+that it binds by the expected amount: 1.094 free-running, 0.9961 held. So on this host **the
+throttle binds only where the cell has spare capacity, and is at or near a no-op under
+load**. **It says nothing about half 2**, which is a claim about two sides sustaining 1.0 and
+not about one side not being slowed.
+
+**What survives, and it is the whole decision.** Both halves stand. Half 1 is a ceiling and
+half 2 is the capacity requirement, and neither substitutes for the other — the measurement
+above is a demonstration that half 1 is cheap here, not evidence that half 2 is met. No
+scenario wall-clock ceiling was changed and none needed to be, which is what the audit
+sequencing in *What this costs us* asked for.
+
+**How the error survived.** The implementing change reasoned correctly that this record could
+not be promoted, and wrongly that a record staying `Proposed` therefore needed no edit. The
+status block was carrying two claims at once — *not binding yet* and *not built yet* — and
+only the first survived. The transferable part is that **half an implemented decision is the
+worst state for a status line to be stale in**: a reader checking whether the world is
+throttled would have read "nothing implemented", trusted it, and either re-done the work or
+written a document around a `0` that has not been in the tree since `94561bf`.
 
 ## Context
 
 ### Nothing throttles anything today
+
+**[Corrected 2026-08-29 — see the Correction section above.]** **The heading and the
+paragraph below describe the tree at `f1f914f`. Since `94561bf` the generated world declares
+`1` and the generator's comment justifying `0` has been replaced. They are left as written
+because the argument the rest of this section builds needs the starting state.**
 
 The generated world sets `real_time_factor` to `0`, which in Gazebo means unthrottled: the
 server steps as fast as it can. The generator states the reason in the constant's own
@@ -188,6 +278,11 @@ measurement and should be re-taken on the target machine.
   campaign measured a solo cell at **RTF 1.097** with vendor meshes and **1.663** with hulls;
   a ceiling of 1.0 gives all of that headroom back in wall time. This is precisely the cost
   the generator's existing comment names, and this decision accepts it.
+  **[2026-08-29: measured on this host, and much smaller than the campaign's idle figures
+  imply. Under load the cost is at most a couple of percent of real-time factor and may be
+  none — this host runs the loaded scenarios far below 1.0, where a ceiling has nothing to
+  bind on. See the table in the Correction section above, and read its provenance note before
+  quoting either column.]**
 - **Every wall-clock ceiling in the scenario suite is justified against a real-time factor**
   (`tests/scenarios/bringup.py`, quoted in ADR-0028), so the change that lands this must
   revisit them rather than discovering them by timeout. **Ask
@@ -220,6 +315,11 @@ measurement and should be re-taken on the target machine.
   [`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
   It changed no ceiling and found none too tight or too loose, so the first step of the
   sequencing above is done and its §3 table is the baseline to re-derive against.]**
+  **[2026-08-29, later: the throttle has since landed at `94561bf` and no ceiling was
+  changed — `grep -rn '^[A-Z_]*CEILING_S = ' tests/scenarios/` still returns the same six
+  names in eight declarations at the same values. The re-derivation this bullet asks for was
+  an audit that found nothing to move, and the measurement in the Correction section above is
+  why: under load this host is nowhere near the ceiling the throttle imposes.]**
 - **How much slower, on this project's own development host, is not known** — and that is a
   gap in the tree rather than in this record. The tree records RTF **0.14** with
   `joint_states` at roughly 21 Hz; the campaign measured **1.097** and 158 Hz on an idle cell
@@ -234,10 +334,15 @@ measurement and should be re-taken on the target machine.
   are usable: at a full allocation this host free-runs above 1.0 and the bound stated two
   bullets above applies to it; at one core it is far below 1.0, where a throttle is a ceiling
   and costs nothing. Cite that campaign for either figure rather than this bullet.]**
+  **[2026-08-29, later: and the question this bullet opens — how much slower throttling makes
+  this host — now has an answer taken directly rather than predicted. It is in the Correction
+  section above, with the weight of two runs per scenario on one machine and no thresholds
+  registered in advance.]**
 - **A new requirement that something has to check.** "Both sides sustain >= 1.0 concurrently"
   is a claim about a running pair, and nothing measures it today. Under P6 and P8 the
   requirement is not met until a scenario or a CI step answers it, and this record is not that
-  check.
+  check. **[2026-08-29: still true, and now the sole reason this record is not promoted. Note
+  that it is blocked rather than merely outstanding — there is no running pair to measure.]**
 - **Throttling does not make a slow machine fast.** On a machine below 1.0, half 1 changes
   nothing at all and half 2 simply fails. That is the intended behaviour — the failure is
   stated instead of silently producing plausible numbers — but nobody should read the

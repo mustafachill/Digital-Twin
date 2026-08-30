@@ -132,6 +132,6 @@ not rewritten either.
 | [0038](0038-stop-the-line-without-ending-the-process.md) | Stop the line without ending the process, and gate resumption on re-armability | Proposed (amended 2026-08-27) |
 | [0039](0039-report-a-station-that-cannot-be-triggered.md) | Report a station that cannot be triggered, as a line state of its own | Proposed (corrected 2026-08-28) |
 | [0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md) | Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand | Proposed (corrected 2026-08-28) |
-| [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed |
+| [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed (corrected 2026-08-29) |
 | [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted (corrected 2026-08-29) |
-| [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed |
+| [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29) |
