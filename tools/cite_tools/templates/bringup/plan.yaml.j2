@@ -38,10 +38,34 @@ plan:
   #
   # A developer attaching `gz topic -e` to a running side must set the same
   # GZ_PARTITION or the topic list comes back empty rather than wrong.
+  #
+  # `domain_offset` is the OTHER isolation, and it is the other half of one rule:
+  # a process belonging to a side carries both, resolved from the same side
+  # identity and read from this one block. GZ_PARTITION does not isolate the ROS
+  # graph — move_group, the controller managers, the skill servers and the L4
+  # coordinator speak DDS and have never heard of it — and ROS_DOMAIN_ID was
+  # measured not to isolate the Gazebo transport. A pair carrying one and not the
+  # other is either two cells sharing every belt topic or two cells colliding on
+  # every node name, since both sides carry byte-identical names by rule
+  # (ADR-0044, clauses 1 and 2).
+  #
+  # An OFFSET and never an absolute domain. A domain id is a host-scoped resource
+  # allocation rather than a name, and the two ways an absolute one could be
+  # derived both fail: from the deployment it differs in every clone, so
+  # ./scripts/validate-model — which requires a fresh run to be byte-identical to
+  # this file — would fail in every checkout but the one that wrote it; from the
+  # model it is the same everywhere, so two checkouts of one commit resolve the
+  # same domain and discover each other. The base travels on its own channel,
+  # CITE_DOMAIN_BASE, and cite_bringup resolves base + offset in one place
+  # (ADR-0044, clause 4).
+  #
+  # Emitted rather than left implicit in this list's order, for the reason the
+  # partition is: positional meaning is not reviewable.
   sides:
 {% for side in sides %}
     - name: {{ side.name }}
       gz_partition: {{ side.gz_partition }}
+      domain_offset: {{ side.domain_offset }}
 {% endfor %}
 
   controller_managers:
