@@ -282,7 +282,7 @@ account of a flake; each was caught by someone re-running, never by someone read
   the rest of the leg: `(-0.001, 0.273, 1.201)`, `(-0.001, 0.273, 1.201)` and
   `(-0.001, 0.274, 1.201)`, each about 390 s after the peak of the lift. **So the grasp is not
   what failed** — `lifted` is *measured*, computed by the scenario as
-  `sample.z - frame_z > LIFTED_M` (`tests/scenarios/continuous_line.py:664-665`) rather than
+  `sample.z - frame_z > LIFTED_M` (`tests/scenarios/continuous_line.py:674-675`) rather than
   reported by the arm, so the piece demonstrably rose off the pick frame and never came back
   down.
   **What stops the piece between those two milestones is now established, by one
