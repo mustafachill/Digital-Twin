@@ -110,6 +110,84 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 **If a topic exists but `hz` reports nothing:** suspect QoS before anything else. See
 [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md).
 
+## Twin pair — Phase 2.A
+
+> **The zone must declare it.** `./scripts/sim --pair` refuses an untwinned zone rather than
+> inventing a second side: whether a zone runs as a pair is an L0 fact, `model/facility/zones.yaml`
+> ships `twin: {sides: single}`, and the shipped model is not paired.
+
+```bash
+./scripts/sim --pair                   # implies headless; both sides, under the supervisor
+```
+
+**What comes up.** Two complete cells, each one exactly the launch above given a different
+environment: its own `GZ_PARTITION` and its own `ROS_DOMAIN_ID`, both resolved from the
+generated plan. **Every name is byte-identical on both sides** — nodes, topics, actions,
+controllers, joints, frames — which is the point
+([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), clause 1) and is why the
+side lives in the environment rather than in a name.
+
+**Expect** each side to reach the end of its own gate chain and announce itself, and then one
+line saying the pair is up:
+
+```
+[plant] [INFO] [launch.user]: CITE_SIDE_READY side=plant zone=cell_a
+[counterpart] [INFO] [launch.user]: CITE_SIDE_READY side=counterpart zone=cell_a
+[pair] both sides announced readiness; the pair is up
+```
+
+**Neither side waits for the other.** They are joined, never sequenced
+([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md)); the order those
+two lines arrive in says nothing and carries no meaning.
+
+**The console is two labelled streams.** Every line is prefixed with the side it came from.
+That is a real ergonomic cost of running a pair and there is no single-stream form of it.
+
+### Reaching one side
+
+A shell is on the plant's domain by default — `./scripts/doctor` prints it — so a bare
+`ros2 topic list` addresses the plant and finds nothing of the counterpart. To address the
+other side, resolve its domain from the plan rather than adding one by hand:
+
+```bash
+./scripts/enter dev python3 -c '
+import os
+from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
+plan = load(default_plan_path())
+for side in plan.sides:
+    print(side.name, resolve_domain_id(plan, side.name, domain_base(os.environ)),
+          side.gz_partition)'
+```
+
+Then `ROS_DOMAIN_ID=<that> ros2 node list`, and `GZ_PARTITION=<that> gz topic -l` for the
+Gazebo half. **Both are needed and neither substitutes for the other**: a shell with the right
+domain and the wrong partition sees the ROS graph and an empty Gazebo transport.
+
+### How a pair fails
+
+| What you see | What it means |
+|---|---|
+| `[pair] X exited N` before any readiness | that side's bring-up failed. Its own diagnosis is above, in that side's stream |
+| `[pair] X never announced readiness and never exited` | the ceiling. Not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
+| `[pair] X announced readiness as 'Y'` | that launch was given the wrong `side:=`. The pair is not what it says it is |
+| a side ends after the pair is up | the pair ends. A half-pair answers some interfaces and not others, and anything asserting against a pair could pass on one side alone |
+
+**A pair is not a fidelity measurement, and 2.A produces none.** Both sides run the same L0
+model and the same solver, so any agreement between them is agreement of a thing with itself.
+2.A is the instrument (charter §8).
+
+### What is not built
+
+- **No paired scenario.** ADR-0047 records why the existing mechanism cannot host one —
+  `launch_test` with `IncludeLaunchDescription` puts the launch in the test process, which
+  holds one context on one domain — and defers what one would look like. `./scripts/scenario`
+  addresses the plant.
+- **No mirroring and no divergence metric.** That is L5, `cite_twin` does not exist, and
+  ADR-0041's open questions are still open.
+- **Real-time factor is not a bring-up condition.** ADR-0043 requires both sides to sustain
+  1.0 concurrently and **nothing in bring-up measures it**, so a side can be up, slow, and
+  indistinguishable from a healthy one here.
+
 ## Physical cell — Phase 2
 
 > **Not valid yet.** No hardware interface exists. This is the designed procedure, recorded

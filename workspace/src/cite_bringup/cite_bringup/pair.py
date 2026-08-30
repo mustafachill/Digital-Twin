@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import os
 import queue
@@ -297,16 +298,65 @@ def supervise(
     )
 
     interrupted = False
-    try:
+    with _stop_requests(events):
         interrupted = _join(sides, events, ceiling_s, out)
-    except KeyboardInterrupt:
-        interrupted = True
-        print("[pair] interrupted; stopping both sides", file=out, flush=True)
+    # Drained BEFORE anything is stopped, and that ordering is the point. When
+    # two sides fail for one reason they fail together, and a side stopped by
+    # this supervisor reports the stop rather than whatever it was reporting -
+    # which is ADR-0038's lesson one level up: ending a process to report a
+    # fault takes the evidence of the fault with it. Anything already on the
+    # queue is that evidence, and it costs nothing to read it first.
+    _drain(events)
     for side in sides:
         _stop(side, out)
         if side.status is None:
             side.status = side.process.poll()
     return _verdict(sides, interrupted, out)
+
+
+def _drain(events: queue.Queue) -> None:
+    """Apply every event already queued, without waiting for another."""
+    while True:
+        try:
+            kind, side, payload = events.get_nowait()
+        except queue.Empty:
+            return
+        if kind == "exit" and side is not None and side.status is None:
+            side.status = payload
+
+
+@contextmanager
+def _stop_requests(events: queue.Queue):
+    """Turn SIGINT and SIGTERM into an event, for the length of one pair.
+
+    The pair's whole state is in one queue, so an operator asking it to stop has
+    to arrive there too - otherwise the request races the join and is handled in
+    two places. It is caught rather than allowed to kill this process because a
+    supervisor that dies leaves two detached launches nobody owns, which is the
+    orphaned `gz sim` this project already knows the cost of.
+
+    SIGTERM as well as SIGINT: a container stop sends the former, and
+    `KeyboardInterrupt` covers only the latter.
+
+    Restored on the way out, and skipped entirely off the main thread, where
+    `signal.signal` is not available - a test driving :func:`supervise` from a
+    worker thread gets the join and the failure rule without the handlers.
+    """
+    previous: dict[int, object] = {}
+
+    def request(number: int, frame: object) -> None:  # noqa: ARG001 - signal shape
+        events.put(("stop", None, number))
+
+    try:
+        for number in (signal.SIGINT, signal.SIGTERM):
+            previous[number] = signal.signal(number, request)
+    except ValueError:
+        previous.clear()
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
 
 
 def _join(sides: Sequence[_Side], events: queue.Queue, ceiling_s: float, out) -> bool:
@@ -326,6 +376,13 @@ def _join(sides: Sequence[_Side], events: queue.Queue, ceiling_s: float, out) ->
         except queue.Empty:
             _report_ceiling(sides, ceiling_s, out)
             return False
+        if kind == "stop":
+            print(
+                f"[pair] asked to stop (signal {payload}); ending both sides",
+                file=out,
+                flush=True,
+            )
+            return True
         if kind == "ready":
             if payload != side.name:
                 print(
