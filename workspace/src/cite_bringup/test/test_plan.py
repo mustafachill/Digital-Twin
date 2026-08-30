@@ -28,6 +28,10 @@ from cite_bringup.plan import (
     ARM_KEYS,
     ControllerManager,
     ControllerRef,
+    domain_base,
+    DOMAIN_BASE_ENV,
+    DOMAIN_ENV,
+    DomainUnresolvedError,
     GazeboPartitionMissingError,
     GRIPPER_KEYS,
     GZ_PARTITION_ENV,
@@ -35,8 +39,10 @@ from cite_bringup.plan import (
     HardwareNotPermittedError,
     load,
     PlanError,
+    PLANT_SIDE,
     require_gz_partition,
     require_hardware_opt_in,
+    resolve_domain_id,
     resolve_uri,
     Side,
 )
@@ -603,7 +609,9 @@ def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
     # each other's topics, and one belt command drives both cells.
     document = _document()
     shared = document["plan"]["sides"][0]["gz_partition"]
-    document["plan"]["sides"].append({"name": "counterpart", "gz_partition": shared})
+    document["plan"]["sides"].append(
+        {"name": "counterpart", "gz_partition": shared, "domain_offset": 1}
+    )
     with pytest.raises(GazeboPartitionMissingError, match="share the Gazebo partition"):
         load(_written(tmp_path, document))
 
@@ -611,7 +619,11 @@ def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
 def test_a_paired_plan_keeps_its_two_partitions_apart(tmp_path: Path) -> None:
     document = _document()
     document["plan"]["sides"].append(
-        {"name": "counterpart", "gz_partition": "cite/cell_a/counterpart"}
+        {
+            "name": "counterpart",
+            "gz_partition": "cite/cell_a/counterpart",
+            "domain_offset": 1,
+        }
     )
     plan = load(_written(tmp_path, document))
     assert [side.name for side in plan.sides] == ["plant", "counterpart"]
@@ -690,3 +702,147 @@ def test_an_untwinned_plan_states_no_counterpart_backend() -> None:
     # none of an untwinned one.
     plan = load(_generated())
     assert all(m.counterpart_backend is None for m in plan.controller_managers)
+
+
+# --- The ROS domain, and why the plan carries half of one ---------------------
+#
+# The other isolation, and neither substitutes for the other. `GZ_PARTITION` is a
+# gz-transport namespace that move_group, the controller managers, the skill
+# servers and the coordinator have never heard of; `ROS_DOMAIN_ID` was measured
+# not to isolate the Gazebo transport at all (ADR-0042, ADR-0044 clause 2). Both
+# sides of a pair carry byte-identical names by rule, so a pair separated only by
+# partition puts two of every node, two /clock publishers and two identical frame
+# trees into one graph.
+#
+# The plan carries an OFFSET rather than a domain. An absolute value fails both
+# ways it could be derived: from the deployment it differs in every clone, which
+# breaks the byte-identity check ./scripts/validate-model performs on the
+# committed tree; from the model it is identical everywhere, so two checkouts of
+# one commit resolve the same domain and discover each other.
+
+
+def test_the_generated_plan_gives_its_side_a_domain_offset() -> None:
+    plan = load(_generated())
+    assert plan.side_named(PLANT_SIDE).domain_offset == 0
+
+
+def test_the_plant_is_reached_by_name_rather_than_by_position() -> None:
+    # The property that replaces `plan.sides[0]`. Positional meaning is not
+    # reviewable, and a plan addressed by index is one reordering away from
+    # handing a caller the counterpart's environment while calling it the plant.
+    plan = load(_generated())
+    assert plan.side_named(PLANT_SIDE).name == PLANT_SIDE
+
+
+def test_asking_an_untwinned_zone_for_its_counterpart_says_so() -> None:
+    # Rather than an IndexError from `sides[1]`, which names the list instead of
+    # the fact: whether a zone runs as a pair is an L0 fact, and the refusal
+    # points at the model rather than at bring-up.
+    plan = load(_generated())
+    with pytest.raises(DomainUnresolvedError, match="declares no side named"):
+        plan.side_named("counterpart")
+
+
+def test_a_side_with_no_domain_offset_is_refused_rather_than_defaulted(
+    tmp_path: Path,
+) -> None:
+    # Defaulting one here would put the derivation in a second place, which is
+    # exactly the failure emitting it exists to prevent.
+    document = _document()
+    del document["plan"]["sides"][0]["domain_offset"]
+    with pytest.raises(PlanError, match="domain_offset"):
+        load(_written(tmp_path, document))
+
+
+def test_a_boolean_domain_offset_is_refused(tmp_path: Path) -> None:
+    # `bool` is an `int` in Python, so `True` would otherwise be accepted and
+    # resolve to the counterpart's domain.
+    document = _document()
+    document["plan"]["sides"][0]["domain_offset"] = True
+    with pytest.raises(DomainUnresolvedError, match="whole number"):
+        load(_written(tmp_path, document))
+
+
+def test_a_plan_with_no_plant_is_refused(tmp_path: Path) -> None:
+    document = _document()
+    document["plan"]["sides"][0]["name"] = "somewhere_else"
+    with pytest.raises(DomainUnresolvedError, match="no side is named"):
+        load(_written(tmp_path, document))
+
+
+def test_a_plant_at_a_non_zero_offset_is_refused(tmp_path: Path) -> None:
+    # Offset 0 is what makes an untwinned zone resolve to the domain the checkout
+    # already uses, so nothing in Phase 1 moves. A plant anywhere else moves
+    # every existing script off the cell it launched.
+    document = _document()
+    document["plan"]["sides"][0]["domain_offset"] = 3
+    with pytest.raises(DomainUnresolvedError, match="rather than 0"):
+        load(_written(tmp_path, document))
+
+
+def _counterpart(offset: int = 1) -> dict:
+    """A second side, as a paired zone's generated plan would state it."""
+    return dict(
+        name="counterpart",
+        gz_partition="cite/cell_a/counterpart",
+        domain_offset=offset,
+    )
+
+
+def test_two_sides_sharing_one_domain_offset_are_refused(tmp_path: Path) -> None:
+    # The ROS-graph twin of two sides sharing a partition, refused in the same
+    # place so that a side cannot carry one isolation and not the other.
+    document = _document()
+    document["plan"]["sides"].append(_counterpart(offset=0))
+    with pytest.raises(DomainUnresolvedError, match="share the domain offset"):
+        load(_written(tmp_path, document))
+
+
+def test_the_resolver_adds_the_base_to_the_side_offset(tmp_path: Path) -> None:
+    document = _document()
+    document["plan"]["sides"].append(_counterpart())
+    plan = load(_written(tmp_path, document))
+    assert resolve_domain_id(plan, PLANT_SIDE, 41) == 41
+    assert resolve_domain_id(plan, "counterpart", 41) == 42
+
+
+def test_the_two_sides_of_a_pair_never_resolve_to_one_domain(tmp_path: Path) -> None:
+    # The clause reduces to this inequality, and it holds for every base rather
+    # than for a chosen one.
+    document = _document()
+    document["plan"]["sides"].append(_counterpart())
+    plan = load(_written(tmp_path, document))
+    for base in range(120):
+        plant = resolve_domain_id(plan, PLANT_SIDE, base)
+        assert plant != resolve_domain_id(plan, "counterpart", base)
+
+
+def test_an_untwinned_zone_resolves_to_exactly_the_base() -> None:
+    # Nothing in Phase 1 moves. This is the regression that says so.
+    plan = load(_generated())
+    for base in (1, 42, 99):
+        assert resolve_domain_id(plan, PLANT_SIDE, base) == base
+
+
+def test_the_base_travels_on_its_own_channel() -> None:
+    assert domain_base(dict([(DOMAIN_BASE_ENV, "7")])) == 7
+
+
+def test_an_unset_base_is_refused_rather_than_read_from_the_ambient_domain() -> None:
+    """The refusal that is not the tautology `env == env + 0`.
+
+    If the base were read from `ROS_DOMAIN_ID` in the process's own environment,
+    then for the plant - at offset 0 - the base would be the value under test,
+    and any check comparing them would pass for every possible value including a
+    wrong one. Only the counterpart's half would have had teeth, and a green
+    result would have been read as covering both sides (ADR-0044, clause 4). So
+    an absent base is refused here rather than defaulted, and the presence of the
+    ambient domain does not satisfy it.
+    """
+    with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
+        domain_base(dict([(DOMAIN_ENV, "42")]))
+
+
+def test_a_base_that_is_not_a_number_is_refused() -> None:
+    with pytest.raises(DomainUnresolvedError, match="whole number"):
+        domain_base(dict([(DOMAIN_BASE_ENV, "plant")]))
