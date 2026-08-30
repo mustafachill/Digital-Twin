@@ -1059,6 +1059,32 @@ class TestTwinSidesAndTheGazeboPartition:
         Should this ever fail because a genuinely side-specific artifact was
         added, do not relax it: state which fact made the sides differ and why
         the copy is not a copy.
+
+        **It is blind to the divergence that actually matters, and that is not a
+        gap to be closed here.** The premise above — that both sides answer all
+        three backend call sites identically — holds because a 2.A counterpart is
+        a second simulation. **`counterpart_backend: real` validates cleanly
+        today**: `physical-plant-on-paired-zone` refuses a physical *plant* and
+        says nothing about a physical counterpart, and
+        `test_a_physical_counterpart_reaches_the_plan` asserts that it reaches
+        the plan. Such a counterpart would be handed the plant's description with
+        the `gz_ros2_control` plugin and `use_sim_time: true`, and `hosted_by`
+        derived from the plant's backend alone — a real cell driven by artifacts
+        that describe a simulated one.
+
+        **This tripwire cannot fire on that**, and the reason is structural
+        rather than an oversight: it compares the artifacts pairing produces
+        against the artifacts it does not, and with no per-side artifact set
+        there is no second artifact to differ. So what it protects against is
+        **reflex duplication** — a generator emitting a byte-identical second
+        world or second controller config — and nothing else.
+
+        **Phase 2.B's owner owes either a refusal or a per-side artifact set**,
+        and it is one or the other: either `counterpart_backend: real` is refused
+        at validation until the artifacts can differ, or the generator emits a
+        per-side set and this test is rewritten around what legitimately differs.
+        That is an architectural decision and belongs in `docs/adr/`, not in a
+        test's docstring and not in this change.
         """
         before = artifacts(real_model)
         self._pair(real_model, edit_yaml)
