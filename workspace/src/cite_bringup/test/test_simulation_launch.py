@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import copy
 import importlib.util
-import os
 from pathlib import Path
 import re
 from types import ModuleType
@@ -1266,6 +1265,28 @@ def _installed_programs() -> list[Path]:
 
 
 def test_every_installed_program_is_executable_in_the_tree() -> None:
+    """Every `install(PROGRAMS ...)` entry carries an executable bit in the tree.
+
+    **Read as a permission bit rather than asked of the filesystem, and that is
+    not a stylistic preference.** `os.access(path, os.X_OK)` answers whether THIS
+    machine would let this process run the file, and on a Docker Desktop bind
+    mount it answers `True` for a file whose mode is `0o100644` - measured in
+    this container on 2026-08-30, over the repository's own mount. So the version
+    of this check that asked `os.access` was **live in CI and dead on a macOS
+    host**: the one environment that produced the defect is the one that could
+    not see it.
+
+    What actually governs is the committed mode, because CI runs on Linux and
+    because a symlink install makes the installed path resolve back to this very
+    file. `st_mode & 0o111` is that mode, and it is the same number on every
+    machine that checks out the tree.
+
+    This check exists because the failure it guards has no event: `launch`
+    reports a failure to exec as an exception on its own logger and emits no
+    `ProcessExited`, so no gate fires and bring-up neither stops nor announces.
+    The class is recorded in `simulation.launch.py`'s own docstring; do not
+    re-derive it from a failed run.
+    """
     programs = _installed_programs()
     assert programs, (
         "no install(PROGRAMS ...) found in CMakeLists.txt. If it moved, move this "
@@ -1273,7 +1294,7 @@ def test_every_installed_program_is_executable_in_the_tree() -> None:
     )
     for program in programs:
         assert program.is_file(), program
-        assert os.access(program, os.X_OK), (
+        assert program.stat().st_mode & 0o111, (
             f"{program} is installed as a program and is not executable. Under a "
             "symlink install the installed path IS this file, so the launch that "
             "starts it fails to exec - and a failure to exec is reported by "

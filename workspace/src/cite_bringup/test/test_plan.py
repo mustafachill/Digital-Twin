@@ -802,6 +802,37 @@ def _counterpart(offset: int = 1) -> dict:
     }
 
 
+def _paired_document() -> dict:
+    """The generated plan with a counterpart, whether or not it already had one.
+
+    Built from whatever the generated plan declares rather than assuming it is
+    `single`. **A checkout flipped to `twin: {sides: pair}` for a run is a real
+    state** — it is how a pair is brought up at all — and on such a checkout a
+    fixture that appends unconditionally produces two sides named `counterpart`,
+    so the test fails on its own fixture rather than on what it is asking about.
+    The same shape as `_paired` in `test_simulation_launch.py` and `_paired_plan`
+    in `test_pair.py`.
+    """
+    document = _document()
+    sides = document["plan"]["sides"]
+    if not any(side["name"] == "counterpart" for side in sides):
+        sides.append(_counterpart())
+    return document
+
+
+def _solo_document() -> dict:
+    """The generated plan with the plant and nothing else.
+
+    The other half of the same hazard: a test about an UNTWINNED zone read the
+    live plan, so it asserted the opposite of what a paired checkout declares.
+    """
+    document = _document()
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
+    ]
+    return document
+
+
 def test_two_sides_sharing_one_domain_offset_are_refused(tmp_path: Path) -> None:
     # The ROS-graph twin of two sides sharing a partition, refused in the same
     # place so that a side cannot carry one isolation and not the other.
@@ -958,9 +989,7 @@ def test_a_side_on_the_domain_the_plan_resolves_for_it_is_accepted() -> None:
 
 
 def test_a_counterpart_on_the_base_plus_one_is_accepted(tmp_path: Path) -> None:
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
 
 
@@ -986,9 +1015,7 @@ def test_a_counterpart_started_on_the_plants_domain_is_refused(tmp_path: Path) -
     # The collision that matters: both sides carry byte-identical names by rule,
     # so a counterpart on the plant's domain is two identical node sets and two
     # /clock publishers in one graph, reported by nothing.
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     with pytest.raises(RosDomainMismatchError, match="byte-identical names"):
         require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "42"})
 
@@ -1018,9 +1045,15 @@ def test_a_side_with_no_base_is_refused_before_the_domain_is_compared() -> None:
         require_domain(plan, PLANT_SIDE, {DOMAIN_ENV: "42"})
 
 
-def test_asking_an_untwinned_zone_for_a_counterpart_names_the_missing_side() -> None:
+def test_asking_an_untwinned_zone_for_a_counterpart_names_the_missing_side(
+    tmp_path: Path,
+) -> None:
     # Not a domain failure. The side does not exist, and answering "the domain
     # cannot be resolved" would send a reader to the wrong half of ADR-0044.
-    plan = load(_generated())
+    #
+    # Driven against a plan written here rather than the generated one, because
+    # the question is about an UNTWINNED zone and a checkout flipped to `pair`
+    # for a run declares a counterpart that exists.
+    plan = load(_written(tmp_path, _solo_document()))
     with pytest.raises(SideNotDeclaredError):
         require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})

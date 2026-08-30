@@ -61,6 +61,10 @@ if(BUILD_TESTING)
   # test executed rather than asserted, and the import-graph check is what makes
   # "holds no rclpy context" reviewable.
   ament_add_pytest_test(pair test/test_pair.py)
+  # ADR-0047 clause 3. `endpoints()` is the definition of "this side is up", and
+  # a witness whose condition is almost empty exits 0 having checked almost
+  # nothing - which the launch announces and the supervisor reports as a pair.
+  ament_add_pytest_test(readiness_witness test/test_readiness_witness.py)
 
   # ADR-0036. The generator suite proves the `constraints:` block is emitted;
   # only a running controller proves the parameter names are ones

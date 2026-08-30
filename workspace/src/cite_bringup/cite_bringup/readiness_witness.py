@@ -77,9 +77,27 @@ from rclpy.parameter import Parameter
 DEADLINE_S = 300.0
 
 #: How long a single `wait_for_server` call blocks before the loop re-checks the
-#: overall deadline. Not a poll interval in the sense P4 forbids — the call is a
-#: blocking wait on a graph event and returns the instant the server appears; the
-#: bound exists only so that the deadline above can be enforced between waits.
+#: overall deadline.
+#:
+#: **This is a poll, and calling it anything else would be false.** An earlier
+#: version of this comment said the call was "a blocking wait on a graph event"
+#: that "returns the instant the server appears". It is neither. Read on
+#: 2026-08-30 in the installed package,
+#: `/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/action/client.py`:
+#: `ActionClient.wait_for_server` loops on `self.server_is_ready()` with a
+#: `sleep_time = 0.25` between attempts, decrementing `timeout_sec` itself, and
+#: the two lines directly above that loop are
+#: `# TODO(jacobperron): Remove arbitrary sleep time and return as soon as server
+#: is ready` and a link to ros2/rclpy#58. So the server can be up for a quarter of
+#: a second before this process learns of it, and that latency is upstream's to
+#: remove rather than this file's.
+#:
+#: **What makes it permitted is the ceiling, not the interval.** P4 forbids
+#: sleeping for a guessed duration in place of an event; this waits under
+#: :data:`DEADLINE_S`, whose expiry is a failure that names the endpoints that
+#: never answered. Nothing here proceeds because a timer elapsed. This bound is
+#: only how often the deadline gets a chance to be enforced, and shortening or
+#: lengthening it changes no outcome.
 _SLICE_S = 1.0
 
 #: Every action a skill server advertises, paired with the plan field naming it.
@@ -107,6 +125,13 @@ def endpoints(plan: Plan) -> list[tuple[str, type]]:
     limitation rather than an oversight: it starts only under `line:=true`, it
     takes exclusive hold of the very skills below, and a pair is brought up idle.
     A witness that waited on it would fail every bring-up that does not run it.
+    **So readiness under `line:=true` does not cover L4**: the token means this
+    side's skills and detection are serving, and says nothing about whether the
+    coordinator that was started alongside them ever reached its own first tick.
+
+    **An empty list is not "nothing to wait on", it is a plan this witness cannot
+    read**, and :func:`main` refuses it rather than exiting 0. See the refusal
+    there for what that would otherwise announce.
     """
     wanted: list[tuple[str, type]] = []
     for manager in plan.controller_managers:
@@ -139,6 +164,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"READINESS WITNESS FAILED: {exc}", file=sys.stderr)
         return 2
 
+    outstanding = endpoints(plan)
+    if not outstanding:
+        # Refused before a context is created, because there is nothing this
+        # process could go on to observe. `plan.load` accepts a plan whose
+        # controller managers declare no `skills:` block, so an edit or a
+        # generator change that dropped it would leave this witness with an empty
+        # condition - which it would satisfy instantly, exit 0 on, and the launch
+        # would announce the side ready and the supervisor would report the pair
+        # up. "Nothing to wait on" is the one answer a readiness witness may
+        # never give.
+        print(
+            f"READINESS WITNESS FAILED: the plan for zone {plan.zone!r} names no "
+            f"action server for side {args.side!r} to wait on, over "
+            f"{len(plan.controller_managers)} controller manager(s). A side with "
+            "no endpoints cannot be observed to be serving, and exiting 0 here "
+            "would announce a readiness nothing checked.",
+            file=sys.stderr,
+        )
+        return 2
+
     # `cite_runtime.init` rather than `rclpy.init`, for the reason ADR-0034
     # records: this process can still be alive when the launch tears the side
     # down, and the raw pair loses the context shutdown to a signal-handler race.
@@ -150,7 +195,6 @@ def main(argv: list[str] | None = None) -> int:
         # expire, and expiry is the whole point of this process.
         parameter_overrides=[Parameter("use_sim_time", value=False)],
     )
-    outstanding = endpoints(plan)
     node.get_logger().info(
         f"waiting for {len(outstanding)} action server(s) on side {args.side!r}"
     )

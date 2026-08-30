@@ -99,8 +99,26 @@ READY_CEILING_S = 900.0
 #: process take 45 s before SIGTERM and 60 s before SIGKILL. A supervisor that
 #: killed the group sooner would truncate the very teardown the launch is in the
 #: middle of performing, and record the truncation instead of what happened.
+#:
+#: **Both are spent per side, because the stop loop is sequential.** Two sides
+#: that both refuse to go cost `2 * (STOP_GRACE_S + STOP_KILL_S)` before the pair
+#: reports, which is a stated cost rather than a measured one: nothing has ever
+#: taken it. Stopping the sides concurrently would halve it and is deliberately
+#: not done here, because ending a pair is the path along which evidence is most
+#: easily lost (ADR-0038) and a sequential stop keeps each side's teardown
+#: readable in the console.
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
+
+#: How often the sweep below asks whether a process group has emptied.
+#:
+#: A poll, stated as one. There is no event a non-parent can wait on for a
+#: process group: the members of a side's group past the launch itself are
+#: grandchildren, so `waitpid` cannot see them and only `killpg(pgid, 0)` answers
+#: whether any of them is left. What carries the meaning is the ceiling above it,
+#: whose expiry escalates to `SIGKILL`; this interval only decides how promptly
+#: that happens and is not a guess about how long anything takes.
+_SWEEP_POLL_S = 0.1
 
 #: The exit status of a pair that ended because a side ended.
 #:
@@ -165,6 +183,15 @@ class _Side:
 
     spec: SideSpec
     process: subprocess.Popen
+    #: The side's process group, CAPTURED WHEN IT STARTED rather than looked up.
+    #:
+    #: `os.getpgid` needs the leader to still exist, and the case the sweep below
+    #: is for is precisely the one where it does not: the launch has exited, been
+    #: reaped, and left everything it started running in the group. Asking for
+    #: the group id then answers `ProcessLookupError` and the orphans are never
+    #: signalled. `start_new_session` makes the child a session and group leader,
+    #: so the group id is the pid it was started with and is known at once.
+    pgid: int | None = None
     ready: bool = False
     status: int | None = None
 
@@ -196,6 +223,12 @@ def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
     )
 
 
+def _started(spec: SideSpec, environ: Mapping[str, str]) -> _Side:
+    """Start one side and record the group it owns, while its leader is alive."""
+    process = _start(spec, environ)
+    return _Side(spec, process, pgid=process.pid)
+
+
 def _pump(side: _Side, events: queue.Queue, out) -> None:
     """Forward one side's output, labelled, and post what the supervisor needs.
 
@@ -219,8 +252,13 @@ def _stop(side: _Side, out) -> None:
     SIGINT to the launch process alone first, because that is the signal `launch`
     installs a handler for and the one its documented shutdown path runs on;
     signalling the whole group here would deliver a second SIGINT to processes
-    launch is already stopping. The group is only reached if the launch itself
-    does not go.
+    launch is already stopping. The group is only reached here if the launch
+    itself does not go.
+
+    **A side that has already exited is not this function's job and is not
+    ignored either** — see :func:`_sweep`, which runs after every side's stop and
+    reaches the group whether or not its leader is still there. Returning early
+    here is what keeps this function about the launch's own teardown.
     """
     if side.process.poll() is not None:
         return
@@ -250,9 +288,63 @@ def _stop(side: _Side, out) -> None:
 
 def _signal_group(side: _Side, number: int) -> None:
     try:
-        os.killpg(os.getpgid(side.process.pid), number)
+        if side.pgid is not None:
+            os.killpg(side.pgid, number)
     except (ProcessLookupError, PermissionError):
         pass
+
+
+def _group_is_empty(side: _Side) -> bool:
+    """Whether nothing is left in this side's process group."""
+    if side.pgid is None:
+        return True
+    try:
+        os.killpg(side.pgid, 0)
+    except (ProcessLookupError, PermissionError):
+        return True
+    return False
+
+
+def _sweep(sides: Sequence[_Side], out) -> None:
+    """Signal every side's whole process group, INCLUDING sides already reaped.
+
+    **`_stop` returns the moment a side's launch has gone, and a launch that died
+    on a signal takes its own supervision with it.** Everything it started is
+    reparented and keeps running: this repository has documented `move_group`,
+    `skill_server`, `parameter_bridge` and `gz` all dying that way at teardown,
+    and an orphaned `gz sim` holds that side's `GZ_PARTITION` — so the pair
+    reports both statuses, exits, and leaves a Gazebo server occupying the
+    transport the next run of that side will look for. That is the orphan this
+    project already knows the cost of, one process group up.
+
+    Unconditional, because "the launch has already exited" is exactly the case
+    that produces the orphan; a sweep that skipped reaped sides would skip the
+    only sides that need it. It is also the only thing that reaches a side at all
+    when the supervisor is asked to stop, since `start_new_session` detaches both
+    sides from the terminal's group and an operator's Ctrl-C never gets to them.
+
+    `SIGTERM` to every group first, so that anything still running gets its own
+    teardown, then `SIGKILL` to whatever has not gone by the same ceiling the
+    stop above uses. A group with nothing in it costs one `ProcessLookupError`,
+    which :func:`_signal_group` already swallows.
+    """
+    for side in sides:
+        _signal_group(side, signal.SIGTERM)
+    deadline = time.monotonic() + STOP_KILL_S
+    while any(not _group_is_empty(side) for side in sides):
+        if time.monotonic() >= deadline:
+            for side in sides:
+                if _group_is_empty(side):
+                    continue
+                print(
+                    f"[pair] {side.name} left processes running {STOP_KILL_S:g} s "
+                    "after its group was asked to stop; killing them",
+                    file=out,
+                    flush=True,
+                )
+                _signal_group(side, signal.SIGKILL)
+            return
+        time.sleep(_SWEEP_POLL_S)
 
 
 def supervise(
@@ -286,7 +378,7 @@ def supervise(
     environ = os.environ if environ is None else environ
 
     events: queue.Queue = queue.Queue()
-    sides = [_Side(spec, _start(spec, environ)) for spec in specs]
+    sides = [_started(spec, environ) for spec in specs]
     for side in sides:
         threading.Thread(target=_pump, args=(side, events, out), daemon=True).start()
 
@@ -311,6 +403,10 @@ def supervise(
         _stop(side, out)
         if side.status is None:
             side.status = side.process.poll()
+    # After every side's own stop, and unconditionally. `_stop` reaches a side
+    # whose launch is still running; this reaches what a launch that has already
+    # gone left behind, which is the half nothing else covers.
+    _sweep(sides, out)
     return _verdict(sides, interrupted, out)
 
 
@@ -439,6 +535,58 @@ def _verdict(sides: Sequence[_Side], interrupted: bool, out) -> int:
     return PAIR_ENDED
 
 
+#: The `key:=value` arguments `./scripts/sim` forwards, and the option each one
+#: means here. The solo path is `ros2 launch`, which takes that spelling, so
+#: `./scripts/sim --headless line:=true` works and `./scripts/sim --pair
+#: line:=true` used to fail with an argparse error - the same request, refused
+#: only because the pair path is a Python program rather than a launch file. A
+#: paired line could not be started through the entry point at all.
+#:
+#: Translated here rather than in `scripts/sim`, because the shell would then
+#: hold a second statement of which arguments a pair takes.
+_LAUNCH_STYLE = {
+    "zone": "--zone",
+    "line": "--line",
+    "headless": "--headless",
+    "ceiling": "--ceiling",
+}
+
+#: The values `ros2 launch` reads as true and false for a boolean argument, and
+#: the same ones `simulation.launch.py` reads. Anything else is refused rather
+#: than treated as false, which is what a launch argument's own reader does not
+#: do and is the one place this is deliberately stricter.
+_TRUE = ("true", "1")
+_FALSE = ("false", "0")
+
+
+def _flags(argv: Sequence[str], parser: argparse.ArgumentParser) -> list[str]:
+    """Rewrite `ros2 launch`'s `key:=value` arguments as this parser's options."""
+    rewritten: list[str] = []
+    for token in argv:
+        key, separator, value = token.partition(":=")
+        if not separator:
+            rewritten.append(token)
+            continue
+        option = _LAUNCH_STYLE.get(key)
+        if option is None:
+            parser.error(
+                f"unknown launch argument {token!r}. A pair takes "
+                + ", ".join(f"{name}:=" for name in sorted(_LAUNCH_STYLE))
+                + ", which is a smaller set than a single side's launch: the "
+                "rest are per-side and a pair has two."
+            )
+        if option in ("--line", "--headless"):
+            if value.lower() in _TRUE:
+                rewritten.append(option)
+            elif value.lower() not in _FALSE:
+                parser.error(
+                    f"{token!r} is not a boolean. Use {key}:=true or {key}:=false."
+                )
+            continue
+        rewritten.extend([option, value])
+    return rewritten
+
+
 def main(argv: list[str] | None = None) -> int:
     """Resolve both sides from the plan and supervise them."""
     parser = argparse.ArgumentParser(description="Bring up both sides of a twin pair.")
@@ -450,7 +598,9 @@ def main(argv: list[str] | None = None) -> int:
         "--line", action="store_true", help="Start the L4 coordinator on each side."
     )
     parser.add_argument("--ceiling", type=float, default=READY_CEILING_S)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(
+        _flags(sys.argv[1:] if argv is None else argv, parser)
+    )
 
     try:
         plan = load(default_plan_path(args.zone))

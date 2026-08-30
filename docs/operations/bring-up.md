@@ -118,7 +118,13 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 
 ```bash
 ./scripts/sim --pair                   # implies headless; both sides, under the supervisor
+./scripts/sim --pair line:=true        # and let L4 drive every station, on both sides
 ```
+
+**Launch arguments keep the `key:=value` spelling they have without `--pair`.** A pair takes
+fewer of them than one side does, and one it will not take is `side:=` — which side a launch
+is, is the supervisor's to decide. An argument a pair does not take is named rather than
+ignored.
 
 **What comes up.** Two complete cells, each one exactly the launch above given a different
 environment: its own `GZ_PARTITION` and its own `ROS_DOMAIN_ID`, both resolved from the

@@ -42,6 +42,30 @@ answers some interfaces and not others.
 Everything specific to *this* cell — the world, the arms, their controllers, the
 order — comes from the generated plan. Adding a fourth arm changes that plan and
 not this file.
+
+**The one blind spot in that guarantee, recorded so that nobody re-derives it
+from a failed run.** A process that cannot be `exec`'d at all produces NO event
+this file can gate on. Upstream `launch/actions/execute_local.py` wraps
+`async_execute_process` in `except Exception:` — it logs the error, runs its
+cleanup, and returns **without emitting `ProcessExited`** — so for that one class
+of failure neither `_gate` nor `_fatal_on_exit` ever fires. The launch does not
+stop, does not report, and does not announce; it simply stands still with the
+chain broken at that link.
+
+It has happened once, and cost the first paired bring-up its join: a Python
+program installed with `install(PROGRAMS ...)` but committed without its
+executable bit reached `launch` as `PermissionError: [Errno 13]` under a symlink
+install. Both sides came up completely and neither announced. **What caught it
+was the pair supervisor's ceiling** — a side that never announced readiness and
+never exited, which is the row ADR-0047 clause 4 wrote for exactly this shape.
+
+Two things follow. A failure mode with no event is not detectable inside this
+file, so the checks for it live outside it — see
+`test_every_installed_program_is_executable_in_the_tree` in
+`test/test_simulation_launch.py`, and read its docstring for where that check is
+itself blind. And **a ceiling above the whole chain is the only backstop this
+class has**: it is not redundancy with the gates, it is the one thing that
+converts "stood still forever" into a diagnosis.
 """
 
 from __future__ import annotations
