@@ -309,13 +309,18 @@ def test_readiness_is_the_token_and_not_the_absence_of_a_crash() -> None:
 
 def _paired_plan(tmp_path: Path) -> Plan:
     document = yaml.safe_load(default_plan_path("cell_a").read_text())
-    document["plan"]["sides"].append(
-        {
-            "name": "counterpart",
-            "gz_partition": "cite/cell_a/counterpart",
-            "domain_offset": 1,
-        }
-    )
+    # See the note on the same fixture in `test_simulation_launch.py`: built from
+    # whatever the generated plan declares, so that a checkout flipped to `pair`
+    # for a run does not fail these on the fixture.
+    sides = document["plan"]["sides"]
+    if not any(side["name"] == "counterpart" for side in sides):
+        sides.append(
+            {
+                "name": "counterpart",
+                "gz_partition": "cite/cell_a/counterpart",
+                "domain_offset": 1,
+            }
+        )
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return load(path)
@@ -347,10 +352,25 @@ def test_no_side_is_given_a_partition_by_the_supervisor(tmp_path: Path) -> None:
 
 
 def test_an_untwinned_zone_is_refused_rather_than_given_a_second_side(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    # Whether a zone runs as a pair is an L0 fact. Bring-up does not invent one,
-    # and it must not report the missing base instead, so the base is present.
+    """Whether a zone runs as a pair is an L0 fact. Bring-up does not invent one.
+
+    Driven against a plan written here rather than against whatever is on disk,
+    and that is not fussiness: `main` STARTS SIDES. Read from the tree, this test
+    would launch two real cells on a checkout whose model had been flipped to
+    `pair` for a run - which is what it did, once, and it took two minutes and a
+    SIGTERM to find out.
+    """
+    document = yaml.safe_load(default_plan_path("cell_a").read_text())
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
+    ]
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+    monkeypatch.setattr(pair, "default_plan_path", lambda zone="cell_a": path)
+    # Present, so that the refusal is the one about sides and not the one about
+    # a base the deployment did not supply.
     monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
     assert pair.main(["--zone", "cell_a"]) == 1
     assert "declares 1 side(s)" in capsys.readouterr().err

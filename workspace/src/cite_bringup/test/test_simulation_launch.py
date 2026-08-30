@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import os
 from pathlib import Path
 import re
 from types import ModuleType
@@ -1050,13 +1051,19 @@ def test_a_side_started_without_a_base_refuses_to_start(
 def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
     """Point the launch at a plan for a paired zone, as `sides: pair` generates it."""
     document = copy.deepcopy(_document())
-    document["plan"]["sides"].append(
-        {
-            "name": "counterpart",
-            "gz_partition": "cite/cell_a/counterpart",
-            "domain_offset": 1,
-        }
-    )
+    # Built from whatever the generated plan declares rather than assuming it is
+    # `single`: a checkout whose model has been flipped to `pair` for a run would
+    # otherwise end up with two sides named 'counterpart', and these tests would
+    # fail on the fixture rather than on what they are asking about.
+    sides = document["plan"]["sides"]
+    if not any(side["name"] == "counterpart" for side in sides):
+        sides.append(
+            {
+                "name": "counterpart",
+                "gz_partition": "cite/cell_a/counterpart",
+                "domain_offset": 1,
+            }
+        )
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     _use(module, monkeypatch, path)
@@ -1221,3 +1228,55 @@ def test_the_launch_file_writes_the_token_nowhere() -> None:
     source = LAUNCH_FILE.read_text()
     assert READY_TOKEN not in source
     assert source.count("ready_announcement(") == 1
+
+
+# --- Anything this package installs as a program has to be one ----------------
+#
+# The defect this closes, and it is worth stating as a class: **`install(PROGRAMS
+# ...)` does not make a file executable under a symlink install.** colcon
+# symlinks the installed path back at the source file, so the mode is the
+# source's mode, and a Python file committed without the executable bit reaches
+# the launch as `PermissionError: [Errno 13]`.
+#
+# It cost the first paired bring-up its join. Both sides came up completely -
+# nine controllers, three planning scenes, three skill servers accepting goals -
+# and neither announced, because launch reports a failure to EXEC as an
+# exception on its own logger rather than as a process exit, so `_gate` never
+# fired and nothing downstream noticed. What caught it was the pair supervisor's
+# ceiling, which is the row ADR-0047 clause 4 wrote for exactly this shape: a
+# side that never announced readiness and never exited.
+#
+# Read out of CMakeLists rather than listed here, so the check covers the next
+# program this package installs without anybody remembering to extend it.
+
+
+def _installed_programs() -> list[Path]:
+    source = (LAUNCH_FILE.parent.parent / "CMakeLists.txt").read_text()
+    found = []
+    for block in re.findall(r"install\(PROGRAMS(.*?)\)", source, re.DOTALL):
+        for line in block.splitlines():
+            name = line.strip()
+            if not name or name.startswith("DESTINATION"):
+                continue
+            found.append(
+                LAUNCH_FILE.parent.parent
+                / name.replace("${PROJECT_NAME}", "cite_bringup")
+            )
+    return found
+
+
+def test_every_installed_program_is_executable_in_the_tree() -> None:
+    programs = _installed_programs()
+    assert programs, (
+        "no install(PROGRAMS ...) found in CMakeLists.txt. If it moved, move this "
+        "check with it rather than deleting it."
+    )
+    for program in programs:
+        assert program.is_file(), program
+        assert os.access(program, os.X_OK), (
+            f"{program} is installed as a program and is not executable. Under a "
+            "symlink install the installed path IS this file, so the launch that "
+            "starts it fails to exec - and a failure to exec is reported by "
+            "launch as an exception rather than as a non-zero process exit, so "
+            "no gate fires."
+        )
