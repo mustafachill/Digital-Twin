@@ -281,10 +281,29 @@ account of a flake; each was caught by someone re-running, never by someone read
   **The three runs end with the part at the same pose to the millimetre**, held in the air for
   the rest of the leg: `(-0.001, 0.273, 1.201)`, `(-0.001, 0.273, 1.201)` and
   `(-0.001, 0.274, 1.201)`, each about 390 s after the peak of the lift. **So the grasp is not
-  what failed** — `lifted` means the piece rose off the pick frame, and it never came back
-  down. **What stops the piece between those two milestones is not established**, and nothing
-  above establishes it; this is the single best-attested open failure in the project and it has
-  no record of its own yet.
+  what failed** — `lifted` is *measured*, computed by the scenario as
+  `sample.z - frame_z > LIFTED_M` (`tests/scenarios/continuous_line.py:664-665`) rather than
+  reported by the arm, so the piece demonstrably rose off the pick frame and never came back
+  down.
+  **What stops the piece between those two milestones is now established, by one
+  investigation and not by a campaign.** The gripper's *result* timed out on a wall-clock
+  deadline supervising a simulation-time process, `Pick` returned `TIMEOUT` without ever
+  saying what the gripper did, and the retry's own `MoveToHome` carried the part **off** the
+  beam the station was about to wait on again — so the station re-entered `AwaitTrigger` on a
+  beam that had gone clear and stayed clear, holding the piece. Two layers, two records, both
+  written 2026-08-29:
+  [ADR-0045](docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md) for the L3
+  deadline and [ADR-0046](docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)
+  for the L4 retry. **Both are `Proposed`, nothing is implemented, and the failure will
+  recur.**
+  **Every timing figure in those records is reported by the project owner's investigation and
+  was not re-measured**, including the on-demand reproduction under CPU starvation — no
+  thresholds registered in advance, no directory in
+  [`docs/measurements/`](docs/measurements/README.md), and both records say so in their own
+  verification tables. What *is* checkable in the mechanism — the constant, the clock it is
+  compared against, the controller's terminating rule read upstream, the recovery branch, the
+  topology edge — was read from source and is tabulated there. Cite the records; do not copy
+  their numbers around (P1).
   **This supersedes the account that called `33158091922` "the only one ever taken off a
   developer machine".** It also means the local sets above and the CI set disagree, and that
   the disagreement is now a repeated failure rather than a single one.
@@ -408,21 +427,61 @@ account of a flake; each was caught by someone re-running, never by someone read
   - **The line still stalls after a failed grasp, and the dead end is observed rather than
     predicted.** A piece fails the friction grasp, the station retries, returns to
     `AwaitTrigger` on a beam the part is **already breaking**, and waits out the leg ceiling —
-    while `LineState` reports `RUNNING`, so nothing escalates and the scenario's fail-fast,
-    which keys on `BLOCKED` or `FAULTED`, correctly stays quiet. Seen twice, reported by the
-    project owner on 2026-08-27. ADR-0038 records why this is deliberately **not** fixed: the
+    while `LineState` reports `RUNNING`, so nothing escalates and the scenario's fail-fast —
+    which keys on `BLOCKED`, `FAULTED` **and `STALLED`** in the tree today
+    (`tests/scenarios/continuous_line.py:458`), and this file said only the first two —
+    correctly stays quiet, because the line publishes none of the three. Seen twice,
+    reported by the project owner on 2026-08-27. ADR-0038 records why this is deliberately **not** fixed: the
     cheap fix restarts the belt, the retry begins with `MoveToHome` carrying whatever the arm
     holds, and `Pick`'s first physical act is to open the gripper — so the retry's first move
     would open the jaws at the home pose and drop a part no planner knows is held.
-  - **A second dead end at the same station, and this one is not the failed grasp.** Three CI
-    runs have left a work-piece stuck between `lifted` and `on_link` at `station_transfer_1` —
-    the arm has the part, the place onto `conveyor_1`'s infeed never happens, `LineState` reads
-    `RUNNING` and nothing escalates. The evidence and the milestone ladder are in the
-    `continuous_line` bullet above and are not repeated here. **No cause is established**, and
-    it is not the item above: the grasp held, and the part stayed in the air. It is the same
-    *silence*, and the same reason for it — `station_transfer_1` is table-fed, which is the
-    blind spot ADR-0039 names. **It has no ADR**, and it is the failure this project has the
-    most evidence for.
+    **This is one entrance to the dead end and not the whole of it** — ADR-0038's 2026-08-29
+    amendment records the second, which is the item below.
+  - **The same dead end reached through a second door: the grasp holds and the retry carries
+    the part off its own trigger.** Three CI runs have left a work-piece stuck between
+    `lifted` and `on_link` at `station_transfer_1` — the arm has the part, the place onto
+    `conveyor_1`'s infeed never happens, `LineState` reads `RUNNING` and nothing escalates.
+    The evidence and the milestone ladder are in the `continuous_line` bullet above and are
+    not repeated here. **The cause is established** and has two records, both written
+    2026-08-29 and both `Proposed`: the gripper result deadline is a wall-clock `constexpr`
+    supervising a simulation-time process
+    ([ADR-0045](docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md)), and a
+    station that still holds its work-piece re-enters a wait its own recovery made
+    unsatisfiable
+    ([ADR-0046](docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)).
+    **It is the item above's dead end with a different entrance, and the difference decides
+    what a fix must do.** There the grasp fails, the beam stays blocked and the arm is empty;
+    here the grasp holds, the beam goes clear and the part is in the gripper — so **a fix
+    keyed on "the beam is blocked" catches only one of the two**, which is why ADR-0046 keys
+    its refusal on custody instead.
+    **Widening the constant is not available as a fix**: `GripperActionController` resets its
+    stall search on every control cycle in which the joint exceeds
+    `stall_velocity_threshold`, so the quantity the deadline is asked to bound has no upper
+    bound — the rule read upstream in ADR-0045's verification table.
+    **The detector is not broken; its coverage is.** In one local run reported by the
+    investigation, the same fault class at belt-fed `station_transfer_3` was named by
+    ADR-0039's detector **0.341 s** later and aborted the run; at table-fed
+    `station_transfer_1`, `untriggerable_reason` returns `nullopt` at its first test because
+    there is no inbound belt, so the line published `RUNNING` for the rest of the leg. That
+    contrast is ADR-0039's 2026-08-29 amendment, one run, not re-measured.
+    **Three things stay explicitly unmeasured**, chief among them why CI's gripper-close
+    distribution has a long tail that the investigating host did not reproduce at a comparable
+    real-time factor. ADR-0045 lists all three with the measurement that would settle each;
+    none may be smoothed over here or anywhere else.
+    **Nothing is implemented and the failure will recur**; it is still the failure this
+    project has the most evidence for.
+  - **A real grasp can be reported empty, and that is a separate defect owed its own record.**
+    `cite_skills::gripper_is_holding` (`gripper.cpp:106-117`) requires the reached width to
+    exceed the commanded width by more than **twice** the linkage's own width tolerance at
+    that drive angle. Recomputed from the L0 linkage dimensions for ADR-0045 and reproducing
+    exactly: against a commanded 45.0 mm, a genuine 46.6 mm stall leaves 1.6 mm of margin
+    against a 2.12 mm threshold, so `Pick` returns `EXECUTION_FAILED` with an empty-grasp
+    description while the part is in the jaws. **This is arithmetic over the shipped
+    constants, not an observed run** — nothing has attributed a CI failure to it.
+    `EXECUTION_FAILED` shares the `RETRY_SAME` branch with `TIMEOUT`, so it reaches the same
+    dead end as the item above by a different entrance — a second reason ADR-0046 refuses on
+    custody rather than on a result code. **ADR-0045 names it as owed its own record and
+    deliberately does not fold it in; that record does not exist yet.**
   - **The only environment-collision gate has an unmeasured edge.** Pilz does not search the
     scene, so `ValidateSolution` is the sole gate, and it checks trajectory waypoints while
     interpolating nothing between them. The sampling time is **0.1 s**, a C++ default argument
@@ -509,13 +568,19 @@ account of a flake; each was caught by someone re-running, never by someone read
     `33158091922`, one run, no thresholds registered in advance, at commit `60eb4a5`. **Inside
     that green run the advisory `continuous_line` step failed** — 1 of 3 work-pieces, a station
     stopped while `LineState` still read healthy. That silence is the blind spot ADR-0039
-    records at that station; what stopped the piece is **not** established.
-    **One attribution has since been weakened by evidence and must not be repeated.** Charter
-    §8 reads that run as consistent with the *failed-grasp* dead end ADR-0038 records. The
-    run's own milestone ladder puts the piece past `lifted(station_transfer_1:
+    records at that station. **What stopped the piece was not established when the clause
+    closed and has been established since** — the gripper-result timeout and the retry that
+    carried the part off its own trigger, ADR-0045 and ADR-0046, at the strength the
+    `continuous_line` bullet above states. Nothing about that changes the closure: it was
+    closed on evidence that did not include a cause, and knowing the cause does not add a run.
+    **One attribution names the right dead end by the wrong door and must not be repeated as
+    it stands.** Charter §8 reads that run as consistent with the *failed-grasp* dead end
+    ADR-0038 records. It is that dead end, and it is not the failed grasp: the run's own
+    milestone ladder puts the piece past `lifted(station_transfer_1:
     cell_a__table_pick__surface)` and leaves it in the air at `(-0.001, 0.273, 1.201)` for the
-    rest of the leg, so the grasp held. The charter is protected and still carries that
-    sentence; treat the ladder as the record.
+    rest of the leg, so the grasp held, and ADR-0038's 2026-08-29 amendment records the second
+    door it went through instead. The charter is protected and still carries that sentence;
+    treat the ladder and the two records as the record.
     A workflow whose conclusion is `success` is therefore not a statement that every scenario
     passed. **Never cite "CI is green" as evidence that a capability works; cite the step that
     gates it** — and note that **the step's own conclusion is not the step's result either**:
@@ -534,9 +599,9 @@ account of a flake; each was caught by someone re-running, never by someone read
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **43 records, all indexed** in this checkout on 2026-08-29 — it
-    said 40 until then — the newest being
-    [ADR-0043](docs/adr/0043-hold-both-sides-to-the-wall-clock.md).
+    `ADR index` line reported **46 records, all indexed** in this checkout on 2026-08-29 — it
+    said 43 earlier the same day, and 40 before that — the newest being
+    [ADR-0046](docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md).
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
     also matches `0000-template.md`; both numbers are right and
     they count different things, so name the command with the number. **This figure moves
