@@ -86,7 +86,7 @@ class _Log(io.StringIO):
 
 
 def _fake_side(name: str, script: str) -> pair.SideSpec:
-    """A side that is not ROS at all: one `python3` process running `script`."""
+    """Return a side that is not ROS at all: one `python3` process."""
     return pair.SideSpec(name, (sys.executable, "-c", script))
 
 
@@ -98,7 +98,7 @@ def _announces(name: str, *, then: str = "") -> pair.SideSpec:
 
 
 def _held_until(name: str, release: Path) -> pair.SideSpec:
-    """A side that announces, then stays up until the supervisor joins the pair."""
+    """Return a side that announces, then stays up until the pair is joined."""
     return _announces(
         name,
         then=f"while not os.path.exists({str(release)!r}):\n    time.sleep(0.02)\n",
@@ -106,7 +106,7 @@ def _held_until(name: str, release: Path) -> pair.SideSpec:
 
 
 def _blocks(name: str) -> pair.SideSpec:
-    """A side that runs and never announces: alive, and not ready."""
+    """Return a side that runs and never announces: alive, and not ready."""
     return _fake_side(name, "import time\ntime.sleep(600)\n")
 
 

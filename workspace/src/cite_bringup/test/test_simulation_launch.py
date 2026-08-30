@@ -1120,7 +1120,7 @@ WITNESS_EXECUTABLE = "readiness_witness.py"
 
 
 def _readiness_gate(actions: list, context: LaunchContext):
-    """The one process-exit gate whose clean branch emits the readiness token.
+    """Return the one process-exit gate whose clean branch emits the token.
 
     Found by what it does rather than by where it sits in the list. A handler
     identified positionally would keep passing after an edit moved it, which is
@@ -1154,11 +1154,12 @@ def test_the_side_starts_exactly_one_readiness_witness(
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     witnesses = _nodes(module._bring_up(context), WITNESS_EXECUTABLE, context)
     assert len(witnesses) == 1, "one witness per side, not one per arm"
-    arguments = [
-        perform_substitutions(context, normalize_to_list_of_substitutions(argument))
-        for argument in witnesses[0].node_arguments
+    assert module._witness_arguments(_plan(), PLANT_SIDE) == [
+        "--zone",
+        "cell_a",
+        "--side",
+        PLANT_SIDE,
     ]
-    assert arguments == ["--zone", "cell_a", "--side", PLANT_SIDE]
 
 
 def test_the_witness_is_started_with_no_environment_of_its_own(

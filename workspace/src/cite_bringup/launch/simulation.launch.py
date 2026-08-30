@@ -283,7 +283,7 @@ _WITNESS_HINT = (
 
 
 def _witness(plan: Plan, side: str) -> Node:
-    """The process whose exit means this side is serving, not merely started.
+    """Build the process whose exit means this side is serving, not just started.
 
     A blocking wait that exits, in the shape of every other link in this chain —
     `ros_gz_sim create`, the controller-manager spawners, the planning-scene
@@ -300,9 +300,19 @@ def _witness(plan: Plan, side: str) -> Node:
         package="cite_bringup",
         executable="readiness_witness.py",
         name="readiness_witness",
-        arguments=["--zone", plan.zone, "--side", side],
+        arguments=_witness_arguments(plan, side),
         output="screen",
     )
+
+
+def _witness_arguments(plan: Plan, side: str) -> list[str]:
+    """Build the witness's argument vector, so that a test can read it back.
+
+    `launch_ros` keeps a node's arguments behind a private attribute, so a test
+    reaching into the action would be testing launch's internals rather than
+    this file's decisions - the same reason `_bridge_topics` exists separately.
+    """
+    return ["--zone", plan.zone, "--side", side]
 
 
 def _seed(environ: dict) -> str | None:

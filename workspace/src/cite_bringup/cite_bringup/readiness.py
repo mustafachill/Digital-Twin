@@ -47,7 +47,7 @@ READY_TOKEN = "CITE_SIDE_READY"
 
 
 def ready_announcement(side: str, zone: str) -> str:
-    """The exact line a side emits when its own gate chain has completed.
+    """Format the one line a side emits when its own gate chain has completed.
 
     The side is named in the line even though the supervisor already knows which
     child's pipe it is reading. That redundancy is the check: a launch started

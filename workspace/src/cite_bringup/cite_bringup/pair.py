@@ -67,8 +67,8 @@ import time
 
 from cite_bringup.plan import (
     default_plan_path,
-    DOMAIN_ENV,
     domain_base,
+    DOMAIN_ENV,
     load,
     Plan,
     PlanError,
