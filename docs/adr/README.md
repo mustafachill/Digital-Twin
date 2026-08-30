@@ -135,3 +135,4 @@ not rewritten either.
 | [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Proposed (corrected 2026-08-29) |
 | [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted (corrected 2026-08-29) |
 | [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29) |
+| [0044](0044-one-ros-domain-per-side-identical-names.md) | Give each side of a twin pair its own ROS domain, and keep both sides' names byte-identical | Proposed |
