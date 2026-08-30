@@ -139,3 +139,4 @@ not rewritten either.
 | [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed (corrected 2026-08-30) |
 | [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed (corrected 2026-08-30) |
 | [0047](0047-two-independent-launches-joined-not-sequenced.md) | Bring a pair up as two independent launches, joined by a supervisor that sees only processes | Proposed |
+| [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Proposed |
