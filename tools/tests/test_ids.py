@@ -144,3 +144,54 @@ class TestGazeboPartition:
         for side in ids.SIDES:
             value = ids.partition("cell_a", side)
             assert re.fullmatch(r"[a-z0-9_]+(/[a-z0-9_]+)*", value), value
+
+
+class TestDomainOffset:
+    """The second isolation a side needs, and why it is an offset.
+
+    `GZ_PARTITION` does not isolate the ROS graph — move_group, the controller
+    managers and the skill servers speak DDS and have never heard of it — so a
+    pair separated only by partition collides on every node name, because both
+    sides carry byte-identical names by rule (ADR-0044, clauses 1 and 2).
+    """
+
+    def test_the_plant_takes_the_zero_offset(self) -> None:
+        # Not arbitrary: zero is what makes an untwinned zone resolve to exactly
+        # the domain it uses today, so nothing in Phase 1 moves and a shell from
+        # a checkout still lands on the side every existing script addresses.
+        assert ids.domain_offset(ids.PLANT_SIDE) == 0
+
+    def test_the_counterpart_takes_the_next_offset(self) -> None:
+        assert ids.domain_offset(ids.COUNTERPART_SIDE) == 1
+
+    def test_the_two_sides_of_one_zone_differ(self) -> None:
+        # The clause reduces to this. Two sides resolving one domain would put
+        # two identically named node sets in one graph.
+        assert ids.domain_offset(ids.PLANT_SIDE) != ids.domain_offset(ids.COUNTERPART_SIDE)
+
+    def test_every_side_has_an_offset_and_no_two_share_one(self) -> None:
+        offsets = [ids.domain_offset(side) for side in ids.SIDES]
+        assert len(set(offsets)) == len(ids.SIDES)
+
+    def test_an_offset_is_not_a_domain(self) -> None:
+        # A domain id is a host-scoped resource allocation and cannot be emitted
+        # into a committed, hashed tree: derived from the deployment it differs
+        # in every clone and breaks the byte-identity check; derived from the
+        # model it is identical everywhere and two checkouts discover each other.
+        # What this function returns is neither — it is an index into the sides,
+        # and the base travels on its own channel.
+        assert all(ids.domain_offset(side) < len(ids.SIDES) for side in ids.SIDES)
+
+    def test_a_side_that_is_not_a_side_is_refused(self) -> None:
+        # Refused for the same reason the partition refuses it: `virtual` and
+        # `physical` are backends, and a Phase 2.A pair has two simulated sides.
+        with pytest.raises(ids.InvalidIdentifierError):
+            ids.domain_offset("virtual")
+
+    def test_the_two_isolations_are_derived_from_one_side_identity(self) -> None:
+        # The property clause 2 rests on: both isolations come from the same
+        # tuple in the same module, so a side cannot acquire one and not the
+        # other, and a third isolation added later has an obvious home.
+        for side in ids.SIDES:
+            assert ids.partition("cell_a", side)
+            assert ids.domain_offset(side) is not None
