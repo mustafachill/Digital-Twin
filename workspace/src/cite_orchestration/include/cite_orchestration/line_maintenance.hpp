@@ -155,17 +155,19 @@ inline std::vector<std::string> stalled_stations(
     // rule asks whether this station ever let go of the work it had. A station
     // matching both is reported once, by the first — a reader given two sentences
     // about one station would reasonably read them as two stations.
+    const bool arrival_in_flight = triggers && conveyors &&
+      triggers->consumed(runtime.trigger_topic) <
+      conveyors->stop_edges(runtime.inbound_belt);
     const auto belt = untriggerable_reason(id, runtime, conveyors);
-    if (belt) {
-      if (triggers && conveyors &&
-        triggers->consumed(runtime.trigger_topic) <
-        conveyors->stop_edges(runtime.inbound_belt))
-      {
-        // An arrival is in flight: the edge that stopped this belt has not reached
-        // the station yet. Not stalled, and this is the branch that keeps the signal
-        // from being noise.
-        continue;
-      }
+    // SUPPRESSED IS NOT ANSWERED, and reading it as answered was a hole. An
+    // arrival in flight means the edge that stopped this belt has not reached the
+    // station yet — so the BELT rule has nothing to say, and that is the branch
+    // that keeps the signal from being noise. It says nothing whatever about
+    // custody. This used to `continue` from inside the belt branch, so a station
+    // whose belt rule was suppressed skipped the custody rule as well and failed
+    // silent: reachable after an operator reset, which returns a station to
+    // WAITING without clearing what it holds.
+    if (belt && !arrival_in_flight) {
       stalled.push_back(*belt);
       continue;
     }

@@ -198,6 +198,16 @@ an empty gripper is still retryable, which is the point. **It re-arms nothing**:
 decision 5 stands, `AwaitReArm` still refuses, and what a station should do with a part in its
 gripper is still nobody's decision to take blind.
 
+**Two things follow that a person walking to a stopped cell has to know.**
+`RecoverFromFailure` returns FAILURE on ESCALATE and it is the first leaf of the recover
+`<Sequence>`, so **`MoveToHome` does not run**: the arm stops where it stood, which after a
+missed grasp is the pick pose, inside the fixture, jaws closed on nothing. Before this rule
+that case retried and went home first. And **nothing in software reopens the jaws** — no leaf
+here touches a gripper, `StopAll` commands belts only, and the controller holds its last
+commanded position through the fault branch and through the ADR-0037 reset. Both are
+deliberate, both are ADR-0046's recorded consequences, and neither is a bug to work around by
+adding motion to the escalation path.
+
 **The same fact is published, through the existing `STATE_STALLED` and not a sixth value.**
 `holding_its_own_workpiece_reason` reports a station that is `IDLE` or `WAITING` while the
 registry says it owns a piece **and** its own runtime still names one. All three legs are

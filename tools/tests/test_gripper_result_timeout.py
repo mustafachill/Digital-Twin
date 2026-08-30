@@ -84,10 +84,17 @@ class TestTheFloorArithmetic:
     ) -> None:
         """`GripperActionController` ends a goal in exactly two ways.
 
-        Either the joint arrives, or it stops moving for `stall_timeout`. So the
-        longest a legitimate close can take before EITHER branch is even reachable
-        is a full stroke at the rate the joint may travel, plus that timeout.
-        Anything below gives up on grasps that were about to succeed.
+        Either the joint arrives, or it stops moving for `stall_timeout`. So a full
+        stroke at the MAXIMUM rate the joint may travel, plus that timeout, is the
+        SHORTEST time in which either branch can fire on a full-stroke close.
+        Anything below it gives up on grasps that were about to succeed.
+
+        WHICH MAKES THE FLOOR NECESSARY AND NOT SUFFICIENT, and this docstring used
+        to say the opposite — "the longest a legitimate close can take". It is a
+        lower bound, because it is computed from a maximum rate: a plant driving at
+        half its declared limit takes twice as long, and a value that clears this
+        floor can still expire mid-stroke. What the assertion below pins is that
+        the declared value is not BELOW the least it could possibly need.
         """
         stroke_s = abs(grasp.closed_position - grasp.open_position) / grasp.max_drive_rate_rad_s
         floor_s = stroke_s + stall_timeout_s
@@ -215,6 +222,16 @@ class TestTheValueTravelsToL3:
         which the node refuses to configure. A default equal to the L0 value would
         be the second copy the decision exists to remove: it would work, and it
         would work only for as long as the two copies agreed.
+
+        THIS TEST IS COUPLED TO A LITERAL COMMENT FRAGMENT AND THAT IS A KNOWN
+        WEAKNESS. The `replace` below exempts one comment line — the one in
+        `skill_server.cpp` that says what the deleted constant used to be — by
+        matching its exact text. Reword that comment and this test fails for a
+        reason that has nothing to do with the constant; delete the comment and the
+        exemption stops covering anything and the test passes for the wrong reason.
+        What it is actually asking is "does the identifier appear outside prose",
+        which wants a comment-stripping parse rather than a string match. Left as it
+        is deliberately: the fix is a small parser and it is not this change's.
         """
         source = (
             Path(__file__).resolve().parents[2] / "workspace/src/cite_skills/src/skill_server.cpp"

@@ -294,8 +294,17 @@ account of a flake; each was caught by someone re-running, never by someone read
   written 2026-08-29:
   [ADR-0045](docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md) for the L3
   deadline and [ADR-0046](docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)
-  for the L4 retry. **Both are `Proposed`, nothing is implemented, and the failure will
-  recur.**
+  for the L4 retry. **Both stay `Proposed` and both are now implemented on branch
+  `feat/close-the-gripper-deadline-dead-end`, which is under review and not merged.** The
+  status does not move because what would move it is a `continuous_line` run on a CI runner in
+  which the gripper fails to answer and the line reports it, and **no such run exists** — a
+  run in which the gripper answers quickly shows nothing at all. **What is evidenced is the
+  mechanism, not the outcome:** a launch test holds simulated time still while the wall clock
+  passes the constant the old code compared against, then advances simulated time past the
+  declared value and requires the wait to end, the cancel to be sent and the report to say
+  custody is unestablished; unit tests on the shipped station tree require a station that
+  still holds its work-piece to be refused its retry and to go `STATE_BLOCKED`. Both ADRs were
+  corrected on 2026-08-30 in that review — see each record's Correction section.
   **Every timing figure in those records is reported by the project owner's investigation and
   was not re-measured**, including the on-demand reproduction under CPU starvation — no
   thresholds registered in advance, no directory in
@@ -437,6 +446,20 @@ account of a flake; each was caught by someone re-running, never by someone read
     would open the jaws at the home pose and drop a part no planner knows is held.
     **This is one entrance to the dead end and not the whole of it** — ADR-0038's 2026-08-29
     amendment records the second, which is the item below.
+    **The account above is falsified for a failed grasp by the branch named in the item below,
+    and this is the fourth time this section has carried a wrong claim.** `TakeCustody` stands
+    **above** `PickAt` in the shipped tree, so a failed grasp fails *after* custody is taken —
+    which means ADR-0046's custody refusal covers it: the retry is refused, the station goes
+    `STATE_BLOCKED`, and `LineState` no longer reads `RUNNING`. The branch's own test
+    (`RunningLine.AStationStillHoldingItsWorkpieceIsRefusedTheRetryAndEscalates`) drives
+    exactly that case through the shipped XML. **What is evidenced is the mechanism, not the
+    outcome:** no run of the cell has produced this failure and reported it, so "the line
+    stalls silently after a failed grasp" is corrected as an account of the *code* and not
+    retired as an account of any *run*. **What is not covered is a failure above
+    `TakeCustody`** — `DetectAt` is the only skill there — which still retries onto a beam the
+    part is already breaking and is reported by nothing at a table-fed station. ADR-0038
+    decision 5 is untouched either way: nothing decides what to do with a held part, and an
+    escalating station performs no motion, so the arm stops where it stood.
   - **The same dead end reached through a second door: the grasp holds and the retry carries
     the part off its own trigger.** Three CI runs have left a work-piece stuck between
     `lifted` and `on_link` at `station_transfer_1` — the arm has the part, the place onto
@@ -468,8 +491,15 @@ account of a flake; each was caught by someone re-running, never by someone read
     distribution has a long tail that the investigating host did not reproduce at a comparable
     real-time factor. ADR-0045 lists all three with the measurement that would settle each;
     none may be smoothed over here or anywhere else.
-    **Nothing is implemented and the failure will recur**; it is still the failure this
-    project has the most evidence for.
+    **Both records are implemented on branch `feat/close-the-gripper-deadline-dead-end`, which
+    is under review and not merged**, and both stay `Proposed`. **The mechanism is evidenced
+    and the outcome is not**: the deadline is now measured in the node's clock and declared in
+    L0, an expiry sends a cancel and latches custody as unknown so that `Pick`, `Place` and
+    `Transfer` refuse rather than assume an empty gripper, and a station that still holds its
+    work-piece is refused its retry and goes `STATE_BLOCKED`. Every one of those is held by a
+    unit or launch test; **none of them is held by a run of the cell in which this failure
+    occurred**, because no such run has been taken since. Until one is, this is still the
+    failure this project has the most evidence for, and nobody may write that it is fixed.
   - **A real grasp can be reported empty, and that is a separate defect owed its own record.**
     `cite_skills::gripper_is_holding` (`gripper.cpp:106-117`) requires the reached width to
     exceed the commanded width by more than **twice** the linkage's own width tolerance at
@@ -478,10 +508,13 @@ account of a flake; each was caught by someone re-running, never by someone read
     against a 2.12 mm threshold, so `Pick` returns `EXECUTION_FAILED` with an empty-grasp
     description while the part is in the jaws. **This is arithmetic over the shipped
     constants, not an observed run** — nothing has attributed a CI failure to it.
-    `EXECUTION_FAILED` shares the `RETRY_SAME` branch with `TIMEOUT`, so it reaches the same
-    dead end as the item above by a different entrance — a second reason ADR-0046 refuses on
-    custody rather than on a result code. **ADR-0045 names it as owed its own record and
-    deliberately does not fold it in; that record does not exist yet.**
+    `EXECUTION_FAILED` shares the `RETRY_SAME` branch with `TIMEOUT`, so it used to reach the
+    same dead end as the item above by a different entrance — a second reason ADR-0046 refuses
+    on custody rather than on a result code, and on the branch above that entrance is closed
+    with the others: the misreported grasp still happens, and the station now escalates instead
+    of dead-ending. **The defect itself is untouched** — a real grasp is still reported empty —
+    and **ADR-0045 names it as owed its own record and deliberately does not fold it in; that
+    record does not exist yet.**
   - **The only environment-collision gate has an unmeasured edge.** Pilz does not search the
     scene, so `ValidateSolution` is the sole gate, and it checks trajectory waypoints while
     interpolating nothing between them. The sampling time is **0.1 s**, a C++ default argument

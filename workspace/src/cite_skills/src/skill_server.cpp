@@ -908,6 +908,15 @@ private:
     result->measured_effort_n = gripper.effort_n;
     result->holding = gripper.holding;
 
+    // THESE THREE ARE COPIED BEFORE THE CODE IS CHECKED, AND ON A TIMEOUT THEY ARE
+    // A DEFAULT-CONSTRUCTED OUTCOME: `holding=false`, `reached_width_m=0.0`,
+    // `measured_effort_n=0.0`. Nothing observed the gripper, so 0.0 mm and 0.0 N
+    // are placeholders and not measurements, and a reader plotting them would be
+    // plotting the absence of an answer as a reading. The `ResultCode` is the only
+    // field on that path that says anything, and its detail says custody is
+    // unestablished. Typing these three as optional is a contract change (P3) with
+    // no consumer today, exactly as ADR-0045 decision 4 says of `holding`; it is
+    // recorded here so that whoever gains one knows what they are reading.
     if (gripper.result.code != ResultCode::SUCCESS) {
       terminate(handle, result, gripper.result);
       return;
@@ -926,6 +935,40 @@ private:
 
     holding_ = result->holding;
     terminate(handle, result, gripper.result);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Custody, when nothing observed the gripper
+  // ---------------------------------------------------------------------------
+  /// The refusal every skill that moves a work-piece makes while custody is unknown.
+  ///
+  /// THE THIRD STATE THE CONTRACT CANNOT CARRY, ACTED ON BY THE LAYER THAT OWNS THE
+  /// FACT (ADR-0045 decision 4). `Pick.Result.holding`, `Place`'s `require_holding`
+  /// and `Transfer.Result.still_holding` are all `bool`, so after a gripper timeout
+  /// every one of them states "not holding" about an arm that may be holding — and
+  /// `still_holding`'s own comment says getting it wrong makes the line "abandon a
+  /// part it still holds or go looking for one it let go of". Leaving `holding_`
+  /// unwritten does not avoid that: unwritten reads as false.
+  ///
+  /// SO L3 REFUSES RATHER THAN REPORTING. It is here and not in L4 because this is
+  /// the layer that failed to observe the gripper. L4's custody rule (ADR-0046)
+  /// stops the LINE from driving a station into this state; it cannot stop any
+  /// other client of a public action, and `pick` is a public action whose first
+  /// physical act is to OPEN THE JAWS. An interlock a layer above the fact is one
+  /// bypass away from a dropped part.
+  ///
+  /// `Grasp` is deliberately NOT refused: it is the only skill that commands the
+  /// gripper and reports what came back, so it is the way out of this state. See
+  /// where the latch is cleared, in `command_gripper`.
+  ResultCode custody_refusal(const std::string & what) const
+  {
+    return make_result(
+      ResultCode::PRECONDITION_FAILED,
+      "asked to " + what + ", but this arm's last gripper command ended without an "
+      "answer from the controller, so WHETHER IT IS HOLDING ANYTHING IS UNESTABLISHED. "
+      "It is refused rather than reported as empty: this skill's next physical act "
+      "assumes a known gripper, and nothing has observed one since. Command a Grasp to "
+      "establish what the jaws hold");
   }
 
   // ---------------------------------------------------------------------------
@@ -949,6 +992,15 @@ private:
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
+
+    // BEFORE ANYTHING, BECAUSE THE FIRST PHYSICAL ACT BELOW IS OPENING THE JAWS.
+    // A `Pick` sent after a gripper timeout would open a gripper that may be
+    // holding a work-piece nothing recorded, at whatever pose the arm is standing
+    // in. See `custody_refusal`.
+    if (custody_unknown_.load()) {
+      finish(custody_refusal("pick work-piece '" + goal->workpiece_id + "'"));
+      return;
+    }
 
     apply_scaling(0.0, 0.0);
     const double max_effort = get_parameter("gripper_max_effort_n").as_double();
@@ -1106,6 +1158,17 @@ private:
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
+
+    // ABOVE THE `require_holding` TEST AND NOT INSIDE IT. That test asks whether
+    // this arm is holding something, and after a gripper timeout there is no
+    // answer to give — `holding_` says false because false is what an unwritten
+    // `bool` says. A caller that passed `require_holding=false` would otherwise
+    // drive to the place pose and open the jaws over it, which is either a mimed
+    // place or a part released somewhere nobody decided. See `custody_refusal`.
+    if (custody_unknown_.load()) {
+      finish(custody_refusal("place"));
+      return;
+    }
 
     // Miming a place with an empty gripper would leave the line believing a
     // work-piece arrived somewhere it never did — and the failure would surface
@@ -1270,6 +1333,15 @@ private:
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
+
+    // FIRST, BECAUSE `still_holding` IS WHAT L4 CHOOSES A RECOVERY FROM and after
+    // a gripper timeout this node cannot fill it in honestly. Refused rather than
+    // answered with a boolean that reads "empty" about an arm that may be holding
+    // the piece the handoff is about. See `custody_refusal`.
+    if (custody_unknown_.load()) {
+      finish(custody_refusal("transfer work-piece '" + goal->workpiece_id + "'"));
+      return;
+    }
 
     // An unnegotiated handoff is refused. The token is opaque to this layer —
     // nothing here reads it, matches it, or expires it, which is ADR-0024's whole
@@ -1880,8 +1952,18 @@ private:
 
     auto future = gripper_client_->async_send_goal(goal, options);
     if (future.wait_for(kGripperAcceptWait) != std::future_status::ready) {
+      // CUSTODY IS UNKNOWN FROM HERE TOO, and this is the less obvious of the two
+      // entrances. What was not observed is the ACCEPTANCE, not the goal's
+      // absence: a request whose acknowledgement never came back may still have
+      // reached the controller and may still be driving the jaws. Latching on
+      // the safe side of that ambiguity costs a refusal; not latching costs a
+      // `Pick` that opens the jaws on a part it did not know about.
+      custody_unknown_.store(true);
       outcome.result = make_result(
-        ResultCode::TIMEOUT, "the gripper never accepted the command");
+        ResultCode::TIMEOUT,
+        "the gripper's controller never acknowledged the command. WHETHER THE JAWS HOLD "
+        "ANYTHING IS UNESTABLISHED: an unacknowledged goal is not an ungiven one, so "
+        "this is not a report of an empty gripper and must not be recovered from as one");
       return outcome;
     }
     auto gripper_handle = future.get();
@@ -1916,6 +1998,15 @@ private:
     // down — which the launch already handles (`_fatal_on_exit`). If that is ever
     // the proximate cause of a failure, what this needs is a liveness condition
     // on the clock, an event and not a second timeout.
+    //
+    // AND A THIRD WAY THE CLOCK CAN STALL, WHICH IS THIS NODE'S OWN. `now()` is
+    // only as fresh as the last `/clock` message this node's executor delivered,
+    // and the same executor serves that subscription and the callbacks this
+    // result future is completed from. A callback group that stopped serving
+    // `/clock` — through a blocked callback rather than through a dead simulator —
+    // freezes this deadline exactly as a stopped simulator would, and from in here
+    // the two are indistinguishable. It is listed with the other two in ADR-0045
+    // and is not separately measured.
     const rclcpp::Time deadline = now() + gripper_result_timeout_;
     bool requested_cancel = false;
     std::future_status status = std::future_status::timeout;
@@ -1944,9 +2035,28 @@ private:
     //
     // Sent and not awaited, deliberately. This path is already the path where the
     // controller is not answering, so waiting for it to answer a cancel would be
-    // the same bet twice. Nothing in this repository asserts what
-    // `GripperActionController` does with a cancel, and ADR-0045 records that as
-    // an open question rather than an assumption.
+    // the same bet twice. SO WHAT IS DONE HERE IS A SEND AND NOT AN OUTCOME, and
+    // nothing downstream may say the goal WAS cancelled — see the detail string
+    // below, which used to.
+    //
+    // TWO WAYS THE SEND ENDS IN NO CANCEL AT ALL, and they leave the plant in
+    // OPPOSITE states, which is why neither may be asserted:
+    //
+    //   * The server never serves it. That is the ordinary case on this path.
+    //     The goal stays live and the controller goes on commanding the closed
+    //     position at the configured effort.
+    //   * The server serves it too late to matter. `check_for_success` can
+    //     terminate the goal successfully between this send and the controller's
+    //     `cancel_callback`, whose guard then does not match a live goal, so
+    //     `set_hold_position()` never runs. The goal ends as SUCCEEDED while this
+    //     node reports TIMEOUT.
+    //
+    // And when it IS served, `cancel_callback` calls `set_hold_position()`, which
+    // writes the MEASURED jaw position as the command. The position error that
+    // was generating grip force goes to zero, so the jaws keep their width and
+    // lose their squeeze. ADR-0045's consequences record that, and record that
+    // whether a friction grasp survives it is unmeasured. None of it changes the
+    // decision to cancel; all of it is why the report says what was DONE.
     if (expired && !requested_cancel) {
       gripper_client_->async_cancel_goal(gripper_handle);
     }
@@ -1963,17 +2073,44 @@ private:
       // work-piece and holding it, which is precisely what happened in the three
       // CI cycle failures this text exists because of: L3 reported the arm empty,
       // L4 believed it, and the recovery carried a part nobody knew was held.
+      //
+      // IT SAYS WHAT WAS DONE AND NOT WHAT RESULTED, and it used to say the
+      // second: "the goal has been cancelled". That was a statement about the
+      // controller made on the one path where the controller is not answering.
+      // The cancel is SENT and deliberately not awaited, it may never be served,
+      // and if it is served late the goal can already have succeeded — the two
+      // cases leave the jaws squeezing and not squeezing respectively. One
+      // sentence could not assert either, so it asserts neither.
       std::ostringstream detail;
       detail.setf(std::ios::fixed);
       detail.precision(1);
       detail << "the gripper's controller never reported a result within "
-             << gripper_result_timeout_.seconds() << " s of this node's clock, and the "
-             << "goal has been cancelled. WHETHER THE JAWS HOLD ANYTHING IS "
-             << "UNESTABLISHED: nothing observed the gripper, so this is not a report "
-             << "of an empty gripper and must not be recovered from as one";
+             << gripper_result_timeout_.seconds() << " s of this node's clock. A cancel "
+             << "has been SENT for the goal and deliberately not awaited, so whether it "
+             << "was ever served, and what the jaws are doing now, are both unknown. "
+             << "WHETHER THE JAWS HOLD ANYTHING IS UNESTABLISHED: nothing observed the "
+             << "gripper, so this is not a report of an empty gripper and must not be "
+             << "recovered from as one";
+      // THE LATCH, AND IT IS WHY THIS IS NOT ONLY A SENTENCE (ADR-0045 decision 4).
+      // `holding_` is deliberately left unwritten here — writing false is the claim
+      // that cost three CI runs — but an unwritten `bool` READS as false to every
+      // consumer, so leaving it alone silently makes the same claim one layer down.
+      // This is the third state the boolean cannot carry: from here `Pick`, `Place`
+      // and `Transfer` refuse until something observes the gripper again. It is
+      // cleared where the observation happens, below.
+      custody_unknown_.store(true);
       outcome.result = make_result(ResultCode::TIMEOUT, detail.str());
       return outcome;
     }
+
+    // A RESULT ARRIVED, SO CUSTODY IS ESTABLISHED AGAIN, whatever the result says.
+    // This is the only place the latch is cleared, and it clears on an OBSERVATION
+    // rather than on a success: an aborted or cancelled goal still carries the
+    // drive position this node judges `holding` from. The refusals above make
+    // `Grasp` the only skill that can reach this line while the latch is set,
+    // which is what "cleared deliberately" means here — a caller has to ask the
+    // gripper a question and get an answer.
+    custody_unknown_.store(false);
 
     const auto wrapped = result_future.get();
     if (wrapped.result) {
@@ -2062,6 +2199,15 @@ private:
   //: cleared by Place. It is the arm's own belief, not the line's record — L4
   //: owns ownership (ADR-0024); this exists only so Place can refuse to mime one.
   std::atomic<bool> holding_{false};
+  //: Whether this node still knows what the jaws hold.
+  //:
+  //: THE THIRD STATE `holding_` CANNOT CARRY. It is set by `command_gripper` on
+  //: either timeout — the controller acknowledged nothing, or answered nothing —
+  //: and cleared only where a result actually arrives, which after the refusals
+  //: above is reachable through `Grasp` alone. While it is set, `Pick`, `Place`
+  //: and `Transfer` refuse; see `custody_refusal` for why the refusal is L3's and
+  //: not L4's.
+  std::atomic<bool> custody_unknown_{false};
 
   cite_skills::GripperTravel travel_;
   double default_grasp_width_m_{0.0};

@@ -455,6 +455,13 @@ class Fault(NamedTuple):
 #: escalates, so the two above never fire — the line used to report RUNNING and this
 #: scenario spent a full leg ceiling on it before accusing the milestone it happened
 #: to be waiting for.
+#:
+#: ADR-0046 GAVE STALLED A SECOND REASON WITH NO BELT IN IT: a station waiting for
+#: work while it still holds the piece its last attempt was about. That one is
+#: derived from custody rather than from a belt setpoint, so it answers at the
+#: table-fed station where the rule above is structurally blind — which is the
+#: station three CI runs died at. Two reasons, one state; the sentence in
+#: `stall_reasons` says which.
 STOPPED_STATES = (LineState.STATE_BLOCKED, LineState.STATE_FAULTED, LineState.STATE_STALLED)
 
 STOPPED_STATE_NAMES = {
@@ -570,11 +577,14 @@ class TestContinuousLine(unittest.TestCase):
             self.fail(
                 f"the line stalled while waiting for {what}. {self._halt.describe()}\n"
                 "Nothing escalated and there is nothing for /cite/line/reset_station to "
-                "clear: a station was returned to a trigger nothing can produce, and the "
-                "belt that would carry it work is stopped (ADR-0039). The re-arm path "
-                "that would clear this is deliberately not built — see ADR-0038 "
-                "decision 5 before reaching for a belt restart, which drops the part the "
-                "gripper is still holding."
+                "clear: a station was returned to a trigger nothing can produce. READ THE "
+                "STALL REASON ABOVE FOR WHICH KIND, because there are two and they need "
+                "different things. Either the belt that would carry it work is stopped "
+                "(ADR-0039), or the station is still holding the work-piece it is waiting "
+                "for a replacement of (ADR-0046) — that one names no belt and happens at "
+                "stations no belt feeds. The re-arm path that would clear either is "
+                "deliberately not built — see ADR-0038 decision 5 before reaching for a "
+                "belt restart, which drops the part the gripper is still holding."
             )
         self.fail(
             f"the line stopped while waiting for {what}. {self._halt.describe()}\n"

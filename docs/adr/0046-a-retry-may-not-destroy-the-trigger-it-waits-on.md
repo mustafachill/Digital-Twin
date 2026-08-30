@@ -1,6 +1,9 @@
 # ADR-0046: A retry may not re-enter a wait on a trigger its own recovery destroyed
 
-- **Status:** Proposed. Written before the implementation, which is what
+- **Status:** Proposed, corrected 2026-08-30 — see the **Correction — 2026-08-30** section
+  below. **Both decisions stand**; what was false is a supporting clause inside decision 2
+  about ADR-0038's door, and what was missing is that **decision 1 closes that door**. Written
+  before the implementation, which is what
   [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record was built at `b8a6c10`**;
   every "will" below was a commitment and not a description.
   **Decisions 1 to 5 are implemented on branch `feat/close-the-gripper-deadline-dead-end`,
@@ -33,6 +36,45 @@
   same failure**),
   [L4](../architecture/L4-orchestration.md),
   charter §4 (P1, P3, P4, P5, P7)
+
+## Correction — 2026-08-30: decision 2 gave the wrong reason for a right conclusion, and decision 1 closes ADR-0038's door
+
+**The decision is untouched.** Both halves stand exactly as written: the retry is refused on
+custody, and the same fact is published as an ADR-0039 stall. What was wrong is a supporting
+claim inside decision 2, and what was missing is the consequence that follows from it.
+
+**The false clause.** Decision 2 ends: *"ADR-0038's door — a part left standing on the beam
+with the arm empty — has occupancy 1 and an empty `current_workpiece_id` at the moment of the
+retry only if custody was never taken, so this predicate does not close it."*
+
+**Its conclusion is true and its reason is false.** `TakeCustody` stands **above** `PickAt` in
+the shipped tree (`line_station.xml:90` and `:93`), so a grasp cannot fail before custody has
+been taken: **every failed grasp is a post-custody failure**, and `current_workpiece_id` is
+never empty at the moment of that retry. The condition the clause makes the door depend on is
+one the tree cannot produce.
+
+What actually keeps the *predicate* silent at ADR-0038's door is **decision 1**, not the shape
+of the state: the retry is refused, `RecoverFromFailure` writes `STATE_BLOCKED`, and `BLOCKED`
+outranks `STALLED` in `publish`'s precedence, so the stall branch is never asked. So decision
+2's report does not close that door — and **decision 1 does.** That is the largest behavioural
+change this record makes and it was stated only in `cite_orchestration/README.md`; it is now
+a consequence of its own below.
+
+**What is genuinely not closed, and is what "for this failure shape only" honestly means.**
+`DetectAt` is the one skill standing above `TakeCustody`, so a station that fails *there*
+retries with an empty `current_workpiece_id`, returns to `AwaitTrigger` on a beam a part may
+already be breaking, and at a table-fed station is reported by neither rule. That is ADR-0038's
+dead end reached above custody. It is untouched by this record and by the branch that
+implements it.
+
+**How the error survived.** The clause was written to establish a limit — "do not read this as
+closing the table-fed blind spot in general" — and the limit is correct, so nothing in review
+pushed on the reason offered for it. A true conclusion carried a false premise through, and no
+assertion anywhere depended on the premise, so nothing failed. The tree ordering it contradicts
+is now asserted in the branch's own tests:
+`RunningLine.AStationThatFailsBeforeItTakesCustodyIsStillAllowedToRetry` requires
+`current_workpiece_id` to be empty when a `DetectAt` failure retries, which is exactly the
+premise the false clause assumed for a `PickAt` failure.
 
 ## The decision, in one line
 
@@ -238,6 +280,28 @@ to do with it.
 anyway — silently, for 420 s, and then the run dies accusing a milestone. What changes is that
 the line says which station stopped it and why, and that there is a process left to ask.
 
+**That sentence was challenged in review and is now argued from the tree rather than
+asserted.** A safety audit read the refusal as escalating cases that were "previously
+recoverable and safe to retry" — a missed friction grasp with the arm empty and the part on
+the table. **No such case exists in this cell**, and the reason is structural:
+
+- `CompleteHandoff` is the only leaf that clears `current_workpiece_id` (`line_nodes.hpp:868`),
+  and `ResumeBelt` stands **below** it in the nominal sequence (`line_station.xml:141`) and
+  appears nowhere in the recover branch. So **custody non-empty implies this station has not
+  run `ResumeBelt` since its own trigger stopped its belt.**
+- The stop is bound to the sensor edge in `ConveyorIndex::on_edge`, and the only other thing
+  that runs a belt is `run_all()` at start-up, before the tick loop.
+- Of the three stations that run this tree, `station_transfer_1` has **no inbound belt at all**
+  (`cell_a_flow.yaml:63`, `via: null`) and the other two are fed by `conveyor_1` and
+  `conveyor_2`.
+
+So every retry this refusal suppresses re-entered `AwaitTrigger` at a station whose inbound
+belt was at a standstill, or which has no belt — with the beam either still blocked by the
+piece that was never lifted or clear and staying clear. **The retry was permitted and it was
+never satisfiable.** What is given up is not availability; it is 420 s of silence. Escalating
+loudly beats dead-ending quietly, and that is the whole trade. **What the refusal does cost is
+physical and is not availability at all** — see the consequence about where the arm stops.
+
 ### 2. The same fact is published, as an ADR-0039 stall
 
 `LineMaintenance::publish` reports a station as stalled when **all three** hold:
@@ -261,6 +325,7 @@ for this failure shape only.** ADR-0038's door — a part left standing on the b
 empty — has occupancy 1 and an empty `current_workpiece_id` at the moment of the retry only if
 custody was never taken, so this predicate does **not** close it, and nobody may read this
 record as closing the table-fed blind spot in general.
+**[Corrected 2026-08-30 — see the Correction section above.]**
 
 ### 3. `STATE_STALLED` is reused; no sixth `LineState` value is added
 
@@ -322,6 +387,15 @@ transfer the line ever performs. **Condition 3 carries the discrimination.**
 - ADR-0039's table-fed blind spot is closed for this shape, by a fact that needs no belt —
   which is what that record's correction said would be needed and deliberately did not choose.
 - One fact, two consumers, one author: the tree refuses on it and the report publishes it.
+- **ADR-0038's dead end is closed, and this is the largest behavioural consequence of this
+  record.** That record's door is a failed friction grasp: the part is never lifted, it stands
+  on the beam, the station retries onto a beam already blocked and waits out the leg ceiling
+  while `LineState` reads `RUNNING`. `TakeCustody` stands above `PickAt`, so **a failed grasp
+  is a post-custody failure** — decision 1 refuses that retry too, and the station goes
+  `STATE_BLOCKED` instead of silent. ADR-0038's own decision 5 is untouched: what a station
+  does with a part it is holding is still nobody's decision, and this changes only whether the
+  line says the station stopped. It closes the door **for a station that took custody**; the
+  pre-custody half is in decision 2 above and is still open.
 
 ### What this costs us
 
@@ -330,6 +404,24 @@ transfer the line ever performs. **Condition 3 carries the discrimination.**
   working for the rest of the leg; after this they are halted by the `Parallel` the moment the
   first one escalates. What makes it acceptable is that the line was already going to die and
   that nothing downstream of a stopped `station_transfer_1` has work coming.
+- **The arm stops where it stood, and after a failed grasp that is inside the fixture.** This
+  is the consequence a safety audit found and no document stated. `RecoverFromFailure` returns
+  `FAILURE` on `ESCALATE`, and it is the first leaf of a `<Sequence>`, so
+  `ReleaseStationClaims` and **`MoveToHome` never run**. Before this record a missed grasp
+  retried, and `MoveToHome` took the arm home empty before the station dead-ended; after it,
+  the arm is left at the pick pose with the jaws closed on nothing, and clearing it needs a
+  person in the cell. That is the same "it stops where it is" ADR-0037 decided for every
+  escalation — this record only widens which failures reach it — and it is deliberate: an
+  escalating station performs no motion, because the answer was that it may not be commanded.
+  **It is a cost and it is paid every time**, not only in the case this record is about.
+- **Nothing reopens the jaws, in software, ever.** `StopAll` commands belts and touches no
+  gripper, and there is no L3 or L4 path that releases a grasp outside `Place`, `Transfer` and
+  `Grasp` — all three of which a blocked station has stopped calling. `GripperActionController`
+  holds the last commanded position, so the jaws keep their width through the fault branch and
+  through the ADR-0037 reset. **That is deliberate**: opening them under a fault would drop the
+  part wherever the arm happens to be standing, which is ADR-0038 decision 5's hazard by
+  another route. It has been written down nowhere until now, and a person walking to a stopped
+  cell needs to know that the gripper will still be holding.
 - **This is a state machine and not a protective measure**, exactly as ADR-0037, ADR-0038 and
   ADR-0039 say of theirs. What stops an arm is the vendor controller's torque limiting and the
   cell's physical guarding (charter §3.2). Nothing here is safer; it is diagnosable.
@@ -390,3 +482,15 @@ In the style of [`toolchain.md`](../reference/toolchain.md). Everything was chec
 | The three CI runs, their milestone ladder, the parked poses and the last `LineState` | **Not re-derived.** Read from [CLAUDE.md §2](../../CLAUDE.md) and the project owner's investigation | **Reported, not measured here.** Six CI runs at six commits, no thresholds registered in advance, no `docs/measurements/` directory |
 | The 0.341 s contrast at `station_transfer_3` | **Not re-measured.** Taken from the investigation | **Reported, not measured here.** One local run. What is checkable — that the station is belt-fed and therefore inside ADR-0039's rule — was checked above |
 | That decision 1 or decision 2 closes the failure | **Not verified. Nothing here is built** | **Unverified.** What would show it is a `continuous_line` run on a CI runner in which this failure occurs and the line reports it. A run in which it does not occur shows nothing |
+
+Added by the 2026-08-30 correction, checked against the branch's tree on that date.
+
+| Claim | How | Result |
+|---|---|---|
+| `TakeCustody` stands above `PickAt`, so a failed grasp is always post-custody | Read `trees/line_station.xml:90`, `:93` | Exact, adjacent leaves in the nominal `<Sequence>`. This is what falsifies decision 2's clause |
+| Custody non-empty implies this station has not restarted its inbound belt | Read `line_nodes.hpp:868` (`CompleteHandoff` is the only clearer), `line_station.xml:141` (`ResumeBelt` stands below it), and the recover `<Sequence>` at `:248-263` | `ResumeBelt` appears once in the file, below `CompleteHandoff`, and not in the recover branch |
+| Nothing else runs a belt during a run | Grepped `cite_orchestration` for `conveyors->run`, `run_all` and `stop` | `ResumeBelt` (`line_nodes.hpp:1005`), `run_all()` once at start-up before the tick loop (`line_orchestrator.cpp:587`), and `StopAll` (`line_fault.hpp:310`), which only stops |
+| Every station running this tree is fed by a stopped belt or by no belt | Read `cite_generated/topology/cell_a_flow.yaml:63-66` | `station_transfer_1` has `via: null`; `station_transfer_2` and `_3` are fed by `conveyor_1` and `conveyor_2`, both indexed on their own station's trigger |
+| An escalating station performs no motion, so `MoveToHome` does not run | Read `line_nodes.hpp` (`ESCALATE` returns FAILURE) and `line_station.xml:248-263` | Exact. `RecoverFromFailure` is the first leaf of a `<Sequence>`, so neither `ReleaseStationClaims` nor `MoveToHome` is reached. Asserted by `RunningLine.AStationStillHoldingItsWorkpieceIsRefusedTheRetryAndEscalates`, which requires `move_to_goals() == 0` |
+| Nothing in software reopens the jaws under a fault | Grepped `cite_orchestration` for any gripper action or `Grasp` client, and read `StopAll` (`line_fault.hpp:296-320`) | No gripper client exists in the package; `StopAll` commands belts only. The jaws keep their last commanded position |
+| That the refused retry had a future | **Unfalsifiable as posed, and answered structurally instead** | **No post-custody retry is satisfiable in this cell**, from the four rows above. This is an argument from the shipped tree and topology, not a measurement, and it is specific to today's L0: a station fed by a belt this line does not stop would break it |

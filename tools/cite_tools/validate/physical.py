@@ -488,15 +488,26 @@ def _result_timeout_outlasts_the_stall_search(asset_type: AssetType) -> list[Fin
 
     L3 waits for `GripperActionController` to terminate a `GripperCommand`. The
     controller terminates it in exactly two ways: the drive joint reaches the
-    commanded position, or it stops moving for `stall_timeout`. So the longest a
-    LEGITIMATE close can take before either branch can fire at all is the stroke
-    itself, at the rate the drive joint is allowed to travel, plus that timeout:
+    commanded position, or it stops moving for `stall_timeout`. So a full stroke
+    at the fastest rate the drive joint is allowed to travel, plus that timeout,
+    is the SHORTEST time in which either branch can fire on a full-stroke close:
 
         floor = (closed_position - open_position) / max_drive_rate_rad_s
                 + stall_timeout
 
-    A `result_timeout_s` below that floor gives up on grasps that were about to
-    succeed, and turns a working gripper into an intermittent one.
+    A `result_timeout_s` below that floor cannot even be reached by a gripper
+    running flat out, so it gives up on grasps that were about to succeed and
+    turns a working gripper into an intermittent one.
+
+    THE FLOOR IS NECESSARY AND NOT SUFFICIENT, and reading it the other way round
+    is the mistake this paragraph used to make. `max_drive_rate_rad_s` is a
+    MAXIMUM, so the arithmetic above is a lower bound on the stroke time and not
+    an upper one: a plant that drives at half its declared limit takes twice as
+    long, and a deadline that clears this floor can still expire mid-stroke. On
+    the shipped gripper that would be 1.7 s against a 1.15 s floor, so
+    `result_timeout_s: 1.2` passes this check and is still wrong — and since
+    ADR-0046 an expiry stops the line. Clearing the floor is the least this value
+    must do, not the most.
 
     THERE IS NO CEILING, and its absence is the decision rather than an omission.
     The stall search restarts on every control cycle above
@@ -516,10 +527,16 @@ def _result_timeout_outlasts_the_stall_search(asset_type: AssetType) -> list[Fin
             stall_timeout_s = float(value)
             break
     if stall_timeout_s is None:
-        # A gripper whose controller declares no stall timeout is a different
-        # finding, and one this function is not the author of: the floor here is
-        # derived FROM that timeout, so with none declared there is nothing to
-        # derive and nothing to say.
+        # NOTHING AUTHORS THAT FINDING, AND THIS RULE THEREFORE DISABLES ITSELF
+        # SILENTLY. The floor is derived FROM `stall_timeout`, so with none
+        # declared there is nothing to derive — but deleting the key from the L0
+        # end-effector type makes `physical.check()` return zero findings, which
+        # was verified by doing it rather than assumed. This comment used to say
+        # the missing timeout "is a different finding"; no rule anywhere writes
+        # that finding, so it is a gap and not a division of labour. Whoever adds
+        # a rule requiring a gripper controller to declare its stall timeout
+        # closes it; until then, a gripper that loses that key loses this check
+        # with it and nothing says so.
         return []
 
     stroke_s = abs(grasp.closed_position - grasp.open_position) / grasp.max_drive_rate_rad_s
@@ -531,11 +548,14 @@ def _result_timeout_outlasts_the_stall_search(asset_type: AssetType) -> list[Fin
         error(
             "gripper-result-timeout-cuts-the-stall-search-short",
             f"types.{asset_type.id}.grasp.result_timeout_s",
-            f"L3 gives up after {grasp.result_timeout_s} s while a full stroke at "
-            f"{grasp.max_drive_rate_rad_s} rad/s takes {stroke_s:.3f} s and the controller "
-            f"may then wait {stall_timeout_s} s before declaring a stall",
+            f"L3 gives up after {grasp.result_timeout_s} s while a full stroke takes at "
+            f"least {stroke_s:.3f} s — that is at the declared maximum "
+            f"{grasp.max_drive_rate_rad_s} rad/s, so it is the fastest the stroke can be — "
+            f"and the controller may then wait {stall_timeout_s} s before declaring a stall",
             "The deadline expires before the controller is even allowed to answer, so a "
             "grasp that was about to succeed is reported as a gripper that never replied. "
-            f"Declare a result_timeout_s above {floor_s:.3f} s.",
+            f"Declare a result_timeout_s above {floor_s:.3f} s. That floor is the least it "
+            "must clear and not enough on its own: the stroke figure assumes the drive "
+            "runs at its declared maximum, and a slower plant needs proportionally more.",
         )
     ]

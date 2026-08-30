@@ -24,9 +24,12 @@ each time `Pick` reported the arm empty while the jaws held the work-piece.
 Two facts, and either alone is satisfiable by a defect:
 
   * **Wall-clock time passing does not expire it.** The simulated clock is held
-    still and several times the declared timeout is spent in WALL time. A
-    `steady_clock` deadline — the code this replaces — fails here, and it is the
-    only assertion in this repository that would have caught the CI failure.
+    still and `WALL_WINDOW_S` is spent in WALL time. That window is sized against
+    the 20 s constant the code this replaces compared against, not against this
+    rig's own deadline, so the replaced code gives up INSIDE it and this assertion
+    fires. It is the only assertion in this repository that would have caught the
+    CI failure — and it was not, until the window was widened: at three times the
+    rig's 4 s deadline it was twelve wall seconds, which the old code survives.
   * **Simulated time passing does.** The clock is then advanced past the declared
     value and the wait ends at once. Without this, a deadline that never fires at
     all would pass the first assertion perfectly.
@@ -37,13 +40,29 @@ declared number in the node's clock, not merely "some clock other than the host'
 
 ## What it does with the answer, which is the second half of the decision
 
-On expiry L3 must **cancel** the goal it gave up on, and must **not** report an
-empty gripper. Both are checked: the fake controller records the cancel request,
-and the `ResultCode.detail` has to say that custody is unestablished.
+On expiry L3 must **send a cancel** for the goal it gave up on, and must **not**
+report an empty gripper. Both are checked: the fake controller records the cancel
+request, and the `ResultCode.detail` has to say that custody is unestablished.
 `Grasp.Result.holding` is a `bool` and cannot say "unknown" — ADR-0045 decision 4
 is explicit that widening the contract is not taken here — so the assertion is
 that the honest statement is present where it CAN be made, not that a boolean
 carries a third state.
+
+**What this rig CANNOT check, stated so that nobody cites it for it.** The fake
+gripper below ACCEPTS every cancel, immediately. A real controller may never serve
+one — this is the path on which it is not answering — and if it serves one late,
+`check_for_success` can have terminated the goal successfully in between, so
+`cancel_callback`'s guard does not match and `set_hold_position()` never runs. The
+two outcomes leave the jaws squeezing and not squeezing respectively. That the
+cancel was SENT is what the assertion below is about, and it is all this fixture
+can be about; what a real `GripperActionController` does with it is ADR-0045's
+open residual and is measured by nothing here.
+
+**The third thing checked is the refusal that follows** (ADR-0045 decision 4, the
+`custody_unknown_` latch). After the timeout, a `Pick` — whose first physical act
+is to open the jaws — and a `Place` are both sent, and both must come back
+`PRECONDITION_FAILED` naming the unestablished custody rather than being attempted
+on an arm nobody has observed.
 
 ## The value is the rig's and the mechanism is production's
 
@@ -83,7 +102,7 @@ import unittest
 import xml.etree.ElementTree as ElementTree
 
 from cite_bringup import plan as bringup_plan
-from cite_interfaces.action import Grasp
+from cite_interfaces.action import Grasp, Pick, Place
 from cite_interfaces.msg import ResultCode
 from control_msgs.action import GripperCommand
 from launch import LaunchDescription
@@ -127,10 +146,28 @@ SHORT_OF_DEADLINE = 0.9
 #: How far past it the clock is then advanced. A tenth over, for the same reason.
 PAST_DEADLINE = 1.1
 
-#: How long the wall clock is allowed to run, as a multiple of the deadline, while
-#: simulated time stands still and the wait is required not to expire. Three, so a
-#: `steady_clock` deadline has expired twice over by the time this stops looking.
-WALL_PATIENCE = 3.0
+#: The constant this deadline replaces: `constexpr std::chrono::seconds
+#: kGripperResultWait{20}`, compared against `steady_clock` (ADR-0045). Stated here
+#: because the window below is sized against IT and not against `DEADLINE_S`.
+REPLACED_WALL_DEADLINE_S = 20.0
+
+#: How long the wall clock is allowed to run, in wall seconds, while simulated time
+#: stands still and the wait is required not to expire.
+#:
+#: SIZED SO THAT THE REPLACED CODE FAILS INSIDE IT, WHICH IS THE WHOLE POINT AND WAS
+#: NOT TRUE. This was `3.0 * DEADLINE_S` — twelve wall seconds — and the docstring
+#: above claimed a `steady_clock` deadline "would have given up here". It would not:
+#: the code this replaces compares against a compiled 20 s and ignores
+#: `gripper_result_timeout_s` entirely, because it does not declare it, so the rig's
+#: 4 s override reaches it not at all. Twelve seconds of wall clock is a window the
+#: old code survives; it failed this test eight seconds later, on the cancel and the
+#: detail, for reasons that are not what the docstring said.
+#:
+#: A multiple of `DEADLINE_S` was the wrong unit as well as the wrong size. What the
+#: window has to outlast is a number in the OLD code, which no override moves, so it
+#: is stated in wall seconds against that number with two seconds of margin — the
+#: old deadline starts a moment after `wait_for_goal` returns, not before it.
+WALL_WINDOW_S = REPLACED_WALL_DEADLINE_S + 2.0
 
 STARTUP_CEILING_S = 240.0
 #: How long a result is waited for once simulated time has passed the deadline. It
@@ -503,11 +540,14 @@ class GripperDeadlineTest(unittest.TestCase):
         # ---- The half that fails against a wall-clock deadline ----------------
         #
         # Wall time runs; simulated time does not. The code this replaces compared
-        # `steady_clock::now()` against a 20 s constant and would have given up
-        # here — which is what a starved CI runner did to it three times, at
+        # `steady_clock::now()` against a 20 s constant and gives up INSIDE this
+        # window — which is what a starved CI runner did to it three times, at
         # 20.009 s, 20.025 s and 20.048 s of a clock the gripper does not run on.
+        # `WALL_WINDOW_S` is sized against that constant rather than against this
+        # rig's deadline, because the old code declares no parameter and so never
+        # sees the override.
         started = time.monotonic()
-        while time.monotonic() - started < WALL_PATIENCE * DEADLINE_S:
+        while time.monotonic() - started < WALL_WINDOW_S:
             time.sleep(0.05)
             self.assertFalse(
                 result_future.done(),
@@ -550,13 +590,16 @@ class GripperDeadlineTest(unittest.TestCase):
             f'{outcome.result.detail}',
         )
 
-        # DECISION 4, FIRST HALF: the goal it gave up on is cancelled, so the
-        # controller stops holding a commanded position for a goal nobody waits on.
+        # DECISION 4, FIRST HALF: a cancel is SENT for the goal it gave up on, so
+        # the controller is asked to stop holding a commanded position for a goal
+        # nobody waits on. WHAT IS ASSERTED IS THE SEND. This fake accepts every
+        # cancel; a real controller may never serve one, and this fixture cannot
+        # tell the difference — see the module docstring.
         self.assertTrue(
             self.gripper.cancel_requested,
-            'the deadline expired and the gripper goal was left running. The controller '
-            'goes on commanding the closed position at the configured effort for a goal '
-            'nobody is waiting on',
+            'the deadline expired and no cancel was even sent for the gripper goal. The '
+            'controller goes on commanding the closed position at the configured effort '
+            'for a goal nobody is waiting on',
         )
 
         # DECISION 4, SECOND HALF: it does not claim an empty gripper. The boolean
@@ -569,13 +612,79 @@ class GripperDeadlineTest(unittest.TestCase):
             f'the timeout does not say that custody is unestablished, so a reader is left '
             f'to infer an empty gripper from a false `holding` field: {detail!r}',
         )
+        # IT SAYS WHAT WAS DONE, NOT WHAT RESULTED. The detail used to end "the goal
+        # has been cancelled" — an assertion about a controller that is, on this very
+        # path, not answering. The words asserted here are the ones that survive both
+        # outcomes of an unawaited cancel.
         self.assertIn(
-            'cancelled', detail,
-            f'the timeout does not say that the goal was cancelled: {detail!r}')
+            'SENT', detail,
+            f'the timeout does not say that a cancel was SENT rather than served: '
+            f'{detail!r}')
+        self.assertNotIn(
+            'has been cancelled', detail,
+            f'the timeout asserts that the goal WAS cancelled. The cancel is sent and '
+            f'not awaited, on the path where the controller is not answering, so that '
+            f'is a claim about the plant nothing here observed: {detail!r}')
         self.assertFalse(
             outcome.holding,
             '`holding` is a bool and false is the only value it has here; a true would '
             'be claiming a grasp nothing observed, which is the opposite defect')
+
+        # ---- DECISION 4, THIRD HALF: the refusal that follows -------------------
+        #
+        # `holding_` was left unwritten, which every consumer reads as false. The
+        # latch is what stops that reading turning into motion: `Pick`'s first
+        # physical act is to open the jaws, and `pick` is a public action that any
+        # client can send. L4's ADR-0046 rule keeps the LINE out of this state; it
+        # cannot keep anything else out, so the interlock is in the layer that owns
+        # the fact.
+        #
+        # The goals are otherwise EMPTY on purpose. A refusal that needed a valid
+        # pose to be produced would be a refusal reached after something had been
+        # resolved, planned or moved; this one is the first statement in each
+        # handler, and an empty goal is what proves it.
+        pick = Pick.Goal()
+        pick.workpiece_id = 'wp_in_unknown_custody'
+        self._assert_refused_for_unestablished_custody(
+            Pick, MANAGER.skills.pick, pick, 'Pick')
+        self._assert_refused_for_unestablished_custody(
+            Place, MANAGER.skills.place, Place.Goal(), 'Place')
+
+    def _assert_refused_for_unestablished_custody(self, action, name, goal, label):
+        """One skill, sent after the timeout, required to refuse and to say why."""
+        client = ActionClient(self.node, action, name)
+        self.assertTrue(
+            client.wait_for_server(timeout_sec=STARTUP_CEILING_S),
+            f'the skill server never advertised {name}')
+
+        handle_future = client.send_goal_async(goal)
+        self.assertTrue(
+            self._settled(handle_future, RESULT_CEILING_S),
+            f'the {label} goal was never answered')
+        handle = handle_future.result()
+        self.assertTrue(
+            handle.accepted,
+            f'the {label} goal was rejected outright rather than refused with a reason. '
+            f'A rejection carries no ResultCode, so an operator is told nothing')
+
+        result_future = handle.get_result_async()
+        self.assertTrue(
+            self._settled(result_future, RESULT_CEILING_S),
+            f'the {label} sent after a gripper timeout never returned. It must refuse, '
+            f'not attempt anything')
+        outcome = result_future.result().result.result
+        self.assertEqual(
+            outcome.code, ResultCode.PRECONDITION_FAILED,
+            f'{label} returned code {outcome.code} after a gripper timeout rather than '
+            f'refusing. Its next physical act assumes a gripper nothing has observed: '
+            f'{outcome.detail}',
+        )
+        self.assertIn(
+            'UNESTABLISHED', outcome.detail,
+            f'{label} refused without saying that custody is unestablished, which leaves '
+            f'a reader to infer an empty gripper from a false `holding`: '
+            f'{outcome.detail!r}',
+        )
 
     @staticmethod
     def _settled(future, ceiling_s):

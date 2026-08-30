@@ -2169,6 +2169,36 @@ TEST_F(StalledLine, AStationIsReportedOnceEvenWhenBothRulesWouldAnswer)
     << reasons.front();
 }
 
+TEST_F(StalledLine, ABeltRuleSuppressedByAnArrivalDoesNotSuppressTheCustodyRule)
+{
+  // SUPPRESSED IS NOT ANSWERED. The in-flight branch means the BELT rule has
+  // nothing to say yet — the edge that stopped this belt has not reached the
+  // station — and it used to `continue` out of the loop entirely, so a station in
+  // that window was never asked the custody question at all. It fails silent,
+  // which is the failure mode the whole of ADR-0046 decision 2 exists to remove.
+  //
+  // THE WINDOW IS ENTERED THE WAY THE RUNNING LINE ENTERS IT: the beam is broken,
+  // so the belt is stopped and the edge is counted, and `take_the_edge` is NOT
+  // called, so the station has not consumed it. Reachable in the cell after an
+  // operator reset, which returns a station to WAITING and deliberately does not
+  // clear what it holds (ADR-0037 decision 5).
+  break_the_beam();
+  ASSERT_EQ(
+    line_.registry->admit("wp_suppressed", "station_two", "frame_pick_2"),
+    cite_orchestration::RegistryOutcome::OK);
+  belt_fed().current_workpiece_id = "wp_suppressed";
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_WAITING;
+
+  const auto reasons = stalled();
+  ASSERT_EQ(reasons.size(), 1u)
+    << "a station holding its own work-piece was reported as nothing, because the belt "
+    "rule happened to be suppressed by an arrival it will never be able to take";
+  EXPECT_NE(reasons.front().find("still holds work-piece"), std::string::npos)
+    << "the reason came from the belt rule, which cannot answer in this window: "
+    << reasons.front();
+  EXPECT_NE(reasons.front().find("wp_suppressed"), std::string::npos) << reasons.front();
+}
+
 int main(int argc, char ** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
