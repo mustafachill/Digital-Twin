@@ -61,11 +61,25 @@
   `counterpart_backend`. It is a cross-document rule — the zone holds one half and the
   instance the other — so it lives in `cite_tools.validate.referential`, as
   `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it.
-  **What is NOT built:** nothing brings a second side up. `twin.sides: pair` today emits the
-  counterpart's Gazebo transport partition and each asset's counterpart backend into the
-  bring-up plan, and nothing else — no second world, no second controller manager, no second
-  set of node names. Do not read a paired model as a running pair.
-- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md)
+  **Each side carries two isolations, and both are emitted for every side including a `single`
+  zone's plant.** The plan's `sides:` entry states a `gz_partition` and a `domain_offset`,
+  formed side by side in `cite_tools.model.ids` from one side identity, because neither
+  substitutes for the other: `GZ_PARTITION` is a gz-transport namespace the ROS graph has never
+  heard of, and `ROS_DOMAIN_ID` was measured not to isolate the Gazebo transport
+  ([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md),
+  [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md) clause 2). The domain is
+  an **offset** and never an absolute value: an absolute one derived from the deployment
+  differs in every clone and breaks the byte-identity check `./scripts/validate-model`
+  performs, and one derived from the model is identical in every clone, so two checkouts of one
+  commit would discover each other. The base travels in `CITE_DOMAIN_BASE` and
+  `cite_bringup.plan.resolve_domain_id` adds them, once.
+  **What is NOT built:** nothing brings a second side up. `twin.sides: pair` today emits a
+  second `sides:` entry — with the counterpart's partition and its offset — and each asset's
+  counterpart backend into the bring-up plan; there is no second world, no second controller
+  manager and no second set of node names. Do not read a paired model as a running pair, and
+  read the emitted plan rather than this sentence for what a change produces: a list of what a
+  change does not do is a claim with an expiry date.
+- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)
 
 ## Responsibility
 

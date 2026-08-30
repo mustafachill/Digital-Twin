@@ -150,8 +150,8 @@ than typing it:
 
 ```bash
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
-from cite_bringup.plan import default_plan_path, load
-print(load(default_plan_path()).sides[0].gz_partition)')"
+from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
+print(load(default_plan_path()).side_named(PLANT_SIDE).gz_partition)')"
 ```
 
 Be precise about what an unpartitioned command does, because it is not what a terminal

@@ -51,6 +51,7 @@ from cite_bringup.plan import (
     GZ_PARTITION_ENV,
     load,
     Plan,
+    PLANT_SIDE,
     require_gz_partition,
     Side,
 )
@@ -103,10 +104,18 @@ def gz_environment(plan: Plan) -> dict[str, str]:
     Which side this addresses is the PLANT, structurally: it is the side the
     untwinned model describes and the side every scenario and `./scripts/sim`
     already address (ADR-0041, Decision 3). Bringing a counterpart up is a
-    separate launch and is not built yet; when it is, it takes the second entry
-    of the same list rather than a second rule.
+    separate launch and is not built yet; when it is, it asks this same function
+    for a different side rather than following a second rule.
+
+    Asked for BY NAME. This used to read `plan.sides[0]`, and its own docstring
+    said the counterpart would be "the second entry of the same list" — which is
+    the positional meaning ADR-0044 refuses, in the one module designated as the
+    single door for this environment. A plan addressed by index is one reordering
+    away from handing a caller the counterpart's partition while calling it the
+    plant, and a partition that reaches the wrong side fails silently by
+    construction: that is the whole reason this module exists.
     """
-    plant: Side = plan.sides[0]
+    plant: Side = plan.side_named(PLANT_SIDE)
     environment = {GZ_PARTITION_ENV: plant.gz_partition}
     # Checked on the dictionary just built, and that is the point: this is the
     # value the processes will actually be started with, so the check binds to

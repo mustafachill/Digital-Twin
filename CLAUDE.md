@@ -398,12 +398,34 @@ account of a flake; each was caught by someone re-running, never by someone read
   `TwinMode/MODE_VIRTUAL_LEAD = 5` in `cite_interfaces`.
   **What a paired model is not, and this is the part to carry.** `model/facility/zones.yaml`
   declares `sides: single` today, so nothing in this repository is paired. Set it to `pair`
-  and the generated plan gains **one more `sides:` entry with the counterpart's partition,
-  and a `counterpart_backend:` line per controller manager. That is all it gains** — no second
-  world, no second controller manager, no second set of node names, no second launch.
-  `cite_bringup/gz.py` says so in its own docstring: it addresses `plan.sides[0]`, the plant,
-  and "bringing a counterpart up is a separate launch and is not built yet". ADR-0041 and
-  ADR-0043 are still `Proposed` for exactly that reason. **`MODE_VIRTUAL_LEAD` is vocabulary
+  and the generated plan gains **one more `sides:` entry — carrying the counterpart's
+  partition *and* its `domain_offset` — and a `counterpart_backend:` line per controller
+  manager. That is all it gains** — no second world, no second controller manager, no second
+  set of node names, no second launch. **The offset is emitted for every side, including a
+  `single` zone's plant**, which is why it is not a thing pairing adds: an isolation that
+  appeared only when someone paired a cell would be untested on every run that does not
+  (ADR-0042, ADR-0044 clause 4). **Ask the plan for the shape rather than reading it out of
+  this paragraph** — an exhaustive list of what a change does not do is a claim with an expiry
+  date, and this sentence has already expired once.
+  `cite_bringup/gz.py` addresses **the side named `plant`**, by name and not by position, and
+  says in its own docstring that "bringing a counterpart up is a separate launch and is not
+  built yet". ADR-0041 and ADR-0043 are still `Proposed` for exactly that reason.
+  **A checkout now claims two domains, not one, and every checkout's domain changed the day
+  that landed.** `scripts/_lib.sh` allocates an odd base per checkout and the counterpart takes
+  the even number above it, so no counterpart can land on another checkout's plant — parity,
+  not luck. A cell launched before that change and a shell entered after it are on different
+  domains, and the shell finds an empty graph; it is one-time and moves no committed artifact.
+  `./scripts/enter`, `./scripts/sim` and `./scripts/scenario` all land on the **plant**, which
+  is the side every script here addresses; `./scripts/doctor` prints that domain and says which
+  side it is. `docs/operations/troubleshooting.md` has the recipe for resolving any side's
+  domain from the plan, and `docs/onboarding/getting-started.md` states the allocation.
+  **The plan carries an offset and never an absolute domain** — one derived from the deployment
+  differs in every clone and breaks `./scripts/validate-model`'s byte-identity check; one
+  derived from the model is identical in every clone and lets two checkouts of one commit
+  discover each other. `cite_bringup.plan.resolve_domain_id` is the one place base and offset
+  are added. **The refusal ADR-0044 clause 4 owes is not built**: nothing yet refuses a side
+  whose process environment does not carry the domain the plan resolves for it, the way
+  `require_gz_partition` refuses a missing partition. **`MODE_VIRTUAL_LEAD` is vocabulary
   only**: `grep -rn MODE_VIRTUAL_LEAD workspace/src` reaches the message, the interface
   baseline and one comment — nothing routes on it, `SetMode` has no server, and `cite_twin`
   does not exist.

@@ -88,15 +88,26 @@ class ResolvedAsset:
 
 @dataclass(frozen=True)
 class ResolvedSide:
-    """One side of the zone, with the Gazebo transport partition it runs in.
+    """One side of the zone, and the two isolations it runs in.
 
-    A `single` zone has one side and it is the plant, so this is never empty: a
-    partition that appeared only when someone paired a cell would be untested on
+    A `single` zone has one side and it is the plant, so this is never empty: an
+    isolation that appeared only when someone paired a cell would be untested on
     every run that does not (ADR-0042).
+
+    Two isolations rather than one, because neither substitutes for the other.
+    `GZ_PARTITION` separates the Gazebo transport and does nothing to the ROS
+    graph; `ROS_DOMAIN_ID` separates the ROS graph and was measured to do nothing
+    to the Gazebo transport. A pair carrying one and not the other is either two
+    cells sharing every belt topic or two cells colliding on every node name
+    (ADR-0044, clause 2).
+
+    The domain is a HALF: an offset, not a value. See `ids.domain_offset` for why
+    an absolute domain cannot be emitted into a committed, hashed tree.
     """
 
     name: str
     gz_partition: str
+    domain_offset: int
 
 
 @dataclass(frozen=True)
@@ -442,7 +453,11 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
     # called is mechanism, so the names are read from `ids` and never authored.
     side_count = 1 if zone.twin.sides == "single" else len(ids.SIDES)
     sides = tuple(
-        ResolvedSide(name=name, gz_partition=ids.partition(zone_id, name))
+        ResolvedSide(
+            name=name,
+            gz_partition=ids.partition(zone_id, name),
+            domain_offset=ids.domain_offset(name),
+        )
         for name in ids.SIDES[:side_count]
     )
 

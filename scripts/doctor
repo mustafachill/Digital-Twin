@@ -90,11 +90,20 @@ step "DDS"
 # host discovered each other's nodes and one scenario run took four times as long
 # as it should have. The identifier below is derived per checkout — see
 # cite_domain_id in scripts/_lib.sh.
+#
+# A checkout claims TWO domains now, and this line reports one of them. What it
+# reports is the PLANT's — the side every script here addresses — and the
+# counterpart's is the plan's offset added to the base, resolved by
+# cite_bringup.plan.resolve_domain_id inside the container rather than by a
+# second copy of that arithmetic here. Saying so plainly is deliberate: a report
+# that named one domain without saying which would read as though a paired cell
+# had one (ADR-0044, clause 4).
 if [ "${ROS_DOMAIN_ID}" -eq 0 ]; then
     report fail "ROS_DOMAIN_ID" \
         "0 — the shared default; concurrent runs on this host will cross-talk"
 else
-    report pass "ROS_DOMAIN_ID" "${ROS_DOMAIN_ID} (${CITE_DOMAIN_SOURCE})"
+    report pass "ROS_DOMAIN_ID" \
+        "${ROS_DOMAIN_ID} (${CITE_DOMAIN_SOURCE}; the plant's — a counterpart's is resolved from the plan, base ${CITE_DOMAIN_BASE})"
 fi
 report pass "RMW implementation" "${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp (default)}"
 

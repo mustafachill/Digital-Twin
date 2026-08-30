@@ -151,6 +151,45 @@ def partition(zone: str, side: str) -> str:
     return f"{ROOT}/{zone}/{side}"
 
 
+def domain_offset(side: str) -> int:
+    """How far this side's ROS domain sits from the checkout's base — 0 or 1.
+
+    The second of the two isolations a side needs, formed here beside
+    :func:`partition` and from the same ``SIDES`` tuple, so that one side
+    identity produces both and a third isolation added later has an obvious home.
+    They are independent and neither substitutes for the other: `GZ_PARTITION`
+    is a gz-transport namespace that `move_group`, the controller managers and
+    the skill servers have never heard of, and `ROS_DOMAIN_ID` was measured not
+    to isolate Gazebo transport at all (ADR-0042, ADR-0044 clause 2).
+
+    An OFFSET rather than a domain, and that is the whole reason this function
+    returns a small integer instead of a number anyone could use directly. A
+    domain id is not a name: it is a host-scoped resource allocation, closer to a
+    TCP port, and emitting an absolute one into the committed generated tree
+    fails in both of the only two ways it could be derived (ADR-0044, clause 4).
+    Derived from the deployment, it differs in every clone, so
+    `./scripts/validate-model` — which regenerates and requires the output to be
+    byte-identical — would fail in every checkout but the one that wrote it.
+    Derived from the model instead, it is the same number everywhere, so two
+    checkouts of one commit resolve the same domain and discover each other,
+    which is the defect the per-checkout derivation exists to prevent.
+
+    What IS a fact about the modelled system is which side this is, and the
+    offset is a function of nothing else. The base travels separately, in
+    `CITE_DOMAIN_BASE`, and the absolute value is base plus offset resolved once
+    in `cite_bringup`.
+
+    The plant is 0 deliberately: an untwinned zone then resolves to exactly the
+    domain it uses today, so nothing in Phase 1 moves and `./scripts/enter` from
+    a checkout still lands on the side every existing script addresses.
+    """
+    if side not in SIDES:
+        raise InvalidIdentifierError(
+            f"{side!r} is not a side of a twin pair. Expected one of {SIDES}."
+        )
+    return SIDES.index(side)
+
+
 def frame(zone: str, asset_id: str, link: str) -> str:
     """`<zone>__<asset_id>__<link>` — a TF frame.
 

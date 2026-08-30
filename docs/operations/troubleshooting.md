@@ -212,14 +212,49 @@ Take the value from the plan rather than typing it, then use `gz` as before:
 
 ```bash
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
-from cite_bringup.plan import default_plan_path, load
-print(load(default_plan_path()).sides[0].gz_partition)')"
+from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
+print(load(default_plan_path()).side_named(PLANT_SIDE).gz_partition)')"
 gz topic -l
 ```
 
 If bring-up itself refuses with a message naming `GZ_PARTITION` or `sides:`, that is not this
 problem: the plan is stale or was hand-edited. Run `./scripts/validate-model --write`, then
 `./scripts/build`.
+
+### `ros2 node list` is empty or short while the cell is plainly running
+
+The same shape of failure as the one above, on the other isolation, and it fails the same
+way: silence rather than an error. Each side of a twin pair runs in its own `ROS_DOMAIN_ID`,
+because both sides carry byte-identical names by rule and one ROS graph cannot hold two of
+them ([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)). A `ros2 topic echo`
+aimed at a topic on the other side does not fail; it waits, indefinitely, exactly as an
+incompatible QoS profile does.
+
+**Check which domain the shell is in before suspecting anything about the cell.**
+`./scripts/enter` from the checkout lands on the plant, which is the side every script here
+addresses and the side a person commands. `./scripts/doctor` reports that domain and says so.
+
+The plan states each side's *offset* from a base rather than an absolute domain — an absolute
+one in a committed, hashed tree would either differ in every clone and break
+`./scripts/validate-model`, or be identical in every clone and let two checkouts of one commit
+discover each other. The base travels in `CITE_DOMAIN_BASE`, and one function adds them, so
+ask it rather than doing the arithmetic:
+
+```bash
+./scripts/enter dev python3 -c '
+import os
+from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
+plan = load(default_plan_path())
+base = domain_base(os.environ)
+for side in plan.sides:
+    print(side.name, resolve_domain_id(plan, side.name, base))'
+```
+
+An untwinned zone prints one line, and it is the domain the checkout already uses. Note that
+a checkout now claims **two** domains rather than one — the base is allocated on odd numbers
+so that no counterpart can ever land on another checkout's plant — so every checkout's domain
+changed on the day that landed. A cell launched before it and a shell entered after it are on
+different domains, and the shell finds an empty graph.
 
 ### Bring-up fails on the second attempt
 

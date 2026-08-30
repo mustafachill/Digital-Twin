@@ -979,12 +979,22 @@ class TestTwinSidesAndTheGazeboPartition:
         )
         assert carrying == ["bringup/cell_a_plan.yaml"]
 
-    def test_an_untwinned_zone_still_declares_one_partitioned_side(self, real_model: Path) -> None:
-        # Never defaulted, and never absent. A partition that appeared only when
+    def test_an_untwinned_zone_still_declares_one_fully_isolated_side(
+        self, real_model: Path
+    ) -> None:
+        # Never defaulted, and never absent. An isolation that appeared only when
         # someone paired a cell would be untested on every run that does not.
+        # Both isolations, because they are two halves of one rule: a process
+        # belonging to a side carries the partition AND the domain, resolved from
+        # the same side identity and read from this one block (ADR-0044,
+        # clause 2).
         plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
         assert plan["sides"] == [
-            {"name": ids.PLANT_SIDE, "gz_partition": ids.partition("cell_a", ids.PLANT_SIDE)}
+            {
+                "name": ids.PLANT_SIDE,
+                "gz_partition": ids.partition("cell_a", ids.PLANT_SIDE),
+                "domain_offset": 0,
+            }
         ]
 
     def test_pairing_a_zone_emits_a_second_side_with_its_own_partition(
@@ -1022,6 +1032,199 @@ class TestTwinSidesAndTheGazeboPartition:
         plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
         for manager in plan["controller_managers"]:
             assert manager["counterpart_backend"] == manager["backend"]
+
+    def test_pairing_a_zone_changes_nothing_but_the_bring_up_plan(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """What actually differs between the two sides, asserted rather than argued.
+
+        In Phase 2.A: **nothing in the generated content.** Both sides load the
+        same world, the same descriptions, the same controller configuration, the
+        same MoveIt configuration, the same planning scene, the same static
+        frames and the same topology, and both present byte-identical names
+        (ADR-0044, clause 1). What separates them is not a file, it is the
+        environment their processes are started in — `GZ_PARTITION` and
+        `ROS_DOMAIN_ID`.
+
+        So this test is a P1 tripwire and not a convenience. Exactly three call
+        sites in the generators branch on a backend — `ros2_control_plugin` into
+        the description, `use_sim_time` in `generate/control.py` and `hosted_by`
+        here — and under ADR-0041's Decision 3 a paired zone's plant must be
+        `sim` and a 2.A counterpart writes no `counterpart_backend` at all, so
+        all three answer identically for both sides. A generator that emitted a
+        second world, a second description or a second controller config for that
+        pair would be emitting a byte-identical copy of a file already in the
+        tree, which is a value in two places.
+
+        Should this ever fail because a genuinely side-specific artifact was
+        added, do not relax it: state which fact made the sides differ and why
+        the copy is not a copy.
+
+        **It is blind to the divergence that actually matters, and that is not a
+        gap to be closed here.** The premise above — that both sides answer all
+        three backend call sites identically — holds because a 2.A counterpart is
+        a second simulation. **`counterpart_backend: real` validates cleanly
+        today**: `physical-plant-on-paired-zone` refuses a physical *plant* and
+        says nothing about a physical counterpart, and
+        `test_a_physical_counterpart_reaches_the_plan` asserts that it reaches
+        the plan. Such a counterpart would be handed the plant's description with
+        the `gz_ros2_control` plugin and `use_sim_time: true`, and `hosted_by`
+        derived from the plant's backend alone — a real cell driven by artifacts
+        that describe a simulated one.
+
+        **This tripwire cannot fire on that**, and the reason is structural
+        rather than an oversight: it compares the artifacts pairing produces
+        against the artifacts it does not, and with no per-side artifact set
+        there is no second artifact to differ. So what it protects against is
+        **reflex duplication** — a generator emitting a byte-identical second
+        world or second controller config — and nothing else.
+
+        **Phase 2.B's owner owes either a refusal or a per-side artifact set**,
+        and it is one or the other: either `counterpart_backend: real` is refused
+        at validation until the artifacts can differ, or the generator emits a
+        per-side set and this test is rewritten around what legitimately differs.
+        That is an architectural decision and belongs in `docs/adr/`, not in a
+        test's docstring and not in this change.
+        """
+        before = artifacts(real_model)
+        self._pair(real_model, edit_yaml)
+        after = artifacts(real_model)
+
+        # No file appears and none disappears: pairing generates no second tree.
+        assert sorted(after) == sorted(before)
+        # And of the files that exist, exactly two have different bytes. The plan
+        # is the substance - a second `sides:` entry and each asset's
+        # `counterpart_backend`. `MODEL_HASH` is the hash of the model that
+        # produced the tree, so it moves whenever the model does; that it moves
+        # is asserted deliberately by `test_pairing_a_zone_changes_the_model_hash`
+        # below, which is the tripwire on `twin.sides` describing the system
+        # rather than running it.
+        differing = sorted(path for path in before if before[path] != after[path])
+        assert differing == ["MODEL_HASH", "bringup/cell_a_plan.yaml"]
+
+    def test_a_paired_zone_still_generates_exactly_one_world(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The same claim as the test above, aimed at the artifact most likely to
+        # be duplicated by reflex. A second world would be the same bytes under a
+        # second name; what makes two `gz sim` servers on one host separate is
+        # the partition each is started with, not a second file (ADR-0042).
+        self._pair(real_model, edit_yaml)
+        worlds = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
+        assert worlds == ["worlds/cell_a.sdf"]
+
+    def test_unpairing_a_zone_returns_the_tree_on_disk_to_exactly_where_it_was(
+        self, real_model: Path, edit_yaml: Callable, tmp_path: Path
+    ) -> None:
+        """Through `gen.write`, because the residue this is about is on a disk.
+
+        **What it proves, exactly.** Generating into a directory that already
+        holds the unpaired tree, pairing, and unpairing again returns that
+        directory — every file, every byte, and the set of filenames — to what it
+        held before. That is a round trip through the writer, not through
+        `generate`, so `write`'s overwrite and its stale-file prune are both in
+        the path.
+
+        **What it does not prove, stated because the earlier version of this test
+        claimed it.** It compared two `generate()` results, and `generate` is
+        pure while `model_hash` digests the object graph rather than file bytes,
+        so it reduced to `f(m) == f(m)` and stayed green under a mutation that
+        injected a second world — both its siblings caught that and it did not.
+        Writing through `write` fixes the shape but not the reach: **pairing adds
+        no file today**, so the prune has nothing to remove at this commit and
+        deleting the prune loop would not fail this test. The prune's own
+        regression is `TestHandEditDetection::test_write_removes_stale_files`. This becomes a
+        second guard on it the moment a per-side artifact exists — which is
+        exactly when a `single` zone could start shipping a `pair`'s residue.
+
+        The paired plan is asserted to differ, so that a generator ignoring
+        `twin.sides` cannot satisfy the round trip by doing nothing. It names the
+        plan and not the whole tree deliberately: `MODEL_HASH` digests the model,
+        so it moves the moment `twin.sides` changes even in a generator that
+        ignores the field entirely, and a whole-tree inequality would be answered
+        by that alone.
+        """
+        out = tmp_path / "generated"
+
+        def on_disk() -> dict[str, str]:
+            gen.write(gen.generate(load(real_model)), out)
+            return {
+                path.relative_to(out).as_posix(): path.read_text()
+                for path in sorted(out.rglob("*"))
+                if path.is_file()
+            }
+
+        before = on_disk()
+        self._pair(real_model, edit_yaml)
+        paired = on_disk()
+        edit_yaml(
+            real_model / "facility/zones.yaml",
+            lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+        )
+
+        plan = "bringup/cell_a_plan.yaml"
+        assert paired[plan] != before[plan], "pairing changed no plan; the round trip is vacuous"
+        assert on_disk() == before
+
+    def test_the_two_sides_take_the_two_domain_offsets(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The plant at 0 is what makes an untwinned zone resolve to exactly the
+        # domain it uses today, so nothing in Phase 1 moves; the counterpart at 1
+        # is the only other value a two-wide pair can take. Distinctness is the
+        # property that matters — two sides sharing a domain collide on every
+        # node name, because both sides carry identical names by rule.
+        self._pair(real_model, edit_yaml)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        by_name = {side["name"]: side["domain_offset"] for side in plan["sides"]}
+        assert by_name == {ids.PLANT_SIDE: 0, ids.COUNTERPART_SIDE: 1}
+
+    def test_no_generated_artifact_carries_an_absolute_domain(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """An absolute domain in a committed, hashed tree fails both ways it could be derived.
+
+        From the deployment it differs in every clone, so `./scripts/validate-model`
+        — which requires a fresh generator run to be byte-identical to what is on
+        disk — would fail in every checkout but the one that wrote it. From the
+        model it is identical everywhere, so two checkouts of one commit resolve
+        the same domain and discover each other, which is the exact defect the
+        per-checkout derivation exists to prevent. Those two are jointly
+        exhaustive, which is why the offset is the only shape left (ADR-0044,
+        clause 4).
+        """
+        self._pair(real_model, edit_yaml)
+        produced = artifacts(real_model)
+
+        # Read from the parsed document rather than from the text, because the
+        # plan's own comments discuss the domain variable at length and a
+        # substring search would be answered by the prose instead of by the data.
+        plan = yaml.safe_load(produced["bringup/cell_a_plan.yaml"])["plan"]
+        for side in plan["sides"]:
+            assert set(side) == {"name", "gz_partition", "domain_offset"}
+            # An offset is a small index into the sides, not a domain: anything
+            # large enough to be usable as one has stopped being an offset.
+            assert side["domain_offset"] in range(len(ids.SIDES))
+
+        # And no other artifact says anything about a domain at all. A domain is
+        # a fact about a deployment; a description, a world or a controller
+        # config that carried one would be a second statement of it.
+        carrying = sorted(path for path, text in produced.items() if "domain_offset" in text)
+        assert carrying == ["bringup/cell_a_plan.yaml"]
+
+    def test_a_paired_zone_generates_byte_identically_across_runs(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        # The determinism property the whole committed-artifact scheme rests on,
+        # asserted under pairing as well. `TestDeterminism` covers the shipped
+        # `single` zone; a second side is exactly the kind of addition that
+        # introduces set iteration or dictionary ordering into the output.
+        self._pair(real_model, edit_yaml)
+        model = load(real_model)
+        digests = {
+            tuple(sorted((a.path, a.content) for a in gen.generate(model))) for _ in range(10)
+        }
+        assert len(digests) == 1
 
     def test_a_physical_counterpart_reaches_the_plan(
         self, real_model: Path, edit_yaml: Callable

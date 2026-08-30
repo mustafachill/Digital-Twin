@@ -78,15 +78,48 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # below preserves anything already set. An explicit ROS_DOMAIN_ID in the
 # environment always wins.
 #
-# Range 1-101: 0 is the ecosystem-wide default this exists to get away from, and
-# on Linux domains above 101 collide with the ephemeral port range.
+# A CHECKOUT NOW CLAIMS TWO DOMAINS, NOT ONE. A twin pair runs each side in its
+# own domain, because both sides carry byte-identical names by rule and one ROS
+# graph cannot hold two of them (ADR-0044). The generated plan states each side's
+# OFFSET from a base - plant 0, counterpart 1 - and this function allocates the
+# base. cite_bringup.plan.resolve_domain_id is the one place they are added.
+#
+# So the base is drawn from the ODD numbers and the counterpart takes the even
+# one above it:
+#
+#     plant       = 2 * (cksum % 50) + 1      # 1, 3, 5, ... 99
+#     counterpart = plant + 1                 # 2, 4, 6, ... 100
+#
+# Plants are odd and counterparts are even, so no counterpart of any checkout can
+# ever equal any plant of any other - not rare, impossible by parity. That
+# removes three of the four ways two checkouts could overlap, and the one left is
+# two checkouts drawing the same base, which collides both sides together and is
+# the ordinary same-domain case developers already recognise.
+#
+# The two alternatives are worse. Wrapping is dead on arrival: the old range
+# ended at 101, so 101 + 1 = 102 is outside the 0-101 band ROS 2 documents as
+# safe from the Linux ephemeral port range, and wrapping it to 0 lands on the
+# ecosystem-wide default ./scripts/doctor deliberately fails on. Plain narrowing
+# to `cksum % 50 + 1` keeps both values in range but leaves all four overlap
+# cases alive, so it roughly triples the collision surface where parity doubles
+# it.
+#
+# Range 1-100 across both sides: 0 is the ecosystem-wide default this exists to
+# get away from, and on Linux domains above 101 collide with the ephemeral port
+# range. The honest cost is 50 possible bases where there were 101 - two
+# checkouts on one host now collide about 1 time in 50 rather than 1 in 101,
+# which is unavoidable for any scheme giving a checkout two domains.
+#
+# NOTE: every checkout's domain changes on the day this lands. A cell launched
+# before it and a shell entered after it are on different domains, and the shell
+# finds an empty graph. It is one-time and no committed artifact moves.
 # -----------------------------------------------------------------------------
 # cite_domain_id <checkout-path>
 cite_domain_id() {
     local key="$1" sum
     # `cksum` is POSIX and identical on macOS and Linux; `md5sum` is neither.
     sum="$(printf '%s' "$key" | cksum | awk '{print $1}')"
-    printf '%s' "$(( sum % 101 + 1 ))"
+    printf '%s' "$(( 2 * (sum % 50) + 1 ))"
 }
 
 if [ -n "${ROS_DOMAIN_ID:-}" ]; then
@@ -97,7 +130,25 @@ else
     ROS_DOMAIN_ID="$(cite_domain_id "$REPO_ROOT")"
     CITE_DOMAIN_SOURCE="derived from this checkout"
 fi
-export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE
+
+# The base a side's domain is resolved from, on its own channel.
+#
+# It carries the same number as ROS_DOMAIN_ID for the plant, and that is not
+# redundancy. The generated plan states an OFFSET, so an absolute domain is base
+# plus offset and anything checking one needs the base from somewhere. Without
+# this variable the only place to read it is ROS_DOMAIN_ID in the process's own
+# environment - which, for the plant at offset 0, is the value under test, so the
+# comparison reduces to `env == env + 0` and passes for every possible value
+# including a wrong one. Only the counterpart's half would have had teeth, and a
+# green result would have been read as covering both sides (ADR-0044, clause 4).
+#
+# Preserved when already set, and that is what makes the two channels
+# independent: a counterpart's process is started with ROS_DOMAIN_ID at base + 1
+# while the base stays the base, so sourcing this file inside it must not
+# overwrite one with the other.
+CITE_DOMAIN_BASE="${CITE_DOMAIN_BASE:-$ROS_DOMAIN_ID}"
+
+export ROS_DOMAIN_ID CITE_DOMAIN_SOURCE CITE_DOMAIN_BASE
 
 # -----------------------------------------------------------------------------
 # COMPOSE_PROJECT_NAME — one set of Docker volumes per checkout, not one per host.
