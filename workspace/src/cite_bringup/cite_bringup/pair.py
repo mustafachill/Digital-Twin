@@ -1,0 +1,419 @@
+#!/usr/bin/env python3
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Start both sides of a twin pair, join them, and own the pair's lifetime.
+
+ADR-0047. **A twin pair is two independent launches. Neither waits for the other,
+because neither needs anything from the other. They are joined, not sequenced.**
+There is no ordering to impose between the sides and this module imposes none:
+both are started at once, and what sits above them is a join and a failure rule.
+
+**The boundary, and it is a classification rather than an intention.**
+
+This may: start and stop operating-system processes; read their exit status; read
+the standard output of processes it started; read the generated plan and resolve
+each side's domain through `plan.resolve_domain_id`; own files it created.
+
+This may not: import `rclpy` or `rclcpp`, or create any context, node, publisher,
+subscription, client, service or action endpoint on either domain; set
+`ROS_DOMAIN_ID` or `GZ_PARTITION` **in its own** environment in order to reach a
+side — it sets them in a child's; decide anything about what crosses between the
+sides, which is L5's definition and this is not L5.
+
+**The membership test, for a design nobody anticipated:** if both sides' DDS and
+both Gazebo transports were removed from the machine, this module's own code
+would run unchanged, because it never speaks either. `test/test_pair.py` drives
+:func:`supervise` against two processes that are not ROS at all, which is that
+sentence executed rather than asserted, and holds the import graph against
+`rclpy` besides. A promise that a component holds no context is not reviewable;
+an import test is.
+
+**Readiness is a line on a pipe.** Each side computes its own readiness inside
+its own domain — see `readiness_witness.py` — and announces it on its own
+standard output. This module's readiness fact is that token arriving on that
+side's pipe. It is strictly stronger than liveness, because a process that has
+not crashed has not reached the end of a gate chain, and it is not a timer: a
+blocking read on a pipe has no interval.
+
+**What it costs a developer, stated because it is a real cost.** The supervisor
+owns both sides' output, so a solo bring-up's plain console becomes two labelled
+interleaved streams. Every line carries its side's name as a prefix.
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+import os
+import queue
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+from cite_bringup.plan import (
+    default_plan_path,
+    DOMAIN_ENV,
+    domain_base,
+    load,
+    Plan,
+    PlanError,
+    resolve_domain_id,
+)
+from cite_bringup.readiness import announced_side
+
+#: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
+#: both sides are stopped and the pair exits non-zero, saying which side never
+#: announced readiness and never exited.
+#:
+#: It exists because that row of ADR-0047's failure table is real — ADR-0044
+#: records the silent, indefinite hang that awaits a mis-wired cross-domain
+#: lifecycle client, and without a ceiling this supervisor would inherit that
+#: silence instead of converting it into a diagnosis.
+#:
+#: **It must never be widened to absorb a slow host.** Two cells on a machine
+#: that cannot hold real time will be slow, and slow is a finding about the
+#: machine (ADR-0043's second half), not a number to raise here.
+READY_CEILING_S = 900.0
+
+#: How long a side is given to shut itself down after SIGINT before the group is
+#: signalled, and then how long before it is killed. Both are ceilings on a
+#: failure: a side that exits at once is not delayed by a millisecond.
+#:
+#: The first is above `simulation.launch.py`'s own teardown ceilings, which let a
+#: process take 45 s before SIGTERM and 60 s before SIGKILL. A supervisor that
+#: killed the group sooner would truncate the very teardown the launch is in the
+#: middle of performing, and record the truncation instead of what happened.
+STOP_GRACE_S = 90.0
+STOP_KILL_S = 30.0
+
+#: The exit status of a pair that ended because a side ended.
+#:
+#: Distinct from 1, which any of the refusals below the supervisor may produce,
+#: so that a caller can tell "a side would not start" from "the pair ran and then
+#: one half of it went away".
+PAIR_ENDED = 3
+
+
+@dataclass(frozen=True)
+class SideSpec:
+    """One side: what to run, and the environment that decides which side it is.
+
+    ``env`` is an OVERLAY on the supervisor's own environment rather than a
+    replacement, and it carries the whole of the difference between the two
+    sides. That is ADR-0047 clause 1 stated as a data structure: the sides share
+    every generated artifact and differ only in the environment their processes
+    start in.
+    """
+
+    name: str
+    argv: tuple[str, ...]
+    env: Mapping[str, str] = field(default_factory=dict)
+
+
+def side_specs(
+    plan: Plan, environ: Mapping[str, str], *, headless: bool = True, line: bool = False
+) -> list[SideSpec]:
+    """One spec per side the plan declares, in the plan's order.
+
+    The domain is resolved through `plan.resolve_domain_id` and nowhere else: a
+    second copy of `base + offset` is a value in two places, and the two copies
+    disagree the first time the allocation changes (ADR-0044, clause 4).
+
+    **`GZ_PARTITION` is deliberately not set here.** The launch builds it from
+    the plan for the side it was told it is, and refuses without it; setting it
+    here as well would be a second statement of a generated name, and the two
+    could disagree. What this sets is the one value the launch cannot derive for
+    itself, because a domain is a deployment fact rather than a modelled one.
+    """
+    base = domain_base(environ)
+    specs = []
+    for side in plan.sides:
+        argv = (
+            "ros2",
+            "launch",
+            "cite_bringup",
+            "simulation.launch.py",
+            f"zone:={plan.zone}",
+            f"side:={side.name}",
+            f"headless:={'true' if headless else 'false'}",
+            f"line:={'true' if line else 'false'}",
+        )
+        domain = resolve_domain_id(plan, side.name, base)
+        specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
+    return specs
+
+
+@dataclass
+class _Side:
+    """A started side, and everything the supervisor knows about it."""
+
+    spec: SideSpec
+    process: subprocess.Popen
+    ready: bool = False
+    status: int | None = None
+
+    @property
+    def name(self) -> str:
+        return self.spec.name
+
+
+def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
+    """Start one side, in its own session, with its output on a pipe we own.
+
+    ``start_new_session`` puts the launch and everything it starts into one
+    process group, which is what makes stopping a side a single signal rather
+    than a search for descendants. It also detaches the side from the terminal's
+    group, so an operator's Ctrl-C reaches this supervisor and is delivered to
+    the sides by it — in order, and with the same teardown ceilings both times —
+    rather than racing it.
+    """
+    env = dict(environ)
+    env.update(spec.env)
+    return subprocess.Popen(
+        list(spec.argv),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        start_new_session=True,
+    )
+
+
+def _pump(side: _Side, events: queue.Queue, out) -> None:
+    """Forward one side's output, labelled, and post what the supervisor needs.
+
+    The reader and the join are the same loop on purpose. A side's readiness IS a
+    line on this pipe, so there is nothing to poll and no interval to choose: the
+    thread blocks in `readline` and the token arrives when the side says so.
+    """
+    assert side.process.stdout is not None
+    for raw in side.process.stdout:
+        line = raw.rstrip("\n")
+        print(f"[{side.name}] {line}", file=out, flush=True)
+        announced = announced_side(line)
+        if announced is not None:
+            events.put(("ready", side, announced))
+    events.put(("exit", side, side.process.wait()))
+
+
+def _stop(side: _Side, out) -> None:
+    """End a side, giving its own teardown the time the launch asks for.
+
+    SIGINT to the launch process alone first, because that is the signal `launch`
+    installs a handler for and the one its documented shutdown path runs on;
+    signalling the whole group here would deliver a second SIGINT to processes
+    launch is already stopping. The group is only reached if the launch itself
+    does not go.
+    """
+    if side.process.poll() is not None:
+        return
+    print(f"[pair] stopping {side.name}", file=out, flush=True)
+    try:
+        side.process.send_signal(signal.SIGINT)
+    except ProcessLookupError:
+        return
+    try:
+        side.process.wait(timeout=STOP_GRACE_S)
+        return
+    except subprocess.TimeoutExpired:
+        print(
+            f"[pair] {side.name} did not stop within {STOP_GRACE_S:g} s of SIGINT; "
+            "signalling its process group",
+            file=out,
+            flush=True,
+        )
+    _signal_group(side, signal.SIGTERM)
+    try:
+        side.process.wait(timeout=STOP_KILL_S)
+        return
+    except subprocess.TimeoutExpired:
+        print(f"[pair] killing {side.name}", file=out, flush=True)
+    _signal_group(side, signal.SIGKILL)
+
+
+def _signal_group(side: _Side, number: int) -> None:
+    try:
+        os.killpg(os.getpgid(side.process.pid), number)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def supervise(
+    specs: Sequence[SideSpec],
+    *,
+    environ: Mapping[str, str] | None = None,
+    ceiling_s: float = READY_CEILING_S,
+    out=None,
+) -> int:
+    """Start every side at once, join them, and own the pair until it ends.
+
+    The whole of ADR-0047 clause 4's failure table, and nothing else:
+
+    ==================================== =========================================
+    What happens                         What this does
+    ==================================== =========================================
+    A side exits before announcing        stop the other, exit non-zero naming
+                                          which side and its status
+    Both exit before announcing           the same, reporting BOTH statuses
+    A side exits after both announced     the same; the pair ends
+    Neither announces, neither exits      the ceiling fires: stop both, and say
+                                          that the side never announced readiness
+                                          AND never exited, rather than "timeout"
+    ==================================== =========================================
+
+    Nothing in here knows what a ROS domain is. It is given argument vectors and
+    environment overlays, it reads pipes, and it reads exit statuses — which is
+    why the membership test can drive it against two processes that are not ROS.
+    """
+    out = sys.stdout if out is None else out
+    environ = os.environ if environ is None else environ
+
+    events: queue.Queue = queue.Queue()
+    sides = [_Side(spec, _start(spec, environ)) for spec in specs]
+    for side in sides:
+        threading.Thread(target=_pump, args=(side, events, out), daemon=True).start()
+
+    print(
+        "[pair] started " + ", ".join(s.name for s in sides) + "; waiting for each "
+        "side to announce its own readiness",
+        file=out,
+        flush=True,
+    )
+
+    interrupted = False
+    try:
+        interrupted = _join(sides, events, ceiling_s, out)
+    except KeyboardInterrupt:
+        interrupted = True
+        print("[pair] interrupted; stopping both sides", file=out, flush=True)
+    for side in sides:
+        _stop(side, out)
+        if side.status is None:
+            side.status = side.process.poll()
+    return _verdict(sides, interrupted, out)
+
+
+def _join(sides: Sequence[_Side], events: queue.Queue, ceiling_s: float, out) -> bool:
+    """Block until the pair is up and then until it ends. Return whether asked to.
+
+    Two phases and one loop. Before the join the wait carries the ceiling, whose
+    expiry is a failure; after it there is nothing left to time — a pair that is
+    up ends when a side ends or when somebody asks it to, and neither is an
+    interval.
+    """
+    deadline = time.monotonic() + ceiling_s
+    while True:
+        joined = all(side.ready for side in sides)
+        timeout = None if joined else max(0.0, deadline - time.monotonic())
+        try:
+            kind, side, payload = events.get(timeout=timeout)
+        except queue.Empty:
+            _report_ceiling(sides, ceiling_s, out)
+            return False
+        if kind == "ready":
+            if payload != side.name:
+                print(
+                    f"[pair] {side.name} announced readiness as {payload!r}. A side "
+                    "announces the side it was started as, so this launch was given "
+                    "the wrong side:= argument and the pair is not what it says.",
+                    file=out,
+                    flush=True,
+                )
+                return False
+            side.ready = True
+            if all(s.ready for s in sides):
+                print(
+                    "[pair] both sides announced readiness; the pair is up",
+                    file=out,
+                    flush=True,
+                )
+        else:
+            side.status = payload
+            print(
+                f"[pair] {side.name} exited {payload}", file=out, flush=True
+            )
+            return False
+
+
+def _report_ceiling(sides: Iterable[_Side], ceiling_s: float, out) -> None:
+    for side in sides:
+        if side.ready:
+            continue
+        print(
+            f"[pair] {side.name} never announced readiness and never exited, "
+            f"within {ceiling_s:g} s. That is not a slow side: every step of its "
+            "bring-up either completes or fails, so a side in neither state is "
+            "one that is waiting on something that will not arrive.",
+            file=out,
+            flush=True,
+        )
+
+
+def _verdict(sides: Sequence[_Side], interrupted: bool, out) -> int:
+    """Report both sides' statuses, never only the first, and grade the run."""
+    for side in sides:
+        print(
+            f"[pair] {side.name}: ready={side.ready} status={side.status}",
+            file=out,
+            flush=True,
+        )
+    if interrupted and all(side.ready for side in sides):
+        # The pair came up and an operator ended it. That is what asking for a
+        # pair and then stopping it looks like, and it is not a failure.
+        return 0
+    if not all(side.ready for side in sides):
+        return 1
+    return PAIR_ENDED
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Resolve both sides from the plan and supervise them."""
+    parser = argparse.ArgumentParser(description="Bring up both sides of a twin pair.")
+    parser.add_argument("--zone", default="cell_a")
+    parser.add_argument(
+        "--headless", action="store_true", help="Run both simulators without a GUI."
+    )
+    parser.add_argument(
+        "--line", action="store_true", help="Start the L4 coordinator on each side."
+    )
+    parser.add_argument("--ceiling", type=float, default=READY_CEILING_S)
+    args = parser.parse_args(argv)
+
+    try:
+        plan = load(default_plan_path(args.zone))
+        specs = side_specs(plan, os.environ, headless=args.headless, line=args.line)
+    except PlanError as exc:
+        print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
+        return 1
+    if len(specs) < 2:
+        # Not an error to be repaired here. Whether a zone runs as a pair is an
+        # L0 fact, and inventing a second side would be bring-up deciding what
+        # the facility is (P5).
+        print(
+            f"PAIR BRING-UP FAILED: zone {plan.zone!r} declares "
+            f"{len(specs)} side(s). A pair needs two; set `twin: {{sides: pair}}` "
+            "on the zone in the L0 model and regenerate.",
+            file=sys.stderr,
+        )
+        return 1
+    return supervise(specs, ceiling_s=args.ceiling)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

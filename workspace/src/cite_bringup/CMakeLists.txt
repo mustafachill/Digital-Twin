@@ -56,6 +56,11 @@ if(BUILD_TESTING)
   # on. A correct check that nothing calls is the defect this catches, and it is
   # the one that was there.
   ament_add_pytest_test(simulation_launch test/test_simulation_launch.py)
+  # ADR-0047. The pair supervisor's failure rule and its boundary. The sides it
+  # is driven against here are not ROS at all, which is the record's membership
+  # test executed rather than asserted, and the import-graph check is what makes
+  # "holds no rclpy context" reviewable.
+  ament_add_pytest_test(pair test/test_pair.py)
 
   # ADR-0036. The generator suite proves the `constraints:` block is emitted;
   # only a running controller proves the parameter names are ones
