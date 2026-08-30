@@ -64,12 +64,11 @@ GZ_PARTITION_ENV = "GZ_PARTITION"
 #: pair carrying one and not the other is either two cells sharing every belt
 #: topic or two cells colliding on every node name.
 #:
-#: **Named here and not yet enforced.** ADR-0044 clause 4 owes a refusal in the
-#: shape of :func:`require_gz_partition` — a side whose process environment does
-#: not carry the domain the plan resolves for it must not start — and there is no
-#: `require_domain` in this module. This constant exists so that the reader and
-#: :func:`domain_base` name the variable once rather than twice; it is not that
-#: refusal and must not be read as it.
+#: **Enforced by :func:`require_domain`**, which is ADR-0044 clause 4's refusal in
+#: the shape of :func:`require_gz_partition`: a side whose process environment
+#: does not carry the domain the plan resolves for it does not start. What that
+#: check compares is this variable against `base + offset`, and the base arrives
+#: separately — see :data:`DOMAIN_BASE_ENV` for why it has to.
 DOMAIN_ENV = "ROS_DOMAIN_ID"
 
 #: The channel the plant's domain travels on, exported by `scripts/_lib.sh`
@@ -155,6 +154,25 @@ class DomainUnresolvedError(PlanError):
     two `/clock` publishers and two identical frame trees into one graph; and a
     side placed on a domain nobody expected simply finds an empty graph and waits
     (ADR-0044).
+    """
+
+
+class RosDomainMismatchError(PlanError):
+    """A side would start its processes on a ROS domain that is not its own.
+
+    The exact counterpart of :class:`GazeboPartitionMissingError`, one isolation
+    over. ADR-0044 clause 2 states the two as one rule — a process belonging to a
+    side carries both — so the two refusals are the same refusal twice and are
+    kept in the same shape deliberately: a reader who has met one already knows
+    what the other means.
+
+    Separate from :class:`DomainUnresolvedError` because the two say different
+    things to whoever hits them. `DomainUnresolvedError` means the question could
+    not be answered — no base, no offset, an answer outside the band. This means
+    it was answered and the process is somewhere else, which is a bring-up that
+    would succeed and be invisible: a side alone on a domain nobody addresses
+    answers nothing, and a side sharing the plant's domain collides with it on
+    every name (ADR-0044, clause 4).
     """
 
 
@@ -759,6 +777,75 @@ def resolve_domain_id(plan: Plan, side: str, base: int) -> int:
             "hand (ADR-0044, clause 4)."
         )
     return domain
+
+
+def require_domain(plan: Plan, side: str, environ: Mapping[str, str]) -> None:
+    """Refuse to start a side whose process environment is not on its own domain.
+
+    ADR-0044 clause 4's last obligation, and the counterpart of
+    :func:`require_gz_partition` one isolation over: *a side whose process
+    environment does not carry the domain the plan resolves for it does not
+    start.* Symmetry is the requirement rather than a nicety — one refusal
+    covering both variables, so that carrying one and not the other is impossible
+    rather than merely discouraged.
+
+    ``environ`` is the environment of the process that is about to bring the side
+    up — its OWN, not one it is assembling for a child. That asymmetry with
+    `require_gz_partition` is real and is the difference between the two
+    isolations rather than an inconsistency. `GZ_PARTITION` is read by each
+    gz-transport process as it starts, so the sharp question there is what the
+    launch is about to hand `gz sim`. `ROS_DOMAIN_ID` is read by DDS when a
+    context is created and is inherited by every child the launch starts, so the
+    sharp question here is which domain the launching process itself sits on.
+
+    **The plant's half is not a tautology, and this is the failure ADR-0044 most
+    nearly repeated.** A domain is `base + offset`, so a check needs the base from
+    somewhere; if it read the base out of :data:`DOMAIN_ENV` it would compare the
+    plant's own `ROS_DOMAIN_ID` against itself plus nothing, and `env == env + 0`
+    passes for every possible value including a wrong one. The base therefore
+    arrives on its own channel, :data:`DOMAIN_BASE_ENV`, and the two values
+    compared here are independently sourced on **both** sides. A supervisor that
+    sets a child's `ROS_DOMAIN_ID` and forgets its `CITE_DOMAIN_BASE`, or the
+    reverse, is refused here rather than producing a side that comes up somewhere
+    nobody is listening.
+
+    Nothing is defaulted and nothing is repaired. A missing `ROS_DOMAIN_ID` is
+    not "domain 0" here, because domain 0 is the ecosystem-wide default this
+    whole mechanism exists to escape and `./scripts/doctor` already fails a run
+    that lands on it.
+    """
+    base = domain_base(environ)
+    offset = plan.side_named(side).domain_offset
+    resolved = resolve_domain_id(plan, side, base)
+    carried = environ.get(DOMAIN_ENV)
+    if carried is None:
+        raise RosDomainMismatchError(
+            f"side {side!r} would start with no {DOMAIN_ENV}, so its processes "
+            f"would join the ecosystem-wide default domain rather than the "
+            f"{resolved} the plan resolves for it. The base is {base} from "
+            f"{DOMAIN_BASE_ENV} and the side's offset is {offset}; "
+            "scripts/_lib.sh exports both, so reaching this means something "
+            "entered the ROS graph outside ./scripts/* (ADR-0044, clause 4)."
+        )
+    try:
+        current = int(carried)
+    except ValueError as exc:
+        raise RosDomainMismatchError(
+            f"side {side!r} would start with {DOMAIN_ENV}={carried!r}, which is not "
+            "a whole number. ROS 2 does not refuse it; it falls back to the default "
+            "domain, and the side comes up where nothing addresses it."
+        ) from exc
+    if current == resolved:
+        return
+    raise RosDomainMismatchError(
+        f"side {side!r} would start on {DOMAIN_ENV}={current}, but the plan "
+        f"resolves {resolved} for it: base {base} from {DOMAIN_BASE_ENV} plus "
+        f"offset {offset}. "
+        "Both sides of a pair carry byte-identical names by rule, so a side on "
+        "the wrong domain is either two identical node sets and two /clock "
+        "publishers in one graph, or a cell alone on a domain nobody addresses. "
+        "Neither reports anything (ADR-0044, clauses 1 and 4)."
+    )
 
 
 def _detection(entry: object | None) -> Detection | None:

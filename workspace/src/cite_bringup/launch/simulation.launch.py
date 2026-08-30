@@ -54,9 +54,12 @@ from cite_bringup.plan import (
     load,
     Plan,
     PlanError,
+    PLANT_SIDE,
+    require_domain,
     require_hardware_opt_in,
     resolve_uri,
 )
+from cite_bringup.readiness import ready_announcement
 from cite_interfaces.msg import LineState
 from launch import LaunchContext, LaunchDescription
 from launch.actions import (
@@ -131,6 +134,17 @@ def generate_launch_description() -> LaunchDescription:
                 description="Which zone of the facility model to bring up.",
             ),
             DeclareLaunchArgument(
+                "side",
+                default_value=PLANT_SIDE,
+                description=(
+                    "Which side of the zone this launch is. The two sides of a "
+                    "twin pair share every generated artifact and differ only in "
+                    "the environment their processes start in, so this argument "
+                    "selects the partition and the domain this launch checks "
+                    "itself against - it changes no name (ADR-0044, ADR-0047)."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "line",
                 default_value="false",
                 description=(
@@ -149,6 +163,7 @@ def _bring_up(context: LaunchContext) -> list:
     zone = LaunchConfiguration("zone").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() in ("true", "1")
     line = LaunchConfiguration("line").perform(context).lower() in ("true", "1")
+    side = LaunchConfiguration("side").perform(context)
 
     try:
         plan = load(default_plan_path(zone))
@@ -160,13 +175,21 @@ def _bring_up(context: LaunchContext) -> list:
         # gets commanded is identical either way; it simply may not begin by
         # accident (cross-cutting-safety.md).
         require_hardware_opt_in(plan, os.environ)
+        # The other half of one rule. A process belonging to a side carries both
+        # isolations, so both are refused in the same place: this one asks
+        # whether the process about to start the side is itself on the domain the
+        # plan resolves for that side, comparing `ROS_DOMAIN_ID` against
+        # `CITE_DOMAIN_BASE` plus the side's offset. Two independently sourced
+        # values, so the plant's half can fail rather than reducing to
+        # `env == env + 0` (ADR-0044, clause 4).
+        require_domain(plan, side, os.environ)
         # The environment every Gazebo-transport process in this launch is
         # started with. Built once, from the plan, and checked before a single
         # process is described — so the refusal answers the question that
         # actually matters, which is not "did someone export a partition" but
         # "does the environment this launch is about to hand to `gz sim` carry
         # the partition the plan names" (ADR-0042).
-        gz_env = gz_environment(plan)
+        gz_env = gz_environment(plan, side)
         seed = _seed(os.environ)
     except PlanError as exc:
         # Fail here, with the reason, rather than launching a partial system that
@@ -175,7 +198,7 @@ def _bring_up(context: LaunchContext) -> list:
 
     actions: list = [
         LogInfo(
-            msg=f"Bringing up zone {plan.zone}: scene plus "
+            msg=f"Bringing up zone {plan.zone} side {side}: scene plus "
                 f"{len(plan.controller_managers)} arm(s)"
         ),
         # Gazebo resolves system plugins from GZ_SIM_SYSTEM_PLUGIN_PATH, which the
@@ -218,18 +241,68 @@ def _bring_up(context: LaunchContext) -> list:
     # exist until a broadcaster is publishing. The line coordinator rides the
     # same gate: it calls those skills, so it may not start on a cell whose
     # planning scene never loaded.
+    witness = _witness(plan, side)
     actions.append(
         RegisterEventHandler(
             OnProcessExit(
                 target_action=last_step,
                 on_exit=_gate(
-                    _skills(plan) + (_line(plan) if line else []),
+                    _skills(plan) + (_line(plan) if line else []) + [witness],
                     "the skill servers",
                 ),
             )
         )
     )
+
+    # The last link in the chain, and the only place in this file that emits the
+    # readiness token. Gated like every other link: a witness that could not
+    # satisfy its condition exits non-zero, and bring-up stops with its diagnosis
+    # rather than announcing a side that is not serving (ADR-0047, clause 3).
+    actions.append(
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=witness,
+                on_exit=_gate(
+                    [LogInfo(msg=ready_announcement(side, plan.zone))],
+                    "the readiness announcement",
+                    hint=_WITNESS_HINT,
+                ),
+            )
+        )
+    )
     return actions
+
+
+#: Appended to the readiness gate's message. A witness that expires has already
+#: said which endpoints never answered, on its own standard error; this points at
+#: the difference between that and every other failure in the chain.
+_WITNESS_HINT = (
+    "Every step before this one succeeded, so the cell was started and did not "
+    "finish coming up. The witness names the endpoints that never answered."
+)
+
+
+def _witness(plan: Plan, side: str) -> Node:
+    """The process whose exit means this side is serving, not merely started.
+
+    A blocking wait that exits, in the shape of every other link in this chain —
+    `ros_gz_sim create`, the controller-manager spawners, the planning-scene
+    loader. It is started with no environment of its own, which is the point: it
+    inherits this launch's, so it runs on this side's `ROS_DOMAIN_ID` and can
+    observe one side only, its own (ADR-0047, clause 3).
+
+    `--side` reaches it for its diagnosis and for nothing else. It cannot select
+    what the witness looks at, because both sides of a pair carry byte-identical
+    names and the only thing that decides which graph is answered is the domain
+    the process was started on.
+    """
+    return Node(
+        package="cite_bringup",
+        executable="readiness_witness.py",
+        name="readiness_witness",
+        arguments=["--zone", plan.zone, "--side", side],
+        output="screen",
+    )
 
 
 def _seed(environ: dict) -> str | None:

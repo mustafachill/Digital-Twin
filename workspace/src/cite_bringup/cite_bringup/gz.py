@@ -91,8 +91,8 @@ def plan_for(zone: str) -> Plan:
     return cached
 
 
-def gz_environment(plan: Plan) -> dict[str, str]:
-    """Build the environment every Gazebo-transport process for this plan is given.
+def gz_environment(plan: Plan, side: str = PLANT_SIDE) -> dict[str, str]:
+    """Build the environment every Gazebo-transport process for one side is given.
 
     One dictionary, applied to `gz sim`, to `parameter_bridge`, to every
     `ros_gz_sim create` and to every probe the harness runs — because all of them
@@ -101,11 +101,12 @@ def gz_environment(plan: Plan) -> dict[str, str]:
     gz_ros2_control needs nothing: its controller managers are created inside the
     server's own process.
 
-    Which side this addresses is the PLANT, structurally: it is the side the
-    untwinned model describes and the side every scenario and `./scripts/sim`
-    already address (ADR-0041, Decision 3). Bringing a counterpart up is a
-    separate launch and is not built yet; when it is, it asks this same function
-    for a different side rather than following a second rule.
+    ``side`` defaults to the PLANT, which is the side the untwinned model
+    describes and the side every scenario and `./scripts/sim` already address
+    (ADR-0041, Decision 3). A counterpart bring-up is a separate launch process
+    and asks this same function for a different side rather than following a
+    second rule — which is what ADR-0047 clause 1 means by the two sides sharing
+    everything except the environment their processes start in.
 
     Asked for BY NAME. This used to read `plan.sides[0]`, and its own docstring
     said the counterpart would be "the second entry of the same list" — which is
@@ -115,20 +116,20 @@ def gz_environment(plan: Plan) -> dict[str, str]:
     plant, and a partition that reaches the wrong side fails silently by
     construction: that is the whole reason this module exists.
     """
-    plant: Side = plan.side_named(PLANT_SIDE)
-    environment = {GZ_PARTITION_ENV: plant.gz_partition}
+    target: Side = plan.side_named(side)
+    environment = {GZ_PARTITION_ENV: target.gz_partition}
     # Checked on the dictionary just built, and that is the point: this is the
     # value the processes will actually be started with, so the check binds to
     # the path that starts them rather than to the shell that invoked it. A
     # future edit that builds this environment from somewhere else, or renames
     # the key, is refused here instead of producing two cells that quietly share
     # a transport.
-    require_gz_partition(plant, environment)
+    require_gz_partition(target, environment)
     return environment
 
 
 def process_environment(
-    plan: Plan, environ: Mapping[str, str] | None = None
+    plan: Plan, environ: Mapping[str, str] | None = None, side: str = PLANT_SIDE
 ) -> dict[str, str]:
     """Build a complete process environment: the caller's, with the partition set.
 
@@ -140,7 +141,7 @@ def process_environment(
     function exists separately rather than callers remembering it.
     """
     merged = dict(os.environ if environ is None else environ)
-    merged.update(gz_environment(plan))
+    merged.update(gz_environment(plan, side))
     return merged
 
 

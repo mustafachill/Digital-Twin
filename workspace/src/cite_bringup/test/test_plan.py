@@ -41,10 +41,12 @@ from cite_bringup.plan import (
     load,
     PlanError,
     PLANT_SIDE,
+    require_domain,
     require_gz_partition,
     require_hardware_opt_in,
     resolve_domain_id,
     resolve_uri,
+    RosDomainMismatchError,
     Side,
     SideNotDeclaredError,
 )
@@ -937,3 +939,88 @@ def test_a_hand_written_offset_beyond_the_sides_is_refused(tmp_path: Path) -> No
     document["plan"]["sides"].append(_counterpart(offset=200))
     with pytest.raises(DomainUnresolvedError, match="declares exactly 0, 1"):
         load(_written(tmp_path, document))
+
+
+# --- The refusal ADR-0044 clause 4 owes ---------------------------------------
+#
+# `require_gz_partition` one isolation over, and the pair of them is one rule: a
+# process belonging to a side carries both. These tests exist to hold the half
+# that is easy to get wrong. A refusal that read its base out of `ROS_DOMAIN_ID`
+# would reduce, for the plant at offset 0, to `env == env + 0` — green for every
+# possible value, including a wrong one — and would have been read as covering
+# both sides. So the plant's half is tested for teeth explicitly, and not only
+# the counterpart's.
+
+
+def test_a_side_on_the_domain_the_plan_resolves_for_it_is_accepted() -> None:
+    plan = load(_generated())
+    require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "42"})
+
+
+def test_a_counterpart_on_the_base_plus_one_is_accepted(tmp_path: Path) -> None:
+    document = _document()
+    document["plan"]["sides"].append(_counterpart())
+    plan = load(_written(tmp_path, document))
+    require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
+
+
+def test_the_plants_half_of_the_refusal_can_fail() -> None:
+    """The test this whole block exists for.
+
+    Base and carried domain are independently sourced, so a plant started on a
+    domain that is not its base is refused. Had the base been read from
+    `ROS_DOMAIN_ID` this case would be unreachable and the check would have had
+    teeth on one side of a pair only (ADR-0044, clause 4).
+    """
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError) as raised:
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
+    message = str(raised.value)
+    # The refusal names both numbers. "Wrong domain" leaves a reader with nothing
+    # to set it to, which is the failure `require_gz_partition` was written to
+    # avoid one isolation over.
+    assert "43" in message and "42" in message
+
+
+def test_a_counterpart_started_on_the_plants_domain_is_refused(tmp_path: Path) -> None:
+    # The collision that matters: both sides carry byte-identical names by rule,
+    # so a counterpart on the plant's domain is two identical node sets and two
+    # /clock publishers in one graph, reported by nothing.
+    document = _document()
+    document["plan"]["sides"].append(_counterpart())
+    plan = load(_written(tmp_path, document))
+    with pytest.raises(RosDomainMismatchError, match="byte-identical names"):
+        require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "42"})
+
+
+def test_a_side_started_with_no_domain_at_all_is_refused() -> None:
+    # Not defaulted to 0. Domain 0 is the ecosystem-wide default the whole
+    # mechanism exists to escape, and ./scripts/doctor already fails a run on it.
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError, match=DOMAIN_ENV):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42"})
+
+
+def test_a_side_started_with_a_malformed_domain_is_refused() -> None:
+    # ROS 2 does not refuse a non-numeric ROS_DOMAIN_ID; it falls back to the
+    # default domain, so the side comes up where nothing addresses it.
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError, match="whole number"):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "plant"})
+
+
+def test_a_side_with_no_base_is_refused_before_the_domain_is_compared() -> None:
+    # `domain_base` owns this refusal and `require_domain` does not repeat it, so
+    # a supervisor that sets a child's ROS_DOMAIN_ID and forgets CITE_DOMAIN_BASE
+    # is stopped rather than silently taking the ambient value as its base.
+    plan = load(_generated())
+    with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_ENV: "42"})
+
+
+def test_asking_an_untwinned_zone_for_a_counterpart_names_the_missing_side() -> None:
+    # Not a domain failure. The side does not exist, and answering "the domain
+    # cannot be resolved" would send a reader to the wrong half of ADR-0044.
+    plan = load(_generated())
+    with pytest.raises(SideNotDeclaredError):
+        require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})

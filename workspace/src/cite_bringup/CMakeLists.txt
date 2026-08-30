@@ -3,8 +3,21 @@ project(cite_bringup)
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
+# Not used by any CMake target here - this package installs Python only. Required
+# so that the dependency is checked at configure time instead of at import time,
+# where a shared PYTHONPATH would satisfy it silently and no manifest would record
+# it. Same reason as cite_facility's, and see ADR-0034.
+find_package(cite_runtime REQUIRED)
 
 ament_python_install_package(${PROJECT_NAME})
+
+# ADR-0047 clause 3's readiness witness. A process that blocks on this side's own
+# endpoints and exits, so that the gate chain ends on "serving" rather than on
+# "started" - and so that the launch has something real to announce readiness on.
+install(PROGRAMS
+  ${PROJECT_NAME}/readiness_witness.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
