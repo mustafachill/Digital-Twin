@@ -81,29 +81,59 @@ TICK_S = 0.005
 LOST_SIGNAL_TRACEBACK = "Unable to convert call argument"
 
 
+#: The band this test draws its private domain from, and the reason it is not
+#: the band `cite_domain_id` draws from.
+#:
+#: ROS 2 documents two ranges as safe from the Linux ephemeral port range: 0-101
+#: and 215-232. A checkout's cell occupies the FIRST — `cite_domain_id` allocates
+#: an odd plant in 1..99 and the generated plan puts its counterpart at the even
+#: number above it, so 1..100 is cell space (ADR-0044, clause 4). A domain drawn
+#: from the SECOND band therefore cannot be any side of any checkout on this
+#: host, paired or not.
+#:
+#: That is a stronger property than the arithmetic this function used to carry.
+#: It picked `os.getpid() % 101 + 1` and stepped over exactly one value, the
+#: ambient `ROS_DOMAIN_ID` — a second, independent implementation of a rule that
+#: lives in `scripts/_lib.sh`, which is why it drifted out of sight when the rule
+#: changed. Under a pair there are TWO domains a test must avoid and it knew
+#: about one; a pid landing on the counterpart's would have joined a live
+#: counterpart's graph, where every node runs `use_sim_time`, which is precisely
+#: what the docstring at the top of this file says the private domain prevents.
+#: Choosing a disjoint band removes the reimplementation rather than updating it.
+PRIVATE_DOMAIN_BAND = range(215, 233)
+
+
 def _private_domain_id() -> int:
     """Pick a DDS domain this process does not share with anything else.
 
-    Two distinct collisions have to be avoided, and one value answers both.
+    Two distinct collisions have to be avoided.
 
-    The AMBIENT domain is a live cell's: `scripts/_lib.sh` derives it from the
-    checkout path precisely so that a shell can attach to a running cell. It is
-    read here and stepped over.
+    A LIVE CELL's domain, this checkout's or any other's. Answered structurally
+    by :data:`PRIVATE_DOMAIN_BAND` rather than by stepping over a value: no
+    domain in that band can be a side of any checkout.
 
     ANOTHER COPY OF THIS TEST is the collision `CMakeLists.txt` used to warn
     about, and moving the test to a fixed private domain would only have moved
     it. The process id distinguishes copies, because two copies are two pytest
     processes by definition.
 
-    Range 1-101 for the reasons `cite_domain_id` gives: 0 is the ecosystem-wide
-    default, and on Linux domains above 101 collide with the ephemeral port
-    range.
+    **The trade is stated rather than hidden.** The band holds 18 values where
+    the old arithmetic had 101, so two concurrent copies of this test collide
+    more often than they did. That is accepted because the two failures are not
+    comparable: a copy collision puts a second `/clock` publisher on a domain
+    only copies of this test can reach, and this file's assertions are about a
+    child process's exit status and stderr, which more clock messages do not
+    change; joining a live cell is silent, corrupts a run nobody is looking at,
+    and was the failure the private domain existed to prevent.
+
+    The ambient domain is still stepped over, because a developer may set
+    `ROS_DOMAIN_ID` explicitly to anything, including a value in this band.
     """
     ambient = os.environ.get("ROS_DOMAIN_ID")
-    candidate = os.getpid() % 101 + 1
-    if str(candidate) == ambient:
-        candidate = candidate % 101 + 1
-    return candidate
+    index = os.getpid() % len(PRIVATE_DOMAIN_BAND)
+    if str(PRIVATE_DOMAIN_BAND[index]) == ambient:
+        index = (index + 1) % len(PRIVATE_DOMAIN_BAND)
+    return PRIVATE_DOMAIN_BAND[index]
 
 
 @pytest.fixture(name="clock_source", scope="module")
@@ -360,3 +390,25 @@ def _raise(error):
         raise error
 
     return _spin
+
+
+def test_the_private_domain_cannot_be_any_side_of_any_checkout() -> None:
+    """The property that replaces stepping over one value.
+
+    `cite_domain_id` allocates an odd plant in 1..99 and the generated plan puts
+    the counterpart at the even number above it, so a cell occupies 1..100 on
+    any checkout on this host. Nothing in this band can be a side of one, so a
+    pid can no longer land on a live counterpart's graph — where every node runs
+    `use_sim_time` and this file publishes `/clock` (ADR-0044, clause 4).
+    """
+    cell_space = range(1, 101)
+    assert not set(PRIVATE_DOMAIN_BAND) & set(cell_space)
+    assert _private_domain_id() in PRIVATE_DOMAIN_BAND
+
+
+def test_the_private_domain_still_steps_over_an_explicit_ambient_one(monkeypatch) -> None:
+    # A developer may export ROS_DOMAIN_ID to anything, including a value in this
+    # band, so the structural guarantee above does not retire the step.
+    chosen = _private_domain_id()
+    monkeypatch.setenv("ROS_DOMAIN_ID", str(chosen))
+    assert _private_domain_id() != chosen

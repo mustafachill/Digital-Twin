@@ -103,6 +103,17 @@ cp .env.example .env      # bootstrap does this for you
 A domain collision makes someone else's nodes appear in your graph. The symptom
 is behaviour that no code in the repository explains, and it costs hours.
 
+**A checkout claims two domains, not one.** A twin pair runs each side in its own
+domain, because both sides carry byte-identical names by rule and one ROS graph
+cannot hold two of them ([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)).
+`scripts/_lib.sh` allocates an odd base per checkout and the counterpart takes
+the even number above it, so no counterpart can ever land on another checkout's
+plant. What you get by default — from `./scripts/enter`, `./scripts/sim` and
+`./scripts/scenario` alike — is the **plant**, which is the side every script
+here addresses. `./scripts/doctor` prints it and says which side it is;
+`docs/operations/troubleshooting.md` has the recipe for resolving any side's
+domain from the plan.
+
 ## Physical hardware
 
 Nothing commands a physical arm unless you set `CITE_ALLOW_HARDWARE=1`

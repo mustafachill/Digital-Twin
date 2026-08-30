@@ -42,6 +42,19 @@ x-common-env: &common-env
   # `docker compose` invocation, and is deliberately not 0. Prefer ./scripts/enter,
   # which supplies the derived value — see cite_domain_id in scripts/_lib.sh.
   ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+  # The base a side's domain is resolved from, carried across exactly as the
+  # domain is. The generated plan states each side's OFFSET from this rather than
+  # an absolute domain — an absolute one in a committed, hashed tree either
+  # differs in every clone and breaks the byte-identity check, or is the same in
+  # every clone and lets two checkouts of one commit discover each other
+  # (ADR-0044, clause 4).
+  #
+  # It is the same number as ROS_DOMAIN_ID for the plant, and it travels
+  # separately on purpose: read from ROS_DOMAIN_ID instead, a check on the plant
+  # would compare the value under test with itself. The default matches the one
+  # above so that a direct `docker compose` invocation is consistent rather than
+  # half-configured.
+  CITE_DOMAIN_BASE: ${CITE_DOMAIN_BASE:-42}
   RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
   # Gazebo needs a writable home for its cache.
   HOME: /home/cite

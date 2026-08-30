@@ -286,18 +286,62 @@ else
     printf '  %sFAIL%s two checkouts get different domains\n' "$C_RED" "$C_RST" >&2
 fi
 
-# Domain 0 is the ecosystem default this exists to avoid; above 101 collides with
-# the Linux ephemeral port range.
+# A checkout claims a PAIR of domains, so the assertion is about the pair and not
+# only about the base. Domain 0 is the ecosystem default this exists to avoid;
+# above 101 collides with the Linux ephemeral port range. The counterpart sits at
+# base + 1, so the base must leave room for it.
+#
+# The parity is asserted rather than the bound alone, because parity is what the
+# allocation buys: plants are odd and counterparts are even, so no counterpart of
+# any checkout can equal any plant of any other. A derivation that drifted back
+# to `sum % 101 + 1` would still satisfy a range check and would silently give
+# that property away (ADR-0044, clause 4).
 for candidate in /a /b /c /d/e/f /workspace "${REPO_ROOT}" /very/long/path/to/a/checkout; do
     DOMAIN="$(cite_domain_id "$candidate")"
-    if [ "$DOMAIN" -ge 1 ] && [ "$DOMAIN" -le 101 ]; then
+    COUNTERPART=$((DOMAIN + 1))
+    if [ "$DOMAIN" -ge 1 ] && [ "$COUNTERPART" -le 101 ] && [ $((DOMAIN % 2)) -eq 1 ]; then
         SELFTEST_PASS=$((SELFTEST_PASS + 1))
     else
         SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
-        printf '  %sFAIL%s domain for %s is in 1..101 (got %s)\n' \
-               "$C_RED" "$C_RST" "$candidate" "$DOMAIN" >&2
+        printf '  %sFAIL%s domains for %s are an odd base with its counterpart in 1..101 (got %s, %s)\n' \
+               "$C_RED" "$C_RST" "$candidate" "$DOMAIN" "$COUNTERPART" >&2
     fi
 done
+
+# The property the parity exists for, asserted directly over the same fixtures:
+# no checkout's counterpart is any checkout's plant. Stated separately from the
+# loop above because it is a claim about the SET rather than about one path.
+for candidate in /a /b /c /d/e/f /workspace "${REPO_ROOT}" /very/long/path/to/a/checkout; do
+    COUNTERPART=$(( $(cite_domain_id "$candidate") + 1 ))
+    COLLIDED=""
+    for other in /a /b /c /d/e/f /workspace "${REPO_ROOT}" /very/long/path/to/a/checkout; do
+        if [ "$COUNTERPART" -eq "$(cite_domain_id "$other")" ]; then
+            COLLIDED="$other"
+        fi
+    done
+    if [ -z "$COLLIDED" ]; then
+        SELFTEST_PASS=$((SELFTEST_PASS + 1))
+    else
+        SELFTEST_FAIL=$((SELFTEST_FAIL + 1))
+        printf '  %sFAIL%s the counterpart of %s (%s) is the plant of %s\n' \
+               "$C_RED" "$C_RST" "$candidate" "$COUNTERPART" "$COLLIDED" >&2
+    fi
+done
+
+# The base travels on its own channel, so that the plant's domain and the value
+# anything checks it against are two independently sourced numbers rather than
+# one number compared with itself.
+expect_eq "CITE_DOMAIN_BASE defaults to the plant's domain" \
+          "$(cite_domain_id "${REPO_ROOT}")" \
+          "$(bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
+                  _ "${REPO_ROOT}/scripts/_lib.sh")"
+
+# A counterpart's process carries ROS_DOMAIN_ID at base + 1 while the base stays
+# the base. Sourcing _lib.sh inside it must not overwrite one with the other.
+expect_eq "an inherited CITE_DOMAIN_BASE survives sourcing _lib.sh" \
+          "7" "$(CITE_DOMAIN_BASE=7 ROS_DOMAIN_ID=8 \
+                  bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
+                  _ "${REPO_ROOT}/scripts/_lib.sh")"
 
 # An explicit setting always wins, or a developer cannot join a colleague's cell.
 expect_eq "an explicit ROS_DOMAIN_ID survives sourcing _lib.sh" \
