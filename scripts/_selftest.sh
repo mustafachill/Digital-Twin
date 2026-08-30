@@ -344,9 +344,14 @@ done
 # precisely so that it does not have to agree with the container's path. It was
 # masked only because ./scripts/test runs this file on the host, before
 # require_ros_env, and _lib.sh forwards CITE_SELFTESTS_DONE=1 into the container.
-BASE_PAIR="$(env -u CITE_DOMAIN_BASE \
-                bash -c 'source "$1"; printf "%s %s" "$ROS_DOMAIN_ID" "$CITE_DOMAIN_BASE"' \
-                _ "${REPO_ROOT}/scripts/_lib.sh")"
+#
+# `unset` in the command substitution's own subshell rather than `env -u`, which
+# says the same thing: shellcheck stops recognising `bash -c` as code once `env`
+# is in front of it, so it both warns about the quoting and stops linting the
+# snippet.
+BASE_PAIR="$(unset CITE_DOMAIN_BASE
+             bash -c 'source "$1"; printf "%s %s" "$ROS_DOMAIN_ID" "$CITE_DOMAIN_BASE"' \
+                  _ "${REPO_ROOT}/scripts/_lib.sh")"
 expect_eq "CITE_DOMAIN_BASE defaults to the domain the same shell resolved" \
           "${BASE_PAIR% *}" "${BASE_PAIR#* }"
 
@@ -359,9 +364,9 @@ expect_eq "CITE_DOMAIN_BASE defaults to the domain the same shell resolved" \
 # environment ./scripts/test runs it in.
 expect_eq "with nothing inherited the base is the derived plant domain" \
           "$(cite_domain_id "${REPO_ROOT}")" \
-          "$(env -u CITE_DOMAIN_BASE -u ROS_DOMAIN_ID \
-                bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
-                _ "${REPO_ROOT}/scripts/_lib.sh")"
+          "$(unset CITE_DOMAIN_BASE ROS_DOMAIN_ID
+             bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
+                  _ "${REPO_ROOT}/scripts/_lib.sh")"
 
 # A counterpart's process carries ROS_DOMAIN_ID at base + 1 while the base stays
 # the base. Sourcing _lib.sh inside it must not overwrite one with the other.
