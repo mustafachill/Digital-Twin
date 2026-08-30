@@ -331,10 +331,37 @@ done
 # The base travels on its own channel, so that the plant's domain and the value
 # anything checks it against are two independently sourced numbers rather than
 # one number compared with itself.
-expect_eq "CITE_DOMAIN_BASE defaults to the plant's domain" \
+#
+# THE CONTRACT IS "the base is whatever ROS_DOMAIN_ID RESOLVED TO", and the two
+# values are read out of the SAME subshell for that reason. Comparing against
+# `cite_domain_id "$REPO_ROOT"` asserts something else - that the base is what
+# THIS path derives - which is the opposite of the design and was red in two
+# ordinary situations. A developer who exports ROS_DOMAIN_ID to join a
+# colleague's cell got `expected: 9, actual: 42` on unrelated code, from the
+# workflow the assertion three lines below exists to protect. And inside the
+# container it failed on every run: the checkout is mounted at /workspace, which
+# derives a different number, and compose carries CITE_DOMAIN_BASE across
+# precisely so that it does not have to agree with the container's path. It was
+# masked only because ./scripts/test runs this file on the host, before
+# require_ros_env, and _lib.sh forwards CITE_SELFTESTS_DONE=1 into the container.
+BASE_PAIR="$(env -u CITE_DOMAIN_BASE \
+                bash -c 'source "$1"; printf "%s %s" "$ROS_DOMAIN_ID" "$CITE_DOMAIN_BASE"' \
+                _ "${REPO_ROOT}/scripts/_lib.sh")"
+expect_eq "CITE_DOMAIN_BASE defaults to the domain the same shell resolved" \
+          "${BASE_PAIR% *}" "${BASE_PAIR#* }"
+
+# The `:-$ROS_DOMAIN_ID` default itself, exercised deliberately with BOTH
+# variables cleared. With nothing in the environment _lib.sh derives the domain
+# from the checkout path and the base must follow it there - so this is the one
+# assertion that may name `cite_domain_id "$REPO_ROOT"`, because it has removed
+# the only thing that could make the two differ. The assertion above never
+# reaches this branch: it inherits an ROS_DOMAIN_ID from its parent in every
+# environment ./scripts/test runs it in.
+expect_eq "with nothing inherited the base is the derived plant domain" \
           "$(cite_domain_id "${REPO_ROOT}")" \
-          "$(bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
-                  _ "${REPO_ROOT}/scripts/_lib.sh")"
+          "$(env -u CITE_DOMAIN_BASE -u ROS_DOMAIN_ID \
+                bash -c 'source "$1"; printf "%s" "$CITE_DOMAIN_BASE"' \
+                _ "${REPO_ROOT}/scripts/_lib.sh")"
 
 # A counterpart's process carries ROS_DOMAIN_ID at base + 1 while the base stays
 # the base. Sourcing _lib.sh inside it must not overwrite one with the other.
