@@ -262,6 +262,56 @@ asset_type:
     # than against a comment.
     default_grasp_width_m: 0.045
 
+    # HOW LONG L3 WAITS FOR THIS GRIPPER'S CONTROLLER TO ANSWER AT ALL, in
+    # seconds of the waiting node's own clock (ADR-0045).
+    #
+    # IT IS NOT "HOW SLOW A GRASP MAY BE", and the difference is the whole
+    # decision. `stall_velocity_threshold` above resets `last_movement_time_` on
+    # every control cycle above the threshold, so the time
+    # `GripperActionController` takes to declare a stall under contact chatter
+    # HAS NO UPPER BOUND. No value here can mean "too slow", because there is no
+    # quantity to bound. What it means is: the controller has not terminated this
+    # goal, and L3 is no longer willing to hold the station open waiting for it.
+    #
+    # A CONSEQUENCE THAT TRAVELS WITH THE VALUE. An expiry is a report about the
+    # CONTROLLER, never about the grasp. Nothing may read it as "the gripper is
+    # empty": at the instant this expires the jaws may well be closed on a part,
+    # and three CI cycle failures were caused by exactly that reading. L3 cancels
+    # the outstanding goal on expiry and reports that custody is unestablished.
+    #
+    # THE FLOOR IS DERIVED AND ENFORCED, and above it the number carries no
+    # claim. `cite_tools.validate.physical` requires this to exceed the longest
+    # stroke this gripper can legitimately spend before its controller may
+    # declare a stall:
+    #
+    #   full stroke, (closed_position - open_position) / max_drive_rate_rad_s
+    #                                                     0.850 s
+    #   plus stall_timeout                                0.300 s
+    #   floor                                             1.150 s
+    #
+    # 20.0 s is 17x that floor. It is deliberately THE SAME NUMBER as the
+    # `kGripperResultWait` constant it replaces, so that this change is a change
+    # of clock and of home and not a widening of a cap — the cap was never the
+    # defect. What was wrong was that 20 s of the HOST's wall clock buys about
+    # 4 s of simulation time on a loaded CI runner, so the bound tightened
+    # whenever the machine was busy. Measured in this clock it does not.
+    #
+    # ON HARDWARE (P2) it is as meaningful as it is here and means the same
+    # thing, because the clock changes with the backend rather than the rule: the
+    # skill server runs on `use_sim_time` in the cell and on the wall clock on
+    # the physical arm, and in both cases that is the clock the gripper's own
+    # controller counts in. What does NOT transfer is the detector behind it —
+    # the physical gripper is driven through the SDK's service layer and has no
+    # `GripperActionController` at all, exactly as `stall_velocity_threshold`
+    # above records. The bound on "no answer arrived" applies to whatever server
+    # answers there; the stall rule it is sized against does not.
+    #
+    # WHOEVER FINDS THIS NUMBER IN THEIR WAY should read ADR-0045's option D
+    # rather than raise it. Watching the drive joint come to rest is an event and
+    # would delete this key; a larger constant is the same defect at a different
+    # value.
+    result_timeout_s: 20.0
+
   controllers:
     - suffix: gripper_controller
       # GripperActionController, not a trajectory controller: a grasp is "close

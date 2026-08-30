@@ -95,10 +95,25 @@ using cite_interfaces::msg::ResultCode;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
 
-//: How long to wait for the gripper controller, its acceptance, and its result.
+//: How long to wait for the gripper controller and for its acceptance.
+//:
+//: THE THIRD ONE USED TO BE HERE AND IS NOW AN L0 VALUE (ADR-0045).
+//: `kGripperResultWait{20}` bounded the wait for the controller's RESULT, in
+//: `steady_clock`, which is the host's wall clock — while everything it
+//: supervises runs in the clock this node runs on. At the real-time factors CI
+//: achieves, 20 s of wall clock bought about 4 s of simulation time, so the bound
+//: tightened whenever the machine was busy and three CI cycle failures came out of
+//: it. It is now `gripper_result_timeout_s`, declared on the L0 end-effector type,
+//: delivered by the generated bring-up plan and measured in `now()`. No number for
+//: it exists in this package.
+//:
+//: These two stay wall-clock deliberately, and the difference is not an oversight.
+//: Both bound DISCOVERY — whether a server exists, and whether it answered a goal
+//: request — which is transport and process liveness rather than plant behaviour,
+//: and neither has a simulated counterpart to be measured against. A node waiting
+//: for a server that never appears must give up even if `/clock` never ticks.
 constexpr std::chrono::seconds kGripperServerWait{10};
 constexpr std::chrono::seconds kGripperAcceptWait{10};
-constexpr std::chrono::seconds kGripperResultWait{20};
 //: How often a wait on the gripper's result looks up to see whether the goal it
 //: is serving has been cancelled. A poll period on a future, not a guess at how
 //: long anything takes (P4).
@@ -231,6 +246,18 @@ public:
     // needs it to size the margin that separates a real grasp from the position
     // bias the controller's own end-of-goal test produces.
     declare_parameter("gripper_goal_tolerance_rad", 0.01);
+    // How long this node waits for the gripper's controller to answer at all,
+    // seconds, in THIS NODE'S clock (ADR-0045). Carried from the L0 end-effector
+    // type by the generated bring-up plan, under the plan's own name.
+    //
+    // ZERO MEANS "NOT SUPPLIED", and it is a sentinel rather than a duration —
+    // the same treatment `gripper_default_grasp_width_m` gets, and for a stronger
+    // reason. ADR-0045 decision 2 says no number for this exists in `cite_skills`,
+    // so a compiled default equal to the L0 value would be the second copy the
+    // decision exists to remove: it would work, and it would work only for as
+    // long as the two copies agreed. An arm that has a gripper and no delivered
+    // timeout refuses to configure instead (see `configure`).
+    declare_parameter("gripper_result_timeout_s", 0.0);
     // The ARM trajectory controller's own goal tolerance, carried here from the
     // same L0 `constraints:` block that configures the controller (ADR-0036).
     //
@@ -335,6 +362,19 @@ public:
     travel_.tip_link_z_m = get_parameter("gripper_tip_link_z_m").as_double();
     travel_.pad_face_centre_z_m = get_parameter("gripper_pad_face_centre_z_m").as_double();
     travel_.goal_tolerance = get_parameter("gripper_goal_tolerance_rad").as_double();
+    gripper_result_timeout_ = rclcpp::Duration::from_seconds(
+      get_parameter("gripper_result_timeout_s").as_double());
+    if (!gripper_action_.empty() && gripper_result_timeout_ <= rclcpp::Duration(0, 0)) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "this arm has a gripper action ('%s') and no gripper_result_timeout_s reached "
+        "this node. It is declared on the L0 end-effector type and carried by the "
+        "generated bring-up plan (ADR-0045); without it a close that the controller "
+        "never terminates would hold the station open for ever, and inventing a "
+        "duration here would put the gripper's own number in a second place.",
+        gripper_action_.c_str());
+      return false;
+    }
     if (cite_skills::gripper_max_width_m(travel_) <= 0.0) {
       RCLCPP_ERROR(
         get_logger(),
@@ -1001,6 +1041,25 @@ private:
     report(Pick::Feedback::PHASE_GRASPING, 0.6);
     gripper = command_gripper(width.width_m, max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
+      if (gripper.result.code == ResultCode::TIMEOUT) {
+        // NOTHING HERE OBSERVED THE GRIPPER, so nothing here may say what it
+        // holds (ADR-0045 decision 4). `Pick.Result.holding` is a `bool` and
+        // cannot say "unknown"; it stays false because that is the only value it
+        // has, and it is NOT a statement about the jaws. The statement is the
+        // code and its detail, and this line is the same statement for whoever
+        // reads the log instead.
+        //
+        // `holding_` is deliberately not written either — neither to true, which
+        // would claim a grasp nobody saw, nor to false, which is the claim that
+        // cost three CI runs.
+        RCLCPP_ERROR(
+          get_logger(),
+          "%s: the close on work-piece '%s' ended without an answer from the gripper's "
+          "controller. THE ARM MAY BE HOLDING THE WORK-PIECE. Custody is unestablished: "
+          "do not retry this station into a motion that assumes an empty gripper, and do "
+          "not read the result's `holding` field as a report about the jaws",
+          asset_id_.c_str(), goal->workpiece_id.c_str());
+      }
       finish(gripper.result);
       return;
     }
@@ -1842,9 +1901,25 @@ private:
     // reaches the gripper rather than being noticed after it has finished. A
     // Grasp that accepted a cancel and then ran to completion is a Grasp that
     // cannot be cancelled at all.
-    const auto deadline = std::chrono::steady_clock::now() + kGripperResultWait;
+    //
+    // THE DEADLINE IS IN THIS NODE'S CLOCK AND THE POLL IS NOT, and they are two
+    // different quantities (ADR-0045 decision 1). `now()` follows `use_sim_time`,
+    // so the deadline is counted in the same clock the controller's own stall
+    // timer counts in — simulation time in the cell, the wall clock on hardware.
+    // The poll stays wall-clock because that is what `std::future::wait_for`
+    // takes and it is only how often this loop looks up; how often it looks and
+    // when it gives up are unrelated.
+    //
+    // THE COST, WRITTEN WHERE IT IS PAID: a deadline in simulation time never
+    // expires if simulation time stops. If Gazebo dies or `/clock` stalls, this
+    // wait is unbounded and the goal hangs until the launch tears the process
+    // down — which the launch already handles (`_fatal_on_exit`). If that is ever
+    // the proximate cause of a failure, what this needs is a liveness condition
+    // on the clock, an event and not a second timeout.
+    const rclcpp::Time deadline = now() + gripper_result_timeout_;
     bool requested_cancel = false;
     std::future_status status = std::future_status::timeout;
+    bool expired = false;
     while (true) {
       status = result_future.wait_for(kCancelPollPeriod);
       if (status == std::future_status::ready) {
@@ -1854,9 +1929,26 @@ private:
         gripper_client_->async_cancel_goal(gripper_handle);
         requested_cancel = true;
       }
-      if (std::chrono::steady_clock::now() >= deadline) {
+      if (now() >= deadline) {
+        expired = true;
         break;
       }
+    }
+
+    // GIVING UP ON A GOAL AND LEAVING IT RUNNING ARE DIFFERENT THINGS, and this
+    // node used to do only the first (ADR-0045 decision 4). The controller went on
+    // commanding the closed position at the configured effort for a goal nobody
+    // was waiting on, indefinitely. Cancelled here rather than in the loop above
+    // because the loop's cancel answers the OUTER goal being cancelled, which is a
+    // different event with a different cause.
+    //
+    // Sent and not awaited, deliberately. This path is already the path where the
+    // controller is not answering, so waiting for it to answer a cancel would be
+    // the same bet twice. Nothing in this repository asserts what
+    // `GripperActionController` does with a cancel, and ADR-0045 records that as
+    // an open question rather than an assumption.
+    if (expired && !requested_cancel) {
+      gripper_client_->async_cancel_goal(gripper_handle);
     }
 
     {
@@ -1865,8 +1957,21 @@ private:
     }
 
     if (status != std::future_status::ready) {
-      outcome.result = make_result(
-        ResultCode::TIMEOUT, "the gripper never reported a result");
+      // WHAT THIS SAYS AND WHAT IT MUST NOT BE READ AS SAYING. It is a report
+      // about the CONTROLLER — no result arrived — and it is not a report about
+      // the jaws. At the instant it expires the gripper may be closed on the
+      // work-piece and holding it, which is precisely what happened in the three
+      // CI cycle failures this text exists because of: L3 reported the arm empty,
+      // L4 believed it, and the recovery carried a part nobody knew was held.
+      std::ostringstream detail;
+      detail.setf(std::ios::fixed);
+      detail.precision(1);
+      detail << "the gripper's controller never reported a result within "
+             << gripper_result_timeout_.seconds() << " s of this node's clock, and the "
+             << "goal has been cancelled. WHETHER THE JAWS HOLD ANYTHING IS "
+             << "UNESTABLISHED: nothing observed the gripper, so this is not a report "
+             << "of an empty gripper and must not be recovered from as one";
+      outcome.result = make_result(ResultCode::TIMEOUT, detail.str());
       return outcome;
     }
 
@@ -1983,6 +2088,11 @@ private:
   //: The arm trajectory controller's goal tolerance, in radians, from L0 via the
   //: generated bring-up plan. Read by `classify_execution_failure` only.
   double arm_goal_tolerance_rad_{0.01};
+  //: How long to wait for the gripper's controller to answer, in THIS NODE'S
+  //: clock, from L0 via the generated bring-up plan (ADR-0045). Zero until the
+  //: plan delivers it, and an arm with a gripper action refuses to configure
+  //: while it is zero — there is no compiled duration to fall back to on purpose.
+  rclcpp::Duration gripper_result_timeout_{0, 0};
   double tf_timeout_s_{5.0};
   std::chrono::duration<double> feedback_period_{0.1};
   double default_velocity_scaling_{1.0};

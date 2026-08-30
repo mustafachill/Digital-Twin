@@ -1,8 +1,23 @@
 # ADR-0046: A retry may not re-enter a wait on a trigger its own recovery destroyed
 
 - **Status:** Proposed. Written before the implementation, which is what
-  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record is built at `b8a6c10`**;
-  every "will" below is a commitment and not a description.
+  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record was built at `b8a6c10`**;
+  every "will" below was a commitment and not a description.
+  **Decisions 1 to 5 are implemented on branch `feat/close-the-gripper-deadline-dead-end`,
+  which is under review and not merged**, and decision 5's deliberate absences are still
+  absent there: no re-arm path, no resumption below `AwaitTrigger`, and `recovery_policy.hpp`
+  unchanged. The status stays `Proposed` for that reason and because this record's own
+  verification table says what would settle it — a `continuous_line` run on a CI runner in
+  which this failure occurs and the line reports it — **and no such run exists**.
+  **Decision 4's assertion was tested rather than assumed and it held.** The shipped station
+  tree, driven through real arrivals by
+  `RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving`, never once produced the
+  reported state across a run carrying several work-pieces; the predicate is sampled on every
+  tick, where the coordinator samples it. That is the assertion the record asked for, and it
+  is a demonstration on one tree rather than a proof about the state space.
+  **What is still unevidenced is the thing the record exists for:** that a station in this
+  state escalates and says so **in the cell**. Every test of it uses fake action servers, so
+  what they prove is sequence, ownership and the refusal — not motion.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, from the project owner's root-cause investigation of the
   three `continuous_line` CI cycle failures recorded in [CLAUDE.md §2](../../CLAUDE.md)

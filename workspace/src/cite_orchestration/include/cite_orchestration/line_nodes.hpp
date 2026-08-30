@@ -290,6 +290,65 @@ inline std::optional<std::string> untriggerable_reason(
   return std::nullopt;
 }
 
+/// Why a station that is waiting cannot be waiting for anything useful, when the reason
+/// is that it never let go of the last piece. Nothing when it did.
+///
+/// THE FACT THIS IS BUILT ON IS ONE THE LINE OWNS OUTRIGHT (ADR-0046 decision 2), and
+/// that is the whole reason it exists beside `untriggerable_reason` rather than inside
+/// it. That rule reads a belt setpoint, so it is silent wherever there is no belt — and
+/// the station this repository has watched die three times in CI is fed by a table. This
+/// one reads custody: the registry says which station owns a piece and the station's own
+/// runtime names it. No belt, no sensor, and no prediction about what the world outside
+/// the cell might put on a table.
+///
+/// ALL THREE CONDITIONS, AND THE THIRD IS THE ONE THAT DISCRIMINATES. The caller supplies
+/// the first — the station is IDLE or WAITING — for the same reason it does for
+/// `untriggerable_reason`, so that one rule about station state serves both. The other
+/// two are here:
+///
+///   * The registry says this station OWNS at least one work-piece.
+///   * The station's own runtime still NAMES one.
+///
+/// Occupancy alone would fire on every transfer the line ever performs, and this was
+/// nearly built that way. `CompleteHandoff` moves ownership to the RECEIVING station while
+/// the piece is still `IN_TRANSIT` on the belt — its own comment says "the receiving
+/// station owns it from this instant even though it has not touched it" — and that station
+/// sits in `WAITING` until the piece arrives. So occupancy is greater than zero, in
+/// `WAITING`, in the healthy cycle, at every belt-fed station, several times a minute.
+/// What is NOT true then is that the receiving station names the piece:
+/// `current_workpiece_id` is written by that station's own `TakeCustody` and by nothing
+/// else, and `TakeCustody` runs while the station is `WORKING`.
+///
+/// SO THE STATE IT REPORTS IS ONE THE NOMINAL BRANCH CANNOT PRODUCE, and that is an
+/// assertion rather than an observation about the XML.
+/// `RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving` drives the shipped tree
+/// through real arrivals and fails if this ever answers during one. Read from the tree it
+/// looks unreachable — `SetStationState state="2"` is written immediately after
+/// `AwaitTrigger`, `TakeCustody` and `CompleteHandoff` both fall inside that window, and
+/// the state returns to `0` only after the handoff completed — and "looks unreachable" is
+/// exactly the kind of sentence this project has been wrong about before.
+///
+/// IT IS THE NET AND NOT THE RULE. `RecoverFromFailure` refuses the retry that produces
+/// this state (ADR-0046 decision 1), so on the route that has actually been observed the
+/// station is `BLOCKED` before anything can be reported here, and `LineState`'s precedence
+/// never asks. This answers for the routes that refusal does not cover, and it answers
+/// within one publication period rather than after a 420 s leg ceiling.
+///
+/// IT COMMANDS NOTHING, and it decides nothing about what to do with the part. Where a
+/// held piece should be put down, observed how, with the planner told what, is ADR-0038
+/// decision 5's question and it is still not answered.
+inline std::optional<std::string> holding_its_own_workpiece_reason(
+  const std::string & station_id, const StationRuntime & runtime, std::size_t occupancy)
+{
+  if (occupancy == 0 || runtime.current_workpiece_id.empty()) {
+    return std::nullopt;
+  }
+  return "station '" + station_id + "' is waiting for work while it still holds work-piece '" +
+         runtime.current_workpiece_id +
+         "', so the arrival it is waiting for would have to be a piece it has not got rid "
+         "of; the piece its last attempt was about never left this station";
+}
+
 /// The fault the line stopped on, latched.
 ///
 /// WHY IT IS LATCHED AT ALL. Once the fault branch exists, a station escalating
@@ -1058,11 +1117,61 @@ public:
       code = static_cast<int>(cite_interfaces::msg::ResultCode::PRECONDITION_FAILED);
     }
     config().blackboard->set(kLastResultCode, no_failure_recorded);
-    const Recovery response = recovery_for(
+    Recovery response = recovery_for(
       static_cast<uint8_t>(code), runtime.consecutive_failures - 1, line_.retry_budget);
+
+    // A RETRY MAY NOT RE-ENTER A WAIT THIS STATION HAS MADE UNSATISFIABLE
+    // (ADR-0046 decision 1).
+    //
+    // Every retry answer returns SUCCESS, the enclosing `Repeat` re-enters the
+    // nominal branch, and its first leaf is `AwaitTrigger` — which waits for a
+    // beam to go from clear to BLOCKED. A station that still owns the piece its
+    // failed attempt was about is waiting for a part to arrive while holding the
+    // one that did: at a belt-fed station the belt is at the standstill its own
+    // trigger commanded, and at a table-fed one nothing was ever going to bring a
+    // second. Observed three times on CI runners, each time as a station reporting
+    // `WAITING` with occupancy 1 for the whole 420 s leg while `LineState` read
+    // `RUNNING`.
+    //
+    // CUSTODY DECIDES, NOT THE RESULT CODE, and that is the decision rather than
+    // an implementation detail. `recovery_policy.hpp` is untouched: the mapping
+    // from `ResultCode` to `Recovery` stays a statement about failures, and this
+    // is a precondition on the retry. It therefore closes every entrance at once —
+    // the gripper deadline ADR-0045 removes, the `gripper_is_holding` margin
+    // defect that reports a real grasp as `EXECUTION_FAILED`, and the failed grasp
+    // ADR-0038 records — instead of one producer of one code. A `TIMEOUT` with an
+    // empty gripper is still retryable, which is the point.
+    //
+    // WHY ESCALATE AND NOT SOMETHING GENTLER. The escalation path is built and
+    // leads somewhere useful: `STATE_BLOCKED`, the root `Parallel` fails, and
+    // ADR-0038's fault branch stops the belts and keeps the coordinator alive to
+    // serve the ADR-0037 reset. The arm stays where it is with the part still in
+    // the jaws, which is the state a person needs in order to decide what to do
+    // with it. It gives up no availability that exists: this station's failure
+    // already stopped the line, silently, and then blamed a milestone.
+    //
+    // IT DOES NOT RE-ARM ANYTHING. ADR-0038 decision 5 is untouched. `Pick`'s
+    // first physical act is to open the gripper and the retry's first act is
+    // `MoveToHome`, so a station that resumed while holding a part would open the
+    // jaws at the home pose and drop a piece no planner knows is there.
+    std::string custody_refusal;
+    const bool would_retry = response == Recovery::NONE ||
+      response == Recovery::RETRY_SAME ||
+      response == Recovery::RETRY_DIFFERENTLY;
+    if (would_retry && !runtime.current_workpiece_id.empty()) {
+      custody_refusal = "the station still holds work-piece '" +
+        runtime.current_workpiece_id +
+        "', and the branch a retry returns to waits for a NEW piece to arrive, which "
+        "nothing will bring while this one has not left. What to do with a part in a "
+        "gripper is a decision for a person (ADR-0038 decision 5)";
+      response = Recovery::ESCALATE;
+    }
 
     runtime.blocked_reason = std::string("result code ") + std::to_string(code) + ": " +
       describe(response);
+    if (!custody_refusal.empty()) {
+      runtime.blocked_reason += ". " + custody_refusal;
+    }
     // The same fact as a value, for a consumer that has to ACT on it rather than
     // print it. `OnFault` latches this when the line stops, and a latch that
     // recovered the number by reading the sentence above would be parsing text to

@@ -50,6 +50,7 @@ def check(model: FacilityModel) -> list[Finding]:
     for asset_type in model.types:
         findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
         findings += _followers_can_still_correct(asset_type)
+        findings += _result_timeout_outlasts_the_stall_search(asset_type)
 
         body = asset_type.description.body
         if body is None:
@@ -477,3 +478,64 @@ def _followers_can_still_correct(asset_type: AssetType) -> list[Finding]:
         ]
 
     return []
+
+
+def _result_timeout_outlasts_the_stall_search(asset_type: AssetType) -> list[Finding]:
+    """A deadline that can cut an ordinary contact stall short is not a backstop.
+
+    The derivation, which is the only part of `grasp.result_timeout_s` that is a
+    constraint rather than a choice (ADR-0045 decision 3).
+
+    L3 waits for `GripperActionController` to terminate a `GripperCommand`. The
+    controller terminates it in exactly two ways: the drive joint reaches the
+    commanded position, or it stops moving for `stall_timeout`. So the longest a
+    LEGITIMATE close can take before either branch can fire at all is the stroke
+    itself, at the rate the drive joint is allowed to travel, plus that timeout:
+
+        floor = (closed_position - open_position) / max_drive_rate_rad_s
+                + stall_timeout
+
+    A `result_timeout_s` below that floor gives up on grasps that were about to
+    succeed, and turns a working gripper into an intermittent one.
+
+    THERE IS NO CEILING, and its absence is the decision rather than an omission.
+    The stall search restarts on every control cycle above
+    `stall_velocity_threshold`, so the quantity above the floor is unbounded and
+    any upper bound stated here would be a guess wearing a validator's clothes.
+    What the value above the floor buys is patience, and ADR-0045 says plainly
+    that its size carries no claim.
+    """
+    grasp = asset_type.grasp
+    if grasp is None:
+        return []
+
+    stall_timeout_s = None
+    for controller in asset_type.controllers:
+        value = controller.parameters.get("stall_timeout")
+        if value is not None:
+            stall_timeout_s = float(value)
+            break
+    if stall_timeout_s is None:
+        # A gripper whose controller declares no stall timeout is a different
+        # finding, and one this function is not the author of: the floor here is
+        # derived FROM that timeout, so with none declared there is nothing to
+        # derive and nothing to say.
+        return []
+
+    stroke_s = abs(grasp.closed_position - grasp.open_position) / grasp.max_drive_rate_rad_s
+    floor_s = stroke_s + stall_timeout_s
+    if grasp.result_timeout_s > floor_s:
+        return []
+
+    return [
+        error(
+            "gripper-result-timeout-cuts-the-stall-search-short",
+            f"types.{asset_type.id}.grasp.result_timeout_s",
+            f"L3 gives up after {grasp.result_timeout_s} s while a full stroke at "
+            f"{grasp.max_drive_rate_rad_s} rad/s takes {stroke_s:.3f} s and the controller "
+            f"may then wait {stall_timeout_s} s before declaring a stall",
+            "The deadline expires before the controller is even allowed to answer, so a "
+            "grasp that was about to succeed is reported as a gripper that never replied. "
+            f"Declare a result_timeout_s above {floor_s:.3f} s.",
+        )
+    ]

@@ -112,6 +112,19 @@
   **IT COMMANDS NOTHING, AND A VISIBLE STALL IS NOT A FIXED STALL.** No belt is restarted,
   nothing is planned, no gripper is touched, no station state is written. `AwaitReArm` still
   keeps no `SUCCESS` edge; the line still dies, and now says so.
+  **A second rule now answers where that one cannot, and it refuses as well as reports**
+  ([ADR-0046](../adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)). The dead end
+  above has a second entrance, taken three times on CI runners: the grasp HELD, the gripper's
+  result timed out on a wall-clock deadline (ADR-0045), and the recovery's `MoveToHome` carried
+  the part off the beam the station was about to wait on. `RecoverFromFailure` therefore
+  answers `ESCALATE` rather than a retry for any station whose `current_workpiece_id` is
+  non-empty — **keyed on custody, not on a result code**, so `recovery_policy.hpp` is unchanged
+  and every entrance to the dead end closes at once rather than the one ADR-0045 removes. The
+  same fact is published through the existing `STATE_STALLED`: a station `IDLE` or `WAITING`
+  that owns a piece in the registry AND still names one in its runtime. All three legs are
+  load-bearing — occupancy alone is true of every healthy transfer, because `CompleteHandoff`
+  moves ownership while the piece is still on the belt. **It re-arms nothing** and ADR-0038
+  decision 5 is untouched.
   **Its blind spot is a station fed by a table, and that is one of the three.** The rule needs
   a belt setpoint to read, and `station_transfer_1` has a trigger and no inbound belt — so the
   same closed loop happens there and nothing reports it. What that station's failure would need

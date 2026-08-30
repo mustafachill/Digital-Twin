@@ -183,6 +183,30 @@ thing and the thing was not happening".
 one author** (ADR-0038 decision 4): a stall ranks strictly below it, and a blocked line
 publishes no stall reasons.
 
+**A station that still holds its work-piece may not re-enter that wait at all**
+([ADR-0046](../../../docs/adr/0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md)). The
+dead end above has a second door, and it was reached three times on CI runners: the grasp
+*held*, the gripper's result timed out, and the recovery's own `MoveToHome` carried the part
+**off** the beam the station was about to wait on — which then stayed clear, because nothing
+brings work to a table-fed station. So `RecoverFromFailure` now answers `ESCALATE` instead of
+a retry whenever the station's `current_workpiece_id` is non-empty.
+
+**It is keyed on custody and not on a result code**, so `recovery_policy.hpp` is untouched and
+every entrance closes at once — the gripper deadline, the `gripper_is_holding` margin defect
+that reports a real grasp as `EXECUTION_FAILED`, and ADR-0038's failed grasp. A `TIMEOUT` with
+an empty gripper is still retryable, which is the point. **It re-arms nothing**: ADR-0038
+decision 5 stands, `AwaitReArm` still refuses, and what a station should do with a part in its
+gripper is still nobody's decision to take blind.
+
+**The same fact is published, through the existing `STATE_STALLED` and not a sixth value.**
+`holding_its_own_workpiece_reason` reports a station that is `IDLE` or `WAITING` while the
+registry says it owns a piece **and** its own runtime still names one. All three legs are
+needed and the third carries the discrimination: `CompleteHandoff` moves ownership to the
+receiving station while the piece is still on the belt, so occupancy alone is greater than
+zero in every healthy transfer this line performs. It needs no belt and no sensor, which is
+why it works where `untriggerable_reason` is structurally blind — and it closes that blind
+spot **for this failure shape only**, not for the class.
+
 **The rule is `untriggerable_reason` in `line_nodes.hpp`, and it is the same one `AwaitReArm`
 uses**, so the two paths cannot answer differently and neither names an asset. Three conditions
 are added on this path, and the last is the whole of the negative direction:
@@ -333,7 +357,7 @@ restated here.
 | the recovery branch fails every time | a leaf gave up without cancelling, so the next goal is rejected by a server still executing the old one |
 | a belt is stopped for ever | nothing confirms a belt's state. See the open-loop note above |
 | a station blocks and the line stops, but the process stays up | decided (ADR-0038). The fault branch holds; call `ResetStation`, and expect `AwaitReArm` to go on refusing afterwards |
-| `LineState` reports `STATE_STALLED` and nothing escalated | a station was returned to a trigger nothing can produce and its inbound belt is stopped (ADR-0039). `stall_reasons` names the station and the belt. There is nothing for `ResetStation` to clear, and no re-arm path exists — read ADR-0038 decision 5 before restarting a belt by hand |
+| `LineState` reports `STATE_STALLED` and nothing escalated | a station is waiting for something that cannot happen: either its inbound belt is stopped and nothing can bring it work (ADR-0039), or it is still holding the work-piece it is waiting for a replacement of (ADR-0046). `stall_reasons` says which, per station. There is nothing for `ResetStation` to clear, and no re-arm path exists — read ADR-0038 decision 5 before restarting a belt by hand |
 | the coordinator sits for ever after a reset, logging a refusal that names a station and a belt | `AwaitReArm`. Nothing re-arms a station yet; the refusal is the design saying so, not a bug to widen the gate around |
 | the coordinator exits 1 having logged that no station said why | a station subtree returned `FAILURE` without its recovery policy classifying anything. `OnFault` latches it so the run still fails; the defect is in that subtree |
 | a reset is refused with `HARDWARE_FAULT` on a station that is only blocked | some other station is faulted, which makes the line faulted |

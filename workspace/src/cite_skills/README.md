@@ -162,10 +162,34 @@ refuses to start without the names. Use the launch.
 | a goal is rejected with "still holds this arm" | another goal is in flight. The caller that abandoned the earlier one has to cancel it |
 | `Pick` fails with `EXECUTION_FAILED` and an empty-grasp message | the jaws closed on nothing. A grasp is evidenced by *failing* to reach the commanded width |
 | a `Pick` warns that no grasp width reached the node | `grasp_width_m` was 0 and no `gripper_default_grasp_width_m` was delivered, so the gripper closes against its effort limit. The end-effector type declares one and the plan carries it |
+| `Pick` or `Grasp` returns `TIMEOUT` "the gripper's controller never reported a result" | the controller did not terminate the goal within `gripper_result_timeout_s` of THIS NODE'S clock (ADR-0045). The goal has been cancelled. **It is not a report about the jaws** — the arm may be holding the work-piece, and the detail says so; nothing may recover from it as an empty gripper |
 | `Place`/`Transfer` returns `PRECONDITION_FAILED` "not holding anything" | refused rather than mimed — the failure would otherwise surface at the receiving station, which is much harder to attribute |
 | `Transfer` returns `PRECONDITION_FAILED` "no rendezvous token" | L4 issues one for every handoff it has negotiated, so an empty token is a caller that skipped the two-party confirmation |
 | `Detect` returns `PRECONDITION_FAILED` on a zero-sized region | a default-constructed goal has one, and an empty result from it would read as "nothing is on the belt" — a wrong answer that looks exactly like a right one |
 | `Detect` times out waiting for a sensor | the bridge is not delivering. The grace period exists so a `Detect` issued just after start-up does not fail for want of a sample about to arrive; expiry is a diagnosis, not an empty belt |
+
+**The gripper result deadline is an L0 value, measured in this node's clock**
+([ADR-0045](../../../docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md)).
+It was `constexpr std::chrono::seconds kGripperResultWait{20}` compared against
+`steady_clock` — the host's wall clock — while everything it supervised ran in simulation
+time, so on a loaded runner it bought about four simulated seconds and expired while the
+gripper was still moving. It is now `gripper_result_timeout_s`, declared on the L0
+end-effector type, delivered by the generated plan, and compared against `now()`, which
+follows `use_sim_time`. **No number for it exists in this package**: the parameter's
+compiled default is `0.0`, a sentinel, and an arm with a gripper action refuses to configure
+without a delivered value rather than falling back on a copy that happens to agree.
+
+**What an expiry means is narrower than it looks, and the narrowing is the decision.**
+`GripperActionController` restarts its stall search on every control cycle above
+`stall_velocity_threshold`, so the time it takes to declare a stall has no upper bound and no
+deadline could cap it. The only thing this can honestly mean is *the controller has not
+terminated this goal*. So on expiry the server **cancels** the outstanding `GripperCommand` —
+otherwise the controller goes on commanding a closed position at the configured effort for a
+goal nobody holds — and it **does not report an empty gripper**. `Pick.Result.holding` is a
+`bool` and cannot say "unknown"; the honest statement is in the `ResultCode.detail` and in an
+error log naming the work-piece, and `holding_` is left unwritten in either direction. The
+cost is stated where it is paid, in `command_gripper`: a deadline in simulation time never
+expires if simulation time stops.
 
 **Every gripper key the plan delivers is now declared here.**
 `gripper_max_drive_rate_rad_s` was the twelfth of `cite_bringup`'s `GRIPPER_KEYS` and was

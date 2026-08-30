@@ -1,8 +1,22 @@
 # ADR-0045: Measure the gripper deadline in the clock the gripper runs on, and declare it in L0
 
 - **Status:** Proposed. Written before the implementation, which is what
-  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record is built at `b8a6c10`**;
-  every "will" below is a commitment and not a description.
+  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record was built at `b8a6c10`**;
+  every "will" below was a commitment and not a description.
+  **Decisions 1 to 6 are implemented on branch `feat/close-the-gripper-deadline-dead-end`,
+  which is under review and not merged.** The status stays `Proposed` for that reason and for
+  a second one this record is unusually clear about: its own verification table ends by saying
+  that what would show the fix works is a `continuous_line` run on a CI runner in which the
+  gripper fails to answer, **and that a run in which it answers quickly shows nothing at all**.
+  No such run exists. What the branch adds is evidence of the MECHANISM, not of the outcome:
+  `cite_bringup/test/test_gripper_deadline_launch.py` holds simulated time still while several
+  times the deadline passes in wall time and requires the wait to survive it, then advances
+  simulated time past the declared value and requires the wait to end, the goal to be
+  cancelled, and the report to say custody is unestablished. That test fails against the code
+  this record replaces. It does not make the record `Accepted`.
+  **One thing named here as owed its own record still has none:** the
+  `cite_skills::gripper_is_holding` margin defect in the last section below is untouched by
+  the branch, exactly as decision 5's neighbouring paragraph asks.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, from the project owner's root-cause investigation of the
   three `continuous_line` CI cycle failures recorded in [CLAUDE.md §2](../../CLAUDE.md)

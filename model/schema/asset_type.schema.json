@@ -490,13 +490,19 @@
           "default": 0.0,
           "title": "Open Position",
           "type": "number"
+        },
+        "result_timeout_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Result Timeout S",
+          "type": "number"
         }
       },
       "required": [
         "drive_joint_suffix",
         "max_drive_rate_rad_s",
         "follower_max_rate_rad_s",
-        "linkage"
+        "linkage",
+        "result_timeout_s"
       ],
       "title": "GraspSpec",
       "type": "object"

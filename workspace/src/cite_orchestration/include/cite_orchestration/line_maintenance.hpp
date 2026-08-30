@@ -45,7 +45,16 @@ namespace cite_orchestration
 
 using cite_interfaces::msg::LineState;
 
-/// The stations that are waiting on a trigger nothing can produce. Empty when none is.
+/// The stations that are waiting for something that cannot happen. Empty when none is.
+///
+/// TWO RULES ANSWER THAT QUESTION AND THEY HAVE DIFFERENT REACH. The first is
+/// `untriggerable_reason` — nothing can bring this station work, because the belt that
+/// would is at a standstill — and everything below about conditions 1 to 4 is about it.
+/// The second is `holding_its_own_workpiece_reason` (ADR-0046 decision 2): this station
+/// never let go of the piece it had, so the arrival it waits for would have to be a piece
+/// it is still holding. The second needs no belt and no sensor, which is why it exists:
+/// the first is structurally silent at a table-fed station, and that is the station this
+/// failure has been observed at three times on CI runners.
 ///
 /// THE DEFECT THIS EXISTS FOR, OBSERVED RATHER THAN PREDICTED (ADR-0039). A
 /// work-piece fails the friction grasp, the station retries, and its `Repeat`
@@ -131,7 +140,8 @@ using cite_interfaces::msg::LineState;
 inline std::vector<std::string> stalled_stations(
   const std::map<std::string, StationRuntime> & stations,
   const std::shared_ptr<ConveyorIndex> & conveyors,
-  const std::shared_ptr<TriggerWatch> & triggers)
+  const std::shared_ptr<TriggerWatch> & triggers,
+  const std::shared_ptr<WorkpieceRegistry> & registry)
 {
   std::vector<std::string> stalled;
   for (const auto & [id, runtime] : stations) {
@@ -140,20 +150,34 @@ inline std::vector<std::string> stalled_stations(
     {
       continue;
     }
-    const auto reason = untriggerable_reason(id, runtime, conveyors);
-    if (!reason) {
+    // TWO RULES, ONE STATE CONDITION, AND THEY ANSWER DIFFERENT QUESTIONS. The
+    // belt rule asks whether anything can bring this station work; the custody
+    // rule asks whether this station ever let go of the work it had. A station
+    // matching both is reported once, by the first — a reader given two sentences
+    // about one station would reasonably read them as two stations.
+    const auto belt = untriggerable_reason(id, runtime, conveyors);
+    if (belt) {
+      if (triggers && conveyors &&
+        triggers->consumed(runtime.trigger_topic) <
+        conveyors->stop_edges(runtime.inbound_belt))
+      {
+        // An arrival is in flight: the edge that stopped this belt has not reached
+        // the station yet. Not stalled, and this is the branch that keeps the signal
+        // from being noise.
+        continue;
+      }
+      stalled.push_back(*belt);
       continue;
     }
-    if (triggers && conveyors &&
-      triggers->consumed(runtime.trigger_topic) <
-      conveyors->stop_edges(runtime.inbound_belt))
-    {
-      // An arrival is in flight: the edge that stopped this belt has not reached
-      // the station yet. Not stalled, and this is the branch that keeps the signal
-      // from being noise.
-      continue;
+    // ADR-0046 decision 2, and it needs neither a belt nor a sensor — which is
+    // the whole reason it exists, because the station this failure has been
+    // observed at three times is fed by a table and the rule above has nothing
+    // to read there.
+    const auto custody = holding_its_own_workpiece_reason(
+      id, runtime, registry ? registry->occupancy(id) : 0);
+    if (custody) {
+      stalled.push_back(*custody);
     }
-    stalled.push_back(*reason);
   }
   return stalled;
 }
@@ -230,7 +254,8 @@ public:
       // author — the station's own tree, by way of the state copied above
       // (ADR-0038 decision 4) — and a stall that could outrank it would be a
       // second author for it by another route.
-      const auto stalled = stalled_stations(*line_.stations, line_.conveyors, line_.triggers);
+      const auto stalled = stalled_stations(
+        *line_.stations, line_.conveyors, line_.triggers, line_.registry);
       announce_the_stall(stalled);
       if (!stalled.empty()) {
         // ABOVE THE WORKING CASE, deliberately. A station that can never be

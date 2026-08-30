@@ -97,6 +97,16 @@ public:
   /// and the subtree. `OnFault` has to latch that too, or the run exits 0.
   void fail_move_to_with(uint8_t code);
 
+  /// What this arm's `Detect` server answers from now on.
+  ///
+  /// The ONE failure a station subtree can suffer before it has taken custody of
+  /// anything: `DetectAt` stands above `TakeCustody` in the shipped tree, so a
+  /// station that fails here owns no work-piece and is the only case in which
+  /// ADR-0046's custody precondition leaves the retry path reachable. Every leaf
+  /// below `TakeCustody` — the pick, the claims, the handoff, the place — fails
+  /// with the piece assigned to the station, and a retry there is refused.
+  void fail_detect_with(uint8_t code);
+
   /// Hold every subsequent `detect` goal open, or stop holding.
   ///
   /// A HELD GOAL IS THE ONLY WAY TO OBSERVE A CANCELLATION. `line_tree.hpp` says
