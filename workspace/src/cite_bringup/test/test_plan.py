@@ -172,7 +172,13 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
             "scene": "package://cite_generated/description/cell_a_scene.urdf.xacro",
             "static_frames": "package://cite_generated/frames/cell_a_static_tf.yaml",
             "topology": "package://cite_generated/topology/cell_a_flow.yaml",
-            "sides": [{"name": "plant", "gz_partition": "cite/cell_a/plant"}],
+            "sides": [
+                {
+                    "name": "plant",
+                    "gz_partition": "cite/cell_a/plant",
+                    "domain_offset": 0,
+                }
+            ],
             "controller_managers": [
                 {
                     "asset": "arm_1",
@@ -618,13 +624,7 @@ def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
 
 def test_a_paired_plan_keeps_its_two_partitions_apart(tmp_path: Path) -> None:
     document = _document()
-    document["plan"]["sides"].append(
-        {
-            "name": "counterpart",
-            "gz_partition": "cite/cell_a/counterpart",
-            "domain_offset": 1,
-        }
-    )
+    document["plan"]["sides"].append(_counterpart())
     plan = load(_written(tmp_path, document))
     assert [side.name for side in plan.sides] == ["plant", "counterpart"]
     assert len({side.gz_partition for side in plan.sides}) == 2
@@ -653,9 +653,7 @@ def _with_counterpart_backend(document: dict, backend: str) -> dict:
     for manager in document["plan"]["controller_managers"]:
         manager["counterpart_backend"] = "sim"
     document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
-    document["plan"]["sides"].append(
-        {"name": "counterpart", "gz_partition": "cite/cell_a/counterpart"}
-    )
+    document["plan"]["sides"].append(_counterpart())
     return document
 
 
@@ -781,12 +779,12 @@ def test_a_plant_at_a_non_zero_offset_is_refused(tmp_path: Path) -> None:
 
 
 def _counterpart(offset: int = 1) -> dict:
-    """A second side, as a paired zone's generated plan would state it."""
-    return dict(
-        name="counterpart",
-        gz_partition="cite/cell_a/counterpart",
-        domain_offset=offset,
-    )
+    """Return a second side, as a paired zone's generated plan would state it."""
+    return {
+        "name": "counterpart",
+        "gz_partition": "cite/cell_a/counterpart",
+        "domain_offset": offset,
+    }
 
 
 def test_two_sides_sharing_one_domain_offset_are_refused(tmp_path: Path) -> None:
@@ -825,7 +823,7 @@ def test_an_untwinned_zone_resolves_to_exactly_the_base() -> None:
 
 
 def test_the_base_travels_on_its_own_channel() -> None:
-    assert domain_base(dict([(DOMAIN_BASE_ENV, "7")])) == 7
+    assert domain_base({DOMAIN_BASE_ENV: "7"}) == 7
 
 
 def test_an_unset_base_is_refused_rather_than_read_from_the_ambient_domain() -> None:
@@ -840,9 +838,9 @@ def test_an_unset_base_is_refused_rather_than_read_from_the_ambient_domain() -> 
     ambient domain does not satisfy it.
     """
     with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
-        domain_base(dict([(DOMAIN_ENV, "42")]))
+        domain_base({DOMAIN_ENV: "42"})
 
 
 def test_a_base_that_is_not_a_number_is_refused() -> None:
     with pytest.raises(DomainUnresolvedError, match="whole number"):
-        domain_base(dict([(DOMAIN_BASE_ENV, "plant")]))
+        domain_base({DOMAIN_BASE_ENV: "plant"})
