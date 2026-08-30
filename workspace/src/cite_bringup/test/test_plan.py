@@ -803,7 +803,7 @@ def _counterpart(offset: int = 1) -> dict:
 
 
 def _paired_document() -> dict:
-    """The generated plan with a counterpart, whether or not it already had one.
+    """Return the generated plan paired, adding a counterpart only if it has none.
 
     Built from whatever the generated plan declares rather than assuming it is
     `single`. **A checkout flipped to `twin: {sides: pair}` for a run is a real
@@ -821,7 +821,7 @@ def _paired_document() -> dict:
 
 
 def _solo_document() -> dict:
-    """The generated plan with the plant and nothing else.
+    """Return the generated plan with the plant side and nothing else.
 
     The other half of the same hazard: a test about an UNTWINNED zone read the
     live plan, so it asserted the opposite of what a paired checkout declares.

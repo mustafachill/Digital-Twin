@@ -122,7 +122,7 @@ def test_a_plan_whose_managers_declare_no_skills_leaves_almost_nothing_to_wait_o
 def test_a_plan_that_names_no_endpoint_at_all_is_refused_rather_than_satisfied(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    """"Nothing to wait on" is the one answer a readiness witness may never give.
+    """A witness may never answer that there was nothing to wait on.
 
     An empty condition is satisfied instantly, so the witness would exit 0, the
     launch would emit the readiness token, and the supervisor would report the
