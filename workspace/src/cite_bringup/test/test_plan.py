@@ -28,8 +28,8 @@ from cite_bringup.plan import (
     ARM_KEYS,
     ControllerManager,
     ControllerRef,
-    domain_base,
     DOMAIN_BAND,
+    domain_base,
     DOMAIN_BASE_ENV,
     DOMAIN_ENV,
     DomainUnresolvedError,
@@ -937,4 +937,3 @@ def test_a_hand_written_offset_beyond_the_sides_is_refused(tmp_path: Path) -> No
     document["plan"]["sides"].append(_counterpart(offset=200))
     with pytest.raises(DomainUnresolvedError, match="declares exactly 0, 1"):
         load(_written(tmp_path, document))
-
