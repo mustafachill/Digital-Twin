@@ -1087,20 +1087,58 @@ class TestTwinSidesAndTheGazeboPartition:
         worlds = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
         assert worlds == ["worlds/cell_a.sdf"]
 
-    def test_unpairing_a_zone_returns_the_tree_to_exactly_where_it_was(
-        self, real_model: Path, edit_yaml: Callable
+    def test_unpairing_a_zone_returns_the_tree_on_disk_to_exactly_where_it_was(
+        self, real_model: Path, edit_yaml: Callable, tmp_path: Path
     ) -> None:
-        # Pairing leaves nothing behind. Without this, a generator could satisfy
-        # every test above and still emit something for a `single` zone that only
-        # makes sense on a `pair` — and the committed tree is a `single` zone, so
-        # that residue would ship.
-        before = artifacts(real_model)
+        """Through `gen.write`, because the residue this is about is on a disk.
+
+        **What it proves, exactly.** Generating into a directory that already
+        holds the unpaired tree, pairing, and unpairing again returns that
+        directory — every file, every byte, and the set of filenames — to what it
+        held before. That is a round trip through the writer, not through
+        `generate`, so `write`'s overwrite and its stale-file prune are both in
+        the path.
+
+        **What it does not prove, stated because the earlier version of this test
+        claimed it.** It compared two `generate()` results, and `generate` is
+        pure while `model_hash` digests the object graph rather than file bytes,
+        so it reduced to `f(m) == f(m)` and stayed green under a mutation that
+        injected a second world — both its siblings caught that and it did not.
+        Writing through `write` fixes the shape but not the reach: **pairing adds
+        no file today**, so the prune has nothing to remove at this commit and
+        deleting the prune loop would not fail this test. The prune's own
+        regression is `TestHandEditDetection::test_write_removes_stale_files`. This becomes a
+        second guard on it the moment a per-side artifact exists — which is
+        exactly when a `single` zone could start shipping a `pair`'s residue.
+
+        The paired plan is asserted to differ, so that a generator ignoring
+        `twin.sides` cannot satisfy the round trip by doing nothing. It names the
+        plan and not the whole tree deliberately: `MODEL_HASH` digests the model,
+        so it moves the moment `twin.sides` changes even in a generator that
+        ignores the field entirely, and a whole-tree inequality would be answered
+        by that alone.
+        """
+        out = tmp_path / "generated"
+
+        def on_disk() -> dict[str, str]:
+            gen.write(gen.generate(load(real_model)), out)
+            return {
+                path.relative_to(out).as_posix(): path.read_text()
+                for path in sorted(out.rglob("*"))
+                if path.is_file()
+            }
+
+        before = on_disk()
         self._pair(real_model, edit_yaml)
+        paired = on_disk()
         edit_yaml(
             real_model / "facility/zones.yaml",
             lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
         )
-        assert artifacts(real_model) == before
+
+        plan = "bringup/cell_a_plan.yaml"
+        assert paired[plan] != before[plan], "pairing changed no plan; the round trip is vacuous"
+        assert on_disk() == before
 
     def test_the_two_sides_take_the_two_domain_offsets(
         self, real_model: Path, edit_yaml: Callable

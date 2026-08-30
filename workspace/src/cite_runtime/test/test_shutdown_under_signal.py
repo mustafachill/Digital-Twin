@@ -126,12 +126,35 @@ def _private_domain_id() -> int:
     change; joining a live cell is silent, corrupts a run nobody is looking at,
     and was the failure the private domain existed to prevent.
 
-    The ambient domain is still stepped over, because a developer may set
-    `ROS_DOMAIN_ID` explicitly to anything, including a value in this band.
+    **The ambient PAIR is stepped over, not the ambient value.** The band's
+    guarantee covers a DERIVED base and nothing else: `cite_domain_id` never
+    returns a number in this band, but a developer may export `ROS_DOMAIN_ID`
+    explicitly to anything, including a value in it — and an explicit domain is a
+    plant, so that developer's counterpart is the number above it. Stepping over
+    one of the two would leave the other reachable, which is the same shape of
+    hole this band replaced: knowing about one of a pair's two domains
+    (ADR-0044, clause 4).
+
+    The set is computed here rather than obtained from the resolver, and that is
+    a layer decision rather than a shortcut: `cite_runtime` holds process
+    lifecycle mechanism and does not depend on `cite_bringup`, which owns the
+    plan. What is duplicated is not the derivation — that is
+    `scripts/_lib.sh`'s, and this file no longer reimplements it — but the fact
+    that a plant's counterpart sits one above it.
     """
     ambient = os.environ.get("ROS_DOMAIN_ID")
+    avoided: set[str] = set()
+    if ambient is not None:
+        avoided.add(ambient)
+        try:
+            avoided.add(str(int(ambient) + 1))
+        except ValueError:
+            # Not a number, so it names no pair. The literal is still avoided.
+            pass
     index = os.getpid() % len(PRIVATE_DOMAIN_BAND)
-    if str(PRIVATE_DOMAIN_BAND[index]) == ambient:
+    for _ in range(len(PRIVATE_DOMAIN_BAND)):
+        if str(PRIVATE_DOMAIN_BAND[index]) not in avoided:
+            break
         index = (index + 1) % len(PRIVATE_DOMAIN_BAND)
     return PRIVATE_DOMAIN_BAND[index]
 
@@ -412,3 +435,25 @@ def test_the_private_domain_still_steps_over_an_explicit_ambient_one(monkeypatch
     chosen = _private_domain_id()
     monkeypatch.setenv("ROS_DOMAIN_ID", str(chosen))
     assert _private_domain_id() != chosen
+
+
+def test_the_private_domain_steps_over_the_ambient_counterpart_too(monkeypatch) -> None:
+    """An explicit domain is a plant, so it brings a counterpart with it.
+
+    The band makes a DERIVED base unreachable, and that is the strong half. This
+    is the half it does not cover: an in-band `ROS_DOMAIN_ID` exported by hand
+    puts a cell at that value and its counterpart at the value above, and
+    stepping over one of the two would leave the other reachable — a test landing
+    there joins a live counterpart's graph, where every node runs `use_sim_time`
+    and this file publishes `/clock` (ADR-0044, clause 4).
+    """
+    chosen = _private_domain_id()
+    monkeypatch.setenv("ROS_DOMAIN_ID", str(chosen - 1))
+    assert _private_domain_id() not in (chosen - 1, chosen)
+
+
+def test_a_non_numeric_ambient_domain_does_not_break_the_picker(monkeypatch) -> None:
+    # A value that names no pair is still avoided as a literal, and the arithmetic
+    # that would find its counterpart does not run.
+    monkeypatch.setenv("ROS_DOMAIN_ID", "not-a-domain")
+    assert _private_domain_id() in PRIVATE_DOMAIN_BAND

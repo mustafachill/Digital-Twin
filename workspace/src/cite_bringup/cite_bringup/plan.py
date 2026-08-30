@@ -63,6 +63,13 @@ GZ_PARTITION_ENV = "GZ_PARTITION"
 #: not to isolate the Gazebo transport at all (ADR-0042, ADR-0044 clause 2). A
 #: pair carrying one and not the other is either two cells sharing every belt
 #: topic or two cells colliding on every node name.
+#:
+#: **Named here and not yet enforced.** ADR-0044 clause 4 owes a refusal in the
+#: shape of :func:`require_gz_partition` — a side whose process environment does
+#: not carry the domain the plan resolves for it must not start — and there is no
+#: `require_domain` in this module. This constant exists so that the reader and
+#: :func:`domain_base` name the variable once rather than twice; it is not that
+#: refusal and must not be read as it.
 DOMAIN_ENV = "ROS_DOMAIN_ID"
 
 #: The channel the plant's domain travels on, exported by `scripts/_lib.sh`
@@ -77,6 +84,26 @@ DOMAIN_ENV = "ROS_DOMAIN_ID"
 #: wrong one. Only the counterpart's half would have had teeth, and a green
 #: refusal would have been read as covering both sides (ADR-0044, clause 4).
 DOMAIN_BASE_ENV = "CITE_DOMAIN_BASE"
+
+#: The domains a side of a cell may occupy, inclusive of both ends.
+#:
+#: The LOWER of the two ranges the ROS 2 documentation names as safe from the
+#: Linux ephemeral port range, and the one this project's cells live in: 0 is the
+#: ecosystem-wide default `./scripts/doctor` fails on, and `cite_domain_id`
+#: allocates an odd base in 1..99 so that the counterpart at base + 1 lands in
+#: 2..100 (ADR-0044, clause 4).
+#:
+#: **Not a restatement of that allocation.** The allocation is a strict subset of
+#: this band and stays in `scripts/_lib.sh`; what is stated here is the band
+#: itself, which is an external fact about Linux and DDS rather than a project
+#: choice. Refused rather than clamped, and named after the base, because a
+#: resolved domain outside it is a mis-set base and not a value to repair.
+#:
+#: The upper band ROS 2 also documents, 215-232, is deliberately NOT admitted:
+#: `cite_runtime/test/test_shutdown_under_signal.py` draws a test's private
+#: domain from there precisely because no side of any checkout can be in it, and
+#: admitting a cell there would take that disjointness away.
+DOMAIN_BAND = range(1, 102)
 
 #: The side the untwinned model already describes, by name.
 #:
@@ -128,6 +155,20 @@ class DomainUnresolvedError(PlanError):
     two `/clock` publishers and two identical frame trees into one graph; and a
     side placed on a domain nobody expected simply finds an empty graph and waits
     (ADR-0044).
+    """
+
+
+class SideNotDeclaredError(PlanError):
+    """The plan declares no side by that name.
+
+    Separate from :class:`DomainUnresolvedError`, because the caller asking may
+    not have been asking about a domain at all. `gz.gz_environment` asks for a
+    side in order to build a `GZ_PARTITION`, and answering it with "the ROS
+    domain cannot be resolved" names the wrong isolation and sends a reader to
+    the wrong half of ADR-0044. What is actually missing is the side.
+
+    Whether a zone runs as a pair is an L0 fact, so the remedy is in the model
+    rather than in bring-up.
     """
 
 
@@ -373,7 +414,7 @@ class Plan:
             if side.name == name:
                 return side
         declared = ", ".join(repr(s.name) for s in self.sides)
-        raise DomainUnresolvedError(
+        raise SideNotDeclaredError(
             f"zone {self.zone!r} declares no side named {name!r}; it has {declared}. "
             "Whether a zone runs as a pair is an L0 fact - set `twin: {sides: pair}` "
             "on the zone and regenerate, rather than asking bring-up to invent a side."
@@ -544,6 +585,16 @@ def _sides(plan: object, path: Path) -> tuple[Side, ...]:
                 "partition falls back to gz-transport's <HOSTNAME>:<USERNAME> default, "
                 "which is the deployment accident ADR-0042 replaced."
             )
+    names = [s.name for s in sides]
+    if len(set(names)) != len(names):
+        shared = sorted({n for n in names if names.count(n) > 1})
+        raise SideNotDeclaredError(
+            f"{path}: two sides are named {', '.join(repr(n) for n in shared)}. "
+            "A side is addressed by identity - `side_named` returns the first match "
+            "and every caller believes it got the only one - so a duplicated name "
+            "hands one caller a side and another caller a different side under the "
+            "same word (ADR-0044)."
+        )
     partitions = [s.gz_partition for s in sides]
     if len(set(partitions)) != len(partitions):
         shared = sorted({p for p in partitions if partitions.count(p) > 1})
@@ -568,7 +619,7 @@ def _sides(plan: object, path: Path) -> tuple[Side, ...]:
 
     named = [s for s in sides if s.name == PLANT_SIDE]
     if not named:
-        raise DomainUnresolvedError(
+        raise SideNotDeclaredError(
             f"{path}: no side is named {PLANT_SIDE!r}. Every zone has a plant — it is "
             "the side the untwinned model describes and the side every scenario and "
             "./scripts/sim addresses — and callers ask for it by name rather than by "
@@ -580,6 +631,24 @@ def _sides(plan: object, path: Path) -> tuple[Side, ...]:
             f"{named[0].domain_offset} rather than 0. Offset 0 is what makes an "
             "untwinned zone resolve to the domain the checkout already uses; a plant "
             "anywhere else moves every existing script off the cell it launched."
+        )
+
+    # An offset is an INDEX into the sides, not a free number: `ids.domain_offset`
+    # forms it as `SIDES.index(side)`, so a plan with N sides declares exactly
+    # 0..N-1 and nothing else. Without this a hand-written `domain_offset: 200`
+    # loaded, and 200 resolves a counterpart far outside the band any side may
+    # occupy - the same edge the odd-base allocation was chosen to eliminate,
+    # arriving through the plan instead of through the derivation (ADR-0044,
+    # clause 4). The offsets are checked as a SET, so this subsumes nothing above:
+    # the distinctness refusal names the collision, this one names the range.
+    if set(offsets) != set(range(len(sides))):
+        raise DomainUnresolvedError(
+            f"{path}: the sides declare domain offsets "
+            f"{', '.join(str(o) for o in offsets)}; a plan with {len(sides)} side(s) "
+            f"declares exactly {', '.join(str(o) for o in range(len(sides)))}. An "
+            "offset is an index into the sides rather than a number of domains a "
+            "reader may choose - it is generated from the L0 model, so run "
+            "./scripts/validate-model --write, then ./scripts/build."
         )
     return sides
 
@@ -668,8 +737,28 @@ def resolve_domain_id(plan: Plan, side: str, base: int) -> int:
     A shell caller reaches this the way `docs/operations/troubleshooting.md`
     already reaches the partition - by asking Python for the plan's answer rather
     than reimplementing it in `sh`.
+
+    **The band is enforced here, and here only.** `cite_domain_id`'s odd-base
+    allocation is what makes `base + 1` land inside :data:`DOMAIN_BAND`, and that
+    guarantee holds for a DERIVED base and nothing else: an explicit
+    `CITE_DOMAIN_BASE=101` or `ROS_DOMAIN_ID=101` goes straight past it and
+    resolves a counterpart to 102, which is the exact edge ADR-0044 clause 4
+    spends a paragraph eliminating. This is the single place every consumer
+    reaches the absolute value, so it is the only place that can close it.
     """
-    return base + plan.side_named(side).domain_offset
+    domain = base + plan.side_named(side).domain_offset
+    if domain not in DOMAIN_BAND:
+        raise DomainUnresolvedError(
+            f"side {side!r} resolves to ROS domain {domain}, outside "
+            f"{DOMAIN_BAND.start}..{DOMAIN_BAND.stop - 1}. The base is {base}, from "
+            f"{DOMAIN_BASE_ENV}, and the side's offset is "
+            f"{plan.side_named(side).domain_offset}. Domain 0 is the ecosystem-wide "
+            "default ./scripts/doctor fails on and domains above 101 collide with the "
+            "Linux ephemeral port range; scripts/_lib.sh derives a base that leaves "
+            "room for the counterpart, so reaching this means the base was set by "
+            "hand (ADR-0044, clause 4)."
+        )
+    return domain
 
 
 def _detection(entry: object | None) -> Detection | None:
