@@ -71,6 +71,10 @@
   <test_depend>sensor_msgs</test_depend>
   <test_depend>geometry_msgs</test_depend>
   <test_depend>tf2_ros</test_depend>
+  <!-- ADR-0045's rig publishes `/clock` itself, so that it can hold simulated
+       time still while wall time runs. That is what separates a deadline in the
+       node's clock from one in the host's. -->
+  <test_depend>rosgraph_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

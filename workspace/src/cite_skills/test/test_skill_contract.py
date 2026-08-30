@@ -208,6 +208,14 @@ def generate_test_description() -> LaunchDescription:
                         "planning_group": moveit["group"],
                         "tip_link": moveit["tip_link"],
                         "gripper_action": GRIPPER_ACTION,
+                        # How long the server waits for the gripper's controller
+                        # to answer, in its own clock (ADR-0045). Read from the
+                        # plan rather than written here: it is an L0 value, and a
+                        # literal would be the second copy that decision removes.
+                        # Not optional — a server with a gripper action and no
+                        # delivered timeout refuses to configure, which is what
+                        # makes an undelivered parameter loud instead of silent.
+                        "gripper_result_timeout_s": manager["gripper_result_timeout_s"],
                         "home_rad": list(moveit["home_rad"]),
                         # The planner the server asks for, from the plan rather
                         # than restated here (ADR-0027). Without these the

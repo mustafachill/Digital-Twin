@@ -162,10 +162,60 @@ refuses to start without the names. Use the launch.
 | a goal is rejected with "still holds this arm" | another goal is in flight. The caller that abandoned the earlier one has to cancel it |
 | `Pick` fails with `EXECUTION_FAILED` and an empty-grasp message | the jaws closed on nothing. A grasp is evidenced by *failing* to reach the commanded width |
 | a `Pick` warns that no grasp width reached the node | `grasp_width_m` was 0 and no `gripper_default_grasp_width_m` was delivered, so the gripper closes against its effort limit. The end-effector type declares one and the plan carries it |
+| `Pick` or `Grasp` returns `TIMEOUT` "the gripper's controller never reported a result" | the controller did not terminate the goal within `gripper_result_timeout_s` of THIS NODE'S clock (ADR-0045). A cancel has been **sent** for it and not awaited, so whether it was served is unknown. **It is not a report about the jaws** — the arm may be holding the work-piece, and the detail says so; nothing may recover from it as an empty gripper |
+| `Pick`, `Place` or `Transfer` returns `PRECONDITION_FAILED` "WHETHER IT IS HOLDING ANYTHING IS UNESTABLISHED" | the latch below. The last gripper command ended without an answer, so this server refuses every skill whose next physical act assumes a known gripper. Send a `Grasp` to establish what the jaws hold; that is the only thing that clears it |
 | `Place`/`Transfer` returns `PRECONDITION_FAILED` "not holding anything" | refused rather than mimed — the failure would otherwise surface at the receiving station, which is much harder to attribute |
 | `Transfer` returns `PRECONDITION_FAILED` "no rendezvous token" | L4 issues one for every handoff it has negotiated, so an empty token is a caller that skipped the two-party confirmation |
 | `Detect` returns `PRECONDITION_FAILED` on a zero-sized region | a default-constructed goal has one, and an empty result from it would read as "nothing is on the belt" — a wrong answer that looks exactly like a right one |
 | `Detect` times out waiting for a sensor | the bridge is not delivering. The grace period exists so a `Detect` issued just after start-up does not fail for want of a sample about to arrive; expiry is a diagnosis, not an empty belt |
+
+**The gripper result deadline is an L0 value, measured in this node's clock**
+([ADR-0045](../../../docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md)).
+It was `constexpr std::chrono::seconds kGripperResultWait{20}` compared against
+`steady_clock` — the host's wall clock — while everything it supervised ran in simulation
+time, so on a loaded runner it bought about four simulated seconds and expired while the
+gripper was still moving. It is now `gripper_result_timeout_s`, declared on the L0
+end-effector type, delivered by the generated plan, and compared against `now()`, which
+follows `use_sim_time`. **No number for it exists in this package**: the parameter's
+compiled default is `0.0`, a sentinel, and an arm with a gripper action refuses to configure
+without a delivered value rather than falling back on a copy that happens to agree.
+
+**What an expiry means is narrower than it looks, and the narrowing is the decision.**
+`GripperActionController` restarts its stall search on every control cycle above
+`stall_velocity_threshold`, so the time it takes to declare a stall has no upper bound and no
+deadline could cap it. The only thing this can honestly mean is *the controller has not
+terminated this goal*. So on expiry the server **sends a cancel** for the outstanding
+`GripperCommand` — otherwise the controller goes on commanding a closed position at the
+configured effort for a goal nobody holds — and it **does not report an empty gripper**.
+`Pick.Result.holding` is a `bool` and cannot say "unknown"; the honest statement is in the
+`ResultCode.detail` and in an error log naming the work-piece, and `holding_` is left
+unwritten in either direction. The cost is stated where it is paid, in `command_gripper`: a
+deadline in simulation time never expires if simulation time stops, and `now()` is only as
+fresh as the last `/clock` the executor delivered.
+
+**The cancel is a send, not an outcome, and from the part's point of view it is the cost
+rather than the win.** It is sent and deliberately not awaited — this is the path on which
+the controller is not answering — so it may never be served; and if it is served late,
+`check_for_success` can have terminated the goal successfully in between, leaving
+`cancel_callback`'s guard unmatched and `set_hold_position()` unrun. Those two outcomes leave
+the jaws in **opposite** states, so nothing here may say the goal *was* cancelled. When it
+**is** served, `set_hold_position()` writes the measured jaw position as the command, the
+position error that was generating grip force goes to zero, and the jaws keep their width and
+lose their squeeze. ADR-0029 removed the attachment plugin, so friction alone holds the part:
+**whether a friction grasp survives a served cancel is unmeasured**, and ADR-0045's
+consequences name the measurement that would settle it. The launch test's fake gripper
+**accepts** every cancel, so it evidences the send and can evidence nothing about any of this.
+
+**And the report is not the only thing that changes on a timeout: a custody-unknown latch is
+set, and L3 acts on it itself.** `holding_` unwritten reads as `false` to every consumer —
+`Place`'s `require_holding` test, `Transfer`'s refusal, `Transfer.Result.still_holding` — so
+silence is not neutrality, it is the same wrong claim one layer down. While the latch is set,
+`Pick`, `Place` and `Transfer` all refuse with `PRECONDITION_FAILED` naming the unestablished
+custody. **`Grasp` is deliberately not refused**: it is the skill that commands the gripper
+and reports what came back, so it is the way out, and a result arriving is what clears the
+latch. The interlock is here rather than in L4 because `pick` is a **public action** whose
+first physical act is to open the jaws — ADR-0046's coordinator rule keeps the line out of
+this state and can keep nothing else out.
 
 **Every gripper key the plan delivers is now declared here.**
 `gripper_max_drive_rate_rad_s` was the twelfth of `cite_bringup`'s `GRIPPER_KEYS` and was

@@ -257,6 +257,8 @@ void FakeArm::fail_pick_with(uint8_t code) {servers_->pick.set_code(code);}
 
 void FakeArm::fail_move_to_with(uint8_t code) {servers_->move_to.set_code(code);}
 
+void FakeArm::fail_detect_with(uint8_t code) {servers_->detect.set_code(code);}
+
 void FakeArm::hold_detect(bool holding) {servers_->detect.hold(holding);}
 
 }  // namespace cite_orchestration_test

@@ -1,8 +1,26 @@
 # ADR-0045: Measure the gripper deadline in the clock the gripper runs on, and declare it in L0
 
-- **Status:** Proposed. Written before the implementation, which is what
-  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record is built at `b8a6c10`**;
-  every "will" below is a commitment and not a description.
+- **Status:** Proposed, corrected 2026-08-30 — see the **Correction — 2026-08-30** section
+  below. **Every decision stands**; what was false is a consequence describing the cancel as an
+  outcome rather than as a send, and what was missing is that a served cancel removes the grip
+  force with unmeasured consequences for the part. Written before the implementation, which is
+  what
+  [CLAUDE.md §12](../../CLAUDE.md) asks for. **Nothing in this record was built at `b8a6c10`**;
+  every "will" below was a commitment and not a description.
+  **Decisions 1 to 6 are implemented on branch `feat/close-the-gripper-deadline-dead-end`,
+  which is under review and not merged.** The status stays `Proposed` for that reason and for
+  a second one this record is unusually clear about: its own verification table ends by saying
+  that what would show the fix works is a `continuous_line` run on a CI runner in which the
+  gripper fails to answer, **and that a run in which it answers quickly shows nothing at all**.
+  No such run exists. What the branch adds is evidence of the MECHANISM, not of the outcome:
+  `cite_bringup/test/test_gripper_deadline_launch.py` holds simulated time still while several
+  times the deadline passes in wall time and requires the wait to survive it, then advances
+  simulated time past the declared value and requires the wait to end, the goal to be
+  cancelled, and the report to say custody is unestablished. That test fails against the code
+  this record replaces. It does not make the record `Accepted`.
+  **One thing named here as owed its own record still has none:** the
+  `cite_skills::gripper_is_holding` margin defect in the last section below is untouched by
+  the branch, exactly as decision 5's neighbouring paragraph asks.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, from the project owner's root-cause investigation of the
   three `continuous_line` CI cycle failures recorded in [CLAUDE.md §2](../../CLAUDE.md)
@@ -15,6 +33,120 @@
   same failure; this record ends at the L3 boundary**),
   [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md),
   charter §4 (P1, P2, P4, P5, P7)
+
+## Correction — 2026-08-30: the cancel is a send, not an outcome, and the grip force is what it costs
+
+**Every decision stands.** The deadline is still measured in the node's clock, still declared
+in L0, still narrowed to "the controller has not terminated this goal", and the goal is still
+cancelled on expiry. What was wrong is how this record described that cancel, and what was
+missing is what a served cancel does to the part.
+
+### The false claim
+
+The first consequences list says: *"A controller goal that is given up on is also cancelled,
+so the gripper stops being commanded by a goal nobody holds."* That states an outcome, and the
+implementation can only state an act.
+
+`async_cancel_goal` is **sent and deliberately not awaited** — on the one path where the
+controller is by definition not answering — so **two things can happen and neither is
+observed**:
+
+- **It is never served.** The goal stays live and the controller goes on commanding the closed
+  position at the configured effort, which is exactly the condition the bullet claims to have
+  removed.
+- **It is served too late to do anything.** `check_for_success` ends a goal by calling
+  `setSucceeded` (or `setAborted`) and then `rt_active_goal_.writeFromNonRT(...)` with an
+  empty handle. `cancel_callback`'s guard is `if (active_goal && active_goal->gh_ ==
+  goal_handle)`, so once that write has happened the guard does not match and
+  `set_hold_position()` **never runs** — and the goal ends as **SUCCEEDED** while L3 reports
+  `TIMEOUT`.
+
+**Those two leave the plant in opposite states**, full squeeze retained versus released, and
+one sentence was asserting one of them for both. The `ResultCode.detail` said "the goal has
+been cancelled" and now says a cancel has been **sent** and not awaited; `cite_skills/README.md`
+says the same. **The launch test cannot catch this and must not be cited as if it could**: its
+fake gripper accepts every cancel immediately, so what it evidences is the send.
+
+### What a served cancel does to the part, which this record did not say at all
+
+Read from the installed header rather than inferred —
+`/opt/ros/jazzy/include/gripper_action_controller/gripper_controllers/gripper_action_controller_impl.hpp`,
+in this project's container on 2026-08-30, which is the same file the `jazzy` branch carries.
+`cancel_callback` (`:123-145`) calls `set_hold_position()` (`:147-153`), and that writes the
+**measured** joint position into `command_struct_.position_`, leaving `max_effort_` at the
+controller's configured maximum. So it is the position ERROR that collapses, not the effort
+ceiling. Under `gz_ros2_control` a position command interface is a P-law producing a velocity
+command, so **before** the cancel a sustained closing command against a blocked joint *is* the
+grip force, and **after** it that command goes to about zero. The jaws keep their width and
+resist being forced open; **the squeeze is gone.**
+
+[ADR-0029](0029-simulated-grasping-by-friction.md) removed the attachment plugin, so friction
+alone holds the part. **Whether a friction grasp survives a served cancel is unmeasured**, and
+nothing in this repository has looked. It is not a premise of any decision here and must not be
+smoothed over anywhere.
+
+**The measurement that would settle it:** force an expiry with a part in the jaws — the
+`docker update --cpus` reproduction in the Context section produces one on demand — and sample
+the work-piece's pose for the following minute. If it moves, the cancel drops parts, and the
+answer is not to stop cancelling but to decide what L3 should command instead of nothing.
+
+**Nothing here argues against cancelling.** Leaving a goal live means the controller squeezes
+indefinitely for a goal nobody holds, which is worse and is unbounded. This is the cost of the
+right decision, recorded beside the L0 value where the next reader will meet it.
+
+### The residual asked the wrong question
+
+The old residual — *"nothing in this repository asserts what `GripperActionController` does
+with a cancel"* — is answered above, from upstream source. The question that is still open is
+the next one: **what does honouring it do to the grip force**, which is the measurement named
+above. And on hardware the residual is a different shape again: the physical gripper is driven
+through the vendor SDK's service layer and there is **no `GripperCommand` action server at
+all**, so neither `cancel_callback` nor `set_hold_position` exists there. What the deadline
+means transfers (P2); what the cancel does does not, and nothing has yet decided what the
+hardware path cancels.
+
+### The other gripper timeout is reachable in the cell, and it was observed
+
+Decision 1 leaves `kGripperServerWait` and `kGripperAcceptWait` in `steady_clock`, on the
+grounds that both bound *discovery* rather than plant behaviour. That reasoning stands. What
+was not anticipated is that the acceptance wait expires **while the controller is executing
+the goal**, and one `continuous_line` run on the reviewing machine on 2026-08-30 did exactly
+that. The controller logged *"Received & accepted new action goal"*, then `rclcpp_action`
+logged *"Failed to send goal response … (timeout): client will not receive response"*, and
+ten wall seconds later L3 reported the acceptance timeout. **The goal reached the plant and
+the acknowledgement did not.**
+
+So `command_gripper`'s acceptance branch is a second entrance to unknown custody, not merely a
+discovery failure, and it is why the latch is set there as well: *an unacknowledged goal is
+not an ungiven one*. The old text on that branch — "the gripper never accepted the command" —
+was false in the one run that produced it.
+
+**One run, on one machine, under load, with no thresholds registered in advance and no
+`docs/measurements/` directory.** Two other runs the same afternoon did not reproduce it: one
+failed before a part was in the world at all (`ros_gz_sim create` timed out at 120 s) and one
+carried three work-pieces end to end with every grasp stalling on the part. Nothing here is a
+rate, and nothing here says whether the acceptance wait should move — moving it would be
+Option A's mistake on a different constant.
+
+### One more way the deadline's clock can stall
+
+The cost list names two — a dead simulator and a stalled `/clock`. There is a third and it is
+this node's own: `now()` is only as fresh as the last `/clock` message this node's executor
+delivered, and the same executor serves that subscription and the callbacks that complete the
+result future. A callback group that stops serving `/clock` freezes this deadline exactly as a
+stopped simulator would, and from inside `command_gripper` the two are indistinguishable. Same
+condition, third cause; the liveness condition the cost list asks for would have to cover it.
+
+### How the error survived
+
+The bullet was written about the decision rather than about the code, at a point when neither
+existed — this record was written before its implementation, which is what CLAUDE.md §12 asks
+for. "Cancel the goal" is what was decided; "the goal is cancelled" is what got written down,
+and the gap between an act and its outcome is invisible until someone asks who confirms it.
+The same gap is the one `ConveyorIndex` records about belts — commanded is not confirmed — and
+it was not carried across to the gripper. The assertion that now holds the line is in
+`test_gripper_deadline_launch.py`, which requires the detail to say **SENT** and forbids it
+from saying the goal *was* cancelled.
 
 ## The decision, in one line
 
@@ -270,6 +402,27 @@ change (P3) and is **not** taken here: no consumer reads that field today — a 
 change with no consumer, and the consumer that needs it is the one
 [ADR-0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) decides.
 
+**Added 2026-08-30, in review: "no code path treats it as an empty gripper" had no enforcement,
+and now has one.** As written, that clause was a rule about future code with nothing holding
+it — and the code it was written against already broke it three ways. `Place` refuses with
+*"the gripper is not holding anything"*, `Transfer` refuses with *"this arm is not holding
+anything"*, and `Transfer.Result.still_holding` reports `false`, all three read off a
+`holding_` this decision deliberately leaves unwritten. **Leaving a `bool` unwritten is not
+silence; it reads as `false` to every consumer.** Worse, `Pick` read no custody state at all,
+and `Pick`'s first physical act is to open the jaws — on a **public** action any client may
+send. The only thing preventing that was ADR-0046's coordinator rule, which is a layer above
+the layer that owns the fact and covers only the line.
+
+The third state the message contract cannot carry is therefore carried **inside L3**: a
+`custody_unknown_` latch, set on either `command_gripper` timeout and cleared only where a
+result actually arrives. While it is set, `Pick`, `Place` and `Transfer` refuse with
+`PRECONDITION_FAILED` and a detail naming the unestablished custody. `Grasp` is deliberately
+**not** refused — it is the skill that commands the gripper and reports what came back, so it
+is the way out of the state and the only thing that clears the latch. **The deferral above is
+unchanged**: `Pick.Result` gains no field, `ResultCode` gains no value, and no typed contract
+moves. `cite_bringup/test/test_gripper_deadline_launch.py` drives a real timeout and then
+requires a `Pick` and a `Place` to be refused.
+
 ### 5. `stall_velocity_threshold` is not touched, and this record is not a licence to touch it
 
 Option E's reasoning, restated as a decision so that nobody reads this change as having
@@ -293,6 +446,7 @@ looks like; they change only what happens when no answer arrives at all.
   single home in L0 (P1, P5).
 - A controller goal that is given up on is also cancelled, so the gripper stops being
   commanded by a goal nobody holds.
+  **[Corrected 2026-08-30 — see the Correction section above.]**
 - The report stops asserting an empty gripper it never observed, which is the L3 half of the
   silence that produced three CI failures.
 
@@ -318,6 +472,8 @@ looks like; they change only what happens when no answer arrives at all.
 - **Cancelling the gripper goal is a new path with no test today**, and nothing in this
   repository asserts what `GripperActionController` does with a cancel. A cancel the controller
   does not honour leaves the same held command with a different name on it.
+  **[Corrected 2026-08-30 — see the Correction section above. The question is answered and it
+  was the wrong question.]**
 
 ### What we will have to revisit
 

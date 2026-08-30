@@ -138,6 +138,21 @@ plan:
       # declaration transfers; the mechanism does not. See the fix report.
       gripper_max_drive_rate_rad_s: {{ manager.gripper_max_drive_rate_rad_s | f }}
 {% endif %}
+{% if manager.gripper_result_timeout_s is not none %}
+      # How long L3 waits for this gripper's controller to answer a GripperCommand
+      # at all, in seconds of the skill server's OWN clock — simulation time in
+      # this cell, the wall clock on hardware, and in both cases the clock the
+      # controller's stall timer counts in (ADR-0045).
+      #
+      # It does not bound a slow grasp and cannot: the controller restarts its
+      # stall search on every cycle above `stall_velocity_threshold`, so that
+      # duration has no upper bound. An expiry says the controller never answered
+      # and says NOTHING about whether the jaws hold a part — L3 cancels the goal
+      # and reports custody as unestablished rather than reporting an empty
+      # gripper. Its floor is derived from the stroke and `stall_timeout` in
+      # cite_tools.validate.physical.
+      gripper_result_timeout_s: {{ manager.gripper_result_timeout_s | f }}
+{% endif %}
 {% if manager.gripper_default_grasp_width_m is not none %}
       # What a Pick closes to when its goal names no width. Narrower than the
       # work-piece on purpose: a parallel gripper evidences a grasp by failing to

@@ -64,6 +64,15 @@ if(BUILD_TESTING)
   # It stands up a planner and a skill server for one arm and plans two motions,
   # which is why the timeout is twice the one above. Still no Gazebo.
   add_launch_test(test/test_abort_classification_launch.py TIMEOUT 600)
+
+  # ADR-0045. The gripper deadline, driven to expiry in a clock the test owns.
+  # The same shape of rig as the one above — generated description on mock
+  # hardware, a real move_group, the real skill server — with two differences that
+  # are the point: `use_sim_time` is TRUE and `/clock` comes from the test process,
+  # and the gripper action is served by a fake that accepts a goal and never
+  # answers. So the test can stop simulated time while wall time runs, which is
+  # the only way to tell the two deadlines apart.
+  add_launch_test(test/test_gripper_deadline_launch.py TIMEOUT 600)
 endif()
 
 ament_package()

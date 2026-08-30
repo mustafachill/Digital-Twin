@@ -591,6 +591,23 @@ class GraspSpec(Strict):
     #: The upper bound is a real constraint, not a preference; it is checked by
     #: `cite_tools.validate.physical`. See that check for the derivation.
     default_grasp_width_m: Annotated[float, Field(gt=0.0)] | None = None
+    #: How long the L3 skill server waits for this gripper's controller to answer
+    #: a `GripperCommand` at all, in seconds of the waiting node's own clock
+    #: (ADR-0045). Required: a gripper whose controller can stop answering and
+    #: does not say how long anyone should wait is a station that hangs.
+    #:
+    #: IT DOES NOT BOUND "A SLOW GRASP". `GripperActionController` restarts its
+    #: stall search on every control cycle above `stall_velocity_threshold`, so
+    #: the time it takes to declare a stall has no upper bound and no value here
+    #: could cap it. What this bounds is the controller not terminating the goal,
+    #: and its expiry says nothing whatever about whether the jaws hold a part.
+    #:
+    #: Its floor is derived from the stroke and the stall timeout together and is
+    #: checked by `cite_tools.validate.physical`; above that floor the value
+    #: carries no claim. The same declaration reaches the hardware path, where
+    #: the node clock is the wall clock and the server being waited on is the
+    #: vendor's rather than a `GripperActionController` (P2).
+    result_timeout_s: Annotated[float, Field(gt=0.0)]
 
     @property
     def max_width_m(self) -> float:

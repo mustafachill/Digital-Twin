@@ -70,6 +70,13 @@ class _ManagerView:
     #: endpoints and must use the arm's own threshold rather than a copy of it.
     arm_goal_tolerance_rad: float | None
     gripper_max_drive_rate_rad_s: float | None
+    #: How long L3 waits for this gripper's controller to answer at all, seconds,
+    #: measured in the waiting node's own clock (ADR-0045). An end-effector
+    #: property because what it bounds is a behaviour of the gripper's controller,
+    #: and it is here rather than compiled into `cite_skills` for the same reason
+    #: the goal tolerance is: a value that describes a piece of equipment belongs
+    #: to the model (P5).
+    gripper_result_timeout_s: float | None
     gripper_drive_pivot_y_m: float | None
     gripper_drive_pivot_z_m: float | None
     gripper_finger_offset_y_m: float | None
@@ -393,6 +400,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                 asset, "joint_trajectory_controller", "goal_tolerance_rad"
             ),
             gripper_max_drive_rate_rad_s=_grasp(cell, asset, "max_drive_rate_rad_s"),
+            gripper_result_timeout_s=_grasp(cell, asset, "result_timeout_s"),
             gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),
             gripper_drive_pivot_z_m=_linkage(cell, asset, "drive_pivot_z_m"),
             gripper_finger_offset_y_m=_linkage(cell, asset, "finger_offset_y_m"),

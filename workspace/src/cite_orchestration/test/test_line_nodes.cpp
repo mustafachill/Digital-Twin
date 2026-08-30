@@ -387,7 +387,8 @@ protected:
   void report_the_line()
   {
     for (const auto & refusal :
-      cite_orchestration::stalled_stations(*line_.stations, line_.conveyors, line_.triggers))
+      cite_orchestration::stalled_stations(
+        *line_.stations, line_.conveyors, line_.triggers, line_.registry))
     {
       stalls_sampled_.push_back(refusal);
     }
@@ -870,18 +871,91 @@ TEST_F(RunningLine, AStationThatEscalatesCommandsNothingAndKeepsWhatItIsStanding
     << "an escalating station gave up the frame its arm is standing in";
 }
 
-TEST_F(RunningLine, AStationThatIsAllowedToRetryGivesItsFramesBackFirst)
+TEST_F(RunningLine, AStationStillHoldingItsWorkpieceIsRefusedTheRetryAndEscalates)
 {
-  // The other answer, and the reason `ReleaseStationClaims` is on the retry path
-  // rather than deleted. `EXECUTION_FAILED` says the arm is at one of the
-  // trajectory's endpoints — a place the next attempt can be planned from — so
-  // the policy answers RETRY_SAME, the branch continues past the policy, and the
-  // station lets go of everything it took before starting again.
+  // ADR-0046 decision 1, driven through the shipped XML.
   //
-  // `retry_budget` is 1 in this fixture, so the first failure retries and the
-  // second escalates. What is asserted is the FIRST answer: the frames come back
-  // to the arbiter, which is what stops a retrying station starving the line.
+  // `EXECUTION_FAILED` is a RETRY answer in `recovery_policy.hpp` and this fixture's
+  // `retry_budget` is 1, so before this change the first failure retried: the station
+  // went back to WAITING, `MoveToHome` drove the arm — CARRYING WHATEVER IT HELD — and
+  // the `Repeat` returned it to `AwaitTrigger` to wait for an arrival that its own
+  // recovery had just made impossible. That is the dead end three CI runs died in, with
+  // the arm holding the work-piece for the whole 420 s leg.
+  //
+  // THE FAILING CODE IS DELIBERATELY A RETRYABLE ONE. An escalation here proves nothing
+  // if the policy would have escalated anyway;
+  // `AStationThatEscalatesCommandsNothingAndKeepsWhatItIsStandingIn` above is the case
+  // where the policy itself says stop. What this asserts is that a code the policy calls
+  // retryable is refused ANYWAY, because of what the station is holding — which is what
+  // makes the rule close every entrance rather than only the one ADR-0045 removes.
+  //
+  // AND IT IS THE FIRST FAILURE, not the budget running out. `consecutive_failures` is
+  // asserted at 1: a station that escalated on its second attempt would look identical
+  // in every other observable here, and would mean this rule never fired.
   arm_one_->fail_pick_with(ResultCode::EXECUTION_FAILED);
+  ASSERT_EQ(plan_.stations.front().id, "station_one");
+
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].state ==
+               cite_interfaces::msg::StationState::STATE_BLOCKED;
+      }))
+    << "a station that failed while holding its work-piece was allowed to retry, so it "
+    "has gone back to AwaitTrigger to wait for an arrival nothing will produce";
+
+  const auto & runtime = (*line_.stations)["station_one"];
+  EXPECT_EQ(runtime.consecutive_failures, 1u)
+    << "the station escalated on a later attempt rather than on this one, which means "
+    "the retry budget stopped it and the custody precondition did not";
+
+  // THE PART IS STILL THIS STATION'S, and both statements of that are checked: the
+  // registry's ownership and the station's own name for it. The refusal is derived from
+  // the second, and a fixture in which the two disagreed would be testing nothing.
+  EXPECT_FALSE(runtime.current_workpiece_id.empty())
+    << "the station named no work-piece, so the precondition had nothing to refuse on "
+    "and this test passed for the wrong reason";
+  EXPECT_EQ(
+    line_.registry->owner_of(runtime.current_workpiece_id).value_or(""), "station_one");
+
+  // NOTHING CARRIED IT ANYWHERE. `MoveToHome` is the only motion leaf on the retry path,
+  // and it is the leaf that took the part off the beam in the observed failure. A
+  // station refused the retry never reaches it.
+  EXPECT_EQ(arm_one_->move_to_goals(), 0)
+    << "a station holding a work-piece nothing can account for was sent home anyway, "
+    "which is the motion that destroys the trigger it is about to wait on";
+
+  // The reason says WHY in the field a person reads, and names the piece. A refusal that
+  // only said "blocked" would leave an operator with the same silence in a new shape.
+  EXPECT_NE(runtime.blocked_reason.find("still holds work-piece"), std::string::npos)
+    << "the station blocked without saying that it is holding a part: "
+    << runtime.blocked_reason;
+  EXPECT_NE(runtime.blocked_reason.find(runtime.current_workpiece_id), std::string::npos)
+    << "the reason does not name the work-piece: " << runtime.blocked_reason;
+
+  // And ADR-0038's fault branch takes it from here, so the coordinator is still alive to
+  // be asked about the part in the gripper.
+  EXPECT_TRUE(line_.fault->latched)
+    << "the escalation never reached the fault branch, so nothing recorded it";
+}
+
+TEST_F(RunningLine, AStationThatFailsBeforeItTakesCustodyIsStillAllowedToRetry)
+{
+  // The other answer, and the reason `ReleaseStationClaims` is on the retry path rather
+  // than deleted. This used to be driven with a failing `PickAt`; ADR-0046 makes that
+  // case an escalation, because `TakeCustody` stands above `PickAt` in the shipped tree.
+  // The retry path is now reachable only from a leaf ABOVE that one, and `DetectAt` is
+  // the only skill there — so driving it through `DetectAt` is what keeps the surviving
+  // retry path evidenced rather than assumed dead.
+  //
+  // THE PREMISE IS ASSERTED AND NOT ASSUMED. If a future tree moved `TakeCustody` above
+  // `DetectAt`, this test would silently become a second copy of the escalation test
+  // above; the custody assertion below is what fails instead.
+  //
+  // `retry_budget` is 1 in this fixture, so the first failure retries and the second
+  // escalates. What is asserted is the FIRST answer: the frames come back to the
+  // arbiter, which is what stops a retrying station starving the line.
+  arm_one_->fail_detect_with(ResultCode::EXECUTION_FAILED);
   const auto & station = plan_.stations.front();
 
   ASSERT_TRUE(
@@ -890,6 +964,10 @@ TEST_F(RunningLine, AStationThatIsAllowedToRetryGivesItsFramesBackFirst)
         return (*line_.stations)["station_one"].consecutive_failures >= 1;
       }))
     << "the station never failed at all";
+
+  EXPECT_TRUE((*line_.stations)["station_one"].current_workpiece_id.empty())
+    << "the station owned a work-piece at the moment it failed, so this is the "
+    "escalation case and not the retry case, and the retry path is covered by nothing";
 
   ASSERT_TRUE(
     run_until(
@@ -1024,7 +1102,16 @@ TEST_F(RunningLine, ARootFailureNoStationClassifiedStillMakesTheRunFail)
   // EXECUTION_FAILED rather than UNREACHABLE, because the policy answers the two
   // differently and this test needs the RETRY: `RETRY_SAME` is what reaches
   // `MoveToHome` at all.
-  arm_one_->fail_pick_with(ResultCode::EXECUTION_FAILED);
+  //
+  // AND IT IS DRIVEN THROUGH `DetectAt` RATHER THAN `PickAt`, which it used to be.
+  // ADR-0046 refuses the retry for a station that still holds its work-piece, and
+  // `TakeCustody` stands above `PickAt` in the shipped tree — so a failing pick now
+  // escalates and never reaches `MoveToHome`. That would have made this test a
+  // second copy of the escalation case, silently: it asserts that NOTHING is
+  // blocked, which a station that escalated would have falsified. `DetectAt` is the
+  // one skill above `TakeCustody`, so it is the only leaf from which the unclassified
+  // route is still reachable.
+  arm_one_->fail_detect_with(ResultCode::EXECUTION_FAILED);
   arm_one_->fail_move_to_with(ResultCode::EXECUTION_FAILED);
 
   ASSERT_TRUE(run_until([this] {return line_.fault->latched;}))
@@ -1775,7 +1862,7 @@ protected:
   std::vector<std::string> stalled() const
   {
     return cite_orchestration::stalled_stations(
-      *line_.stations, line_.conveyors, line_.triggers);
+      *line_.stations, line_.conveyors, line_.triggers, line_.registry);
   }
 
   rclcpp::Node::SharedPtr node_;
@@ -1934,7 +2021,8 @@ TEST_F(StalledLine, ABeltNobodyHasEverCommandedIsItsOwnRefusal)
   const auto untouched = std::make_shared<ConveyorIndex>(node_, drives);
 
   const auto refusals =
-    cite_orchestration::stalled_stations(*line_.stations, untouched, line_.triggers);
+    cite_orchestration::stalled_stations(
+      *line_.stations, untouched, line_.triggers, line_.registry);
   ASSERT_EQ(refusals.size(), 1u);
   EXPECT_NE(refusals.front().find("never been commanded"), std::string::npos)
     << "a belt nobody has spoken to was reported as a belt somebody stopped: "
@@ -1952,6 +2040,163 @@ TEST_F(StalledLine, AStationFedByATableIsSkippedByTheRuleRatherThanExemptedFromI
     EXPECT_EQ(refusal.find("station_one"), std::string::npos)
       << "a table-fed station was refused on a belt it does not have: " << refusal;
   }
+}
+
+// ---------------------------------------------------------------------------
+// The stall a station reaches while holding its own work-piece — ADR-0046
+// decision 2. It needs no belt, which is the whole reason it exists.
+// ---------------------------------------------------------------------------
+
+TEST_F(StalledLine, AStationWaitingWhileItStillHoldsItsOwnWorkpieceIsStalled)
+{
+  // `station_one` is the fixture's table-fed station: no inbound belt, so
+  // `untriggerable_reason` has nothing to read and the ADR-0039 rule is silent
+  // there by construction — which is exactly the coverage gap this closes, and
+  // exactly the station shape three CI runs died at.
+  //
+  // The state is assembled the way the running line arrives at it: the registry
+  // owns the piece for this station and the station's own runtime names it, which
+  // is what `TakeCustody` writes and what neither `RecoverFromFailure` nor
+  // `SetStationState` clears.
+  auto & runtime = (*line_.stations)["station_one"];
+  ASSERT_TRUE(runtime.inbound_belt.empty())
+    << "the fixture's first station has a belt, so this is not the table-fed shape "
+    "the rule exists for";
+  ASSERT_EQ(
+    line_.registry->admit("wp_held", "station_one", "frame_pick_1"),
+    cite_orchestration::RegistryOutcome::OK);
+  runtime.current_workpiece_id = "wp_held";
+  runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+
+  const auto reasons = stalled();
+  ASSERT_EQ(reasons.size(), 1u)
+    << "a station waiting for a part while holding one was not reported, so the line "
+    "goes on publishing RUNNING until a leg ceiling accuses a milestone instead";
+  EXPECT_NE(reasons.front().find("station_one"), std::string::npos) << reasons.front();
+  EXPECT_NE(reasons.front().find("wp_held"), std::string::npos)
+    << "the reason does not name the work-piece, so an operator is told a station is "
+    "stuck and not which part is in its gripper: " << reasons.front();
+
+  // And it reaches the message a consumer acts on, as the fifth state rather than a
+  // sixth (ADR-0046 decision 3). `continuous_line` already fails fast on this value.
+  const auto message = reported();
+  EXPECT_EQ(message.state, cite_interfaces::msg::LineState::STATE_STALLED);
+  EXPECT_EQ(message.stall_reasons.size(), 1u);
+  EXPECT_TRUE(message.blocked_reason.empty())
+    << "a stall wrote the blocked reason, which belongs to STATE_BLOCKED and its one "
+    "author";
+}
+
+TEST_F(StalledLine, OwningAPieceWithoutNamingItIsTheHealthyTransferAndIsNotAStall)
+{
+  // THE LEG THAT CARRIES THE DISCRIMINATION, AND THE ONE THAT WAS NEARLY LEFT OUT.
+  //
+  // `buffer_occupancy > 0` on its own is reached in EVERY healthy cycle at a belt-fed
+  // station: `CompleteHandoff` transfers ownership to the receiving station while the
+  // piece is still `IN_TRANSIT` on the belt, and that station sits in `WAITING` until it
+  // arrives. A predicate built on occupancy alone would fire on every transfer this line
+  // ever performs — a detector that is noise by the second work-piece.
+  //
+  // What is NOT true in that window is that the receiving station NAMES the piece:
+  // `current_workpiece_id` is written by that station's own `TakeCustody` and by nothing
+  // else. This reproduces the window exactly and requires silence.
+  ASSERT_EQ(
+    line_.registry->admit("wp_in_transit", "station_one", "conveyor_fixture"),
+    cite_orchestration::RegistryOutcome::OK);
+  auto & runtime = (*line_.stations)["station_one"];
+  runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+  ASSERT_TRUE(runtime.current_workpiece_id.empty());
+
+  EXPECT_TRUE(stalled().empty())
+    << "a station waiting for a piece already assigned to it — which is what every "
+    "handoff on this line looks like while the part is on the belt — was reported as "
+    "stalled";
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, NamingAPieceTheRegistryDoesNotOwnIsNotReported)
+{
+  // The other direction of the conjunction, and its cost is recorded rather than
+  // asserted away (ADR-0046's consequences): a station whose runtime names a piece the
+  // registry does not think it owns is reported as NOTHING. That failure is in the safe
+  // direction — silence rather than a false alarm — and it is a blind spot all the same.
+  // Whether such a disagreement deserves a report of its own is a separate question and
+  // is not taken here; this test is what makes the choice visible if anyone changes it.
+  auto & runtime = (*line_.stations)["station_one"];
+  runtime.current_workpiece_id = "wp_nobody_owns";
+  runtime.state = cite_interfaces::msg::StationState::STATE_WAITING;
+  ASSERT_EQ(line_.registry->occupancy("station_one"), 0u);
+
+  EXPECT_TRUE(stalled().empty());
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, AWorkingStationHoldingItsWorkpieceIsJustAStationDoingItsJob)
+{
+  // The first leg, which is the caller's and is shared with the belt rule. A station
+  // holds its own work-piece for the whole middle of every cycle — from `TakeCustody` to
+  // `CompleteHandoff` — and it is `WORKING` for all of it. Reporting that would report
+  // every pick this line performs.
+  ASSERT_EQ(
+    line_.registry->admit("wp_working", "station_one", "frame_pick_1"),
+    cite_orchestration::RegistryOutcome::OK);
+  auto & runtime = (*line_.stations)["station_one"];
+  runtime.current_workpiece_id = "wp_working";
+  runtime.state = cite_interfaces::msg::StationState::STATE_WORKING;
+
+  EXPECT_TRUE(stalled().empty())
+    << "a station carrying out its cycle was reported as stalled";
+  EXPECT_EQ(reported().state, cite_interfaces::msg::LineState::STATE_RUNNING);
+}
+
+TEST_F(StalledLine, AStationIsReportedOnceEvenWhenBothRulesWouldAnswer)
+{
+  // `station_two` is belt-fed and can satisfy both rules at once: its belt is at the
+  // standstill its own trigger commanded AND it still holds the piece. Two sentences
+  // about one station read as two stations, so the belt rule answers and the custody
+  // rule stays quiet.
+  break_the_beam();
+  ASSERT_TRUE(take_the_edge());
+  ASSERT_EQ(
+    line_.registry->admit("wp_both", "station_two", "frame_pick_2"),
+    cite_orchestration::RegistryOutcome::OK);
+  belt_fed().current_workpiece_id = "wp_both";
+
+  const auto reasons = stalled();
+  ASSERT_EQ(reasons.size(), 1u) << "one station produced " << reasons.size() << " reasons";
+  EXPECT_NE(reasons.front().find("conveyor_fixture"), std::string::npos)
+    << "the belt rule did not answer for a station whose belt is stopped: "
+    << reasons.front();
+}
+
+TEST_F(StalledLine, ABeltRuleSuppressedByAnArrivalDoesNotSuppressTheCustodyRule)
+{
+  // SUPPRESSED IS NOT ANSWERED. The in-flight branch means the BELT rule has
+  // nothing to say yet — the edge that stopped this belt has not reached the
+  // station — and it used to `continue` out of the loop entirely, so a station in
+  // that window was never asked the custody question at all. It fails silent,
+  // which is the failure mode the whole of ADR-0046 decision 2 exists to remove.
+  //
+  // THE WINDOW IS ENTERED THE WAY THE RUNNING LINE ENTERS IT: the beam is broken,
+  // so the belt is stopped and the edge is counted, and `take_the_edge` is NOT
+  // called, so the station has not consumed it. Reachable in the cell after an
+  // operator reset, which returns a station to WAITING and deliberately does not
+  // clear what it holds (ADR-0037 decision 5).
+  break_the_beam();
+  ASSERT_EQ(
+    line_.registry->admit("wp_suppressed", "station_two", "frame_pick_2"),
+    cite_orchestration::RegistryOutcome::OK);
+  belt_fed().current_workpiece_id = "wp_suppressed";
+  belt_fed().state = cite_interfaces::msg::StationState::STATE_WAITING;
+
+  const auto reasons = stalled();
+  ASSERT_EQ(reasons.size(), 1u)
+    << "a station holding its own work-piece was reported as nothing, because the belt "
+    "rule happened to be suppressed by an arrival it will never be able to take";
+  EXPECT_NE(reasons.front().find("still holds work-piece"), std::string::npos)
+    << "the reason came from the belt rule, which cannot answer in this window: "
+    << reasons.front();
+  EXPECT_NE(reasons.front().find("wp_suppressed"), std::string::npos) << reasons.front();
 }
 
 int main(int argc, char ** argv)

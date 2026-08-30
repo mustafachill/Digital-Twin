@@ -36,10 +36,17 @@ uint32 workpieces_completed
 float64 cycle_time_s          # s, mean over the last completed cycles
 float64 throughput_per_hour   # work-pieces per hour, over the same window
 string blocked_reason         # empty unless state is BLOCKED
-# One sentence per stalled station, each naming the station and the belt that would
-# have carried work to it. Plural where `blocked_reason` is singular, because the
+# One sentence per stalled station, each naming the station and WHAT IT IS WAITING
+# FOR THAT CANNOT HAPPEN. Plural where `blocked_reason` is singular, because the
 # root Parallel halts every station behind the one that escalated but nothing stops
 # two stations from being un-triggerable at once.
+#
+# THIS SENTENCE USED TO SAY "the station and the belt that would have carried work
+# to it", AND THAT NARROWED THE FIELD TO ONE OF THE TWO REASONS (ADR-0046 decision
+# 3). A station can also be waiting for a part while still holding the last one —
+# which needs no belt to be true, and is the shape this line was observed dying in
+# three times at a station a belt does not feed. A reason with no belt in it would
+# have falsified the old sentence, so the sentence changed rather than the reason.
 #
 # PROSE FOR A PERSON, and nothing parses it — as `blocked_reason` and
 # `ResultCode.detail` say of themselves. A consumer that has to ACT reads `state`.

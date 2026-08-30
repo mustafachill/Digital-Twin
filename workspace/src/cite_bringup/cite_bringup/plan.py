@@ -170,6 +170,7 @@ GRIPPER_KEYS = (
     "gripper_default_grasp_width_m",
     "gripper_goal_tolerance_rad",
     "gripper_max_drive_rate_rad_s",
+    "gripper_result_timeout_s",
     "gripper_drive_pivot_y_m",
     "gripper_drive_pivot_z_m",
     "gripper_finger_offset_y_m",

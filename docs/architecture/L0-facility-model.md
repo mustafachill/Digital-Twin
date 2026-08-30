@@ -169,7 +169,7 @@ embed a timestamp or a random identifier, and never depend on filesystem orderin
 | Schema | Structural errors, missing required fields, wrong types | `jsonschema` |
 | Referential | An asset referencing a type that does not exist; duplicate IDs; a station referencing a missing asset | validator |
 | Geometric | Assets overlapping; a station outside its zone; a frame outside the body it names; a station out of reach or its approach corridor obstructed; a place point too near the edge of what supports it | validator |
-| Physical | Implausible density; an inertia tensor that is not positive definite, breaks the triangle inequality, or is copied between differently sized bodies; a centre of mass outside its geometry; collision geometry reusing a visual mesh; a gripper whose stroke is zero, whose default grasp width cannot close on the narrowest part, or whose mimic followers have no velocity headroom | validator + `model-validator` |
+| Physical | Implausible density; an inertia tensor that is not positive definite, breaks the triangle inequality, or is copied between differently sized bodies; a centre of mass outside its geometry; collision geometry reusing a visual mesh; a gripper whose stroke is zero, whose default grasp width cannot close on the narrowest part, whose mimic followers have no velocity headroom, or whose `result_timeout_s` is short enough to cut its own controller's stall search short (ADR-0045) | validator + `model-validator` |
 | Generated | Output that does not match a fresh generator run | `model-validator` |
 
 ## Failure modes

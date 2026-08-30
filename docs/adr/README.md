@@ -136,5 +136,5 @@ not rewritten either.
 | [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted (corrected 2026-08-29) |
 | [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29) |
 | [0044](0044-one-ros-domain-per-side-identical-names.md) | Give each side of a twin pair its own ROS domain, and keep both sides' names byte-identical | Proposed |
-| [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed |
-| [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed |
+| [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed (corrected 2026-08-30) |
+| [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed (corrected 2026-08-30) |
