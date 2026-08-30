@@ -64,6 +64,41 @@ def test_a_plan_whose_side_lost_its_partition_is_refused(tmp_path: Path) -> None
         gz.gz_environment(load(path))
 
 
+def test_a_reordered_plan_still_yields_the_plants_partition(tmp_path: Path) -> None:
+    """The regression for asking by name instead of by `plan.sides[0]`.
+
+    Nothing in the plan schema fixes the order of `sides:`, and nothing needs to:
+    each entry states its own name and its own offset precisely so that position
+    carries no meaning (ADR-0044, clause 4). So a plan listing the counterpart
+    first is a well-formed plan, and against `plan.sides[0]` this module answers
+    it with the COUNTERPART's partition while calling it the plant.
+
+    That failure is silent by construction, which is the whole reason this module
+    exists: a process on the wrong partition does not error, it discovers an
+    empty topic list and waits. Reverting `gz.py` to `plan.sides[0]` fails this
+    test and nothing else in the suite — verified.
+    """
+    document = yaml.safe_load(_generated().read_text())
+    plant = document["plan"]["sides"][0]
+    counterpart = {
+        "name": "counterpart",
+        "gz_partition": f"cite/{ZONE}/counterpart",
+        "domain_offset": 1,
+    }
+    # The counterpart first, which is the ordering the generator does not emit
+    # today and that no rule forbids a future one from emitting.
+    document["plan"]["sides"] = [counterpart, plant]
+    for manager in document["plan"]["controller_managers"]:
+        manager["counterpart_backend"] = manager["backend"]
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+
+    plan = load(path)
+    assert [side.name for side in plan.sides] == ["counterpart", "plant"]
+    assert gz.gz_environment(plan) == {GZ_PARTITION_ENV: plant["gz_partition"]}
+    assert gz.gz_environment(plan)[GZ_PARTITION_ENV] != counterpart["gz_partition"]
+
+
 def test_the_process_environment_extends_the_callers_rather_than_replacing_it() -> None:
     """The asymmetry that makes this a function instead of a `dict` literal.
 
