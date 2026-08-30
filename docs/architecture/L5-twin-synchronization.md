@@ -78,6 +78,18 @@ sorted by hand rather than counted. Every hit that defines the **level** must ei
 the gate or say which axis it is classifying on. If one is ever left carrying the direction
 alone, ADR-0011's amendment fails and this mode has to be re-argued.
 
+**Two of those sentences are now held mechanically, and an editor moving either cell should
+know it before moving it.** [`tools/tests/test_twin_mode_enumerations.py`](../../tools/tests/test_twin_mode_enumerations.py)
+asserts that the `CLOSED_LOOP` row above still reads *"commanded after virtual validation
+gates it"* against level `L3`, that `VIRTUAL_LEAD`'s Level cell is still exactly the em-dash,
+and that charter §2's L3 row still carries *"validated in simulation and then commands"*. It
+also parses the mode set out of `TwinMode.msg` and requires the table above, the glossary's,
+charter §3.1's scope row, charter §5's mode table,
+[`docs/interfaces/README.md`](../interfaces/README.md)'s quoted constant block and the frozen
+interface baseline to name exactly those modes and no others. **It does not re-do the survey
+above** — it holds the conclusion, not the inventory — and the sites it deliberately cannot
+see, `DivergenceMetrics.msg` chief among them, are listed in its docstring.
+
 Mode is **explicit, observable at runtime, and gated.** It is never reachable by a default
 parameter, an environment variable, or a launch-argument default. A system that can enter
 `REAL` because someone forgot to pass an argument is a system that will.

@@ -1,9 +1,15 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **236**
-  host tests at this commit, counted by collection, plus shell self-tests for the gate logic
-  in `scripts/_lib.sh`. The contract level is populated: 22 interface definitions are frozen
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **363**
+  host tests at this commit, counted by collection
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-30),
+  plus shell self-tests for the gate logic
+  in `scripts/_lib.sh`. **This line said 236 until 2026-08-30 and 22 below it**; both were
+  numbers in prose that nothing re-ran, which is the defect
+  [`test_interface_counts.py`](../../tools/tests/test_interface_counts.py) was written for
+  and does not guard here — it holds the two READMEs that open by counting the package, not
+  this status line. The contract level is populated: **23** interface definitions are frozen
   against a stored baseline.
   The scenario level has three: `bringup`, a blocking CI gate run twice per run;
   `pick_and_place`, **promoted to a blocking gate at `c1e9e03`**; and `continuous_line`,
