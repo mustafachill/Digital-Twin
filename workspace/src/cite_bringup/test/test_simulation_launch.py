@@ -33,11 +33,15 @@ import re
 from types import ModuleType
 
 from cite_bringup.plan import (
+    DOMAIN_BASE_ENV,
+    DOMAIN_ENV,
     GZ_PARTITION_ENV,
     HARDWARE_OPT_IN_ENV,
     load,
+    PLANT_SIDE,
     resolve_uri,
 )
+from cite_bringup.readiness import announced_side, READY_TOKEN
 from launch import LaunchContext
 from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
@@ -72,12 +76,27 @@ def module() -> ModuleType:
     return loaded
 
 
+#: The base and the domain a side is checked against, as `scripts/_lib.sh` and
+#: `docker-compose.yml` supply them. Set for every test rather than inherited, so
+#: that the suite answers the same way on a machine whose ambient domain differs
+#: and so that the tests which assert the refusal have something to break.
+_TEST_DOMAIN = "42"
+
+
+@pytest.fixture(autouse=True)
+def side_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put every test on the plant's own domain, both values independently set."""
+    monkeypatch.setenv(DOMAIN_BASE_ENV, _TEST_DOMAIN)
+    monkeypatch.setenv(DOMAIN_ENV, _TEST_DOMAIN)
+
+
 @pytest.fixture()
 def context() -> LaunchContext:
     ctx = LaunchContext()
     ctx.launch_configurations["zone"] = "cell_a"
     ctx.launch_configurations["headless"] = "true"
     ctx.launch_configurations["line"] = "false"
+    ctx.launch_configurations["side"] = PLANT_SIDE
     return ctx
 
 
@@ -996,3 +1015,289 @@ def test_a_plan_with_no_partition_refuses_to_bring_the_cell_up(
     assert "Shutdown" in _kinds(actions)
     assert not _processes(actions), "nothing may be started on the way to refusing"
     assert "sides" in _refusal(actions, context)
+
+
+# --- A side starts on its own domain, or it does not start --------------------
+#
+# ADR-0044 clause 4's refusal, at the boundary that actually starts the side. The
+# unit tests next door hold `require_domain` itself; these hold that this launch
+# calls it, on the side it was asked for, and that a mismatch stops bring-up
+# rather than producing a cell nobody is addressing.
+
+
+def test_a_side_on_a_domain_that_is_not_its_own_refuses_to_start(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    # Base and carried domain disagree. This is the plant, at offset 0, so it is
+    # the case that would have been unreachable had the base been read from
+    # ROS_DOMAIN_ID - the whole reason CITE_DOMAIN_BASE travels separately.
+    monkeypatch.setenv(DOMAIN_ENV, "43")
+    actions = module._bring_up(context)
+    message = _refusal(actions, context)
+    assert "43" in message and DOMAIN_ENV in message
+
+
+def test_a_side_started_without_a_base_refuses_to_start(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    monkeypatch.delenv(DOMAIN_BASE_ENV, raising=False)
+    actions = module._bring_up(context)
+    assert DOMAIN_BASE_ENV in _refusal(actions, context)
+
+
+def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
+    """Point the launch at a plan for a paired zone, as `sides: pair` generates it."""
+    document = copy.deepcopy(_document())
+    # Built from whatever the generated plan declares rather than assuming it is
+    # `single`: a checkout whose model has been flipped to `pair` for a run would
+    # otherwise end up with two sides named 'counterpart', and these tests would
+    # fail on the fixture rather than on what they are asking about.
+    sides = document["plan"]["sides"]
+    if not any(side["name"] == "counterpart" for side in sides):
+        sides.append(
+            {
+                "name": "counterpart",
+                "gz_partition": "cite/cell_a/counterpart",
+                "domain_offset": 1,
+            }
+        )
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+    _use(module, monkeypatch, path)
+
+
+def test_the_counterpart_takes_the_other_partition_and_the_other_domain(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """The two sides differ in their environment and in nothing else.
+
+    The counterpart's launch is this launch, given a different `side:=`. It
+    checks itself against base + 1 and hands its Gazebo processes the
+    counterpart's partition, while every name it builds is the plant's byte for
+    byte - ADR-0044 clause 1, and what makes a consumer portable between sides.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _paired(module, tmp_path, monkeypatch)
+    context.launch_configurations["side"] = "counterpart"
+    monkeypatch.setenv(DOMAIN_ENV, "43")
+
+    actions = module._bring_up(context)
+    assert not any(isinstance(action, Shutdown) for action in actions), _kinds(actions)
+    carriers = _gz_transport_processes(context, actions)
+    assert carriers
+    for process in carriers:
+        assert (
+            _environment(context, process).get(GZ_PARTITION_ENV)
+            == "cite/cell_a/counterpart"
+        )
+
+
+def test_the_counterpart_started_on_the_plants_domain_refuses(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    # Two identically named node sets and two /clock publishers in one graph,
+    # reported by nothing. The one failure the pair's isolation exists for.
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _paired(module, tmp_path, monkeypatch)
+    context.launch_configurations["side"] = "counterpart"
+    actions = module._bring_up(context)
+    assert DOMAIN_ENV in _refusal(actions, context)
+
+
+def test_asking_an_untwinned_zone_for_a_counterpart_refuses(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    # Whether a zone runs as a pair is an L0 fact. Bring-up does not invent a
+    # second side, and the refusal says so rather than reporting a domain error.
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["side"] = "counterpart"
+    assert "counterpart" in _refusal(module._bring_up(context), context)
+
+
+# --- The chain ends on a witness, and the token is the last thing it says -----
+#
+# ADR-0047 clause 3. Until this existed the last gate was labelled "the skill
+# servers" and fired when they were started rather than when they were serving,
+# and nothing anywhere announced that a cell had finished coming up.
+
+WITNESS_EXECUTABLE = "readiness_witness.py"
+
+
+def _readiness_gate(actions: list, context: LaunchContext):
+    """Return the one process-exit gate whose clean branch emits the token.
+
+    Found by what it does rather than by where it sits in the list. A handler
+    identified positionally would keep passing after an edit moved it, which is
+    the positional meaning this project refuses everywhere else.
+    """
+    found = []
+    for action in actions:
+        if not isinstance(action, RegisterEventHandler):
+            continue
+        handler = action.event_handler
+        if not isinstance(handler, OnProcessExit):
+            continue
+        if READY_TOKEN in _logged(handler.handle(_Exited(returncode=0), context) or [],
+                                  context):
+            found.append(handler)
+    assert len(found) == 1, "exactly one gate announces this side's readiness"
+    return found[0]
+
+
+def _logged(entities: list, context: LaunchContext) -> str:
+    return "\n".join(
+        perform_substitutions(context, list(entity.msg))
+        for entity in entities
+        if isinstance(entity, LogInfo)
+    )
+
+
+def test_the_side_starts_exactly_one_readiness_witness(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    witnesses = _nodes(module._bring_up(context), WITNESS_EXECUTABLE, context)
+    assert len(witnesses) == 1, "one witness per side, not one per arm"
+    assert module._witness_arguments(_plan(), PLANT_SIDE) == [
+        "--zone",
+        "cell_a",
+        "--side",
+        PLANT_SIDE,
+    ]
+
+
+def test_the_witness_is_started_with_no_environment_of_its_own(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    # It has to inherit this launch's, because that is what puts it on this
+    # side's domain. A witness given an environment of its own is a witness that
+    # could be pointed at another graph (ADR-0047, clause 3).
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    witness = _nodes(module._bring_up(context), WITNESS_EXECUTABLE, context)[0]
+    assert not _environment(context, witness)
+
+
+def test_the_readiness_token_names_this_side(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+    gate = _readiness_gate(actions, context)
+    announced = _logged(gate.handle(_Exited(returncode=0), context) or [], context)
+    assert announced_side(announced) == PLANT_SIDE
+
+
+def test_the_counterpart_announces_itself_as_the_counterpart(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    # The supervisor reads its own child's pipe and already knows which side it
+    # started, so this is the cross-check: a launch given the wrong `side:=`
+    # announces a side its supervisor is not expecting rather than passing.
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _paired(module, tmp_path, monkeypatch)
+    context.launch_configurations["side"] = "counterpart"
+    monkeypatch.setenv(DOMAIN_ENV, "43")
+    actions = module._bring_up(context)
+    gate = _readiness_gate(actions, context)
+    announced = _logged(gate.handle(_Exited(returncode=0), context) or [], context)
+    assert announced_side(announced) == "counterpart"
+
+
+def test_a_witness_that_expired_announces_nothing_and_stops_bring_up(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+    gate = _readiness_gate(actions, context)
+    produced = gate.handle(_Exited(returncode=1), context) or []
+    assert any(isinstance(entity, Shutdown) for entity in produced)
+    assert READY_TOKEN not in _logged(produced, context)
+
+
+def test_the_launch_file_writes_the_token_nowhere() -> None:
+    """Two string literals would be the defect this design exists to avoid.
+
+    ADR-0047 clause 3 requires the token to be defined once in `cite_bringup` and
+    imported by both the emitter and the reader. This is the check that the
+    emitter did not grow a copy of it, and that the announcement is made in one
+    place rather than on several gates.
+    """
+    source = LAUNCH_FILE.read_text()
+    assert READY_TOKEN not in source
+    assert source.count("ready_announcement(") == 1
+
+
+# --- Anything this package installs as a program has to be one ----------------
+#
+# The defect this closes, and it is worth stating as a class: **`install(PROGRAMS
+# ...)` does not make a file executable under a symlink install.** colcon
+# symlinks the installed path back at the source file, so the mode is the
+# source's mode, and a Python file committed without the executable bit reaches
+# the launch as `PermissionError: [Errno 13]`.
+#
+# It cost the first paired bring-up its join. Both sides came up completely -
+# nine controllers, three planning scenes, three skill servers accepting goals -
+# and neither announced, because launch reports a failure to EXEC as an
+# exception on its own logger rather than as a process exit, so `_gate` never
+# fired and nothing downstream noticed. What caught it was the pair supervisor's
+# ceiling, which is the row ADR-0047 clause 4 wrote for exactly this shape: a
+# side that never announced readiness and never exited.
+#
+# Read out of CMakeLists rather than listed here, so the check covers the next
+# program this package installs without anybody remembering to extend it.
+
+
+def _installed_programs() -> list[Path]:
+    source = (LAUNCH_FILE.parent.parent / "CMakeLists.txt").read_text()
+    found = []
+    for block in re.findall(r"install\(PROGRAMS(.*?)\)", source, re.DOTALL):
+        for line in block.splitlines():
+            name = line.strip()
+            if not name or name.startswith("DESTINATION"):
+                continue
+            found.append(
+                LAUNCH_FILE.parent.parent
+                / name.replace("${PROJECT_NAME}", "cite_bringup")
+            )
+    return found
+
+
+def test_every_installed_program_is_executable_in_the_tree() -> None:
+    """Every `install(PROGRAMS ...)` entry carries an executable bit in the tree.
+
+    **Read as a permission bit rather than asked of the filesystem, and that is
+    not a stylistic preference.** `os.access(path, os.X_OK)` answers whether THIS
+    machine would let this process run the file, and on a Docker Desktop bind
+    mount it answers `True` for a file whose mode is `0o100644` - measured in
+    this container on 2026-08-30, over the repository's own mount. So the version
+    of this check that asked `os.access` was **live in CI and dead on a macOS
+    host**: the one environment that produced the defect is the one that could
+    not see it.
+
+    What actually governs is the committed mode, because CI runs on Linux and
+    because a symlink install makes the installed path resolve back to this very
+    file. `st_mode & 0o111` is that mode, and it is the same number on every
+    machine that checks out the tree.
+
+    This check exists because the failure it guards has no event: `launch`
+    reports a failure to exec as an exception on its own logger and emits no
+    `ProcessExited`, so no gate fires and bring-up neither stops nor announces.
+    The class is recorded in `simulation.launch.py`'s own docstring; do not
+    re-derive it from a failed run.
+    """
+    programs = _installed_programs()
+    assert programs, (
+        "no install(PROGRAMS ...) found in CMakeLists.txt. If it moved, move this "
+        "check with it rather than deleting it."
+    )
+    for program in programs:
+        assert program.is_file(), program
+        assert program.stat().st_mode & 0o111, (
+            f"{program} is installed as a program and is not executable. Under a "
+            "symlink install the installed path IS this file, so the launch that "
+            "starts it fails to exec - and a failure to exec is reported by "
+            "launch as an exception rather than as a non-zero process exit, so "
+            "no gate fires."
+        )

@@ -36,6 +36,10 @@ answers some interfaces and not others.
 | File | What it is |
 |---|---|
 | `cite_bringup/plan.py` | reads and checks the generated plan; pure logic, no ROS runtime |
+| `cite_bringup/gz.py` | the one door that builds a Gazebo-transport process environment |
+| `cite_bringup/readiness.py` | the token a side announces when it has finished coming up |
+| `cite_bringup/readiness_witness.py` | the process that blocks until this side is serving, then exits |
+| `cite_bringup/pair.py` | the pair supervisor: starts both sides, joins them, owns the pair's lifetime |
 | `launch/simulation.launch.py` | the launch description built from that plan |
 
 The split is so the plan reader can be unit-tested. A launch file is awkward to test; a
@@ -92,6 +96,7 @@ plan.
 | `headless` | `true` | run the simulator without a GUI. Required on macOS and in CI |
 | `zone` | `cell_a` | which zone of the facility model to bring up |
 | `line` | `false` | start the L4 line coordinator |
+| `side` | `plant` | which side of the zone this launch is. It selects the partition and the domain the launch checks itself against, and changes no name |
 
 `line` is off by default and that is a real constraint rather than caution: a skill server
 admits one goal at a time per arm, so a running coordinator holds all three arms and any other
@@ -189,6 +194,92 @@ builds the safety layer. It does not change *what* is commanded on either path (
 a physical machine being commanded by accident. There is no hardware launch file in this
 package at this commit, and every backend in `cell_a_plan.yaml` is `sim`.
 
+## The ROS domain, and the other half of one rule
+
+A process belonging to a side carries **two** isolations, and neither substitutes for the
+other. `GZ_PARTITION` is a gz-transport namespace that `move_group`, the controller managers,
+the skill servers and the coordinator have never heard of; `ROS_DOMAIN_ID` was measured not to
+isolate the Gazebo transport at all. A pair carrying one and not the other is either two cells
+sharing every belt topic or two cells colliding on every node name, because **both sides carry
+byte-identical names by rule** ([ADR-0044](../../../docs/adr/0044-one-ros-domain-per-side-identical-names.md),
+clauses 1 and 2).
+
+So `plan.py::require_domain` refuses a side whose process environment does not carry the
+domain the plan resolves for it, in the same manner and the same place as
+`require_gz_partition`. The plan states an **offset** and never an absolute domain; the base
+travels on `CITE_DOMAIN_BASE` and `resolve_domain_id` is the one place the two are added.
+
+**Why the base has a channel of its own, and why that is not redundancy.** A domain is
+`base + offset`, so a check needs the base from somewhere. Read from `ROS_DOMAIN_ID` in the
+process's own environment, the plant — at offset 0 — would be compared with itself plus
+nothing, and `env == env + 0` passes for every possible value including a wrong one. Only the
+counterpart's half would have had teeth, and a green refusal would have been read as covering
+both sides. With `CITE_DOMAIN_BASE` the two values are independently sourced and the plant's
+half can fail.
+
+## The readiness witness, and what a side announces
+
+The chain used to end on a gate labelled "the skill servers", and that gate fired when they
+were **started**, not when they were **serving**. Nothing in this project announced that a cell
+had finished coming up — not a pair, and not the single cell every scenario runs.
+
+`cite_bringup/readiness_witness.py` closes that. It is the same shape as every other link:
+a process that blocks on a condition and exits, whose exit `_gate` consumes. It waits for every
+skill action server the plan declares, and the zone's `detect` server, to be answering — on
+**its own side's domain**, because it inherits the launch's environment and is given no other.
+On that gate, and nowhere else in the launch file, one fixed token line is emitted. The token
+is defined once, in `cite_bringup/readiness.py`, and imported by both the emitter and the
+reader ([ADR-0047](../../../docs/adr/0047-two-independent-launches-joined-not-sequenced.md),
+clause 3).
+
+**Two things the witness may not observe, and they are rules rather than limitations.** It
+cannot observe the other side — it holds one context on one domain and is given no side's
+identity but its own. And it does not measure real-time factor: ADR-0043's requirement that
+both sides sustain 1.0 concurrently is explicitly **not** a bring-up condition, so a side can
+be up, slow, and indistinguishable from a healthy one here. Its own deadline is measured on the
+wall clock deliberately, because one of the failures it exists to catch is a simulated clock
+that never starts.
+
+The L4 coordinator is deliberately outside the witness's condition: it starts only under
+`line:=true`, and waiting on it would fail every bring-up that does not run it.
+
+## The pair supervisor
+
+`cite_bringup/pair.py`. **A twin pair is two independent launches, joined and never
+sequenced.** Neither side waits for the other, because neither needs anything from the other —
+ADR-0047 enumerated the candidates and found no fact about one side that any gate on the other
+reads. What is left is a join and a failure rule.
+
+The supervisor starts both sides at once, each with its own `ROS_DOMAIN_ID` set **in the
+child's** environment, reads each child's pipe, and treats the token arriving there as that
+side's readiness. That is strictly stronger than liveness: a process that has not crashed has
+not reached the end of a gate chain. It is a pipe rather than a ready file on purpose — the
+second-world-cost campaign's rig had to `rm -f` its ready files before every run, and **a stale
+ready file is a false join**.
+
+| What happens | What the supervisor does |
+|---|---|
+| a side exits before announcing | stop the other; exit non-zero naming which side and its status |
+| both exit before announcing | the same, reporting **both** statuses |
+| a side exits after both announced | the same; the pair ends |
+| neither announces and neither exits | the ceiling fires: stop both, and say the side never announced readiness **and** never exited |
+| a side announces the other side's name | stop both; a launch given the wrong `side:=` is not the pair it says it is |
+
+**It holds no `rclpy` context, and that is checked rather than promised.**
+`test/test_pair.py` walks its import graph and fails if it reaches a ROS client library, and
+drives it against sides that are plain `python3` processes — which is ADR-0047's membership
+test executed rather than asserted. A supervisor that cannot import `rclpy` cannot express the
+mistake ADR-0044 warns about: sequencing a counterpart's managed node from a context on the
+other side's domain, which hangs forever with no log line at any level.
+
+**What it costs you.** The supervisor owns both sides' output, so the plain single-launch
+console becomes two labelled interleaved streams, every line prefixed with its side.
+
+**What it is not.** It is not L5 and it is not a scenario harness. It decides nothing about
+what crosses between the sides, and ADR-0047 defers what a paired scenario looks like:
+`launch_test` with `IncludeLaunchDescription` puts the launch in the test process, which holds
+one context on one domain, so two sides cannot be hosted there.
+
 ## What it deliberately does not do
 
 - **It does not sequence anything by time.** See above.
@@ -216,8 +307,14 @@ package at this commit, and every backend in `cell_a_plan.yaml` is `sim`.
 ```bash
 ./scripts/sim --headless                 # the cell, without the L4 coordinator
 ./scripts/sim --headless line:=true      # with it
+./scripts/sim --pair                     # both sides of a twinned zone, under the supervisor
 ./scripts/scenario bringup               # headless, asserted, and a blocking CI gate
 ```
+
+`--pair` implies headless and requires the zone to declare `twin: {sides: pair}` in the L0
+model; on an untwinned zone it refuses rather than inventing a second side. There is no
+asserted paired scenario — ADR-0047 defers what one would look like, and `./scripts/scenario`
+addresses the plant.
 
 Invoke `./scripts/sim` rather than `ros2 launch` (CLAUDE.md §7): it routes to the right
 environment, and on a machine without ROS it re-executes itself inside the container.
@@ -241,6 +338,12 @@ started cell.
 | `BRING-UP FAILED before <step>: the previous step exited N` | a gated step failed. If it timed out, the node it waits on never appeared, or a controller's joint names do not match the description — run `./scripts/validate-model` |
 | `<node> could not reach 'active'` | a managed node's `on_configure` or `on_activate` returned FAILURE or raised. The node logged why immediately above; nothing downstream of it is started |
 | a spawner times out on a service | usually `gz_ros2_control-system` failed to load, so no controller manager was ever created. The launch appends `GZ_SIM_SYSTEM_PLUGIN_PATH` for exactly this reason |
+| `side 'plant' would start on ROS_DOMAIN_ID=N, but the plan resolves M` | the process is not on its side's domain. Not something a user sets by hand — `scripts/_lib.sh` exports both values and the supervisor sets the child's |
+| `CITE_DOMAIN_BASE is unset` | something entered the ROS graph outside `./scripts/*` |
+| `zone 'cell_a' declares no side named 'counterpart'` | the model says `sides: single`. Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
+| `READINESS WITNESS FAILED: side 'X' did not finish coming up within N s` | every step before it succeeded, so the servers were started and are not serving. The message names the endpoints that never answered |
+| `[pair] X never announced readiness and never exited` | the pair's ceiling. That is not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
+| `[pair] X announced readiness as 'Y'` | that launch was given the wrong `side:=` |
 | `move_group` logs "No 3D sensor plugin(s) defined for octomap updates" | accurate — no depth sensor feeds this cell. It goes away when Phase 3 brings depth sensing, not before |
 
 The `TEARDOWN_SIGTERM_S`/`TEARDOWN_SIGKILL_S` ceilings are ceilings on a failure, not a
@@ -256,7 +359,11 @@ launch broadcasts SIGINT to every process in one event dispatch.
 The first two are pytest and start no process; they run in milliseconds. The last two are
 `launch_testing` rigs that start real nodes, and neither of them runs Gazebo.
 
-* `test_plan.py` — the plan reader: what it accepts, and every error message it produces.
+* `test_plan.py` — the plan reader: what it accepts, and every error message it produces,
+  including both refusals — the partition's and the domain's.
+* `test_pair.py` — the supervisor's failure rule and its boundary. Every side it drives the
+  supervisor against is a plain `python3` process, so ADR-0047's membership test is executed
+  rather than asserted, and the import-graph walk makes "reaches no `rclpy`" a fact.
 * `test_simulation_launch.py` — the launch description itself: what it refuses to start and
   what it stops on. Both halves are needed and neither substitutes for the other — **a
   perfectly correct `require_hardware_opt_in` that nothing calls is exactly the defect this

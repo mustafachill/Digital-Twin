@@ -31,6 +31,11 @@
   <exec_depend>pilz_industrial_motion_planner</exec_depend>
   <exec_depend>moveit_planners_ompl</exec_depend>
   <exec_depend>cite_interfaces</exec_depend>
+  <!-- The readiness witness is an rclpy process this package installs and this
+       package's launch graph starts, so rclpy and the shutdown mechanism are
+       runtime dependencies of cite_bringup rather than only of its tests. -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>cite_runtime</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
@@ -58,7 +63,6 @@
   <!-- mock_components/GenericSystem, the stand-in hardware the test injects a
        held joint with. It ships in hardware_interface. -->
   <test_depend>hardware_interface</test_depend>
-  <test_depend>rclpy</test_depend>
   <test_depend>python3-yaml</test_depend>
   <!-- ADR-0040's fixture: mock hardware with a pair of hard stops on one joint,
        which is what lets a trajectory be aborted PART WAY along its path rather

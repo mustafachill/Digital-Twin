@@ -3,19 +3,38 @@
 #
 #   ./scripts/sim              GUI (requires a display)
 #   ./scripts/sim --headless   no GUI — the form used by CI and by the tester agent
+#   ./scripts/sim --pair       both sides of a twin pair, under the pair supervisor
+#
+# --pair requires the zone to declare `twin: {sides: pair}` in the L0 model; on an
+# untwinned zone it refuses rather than inventing a second side. The two sides run
+# the same launch in two environments and are joined, never sequenced (ADR-0047).
+#
+# Launch arguments take the same `key:=value` spelling either way, so
+# `./scripts/sim --pair line:=true` runs the line on both sides. A pair takes
+# fewer of them than one side does: `side:=` is the supervisor's to decide.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 HEADLESS=0
+PAIR=0
 PASSTHROUGH=()
 for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
-        -h|--help)  sed -n '2,6p' "$0"; exit 0 ;;
+        --pair)     PAIR=1 ;;
+        -h|--help)  sed -n '2,14p' "$0"; exit 0 ;;
         *)          PASSTHROUGH+=("$arg") ;;
     esac
 done
+
+# A pair is headless, and there is no other form of it to offer. Two windows of a
+# cell whose names are byte-identical on both sides would be indistinguishable
+# (ADR-0044, clause 1), and the compose service that carries a display carries
+# one. Inspect either side with Foxglove on that side's domain instead.
+if [ "$PAIR" -eq 1 ]; then
+    HEADLESS=1
+fi
 
 # GUI needs display passthrough, which is a different compose service.
 if [ "$HEADLESS" -eq 0 ] && ! in_container; then
@@ -43,6 +62,15 @@ if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
     warn "cite_bringup is not built yet — there is nothing to launch."
     warn "Run ./scripts/build. See CLAUDE.md §2."
     exit 0
+fi
+
+if [ "$PAIR" -eq 1 ]; then
+    info "Launching both sides of the pair under the supervisor"
+    # The supervisor rather than a second `ros2 launch` here: it owns the join
+    # and the pair's lifetime, and a shell that started two launches would leave
+    # nothing computing "the pair is up" and nothing stopping a half-pair
+    # (ADR-0047, Option A).
+    exec python3 -m cite_bringup.pair --headless "${PASSTHROUGH[@]}"
 fi
 
 info "Launching the simulated cell (headless=${HEADLESS})"
