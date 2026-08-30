@@ -89,6 +89,16 @@ from cite_bringup.readiness import announced_side
 #: **It must never be widened to absorb a slow host.** Two cells on a machine
 #: that cannot hold real time will be slow, and slow is a finding about the
 #: machine (ADR-0043's second half), not a number to raise here.
+#:
+#: **It is stated rather than derived, and nothing binds it to the ceilings a
+#: side's own gate chain carries.** The readiness witness alone allows 300 s, and
+#: the spawners and scene loader ahead of it carry their own. If those ever sum
+#: past this number, this ceiling fires first and the pair reports "never
+#: announced readiness and never exited" for a side that was about to fail with a
+#: diagnosis naming the step - a strictly worse answer, produced by a number and
+#: not by anything that happened. Deriving it from the chain would need the
+#: launch to state its own total, which it does not; until it does, this is a
+#: recorded hazard rather than a fixed one.
 READY_CEILING_S = 900.0
 
 #: How long a side is given to shut itself down after SIGINT before the group is
@@ -437,6 +447,18 @@ def _stop_requests(events: queue.Queue):
     Restored on the way out, and skipped entirely off the main thread, where
     `signal.signal` is not available - a test driving :func:`supervise` from a
     worker thread gets the join and the failure rule without the handlers.
+
+    **A known hazard, recorded rather than fixed, because the fix is bigger than
+    the defect.** `Queue.put` takes the queue's own lock, and a Python signal
+    handler runs in the main thread between bytecodes - including between the
+    bytecodes of :func:`_join`'s `events.get`, which holds that same lock while
+    it inspects the queue. A signal arriving in that window would deadlock the
+    supervisor against itself, and the ceiling could not fire either, because the
+    ceiling is enforced by the call that is stuck. The window is narrow, this has
+    never been observed, and the reason it is not repaired here is that the
+    repair is a self-pipe plus a reader thread - new mechanism on the teardown
+    path, where a bug is worse than the one it removes. Whoever needs it should
+    write the reader thread rather than moving the `put`.
     """
     previous: dict[int, object] = {}
 
