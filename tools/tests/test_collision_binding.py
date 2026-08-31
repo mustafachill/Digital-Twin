@@ -7,7 +7,8 @@ Three things are checked here and they answer three different questions:
   byte-identity check tell "unchanged" from "changed";
 * **selecting a set actually reaches the description**, and reaches it as the
   vendor macro parameter the model names rather than as a value the generator
-  invented;
+  invented, **and the generated package declares what that description now
+  needs** — this file used to assert the opposite, which is the defect below;
 * the **validator now fires on a vendor description**, which it structurally
   could not do before this field existed.
 """
@@ -83,9 +84,17 @@ class TestSelectingADerivedSet:
         assert len(added) == 1
         assert "collision_mesh_path" in added[0]
 
-    def test_only_the_arm_descriptions_and_the_hash_move(
+    def test_the_descriptions_the_hash_and_the_package_move(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
+        """`package.xml` is in this set, and it was the defect that it was not.
+
+        This test asserted the opposite until 2026-08-31: the expected set named
+        the three descriptions and the hash, so it *required* the generated
+        `package.xml` to stay still while the descriptions it declares the
+        dependencies for started naming a package it did not list. A dependency
+        derivation that a test pins shut is not a derivation.
+        """
         before = artifacts(real_model)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         after = artifacts(real_model)
@@ -93,10 +102,39 @@ class TestSelectingADerivedSet:
         changed = {path for path in before if before[path] != after[path]}
         assert changed == {
             "MODEL_HASH",
+            "package.xml",
             "description/cell_a_arm_1.urdf.xacro",
             "description/cell_a_arm_2.urdf.xacro",
             "description/cell_a_arm_3.urdf.xacro",
         }
+
+    def test_the_generated_package_declares_the_set_it_installs_from(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Every `$(find X)` in a generated description needs X in `package.xml`.
+
+        Without this the failure is not a build error but a run-time one, and it
+        arrives late: `colcon build --packages-up-to cite_bringup` succeeds
+        because nothing declares the ordering, and `robot_state_publisher` then
+        dies with `PackageNotFoundError: cite_description` when the cell comes up.
+        """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+        generated = artifacts(real_model)
+        description = generated[ARM_DESCRIPTION]
+        assert "$(find cite_description)" in description
+        assert "<exec_depend>cite_description</exec_depend>" in generated["package.xml"]
+
+    def test_a_declared_but_unselected_set_brings_no_dependency(self, real_model: Path) -> None:
+        """The other direction, and it is why the derivation reads `selected`.
+
+        `convex_hull` is declared on the shipped type and is not bound. Nothing
+        loads it, so `cite_generated` must not depend on it — and if it did, the
+        shipped default would stop emitting the bytes it emitted before the field
+        existed, which is the property the byte-identity check rests on.
+        """
+        generated = artifacts(real_model)
+        assert "cite_description" not in generated["package.xml"]
+        assert "cite_description" not in generated[ARM_DESCRIPTION]
 
 
 class TestTheSchemaRefusesAnUnusableDeclaration:

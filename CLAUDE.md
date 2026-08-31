@@ -679,6 +679,14 @@ account of a flake; each was caught by someone re-running, never by someone read
     and that campaign has not been run — so nothing here is evidence about grasping, and no
     document may say hulls are safe for this cell. What landing them buys today is that
     **both geometries exist and are one field apart**, which is what that A/B needs.
+    **"One field apart" was false when it was written and is true as of 2026-08-31.** The
+    generated `package.xml` derived its dependencies from the description and SRDF packages
+    only, so flipping the field emitted `$(find cite_description)` into all three arm
+    descriptions while the generated package still declared neither it nor anything else new
+    — and a build scoped with `--packages-up-to cite_bringup` succeeded, leaving
+    `robot_state_publisher` to die with `PackageNotFoundError` when the cell came up. The
+    derivation now follows the selected set, and the test that had *asserted* `package.xml`
+    does not move was the thing holding it shut.
     **The speed figures are in ADR-0028's implementation note and are not copied here (P1).**
     Their strength: one machine, two 120 s windows per condition, both sides of a pair sampled
     concurrently, no thresholds registered in advance, no directory in `docs/measurements/`.

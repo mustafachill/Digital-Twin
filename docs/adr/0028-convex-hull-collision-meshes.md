@@ -316,6 +316,14 @@ passes against them.
 ([`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md))
 re-run against hull geometry, with its already-written thresholds, and its result published.
 Both geometries now exist and are selectable by one field, which is what that A/B needs.
+**[Corrected 2026-08-31: "one field" was not true when this was written.** The generated
+`package.xml` derived its dependencies from `description.package` and `planning.srdf_package`
+only, so a selection that emitted `$(find cite_description)` into every arm description left
+the generated package declaring nothing about it — the invariant `generate/package.py`'s own
+docstring states, violated by decision 3. `cite-model`'s dependency derivation now follows
+the selected set, and `tools/tests/test_collision_binding.py` asserts both directions: the
+dependency appears when the set is bound and stays away when it is merely declared. Flipping
+the field is now genuinely the whole change.**]
 
 **Nothing in this section is evidence for it.** No grasp was attempted under hull geometry by
 the change that wrote this, deliberately: a casual opinion about grasp quality from an
