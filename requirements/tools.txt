@@ -19,7 +19,7 @@ scipy==1.14.1               # Qhull, for the convex-hull collision meshes ADR-00
                             # asset checked byte for byte against a fresh
                             # derivation, and Qhull may triangulate a coplanar
                             # facet differently between versions. Bumping this may
-                            # therefore require `cite-model hulls --write` and a
+                            # therefore require `./scripts/hulls --write` and a
                             # real diff in assets/meshes/ — which is the check
                             # working, not a fault. Was deliberately absent until
                             # 2026-08-31; `trimesh` below cannot compute a hull

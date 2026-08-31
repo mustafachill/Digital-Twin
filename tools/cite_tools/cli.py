@@ -346,6 +346,13 @@ def hulls(
     inputs produce. A drift here is a stale hull, which is a collision shape that
     does not match the arm — ADR-0028 names that failure as one that looks like a
     planner bug.
+
+    **A skipped set suppresses the region comparison rather than failing it.** A
+    set that produced no entry is a set deleted from the region this derives, so
+    the comparison would be against something nobody built, and the message it
+    used to emit named `--write` as the remedy — an action that would have erased
+    the region it was complaining about. The skip's own error stands; the region
+    reports as unchecked (ADR-0028, R-09).
     """
     try:
         facility_model = load(model)
@@ -367,6 +374,14 @@ def hulls(
 
     entries: list[dict] = []
     problems: list[str] = []
+    #: Declared sets that produced no entry, for any reason. A skipped set is
+    #: absent from `entries`, so the region derived from `entries` is a region
+    #: with that set deleted from it — and comparing THAT against the committed
+    #: file asks a question nobody was answering. Recorded by name rather than as
+    #: a flag so the note below can say which sets, and so the write path can
+    #: refuse on the fact itself instead of on the coincidence that every skip
+    #: also happens to file a problem.
+    skipped: list[str] = []
     for asset_type, mesh_set in sets:
         # Both are guaranteed non-empty by `CollisionMeshSet`'s own validator for
         # a `convex_hull` set; the assertion is for the type checker, and if it
@@ -378,6 +393,7 @@ def hulls(
                 f"{asset_type.id}/{mesh_set.id}: the vendor meshes are not in this checkout "
                 f"({source_root}). Run ./scripts/bootstrap."
             )
+            skipped.append(f"{asset_type.id}/{mesh_set.id}")
             continue
         dest_root = repo_root / "assets" / _asset_subdir(mesh_set)
         try:
@@ -385,7 +401,14 @@ def hulls(
                 _hull_set(asset_type, mesh_set, source_root, dest_root, repo_root, write, problems)
             )
         except meshes.MeshError as exc:
+            # A missing vendor tree is not the only way a set is skipped: a
+            # declared mesh absent from the vendor package, an unreadable STL, or
+            # scipy missing from the interpreter all arrive here. This was
+            # reproduced on a stale checkout where scipy was the cause, with the
+            # vendor tree present — same wrong second message, different cause,
+            # which is why the guard below is on the skip and not on the tree.
             problems.append(f"{asset_type.id}/{mesh_set.id}: {exc}")
+            skipped.append(f"{asset_type.id}/{mesh_set.id}")
 
     manifest_path = repo_root / "assets" / "manifest.yaml"
     text = manifest_path.read_text()
@@ -396,7 +419,11 @@ def hulls(
         raise typer.Exit(code=1) from exc
 
     if write:
-        if problems:
+        # `skipped` is redundant with `problems` today — every skip files one —
+        # and it is named anyway, because what stands between a skipped set and a
+        # region rewritten with that set deleted from it must not be a
+        # coincidence between two lists.
+        if problems or skipped:
             for problem in problems:
                 err_console.print(f"[red]error[/red] {problem}")
             raise typer.Exit(code=1)
@@ -406,13 +433,27 @@ def hulls(
         console.print(f"[green]ok[/green] {len(entries)} set(s), {total} mesh(es)")
         return
 
-    if updated != text:
+    # NOT compared when a set was skipped, for any reason. The region derived from
+    # a short `entries` is that region with the skipped sets deleted from it, so it
+    # can only disagree with the committed file — and the message that disagreement
+    # used to produce told the reader to run `--write`, an action that would have
+    # erased the region it named (ADR-0028, R-09).
+    if not skipped and updated != text:
         problems.append(
             "assets/manifest.yaml's derived region does not match the meshes on disk — "
-            "run `cite-model hulls --write`"
+            "run `./scripts/hulls --write`"
         )
     for problem in problems:
         err_console.print(f"[red]error[/red] {problem}")
+    if skipped:
+        # After the errors, so it reads as what it is: the skip above has its own
+        # message and its own remedy, and this only records that one question went
+        # unasked, so that no reader takes silence for a passing region.
+        console.print(
+            "[yellow]note[/yellow] the manifest's derived region was not checked — "
+            f"{len(skipped)} declared set(s) were skipped above ({', '.join(skipped)}). "
+            "Fix the skip and run this again; do not run --write to make it agree."
+        )
     if problems:
         raise typer.Exit(code=1)
     total = sum(len(e["meshes"]) for e in entries)
