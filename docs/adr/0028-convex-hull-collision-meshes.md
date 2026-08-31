@@ -347,6 +347,10 @@ shipped selection still emits no collision argument at all.
 **Only clause 2 of the amended gate**, unchanged: the friction-grasp campaign
 ([`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md))
 re-run against hull geometry, with its already-written thresholds, and its result published.
+**Do not design that re-run from this section alone.** The hypothesis it would have been aimed
+at was wrong: read "Correction — 2026-08-31: the gripper risk is real and it is not a filled
+inter-finger gap" below, which names the three quantities the re-run has to report and why
+neither of the campaign's two published residuals is one of them.
 Both geometries now exist and are selectable by one field, which is what that A/B needs.
 **[Corrected 2026-08-31: "one field" was not true when this was written.** The generated
 `package.xml` derived its dependencies from `description.package` and `planning.srdf_package`
