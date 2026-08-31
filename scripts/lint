@@ -65,6 +65,32 @@ else
     warn "cite_tools not installed — run ./scripts/bootstrap --host-only"
 fi
 
+# Derived assets (ADR-0028). The check form of ./scripts/hulls: every committed hull
+# re-derived from the vendor file it names and compared byte for byte, plus the
+# machine-written region of assets/manifest.yaml compared against what the same inputs
+# produce.
+#
+# In the host half deliberately, and skipped rather than failed where the vendor source is
+# absent. manifest.py argues that "a generated region that a check can falsify is stronger
+# discipline than a hand-written one that nothing verifies", and until this step existed
+# that argument rested on a command no script, no CI step and no test ever invoked. A hull
+# that has gone stale against a vendor bump is a collision shape that does not match the
+# arm, which ADR-0028 names as a failure that looks like a planner bug.
+#
+# The skip is a real weakness and is stated rather than hidden: on a laptop that has never
+# run ./scripts/bootstrap this proves nothing. It gates in the container and in CI, which
+# is where the vendor source is, and it must never be made fatal on the host — the whole
+# point of the L0 layer being ROS-free is that these gates run from a machine that could
+# never build the simulator.
+step "Derived assets (ADR-0028)"
+if [ ! -d "${REPO_ROOT}/workspace/src/external/xarm_ros2" ]; then
+    warn "SKIPPED — the vendor source is not imported in this checkout."
+    warn "  A hull is a function of the vendor bytes, so there is nothing to compare against."
+    warn "  For the full gate, in one command: ./scripts/enter dev ./scripts/lint"
+else
+    check "${REPO_ROOT}/scripts/hulls"
+fi
+
 step "YAML"
 if [ -x "${VENV}/yamllint" ]; then
     # .yamllint's own ignore list scopes this; passing the repo root means a new

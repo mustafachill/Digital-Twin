@@ -479,7 +479,7 @@ def _hull_set(asset_type, mesh_set, source_root, dest_root, repo_root, write, pr
         "source": {
             "type": "vcs",
             "repo": "external/xarm_ros2",
-            "version": _pinned_version(repo_root, "xarm_ros2"),
+            "version": pinned_version(repo_root, "xarm_ros2"),
             "package": mesh_set.source_package,
             "root": mesh_set.source_root,
         },
@@ -489,13 +489,18 @@ def _hull_set(asset_type, mesh_set, source_root, dest_root, repo_root, write, pr
     }
 
 
-def _pinned_version(repo_root: Path, repo: str) -> str:
+def pinned_version(repo_root: Path, repo: str) -> str:
     """The commit the vcs manifest pins for a repository.
 
     Read rather than restated. A hull's provenance is only as good as the version
     it names, and a version copied by hand into the asset manifest would be a
     second place for the pin to live — the thing `external/cite.repos` exists to
     be the only one of (ADR-0008, P1).
+
+    Public because the check that the recorded version is still the pinned one has
+    to read the pin the same way this does. A second parser in the test would be a
+    second place for the manifest's own format to be understood, and the two would
+    agree right up to the day one of them was updated.
     """
     document = yaml.safe_load((repo_root / "external" / "cite.repos").read_text()) or {}
     for name, entry in (document.get("repositories") or {}).items():

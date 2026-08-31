@@ -872,6 +872,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/format` | Apply formatting in place |
 | `./scripts/sim [--headless] [--pair]` | Launch the simulated cell. `--pair` brings both sides of a twin pair up under the pair supervisor, implies `--headless`, and requires an L0 model that declares `twin: {sides: pair}` |
 | `./scripts/validate-model` | L0 schema validation + generator dry-run. Runs anywhere. |
+| `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares (ADR-0028). Needs the imported vendor source, so unlike `validate-model` it does not run anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name]` | Headless simulation-in-the-loop scenario; no argument lists them |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |

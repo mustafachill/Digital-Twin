@@ -8,18 +8,32 @@ second kind of asset — one **derived** from a pinned vendor file rather than
 captured — and requires its provenance and checksums in the same file.
 
 So this module does not add a second manifest. It owns one delimited region of
-the existing one, rewritten whole by ``cite-model hulls --write`` and compared by
-``cite-model hulls --check``. Everything outside the markers — the header, the
+the existing one, rewritten whole by ``./scripts/hulls --write`` and compared by
+``./scripts/hulls`` with no flag -- checking is the default and there is no
+``--check`` to pass, which this sentence invented. Everything outside the markers — the header, the
 policy comments, the ``assets:`` list the fetcher reads — is preserved byte for
 byte.
 
-**Why a generated region rather than a hand-written table.** The entries are
-sixty-odd checksums. A person maintaining them by hand is a person who will one
-day update a mesh and not the digest beside it, which is the failure ADR-0012
-already names, made worse by being invisible. A person maintaining them by hand
-is also not what ADR-0012 asked for: it asked for provenance to *exist*, and a
-generated region that a check can falsify is stronger discipline than a
-hand-written one that nothing verifies.
+**Why a generated region rather than a hand-written table.** Every declared mesh
+contributes two checksums, a byte count and two triangle counts. A person
+maintaining those by hand is a person who will one day update a mesh and not the
+digest beside it, which is the failure ADR-0012 already names, made worse by being
+invisible. A person maintaining them by hand is also not what ADR-0012 asked for:
+it asked for provenance to *exist*, and a generated region that a check can
+falsify is stronger discipline than a hand-written one that nothing verifies.
+
+*(This paragraph said "sixty-odd checksums" until 2026-08-31 and the region held
+twenty-six. A count of a generated collection stated in prose is a number that goes
+stale the first time the collection changes — ADR-0027's correction says so in as
+many words — so it is a rate here and the count comes from ``./scripts/hulls``.)*
+
+**And the argument above is only true because something runs.** It was not, when it
+was written: ``cite-model hulls`` was invoked by no script, no CI step and no test,
+and three fields of the region — ``source.version``, ``bytes`` and ``installed_as``
+— could each be mutated into a well-formed lie with the whole suite green. The
+check form is now a step in ``./scripts/lint`` wherever the vendor source is
+imported, and ``tools/tests/test_manifest_region.py`` binds those three fields to
+what they describe on any host.
 """
 
 from __future__ import annotations

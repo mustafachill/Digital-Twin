@@ -4,6 +4,17 @@ The region is machine-written inside a hand-written file, which is a shape this
 project is otherwise hostile to. What makes it acceptable is that the boundary is
 exact: everything outside the markers survives untouched. These tests are that
 guarantee, plus the two ways the boundary can be lost.
+
+They are also what makes `manifest.py`'s own argument true rather than merely
+stated. That module says *"a generated region that a check can falsify is stronger
+discipline than a hand-written one that nothing verifies"*, and until 2026-08-31
+three of the region's fields could be mutated into a well-formed lie with the whole
+suite still passing — `source.version`, which `assets/README.md` calls out as the
+thing a derived asset carries and an authored one does not; `bytes`; and
+`installed_as`, the URI a consumer would actually use. `TestEveryRecordedFieldIsBound`
+below is that half. It runs on the host, without the vendor tree, because the
+inputs it compares against — `external/cite.repos`, the committed hulls and the L0
+declaration — are all in git.
 """
 
 from __future__ import annotations
@@ -14,9 +25,24 @@ import pytest
 import yaml
 
 from cite_tools import manifest
+from cite_tools.cli import pinned_version
+from cite_tools.model.loader import load
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "assets" / "manifest.yaml"
+
+
+def declared_sets():
+    """Every derived collision set the L0 model declares, with its type."""
+    model = load(REPO_ROOT / "model")
+    return [
+        (asset_type, mesh_set)
+        for asset_type in model.types
+        if asset_type.description.collision is not None
+        for mesh_set in asset_type.description.collision.sets
+        if mesh_set.kind == "convex_hull"
+    ]
+
 
 SAMPLE = f"""# header comment
 version: 1
@@ -91,3 +117,57 @@ class TestTheRealManifest:
             for mesh in entry["meshes"]:
                 assert len(mesh["sha256"]) == 64
                 assert len(mesh["source_sha256"]) == 64
+
+
+class TestEveryRecordedFieldIsBound:
+    """Each of these was mutable into a well-formed lie until 2026-08-31.
+
+    The shape of the hole is worth keeping in view: the region *had* checks, and
+    every one of them checked a field's **form** rather than its **value**. A
+    forty-character hexadecimal string that is not the pinned commit passes a
+    length assertion, and a plausible byte count passes nothing at all. A check
+    that cannot be falsified by a well-formed wrong answer is documentation.
+    """
+
+    def test_the_recorded_source_version_is_the_pin(self) -> None:
+        """`source.version` against `external/cite.repos`, read the same way.
+
+        This is the field `assets/README.md` names as what makes a derived asset
+        different from an authored one — *"the file it came from, the commit that
+        file is pinned at, and what both hash to"*. It is also the one a vendor
+        bump moves: raising the pin without re-running `./scripts/hulls` leaves a
+        hull of the arm the project used to have, carrying a commit it was never
+        derived from, and ADR-0028 names that as a failure that presents as a
+        planner bug.
+        """
+        for entry in manifest.read(MANIFEST):
+            repo = Path(entry["source"]["repo"]).name
+            assert entry["source"]["version"] == pinned_version(REPO_ROOT, repo), (
+                f"{entry['id']}: the manifest records a commit that "
+                f"external/cite.repos does not pin. Re-run ./scripts/hulls --write."
+            )
+
+    def test_every_recorded_byte_count_is_the_file_size(self) -> None:
+        """`bytes` against the committed file, which is the only thing it can mean."""
+        for entry in manifest.read(MANIFEST):
+            root = REPO_ROOT / entry["dest"]
+            for mesh in entry["meshes"]:
+                path = root / mesh["path"]
+                assert path.is_file(), f"{entry['id']}: {mesh['path']} is not committed"
+                assert path.stat().st_size == mesh["bytes"], mesh["path"]
+
+    def test_the_recorded_uri_is_the_one_the_model_binds(self) -> None:
+        """`installed_as` against the L0 set it describes.
+
+        A consumer reading provenance out of the manifest and a description
+        emitted from L0 must name the same thing. Nothing compared them, so the
+        manifest could have advertised a URI that resolved to nothing while every
+        gate stayed green.
+        """
+        recorded = {entry["id"]: entry for entry in manifest.read(MANIFEST)}
+        for asset_type, mesh_set in declared_sets():
+            entry = recorded[f"{asset_type.id}_{mesh_set.id}"]
+            assert entry["installed_as"] == f"package://{mesh_set.package}/{mesh_set.root}"
+            assert entry["dest"] == f"assets/{mesh_set.root}"
+            assert entry["source"]["package"] == mesh_set.source_package
+            assert entry["source"]["root"] == mesh_set.source_root

@@ -39,10 +39,13 @@ is pinned at, and what both hash to**. That lives in the `derived:` section of
 `manifest.yaml`, which is written by
 
 ```bash
-./scripts/enter dev python3 -m cite_tools.cli hulls --model model --write
+./scripts/hulls --write
 ```
 
-and checked, without writing, by the same command without `--write`.
+and checked, without writing, by the same command without `--write`. That check is
+a step in `./scripts/lint` wherever the vendor source is imported, so a hull that
+has gone stale against a vendor bump fails the gate rather than waiting to be
+noticed.
 
 **Why the provenance is not optional here.** A derived asset can go stale in a
 way an authored one cannot: a vendor bump changes the source, every gate passes,
@@ -53,8 +56,13 @@ runs the comparison wherever the vendor source is imported.
 
 **The `derived:` section is machine-written.** Everything above its markers in
 `manifest.yaml` is hand-written and is preserved untouched; the region between
-them is replaced whole. Sixty checksums maintained by hand is a discipline that
-fails silently, which is the weakness ADR-0012 already names.
+them is replaced whole. It carries **two checksums per mesh** — the vendor file's
+and the hull's — plus a byte count and two triangle counts, and maintaining that
+by hand is a discipline that fails silently, which is the weakness ADR-0012
+already names. **A rate, not a count: this paragraph said "sixty checksums" and
+the region held twenty-six**, and ADR-0027's correction ends *"do not state the
+cardinality of a generated collection in prose"* for exactly this reason. Ask the
+file: `./scripts/hulls` reports the number of sets and meshes it compared.
 
 ## Why a manifest instead of Git LFS
 

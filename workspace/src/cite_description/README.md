@@ -32,12 +32,13 @@ generated from the L0 model — everything that is generated lives in
 They are derived from the vendor meshes `external/cite.repos` pins, by
 
 ```bash
-./scripts/enter dev python3 -m cite_tools.cli hulls --model model --write
+./scripts/hulls --write
 ```
 
 and checked, without writing, by the same command with no `--write`. The check
 re-derives every mesh and compares byte for byte, so a hull that no longer
-matches the vendor file it names is a failure rather than a silence. See
+matches the vendor file it names is a failure rather than a silence. It runs from
+the host and from `./scripts/enter dev` alike. See
 [ADR-0028](../../../docs/adr/0028-convex-hull-collision-meshes.md).
 
 ## How it fails
@@ -48,5 +49,11 @@ matches the vendor file it names is a failure rather than a silence. See
   time; `cite-model hulls` catches it against the vendor tree.
 - **`assets/meshes` is missing entirely.** Configure-time `FATAL_ERROR`, rather
   than an install that silently contains nothing.
-- **A hull is stale against a vendor bump.** `cite-model hulls` fails. Nothing
-  else notices, which is why that command exists.
+- **A hull is stale against a vendor bump.** Two things notice, and this entry
+  named neither of them until 2026-08-31. `tools/tests/test_hulls_match_the_vendor.py`
+  is the one that has always run — it re-derives every declared mesh from the
+  imported vendor tree and compares, and it skips, naming its reason, where that
+  tree is absent. `./scripts/hulls` is the same comparison plus the manifest
+  region, and it is a step in `./scripts/lint` under the same condition. This
+  entry credited `cite-model hulls` and said "nothing else notices"; the test was
+  what noticed, and the command was in no gate at all.
