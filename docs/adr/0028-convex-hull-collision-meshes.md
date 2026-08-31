@@ -6,6 +6,10 @@
   superseded and is corrected in place below. **The shipped default is still the vendor's
   meshes**, and it stays there until clause 2 of the promotion gate is satisfied — see the
   section "Implementation note — 2026-08-31" for what landed and what promotion still needs.
+  **Read "Correction — 2026-08-31: the gripper risk is real and it is not a filled
+  inter-finger gap" before designing that measurement**: this record's stated hypothesis for
+  it was wrong, and a re-run aimed at the sentence it used to carry would pass without asking
+  the question.
   **[Superseded 2026-08-31, kept for the record:]** *"decided in principle, nothing
   implemented. No hull exists: `assets/` contains only `README.md` and `manifest.yaml`, no
   `assets/meshes/` directory has been created, and the L0 schema has no field through which a
@@ -20,8 +24,9 @@
   whose §3.1 lands in the pre-registered band *"material but not dominant"* and whose §5
   shows a pair missing real time with vendor meshes and meeting it with hulls.
   **The status does not move, for a reason this record already contains:** the campaign
-  measured cost and never correctness, and this record's own warning about the gripper's
-  filled concavity is still untested. What promotion now additionally requires is in the
+  measured cost and never correctness, and this record's own warning about the gripper is
+  still untested — and that warning was itself wrong about the mechanism until the correction
+  of 2026-08-31 below. What promotion now additionally requires is in the
   section named "Amendment — 2026-08-29: the re-measurement landed, and the promotion gate
   is stated", below.
   **Corrected on the same day, for a different claim.** The decision stands entire and so
@@ -212,7 +217,7 @@ change may promote the status on the strength of a real-time-factor figure alone
 
 The part that transfers: this record set its own promotion condition in terms of the *work*
 (landing a hull and its binding) while stating its principal risk in terms of an *unmeasured
-behaviour* (the filled concavity). Those are not the same test, and a condition written
+behaviour* (what the hull does to the grasp). Those are not the same test, and a condition written
 against the work would have been satisfied by a change that never asked the question the
 record itself raised. A promotion condition has to name the measurement, not the commit.
 
@@ -315,8 +320,84 @@ Both geometries now exist and are selectable by one field, which is what that A/
 **Nothing in this section is evidence for it.** No grasp was attempted under hull geometry by
 the change that wrote this, deliberately: a casual opinion about grasp quality from an
 incidental run would poison a campaign whose thresholds are pre-registered. The speed figures
-above are a cost measurement and say nothing about the filled concavity between the pads,
-which is this record's own principal risk.
+above are a cost measurement and say nothing about what the hull does to the grasp, which is
+this record's own principal risk — and which this record described wrongly until the
+correction of 2026-08-31 below.
+
+## Correction — 2026-08-31: the gripper risk is real and it is not a filled inter-finger gap
+
+**This record said in three places that a convex hull "fills the space between the fingers".
+It does not, and the sentence has to go because it is the hypothesis clause 2 of the
+promotion gate would be tested against.** The three places were this section's Consequences
+bullet, the same claim restated in `model/assets/types/robots/xarm5.yaml`, and
+`CollisionSpec`'s docstring in `tools/cite_tools/model/schema.py`; a fourth restatement, in
+[ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s revisit list, is corrected with them.
+All four now point here.
+
+**Why it was wrong, structurally.** Each link is hulled independently — the L0 set names
+thirteen mesh files and `cite-model hulls` derives one hull per file. `left_finger` and
+`right_finger` are two of them, so the space between the fingers is the space between two
+separate collision bodies, and no per-link hull can occupy it. Filling it would take a hull
+over the *assembly*, which this pipeline never computes.
+
+### What the hull actually changes, measured
+
+Geometry audit of 2026-08-31, taken from the committed hulls and the pinned vendor meshes.
+**This is a static measurement of shape, not a campaign and not a simulation run: no grasp
+was attempted, and nothing here is evidence about grasp quality.** There is no directory in
+[`docs/measurements/`](../measurements/README.md) behind it, and no threshold was registered
+in advance. Distances are along the jaw axis; `z` is height in the same frame the audit read
+the meshes in.
+
+- **The jaw aperture at the pads is unchanged.** At the shipped 45 mm command it is
+  **44.99 mm on both geometries over the entire 37 mm pad**, identical to 0.01 mm. The pad
+  plane, the first contact and its normal are the same on both.
+- **Each pad's own relief shoulders change, and they are inside the part.** The vendor finger
+  steps back 2.0 mm just proximal and just distal of the pad; the hull ramps across both
+  steps instead. Aperture goes **48.99 → 46.28 mm at z = 132**, **48.99 → 45.40 mm at
+  z = 134** and **48.99 → 47.66 mm at z = 173**. The 50 mm work-piece spans z ≈ 128.4–178.4,
+  so both shoulders lie inside the part's envelope *in both geometries* — the hull's are
+  1.2–1.9 mm deeper.
+- **The outer-knuckle hook narrows**, z = 55–68 mm, throat **67.6 → 40.4 mm**. That is 60 mm
+  below the part and below a pinch the vendor already has, so it is a planning effect and not
+  a grasp effect.
+
+### The prediction, stated so that a re-run can be designed against it
+
+The hull adds two inclined wedges, at the proximal and the distal end of each pad, which
+contact the part's flat face at a slope. Inclined contact against a flat face carries a force
+component **along the approach axis**; the two wedges push in opposite directions and are not
+symmetric in length. So:
+
+- expect a **small net translation of the part along the jaw axis during closure**;
+- possibly a **pitch about the finger-pivot axis**;
+- an **effective contact patch growing from 37 mm to 44 mm**.
+
+**Nothing here predicts a failed grasp.** The pad still makes first contact, at the same
+width, everywhere along it. The risk this record should have been naming is a part that is
+held slightly *elsewhere*, not a part that is not held.
+
+### What clause 2 of the promotion gate must measure
+
+This is the reason the sentence mattered rather than being pedantry. **A re-run designed to
+look for a filled inter-finger gap would find no difference and read as a clean pass** — a
+green A/B that never asked the question, which is worse than a red one.
+
+The friction-grasp campaign's two published residuals are a **roll** about the pad-to-pad
+axis (18.7°) and a **yaw** about the world vertical (10.62°), and **neither is the quantity
+predicted above.** A re-run under hull geometry must therefore additionally report, per
+trial:
+
+1. **translation of the part along the jaw axis** between first contact and the settled hold;
+2. **pitch about the finger-pivot axis**, which is a third axis and not either published one;
+3. **contact-patch length along the pad**, against the 37 → 44 mm prediction.
+
+Its existing thresholds still apply to the quantities they were written for. These three have
+no pre-registered threshold and must get one *before* the first trial, exactly as that
+campaign's own rule requires.
+
+**This correction promotes nothing.** The status stays `Proposed`, the shipped default stays
+`vendor_meshes`, and clause 2 remains unsatisfied.
 
 ## Context
 
@@ -495,22 +576,31 @@ real-time factor is earned by re-measuring RTF and `joint_states` frequency agai
 - **A new asset class to produce, store and keep in step with the vendor.** A vendor upgrade
   that changes a mesh now requires regenerating hulls, and a stale hull is a collision shape
   that does not match the arm — a failure that looks like a planner bug.
-- **A convex hull is not the true shape.** Concavities are filled: the space between the
-  gripper fingers, and any pocket a real part could enter, becomes solid. For the gripper in
+- **A convex hull is not the true shape.** Concavities within a link are filled, and any
+  pocket in a single link that a real part could enter becomes solid. For the gripper in
   particular this is likely to be wrong in a way that matters, and per-link exceptions
   (primitives, or multiple hulls for one link) will be needed. That is a genuine loss of
   fidelity traded for a genuine gain in solvability, and it must be stated wherever a
   contact measurement is published (P8).
+  **[Corrected 2026-08-31: this bullet said "the space between the gripper fingers" becomes
+  solid. It does not — each link is hulled separately, so that space lies between two
+  collision bodies. What the hull does change at the gripper is measured in the section
+  "Correction — 2026-08-31: the gripper risk is real and it is not a filled inter-finger
+  gap", which also states what the re-run has to measure instead.]**
 - **An L0 schema change**, which is a versioned contract with generated artifacts behind it
   (ADR-0021). Every generated file that references a collision mesh changes with it.
 - **Build and pipeline time**, plus a new dependency for hull computation that
   `requirements/README.md` has to place in exactly one of the four layers.
 
 ### What we will have to revisit
-- **When the gripper's filled concavity produces a wrong grasp.** The fingers are the links
-  whose exact geometry decides whether a part fits, and they are the links a convex hull
+- **When the gripper's hulled relief shoulders produce a wrong grasp.** The fingers are the
+  links whose exact geometry decides how a part is held, and they are the links a convex hull
   approximates worst. If it bites, the answer is per-link geometry for the fingers, not
-  abandoning hulls elsewhere.
+  abandoning hulls elsewhere. **[Corrected 2026-08-31: this bullet said "filled concavity",
+  meaning the gap between the fingers, and that mechanism does not occur. The one that does
+  is the pair of inclined wedges the hull adds at each pad's own relief steps — see the
+  correction section named above. `end_tool` is now a second candidate for this same
+  exception, for a different reason; see the note under the implementation note.]**
 - **When the RTF re-measurement lands.** If 0.14 does not move materially, the bottleneck is
   elsewhere — three controller managers at 150 Hz, or the physics step itself — and this
   record must not be cited as having fixed it. **[2026-08-29: two campaigns have landed and

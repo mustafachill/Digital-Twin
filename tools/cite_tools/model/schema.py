@@ -272,10 +272,18 @@ class CollisionSpec(Strict):
     reason. The mechanism underneath is the substitution of one mesh *root* for
     another in the vendor description, which is not something a single link can
     have an opinion about. Per-link exceptions are foreseen — ADR-0028 expects the
-    gripper fingers to need one, because a convex hull fills the gap between the
-    pads — but the exception it describes is *a primitive instead of a mesh*,
-    which this field could never express whatever its granularity. That is a
-    different mechanism and belongs to the change that measures it.
+    gripper fingers to need one — but the exception it describes is *a primitive
+    instead of a mesh*, which this field could never express whatever its
+    granularity. That is a different mechanism and belongs to the change that
+    measures it.
+
+    This docstring said until 2026-08-31 that the exception was needed "because a
+    convex hull fills the gap between the pads". It does not: each link is hulled
+    separately, so that gap lies between two collision bodies, and the aperture at
+    the pads is unchanged to 0.01 mm. What makes the fingers still need the
+    exception is the 2.0 mm relief step at each end of each pad, which the hull
+    ramps across. ADR-0028's correction of 2026-08-31 carries the measurements and
+    names what a re-run has to report.
     """
 
     #: The ``id`` of the set in ``sets`` that is bound into the description.

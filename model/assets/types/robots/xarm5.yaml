@@ -108,10 +108,20 @@ asset_type:
       # geometry before hulls may be selected. The campaign that motivated hulls
       # measured what they COST and never measured what they BREAK, and the
       # record's own warning is about this cell's grasp: the pads hold a part by
-      # friction alone (ADR-0029), so the contact surface IS the mechanism, and a
-      # convex hull fills the space between the fingers. Selecting `convex_hull`
-      # here without that measurement would replace a working, measured line with
-      # an unmeasured geometry.
+      # friction alone (ADR-0029), so the contact surface IS the mechanism, and
+      # the hull changes it. Selecting `convex_hull` here without that measurement
+      # would replace a working, measured line with an unmeasured geometry.
+      #
+      # WHAT THE HULL CHANGES, AND WHAT IT DOES NOT. This comment said until
+      # 2026-08-31 that "a convex hull fills the space between the fingers". It
+      # does not: each link is hulled separately, so that space lies between two
+      # collision bodies. Measured at the shipped 45 mm command, the aperture is
+      # 44.99 mm on BOTH geometries over the whole 37 mm pad. What does change is
+      # the 2.0 mm relief step at each end of each pad, which the hull ramps
+      # across, adding two inclined wedges inside the part's envelope. Read
+      # ADR-0028's correction of 2026-08-31 before designing the re-run: it names
+      # the three quantities to measure, and none of them is either residual the
+      # friction-grasp campaign has already published.
       select: vendor_meshes
       # The vendor macro parameter that carries a collision-mesh root. Named here
       # rather than in the generator for the same reason every entry in
