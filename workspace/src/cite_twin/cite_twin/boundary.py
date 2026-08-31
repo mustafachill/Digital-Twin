@@ -348,6 +348,9 @@ class SideContext:
         self.executor = MultiThreadedExecutor(context=self.context)
         self.executor.add_node(self.node)
         self._thread: threading.Thread | None = None
+        #: What ended this side's spin, where anything did. `None` while it is
+        #: running and after an orderly `stop()`.
+        self.failure: BaseException | None = None
 
     def spin_in_a_thread(self) -> None:
         """Spin this side's executor off the calling thread."""
@@ -359,10 +362,37 @@ class SideContext:
         self._thread.start()
 
     def _spin(self) -> None:
+        """Spin until the context goes away, and REMEMBER anything else.
+
+        This used to `return` on any exception, which made a dead side
+        indistinguishable from a quiet one: the context stayed `ok()`, `stop()`
+        checked nothing, and every divergence sample reported the far operand
+        as absent forever - the same answer it gives while the far cell is
+        merely not up yet. A twin whose far half has died says so in a field
+        (`DivergenceMetrics.counterpart_observed`), not by a hole in a
+        timestamp.
+        """
         try:
             self.executor.spin()
-        except Exception:  # the context went away underneath us; stop() reports it
+        except BaseException as error:  # noqa: B036
+            if rclpy.ok(context=self.context):
+                self.failure = error
             return
+
+    @property
+    def observing(self) -> bool:
+        """Whether L5 is still receiving anything at all on this side.
+
+        False once the spin thread has ended, however it ended. A side that is
+        not being observed is not the same fact as a side that is quiet, and
+        the ages in a divergence sample cannot tell them apart.
+        """
+        return (
+            self.failure is None
+            and self._thread is not None
+            and self._thread.is_alive()
+            and rclpy.ok(context=self.context)
+        )
 
     def stop(self) -> None:
         """Release this side, executor first, then node, then context.

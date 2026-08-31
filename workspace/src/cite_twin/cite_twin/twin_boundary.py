@@ -68,6 +68,7 @@ from dataclasses import dataclass
 from functools import partial
 import os
 from pathlib import Path
+import math
 import sys
 import threading
 import time
@@ -100,8 +101,19 @@ from cite_twin.boundary import (
     SKILL_ACTION_TYPES,
 )
 from cite_twin.divergence import assess, compare, Operand, UNMEASURED
-from cite_twin.mode import Deployment, MODE_NAMES, ModeAuthority, SIMULATION_BACKEND
-from cite_twin.routing import COUNTERPART_SIDE, PLANT_SIDE, route
+from cite_twin.mode import (
+    Deployment,
+    MODE_NAMES,
+    ModeAuthority,
+    SIMULATION_BACKEND,
+    Verdict,
+)
+from cite_twin.routing import (
+    COUNTERPART_SIDE,
+    PLANT_SIDE,
+    reverse_state_flow,
+    route,
+)
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.task import Future
@@ -111,11 +123,18 @@ from sensor_msgs.msg import JointState
 #: that the goal cannot be dispatched, in seconds of the WALL clock.
 #:
 #: A discovery wait and never a motion wait, which is what makes a wall-clock
-#: ceiling defensible here: `ActionClient.wait_for_server` waits on a graph
-#: event, so it returns the instant the server appears and the ceiling is only
-#: reached when it never does. ADR-0045's defect — a wall-clock deadline
-#: supervising a simulation-time process — is the one this is not: nothing
-#: bounded by this number is executed by a simulator.
+#: ceiling defensible here: nothing bounded by this number is executed by a
+#: simulator, so ADR-0045's defect — a wall-clock deadline supervising a
+#: simulation-time process — is the one this is not.
+#:
+#: **It is a poll and not a graph event, and this comment said otherwise until
+#: 2026-08-31.** `rclpy`'s `ActionClient.wait_for_server` loops on
+#: `server_is_ready()` with `time.sleep(0.25)` between attempts
+#: (`rclpy/action/client.py`), so a server that appears is noticed within a
+#: quarter of a second rather than instantly. Nothing here is sequenced on that
+#: quarter second — it decides only how quickly a goal that could already have
+#: been sent is sent — but a comment claiming an event where the upstream code
+#: sleeps is the kind of claim this project has been wrong about before.
 SERVER_WAIT_S = 30.0
 
 #: **How one operator result is ranked out of one result per side, worst first.**
@@ -158,6 +177,24 @@ AGGREGATE_RANKING: tuple[int, ...] = (
     ResultCode.NOT_IMPLEMENTED,
     ResultCode.TIMEOUT,
     ResultCode.CANCELLED,
+)
+
+#: The comparison fields no producer in this tree computes.
+#:
+#: Published as NaN rather than as zero, in every sample. `DivergenceMetrics.msg`
+#: declares the marker; the reason it is not zero is that zero is a measurement
+#: of zero and these were never measured at all. A reader plotting a series of
+#: them gets a hole, which is the truth, instead of a flat line at the origin,
+#: which is a claim.
+#:
+#: What would delete this list: a TCP pose error needs one TF buffer per side
+#: (ADR-0050 clause 1c) and forward kinematics for each; the two timing
+#: deviations need L4 line state from both sides. Neither exists here.
+NOT_COMPUTED_FIELDS: tuple[str, ...] = (
+    "tcp_position_error_m",
+    "tcp_orientation_error_rad",
+    "cycle_time_deviation_s",
+    "event_timing_deviation_s",
 )
 
 #: How often a divergence sample is published, per asset, in seconds.
@@ -212,15 +249,24 @@ class TwinBoundary:
         # Both sides resolved by NAME through ADR-0044 clause 4's single
         # resolver. A zone that declares no counterpart refuses here, with the
         # plan reader's own message, rather than L5 inventing a second side.
-        self._sides = {
-            PLANT_SIDE: SideContext(address(plan, PLANT_SIDE, base)),
-            COUNTERPART_SIDE: SideContext(address(plan, COUNTERPART_SIDE, base)),
-        }
+        #
+        # Built one at a time and released on the way out, because the refusal
+        # is the COMMON case on this repository's own model: it ships
+        # `twin: {sides: single}`, so every ordinary run of L5 reaches the
+        # second `address()` call and raises. Constructing both in one literal
+        # left the plant's `rclpy` context initialised with no reference to it
+        # anywhere — `main`'s `finally` only stops a boundary that finished
+        # constructing — and the process then exited with a live context.
+        self._sides: dict[str, SideContext] = {}
+        try:
+            for name in (PLANT_SIDE, COUNTERPART_SIDE):
+                self._sides[name] = SideContext(address(plan, name, base))
+                _refuse_sim_time(self._sides[name])
+        except BaseException:  # noqa: B036
+            self.stop()
+            raise
         self._plant = self._sides[PLANT_SIDE]
         self._counterpart = self._sides[COUNTERPART_SIDE]
-
-        for side in self._sides.values():
-            _refuse_sim_time(side)
 
         self._group = ReentrantCallbackGroup()
         self._log = self._plant.node.get_logger()
@@ -270,6 +316,11 @@ class TwinBoundary:
             self._on_set_mode,
             callback_group=self._group,
         )
+
+        #: Every goal L5 has dispatched and not yet finished, by the endpoint
+        #: it entered on. Read by the mode server, which refuses a transition
+        #: while any of them is outstanding (S-06).
+        self._in_flight: dict[tuple[str, bytes], str] = {}
 
         self._skills = _skill_endpoints(plan)
         self._servers = [self._serve(skill) for skill in self._skills]
@@ -372,11 +423,26 @@ class TwinBoundary:
         """
         with self._lock:
             before = self._authority.mode
-            verdict = self._authority.request(
-                request.mode, "", request.reason, request.force
-            )
+            outstanding = sorted(self._in_flight.values())
+            if outstanding and request.mode != before:
+                verdict = _a_transition_may_not_outrun_the_cell(
+                    before, request.mode, outstanding
+                )
+            else:
+                verdict = self._authority.request(
+                    request.mode, "", request.reason, request.force
+                )
             changed = verdict.accepted and verdict.mode != before
             if changed:
+                # A far-side operand recorded under the old mode is not an
+                # operand under the new one: whether a side's state crosses at
+                # all is a property of the mode (ADR-0050 decision 1b), so one
+                # kept across a transition would be a sample the new mode says
+                # cannot exist, ageing quietly rather than being absent.
+                for key in [
+                    key for key in self._operands if key[0] != PLANT_SIDE
+                ]:
+                    del self._operands[key]
                 self._publish_mode()
 
         response.accepted = verdict.accepted
@@ -453,9 +519,32 @@ class TwinBoundary:
         the twin said no and never learns why; every L3 result in this project
         is typed and this one is too (P3).
         """
+        # Read and registered under ONE acquisition, so that a transition
+        # cannot slip between them: either this goal is outstanding when the
+        # mode server looks, and the transition is refused, or the mode has
+        # already moved and this goal reads the new one.
+        key = (skill.endpoint, bytes(goal_handle.goal_id.uuid))
         with self._lock:
             mode = self._authority.mode
-        chosen = route(mode)
+            chosen = route(mode)
+            if chosen.accepted:
+                self._in_flight[key] = skill.endpoint
+        try:
+            return self._run_dispatched_goal(skill, goal_handle, mode, chosen)
+        finally:
+            with self._lock:
+                self._in_flight.pop(key, None)
+
+    def _run_dispatched_goal(
+        self, skill: _SkillEndpoint, goal_handle, mode: int, chosen
+    ):
+        """The body of one goal, with the goal already registered as in flight.
+
+        Split out so that the registration above has exactly one exit — the
+        `finally` — and cannot be left behind by a return added later. A goal
+        that stayed registered would refuse every mode transition for the life
+        of the process.
+        """
         if not chosen.accepted:
             self._log.warning(
                 f"{skill.endpoint} refused in {MODE_NAMES.get(mode, mode)}: {chosen.detail}"
@@ -593,6 +682,16 @@ class TwinBoundary:
     def _on_joint_state(self, side_name: str, asset: str, message: JointState) -> None:
         """Record one side's operand, timestamped ON ARRIVAL by L5's own clock.
 
+        **Consumed only where the mode has a reverse state flow for that side**
+        (`cite_twin.routing.reverse_state_flow`), which is the production caller
+        that function did not have. The subscription exists in every mode
+        because it is created once at start-up, and a message it delivers in a
+        mode with no reverse flow is dropped here rather than becoming an
+        operand — otherwise L5 would hold a far-side state in `VIRTUAL_LEAD`,
+        which is the one mode DEFINED by there being none, and the module that
+        says "L5 may not quietly open a reverse state flow" would be
+        contradicted by the node that imports it.
+
         The arrival stamp is the whole reason this is a subscription in L5
         rather than a bridge: a bridge copies and cannot timestamp, and the
         stamp is the term that separates a slow mirror from a wrong model
@@ -606,6 +705,10 @@ class TwinBoundary:
             for name, position in zip(message.name, message.position)
         }
         with self._lock:
+            if side_name != PLANT_SIDE and side_name not in reverse_state_flow(
+                self._authority.mode
+            ):
+                return
             self._operands[(side_name, asset)] = Operand(
                 positions=positions,
                 received_wall_s=time.time(),
@@ -658,17 +761,26 @@ class TwinBoundary:
         message.asset_id = asset
         message.valid = conditions.valid
 
-        # The zeroing rule, applied to the six comparison fields and to nothing
-        # else. Four of the six are zero in every sample for a second reason:
-        # this monitor does not compute a TCP pose error, a cycle-time deviation
-        # or an event-timing deviation at all — see cite_twin.divergence.
+        # The zeroing rule, applied to the two comparison fields this monitor
+        # computes. `valid` false zeroes them; that is ADR-0050 decision 5c.
         if conditions.valid:
             message.joint_error_rms_rad = comparison.joint_error_rms_rad
             message.joint_error_max_rad = comparison.joint_error_max_rad
-        message.tcp_position_error_m = 0.0
-        message.tcp_orientation_error_rad = 0.0
-        message.cycle_time_deviation_s = 0.0
-        message.event_timing_deviation_s = 0.0
+
+        # **NOT ZERO: NOT COMPUTED.** Nothing in this tree computes a TCP pose
+        # error, a cycle-time deviation or an event-timing deviation — see
+        # `cite_twin.divergence.Comparison`. Zero is a measurement of zero, and
+        # it is the strongest claim these fields can carry; it was being
+        # published for four fields no instrument had touched. The day term 3
+        # gains an instrument and `valid` turns true, a zero here would have
+        # become a fidelity number nobody measured.
+        #
+        # NaN is the marker, declared in `DivergenceMetrics.msg`. It is not the
+        # zeroing rule and does not replace it: the rule says what an INVALID
+        # sample carries, and this says what an UNCOMPUTED field carries, in
+        # every sample either way.
+        for field in NOT_COMPUTED_FIELDS:
+            setattr(message, field, math.nan)
 
         # The condition terms, which the rule does NOT zero: they are how a
         # reader learns which conjunct failed (ADR-0050, 5c).
@@ -680,11 +792,49 @@ class TwinBoundary:
         # A reader tells that from the two deficits above rather than from this.
         message.window_s = 0.0
         message.far_side_physical = far_side_physical
+        # Whether L5 is still watching the far side at all, which the ages
+        # above cannot say: an operand that never arrives and an observer that
+        # died look identical in a timestamp.
+        message.counterpart_observed = self._counterpart.observing
         # The plant's, because that is the side this sample is published on. The
         # two disagreeing is exactly what term 4 reports, so the field carries
         # one of them rather than a merged string.
         message.model_version = versions.get(PLANT_SIDE, "")
         return message
+
+
+def _a_transition_may_not_outrun_the_cell(
+    current: int, requested: int, outstanding: tuple[str, ...] | list[str]
+) -> Verdict:
+    """Refuse a transition while L5 still has goals it dispatched in flight.
+
+    **The mode must not be published ahead of the state it describes.** A
+    transition touched nothing in flight, so `/cite/twin/mode` could publish
+    `SIM` — `TwinMode.msg`: *"physical idle, virtual commanded"* — while a
+    physical arm was mid-motion under L5's own command, and every consumer of
+    that topic would have been told the cell was idle.
+
+    Refused rather than answered by cancelling. Cancelling is motion policy and
+    L5 is not the layer that decides what an arm does; the operator's cancel
+    already reaches every side through the goal that is outstanding, and this
+    refusal names the goals so that the operator knows which ones. It is
+    evaluated BEFORE `ModeAuthority` is consulted, so no value of `force`
+    reaches it — a forced transition here would be a forced lie on a topic
+    whose readers cannot check it.
+    """
+    named = ", ".join(outstanding)
+    return Verdict(
+        accepted=False,
+        mode=current,
+        code=ResultCode.PRECONDITION_FAILED,
+        detail=(
+            f"{MODE_NAMES.get(requested, requested)} describes a cell in which "
+            f"{len(outstanding)} goal(s) L5 dispatched are still running "
+            f"({named}). Publishing the new mode now would describe a state the "
+            "cell is not in - cancel those goals and ask again."
+        ),
+        commands_hardware=False,
+    )
 
 
 def _age(operand: Operand | None, now: float) -> float:

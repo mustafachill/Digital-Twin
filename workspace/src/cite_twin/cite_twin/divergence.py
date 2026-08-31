@@ -129,7 +129,8 @@ class Comparison:
     """The part of the sample that is arithmetic over two operands.
 
     Joint space only. The other four fields on `DivergenceMetrics` are not
-    computed by this module and the node sets them to zero:
+    computed by this module, and the node marks them NaN rather than zero
+    (`twin_boundary.NOT_COMPUTED_FIELDS`, and the message's own header):
 
     * `tcp_position_error_m` and `tcp_orientation_error_rad` need a tool pose
       per side, which needs one TF buffer per side (ADR-0050 clause 1c —
@@ -139,11 +140,14 @@ class Comparison:
     * `cycle_time_deviation_s` and `event_timing_deviation_s` need L4 line state
       from both sides, which L5 does not subscribe to yet.
 
-    **Their zero is not distinguishable from the zeroing rule's zero today**,
-    because `valid` is false for every sample and the rule zeroes all six
-    anyway. That stops being true the moment term 3 gains an instrument, and it
-    is named here so the gap is found then rather than discovered as a wrong
-    number.
+    **Their zero used to be indistinguishable from the zeroing rule's zero**,
+    because `valid` is false for every sample and the rule zeroed all six. That
+    would have stopped being true the moment term 3 gained an instrument, and
+    the four would have become fidelity numbers nobody measured. They now carry
+    NaN in every sample, which is a different statement on a different axis:
+    the zeroing rule says what an INVALID sample carries, and NaN says what an
+    UNCOMPUTED field carries. A producer that computes one of them stops
+    marking that one.
     """
 
     joint_error_rms_rad: float

@@ -27,10 +27,13 @@ finding to report.
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 from cite_interfaces.msg import TwinMode
 from cite_twin.divergence import (
     assess,
     compare,
+    Conditions,
     DEFICIT_BOUND_S,
     MODES_THAT_DEFINE_THE_COMPARISON,
     Operand,
@@ -128,6 +131,57 @@ class TestTheGateIsStructurallyShut:
             deficit_bound_s=0.1,
         )
         assert conditions.valid
+
+
+class TestValidIsTheConjunctionOfAllFiveTerms:
+    """`Conditions.valid`: "All five terms, never four."
+
+    **Nothing held that sentence until 2026-08-31.** Deleting term 1, 2, 4 or 5
+    from the conjunction left every test in this file green, because they all
+    drive `assess()` in a tree where term 3 is false anyway — so the sample was
+    invalid either way and no assertion could tell which conjunct did it. Only
+    term 3 was covered, and term 3 is the one that cannot be deleted by
+    accident.
+
+    These five drive the dataclass directly, one term false at a time and every
+    other term true, which is the only shape that distinguishes a conjunction
+    of five from a conjunction of four.
+    """
+
+    TERMS = (
+        "mode_defines_the_comparison",
+        "operands_paired_in_window",
+        "clock_deficit_within_bound",
+        "model_versions_agree",
+        "frames_correspond",
+    )
+
+    @staticmethod
+    def conditions(**overrides: bool) -> Conditions:
+        terms = dict.fromkeys(
+            TestValidIsTheConjunctionOfAllFiveTerms.TERMS, True
+        )
+        terms.update(overrides)
+        return Conditions(**terms)
+
+    def test_all_five_true_is_the_only_way_to_be_valid(self) -> None:
+        assert self.conditions().valid
+
+    @pytest.mark.parametrize("term", TERMS)
+    def test_any_single_term_false_makes_the_sample_invalid(self, term: str) -> None:
+        """One test per term, which is what the docstring already promised."""
+        conditions = self.conditions(**{term: False})
+        assert not conditions.valid, f"{term} was dropped from the conjunction"
+
+    @pytest.mark.parametrize("term", TERMS)
+    def test_the_failed_term_is_named(self, term: str) -> None:
+        """A term that fails invisibly is a term somebody will delete."""
+        assert self.conditions(**{term: False}).failed_terms() == (term,)
+
+    def test_the_dataclass_carries_five_terms_and_not_four(self) -> None:
+        """A guard on the guard: a sixth term added silently would pass above."""
+        assert len(fields(Conditions)) == 5
+        assert {field.name for field in fields(Conditions)} == set(self.TERMS)
 
 
 class TestTermOneTheMode:

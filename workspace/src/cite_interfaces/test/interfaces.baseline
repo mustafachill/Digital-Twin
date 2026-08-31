@@ -41,6 +41,7 @@ msg/DivergenceMetrics.msg
   float64 counterpart_clock_deficit_s
   float64 window_s
   bool far_side_physical
+  bool counterpart_observed
 msg/LineState.msg
   string TOPIC="/cite/line/state"
   std_msgs/Header header

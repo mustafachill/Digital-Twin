@@ -47,6 +47,7 @@ land on the domain of a cell somebody else is running from another checkout.
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 import tempfile
@@ -357,13 +358,19 @@ class TestTheTwinBoundary(unittest.TestCase):
         for sample in self.samples:
             self.assertNotEqual(sample.asset_id, "", "there is no facility-level number")
             self.assertFalse(sample.valid)
-            # The zeroing rule, applied to the six comparison fields.
+            # The zeroing rule, applied to the two fields this monitor computes.
             self.assertEqual(sample.joint_error_rms_rad, 0.0)
             self.assertEqual(sample.joint_error_max_rad, 0.0)
-            self.assertEqual(sample.tcp_position_error_m, 0.0)
-            self.assertEqual(sample.tcp_orientation_error_rad, 0.0)
-            self.assertEqual(sample.cycle_time_deviation_s, 0.0)
-            self.assertEqual(sample.event_timing_deviation_s, 0.0)
+            # And the OTHER rule, on the other axis: a field nothing computes
+            # carries NaN in every sample. Zero here would be a measurement of
+            # zero, and these four were never measured at all.
+            self.assertTrue(math.isnan(sample.tcp_position_error_m))
+            self.assertTrue(math.isnan(sample.tcp_orientation_error_rad))
+            self.assertTrue(math.isnan(sample.cycle_time_deviation_s))
+            self.assertTrue(math.isnan(sample.event_timing_deviation_s))
+            # The far side is being watched, which is not the same claim as the
+            # far side having published anything (it has not, in this rig).
+            self.assertTrue(sample.counterpart_observed)
             # And NOT applied to the condition terms, which are how a reader
             # learns which conjunct failed.
             self.assertEqual(sample.plant_clock_deficit_s, UNMEASURED)
@@ -371,6 +378,21 @@ class TestTheTwinBoundary(unittest.TestCase):
             # Neither side is up, so neither operand ever arrived.
             self.assertEqual(sample.plant_sample_age_s, UNMEASURED)
             self.assertEqual(sample.counterpart_sample_age_s, UNMEASURED)
+
+    def test_a_transition_is_refused_while_a_goal_l5_dispatched_is_running(self):
+        """**S-06.** The mode must not be published ahead of the state it describes.
+
+        This rig cannot hold a goal in flight — no side serves an L3 action, so
+        every dispatch fails at `wait_for_server` — so what is asserted here is
+        the other half: with nothing in flight, a transition is decided by the
+        mode authority as before. The refusal itself is unit-tested against the
+        function, and the paired rig drives a real in-flight goal.
+        """
+        self._reset_to_sim()
+        response = self._request(TwinMode.MODE_VALIDATED, "nothing is in flight")
+        self.assertFalse(response.accepted)
+        self.assertEqual(response.result.code, ResultCode.SAFETY_BLOCKED)
+        self.assertNotIn("still running", response.result.detail)
 
     def test_whether_the_far_side_is_physical_rides_with_the_sample(self):
         """The predicate that answers whether a number could ever be a fidelity one.

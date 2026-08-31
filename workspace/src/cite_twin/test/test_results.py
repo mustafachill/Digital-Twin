@@ -35,9 +35,12 @@ takes plain values.
 
 from __future__ import annotations
 
+import inspect
+from pathlib import Path
+
 from action_msgs.msg import GoalStatus
 from cite_interfaces.action import Grasp, MoveTo, Pick, Place, Transfer
-from cite_interfaces.msg import ResultCode
+from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_twin.boundary import (
     CUSTODY_FIELDS,
     IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS,
@@ -46,16 +49,24 @@ from cite_twin.boundary import (
 )
 from cite_twin.routing import COUNTERPART_SIDE, PLANT_SIDE
 from cite_twin.twin_boundary import (
+    _a_transition_may_not_outrun_the_cell,
     _aggregate,
     _compose_result,
     _outcome_of,
     _SideOutcome,
     _SkillEndpoint,
     _uncommanded_result,
+    NOT_COMPUTED_FIELDS,
 )
 import pytest
 
 BOTH = (PLANT_SIDE, COUNTERPART_SIDE)
+
+#: The definition in the source tree, for a checkout that is not installed.
+SOURCE_MESSAGE = (
+    Path(__file__).resolve().parents[2]
+    / "cite_interfaces/msg/DivergenceMetrics.msg"
+)
 
 
 def endpoint(field: str) -> _SkillEndpoint:
@@ -437,3 +448,78 @@ class TestTheAggregateRanking:
 
     def test_no_side_at_all_is_a_precondition_failure(self) -> None:
         assert _aggregate(BOTH, {}).code == ResultCode.PRECONDITION_FAILED
+
+
+class TestATransitionMayNotOutrunTheCell:
+    """**S-06.** The mode must not be published ahead of the state it describes.
+
+    A transition touched nothing in flight, so `/cite/twin/mode` could publish
+    `SIM` — `TwinMode.msg`: *"physical idle, virtual commanded"* — while a
+    physical arm was mid-motion under L5's own command.
+    """
+
+    def test_a_transition_is_refused_while_a_goal_is_outstanding(self) -> None:
+        verdict = _a_transition_may_not_outrun_the_cell(
+            TwinMode.MODE_VIRTUAL_LEAD,
+            TwinMode.MODE_SIM,
+            ["/cite/twin/cell_a/arm_1/pick"],
+        )
+        assert not verdict.accepted
+        assert verdict.code == ResultCode.PRECONDITION_FAILED
+
+    def test_the_refusal_names_the_goals(self) -> None:
+        """A refusal an operator cannot act on is a refusal they will force."""
+        verdict = _a_transition_may_not_outrun_the_cell(
+            TwinMode.MODE_VALIDATED,
+            TwinMode.MODE_SIM,
+            ["/cite/twin/cell_a/arm_1/pick", "/cite/twin/cell_a/arm_3/move_to"],
+        )
+        assert "/cite/twin/cell_a/arm_1/pick" in verdict.detail
+        assert "/cite/twin/cell_a/arm_3/move_to" in verdict.detail
+        assert "cancel" in verdict.detail
+
+    def test_the_mode_does_not_move(self) -> None:
+        verdict = _a_transition_may_not_outrun_the_cell(
+            TwinMode.MODE_VALIDATED, TwinMode.MODE_SIM, ["/cite/twin/x"]
+        )
+        assert verdict.mode == TwinMode.MODE_VALIDATED
+        assert not verdict.commands_hardware
+
+
+class TestTheFieldsNothingComputes:
+    """**S-07.** A zero is a measurement of zero, and these were never measured."""
+
+    def test_the_four_are_named_and_are_not_the_two_that_are_computed(self) -> None:
+        assert set(NOT_COMPUTED_FIELDS) == {
+            "tcp_position_error_m",
+            "tcp_orientation_error_rad",
+            "cycle_time_deviation_s",
+            "event_timing_deviation_s",
+        }
+        assert "joint_error_rms_rad" not in NOT_COMPUTED_FIELDS
+        assert "joint_error_max_rad" not in NOT_COMPUTED_FIELDS
+
+    def test_every_one_of_them_is_a_field_of_the_message(self) -> None:
+        declared = DivergenceMetrics.get_fields_and_field_types()
+        for field in NOT_COMPUTED_FIELDS:
+            assert declared[field] == "double", field
+
+    def test_the_message_declares_the_marker_where_a_consumer_will_read_it(
+        self,
+    ) -> None:
+        """`ros2 interface show` returns the comments, and L6 records beside them.
+
+        The README said it and the contract did not, which is the half a
+        consumer never sees.
+        """
+        text = (
+            Path(inspect.getfile(DivergenceMetrics))
+            .resolve()
+            .parents[3]
+            .joinpath("share/cite_interfaces/msg/DivergenceMetrics.msg")
+        )
+        if not text.is_file():  # pragma: no cover - source checkout, not installed
+            text = SOURCE_MESSAGE
+        body = text.read_text()
+        assert "NaN" in body
+        assert "NOT COMPUTED AT ALL" in body
