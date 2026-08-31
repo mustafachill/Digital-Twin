@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_twin</name>
+  <version>0.1.0</version>
+  <description>
+    L5 — the twin boundary. Mode, command routing and the divergence monitor.
+
+    One process per zone holding one ROS context per side, and the only component
+    in the running system with endpoints in both domains (ADR-0044 clause 3).
+    Nothing is republished across the boundary: what crosses, crosses in this
+    process's own memory (ADR-0050).
+
+    It produces no fidelity measurement. Both sides of a Phase 2.A pair run the
+    same L0 model and the same solver, so a comparison is a thing with itself.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>cite_interfaces</depend>
+  <!-- The bring-up plan READER, and two things in it that ADR-0050 requires
+       this package to reuse rather than restate: `resolve_domain_id`, which is
+       ADR-0044 clause 4's single resolver of base plus offset — L5 recomputes
+       that arithmetic nowhere — and `require_hardware_opt_in`, which is the
+       check SetMode.srv's header commits this server to applying at the
+       transition. "The same check" means the same function.
+
+       A dependency on a reader of generated data, not on the launch graph:
+       nothing here starts a process, and ADR-0047 clause 2 forbids it to. -->
+  <depend>cite_bringup</depend>
+  <!-- For one name: the topic each side publishes its model version on, which
+       is `cite_facility.model_info`'s and is term 4 of the divergence
+       conjunction. Written once, there. -->
+  <depend>cite_facility</depend>
+  <!-- For one constant: which exceptions mean "the context was shut down while
+       we were in it". That module documents itself as the single place that set
+       is written down, and this package deliberately does NOT adopt its
+       init/spin/shutdown — see twin_boundary.py's docstring, and cite_runtime's
+       own adoption rule, which names an L5 mode controller as the example of a
+       process that may not use it. -->
+  <depend>cite_runtime</depend>
+  <!-- The reverse state flow: an arm's joint state, consumed by the divergence
+       monitor and republished nowhere. -->
+  <depend>sensor_msgs</depend>
+  <exec_depend>cite_generated</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>cite_generated</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
