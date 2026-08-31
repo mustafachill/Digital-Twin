@@ -612,12 +612,13 @@ the four fail against the pre-fix command and pass after it. The fourth — that
 refuses — passed before the change as well, and is recorded here as documenting existing
 behaviour rather than as evidence of a fix.
 
-**The anti-vacuous test needs the vendor tree and was not run.** A guard that suppresses a
-comparison and a guard that deleted one look identical from the passing side, so the file also
-asserts that a corrupted derived region is still caught and still names `./scripts/hulls
---write`. That test is `skipif`-guarded on `workspace/src/external/` and **skipped on the
-machine the fix was written on**; it runs in the container and in CI, and until it has, the
-claim that the comparison still fires is unverified.
+**The anti-vacuous half was run, after the vendor tree was imported.** A guard that suppresses
+a comparison and a guard that deleted one look identical from the passing side, so the file
+also asserts that a corrupted derived region is still caught and still names `./scripts/hulls
+--write`. That test is `skipif`-guarded on `workspace/src/external/`, and it **skipped on the
+first pass and passed once `./scripts/bootstrap` had imported the vendor source** — with
+`./scripts/hulls` itself then reporting `1 set(s), 13 mesh(es) match the vendor` on an
+unmodified checkout. So the comparison is shown still firing, and is not merely believed to.
 
 ### The schema generalises to a second vendor and the tool does not
 
