@@ -503,12 +503,29 @@ account of a flake; each was caught by someone re-running, never by someone read
   the margin
   [`2026-08-28-second-world-cost`](docs/measurements/2026-08-28-second-world-cost/ANALYSIS.md)
   predicted for vendor collision meshes, on a different host and with the throttle now in the
-  world.** So half 2 is a **measured gap in the
-  machine** rather than an open question, and ADR-0043 stays `Proposed` for that reason and no
-  longer for the "unmeasurable today" one it used to give. **No scenario ceiling was changed and
-  none may be widened to absorb this.** The lever the campaign names is
-  [ADR-0028](docs/adr/0028-convex-hull-collision-meshes.md)'s hulls, still `Proposed`, with
-  `assets/` still holding only its README and its manifest.
+  world.**
+  **Half 2 is unmet in two different ways and only one of them is the machine. This file called
+  it "a measured gap in the machine" until 2026-08-31, and that was half the story.** The other
+  half is the shape of the requirement: with half 1's throttle in the world a measured real-time
+  factor is **capped at the declared factor by construction**, so half 2 as worded is a test no
+  machine passes, and an over-provisioned machine answers it much as an adequate one does. That
+  is read in upstream `gz-sim` source and recorded in
+  [ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md) and in ADR-0043's
+  2026-08-31 correction — which also records that ADR-0043's own throttled/unthrottled idle rows
+  were the evidence against its own requirement and were never read against each other.
+  **The machine is nevertheless genuinely short**: the paired shortfall is about an eighth, far
+  outside anything a throttle loss accounts for. The project owner **ratified ADR-0049's
+  decision on 2026-08-31** — the 1.0 floor is kept, not relaxed, and moves onto **capacity**
+  measured with the throttle lifted, plus a second requirement on the **accumulated clock
+  deficit** in seconds, measured with the throttle in force. **Ratification is not promotion**:
+  ADR-0049 stays `Proposed`, **neither of its two thresholds is set**, and nothing in the tree
+  measures either quantity — so half 2 is unmet under the new shape as well as the old, and
+  nothing can be shown to *pass*, only to fail. ADR-0043 stays `Proposed` too, and no longer for
+  the "unmeasurable today" reason it used to give. **No scenario ceiling was changed and
+  none may be widened to absorb this.** The lever the campaign named is
+  [ADR-0028](docs/adr/0028-convex-hull-collision-meshes.md)'s hulls; it has been pulled and it
+  was not enough — read the collision-geometry item in the gap list below, which is where that
+  record's state is kept.
   **The sharpest lesson of that work is a defect class, not a decision.** Every process the
   launch graph starts carried the partition; the scenario harness started its own and carried
   none, so both cycle scenarios hung at their work-piece spawn — and an unpartitioned

@@ -32,10 +32,17 @@
   make a slow one faster. Two free-running sides cannot agree about what time it is, and a
   clock deficit accumulates without bound while a transport latency does not
   ([ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)). The other half of that
-  decision — that both sides *sustain* 1.0 concurrently — is a requirement on the machine
-  answered by measurement, and **nothing in the tree measures it**; do not read the generated
-  value as that guarantee. It has since been measured **by hand, once, on a pair**, and it is
-  **not met**: ADR-0043's 2026-08-30 correction carries the figures and their provenance. `max_step_size` is untouched.
+  decision is a real-time floor on the machine, answered by measurement, and **nothing in the
+  tree measures it**; do not read the generated value as that guarantee. **Its original wording
+  — both sides *sustain* a measured 1.0 concurrently — is not the requirement**: under this
+  generated throttle a measured real-time factor is capped at the declared factor by
+  construction, so it was restated on 2026-08-31 by
+  [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) as a capacity floor
+  measured with the throttle **lifted**, plus a bound on the accumulated clock deficit measured
+  with it in force. Neither of that record's thresholds is set, so the floor is **not met** in
+  either shape; the paired figure measured by hand once on 2026-08-30 is in ADR-0043's
+  correction of that date, and being throttled it is not a capacity number.
+  `max_step_size` is untouched.
 - **Asset policy and pipeline:** [`../../assets/README.md`](../../assets/README.md)
 - **Related:** [ADR-0003](../adr/0003-gazebo-harmonic.md), [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0012](../adr/0012-large-asset-storage.md), [ADR-0029](../adr/0029-simulated-grasping-by-friction.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)
 
