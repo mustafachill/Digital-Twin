@@ -31,13 +31,25 @@
 # so neither refuses any transition this service carries. Do not read the list above
 # as saying these three are gated at the point of transition — they are not.
 #
-# NOTHING enforces it on this service, because no server implements it: the L5
-# twin package does not exist yet (CLAUDE.md §2). The server that eventually does
-# must apply the same check to any transition that commands physical hardware —
-# VIRTUAL_LEAD included, which is the one with nothing interposed — and until it
-# exists this interface is a contract and not a guarantee (P7). For a facility-wide
-# request that server has to resolve the far-side backend of every asset before it
-# can decide the transition; see cross-cutting-safety.md and the L5 open question.
+# What enforces it on this service, as of the L5 mode server: a transition that
+# places physical actuation under an authority that was not previously commanding
+# it calls `cite_bringup.plan.require_hardware_opt_in` — the SAME check, at the
+# transition rather than only at bring-up — and refuses with SAFETY_BLOCKED when
+# it raises. `force` does not skip it. Which transitions those are is
+# cross-cutting-safety.md's list and not a second one: entry to REAL and entry to
+# CLOSED_LOOP, which mean physical actuation whoever asks, and entry to
+# VIRTUAL_LEAD where the far side of any asset in scope is not simulated. A
+# facility-wide request resolves the far-side backend of EVERY asset before it
+# decides, because two assets answering "simulated" is not an answer for the
+# third.
+#
+# What that still is not: the safety layer. It is one refusal in one server, and
+# a hardware path that is opted into is not thereby supervised (P7).
+#
+# SERVICE below is the ONE place this name is written, for the same reason
+# ResetStation.srv carries its own.
+
+string SERVICE="/cite/twin/set_mode"
 
 uint8 mode                  # one of TwinMode.MODE_*
 string reason               # recorded; required, so every transition has a why

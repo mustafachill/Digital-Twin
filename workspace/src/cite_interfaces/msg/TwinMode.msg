@@ -9,6 +9,13 @@
 # parameter, an environment variable, or a launch-argument default — a system
 # that can enter REAL because someone forgot an argument is a system that will.
 
+# TOPIC below is the ONE place this name is written, for the same reason
+# LineState and LineTopology carry theirs: it was in prose in
+# docs/operations/bring-up.md and nowhere in the contract, which is one value in
+# two documents waiting for a third (ADR-0050, decision 5d).
+
+string TOPIC="/cite/twin/mode"
+
 uint8 MODE_SIM=0            # physical idle, virtual commanded
 uint8 MODE_REAL=1           # physical commanded, virtual idle
 uint8 MODE_SHADOW=2         # physical commanded, virtual follows its state
