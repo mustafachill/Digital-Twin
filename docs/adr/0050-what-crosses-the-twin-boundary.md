@@ -1,8 +1,13 @@
 # ADR-0050: Cross the twin boundary in L5's own memory, and say when a divergence number may be believed
 
-- **Status:** Proposed — **nothing in this record is implemented, and the tree state it is
-  written against is this.** Established against the checkout rather than taken from another
-  document:
+- **Status:** Proposed — **the mechanism is implemented and the promotion condition is still
+  unmet.** See the correction at the end of this record: `cite_twin` exists, four of the five
+  rows below are false, and the clause that governs promotion — a `DivergenceMetrics`
+  computed from two sides under decision 3's rule — is not satisfied, because `valid` is
+  false in every sample the package can produce and will stay false until ADR-0049's
+  clock-deficit instrument exists. `Proposed` is therefore the right status, and the table
+  below is **the tree of 2026-08-31 before the implementing branch**, kept as it was written
+  rather than edited in place:
 
   | Claim | Established by |
   |---|---|
@@ -11,6 +16,9 @@
   | [L5](../architecture/L5-twin-synchronization.md) is `DESIGNED` | `head -3 docs/architecture/L5-twin-synchronization.md` |
   | The shipped model is not paired | `model/facility/zones.yaml:22-23` declares `twin: {sides: single}` |
   | `/cite/twin/` is reserved for this layer and has no publisher | [`naming-and-namespaces.md`](../architecture/naming-and-namespaces.md) lines 8-9 and 118 |
+
+  **[Corrected 2026-08-31 — four of these five rows are false; see the Correction
+  section below.]**
 
   So every "will", "must" and "may not" below is a commitment rather than a description.
   **Promoted to `Accepted`** by the change that first computes a `DivergenceMetrics` from two
@@ -53,6 +61,78 @@
   [`qos-profiles.md`](../interfaces/qos-profiles.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   charter §4 (P1, P2, P3, P7, P8, P9), charter §8 (Phase 2)
+
+## Correction — 2026-08-31: four of the five status rows are false, and the promotion clause is not
+
+
+**What was wrong.** The status block above says *"nothing in this record is implemented"* and
+supports it with a five-row table read off the checkout. The branch that implements this
+record falsified four of those five rows and did not touch this file, which is the failure
+shape ADR-0044's own correction names: a record falsified by the change that satisfies it.
+
+| Row | State on 2026-08-31, after `feat/l5-twin-boundary` |
+|---|---|
+| `cite_twin` does not exist | **False.** It exists, with five modules and six test files. |
+| Nothing publishes or subscribes `DivergenceMetrics`, and nothing serves `SetMode` | **False.** Both endpoints exist, on the plant's domain. |
+| L5 is `DESIGNED` | **False.** `PARTIAL`, with what is and is not built named in its status bullet. |
+| The shipped model is not paired | **True, and unchanged.** `model/facility/zones.yaml` still declares `twin: {sides: single}`, so L5 refuses to start on a clean checkout. |
+| `/cite/twin/` is reserved and has no publisher | **False.** It has three: mode, divergence, and one action server per arm per skill. |
+
+**What is NOT wrong: the status.** The promotion clause is *"the change that first computes a
+`DivergenceMetrics` from two sides under decision 3's rule"*, and nothing has. `valid` is a
+conjunction whose third term is each side's clock deficit measured and within a bound
+ADR-0049 decision 2 deliberately leaves unset, so every sample the package can produce is
+invalid **by construction**, and that is decision 3 working rather than a defect. Two operands
+now do reach the monitor — `cite_twin/test/test_twin_boundary_paired_launch.py` — and a
+comparison over two operands is not a `DivergenceMetrics` that may be read. `Proposed` stays.
+
+**Three things this record does not decide, which the implementation had to, and which are
+recorded here rather than left in code comments.**
+
+1. **`Detect` does not cross.** Decision 2's table is about commands, and `Detect` observes
+   rather than commands; it is also zone-level rather than per-asset, so it has no place in a
+   per-arm routing table. This record's only mention of `Detect` counts it among L3's six
+   actions that `domain_bridge` cannot carry (the Option B rejection), which is not an
+   argument that it crosses. **The exclusion is a decision and it is made here**: L5 routes
+   the five per-asset skills and not `Detect`. What would reopen it is a mode in which the
+   twin has to compare two sides' *observations* rather than two sides' *states* — which is
+   not any mode in the present set.
+2. **A comparison field that nothing computes carries `NaN`, in every sample, valid or not.**
+   Decision 5c's zeroing rule says what an INVALID sample carries; it says nothing about a
+   field no producer computes, and four of the six are in that state — a TCP pose error needs
+   one TF buffer per side and forward kinematics, and the two timing deviations need L4 line
+   state from both sides. Zero is a measurement of zero, and publishing it for an unmeasured
+   quantity would have become a fidelity number the day term 3 gained an instrument. The
+   marker is declared in `DivergenceMetrics.msg`, because that file is what
+   `ros2 interface show` returns and what L6 records beside the numbers. This adds a rule on a
+   second axis and does not weaken 5c.
+3. **`DivergenceMetrics` gained one boolean, `counterpart_observed`**, appended at the end, so
+   the baseline moved without breaking a consumer. It reports whether L5's own observer for
+   the far side is still running, which the sample ages cannot say: an operand that never
+   arrives and an observer that died are the same hole in a timestamp.
+
+**And one thing this record's *readers* got wrong, which is worth recording because four
+documents carried it.** *"Nothing automated can show a goal crossing the boundary,"* attributed
+to `launch_test` holding one context on one domain. The premise is ADR-0047's and is about
+`IncludeLaunchDescription` hosting a whole cell's launch inside the test process; it was
+generalised into a claim about every automated test, and this repository already held the
+counter-example — `docs/measurements/2026-08-28-second-world-cost/harness/mirror_latency.py`
+holds two contexts on two domains in one process and carried 20,000 messages, and **this
+record chose L5's mechanism from that rig**. A goal now crosses in
+`cite_twin/test/test_twin_boundary_paired_launch.py`, which puts each side in its own process
+on its own domain. **No paired scenario exists and no goal has crossed into a running cell**;
+ADR-0047's claim about the scenario mechanism is untouched.
+
+**How the error survived.** Nothing checks a record against the tree it describes. The status
+table was established by four shell commands on the day it was written, which is the right
+way to write one — and the answers went stale the moment the branch that implements the
+record landed, with no test, no lint rule and no review step that reads a `Proposed` record
+back against the checkout. The branch's own author had every reason to read this file and no
+reason to re-run its table. ADR-0044's correction says the same thing about itself, three
+weeks earlier, which is the part that transfers: **a status block established by command is
+a measurement, and a measurement in a document has an expiry date.** The remedy this project
+already uses elsewhere is to name the command beside the number so the next reader can
+re-run it; that is done here, and it is not the same as anything re-running it.
 
 ## Context
 
@@ -617,3 +697,4 @@ record a reader is most likely to mistake for the twin becoming real.
 - **Whether a paired scenario exists, and what it would assert** — ADR-0047 left it open and this
   record adds nothing to it.
 - **How L6 records a pair** — ADR-0044 clause 3's third carve-out, still unresolved.
+

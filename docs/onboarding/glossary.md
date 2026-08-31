@@ -44,7 +44,11 @@ carries the level each mode sits at.
 
 `VIRTUAL_LEAD` is `CLOSED_LOOP` without the validation gate and `SHADOW` with the arrow
 reversed ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
-Decision 2). **No node implements any mode** — `cite_twin` does not exist (CLAUDE.md §2).
+Decision 2). **A node now serves the mode and no bring-up starts it** —
+`cite_twin/twin_boundary.py` serves `SetMode` and publishes `TwinMode`, and it refuses to
+start against a zone that declares one side, which the shipped model does
+([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)). So the mode set is still
+vocabulary in every deployment anyone has run.
 
 ## Architecture
 

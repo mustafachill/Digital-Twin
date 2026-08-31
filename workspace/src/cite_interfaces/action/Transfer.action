@@ -8,6 +8,24 @@
 # That split is what makes a handoff testable in isolation, which is what v1's
 # handoff protocol never was: it published to a topic nothing subscribed to and
 # every transaction timed out forever, with no test able to notice.
+#
+# WHEN THIS RESULT COMES FROM THE TWIN BOUNDARY (L5), it is an aggregate of two
+# cells and not one cell's answer. `cite_twin` decides every field of it, and
+# the rule is per field rather than per message:
+#
+#   * `result` is ranked by consequence over the sides, worst first, and every
+#     side is named in `detail`.
+#   * `still_holding` states CUSTODY and is the logical OR over the sides the
+#     goal was dispatched to - somebody is holding it. A dispatched side that
+#     returned no result at all counts as holding, because unknown custody has
+#     to fall on the side that makes L4 escalate rather than the side that
+#     makes it open a gripper (ADR-0038 decision 5, ADR-0046).
+#   * `duration` is one side's MEASUREMENT. Two arms produce two of them and
+#     their mean is a value neither arm produced, so L5 forwards the PLANT's
+#     whole - the side the operator is on (ADR-0044 clause 5) - and says so in
+#     `detail`. Where the plant returned no result, none is forwarded and
+#     `detail` says that instead; the counterpart's number is never reported
+#     under the plant's name.
 
 geometry_msgs/PoseStamped handoff_pose
 string rendezvous_token                 # issued by L4; opaque to this layer

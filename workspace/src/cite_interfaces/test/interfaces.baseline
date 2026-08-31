@@ -24,6 +24,7 @@ msg/DetectionEvent.msg
   geometry_msgs/Point position
   string workpiece_id
 msg/DivergenceMetrics.msg
+  string TOPIC="/cite/twin/divergence"
   std_msgs/Header header
   string asset_id
   bool valid
@@ -34,6 +35,13 @@ msg/DivergenceMetrics.msg
   float64 cycle_time_deviation_s
   float64 event_timing_deviation_s
   string model_version
+  float64 plant_sample_age_s
+  float64 counterpart_sample_age_s
+  float64 plant_clock_deficit_s
+  float64 counterpart_clock_deficit_s
+  float64 window_s
+  bool far_side_physical
+  bool counterpart_observed
 msg/LineState.msg
   string TOPIC="/cite/line/state"
   std_msgs/Header header
@@ -143,6 +151,7 @@ msg/StationTopology.msg
   string[] upstream_ids
   string[] downstream_ids
 msg/TwinMode.msg
+  string TOPIC="/cite/twin/mode"
   uint8 MODE_SIM=0
   uint8 MODE_REAL=1
   uint8 MODE_SHADOW=2
@@ -167,6 +176,7 @@ srv/ResetStation.srv
   uint8 station_state
   string cleared_reason
 srv/SetMode.srv
+  string SERVICE="/cite/twin/set_mode"
   uint8 mode
   string reason
   bool force

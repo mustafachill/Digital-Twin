@@ -1,4 +1,17 @@
 # Place a held object: approach, release, and retreat.
+#
+# WHEN THIS RESULT COMES FROM THE TWIN BOUNDARY (L5), it is an aggregate of two
+# cells and not one cell's answer. `cite_twin` decides every field of it, and
+# the rule is per field rather than per message:
+#
+#   * `result` is ranked by consequence over the sides, worst first, and every
+#     side is named in `detail`.
+#   * `release_pose` and `duration` are one side's MEASUREMENT. Two arms
+#     produce two of them and their mean is a value neither arm produced, so L5
+#     forwards the PLANT's whole - the side the operator is on (ADR-0044 clause
+#     5) - and says so in `detail`. Where the plant returned no result, none is
+#     forwarded and `detail` says that instead; the counterpart's number is
+#     never reported under the plant's name.
 
 geometry_msgs/PoseStamped target_pose
 float64 approach_distance_m             # m

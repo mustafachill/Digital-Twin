@@ -3,6 +3,19 @@
 # The goal is in task space, never joint space. A joint-space goal leaks the
 # robot's kinematics upward and breaks every promise L3 makes — swapping an
 # xArm 5 for a 7-DOF arm must change nothing above this line.
+#
+# WHEN THIS RESULT COMES FROM THE TWIN BOUNDARY (L5), it is an aggregate of two
+# cells and not one cell's answer. `cite_twin` decides every field of it, and
+# the rule is per field rather than per message:
+#
+#   * `result` is ranked by consequence over the sides, worst first, and every
+#     side is named in `detail`.
+#   * `reached`, `position_error_m` and `duration` are one side's MEASUREMENT.
+#     Two arms produce two of them and their mean is a value neither arm
+#     produced, so L5 forwards the PLANT's whole - the side the operator is on
+#     (ADR-0044 clause 5) - and says so in `detail`. Where the plant returned
+#     no result, none is forwarded and `detail` says that instead; the
+#     counterpart's number is never reported under the plant's name.
 
 geometry_msgs/PoseStamped target        # in any frame TF can resolve
 string named_configuration              # alternative to `target`, e.g. "home";

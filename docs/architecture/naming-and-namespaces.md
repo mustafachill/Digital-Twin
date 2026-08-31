@@ -6,7 +6,11 @@
   `./scripts/scenario bringup` asserts the result — controller and joint names, the
   `/cite/facility/` scope, and station frames resolving against the world.
   **Not exercised:** of the reserved scopes, only `/cite/facility/` and `/cite/line/topology`
-  have a publisher. `/cite/twin/` and the rest of `/cite/line/` are Phase 2 and later.
+  have a publisher **in a bring-up anyone runs**. `/cite/twin/` gained one when `cite_twin`
+  landed — mode, divergence and one action endpoint per skill, all under it, with a test
+  asserting that no L5 name collides with a name a side owns — but no bring-up starts that
+  node and it refuses a single-sided zone, so nothing publishes there in the shipped
+  configuration. The rest of `/cite/line/` is Phase 2 and later.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [L0](L0-facility-model.md)
 
 Naming looks like a style question. In this project it is a correctness question: P2 says

@@ -110,6 +110,30 @@ to `VIRTUAL_LEAD` hands it to the virtual side with nothing interposed — it is
 The third entry is therefore on this list on the same criterion as the other two, and not
 by analogy.
 
+**THE LIST IS THREE EXAMPLES OF THE CRITERION AND HAS NEVER BEEN THE SET, and on
+2026-08-31 the difference stopped being academic.** L5's mode server transcribed these
+three into code, and `VALIDATED` — which dispatches an operator's goal to both sides by
+byte-identical code to `VIRTUAL_LEAD`'s — is not among them. On a plan with a real far
+side, `SetMode(VIRTUAL_LEAD)` was refused `SAFETY_BLOCKED` and `SetMode(VALIDATED)` was
+accepted with no gate and no `force`, after which a goal reached the physical arm. A test
+asserted that acceptance and passed.
+
+**Apply the criterion; never transcribe the list.** Applying it needs two facts, and both
+are already data: *which sides does this mode command*, which `TwinMode.msg` states per
+mode and `cite_twin.routing.commanded_sides` reads, and *does any of those sides, for any
+asset in scope, load something other than a simulation*, which the generated bring-up plan
+states per (asset, side). Computed that way, the answer on a cell with one physical far
+side is **every mode but `SIM`** — the three above, and `VALIDATED`, and `SHADOW`, whose
+own definition in `TwinMode.msg` is *"physical commanded, virtual follows its state"* and
+which this list never asked about. A seventh mode is decided by the same two questions on
+the day it is added.
+
+**And on a cell with no physical side, no mode is gated.** That is the criterion too: a
+mode cannot place physical actuation under a new authority where there is no physical
+actuation. The refusal both guards below implement is scoped to the PLAN, so it could not
+have refused anything there in any case — a gate reported as applying to a wholly
+simulated deployment was reporting a check that was structurally a no-op.
+
 **Whether entering `VIRTUAL_LEAD` can move anything physical is a per-asset fact, and a
 facility-wide transition is not that question asked once.** Where *a given asset's* far
 side is a simulated counterpart, entering the mode moves nothing physical **for that
@@ -134,13 +158,31 @@ value**, and that is filed as an open question rather than answered here — see
 The two guards, where they live and that both carry tests are in this document's Status
 bullet, and are deliberately not restated here (P1). What that bullet does not say is *when*
 they take effect: **both refuse before the stack starts — one at the shell boundary, one at
-bring-up — and neither refuses a transition.** What they buy is that the stack could not
-have **started** with a physical backend. Neither is a per-command refusal, and **nothing
-refuses a mode transition today**, because no server implements `SetMode` — `cite_twin` does
-not exist (CLAUDE.md §2). That service's own header commits the L5 server that eventually
-serves it to applying the same check at the transition, and for `VIRTUAL_LEAD` that
-commitment is the whole of the transition-time story. Do not read the three above as gated
-at the point of transition.
+bring-up.** What they buy is that the stack could not have **started** with a physical
+backend, and neither is a per-command refusal.
+
+**A third refusal now exists at the point of transition, and its reach is narrow.**
+`cite_twin/twin_boundary.py` serves `SetMode` and calls the same
+`cite_bringup.plan.require_hardware_opt_in` when a transition places physical actuation
+under an authority that was not previously commanding it. **Which transitions those are is
+computed from the criterion and not read off the list above** — see the correction under
+that list, and `cite_twin/cite_twin/mode.py`, which states in its own comment that it holds
+no list of gated modes and why. `force` cannot skip it, which its own unit tests hold, one
+per mode the message declares ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)).
+
+**A second refusal, on a different hazard, is also out of `force`'s reach**: a transition
+is refused while any goal L5 dispatched is still running. `/cite/twin/mode` is where every
+consumer reads what the cell is doing, and publishing `SIM` — *"physical idle"* — while an
+arm is mid-motion under L5's own command would be a statement no reader could check. The
+refusal names the goals; cancelling them is the operator's remedy, and L5 does not cancel
+an arm's goal as a side effect of a mode change.
+
+**What that does not amount to:** it is one refusal in one server, it is not the safety
+layer, and **no bring-up starts that server** — nothing in `simulation.launch.py`,
+`./scripts/sim` or any scenario, and it refuses a single-sided zone, which is the only kind
+this repository ships. So in every deployment anyone has run, nothing refuses a mode
+transition, because nothing serves one. Do not read anything above as saying a transition
+is gated in a deployment somebody has run.
 
 ## Multi-robot workspaces
 

@@ -11,6 +11,16 @@
 # commanding it. VIRTUAL_LEAD meets it with nothing interposed — it is CLOSED_LOOP
 # minus the validation gate, aimed at the same arm (ADR-0041 Decision 2).
 #
+# THOSE THREE ARE NOT THE GATE, AND READING THEM AS THE GATE COST THIS PROJECT A
+# BYPASS. They are the three that matter most, which is a statement about
+# emphasis; the gate is the criterion, and the criterion decides every mode.
+# VALIDATED also dispatches an operator goal to both sides — by byte-identical
+# code to VIRTUAL_LEAD's — and it is not in the list of three, so until
+# 2026-08-31 SetMode(VIRTUAL_LEAD) was refused SAFETY_BLOCKED on a plan with a
+# real far side while SetMode(VALIDATED) was accepted with no gate and no
+# `force`, after which a goal reached the physical arm. Never transcribe this
+# list into code.
+#
 # Whether entering VIRTUAL_LEAD can move anything physical is a PER-ASSET fact.
 # Where that asset's far side is a simulated counterpart, entering the mode moves
 # nothing physical for that asset. This request is not always per-asset: TwinMode
@@ -31,18 +41,49 @@
 # so neither refuses any transition this service carries. Do not read the list above
 # as saying these three are gated at the point of transition — they are not.
 #
-# NOTHING enforces it on this service, because no server implements it: the L5
-# twin package does not exist yet (CLAUDE.md §2). The server that eventually does
-# must apply the same check to any transition that commands physical hardware —
-# VIRTUAL_LEAD included, which is the one with nothing interposed — and until it
-# exists this interface is a contract and not a guarantee (P7). For a facility-wide
-# request that server has to resolve the far-side backend of every asset before it
-# can decide the transition; see cross-cutting-safety.md and the L5 open question.
+# What enforces it on this service, as of the L5 mode server: a transition that
+# places physical actuation under an authority that was not previously commanding
+# it calls `cite_bringup.plan.require_hardware_opt_in` — the SAME check, at the
+# transition rather than only at bring-up — and refuses with SAFETY_BLOCKED when
+# it raises. `force` does not skip it.
+#
+# WHICH TRANSITIONS THOSE ARE IS COMPUTED AND NOT LISTED, which is the whole of
+# the correction above. `cite_twin` asks two questions of data: which sides the
+# requested mode commands — `cite_twin.routing.commanded_sides`, read off
+# TwinMode.msg's own per-mode comment, and a superset of the sides L5 dispatches
+# a goal to — and whether any of those sides, for any asset in scope, loads a
+# backend that is not a simulation. So the answer on a cell with a physical far
+# side is every mode but SIM, including VALIDATED and including SHADOW, and a
+# seventh mode is decided by the same two questions rather than by whether
+# somebody remembered to add it.
+#
+# A facility-wide request resolves the backend of EVERY asset before it decides,
+# because two assets answering "simulated" is not an answer for the third.
+#
+# On a deployment where no side is physical, no mode is gated and the response
+# says so: there is nothing there for a mode to place under a new authority, and
+# the check is plan-scoped, so it could not have refused one anyway.
+#
+# What that still is not: the safety layer. It is one refusal in one server, and
+# a hardware path that is opted into is not thereby supervised (P7).
+#
+# SERVICE below is the ONE place this name is written, for the same reason
+# ResetStation.srv carries its own.
+
+string SERVICE="/cite/twin/set_mode"
 
 uint8 mode                  # one of TwinMode.MODE_*
 string reason               # recorded; required, so every transition has a why
 bool force                  # skip non-safety preconditions. Never skips a safety
-                            # check — no value of this field can do that.
+                            # check — no value of this field can do that, and
+                            # two refusals are structurally out of its reach:
+                            # the hardware gate above, and the refusal of a
+                            # transition taken while goals L5 dispatched are
+                            # still running. The second is not decoration — a
+                            # mode published ahead of the cell says "physical
+                            # idle" while an arm is moving, and forcing it would
+                            # be forcing that statement onto every reader of
+                            # /cite/twin/mode.
 ---
 bool accepted
 ResultCode result

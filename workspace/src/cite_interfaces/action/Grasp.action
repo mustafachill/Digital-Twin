@@ -7,6 +7,24 @@
 #
 # The skill commands the gripper's ros2_control controller and nothing else
 # (ADR-0022), so this action behaves identically in simulation and on hardware.
+#
+# WHEN THIS RESULT COMES FROM THE TWIN BOUNDARY (L5), it is an aggregate of two
+# cells and not one cell's answer. `cite_twin` decides every field of it, and
+# the rule is per field rather than per message:
+#
+#   * `result` is ranked by consequence over the sides, worst first, and every
+#     side is named in `detail`.
+#   * `holding` states CUSTODY and is the logical OR over the sides the goal
+#     was dispatched to - somebody is holding it. A dispatched side that
+#     returned no result at all counts as holding, because unknown custody has
+#     to fall on the side that makes L4 escalate rather than the side that
+#     makes it open a gripper (ADR-0038 decision 5, ADR-0046).
+#   * `reached_width_m` and `measured_effort_n` are one side's MEASUREMENT. Two
+#     grippers produce two of them and their mean is a value neither produced,
+#     so L5 forwards the PLANT's whole - the side the operator is on (ADR-0044
+#     clause 5) - and says so in `detail`. Where the plant returned no result,
+#     none is forwarded and `detail` says that instead; the counterpart's
+#     number is never reported under the plant's name.
 
 float64 width_m                 # m, target opening between the pads
 float64 max_effort_n            # N, upper bound on grip force
