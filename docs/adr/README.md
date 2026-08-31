@@ -134,9 +134,10 @@ not rewritten either.
 | [0040](0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md) | Stop a joint part way with a test-only hardware plugin, so an abort reaches L3 on demand | Proposed (corrected 2026-08-28) |
 | [0041](0041-virtual-counterpart-is-a-second-full-simulation.md) | Build the Phase 2.A virtual counterpart as a second full simulation | Accepted (corrected 2026-08-29 and 2026-08-30) |
 | [0042](0042-partition-gazebo-transport-per-side.md) | Partition Gazebo transport per side, explicitly and never by default | Accepted (corrected 2026-08-29) |
-| [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29 and 2026-08-30) |
+| [0043](0043-hold-both-sides-to-the-wall-clock.md) | Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently | Proposed (corrected 2026-08-29 and 2026-08-30; half 2 restated by [0049](0049-measure-the-real-time-floor-as-capacity.md)) |
 | [0044](0044-one-ros-domain-per-side-identical-names.md) | Give each side of a twin pair its own ROS domain, and keep both sides' names byte-identical | Proposed (corrected 2026-08-30) |
 | [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed (corrected 2026-08-30) |
 | [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed (corrected 2026-08-30) |
 | [0047](0047-two-independent-launches-joined-not-sequenced.md) | Bring a pair up as two independent launches, joined by a supervisor that sees only processes | Accepted |
 | [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Proposed (corrected 2026-08-30) |
+| [0049](0049-measure-the-real-time-floor-as-capacity.md) | Keep the real-time floor and measure it as capacity, not as a throttled rate | Proposed |
