@@ -207,8 +207,12 @@ class TestTheWorldIsHeldToTheWallClock:
     deficit accumulates without bound while a transport latency does not.
 
     A CEILING, not a floor, and nothing here may be read as saying the machine
-    holds it. That is ADR-0043's second half, it is answered by measurement, and
-    nothing measures it yet.
+    holds it. That is ADR-0043's second half, whose WORDING is superseded: with
+    this factor in the world a measured rate is capped at it by construction, so
+    ADR-0043's status line says not to cite half 2 as written. ADR-0049 keeps the
+    1.0 floor on two quantities instead — capacity with this throttle lifted, and
+    the accumulated clock deficit in seconds with it in force — and nothing in the
+    tree measures either.
     """
 
     def test_the_world_declares_a_throttled_factor(self, cell) -> None:

@@ -88,7 +88,13 @@ from cite_bringup.readiness import announced_side
 #:
 #: **It must never be widened to absorb a slow host.** Two cells on a machine
 #: that cannot hold real time will be slow, and slow is a finding about the
-#: machine (ADR-0043's second half), not a number to raise here.
+#: machine, not a number to raise here. **Which finding is ADR-0049's, not
+#: ADR-0043 half 2's** — ADR-0043's status line says not to cite half 2's
+#: wording, because with half 1's throttle in the generated world a measured
+#: factor is capped at the declared factor by construction. ADR-0049 keeps the
+#: 1.0 floor and puts it on two quantities, neither threshold set: capacity with
+#: that throttle lifted, and the accumulated clock deficit in seconds with it in
+#: force. Neither is a bring-up condition (ADR-0049 decision 4).
 #:
 #: **It is stated rather than derived, and nothing binds it to the ceilings a
 #: side's own gate chain carries.** The readiness witness alone allows 300 s, and

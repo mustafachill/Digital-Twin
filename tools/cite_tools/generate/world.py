@@ -55,9 +55,16 @@ STEP_SIZE_S = 0.001
 #: `docs/measurements/2026-08-29-real-time-factor-conditions/` — and no ceiling
 #: moved.
 #:
-#: The other half of ADR-0043 — that both sides SUSTAIN 1.0 concurrently — is a
-#: requirement on the machine answered by measurement, and nothing measures it
-#: yet. Do not read this constant as that guarantee. When something does measure
+#: The other half of ADR-0043 is a requirement on the machine, still unmeasured
+#: by anything in this tree — and its WORDING is superseded. ADR-0043's status
+#: line says not to cite half 2 as written, because with this constant in the
+#: world a measured factor is capped at it by construction, which makes "both
+#: sides sustain 1.0" a test no machine passes. ADR-0049 keeps the 1.0 floor and
+#: restates it as two quantities, neither of whose thresholds is set: CAPACITY —
+#: both sides sampled concurrently with this throttle LIFTED — and the
+#: accumulated CLOCK DEFICIT in seconds, wall time elapsed minus simulated time
+#: elapsed over a stated window, with the throttle in force. Cite those two, not
+#: half 2. Do not read this constant as that guarantee. When something does measure
 #: it, `Δ sim_time / Δ real_time` over a stated window is the method; Gazebo's
 #: own `real_time_factor` field over-reports under CPU starvation and
 #: `cross-cutting-testing.md` forbids it.

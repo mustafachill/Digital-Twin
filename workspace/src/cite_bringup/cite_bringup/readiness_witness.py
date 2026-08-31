@@ -37,11 +37,16 @@ is what keeps the supervisor above it from being a cross-domain observer.
 
 - **The other side.** Not "does not", *cannot*: it holds one context on one
   domain, and it is given no side's identity but its own.
-- **Real-time factor.** ADR-0043's second half — both sides sustaining 1.0
-  concurrently — is explicitly **not** a bring-up condition, so a side can be up,
-  slow, and indistinguishable from a healthy one here. Making readiness depend on
-  a performance figure would turn a slow host into a bring-up failure, which is
-  the opposite of what a ceiling on a failure means.
+- **Real-time factor.** ADR-0043's second half is explicitly **not** a bring-up
+  condition, so a side can be up, slow, and indistinguishable from a healthy one
+  here. **Do not cite half 2's wording** — ADR-0043's status line supersedes it,
+  and ADR-0049 restates the same 1.0 floor as two quantities with neither
+  threshold set: capacity, measured with the generated world's throttle lifted,
+  and the accumulated clock deficit in seconds, measured with it in force.
+  ADR-0049's decision 4 keeps **either** shape outside bring-up, and cites
+  ADR-0047's clause 4 for it. Making readiness depend on a performance
+  figure would turn a slow host into a bring-up failure, which is the opposite of
+  what a ceiling on a failure means.
 
 **Its deadline is measured on the wall clock, deliberately.** Every other node in
 this launch honours `use_sim_time` and this one is declared `False`, because one
