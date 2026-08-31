@@ -1,12 +1,21 @@
 # ADR-0043: Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently
 
-- **Status:** Proposed (corrected 2026-08-29 and 2026-08-30) — **half 2 is restated by
-  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md), 2026-08-31, and half 1 is
-  untouched.** That record keeps the 1.0 floor and moves it onto *capacity*, measured with this
-  world's throttle lifted, because under half 1 a measured real-time factor is capped at the
-  declared factor by construction — so half 2 as worded below is a test no machine passes.
-  **Read ADR-0049 before citing half 2, and do not cite half 2's wording as the requirement.**
-  The rest of this block stands as written.
+- **Status:** Proposed (corrected 2026-08-29, 2026-08-30 and 2026-08-31) — **half 1 stands
+  exactly as written and is implemented; half 2 does not stand as worded.** It is restated by
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md), whose decision the project owner
+  ratified on 2026-08-31, because under half 1 a measured real-time factor is capped at the
+  declared factor by construction — so half 2 as worded below is a test no machine passes, and
+  an adequate machine and an over-provisioned one return almost the same answer to it.
+  **The 1.0 floor is not relaxed.** It moves onto *capacity*, measured with this world's
+  throttle lifted, and a second requirement is added on the accumulated clock deficit measured
+  with the throttle in force. **Neither of that record's two thresholds is set**, so half 2 is
+  unmet under the new shape as well as the old, and **ADR-0049 is itself `Proposed`** —
+  ratification is not promotion. **The paired shortfall recorded below is a real shortfall and
+  not an artefact of the wording**; the requirement's shape is part of the gap and not the whole
+  of it. **Read ADR-0049 before citing half 2, and do not cite half 2's wording as the
+  requirement.** See the section "Correction — 2026-08-31: half 2 as worded is a test no machine
+  passes, and this record's own table said so", below. **Three corrections sit here, newest
+  first.**
   **half 2 has been measured
   and is NOT MET.** A pair came up on 2026-08-30, both sides were sampled in the same window,
   and each ran at about 0.88 — roughly 12 % short of the 1.0 this record requires. The reason
@@ -47,6 +56,81 @@
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
   charter §4 (P1, P4, P6, P8)
+
+## Correction — 2026-08-31: half 2 as worded is a test no machine passes, and this record's own table said so
+
+**Installed on the project owner's ratification of
+[ADR-0049](0049-measure-the-real-time-floor-as-capacity.md)'s decision, 2026-08-31.** That
+record is `Proposed` and stays `Proposed`; a `Proposed` record may not install a correction in
+another, and the ratification is what lifted that. **No status moves and no threshold is set
+here.**
+
+**What was wrong.** Half 2 as worded — *"Both sides must sustain a measured real-time factor of
+at least 1.0, concurrently"* — is not a requirement any machine can satisfy while half 1 is in
+force. Two sentences elsewhere in this record are wrong with it: the 2026-08-29 correction's
+*"It says nothing about half 2"*, said of the table below, and the 2026-08-30 correction's
+*"Both halves stand exactly as written"*. The consequence bullet that asks for something to
+check "both sides sustain >= 1.0 concurrently" asks for a check of a quantity that cannot pass.
+
+**What is true, read in upstream source rather than inferred.** `gz-sim` is Gazebo Harmonic's
+simulation library. `src/SimulationRunner.cc` was read again on 2026-08-31 for this correction,
+at branch `gz-sim8` and at tag `gz-sim8_8.0.0` — both ends of the release series, because **the
+installed patch version is not determined**: `infra/docker/Dockerfile` installs the
+`gz-harmonic` metapackage from apt and pins no version. ADR-0049 holds the same reading with
+its line-level detail and is not duplicated here (P1).
+
+| Claim | Where it was read | Result |
+|---|---|---|
+| the declared factor becomes a period, `updatePeriod = stepSize / desiredRtf` | `SimulationRunner::SimulationRunner`, both refs | **true** |
+| a declared factor below `1e-9` sets `updatePeriod` to zero, i.e. unthrottled | the same constructor, both refs | **true** — source-level confirmation of something this record could only record as observed |
+| simulated time advances by exactly one `stepSize` per unpaused iteration | `UpdateCurrentInfo`, `currentInfo.simTime += this->stepSize` | **true** |
+| an iteration never begins sooner than `updatePeriod` after the previous one | the throttle wait in `SimulationRunner::Run`, both refs | **true** |
+| an overrun is never banked back | `8.0.0` anchors the wait to `prevUpdateRealTime + updatePeriod`, so a long step loses that time permanently; the branch advances a deadline on a grid and then **discards** any backlog beyond one period | **true at both refs**, differing only in how much backlog is tolerated before it is thrown away |
+
+The consequence is arithmetic, not a property of any host. `d(sim)/d(real)` is **bounded above
+by the declared factor by construction** and falls below it by the sum of the run's overruns.
+With half 1 declaring `1.0`, a measured real-time factor is capped at 1.0. **A machine with
+adequate spare capacity measures just under 1.0; a machine with vast spare capacity measures
+just under 1.0.** So half 2 as worded neither passes nor discriminates.
+
+**The datum was already in this record.** The table the 2026-08-29 correction added has, for the
+same cell on the same host, throttled idle at **0.9961** against an unthrottled comparator of
+**1.094** — a cell with enough capacity to free-run nearly a tenth above real time, held four
+thousandths below 1.0 the moment the throttle was declared. That is the predicted shape exactly.
+The comparator's provenance caveat, stated with the table, does not disturb it: the campaign's
+own IDLE median of 1.060 over six trials is above 1.0 as well.
+
+**And the requirement's shape does not explain the measurement.** The 2026-08-30 correction's
+paired figure of **0.877 - 0.887** is short of 1.0 by about an eighth, which is far outside
+anything a throttle loss accounts for — the same mechanism cost four thousandths on the idle
+cell above. That correction's own reasoning stands as written: half 1 is a ceiling and cannot
+lift a cell that is below it, so 0.88 is what the host delivered. **The machine is genuinely
+short**, and that half of "half 2 is not met" is untouched by this section. What does change is
+that no throttled figure is admissible as a *capacity* measurement, so **this record holds no
+capacity number for any host.**
+
+**What survives.** Half 1 is untouched. The *Why this is not comparable to a latency figure*
+section is untouched and is the reason the floor stays: a clock deficit accumulates without
+bound, and below 1.0 it overtakes the measured p99 mirroring latency within tens of
+milliseconds of wall time. The floor stays at **1.0** and is not relaxed. ADR-0049 moves it onto
+**capacity** — the same 1.0, measured with this world's throttle lifted — and adds a second
+requirement on the **accumulated clock deficit**, measured with the throttle in force and
+expressed in seconds so that it is directly comparable to that p99 latency. **Neither threshold
+is set**, and nothing in the tree measures either quantity, so half 2 is unmet under the new
+shape as well as the old and nothing can be shown to *pass* today. Read ADR-0049 for both
+requirements; do not read them out of this paragraph.
+
+**How the error survived.** This record contained the evidence against its own requirement, and
+nobody read the two rows against each other. The table was added for one question — does the
+ceiling bind, and what does half 1 cost? — and it answered that question correctly. Having
+answered it, the correction wrote *"It says nothing about half 2"* and moved on. But the idle
+row **is** half 2 being failed by a healthy, over-provisioned cell, which is precisely the case
+half 2 would have to distinguish from an inadequate machine and cannot. The transferable part:
+**a requirement nothing can pass and a requirement a machine keeps failing produce the same
+result line**, and the only way to tell them apart is to ask what a *passing* measurement would
+look like. Across two corrections, this record never asked that of half 2. So:
+read every row of a table against every requirement the record states, not only against the one
+the table was built to answer.
 
 ## Correction — 2026-08-30: half 2 is measurable, was measured, and is not met
 
@@ -93,7 +177,10 @@ measurement of a pair doing work — and the campaign's own rule 5 is that an id
 a work allowance. Nothing here isolates the throttle: half 1 is a ceiling and cannot lift a
 cell that is below it, so the 0.88 is what the host delivers rather than what the world permits.
 
-**What survives, and it is the whole decision.** Both halves stand exactly as written. Half 2
+**What survives, and it is the whole decision.** Both halves stand exactly as written.
+**[Corrected 2026-08-31 — see the Correction section above. Half 1 stands as written; half 2
+does not, and is restated by ADR-0049. The measured shortfall recorded in this section is
+unaffected.]** Half 2
 is a requirement on the machine, and a requirement is not falsified by a machine failing it —
 it is now a **measured gap** instead of an open question, which is what this record asked for.
 The lever the second-world campaign names for closing it is
@@ -186,6 +273,9 @@ that it binds by the expected amount: 1.094 free-running, 0.9961 held. So on thi
 throttle binds only where the cell has spare capacity, and is at or near a no-op under
 load**. **It says nothing about half 2**, which is a claim about two sides sustaining 1.0 and
 not about one side not being slowed.
+**[Corrected 2026-08-31 — see the Correction section above. The idle row is a healthy cell
+failing half 2 by construction, which is the whole of what was wrong with half 2's
+wording.]**
 
 **What survives, and it is the whole decision.** Both halves stand. Half 1 is a ceiling and
 half 2 is the capacity requirement, and neither substitutes for the other — the measurement
@@ -316,6 +406,11 @@ required:
    and is identical on both sides by construction.
 2. **Both sides must sustain a measured real-time factor of at least 1.0, concurrently.**
    This is a requirement on the machine, checked by measurement, not a setting.
+   **[Corrected 2026-08-31 — see the Correction section above. Under half 1 this measurement is
+   capped at 1.0 by construction, so as worded it is a test no machine passes. It is restated by
+   [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) as a capacity floor measured with
+   the throttle lifted, plus a bound on the accumulated clock deficit measured with it in force.
+   The 1.0 is not relaxed. Do not cite the wording above as the requirement.]**
 
 The two halves do different work and neither substitutes for the other. **Half 1 is a
 ceiling, not a floor**: the specification calls it a *target* speedup factor, so it bounds
@@ -436,7 +531,11 @@ measurement and should be re-taken on the target machine.
   section above, with the weight of two runs per scenario on one machine and no thresholds
   registered in advance.]**
 - **A new requirement that something has to check.** "Both sides sustain >= 1.0 concurrently"
-  is a claim about a running pair, and nothing measures it today. Under P6 and P8 the
+  is a claim about a running pair, and nothing measures it today.
+  **[Corrected 2026-08-31 — see the Correction section above. The two quantities that have to be
+  checked are ADR-0049's, and the constraints on the instrument that checks them are that
+  record's decision 5. Nothing measures either one today, so the "nothing measures it" half of
+  this bullet is unchanged.]** Under P6 and P8 the
   requirement is not met until a scenario or a CI step answers it, and this record is not that
   check. **[2026-08-29: still true, and now the sole reason this record is not promoted. Note
   that it is blocked rather than merely outstanding — there is no running pair to measure.]**

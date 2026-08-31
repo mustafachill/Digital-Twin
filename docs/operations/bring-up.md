@@ -190,11 +190,17 @@ model and the same solver, so any agreement between them is agreement of a thing
   addresses the plant.
 - **No mirroring and no divergence metric.** That is L5, `cite_twin` does not exist, and
   ADR-0041's open questions are still open.
-- **Real-time factor is not a bring-up condition.** ADR-0043 requires both sides to sustain
-  1.0 concurrently and **nothing in bring-up measures it**, so a side can be up, slow, and
-  indistinguishable from a healthy one here. Measured by hand on a pair on 2026-08-30, that
-  requirement is **not met** — see ADR-0043's correction of that date for the figures. A pair
-  that comes up is not a pair that is keeping time.
+- **Real-time factor is not a bring-up condition.** ADR-0043's half 2 puts a real-time floor on
+  both sides and **nothing in bring-up measures it**, so a side can be up, slow, and
+  indistinguishable from a healthy one here. **Do not cite half 2's original wording as the
+  requirement**: it was restated on 2026-08-31 by
+  [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) as a **capacity** floor of
+  1.0 measured with the world's throttle lifted, plus a bound on the **accumulated clock
+  deficit** measured with it in force. Neither of ADR-0049's two thresholds is set and nothing
+  in the tree measures either quantity, so the floor is **not met** under either shape. The
+  paired figure measured by hand on 2026-08-30 is in ADR-0043's correction of that date; it was
+  taken with the throttle in force, so it is a real shortfall and not a capacity number. In
+  either shape, **a pair that comes up is not a pair that is keeping time.**
 
 ## Physical cell — Phase 2
 

@@ -234,9 +234,13 @@ clause 3).
 
 **Two things the witness may not observe, and they are rules rather than limitations.** It
 cannot observe the other side — it holds one context on one domain and is given no side's
-identity but its own. And it does not measure real-time factor: ADR-0043's requirement that
-both sides sustain 1.0 concurrently is explicitly **not** a bring-up condition, so a side can
-be up, slow, and indistinguishable from a healthy one here. Its own deadline is measured on the
+identity but its own. And it does not measure real-time factor: the real-time
+floor is explicitly **not** a bring-up condition, so a side can
+be up, slow, and indistinguishable from a healthy one here. That floor is ADR-0043's half 2,
+restated on 2026-08-31 by
+[ADR-0049](../../../docs/adr/0049-measure-the-real-time-floor-as-capacity.md) as a capacity
+requirement plus a bound on the accumulated clock deficit; **in either shape it stays outside
+bring-up** (ADR-0049 decision 4). Its own deadline is measured on the
 wall clock deliberately, because one of the failures it exists to catch is a simulated clock
 that never starts.
 
