@@ -106,9 +106,7 @@ class TestTheHullsStillMatchTheVendor:
         for entry in manifest.read(MANIFEST):
             source_root = VENDOR / entry["source"]["package"] / entry["source"]["root"]
             for mesh in entry["meshes"]:
-                payload, source_triangles, triangles = meshes.hull_bytes(
-                    source_root / mesh["path"]
-                )
+                payload, source_triangles, triangles = meshes.hull_bytes(source_root / mesh["path"])
                 assert hashlib.sha256(payload).hexdigest() == mesh["sha256"], mesh["path"]
                 assert source_triangles == mesh["source_triangles"]
                 assert triangles == mesh["triangles"]

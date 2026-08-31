@@ -158,6 +158,35 @@ class TestDeterminism:
         _write_binary_stl(second, CUBE, header=b"vendor two")
         assert meshes.hull_bytes(first)[0] == meshes.hull_bytes(second)[0]
 
+    def test_a_facet_is_fanned_from_its_own_vertices_not_from_their_order(self) -> None:
+        """The property that made the hull reproduce on a second platform.
+
+        This is the local half of a failure that only showed up across machines:
+        with the same pinned scipy, three of the thirteen vendor meshes hashed
+        differently on macOS and in the Linux container, because Qhull split their
+        flat faces along different diagonals. The vertex sets and the face counts
+        agreed; only the diagonals did not.
+
+        A unit test cannot run on two platforms, so it asserts the property the fix
+        rests on instead: the triangulation of a facet is a function of that
+        facet's vertex SET. Here the same square is presented with its corners in
+        two different orders, and the fan comes out the same.
+        """
+        normal = np.array([0.0, 0.0, 1.0])
+        square = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=np.float64)
+        rolled = np.roll(square, 2, axis=0)[::-1]
+        assert np.array_equal(
+            np.asarray(meshes._fan(square, normal)),
+            np.asarray(meshes._fan(rolled, normal)),
+        )
+
+    def test_a_fanned_facet_winds_outward(self) -> None:
+        """A fan wound the wrong way turns every face's normal into the solid."""
+        normal = np.array([0.0, 0.0, 1.0])
+        square = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=np.float64)
+        for face in meshes._fan(square, normal):
+            assert np.dot(np.cross(face[1] - face[0], face[2] - face[0]), normal) > 0
+
 
 class TestBuild:
     def test_the_relative_layout_is_mirrored(self, tmp_path: Path) -> None:

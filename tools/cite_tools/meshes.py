@@ -21,24 +21,32 @@ against hulls (ADR-0028's amended promotion gate).
 
 **Determinism.** ADR-0028 requires that a regenerated hull be byte-identical or
 the change be real, which is what makes a committed derived asset checkable.
-Three things buy that here, and the first of them was learned rather than
-designed:
+Everything below was learned by watching it fail rather than designed up front,
+and the order matters — each step was added because the previous set was not
+enough:
 
 * The *input* is canonicalised — vertices deduplicated and lexicographically
-  sorted — before Qhull sees it. Sorting the output alone is **not enough**, and a
-  test that hulls the same cube with its triangles reversed is what showed it:
-  Qhull's split of a coplanar facet follows the order it received the points in,
-  and a machined part is mostly coplanar facets.
-* The hull's *faces* are canonicalised too — each triangle rotated onto its
-  lexicographically smallest vertex, then the triangles sorted.
-* The header is a fixed string. No path, no date, no version: every one of those
-  would make the same input produce different bytes on a different machine.
+  sorted — before Qhull sees it. A test that hulls the same cube with its
+  triangles reversed is what showed this was needed: Qhull's split of a coplanar
+  facet follows the order it received its points in.
+* Each *facet* is re-triangulated here rather than taken as Qhull cut it, fanned
+  from its own lexicographically smallest vertex. This is the one that mattered
+  most and the one nothing local would have caught. With only the two steps above,
+  three of the thirteen vendor meshes hashed differently between macOS and the
+  Linux container on the *same* pinned scipy — identical hull vertex sets,
+  identical face counts, different diagonals across the flat faces. Same solid,
+  different bytes, and a committed asset that no CI run could reproduce.
+* The triangles are then sorted, and the header is a fixed string. No path, no
+  date, no version: every one of those would make the same input produce different
+  bytes on a different machine.
 
-The residual is stated rather than hidden: Qhull may still triangulate a coplanar
-facet differently between *versions*, so a scipy bump can change the face set for
-such a mesh even though the hull is the same solid. ``scipy`` is pinned exactly in
-``requirements/tools.txt`` for that reason, and ``cite-model hulls`` reports the
-drift loudly rather than silently re-writing.
+The residual is stated rather than hidden: Qhull could still *merge facets*
+differently between versions, which would change the polygons this module fans
+and therefore the file. That is a coarser and much rarer disagreement than the
+diagonal one — it did not occur across the two platforms measured — but it is not
+excluded. ``scipy`` is pinned exactly in ``requirements/tools.txt`` for that
+reason, and ``cite-model hulls`` reports the drift loudly rather than silently
+re-writing.
 """
 
 from __future__ import annotations
@@ -125,7 +133,7 @@ def convex_hull(triangles: np.ndarray) -> np.ndarray:
     nothing on a machine that only wants to read the provenance records.
     """
     try:
-        from scipy.spatial import ConvexHull  # type: ignore[import-untyped]
+        from scipy.spatial import ConvexHull  # type: ignore[import-untyped,import-not-found]
     except ImportError as exc:  # pragma: no cover - a missing pin, not a code path
         raise MeshError(
             "scipy is required to compute a hull; it is pinned in requirements/tools.txt"
@@ -146,15 +154,25 @@ def convex_hull(triangles: np.ndarray) -> np.ndarray:
     except Exception as exc:  # pragma: no cover - degenerate vendor mesh
         raise MeshError(f"convex hull failed: {exc}") from exc
 
-    faces = []
+    # Re-triangulate every FACET rather than trusting Qhull's own split of it.
+    # A facet of a convex hull is a planar polygon; Qhull returns it already cut
+    # into triangles, and WHICH diagonal it cut along is not stable across
+    # platforms. That was measured, not feared: the same scipy 1.14.1 on macOS and
+    # in the Linux container produced an identical hull vertex set and an identical
+    # face count for all thirteen vendor meshes, and differing bytes for three of
+    # them. Same solid, different diagonals.
+    #
+    # Fanning each facet from its own lexicographically smallest vertex makes the
+    # triangulation a function of the facet's vertex set, which is the part that
+    # was observed to agree. It produces the same number of triangles Qhull's split
+    # does (an n-gon is n-2 either way).
+    facets: dict[tuple[float, ...], set[int]] = {}
     for simplex, equation in zip(hull.simplices, hull.equations, strict=True):
-        a, b, c = points[simplex[0]], points[simplex[1]], points[simplex[2]]
-        # Qhull's simplices carry no winding guarantee; its plane equation does.
-        # Orient every face outward against that normal, so the written mesh is a
-        # closed solid whichever way Qhull happened to list the vertices.
-        if float(np.dot(np.cross(b - a, c - a), equation[:3])) < 0.0:
-            b, c = c, b
-        faces.append(_canonical_face(np.vstack([a, b, c])))
+        facets.setdefault(tuple(equation), set()).update(int(i) for i in simplex)
+
+    faces: list[np.ndarray] = []
+    for equation, indices in facets.items():
+        faces += _fan(points[sorted(indices)], np.asarray(equation[:3], dtype=np.float64))
 
     if not faces:  # pragma: no cover - Qhull raises before this
         raise MeshError("convex hull produced no faces")
@@ -163,16 +181,37 @@ def convex_hull(triangles: np.ndarray) -> np.ndarray:
     return stacked[order]
 
 
-def _canonical_face(face: np.ndarray) -> np.ndarray:
-    """Rotate a triangle onto its lexicographically smallest vertex.
+def _fan(vertices: np.ndarray, normal: np.ndarray) -> list[np.ndarray]:
+    """Triangulate one planar convex facet, deterministically and outward.
 
-    Rotation preserves winding, so this changes which vertex is written first and
-    nothing about the surface. It is what stops Qhull's arbitrary starting vertex
-    reaching the file.
+    The vertices arrive as a set. They are ordered around the facet's centroid in
+    the plane, rotated so the lexicographically smallest comes first, and fanned
+    from it — so nothing about the order they arrived in survives into the result.
     """
-    keys = [tuple(vertex) for vertex in face]
-    start = min(range(3), key=keys.__getitem__)
-    return np.vstack([face[start], face[(start + 1) % 3], face[(start + 2) % 3]])
+    centre = vertices.mean(axis=0)
+    # Any two orthogonal directions in the plane will do; `axis` is chosen as the
+    # coordinate the normal leans on least, which keeps the cross product far from
+    # degenerate whatever the facet's orientation.
+    axis = np.zeros(3)
+    axis[int(np.argmin(np.abs(normal)))] = 1.0
+    u = np.cross(normal, axis)
+    u = u / np.linalg.norm(u)
+    v = np.cross(normal, u)
+
+    offsets = vertices - centre
+    angles = np.arctan2(offsets @ v, offsets @ u)
+    # Radius breaks a tie between two vertices at the same bearing, which is what a
+    # collinear pair on a facet edge looks like. Without it their order would come
+    # from the sort's stability and therefore from the input order.
+    order = np.lexsort((np.linalg.norm(offsets, axis=1), angles))
+    ring = vertices[order]
+
+    start = int(min(range(len(ring)), key=lambda i: tuple(ring[i])))
+    ring = np.roll(ring, -start, axis=0)
+
+    # `arctan2` walks anticlockwise about `normal`, so the ring is already wound
+    # outward; reversing it would put every face's normal into the solid.
+    return [np.vstack([ring[0], ring[i], ring[i + 1]]) for i in range(1, len(ring) - 1)]
 
 
 def encode_stl(triangles: np.ndarray) -> bytes:

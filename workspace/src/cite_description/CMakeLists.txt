@@ -31,7 +31,27 @@ install(DIRECTORY "${CITE_ASSET_MESHES}" DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+
+  # Two linters registered by hand rather than through ament_lint_auto, for the
+  # reason `cite_bringup` and `cite_facility` already give and with the same
+  # settlement, so that a Python file does not have to be written differently
+  # depending on which package it happens to live in.
+  #
+  # pep257: the "ament" convention ignores D212 and therefore enforces D213,
+  # "summary should start at the second line". The two are mutually exclusive by
+  # construction and every docstring in this repository puts the summary on the
+  # first line.
+  #
+  # flake8: ament's default prefers single quotes; this repository formats Python
+  # with ruff, which prefers double. `.flake8` at the repository root is the one
+  # place that is settled.
+  list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../../.flake8")
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D213)
 
   # An installed asset that no description references is dead weight; a
   # referenced asset that is not installed is a missing collision shape. This

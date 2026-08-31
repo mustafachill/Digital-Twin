@@ -56,55 +56,55 @@ derived:
   meshes:
   - path: end_tool/collision/end_tool.stl
     source_sha256: e06112781cdd615b7df536569f50addb445a6f4b4acced6d53b0742018b6c768
-    sha256: f45fecbe6bbc15c1192c2b69adfaa0c71da014bc3807f9db38a50d858d9b3f6a
+    sha256: 235583118dd885aeb503591839237e711db606a883a0497d245e09e22cab7119
     source_triangles: 260
     triangles: 180
     bytes: 9084
   - path: gripper/xarm/base_link.stl
     source_sha256: cdaa4cff22f7c9cff05c6a8ed32f94fd2b11a69d37dd97a159ccee2d8dd32f13
-    sha256: d6f499d5bd6148de69b31071cdfb406fa076451b391649bfbde9cea7485d6e57
+    sha256: d3c967b087a4922c58ea0cf80913a61069ac2dc4578bf3bb4417f768e0fd7f93
     source_triangles: 24227
     triangles: 2110
     bytes: 105584
   - path: gripper/xarm/left_finger.stl
     source_sha256: a44756eb72f9c214cb37e61dc209cd7073fdff3e4271a7423476ef6fd090d2d4
-    sha256: f7101a863ff38183edfeb16e385c45b5c02b106178d736c44d6c51399dfb2643
+    sha256: d4b08f923bef0c1b40166d877f31190bb9df4a5540ac21ad4047e8d8fbdc29f7
     source_triangles: 4852
     triangles: 204
     bytes: 10284
   - path: gripper/xarm/left_inner_knuckle.stl
     source_sha256: e8e48692ad26837bb3d6a97582c89784d09948fc09bfe4e5a59017859ff04dac
-    sha256: 3242f4ef8e839f9defe57789329f74c455be8e18a1e3bb89348dbe0f8d1e3b9f
+    sha256: f7f9a6dbc5a8564ec2ce9988562383db8fa373d7793fe672f32208bcfc9d1c8d
     source_triangles: 7324
     triangles: 166
     bytes: 8384
   - path: gripper/xarm/left_outer_knuckle.stl
     source_sha256: 501665812b08d67e764390db781e839adc6896a9540301d60adf606f57648921
-    sha256: 9e530c0e86c4697ce6b955370a233414d24d3f1c85f18dbeddaa3509166dbfd5
+    sha256: c6db6f2ce202f3fac81b375f0183b3ba7ce83ec87051a4fea1484a84657d07cd
     source_triangles: 444
     triangles: 100
     bytes: 5084
   - path: gripper/xarm/right_finger.stl
     source_sha256: c5dee87c7f37baf554b8456ebfe0b3e8ed0b22b8938bd1add6505c2ad6d32c7d
-    sha256: 41228c553682fea0e2e7cd4c684f0392ac513b128858a20789c0e7f3933b2bce
+    sha256: a8d7ce11613c99aebc0b9d582fc3822aaa4294961a022c1518f977bbf88c9cb5
     source_triangles: 4852
     triangles: 204
     bytes: 10284
   - path: gripper/xarm/right_inner_knuckle.stl
     source_sha256: b41dd2c2c550281bf78d7cc6fa117b14786700e5c453560a0cb5fd6dfa0ffb3e
-    sha256: 828ede27959e6ffb42280057f182699e4708e8254918de14330ef64ed490b95c
+    sha256: 5b90ddc23f1d952b946efef13bb18b186ffe9bfbdfc039ae9ad941e1c190d5ae
     source_triangles: 7324
     triangles: 166
     bytes: 8384
   - path: gripper/xarm/right_outer_knuckle.stl
     source_sha256: 75ca1107d0a42a0f03802a9a49cab48419b31851ee8935f8f1ca06be1c1c91e8
-    sha256: 5a771a11dae5b700df7833f48c10ec35cac1e65e7202d2674a8276cb05e6bcd7
+    sha256: 69beadf678b6d9d3394f32e6ee4af0c6da453594fbc16986bbea9b684a0c6a46
     source_triangles: 444
     triangles: 100
     bytes: 5084
   - path: xarm5/visual/link1.stl
     source_sha256: 5ae7c9188c5687581f7b9470d0dc0df30823436ff2413c9f57d93a999d61a3b7
-    sha256: 045b34b29d0b71243ed0b9c764024c0343d153166f3709f93b2a3da18a13380b
+    sha256: 80e7b0587903df038cbb0023107dd717396a33c0aca0d6ab36e1a7fd9b34fb7f
     source_triangles: 3760
     triangles: 1084
     bytes: 54284
@@ -122,13 +122,13 @@ derived:
     bytes: 84684
   - path: xarm5/visual/link4.stl
     source_sha256: 22fb8e4b4a9c07514413e42fbaef7a7646d257dece0c90b35259262f8c567fc3
-    sha256: 747030d0b1c785e0f377ac78582e1798d01961191dc5928f687c36b6769b4fc4
+    sha256: 10a00b1b7c62125750f29e16acfd3a73e3b8844c85d4c686334fd28823e88290
     source_triangles: 7659
     triangles: 1412
     bytes: 70684
   - path: xarm5/visual/link_base.stl
     source_sha256: 19cf5702ffdab4727e2997c3194c2ada90395c8ca750cb33db7f4039ee5aec71
-    sha256: d679577d9e42e6d7dc720bb588d1a40a05b12666c1f4b6e8f9300f472dc319aa
+    sha256: 8143a9610dc83586d7c716ba0ed889e4f57059696881330b7040563aeef3325f
     source_triangles: 2464
     triangles: 326
     bytes: 16384
