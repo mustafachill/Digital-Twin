@@ -452,8 +452,11 @@ is what they found wrong or unmeasured **around** them. The blocking items are f
 recorded in their own sections above; these are the ones recorded rather than built, each with
 what would settle it.
 
-**Every measurement below is the audit's**, taken on 2026-08-31 from the committed hulls, the
-pinned vendor meshes and the generated artifacts. **One measurement, one machine, no
+**Every *measurement* below is the audit's**, taken on 2026-08-31 from the committed hulls, the
+pinned vendor meshes and the generated artifacts. The *reproductions* — the two-message state
+below, the patch-ordering conflict, `meshes.build`'s missing caller and the permutation test
+surviving its own canonicalisation — were each re-run by the change that wrote this section
+rather than carried over, and say so where they appear. **One measurement, one machine, no
 thresholds registered in advance and no directory in
 [`docs/measurements/`](../measurements/README.md).** They are static geometry, never a running
 cell, and none of them is evidence about grasp behaviour.
@@ -536,6 +539,66 @@ computed for a different robot.
 **What would settle it:** a matrix derived from the selected geometry, in the generator, so
 that the two cannot disagree; and, until then, a check that fails when a derived set is
 selected while the SRDF's matrix names the vendor's.
+
+### An un-bootstrapped checkout is told to run the command that would erase the region
+
+`cite-model hulls` skips a set whose `source_root` does not exist, so `entries` comes back
+empty, so `manifest.replace(text, [])` differs from the committed file. The check form
+therefore emits **two** messages on the ordinary state of a fresh clone: the correct one —
+*"the vendor meshes are not in this checkout … Run ./scripts/bootstrap"* — and then
+
+> `assets/manifest.yaml's derived region does not match the meshes on disk — run
+> cite-model hulls --write`
+
+**Nothing is lost, and that is not the same as the message being harmless.** `--write` refuses,
+because the `problems` guard precedes the write; reproduced on 2026-08-31 against a temp repo
+root carrying `model/`, `assets/` and `external/cite.repos` and no `workspace/src/external`,
+where both messages appear, `--write` exits 1, and the manifest is byte-unchanged. What is
+wrong is that **the second message points at an action that would destroy the thing it names**,
+and it fires on the normal state of a checkout nobody has bootstrapped — which is the first
+state a new contributor is in.
+
+**The fix is to skip the region comparison when any set was skipped**, so that a missing vendor
+tree produces one message about the vendor tree and no claim about the manifest at all. It is
+deliberately not made here: it is a change to the command's control flow, and this change is
+already the one that put that command into a gate.
+
+Note for whoever takes it: **the remedy string also names `cite-model hulls --write`**, which
+after 2026-08-31 is no longer the entry point CLAUDE.md §7 points anyone at — `./scripts/hulls`
+is. Both belong to the same edit. The string was left exactly as it stands so that "R-09
+recorded, not fixed" means what it says.
+
+### The schema generalises to a second vendor and the tool does not
+
+Decision 3 requires the binding be usable by a description other than this one, and the
+**schema** honours it: `CollisionSpec` and `CollisionMeshSet` name no vendor anywhere —
+`source_package` and `source_root` are the only provenance they carry, and both are ordinary
+model data.
+
+**The tool hard-codes `xarm_ros2` in three places**, all in `tools/cite_tools/cli.py`:
+
+| line | what it does |
+|---|---|
+| `_vendor_share` | resolves `workspace/src/external/`**`xarm_ros2`**`/<source_package>` |
+| `_hull_set` | writes `"repo": "external/xarm_ros2"` into the manifest entry |
+| `_hull_set` | calls `pinned_version(repo_root, "xarm_ros2")` |
+
+So a second vendor's set is looked for under `xarm_ros2/` and fails with *"the vendor meshes
+are not in this checkout"* — a message that is true of the path it names and false about the
+world, which is the worst kind. The two adjacent lines are the sharper half: `pinned_version`'s
+own docstring refuses to restate the pin, *"the thing `external/cite.repos` exists to be the
+only one of (ADR-0008, P1)"*, and is then handed which repository it is by a literal. The check
+added the same day already reads `entry["source"]["repo"]` out of the manifest rather than a
+constant, so **the test generalises and the writer does not.**
+
+**Of the two available shapes, `source_repo` on `CollisionMeshSet` is the one to take.**
+Resolving the repository from `external/cite.repos` by matching `source_package` sounds tidier
+and is worse: `cite.repos` lists repositories and not the packages inside them, so the match
+would have to scan the imported tree — which is absent in exactly the failure case above, and
+which would make the checkout's layout a second source of truth about provenance. A
+`source_repo` field sits beside `source_package` and `source_root`, is model data like every
+other vendor fact in this block (`root_arg`, `root_uri_scheme`), needs no tree to resolve, and
+is checkable against `cite.repos` by the test that already exists.
 
 ### Four things about the pipeline's own tests, recorded and not fixed
 
