@@ -62,6 +62,7 @@ def side_owned_names() -> set[str]:
     for manager in PLAN.controller_managers:
         names.add(manager.node)
         names.add(manager.description_topic)
+        names.add(manager.joint_state_topic)
         for optional in (manager.trajectory_action, manager.gripper_action):
             if optional:
                 names.add(optional)
@@ -148,7 +149,7 @@ class TestTheAssetNamespaceIsReadOffTheModel:
         """
         for manager in PLAN.controller_managers:
             namespace = asset_namespace(manager)
-            owned = [manager.description_topic]
+            owned = [manager.description_topic, manager.joint_state_topic]
             if manager.skills is not None:
                 owned += [
                     getattr(manager.skills, field) for field in SKILL_ACTION_TYPES

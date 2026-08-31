@@ -76,11 +76,22 @@ ASSET = "arm_1"
 MOVE_TO = f"/cite/twin/{ZONE}/{ASSET}/move_to"
 PICK = f"/cite/twin/{ZONE}/{ASSET}/pick"
 
+#: The same skill under the name the SIDE serves it on, which is the name a
+#: fake prints when a goal reaches it. The two differ only by the reserved
+#: `/twin` scope, and that difference is the crossing.
+MOVE_TO_ON_A_SIDE = f"/cite/{ZONE}/{ASSET}/move_to"
+
 #: An odd base, so the counterpart at base + 1 is even and inside the band too —
 #: the parity rule `scripts/_lib.sh` allocates by, applied to a process id so
-#: that two runs of this test cannot collide either. Offset by one band from
-#: the mixed rig's so the two can run in the same session.
-BASE = 101 + 2 * (os.getpid() % 40)
+#: that two runs of this test do not collide either.
+#:
+#: **It must land inside `cite_bringup.plan.DOMAIN_BAND`, which is 1..101**, and
+#: the first version of this line did not: it started at 101 to keep clear of
+#: the mixed rig's band, `resolve_domain_id` refused the counterpart at 102, and
+#: the boundary exited 2 before serving anything — which this rig reported as
+#: every assertion timing out rather than as a refusal, because a process that
+#: never starts and a process that never answers look identical from a client.
+BASE = 1 + 2 * ((os.getpid() + 1) % 50)
 PLANT_DOMAIN = BASE
 COUNTERPART_DOMAIN = BASE + 1
 
@@ -89,6 +100,20 @@ COUNTERPART_DOMAIN = BASE + 1
 SETTLE_S = 30.0
 
 FAKE_SIDE = str(Path(__file__).resolve().parent / "fake_side.py")
+
+
+def _wait_for_side(proc_output, line: str) -> None:
+    """Wait for one line on a fake side's STDOUT.
+
+    `stream="stdout"` is not the default and the omission is silent:
+    `launch_testing.io_handler.waitFor` defaults to `stream='stderr'`, so an
+    assertion about a `print()` times out saying "Waiting for output timed out"
+    rather than saying it looked in the wrong stream. Three assertions in this
+    file failed that way before the default was read upstream.
+    """
+    proc_output.assertWaitFor(
+        expected_output=line, stream="stdout", timeout=SETTLE_S
+    )
 
 
 def _paired_plan() -> Path:
@@ -148,22 +173,18 @@ def generate_test_description():
     os.environ.pop("CITE_ALLOW_HARDWARE", None)
     plant = _side("plant", PLANT_DOMAIN, 0.25)
     counterpart = _side("counterpart", COUNTERPART_DOMAIN, 0.75)
+    boundary = Node(
+        package="cite_twin",
+        executable="twin_boundary.py",
+        name="twin_boundary",
+        arguments=["--plan", str(PLAN_PATH)],
+        output="screen",
+    )
     return (
         launch.LaunchDescription(
-            [
-                plant,
-                counterpart,
-                Node(
-                    package="cite_twin",
-                    executable="twin_boundary.py",
-                    name="twin_boundary",
-                    arguments=["--plan", str(PLAN_PATH)],
-                    output="screen",
-                ),
-                launch_testing.actions.ReadyToTest(),
-            ]
+            [plant, counterpart, boundary, launch_testing.actions.ReadyToTest()]
         ),
-        {"plant": plant, "counterpart": counterpart},
+        {"plant": plant, "counterpart": counterpart, "boundary": boundary},
     )
 
 
@@ -243,6 +264,11 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         would place physical actuation under an authority that was not
         commanding it.
         """
+        # Put the mode back first: `unittest` runs a class's methods in
+        # alphabetical order, and a test that assumed the order would break the
+        # moment one was renamed. Asking for the mode already in force is not a
+        # transition and publishes nothing.
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "resetting").accepted)
         before = len(self.modes)
         self._enter_validated()
         self._spin_until(lambda: len(self.modes) > before, "the new mode was published")
@@ -263,10 +289,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         result = self._result_of(handle)
         self.assertEqual(result.result.code, ResultCode.SUCCESS, result.result.detail)
         for side in ("plant", "counterpart"):
-            proc_output.assertWaitFor(
-                expected_output=f"{side}: accepted /cite/{ZONE}/{ASSET}/move_to",
-                timeout=SETTLE_S,
-            )
+            _wait_for_side(proc_output, f"{side}: accepted {MOVE_TO_ON_A_SIDE} as succeed")
 
     def test_the_operators_measurement_is_the_plants(self):
         """Two sides answer with two numbers; the aggregate carries one of them.
@@ -367,10 +390,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         """
         self._enter_validated()
         handle = self._send(self.move_to, self._move_to("hold:hold"))
-        proc_output.assertWaitFor(
-            expected_output=f"counterpart: accepted /cite/{ZONE}/{ASSET}/move_to as hold",
-            timeout=SETTLE_S,
-        )
+        _wait_for_side(proc_output, f"counterpart: accepted {MOVE_TO_ON_A_SIDE} as hold")
         response = self._request(TwinMode.MODE_SIM, "trying to leave mid-goal")
         self.assertFalse(response.accepted, response.result.detail)
         self.assertEqual(response.result.code, ResultCode.PRECONDITION_FAILED)
@@ -425,13 +445,12 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
 
 @launch_testing.post_shutdown_test()
 class TestCleanShutdown(unittest.TestCase):
-    def test_the_boundary_exits_cleanly(self, proc_info):
+    def test_the_boundary_exits_cleanly(self, proc_info, boundary):
         """The fakes are killed by the launch teardown; L5 must exit on its own.
 
-        Asserted for the boundary alone, by name: a child killed with SIGTERM
-        at teardown is the harness's doing and says nothing about the code
-        under test.
+        Asserted for the boundary alone: a fake side killed with SIGTERM at
+        teardown is the harness's doing and says nothing about the code under
+        test. L5 keeps rclpy's ordinary SIGINT behaviour, so the signal it is
+        stopped with is an allowed answer and a crash is not.
         """
-        for process in proc_info.processes():
-            if "twin_boundary" in " ".join(str(part) for part in process.cmd):
-                self.assertIn(proc_info[process].returncode, (0, -2, -15))
+        self.assertIn(proc_info[boundary].returncode, (0, -2, -15))
