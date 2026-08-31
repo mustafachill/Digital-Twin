@@ -240,7 +240,7 @@ class TestTheTwinBoundary(unittest.TestCase):
         self.assertEqual(response.result.code, ResultCode.SAFETY_BLOCKED)
 
     def test_entering_validated_against_a_real_far_side_is_refused(self):
-        """**This test asserted the bypass until 2026-08-31.**
+        """Refuse VALIDATED here, where this test asserted the bypass until 2026-08-31.
 
         It read `assertTrue(response.accepted)`, and it passed: the gate was a
         transcribed list of three modes, `VALIDATED` was not in it, and

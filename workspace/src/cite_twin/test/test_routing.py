@@ -91,7 +91,7 @@ class TestWhichSidesAModeCommands:
     def test_a_side_a_goal_is_dispatched_to_is_a_side_under_command(
         self, mode: int
     ) -> None:
-        """**The invariant that makes the two tables one decision.**
+        """Hold the invariant that makes the two tables one decision.
 
         The routing table must be a subset of this one. If a mode dispatched a
         goal to a side it did not list as commanded, the gate would judge the

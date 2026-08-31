@@ -66,13 +66,14 @@ import argparse
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
+import math
 import os
 from pathlib import Path
-import math
 import sys
 import threading
 import time
 
+from action_msgs.msg import GoalStatus
 from cite_bringup.plan import (
     default_plan_path,
     domain_base,
@@ -86,15 +87,13 @@ from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, Twi
 from cite_interfaces.qos import LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
-from action_msgs.msg import GoalStatus
 from cite_twin.boundary import (
     address,
-    asset_namespace,
     BoundaryError,
     CUSTODY_FIELDS,
-    off_executor,
     IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS,
     measurement_fields,
+    off_executor,
     operator_endpoint,
     SideContext,
     SKILL_ACTION_TYPES,
@@ -540,7 +539,7 @@ class TwinBoundary:
     def _run_dispatched_goal(
         self, skill: _SkillEndpoint, goal_handle, mode: int, chosen
     ):
-        """The body of one goal, with the goal already registered as in flight.
+        """Run the body of one goal, with the goal already registered as in flight.
 
         Split out so that the registration above has exactly one exit — the
         `finally` — and cannot be left behind by a return added later. A goal
@@ -890,7 +889,7 @@ def _aggregate(
 
 
 def _uncommanded_result(skill: _SkillEndpoint, code: ResultCode):
-    """The result for a goal no side was ever sent.
+    """Return the result for a goal no side was ever sent.
 
     Every field but the code stays at its default, and that is justified here
     and only here: this goal commanded nothing, so it took no custody and

@@ -117,7 +117,7 @@ def _wait_for_side(proc_output, line: str) -> None:
 
 
 def _paired_plan() -> Path:
-    """The generated plan, plus a counterpart the shipped model lacks.
+    """Write the generated plan, plus a counterpart the shipped model lacks.
 
     Every far side simulated. The mixed case is the other rig's.
     """
@@ -278,7 +278,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertFalse(latest.transition_in_progress)
 
     def test_the_goal_reaches_both_sides_own_servers(self, proc_output):
-        """**The crossing itself.**
+        """Watch the crossing itself, which is what this rig exists for.
 
         The operator's goal enters `/cite/twin/...` and each side's own L3 name
         answers it on that side's own domain. The counterpart's half is read
@@ -307,7 +307,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertIn("measurements are the plant's", result.result.detail)
 
     def test_a_far_side_that_threw_is_not_reported_as_a_success(self, proc_output):
-        """**R-05, end to end.**
+        """Refuse a far side that threw, end to end.
 
         rclpy catches an exception raised in an execute callback, aborts the
         goal and returns a DEFAULT-CONSTRUCTED result whose `ResultCode` is 0 —
@@ -355,7 +355,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertIn("impossible", result.result.detail)
 
     def test_both_operands_reach_the_monitor(self):
-        """**No operand had ever arrived, in any run or any test, until this one.**
+        """Pair two operands, which no run and no test had ever done before this.
 
         Both sides publish a joint state; L5 records each on its own context,
         stamps it on arrival and pairs the two. `valid` is still false, and for
@@ -409,7 +409,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertTrue(accepted.accepted, accepted.result.detail)
 
     def test_the_stop_path_answers_while_a_goal_is_in_flight(self, proc_output):
-        """**R-01 / S-03, as a property rather than a thread count.**
+        """Keep the stop path answering, as a property rather than a thread count.
 
         Every in-flight goal used to park a thread of the node's only executor
         pool, and the cancel that bounds a goal is itself executor work — so

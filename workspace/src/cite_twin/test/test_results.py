@@ -297,7 +297,7 @@ class TestTheMeasurementRule:
 
 class TestReadingOneSidesAnswer:
     def test_an_abort_with_an_unset_code_is_not_a_success(self) -> None:
-        """**The revived branch.**
+        """Read an abort as an abort, which is the branch this revived.
 
         rclpy aborts a goal whose execute callback raised and returns a
         default-constructed result. `ResultCode.SUCCESS` is 0, so the payload

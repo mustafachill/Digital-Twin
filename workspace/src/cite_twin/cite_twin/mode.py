@@ -165,7 +165,7 @@ class Deployment:
 
     @staticmethod
     def paired(far_side_backends: Mapping[str, str | None]) -> Deployment:
-        """A zone whose plant is simulated, stated by far-side backend alone.
+        """Build a zone whose plant is simulated, from far-side backends alone.
 
         The shape of every paired zone this repository can generate, and the one
         a test states most readably. A constructor and not the representation —
@@ -179,7 +179,7 @@ class Deployment:
         )
 
     def backend(self, asset: str, side: str) -> str | None:
-        """What ``side`` loads for ``asset``, or `None` where there is no such side."""
+        """Return what ``side`` loads for ``asset``, or `None` where it has no such side."""
         return self.backends[asset].get(side)
 
     def assets_in_scope(self, asset_id: str) -> tuple[str, ...]:
@@ -209,7 +209,7 @@ class Deployment:
         )
 
     def assets_without_a_far_side(self, asset_id: str) -> tuple[str, ...]:
-        """The assets in scope for which this zone declares no counterpart."""
+        """Return the assets in scope for which this zone declares no counterpart."""
         return tuple(
             asset
             for asset in self.assets_in_scope(asset_id)
@@ -323,7 +323,8 @@ class ModeAuthority:
 
         # Asked before anything else looks at the scope, so that an unknown
         # asset is reported as an unknown asset rather than as a mode refusal.
-        assets = self._deployment.assets_in_scope(asset_id)
+        # The result is discarded: what is wanted is the refusal it raises.
+        self._deployment.assets_in_scope(asset_id)
 
         commands_hardware = self._commands_hardware(mode, asset_id)
 

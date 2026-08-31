@@ -134,7 +134,7 @@ class TestTheGateIsStructurallyShut:
 
 
 class TestValidIsTheConjunctionOfAllFiveTerms:
-    """`Conditions.valid`: "All five terms, never four."
+    """Hold the promise `Conditions.valid` makes: all five terms, never four.
 
     **Nothing held that sentence until 2026-08-31.** Deleting term 1, 2, 4 or 5
     from the conjunction left every test in this file green, because they all

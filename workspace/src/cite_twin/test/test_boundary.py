@@ -386,10 +386,8 @@ def _dotted(node: ast.expr) -> str:
     return ".".join(reversed(parts))
 
 
-
-
 def _reachable_modules(first_party: tuple[str, ...]) -> set[tuple[Path, str]]:
-    """Every source file L5 can reach, by following first-party imports.
+    """Return every source file L5 can reach, by following first-party imports.
 
     Starts at this package's own modules and follows any `import cite_*` or
     `from cite_*.x import y` to the file behind it, transitively. A module that
