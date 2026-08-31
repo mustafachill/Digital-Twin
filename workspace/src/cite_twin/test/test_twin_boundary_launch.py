@@ -22,11 +22,17 @@ condition term is present, every comparison field is zeroed by the rule, and the
 
 WHAT THIS RIG CANNOT ANSWER, stated rather than left to be assumed. It brings up
 no cell, so nothing here shows a goal reaching a far side's L3 server, a joint
-state crossing the boundary, or a comparison over two real arms. **Nothing
-automated can show those today**: `launch_test` puts the launch inside the test
-process, which holds one context on one domain, so two sides cannot be included
-in one, and `./scripts/scenario` addresses the plant (CLAUDE.md §2). A paired
-scenario does not exist and ADR-0047 left whether one should open.
+state crossing the boundary, or a comparison over two arms.
+
+**Two of those three are shown by the rig next door**, and this docstring said
+until 2026-08-31 that nothing automated could show any of them.
+`test_twin_boundary_paired_launch.py` puts each side in its own PROCESS on its
+own domain and drives a goal across; the impossibility claim is ADR-0047's and
+is about `launch_test` with `IncludeLaunchDescription` hosting a whole cell's
+launch inside the test process, which is true and is not the only shape a test
+can take. What neither rig does is bring a cell up: **a comparison over two real
+arms is still shown by nothing**, no paired scenario exists, and
+`./scripts/scenario` addresses the plant (CLAUDE.md §2).
 
 **The plan is fabricated and the shipped model is not paired.**
 `model/facility/zones.yaml` declares `twin: {sides: single}` and ADR-0049

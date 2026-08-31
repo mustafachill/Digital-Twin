@@ -58,6 +58,10 @@ if(BUILD_TESTING)
   # owns. A static check over the generated plan, because the defect it guards
   # against produces no symptom at run time.
   ament_add_pytest_test(boundary test/test_boundary.py)
+  # Every field of the result L5 hands the operator, and the ranking it hands it
+  # under. The defect this holds shut is a manufactured custody belief: a Pick
+  # returning SUCCESS with holding=false, which Pick.action calls impossible.
+  ament_add_pytest_test(results test/test_results.py)
 
   # The node itself, against a plan that declares a counterpart. It brings no
   # cell up - neither side is running - which is exactly the case that has to
@@ -65,6 +69,12 @@ if(BUILD_TESTING)
   # why they are invalid.
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_twin_boundary_launch.py TIMEOUT 300)
+  # And the same node against a pair that answers: two fake sides, one process
+  # each, one domain each. It is what shows a goal CROSSING the boundary and
+  # two operands reaching the monitor - the thing four documents said nothing
+  # automated could show, which was overstated. It brings no cell up either, so
+  # nothing here is evidence about motion.
+  add_launch_test(test/test_twin_boundary_paired_launch.py TIMEOUT 300)
 endif()
 
 ament_package()

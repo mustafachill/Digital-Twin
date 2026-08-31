@@ -10,11 +10,18 @@
   in the modes ADR-0050's table gives a command flow, and a per-asset `DivergenceMetrics`
   publisher on `/cite/twin/divergence`. Each rule is held by a test in that package, and a
   launch test drives the node itself.
-  **Not built, and read this before believing the line above.** **No bring-up starts it** —
-  not `simulation.launch.py`, not `./scripts/sim`, not any scenario — and it **refuses to
-  start against the shipped model**, which declares `twin: {sides: single}`. So no goal has
-  crossed the boundary and no operand has ever arrived, in any run or any test; what is
-  evidenced is the decision each rule makes, not the crossing. **State mirroring is not
+  **A goal crosses the boundary in a test, and two operands reach the monitor**, as of
+  2026-08-31: `cite_twin/test/test_twin_boundary_paired_launch.py` runs each side as its own
+  process on its own `ROS_DOMAIN_ID`, serving an arm's L3 action names and moving nothing,
+  while the test process holds one context on the plant's domain. **This document said no
+  goal had crossed "in any run or any test" and that nothing automated could show one**; the
+  second half was overstated — the impossibility is about `launch_test` with
+  `IncludeLaunchDescription` hosting a whole cell, not about any automated test at all.
+  **Not built, and read this before believing either line above.** **No bring-up starts it**
+  — not `simulation.launch.py`, not `./scripts/sim`, not any scenario — and it **refuses to
+  start against the shipped model**, which declares `twin: {sides: single}`. **No goal has
+  crossed the boundary into a running cell**, in any run: the rig above brings no cell up, so
+  it is evidence about the boundary and about nothing that moves. **State mirroring is not
   implemented at all** — the monitor consumes each side's joint state and nothing follows
   anything. Registration is Phase 3: every asset instance in L0 carries a `registration`
   block, `unregistered` for all three arms.
@@ -116,9 +123,15 @@ criterion the three share is stated once, in
 physical actuation under an authority that was not previously commanding it — and this list
 cites it rather than restating it, so that a fourth candidate can be judged against a
 criterion instead of compared to these three.
-**All three are now refused at the point of transition by the L5 mode server, and no
-deployment anyone has run starts that server.** `require_hardware_opt_in` and
-`CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is that the stack could not have
+**Every mode that would place physical actuation under a new authority is now refused at
+the point of transition by the L5 mode server — computed and not listed — and no deployment
+anyone has run starts that server.** The three above are three examples of the criterion.
+The server applies the criterion: which sides the requested mode commands, and whether any of
+them loads something other than a simulation. Transcribing the three left `VALIDATED`
+ungated until 2026-08-31, and `VALIDATED` dispatches an operator's goal to both sides by
+byte-identical code to `VIRTUAL_LEAD`'s — see `cross-cutting-safety.md`'s correction.
+
+`require_hardware_opt_in` and `CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is that the stack could not have
 started with a physical backend; `cite_twin` calls **the same function** when a transition
 places physical actuation under an authority that was not previously commanding it, and
 `force` cannot skip it. It is one refusal in one server and it is not the safety layer. See

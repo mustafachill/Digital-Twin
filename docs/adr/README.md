@@ -141,4 +141,4 @@ not rewritten either.
 | [0047](0047-two-independent-launches-joined-not-sequenced.md) | Bring a pair up as two independent launches, joined by a supervisor that sees only processes | Accepted |
 | [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Proposed (corrected 2026-08-30) |
 | [0049](0049-measure-the-real-time-floor-as-capacity.md) | Keep the real-time floor and measure it as capacity, not as a throttled rate | Proposed |
-| [0050](0050-what-crosses-the-twin-boundary.md) | Cross the twin boundary in L5's own memory, and say when a divergence number may be believed | Proposed |
+| [0050](0050-what-crosses-the-twin-boundary.md) | Cross the twin boundary in L5's own memory, and say when a divergence number may be believed | Proposed (corrected 2026-08-31) |

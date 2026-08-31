@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 from ament_index_python.packages import get_package_share_directory
 from cite_bringup.plan import default_plan_path, load, SkillActions
@@ -42,6 +43,7 @@ from cite_twin.boundary import (
     twin_endpoints,
     TWIN_SCOPE,
 )
+from cite_twin.twin_boundary import _refuse_sim_time
 import pytest
 
 PLAN = load(default_plan_path("cell_a"))
@@ -428,6 +430,52 @@ def _reachable_modules(first_party: tuple[str, ...]) -> set[tuple[Path, str]]:
                 if candidate.is_file():
                     queue.append((candidate, module.name))
     return found
+
+
+class TestUseSimTimeIsRefused:
+    """**R-12.** The refusal existed and nothing exercised it.
+
+    L5 holds two contexts whose simulated clocks are independent and separate
+    without bound (ADR-0043, ADR-0049), so there is no one simulated clock for
+    this process to honour, and ADR-0050 decision 3 pairs two operands on the
+    WALL clock for exactly that reason. Every other node in this system honours
+    `use_sim_time`; this one refuses to start with it rather than quietly
+    ignoring it — and a refusal no test drives is a refusal that will be
+    deleted as dead code, or inverted, without anything noticing.
+
+    Driven against a stub rather than a live node: the function reads one
+    parameter and one side name, and building two ROS contexts to ask it a
+    question would test rclpy.
+    """
+
+    class _Parameter:
+        def __init__(self, value: bool) -> None:
+            self.bool_value = value
+
+    class _Node:
+        def __init__(self, value: bool) -> None:
+            self._value = value
+
+        def get_parameter(self, name: str):
+            assert name == "use_sim_time"
+            return self
+
+        def get_parameter_value(self):
+            return TestUseSimTimeIsRefused._Parameter(self._value)
+
+    class _Side:
+        def __init__(self, value: bool, name: str = "counterpart") -> None:
+            self.node = TestUseSimTimeIsRefused._Node(value)
+            self.side = SimpleNamespace(name=name)
+
+    def test_a_side_told_to_take_simulated_time_is_refused(self) -> None:
+        with pytest.raises(BoundaryError) as refusal:
+            _refuse_sim_time(self._Side(True))
+        assert "use_sim_time" in str(refusal.value)
+        assert "counterpart" in str(refusal.value)
+
+    def test_a_side_on_the_wall_clock_starts(self) -> None:
+        _refuse_sim_time(self._Side(False))
 
 
 def test_every_skill_the_plan_declares_is_routable() -> None:

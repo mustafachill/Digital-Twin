@@ -18,10 +18,21 @@ restated here (P1).
   memory from the generated one.
 - **Nothing starts it.** It is not in `simulation.launch.py`, not in `./scripts/sim`, and not
   in any scenario. A solo bring-up is exactly what it was before this package existed.
-- **No goal has crossed the boundary in any automated test**, and none can today: `launch_test`
-  puts the launch inside the test process, which holds one context on one domain, so two sides
-  cannot be included in one (CLAUDE.md §2). What is evidenced is the routing decision, the mode
-  decision and the conjunction — each by a test — and not the crossing.
+- **A goal now crosses the boundary in an automated test, and this bullet said it could not.**
+  `test/test_twin_boundary_paired_launch.py` puts each side in its own PROCESS on its own
+  `ROS_DOMAIN_ID` — `test/fake_side.py`, which serves an arm's L3 action names and moves
+  nothing — while the test process holds one context on the plant's domain and opens no
+  second one. What the far side did is read from its stdout, which a launch-process
+  supervisor may already observe (ADR-0044 clause 3). The impossibility claim was about
+  `launch_test` with `IncludeLaunchDescription`, which does put a whole cell's launch inside
+  the test process; it was overstated into "nothing automated can show this", and this
+  repository already held the counter-example — the second-world campaign's
+  `mirror_latency.py` runs two contexts on two domains in one process and carried 20,000
+  messages, and ADR-0050 chose L5's mechanism from that rig.
+  **What that rig still cannot answer:** it brings no cell up — no Gazebo, no controller
+  manager, no `move_group`, no arm — so nothing in it is evidence about motion, planning,
+  grasping or timing. **No goal has crossed the boundary into a running cell**, and no
+  paired scenario exists.
 - **`valid` is false in every sample this package can produce**, and that is the intended
   behaviour. See below.
 
@@ -36,9 +47,20 @@ are constants on the contracts, so each is written once.
 A transition that places physical actuation under an authority that was not previously
 commanding it calls `cite_bringup.plan.require_hardware_opt_in` — **the same check bring-up
 applies, at the transition rather than only at bring-up**, which is what `SetMode.srv`'s header
-commits this server to. `force` cannot skip it. Which transitions those are is
-[`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md)'s list and not a
-second one.
+commits this server to. `force` cannot skip it.
+
+**Which transitions those are is computed, and this package holds no list of gated modes.**
+`cite_twin/mode.py` asks which sides the requested mode commands — `routing.commanded_sides`,
+read off `TwinMode.msg` — and whether any of those sides, for any asset in scope, loads a
+backend that is not a simulation. Transcribing
+[`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md)'s three
+examples is what this package did until 2026-08-31, and it left `VALIDATED` — which
+dispatches a goal to both sides by byte-identical code to `VIRTUAL_LEAD`'s — ungated on a
+plan with a real far side.
+
+**A second refusal is also out of `force`'s reach:** a transition is refused while any goal
+L5 dispatched is still running, because `/cite/twin/mode` publishing `SIM` — *"physical
+idle"* — while an arm is mid-motion under L5's command is a statement no reader can check.
 
 **What that is not: the safety layer.** It is one refusal in one server. A transition this
 server permits is not thereby supervised.
@@ -75,11 +97,12 @@ within a bound [ADR-0049](../../../docs/adr/0049-measure-the-real-time-floor-as-
 decision 1 deliberately leaves unset — and nothing in the tree measures it. A term with no
 instrument makes the conjunction false, so the gate is arithmetic rather than a warning in prose.
 
-So the monitor **publishes self-describing invalid samples rather than nothing**: the six
-comparison fields are zeroed by the message's own rule, and the condition terms are not, because
+So the monitor **publishes self-describing invalid samples rather than nothing**: a computed
+comparison field is zeroed by the message's own rule, and the condition terms are not, because
 they are how a reader learns which conjunct failed. `test_divergence.py` asserts that `valid` is
-false *for that named term* rather than merely that it is false, so a change which makes it true
-has to confront why.
+false *for that named term* rather than merely that it is false, and one test per term holds the
+conjunction at five rather than four — deleting term 1, 2, 4 or 5 used to leave every test in
+that file green.
 
 **Do not make `valid` true by weakening a term.** If the conjunction turns out to be
 unsatisfiable in a way ADR-0050 did not anticipate, that is a finding to report.
@@ -87,11 +110,16 @@ unsatisfiable in a way ADR-0050 did not anticipate, that is a finding to report.
 ### What is NOT computed
 
 `tcp_position_error_m`, `tcp_orientation_error_rad`, `cycle_time_deviation_s` and
-`event_timing_deviation_s` are zero in every sample because **nothing here computes them**. The
-first two need a tool pose per side, which needs one TF buffer per side (ADR-0050 clause 1c) and
-forward kinematics; the last two need L4 line state from both sides. Their zero is
-indistinguishable from the zeroing rule's zero while `valid` is false for every sample — which
-is every sample today — and stops being so the moment term 3 gains an instrument.
+`event_timing_deviation_s` carry **NaN** in every sample because **nothing here computes
+them**. The first two need a tool pose per side, which needs one TF buffer per side (ADR-0050
+clause 1c) and forward kinematics; the last two need L4 line state from both sides.
+
+They used to be zero, and **that fact lived here and not in the contract** — so the day term
+3 gains an instrument and a sample turns valid, `tcp_position_error_m = 0.0` would have been
+published as a measurement. The marker is now declared in `DivergenceMetrics.msg`, which is
+what `ros2 interface show` returns and what L6 records beside the numbers. It is a second
+rule on a second axis: the zeroing rule says what an INVALID sample carries, NaN says what an
+UNCOMPUTED field carries, and a producer that computes one of them stops marking that one.
 
 ## No fidelity claim, ever
 
@@ -134,15 +162,27 @@ but a test passes it.
   adoption rule bars a process that commands an actuator from absorbing SIGINT, and this one
   dispatches goals that move arms. It imports from it only the one constant that module
   documents as the single place it is written down.
-- **The executor is multi-threaded and the callback group is reentrant, deliberately.** The
-  operator's goal is dispatched and then waited on inside a callback; on a single-threaded
-  executor the wait for the plant's own goal would deadlock against itself.
+- **No in-flight goal occupies an executor thread**, and that property is what the stop path
+  rests on rather than a thread count. A goal's blocking half runs on a thread of L5's own
+  (`boundary.off_executor`) behind a coroutine execute callback, so the mode service, the
+  cancel and the divergence timer are served whatever is in flight. Until 2026-08-31 every
+  in-flight goal parked a thread of the node's only pool, and the cancel that bounds a goal is
+  itself executor work — so the bound was starved by the thing it was meant to bound: two
+  blocking handlers on a two-thread executor served **1 timer tick in 3 s where 15 were due**.
+  Raising the thread count moves the number at which that happens and does not remove it. The
+  cost is one thread per in-flight goal, which is bounded by how many an operator has
+  outstanding and by nothing else.
 - **No deadline on a far-side goal.** [ADR-0045](../../../docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md)
   records what a wall-clock deadline supervising a simulation-time process cost this project, and
   L5 has two simulated clocks to be wrong about rather than one. The operator's cancel is the
-  bound, and it reaches every side. The one bounded wait is for a server to appear, which is a
-  graph event.
-- **One name here is written by hand and the plan does not carry it:** `joint_states`, the
-  interface an arm's joint state arrives on. It is `joint_state_broadcaster`'s own topic, formed
-  upstream. The namespace it hangs under is read off the plan rather than composed; what would
-  close the residual is the plan carrying the topic, which is generator work.
+  bound, and it reaches every side. That is unchanged by the bullet above; what changed is where
+  the waiting happens, not whether it is bounded.
+  **The one bounded wait is for a server to appear, and it is a poll rather than a graph
+  event** — `rclpy`'s `wait_for_server` loops on `server_is_ready()` with `time.sleep(0.25)`.
+  This README said "a graph event" until 2026-08-31. Nothing is sequenced on that quarter
+  second; it decides only how quickly a goal that could already have been sent is sent.
+- **Every name this package uses comes from the generated plan.** `joint_states` was written by
+  hand here until 2026-08-31, guarded by nothing — renaming it left every test green and the
+  failure mode is a monitor that reports `UNMEASURED` forever, which is also what a healthy
+  monitor reports before a side is up. The generator now emits `joint_state_topic` beside
+  `description_topic` and L5 reads it.
