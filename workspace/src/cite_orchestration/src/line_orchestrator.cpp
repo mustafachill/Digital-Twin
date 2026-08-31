@@ -247,8 +247,17 @@ bool read_conveyor_drives(
 /// callback signals, and the deadline exists only so that a topology which never
 /// comes is reported instead of waited on for ever. The LATCHED profile is what
 /// makes this work at all for a coordinator that starts after the topology
-/// server: a VOLATILE publisher would connect to this subscription silently and
-/// deliver nothing, which is the failure CLAUDE.md §10 names first.
+/// server, and the two ways it can fail are different failures that look alike
+/// from here.
+///
+/// `LATCHED` is RELIABLE + TRANSIENT_LOCAL. Against a VOLATILE publisher the two
+/// are **incompatible**, so they never match at all — the silent non-connection
+/// CLAUDE.md §10 names first. Against a compatible-but-volatile pair they *do*
+/// match and still deliver nothing, because the server publishes the topology
+/// **once**, in `on_activate`: a subscriber that matched after that publish has
+/// no sample to be given. `ros2 topic info --verbose` on both endpoints is what
+/// tells the two apart, and `docs/operations/troubleshooting.md` carries the
+/// rest of the list under the heading naming this timeout.
 class TopologyWait
 {
 public:
@@ -385,9 +394,16 @@ int main(int argc, char ** argv)
       RCLCPP_FATAL(
         node->get_logger(),
         "no LineTopology arrived on %s within the deadline. It is published on the LATCHED "
-        "profile, so a topology server that is already up delivers it immediately — this "
-        "means either no server is running or it has not been activated.",
-        std::string(LineTopology::TOPIC).c_str());
+        "profile, so a topology server that is already up delivers it immediately — the "
+        "likeliest cause is that no server is running or it was never activated. "
+        "DO NOT RESTART BEFORE CAPTURING EVIDENCE. This has been seen once, on a run that "
+        "was restarted rather than analysed, so nothing is known about it. Three candidates "
+        "need separating and only a live cell separates them: a QoS or latching mismatch on "
+        "the topic, a publisher that published before it had matched, and a genuinely slow "
+        "bring-up. `ros2 topic info %s --verbose` on both endpoints tells them apart; "
+        "docs/operations/troubleshooting.md says what else to capture, and why widening "
+        "topology_deadline_s is not the answer.",
+        std::string(LineTopology::TOPIC).c_str(), std::string(LineTopology::TOPIC).c_str());
       status = 1;
     } else if (topology.zone != zone) {
       RCLCPP_FATAL(

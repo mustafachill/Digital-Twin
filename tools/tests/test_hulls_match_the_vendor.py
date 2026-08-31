@@ -98,7 +98,7 @@ class TestTheHullsStillMatchTheVendor:
                 assert path.is_file(), f"vendor mesh has moved or gone: {mesh['path']}"
                 assert meshes.sha256_of(path) == mesh["source_sha256"], (
                     f"{mesh['path']}: the vendor mesh changed. Re-derive with "
-                    "`cite-model hulls --write` and review the diff."
+                    "`./scripts/hulls --write` and review the diff."
                 )
 
     def test_re_deriving_reproduces_the_committed_bytes(self) -> None:

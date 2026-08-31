@@ -562,11 +562,63 @@ state a new contributor is in.
 tree produces one message about the vendor tree and no claim about the manifest at all. It is
 deliberately not made here: it is a change to the command's control flow, and this change is
 already the one that put that command into a gate.
+**[Fixed 2026-08-31 — see the correction below.]**
 
 Note for whoever takes it: **the remedy string also names `cite-model hulls --write`**, which
 after 2026-08-31 is no longer the entry point CLAUDE.md §7 points anyone at — `./scripts/hulls`
 is. Both belong to the same edit. The string was left exactly as it stands so that "R-09
-recorded, not fixed" means what it says.
+recorded, not fixed" means what it says. **[Fixed 2026-08-31 — see the correction below.]**
+
+#### Correction — 2026-08-31: R-09 is fixed, and it was broader than this section wrote it
+
+**The cause named above is one of two, and the section stated the narrower one as if it were
+the whole.** It says the set is skipped *"whose `source_root` does not exist"*, which is the
+route that `continue`s before `_hull_set` is called. A set is skipped by a second route as
+well: `_hull_set` raising `MeshError`, which happens when a declared mesh is absent from a
+vendor package that *is* present, when an STL cannot be parsed, and when **`scipy` is missing
+from the interpreter** — `cite_tools.meshes.convex_hull` imports it at call time and raises
+that same exception when it is not there.
+
+**That second route was reproduced**, on a stale checkout carrying the vendor tree where
+`scipy` was absent: the same wrong second message, from a different cause, on a machine that
+*had* been bootstrapped. So the diagnosis in the section — "the ordinary state of a fresh
+clone" — understates the reach: the bad message follows from *a declared set produced no
+entry*, and the missing vendor tree is only its most common reason.
+
+**What was changed**, in `tools/cite_tools/cli.py`:
+
+- The command records the sets that produced no entry, by name, at **both** skip routes.
+- The region comparison is skipped when that list is non-empty — for any reason, not for the
+  vendor-tree reason — and the run instead prints a note that the region **went unchecked**,
+  naming the skipped sets. The skip keeps its own error and its own remedy; the manifest is
+  no longer spoken about at all.
+- The note says *"do not run `--write` to make it agree"* in as many words, because the
+  message this replaces did the opposite.
+- `--write` now refuses on the skip itself as well as on `problems`. It already refused, and
+  it refused **by coincidence** — every skip happens to file a problem. What stands between a
+  skipped set and a region rewritten with that set deleted from it should not be a coincidence
+  between two lists.
+- The remedy string on the surviving comparison now names `./scripts/hulls --write`, with the
+  two other places that named the old entry point as an instruction:
+  `tools/tests/test_hulls_match_the_vendor.py` and the `scipy` pin's comment in
+  `requirements/tools.txt`. **The generated manifest's own `tool:` field and `BEGIN` marker
+  still read `cite-model hulls`** and are deliberately untouched — they are machine-written
+  provenance, and rewriting them means a `--write` run against the vendor tree.
+
+**What it is checked by**, `tools/tests/test_hulls_skipped_set_message.py`: both skip routes,
+each asserting the region complaint is absent and the note present; that no remedy naming
+`--write` is offered; and that `--write` refuses leaving the manifest byte-identical. Three of
+the four fail against the pre-fix command and pass after it. The fourth — that `--write`
+refuses — passed before the change as well, and is recorded here as documenting existing
+behaviour rather than as evidence of a fix.
+
+**The anti-vacuous half was run, after the vendor tree was imported.** A guard that suppresses
+a comparison and a guard that deleted one look identical from the passing side, so the file
+also asserts that a corrupted derived region is still caught and still names `./scripts/hulls
+--write`. That test is `skipif`-guarded on `workspace/src/external/`, and it **skipped on the
+first pass and passed once `./scripts/bootstrap` had imported the vendor source** — with
+`./scripts/hulls` itself then reporting `1 set(s), 13 mesh(es) match the vendor` on an
+unmodified checkout. So the comparison is shown still firing, and is not merely believed to.
 
 ### The schema generalises to a second vendor and the tool does not
 

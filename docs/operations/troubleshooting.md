@@ -256,6 +256,55 @@ so that no counterpart can ever land on another checkout's plant — so every ch
 changed on the day that landed. A cell launched before it and a shell entered after it are on
 different domains, and the shell finds an empty graph.
 
+### `line_orchestrator` exits with "no LineTopology arrived"
+
+**Seen once, on a run that was restarted rather than analysed, so there is no log.** That is
+the whole reason this section exists: the next person to see it should capture the evidence
+before killing anything. A restart is what turned the only observation of this into an
+anecdote.
+
+**Capture first, while the cell is still up.** In another shell on the same domain
+(`./scripts/enter dev`, which lands on the plant — `./scripts/doctor` prints the domain):
+
+```bash
+ros2 topic info /cite/line/topology --verbose     # BOTH endpoints, all three QoS fields
+ros2 lifecycle get /cite/facility/topology_server # configured? active?
+ros2 node list | grep topology
+```
+
+Keep the full launch log. The coordinator's own FATAL line and the topology server's
+`configured with N station(s)` line, with their timestamps, are what separate the causes
+below; nothing reconstructs them afterwards.
+
+**Three candidate causes, worth separating rather than merging into "it was slow".**
+
+- **A QoS or latching mismatch on the topic.** The subscriber asks for the latched profile,
+  and the failure has two shapes. If the publisher is not `TRANSIENT_LOCAL`, the two are
+  *incompatible* and never connect — silently, which
+  [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md) and CLAUDE.md §10's first
+  bullet name as the most-misdiagnosed failure in ROS 2. If both sides are compatible but
+  the durability is volatile, they connect and still deliver nothing, because the server
+  publishes the topology **once**: a subscriber that matched after that publish gets no
+  sample and waits out the deadline. `ros2 topic info --verbose` distinguishes these two
+  from each other and from everything below.
+- **A publisher created and published from inside one callback.** Reliable is a promise to
+  *matched* subscribers, so anything published in the same callback that created the
+  publisher reaches nobody. This is the defect that cost this project a belt setpoint for
+  ten commits. **On the code as it stands it is ruled out, not suspected**: `topology_server`
+  creates its publisher in `on_configure` and publishes in `on_activate`, which are two
+  transitions. Check that this is still true before spending time elsewhere — it is the
+  cheapest of the three to re-confirm and the easiest to reintroduce.
+- **Genuinely slow bring-up under load.** `topology_deadline_s` defaults to 30 s. If the
+  topology arrives and the coordinator had already given up, the launch log shows the
+  server's own line *after* the FATAL. **Do not widen the parameter to make the symptom go
+  away.** It is a ceiling on a failure, not a schedule (P4), and
+  [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) is
+  explicit that no ceiling may be widened to absorb a slow host.
+
+**One thing that is not a candidate.** The deadline is a `std::condition_variable` wait on
+the wall clock, so a simulated clock that never started cannot expire it and cannot explain
+this. That failure produces a different symptom.
+
 ### Bring-up fails on the second attempt
 
 Orphaned processes from the first.

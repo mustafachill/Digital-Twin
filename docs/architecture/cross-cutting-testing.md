@@ -1,15 +1,26 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **363**
+  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **822**
   host tests at this commit, counted by collection
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-30),
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-31),
   plus shell self-tests for the gate logic
-  in `scripts/_lib.sh`. **This line said 236 until 2026-08-30 and 22 below it**; both were
-  numbers in prose that nothing re-ran, which is the defect
+  in `scripts/_lib.sh`. **This line said 236 until 2026-08-30, and where the interface count
+  sat below it, 22 where the package held 23**; both were numbers in prose that nothing
+  re-ran, which is the defect
   [`test_interface_counts.py`](../../tools/tests/test_interface_counts.py) was written for
-  and does not guard here — it holds the two READMEs that open by counting the package, not
-  this status line. The contract level is populated: **23** interface definitions are frozen
+  and did not reach here — it held the two READMEs that open by counting the package, and not
+  this status line. **The interface count has since been deleted from this line rather than
+  corrected a second time.** Its canonical home is
+  [`../interfaces/README.md`](../interfaces/README.md), which is guarded; a second copy here
+  could only ever go stale, and that test now fails on any document that states an interface
+  count and gets it wrong. The test count stays because this line is its only home and it
+  names the command that reproduces it. **Read that number as files as well as behaviours.**
+  Two guards added on 2026-08-31 parametrise over every tracked file — the superseded
+  real-time wording and the interface-count scan — so each file is one case, and between them
+  they are **394** of the 822. A count that moves when the repository grows is the price of a
+  guard that reaches every document instead of a named list; it is not 394 new behaviours.
+  The contract level is populated: every interface definition in `cite_interfaces` is frozen
   against a stored baseline.
   The scenario level has three: `bringup`, a blocking CI gate run twice per run;
   `pick_and_place`, **promoted to a blocking gate at `c1e9e03`**; and `continuous_line`,
