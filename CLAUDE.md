@@ -601,6 +601,17 @@ account of a flake; each was caught by someone re-running, never by someone read
     of dead-ending. **The defect itself is untouched** — a real grasp is still reported empty —
     and **ADR-0045 names it as owed its own record and deliberately does not fold it in; that
     record does not exist yet.**
+  - **No vendor-described link's mass or inertia tensor is validated by anything, and this
+    is the same structural blindness ADR-0028 just fixed for collision geometry.** The
+    validator reads `description.body`; every vendor-described type leaves `body` unset; so
+    the rule returns an empty list for exactly the links where the failure it names occurs.
+    That is the shape ADR-0028 decision 4 closed for collision meshes by making L0 declare
+    what the vendor does, and the identical hole is still open for inertia — which CLAUDE.md
+    §10 names in the same breath as dense collision geometry, and which
+    `model-validator` is documented as always checking. **Nothing is known to be wrong**: the
+    2026-08-31 audit read all **27** vendor-described links itself and found **0** violations,
+    one pass by one reader, not a check. What is missing is that nothing would notice if a
+    vendor bump made one wrong. This is owed its own record and does not have one.
   - **The only environment-collision gate has an unmeasured edge.** Pilz does not search the
     scene, so `ValidateSolution` is the sole gate, and it checks trajectory waypoints while
     interpolating nothing between them. The sampling time is **0.1 s**, a C++ default argument
@@ -693,6 +704,18 @@ account of a flake; each was caught by someone re-running, never by someone read
     Their verdict is a negative one worth carrying: **hulls move a pair materially and still do
     not reach the 1.0 [ADR-0043](docs/adr/0043-hold-both-sides-to-the-wall-clock.md) requires**,
     so that record's gap is narrowed and not closed. No ceiling or tolerance was touched.
+    **A geometry audit and a code review on 2026-08-31 found the hulls themselves correct,
+    reproducible and reaching only collision geometry, and found the record wrong about the
+    risk it names.** ADR-0028 said in four places that a hull *"fills the space between the
+    fingers"*; it does not, because each link is hulled separately, and **that sentence was the
+    hypothesis the promotion gate's measurement would have been designed against** — a re-run
+    looking for a filled gap would find nothing and read as a clean pass. What the hull does
+    change at the gripper, what a re-run must therefore report, and four residuals recorded
+    rather than fixed — an untested CPU architecture, `end_tool` as a second exception
+    candidate, a vendor self-collision matrix that no longer matches the geometry, and four
+    pipeline gates that prove less than they appear to — are in ADR-0028's corrections and its
+    "Residuals recorded 2026-08-31" section, **not copied here** (P1). **Nothing in that work
+    touched grasp behaviour and none of it is evidence for or against the gate.**
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.

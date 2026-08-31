@@ -40,13 +40,29 @@ enough:
   date, no version: every one of those would make the same input produce different
   bytes on a different machine.
 
-The residual is stated rather than hidden: Qhull could still *merge facets*
-differently between versions, which would change the polygons this module fans
-and therefore the file. That is a coarser and much rarer disagreement than the
-diagonal one — it did not occur across the two platforms measured — but it is not
-excluded. ``scipy`` is pinned exactly in ``requirements/tools.txt`` for that
-reason, and ``cite-model hulls`` reports the drift loudly rather than silently
-re-writing.
+**Two residuals are stated rather than hidden, and there were two only after
+2026-08-31 — this block named the first and omitted the second.**
+
+*Qhull could still merge facets differently between versions*, which would change
+the polygons this module fans and therefore the file. That is a coarser and much
+rarer disagreement than the diagonal one, and it did not occur across the two
+platforms measured — **but read what those two platforms are before taking
+comfort from it. They are macOS/arm64 and the Linux container on the same host:
+two operating systems and ONE CPU architecture.** CI is x86_64, this branch has
+never run there, and the axis on which floating-point results most plausibly
+differ is the one carrying no observation at all. ``scipy`` is pinned exactly in
+``requirements/tools.txt`` for this reason, and ``./scripts/hulls`` reports the
+drift loudly rather than silently re-writing.
+
+*This module has a sensitivity of its own*, and it is nearer than Qhull's.
+``_fan`` orders a facet's vertices by their bearing about the facet centroid, so
+two vertices at the same bearing to within floating-point error would swap and
+the file would change. Measured rather than argued: across **all 19,471
+consecutive-bearing gaps in all 13 hulls the tightest is 1.77e-8 rad**, roughly
+**8e7 ULPs**, with **zero exact ties**. That is a wide margin and it is a reason
+to expect stability, not a proof of it — and it is a property of *these thirteen
+meshes*, which a vendor bump can change. Radius already breaks an exact tie (see
+``_fan``); nothing breaks a near-tie, because nothing needs to at this margin.
 """
 
 from __future__ import annotations
@@ -187,6 +203,11 @@ def _fan(vertices: np.ndarray, normal: np.ndarray) -> list[np.ndarray]:
     The vertices arrive as a set. They are ordered around the facet's centroid in
     the plane, rotated so the lexicographically smallest comes first, and fanned
     from it — so nothing about the order they arrived in survives into the result.
+
+    The bearing comparison is this module's own determinism residual, and the
+    module docstring carries its measured margin: the tightest consecutive-bearing
+    gap across all thirteen committed hulls is 1.77e-8 rad, with no exact ties. Two
+    vertices closer than floating-point noise would swap and change the file.
     """
     centre = vertices.mean(axis=0)
     # Any two orthogonal directions in the plane will do; `axis` is chosen as the

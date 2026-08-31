@@ -265,7 +265,10 @@ as the Context section states and as the second-world campaign independently rec
 hulls come to **9,812** rather than the campaign's 9,810 — a **10.02x** reduction. The two
 triangles are not a discrepancy to resolve: they are the different, and deliberately
 stricter, canonicalisation this pipeline applies to make the output reproducible on a second
-machine. The thirteenth mesh, the vendor's own `end_tool` collision proxy, goes 260 -> 180.
+machine. The thirteenth mesh, the vendor's own `end_tool` collision proxy, goes 260 -> 180 —
+**80 triangles, which is 0.09 % of the reduction, in exchange for +6.0 % volume and a closed
+through-feature. It is the one link where this trade goes the wrong way**, and the numbers are
+under "Residuals recorded 2026-08-31" below.
 
 ### What reproducibility cost, because the record asked for byte-identity
 
@@ -277,6 +280,11 @@ identical face counts, different diagonals across the flat faces. Each facet is 
 re-triangulated by the pipeline rather than taken as Qhull cut it. The residual that remains
 is coarser and is stated in the module: Qhull could still *merge* facets differently between
 versions.
+**[Corrected 2026-08-31 on both halves.** "Across machines" and "the two platforms measured"
+mean macOS/arm64 and the Linux container **on one CPU architecture**; x86_64 is untested and
+this branch has never run in CI. And the module named Qhull's residual while omitting its own
+bearing-ordering one, whose measured margin is now recorded there. See "Residuals recorded
+2026-08-31" below.**]**
 
 ### The speed figures, and their strength
 
@@ -430,6 +438,123 @@ campaign's own rule requires.
 
 **This correction promotes nothing.** The status stays `Proposed`, the shipped default stays
 `vendor_meshes`, and clause 2 remains unsatisfied.
+
+## Residuals recorded 2026-08-31, and deliberately not fixed here
+
+A geometry audit and a code review of the implementing change found the hulls themselves
+correct, reproducible, structurally sound and reaching only collision geometry. What follows
+is what they found wrong or unmeasured **around** them. The blocking items are fixed and
+recorded in their own sections above; these are the ones recorded rather than built, each with
+what would settle it.
+
+**Every measurement below is the audit's**, taken on 2026-08-31 from the committed hulls, the
+pinned vendor meshes and the generated artifacts. **One measurement, one machine, no
+thresholds registered in advance and no directory in
+[`docs/measurements/`](../measurements/README.md).** They are static geometry, never a running
+cell, and none of them is evidence about grasp behaviour.
+
+### The determinism residual is stated against an axis nothing has tested
+
+`cite_tools.meshes` says the facet-merging residual *"did not occur across the two platforms
+measured"*. **Those two platforms are macOS/arm64 and the Linux container on the same host —
+two operating systems and one CPU architecture.** CI is x86_64 and this branch has never run
+there, so the axis on which floating-point results most plausibly differ is the one with no
+observation on it at all. The claim is not wrong; it is narrower than it reads, and the module
+now says so.
+
+**The module also named only Qhull's facet merging and omitted a residual of its own.** `_fan`
+orders a facet's vertices by their bearing about the facet centroid, so two vertices at the
+same bearing to within floating-point error would swap and the file would change. That is now
+measured rather than argued: across **all 19,471 consecutive-bearing gaps in all 13 hulls the
+tightest is 1.77e-8 rad**, about **8x10^7 ULPs**, with **zero exact ties**. So the margin is
+large — which is a reason to expect stability, not a proof of it, and it is a property of
+*these thirteen meshes* that a vendor bump can change. Both residuals are now in the module's
+docstring.
+
+**What would settle it:** one `./scripts/hulls` run on x86_64. It is one CI step and it does
+not exist.
+
+### `end_tool` is the one link where the hull is worse, and it is now measured
+
+This record said the `end_tool` effect was unmeasured. It is not, and the numbers matter
+because they point the other way from every other link.
+
+| | |
+|---|---|
+| volume added by the hull | **+7.42 cm^3**, **+6.0 %** |
+| peripheral fill depth | median **6.4 mm**, maximum **~18.9 mm** |
+| feature closed | a **~75 mm** through-feature |
+| triangles saved | **80**, which is **0.09 %** of the total reduction |
+
+**Everywhere else in the set a rendering mesh is traded for a hull. Here a hand-made vendor
+collision proxy is** — 260 triangles the vendor authored *as* collision geometry — and it buys
+0.09 % of the saving. It is the one link where the exchange is fidelity for almost nothing.
+
+**So `end_tool` is a second candidate for the per-link exception this record already foresees
+for the fingers, and it is a stronger one on cost-benefit while being a different case in
+kind.** The fingers' case is that the hull changes how a part is held (see the correction of
+2026-08-31); `end_tool`'s is that the hull closes a through-feature and saves nothing worth
+having. The mechanism ADR-0028 names for the exception — a primitive, or several hulls for one
+link — fits both, and `CollisionSpec` cannot express either, which is stated in its docstring
+and is unchanged.
+
+**What would settle it:** the exception itself, which is the change that would also have to
+decide whether an unhulled member of a set is expressible at all. Selecting `vendor_meshes`
+for `end_tool` alone is not available today: the binding substitutes a *root*, wholesale.
+
+### Promoting hulls means the self-collision matrix no longer matches its geometry
+
+The generated SRDF invokes the **vendor's** self-collision matrix, and that matrix was computed
+against **vendor** geometry. A convex hull is never smaller than what it replaces, so pairs the
+vendor disabled as never-colliding can collide once hulls are selected, and the planner then
+refuses configurations it used to accept.
+
+Measured over **484 configurations and the 34 pairs the vendor's matrix does not disable**:
+
+| vendor clearance | configurations that become hull-colliding |
+|---|---|
+| any gap above 2 mm | **9 of 484 (1.9 %)** |
+| above 10 mm | **2 of 484** |
+| above 20 mm | **0 of 484** |
+
+**Home is clear on both geometries.** So this is a small, real narrowing of the reachable
+configuration space concentrated where the vendor geometry was already close — not a broken
+arm, and not nothing.
+
+**The transferable part is not the percentage.** It is that **a self-collision matrix is a
+function of the geometry it was computed for**, and selecting a different collision geometry
+silently invalidates that function. Nothing in this repository checks the pairing. Promoting
+hulls therefore means either regenerating the matrix against hull geometry — which is a
+`moveit_setup_assistant` output the project does not generate today — or accepting a matrix
+computed for a different robot.
+
+**What would settle it:** a matrix derived from the selected geometry, in the generator, so
+that the two cannot disagree; and, until then, a check that fails when a derived set is
+selected while the SRDF's matrix names the vendor's.
+
+### Four things about the pipeline's own tests, recorded and not fixed
+
+None of these is a defect in a hull. Each is a gate that proves less than it appears to.
+
+- **The tested hull-writing loop is dead; the live one is untested.** The write path that has
+  unit tests is not the path `./scripts/hulls --write` takes. What actually writes the files
+  is exercised only by being run by hand.
+- **`test_a_permuted_input_gives_the_same_bytes` passes with the canonicalisation removed.**
+  The property it names is real and the test does not hold it; the guard that does is
+  vendor-gated and skips on the host job, which is the job most contributors run.
+- **Nothing checks that the declared mesh list stays exhaustive.** The list in L0 is exhaustive
+  today and the binding substitutes a root wholesale, so a vendor bump that adds a
+  collision-bearing link — or an L0 change that pushes `model_num` to 1305 or above, which
+  moves the vendor's own `collision_dir` — leaves references resolving to nothing. Gazebo warns
+  and simulates a body with no collision geometry; nothing fails.
+- **`cite_description`'s admission test is prose where its cited precedent is mechanical.** It
+  says what belongs in the package in a `package.xml` comment. The precedent it names enforces
+  its equivalent in code.
+
+**What would settle each:** a test that calls the live write path; a host-runnable permutation
+guard; a check that the declared list equals the collision references in the expanded
+description, which is the only statement of exhaustiveness that cannot go stale; and an
+admission check that runs.
 
 ## Context
 

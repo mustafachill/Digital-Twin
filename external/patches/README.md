@@ -26,6 +26,31 @@ its own reason for existing.
 
 `NN` orders application. Example: `01-xarm_ros2-jazzy-cmake-fix.patch`.
 
+## Two patches touch one file, and their order is a constraint
+
+`02-xarm_ros2-gripper-drive-rate-parameter.patch` and
+`03-xarm_ros2-collision-mesh-root.patch` both add a parameter to
+`xarm_device_macro.xacro`'s parameter list, within a few lines of each other. **Patch 03's
+insertion point is load-bearing for patch 02, and nothing said so until 2026-08-31.**
+
+Move 03's inserted line one line lower and 02 no longer reverse-applies. `patch_state` in
+`scripts/_lib.sh` asks the reverse question first, so an applied-but-shifted 02 reads as
+neither `applied` nor `pending` and comes back **`conflict`** — which is fatal, and which
+stops a second `./scripts/bootstrap` on a checkout where nothing is actually wrong.
+
+Reproduced on 2026-08-31 in a throwaway clone of the pinned vendor commit: applying 01, 02 and
+an unmodified 03 leaves `patch_state` reporting **`applied`** for 02; applying 01, 02 and a 03
+whose `collision_mesh_path:=''` sits one line lower leaves it reporting **`conflict`** for the
+same unmodified 02. One anchor, one run, and the mechanism rather than a rate.
+
+The cost is not the failure, which is loud. It is that the failure **names the wrong cause**:
+`conflict` is documented as "the usual cause is a version bump that moved the code the patch
+edits", and the next person to refresh 02 against a vendor bump will read that and go looking
+upstream.
+
+**So: refreshing either of these two means regenerating both, against the same checkout, in
+bootstrap's order.** Do not hand-edit one patch's context lines to make it apply.
+
 ## Every patch must carry a header
 
 ```
