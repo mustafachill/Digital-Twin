@@ -617,7 +617,12 @@ def test_a_side_with_an_empty_partition_is_refused(tmp_path: Path) -> None:
 def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
     # The measured defect itself, written down. Two servers on one partition see
     # each other's topics, and one belt command drives both cells.
-    document = _document()
+    #
+    # Built from the plant side alone, because the side appended below is the
+    # BROKEN one: on a checkout flipped to `pair` the generated plan already
+    # declares a counterpart, and a third side would be refused for its
+    # duplicated name before the shared partition was ever reached.
+    document = _solo_document()
     shared = document["plan"]["sides"][0]["gz_partition"]
     document["plan"]["sides"].append(
         {"name": "counterpart", "gz_partition": shared, "domain_offset": 1}
@@ -627,9 +632,7 @@ def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
 
 
 def test_a_paired_plan_keeps_its_two_partitions_apart(tmp_path: Path) -> None:
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     assert [side.name for side in plan.sides] == ["plant", "counterpart"]
     assert len({side.gz_partition for side in plan.sides}) == 2
 
@@ -653,18 +656,23 @@ def test_a_side_is_named_as_well_as_partitioned() -> None:
 
 
 def _with_counterpart_backend(document: dict, backend: str) -> dict:
+    """Give every manager a counterpart backend, and one of them a different one.
+
+    Takes an already-paired document rather than pairing one itself, so that the
+    guard against a checkout flipped to `pair` lives in `_paired_document` and
+    nowhere else.
+    """
     document = copy.deepcopy(document)
     for manager in document["plan"]["controller_managers"]:
         manager["counterpart_backend"] = "sim"
     document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
-    document["plan"]["sides"].append(_counterpart())
     return document
 
 
 def test_a_simulated_counterpart_needs_no_opt_in(tmp_path: Path) -> None:
     # Phase 2.A: both sides simulated, so nothing is gated and the gate must not
     # fire on the mere presence of a counterpart.
-    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "sim")))
+    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "sim")))
     require_hardware_opt_in(plan, {})
 
 
@@ -672,7 +680,7 @@ def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) ->
     # This is Phase 2.B arriving. A backend is selected per (asset, side), so a
     # gate that read only `backend` would let the far side become physical
     # without ever looking at it (ADR-0041, Decision 2).
-    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "real")))
+    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
@@ -682,7 +690,7 @@ def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) ->
 
 
 def test_a_physical_counterpart_starts_with_the_opt_in(tmp_path: Path) -> None:
-    plan = load(_written(tmp_path, _with_counterpart_backend(_document(), "real")))
+    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
     require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
 
 
@@ -692,17 +700,23 @@ def test_an_unknown_counterpart_backend_is_refused_rather_than_allowed(
     # The same allowlist as the plant side. A backend nobody anticipated must not
     # be treated as simulation on either side.
     plan = load(
-        _written(tmp_path, _with_counterpart_backend(_document(), "mock_components"))
+        _written(
+            tmp_path, _with_counterpart_backend(_paired_document(), "mock_components")
+        )
     )
     with pytest.raises(HardwareNotPermittedError):
         require_hardware_opt_in(plan, {})
 
 
-def test_an_untwinned_plan_states_no_counterpart_backend() -> None:
+def test_an_untwinned_plan_states_no_counterpart_backend(tmp_path: Path) -> None:
     # `None` here means "there is no such side", never "the model left the key
     # out": the generator writes the key for every asset of a paired zone and for
     # none of an untwinned one.
-    plan = load(_generated())
+    #
+    # Driven against a plan written here rather than the generated one, because
+    # the question is about an UNTWINNED zone and a checkout flipped to `pair`
+    # for a run generates exactly the key this asserts is absent.
+    plan = load(_written(tmp_path, _solo_document()))
     assert all(m.counterpart_backend is None for m in plan.controller_managers)
 
 
@@ -736,21 +750,27 @@ def test_the_plant_is_reached_by_name_rather_than_by_position() -> None:
     assert plan.side_named(PLANT_SIDE).name == PLANT_SIDE
 
 
-def test_asking_an_untwinned_zone_for_its_counterpart_says_so() -> None:
+def test_asking_an_untwinned_zone_for_its_counterpart_says_so(tmp_path: Path) -> None:
     # Rather than an IndexError from `sides[1]`, which names the list instead of
     # the fact: whether a zone runs as a pair is an L0 fact, and the refusal
     # points at the model rather than at bring-up.
-    plan = load(_generated())
+    #
+    # Written here rather than read from the generated plan: the question is
+    # about an untwinned zone, and a paired checkout has the side it asks for.
+    plan = load(_written(tmp_path, _solo_document()))
     with pytest.raises(SideNotDeclaredError, match="declares no side named"):
         plan.side_named("counterpart")
 
 
-def test_a_missing_side_is_not_reported_as_a_domain_failure() -> None:
+def test_a_missing_side_is_not_reported_as_a_domain_failure(tmp_path: Path) -> None:
     # `gz.gz_environment` asks for a side in order to build a GZ_PARTITION, and
     # answering it with "the ROS domain cannot be resolved" names the wrong
     # isolation and sends a reader to the wrong half of ADR-0044. Both are
     # PlanErrors, so the loader's contract is unchanged.
-    plan = load(_generated())
+    #
+    # Written here for the same reason as the test above: the side has to be
+    # missing, and on a paired checkout it is not.
+    plan = load(_written(tmp_path, _solo_document()))
     with pytest.raises(PlanError):
         plan.side_named("counterpart")
     assert not issubclass(SideNotDeclaredError, DomainUnresolvedError)
@@ -821,31 +841,41 @@ def _paired_document() -> dict:
 
 
 def _solo_document() -> dict:
-    """Return the generated plan with the plant side and nothing else.
+    """Return the generated plan as an UNTWINNED zone generates it.
 
-    The other half of the same hazard: a test about an UNTWINNED zone read the
+    The other half of the same hazard: a test about an untwinned zone read the
     live plan, so it asserted the opposite of what a paired checkout declares.
+
+    Two things go, because pairing adds exactly two things to this plan: the
+    counterpart's `sides:` entry, and a `counterpart_backend` on every controller
+    manager. Dropping only the first would leave a document no generator emits —
+    a zone with one side that still states what its second side loads — and a
+    test written against it would be asking about nothing.
     """
     document = _document()
     document["plan"]["sides"] = [
         side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
     ]
+    for manager in document["plan"]["controller_managers"]:
+        manager.pop("counterpart_backend", None)
     return document
 
 
 def test_two_sides_sharing_one_domain_offset_are_refused(tmp_path: Path) -> None:
     # The ROS-graph twin of two sides sharing a partition, refused in the same
     # place so that a side cannot carry one isolation and not the other.
-    document = _document()
+    #
+    # From the plant side alone, for the reason given at
+    # `test_two_sides_sharing_one_partition_are_refused`: the appended side is
+    # the broken one, and a paired checkout would refuse its name first.
+    document = _solo_document()
     document["plan"]["sides"].append(_counterpart(offset=0))
     with pytest.raises(DomainUnresolvedError, match="share the domain offset"):
         load(_written(tmp_path, document))
 
 
 def test_the_resolver_adds_the_base_to_the_side_offset(tmp_path: Path) -> None:
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     assert resolve_domain_id(plan, PLANT_SIDE, 41) == 41
     assert resolve_domain_id(plan, "counterpart", 41) == 42
 
@@ -853,9 +883,7 @@ def test_the_resolver_adds_the_base_to_the_side_offset(tmp_path: Path) -> None:
 def test_the_two_sides_of_a_pair_never_resolve_to_one_domain(tmp_path: Path) -> None:
     # The clause reduces to this inequality, and it holds for every base rather
     # than for a chosen one.
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     # Every base a pair may legally take, not a chosen one. The upper end is 100
     # rather than 101 because the counterpart sits above the plant and both must
     # land inside the band; a base of 101 is refused by the test below rather
@@ -916,9 +944,7 @@ def test_a_hand_set_base_cannot_resolve_a_counterpart_past_the_band(
     tmp_path: Path,
 ) -> None:
     # The edge itself: base 101 is a legal plant and an illegal pair.
-    document = _document()
-    document["plan"]["sides"].append(_counterpart())
-    plan = load(_written(tmp_path, document))
+    plan = load(_written(tmp_path, _paired_document()))
     assert resolve_domain_id(plan, PLANT_SIDE, 101) == 101
     with pytest.raises(DomainUnresolvedError, match="outside 1..101"):
         resolve_domain_id(plan, "counterpart", 101)
@@ -966,7 +992,10 @@ def test_a_hand_written_offset_beyond_the_sides_is_refused(tmp_path: Path) -> No
     # An offset is an index into the sides, not a number a reader may choose.
     # `domain_offset: 200` loaded, and 200 resolves a counterpart far outside any
     # band a side may occupy.
-    document = _document()
+    #
+    # From the plant side alone, so that the appended side is the only broken one
+    # and the refusal is the offset rather than a duplicated name.
+    document = _solo_document()
     document["plan"]["sides"].append(_counterpart(offset=200))
     with pytest.raises(DomainUnresolvedError, match="declares exactly 0, 1"):
         load(_written(tmp_path, document))
