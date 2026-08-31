@@ -11,10 +11,10 @@
     needed it: the convex-hull collision meshes ADR-0028 decides on. It holds no
     code and no node.
 
-    ADMISSION TEST, in the style of `cite_runtime` (ADR-0034) and
-    `cite_test_hardware` (ADR-0040), because a package named for a layer will
-    otherwise accumulate whatever that layer touched. Something belongs here only
-    if all three hold:
+    ADMISSION TEST, in the style ADR-0034 and ADR-0040 set for the two packages
+    that came before it, because a package named for a layer will otherwise
+    accumulate whatever that layer touched. Something belongs here only if all
+    three hold:
 
       1. it is GEOMETRY OR MATERIAL a simulator or a planner loads by URI —
          a mesh, a material, a texture — and not configuration, code or data;
