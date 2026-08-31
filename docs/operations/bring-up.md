@@ -1,8 +1,10 @@
 # Bring-up
 
 - **Status:** `PARTIAL` — the simulated path below works and is what `./scripts/scenario bringup`
-  drives. Of the last two stages of the step-4 sequence, **twin sync does not exist** (there
-  is no `cite_twin` package) and **orchestration is off by default**: the line coordinator
+  drives. Of the last two stages of the step-4 sequence, **twin sync is not started by any
+  bring-up** — `cite_twin` now exists, and nothing in `simulation.launch.py`, `./scripts/sim`
+  or any scenario starts it; it also refuses to start against the shipped model, which
+  declares one side — and **orchestration is off by default**: the line coordinator
   starts only with `line:=true`, because it takes exclusive hold of every arm's skills, so a
   default bring-up leaves the arms free for an operator or a scenario. The physical path is
   Phase 2 and has never been run.
@@ -70,7 +72,8 @@ degraded — that is the point of lifecycle sequencing.
 ros2 control list_controllers          # all active
 ros2 topic hz /cite/cell_a/arm_1/joint_states
 ros2 action list | grep cite           # skill servers present
-ros2 topic echo /cite/twin/mode --once # expect SIM
+# /cite/twin/mode has NO publisher in this bring-up: cite_twin is not started
+# by it, and needs a zone declaring `twin: {sides: pair}` to start at all.
 ```
 
 The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process, and the
@@ -188,8 +191,14 @@ model and the same solver, so any agreement between them is agreement of a thing
   `launch_test` with `IncludeLaunchDescription` puts the launch in the test process, which
   holds one context on one domain — and defers what one would look like. `./scripts/scenario`
   addresses the plant.
-- **No mirroring and no divergence metric.** That is L5, `cite_twin` does not exist, and
-  ADR-0041's open questions are still open.
+- **No mirroring, and a divergence metric nothing can read.** `cite_twin` exists and
+  publishes `DivergenceMetrics` per asset, but no bring-up starts it, it refuses a
+  single-sided zone, and `valid` is false in every sample it can produce — one of the
+  conjunction's terms is each side's clock deficit within a bound
+  [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) leaves unset, measured by
+  nothing ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3). Mirroring in
+  the sense L5 owns it — physical state driving the virtual side — is not implemented at all,
+  and ADR-0041's open questions are still open.
 - **Real-time factor is not a bring-up condition.** ADR-0043's half 2 puts a real-time floor on
   both sides and **nothing in bring-up measures it**, so a side can be up, slow, and
   indistinguishable from a healthy one here. **Do not cite half 2's original wording as the

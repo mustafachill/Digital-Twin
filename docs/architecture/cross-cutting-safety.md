@@ -134,13 +134,21 @@ value**, and that is filed as an open question rather than answered here — see
 The two guards, where they live and that both carry tests are in this document's Status
 bullet, and are deliberately not restated here (P1). What that bullet does not say is *when*
 they take effect: **both refuse before the stack starts — one at the shell boundary, one at
-bring-up — and neither refuses a transition.** What they buy is that the stack could not
-have **started** with a physical backend. Neither is a per-command refusal, and **nothing
-refuses a mode transition today**, because no server implements `SetMode` — `cite_twin` does
-not exist (CLAUDE.md §2). That service's own header commits the L5 server that eventually
-serves it to applying the same check at the transition, and for `VIRTUAL_LEAD` that
-commitment is the whole of the transition-time story. Do not read the three above as gated
-at the point of transition.
+bring-up.** What they buy is that the stack could not have **started** with a physical
+backend, and neither is a per-command refusal.
+
+**A third refusal now exists at the point of transition, and its reach is narrow.**
+`cite_twin/twin_boundary.py` serves `SetMode` and calls the same
+`cite_bringup.plan.require_hardware_opt_in` when a transition places physical actuation under
+an authority that was not previously commanding it — the two self-identifying entries above
+whatever the far side is, and `VIRTUAL_LEAD` where the far side of any asset in scope is not
+simulated. `force` cannot skip it, which its own unit tests hold
+([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)). **What that does not amount
+to:** it is one refusal in one server, it is not the safety layer, and **no bring-up starts
+that server** — nothing in `simulation.launch.py`, `./scripts/sim` or any scenario, and it
+refuses a single-sided zone, which is the only kind this repository ships. So in every
+deployment anyone has run, nothing refuses a mode transition, because nothing serves one. Do
+not read the three above as gated at the point of transition.
 
 ## Multi-robot workspaces
 

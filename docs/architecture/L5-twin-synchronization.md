@@ -1,13 +1,25 @@
 # L5 — Twin synchronization
 
-- **Status:** `DESIGNED` — no node implements any of this, and `cite_twin` does not exist.
-  Phase 2. The typed interfaces are in place and frozen against the contract baseline —
-  `TwinMode`, `SetMode`, `DivergenceMetrics`, `ModelVersion` — and every asset instance in
-  L0 carries a `registration` block, currently `unregistered` for all three arms. Nothing
-  consumes any of it.
-  **What crosses the boundary, and what a divergence number means, are now recorded** in
-  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) — which is `Proposed` and
-  implemented by nothing, so this status line is unchanged by it.
+- **Status:** `PARTIAL` — `cite_twin` exists and implements
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md); **nothing has ever run it against
+  a pair.**
+  **Built:** one process per zone holding one `rclpy` context per side
+  (`cite_twin/twin_boundary.py`), a `SetMode` server that applies the hardware opt-in **at the
+  transition** and publishes `TwinMode` latched on `/cite/twin/mode`, an action server per arm
+  per skill under `/cite/twin/...` that dispatches the L3 **goal** to each side's own server
+  in the modes ADR-0050's table gives a command flow, and a per-asset `DivergenceMetrics`
+  publisher on `/cite/twin/divergence`. Each rule is held by a test in that package, and a
+  launch test drives the node itself.
+  **Not built, and read this before believing the line above.** **No bring-up starts it** —
+  not `simulation.launch.py`, not `./scripts/sim`, not any scenario — and it **refuses to
+  start against the shipped model**, which declares `twin: {sides: single}`. So no goal has
+  crossed the boundary and no operand has ever arrived, in any run or any test; what is
+  evidenced is the decision each rule makes, not the crossing. **State mirroring is not
+  implemented at all** — the monitor consumes each side's joint state and nothing follows
+  anything. Registration is Phase 3: every asset instance in L0 carries a `registration`
+  block, `unregistered` for all three arms.
+  **`valid` is false in every sample the package can produce**, by construction, and that is
+  the deliverable rather than a defect — see *Divergence measurement is the point* below.
 - **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
 
 ## Responsibility
@@ -104,19 +116,21 @@ criterion the three share is stated once, in
 physical actuation under an authority that was not previously commanding it — and this list
 cites it rather than restating it, so that a fourth candidate can be judged against a
 criterion instead of compared to these three.
-**None of the three is refused at the point of transition today.**
-`require_hardware_opt_in` and `CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is
-that the stack could not have started with a physical backend; `SetMode.srv`'s header
-commits the L5 server that will eventually serve this transition to applying the same check
-there, and no such server exists. See
-[cross-cutting-safety.md](cross-cutting-safety.md), which carries the same three and the
-same residual.
+**All three are now refused at the point of transition by the L5 mode server, and no
+deployment anyone has run starts that server.** `require_hardware_opt_in` and
+`CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is that the stack could not have
+started with a physical backend; `cite_twin` calls **the same function** when a transition
+places physical actuation under an authority that was not previously commanding it, and
+`force` cannot skip it. It is one refusal in one server and it is not the safety layer. See
+[cross-cutting-safety.md](cross-cutting-safety.md), which carries the same three and states
+what that refusal does and does not amount to.
 
 ### What crosses the boundary
 
 Decided in [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) and deliberately not
-restated here (P1). The four things a reader of this document needs to know it says, each
-with the clause that carries it:
+restated here (P1), and implemented in `cite_twin` — with the caveat in this document's
+status bullet, which is that no goal has crossed in any run. The four things a reader of
+this document needs to know it says, each with the clause that carries it:
 
 - **L5 is one process per zone holding one ROS context per side**, and **nothing is
   republished across the boundary** — what crosses, crosses in L5's own memory. `domain_bridge`
@@ -156,6 +170,22 @@ over the mode, the pairing window, both sides' clock deficit
 frame correspondence, so a term with no instrument makes it false. Read that record before
 computing or interpreting one; it also states that `asset_id` is never empty, because there is
 no facility-level divergence number.
+
+**In the tree, `valid` is false in every sample and the clock-deficit term is why.** Nothing
+measures a clock deficit and ADR-0049 leaves its bound unset, so `cite_twin` publishes
+**self-describing invalid samples** rather than nothing: the six comparison fields are zeroed
+by the message's own rule, and the six condition terms are not, because they are how a reader
+learns which conjunct failed. Its `test_divergence.py` asserts that `valid` is false *for that
+named term*, so a change which makes it true has to confront the term rather than flip a
+boolean. **Four of the six comparison fields are additionally not computed at all** — TCP pose
+error needs one TF buffer per side and forward kinematics, and the two timing terms need L4
+line state from both sides — and while `valid` is false for every sample their zero is
+indistinguishable from the rule's zero.
+
+**Nothing above is a fidelity measurement.** Both sides of a Phase 2.A pair run the same L0
+model and the same solver, so what a sample would compare is a thing with itself;
+`far_side_physical` is the field that answers whether a number could ever be one, and in 2.A
+it is false for every asset (P8, [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)).
 
 ### Registration is what makes measurements transferable
 

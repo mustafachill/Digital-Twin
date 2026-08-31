@@ -35,12 +35,15 @@ than by reading the definitions.
 | `ConveyorState` | **nothing** |
 | `RobotState` | **nothing** |
 | `SafetyState` | **nothing** |
-| `TwinMode`, `DivergenceMetrics`, `SetMode` | **nothing** — L5 does not exist (CLAUDE.md §2) |
+| `TwinMode`, `DivergenceMetrics`, `SetMode` | `cite_twin/twin_boundary.py` — **which no bring-up starts**, and which refuses a zone declaring one side, as the shipped model does. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
 | `ResetStation` | `cite_orchestration/line_orchestrator` — the operator's only control over a blocked station (ADR-0037) |
 
-`LineTopology` and `LineState` each carry their own topic name as a `string TOPIC` constant,
-so the name exists in one place and a consumer reads it off the message rather than
-composing it.
+`LineTopology`, `LineState`, `TwinMode` and `DivergenceMetrics` each carry their own topic
+name as a `string TOPIC` constant, and `ResetStation` and `SetMode` carry theirs as a
+`string SERVICE` on the request — so each name exists in one place and a consumer reads it
+off the definition rather than composing it. In Python a service's constant is on the
+section it was declared in (`SetMode.Request.SERVICE`), which is the same place C++ reaches
+it (`SetMode::Request::SERVICE`).
 
 ## What it deliberately does not do
 
@@ -50,8 +53,10 @@ composing it.
   (CLAUDE.md §4). `LineTopology` exists precisely because the topology used to be published
   that way as a temporary exception; the exception expired when a consumer appeared.
 - **It does not guarantee behaviour.** `SetMode.srv` says so in its own body: bring-up and
-  `./scripts/enter hardware` enforce the hardware opt-in, and nothing enforces it on this
-  service, because no server implements it. A contract is not an implementation (P7).
+  `./scripts/enter hardware` enforce the hardware opt-in before the stack starts, and the L5
+  server now applies the same check at the transition — in a process nothing starts. A
+  contract is not an implementation, and an implementation nothing runs is not a guarantee
+  either (P7).
 
 ## The QoS library (ADR-0025)
 
