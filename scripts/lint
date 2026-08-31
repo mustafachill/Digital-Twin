@@ -78,10 +78,15 @@ fi
 # arm, which ADR-0028 names as a failure that looks like a planner bug.
 #
 # The skip is a real weakness and is stated rather than hidden: on a laptop that has never
-# run ./scripts/bootstrap this proves nothing. It gates in the container and in CI, which
-# is where the vendor source is, and it must never be made fatal on the host — the whole
-# point of the L0 layer being ROS-free is that these gates run from a machine that could
-# never build the simulator.
+# run ./scripts/bootstrap this proves nothing. It must never be made fatal on the host —
+# the whole point of the L0 layer being ROS-free is that these gates run from a machine
+# that could never build the simulator.
+#
+# Where it gates in CI, exactly. The `host-tooling` job bootstraps with --host-only, which
+# runs no `vcs import`, so this step SKIPS there. The `ros-workspace` job bootstraps with
+# --in-container and then runs this script inside the image, so this step RUNS there. One
+# of the two CI lint runs answers the question — do not read a green host-tooling job as
+# having compared a hull against anything.
 step "Derived assets (ADR-0028)"
 if [ ! -d "${REPO_ROOT}/workspace/src/external/xarm_ros2" ]; then
     warn "SKIPPED — the vendor source is not imported in this checkout."
