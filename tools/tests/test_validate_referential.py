@@ -218,11 +218,24 @@ def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
     assert "physical-plant-on-paired-zone" not in rules(minimal_model)
 
 
-def test_a_physical_counterpart_on_a_paired_zone_is_allowed(
+def test_a_physical_counterpart_on_a_paired_zone_is_refused(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    # This is Phase 2.B as charter section 8 scopes it — one physical arm, the
-    # rest simulated — and it is the encoding that must stay expressible.
+    """Phase 2.B's encoding stays expressible; GENERATING from it does not.
+
+    This test asserted `rules(...) == set()` until ADR-0048 clause 1 landed, on
+    the comment "it is the encoding that must stay expressible". That comment is
+    right about the vocabulary and was wrong about the tree: the encoding is
+    still `counterpart_backend` and this record proposes no other, but all three
+    generator sites that branch on a backend read the plant's, so the model
+    validated cleanly and the counterpart was handed a description of a
+    simulated cell. Rewritten rather than deleted, for that reason.
+
+    The assertion is set EQUALITY rather than membership, which makes it the
+    mutation check as well: the model is otherwise clean, so deleting the new
+    rule turns this back into the empty set it used to assert, and no other rule
+    can be the one refusing.
+    """
     _pair_the_zone(minimal_model, edit_yaml)
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
@@ -230,7 +243,82 @@ def test_a_physical_counterpart_on_a_paired_zone_is_allowed(
             "hardware", {"backend": "sim", "counterpart_backend": "real"}
         ),
     )
+    assert rules(minimal_model) == {"divergent-counterpart-backend"}
+
+
+def test_the_divergence_refusal_says_what_would_have_been_generated(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The trade ADR-0048 takes is that someone writes a true fact about the
+    # facility and is told no, so the message has to be good enough to move
+    # them: it names what the generator would have emitted and the record that
+    # lifts the refusal.
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "real"}
+        ),
+    )
+    findings = referential.check(load(minimal_model))
+    refusal = next(f for f in findings if f.rule == "divergent-counterpart-backend")
+    assert refusal.where == "assets.arm_1.hardware.counterpart_backend"
+    hint = refusal.hint or ""
+    assert "use_sim_time: true" in hint
+    assert "ADR-0048" in hint
+
+
+def test_the_refusal_is_keyed_on_difference_rather_than_on_a_physical_backend(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The mutation check: `real` is not what the rule reads.
+
+    Keying on the literal would leave a third backend to rediscover the gap, so
+    the rule is asserted against a counterpart that is not physical at all. The
+    plant here is `real` and the counterpart `sim` — a case no other rule
+    touches on an untwinned zone, which is also what makes this the mutation
+    check for the rule's key.
+    """
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "real", "counterpart_backend": "sim"}
+        ),
+    )
+    assert "divergent-counterpart-backend" in rules(minimal_model)
+
+
+def test_a_counterpart_naming_the_backend_it_already_has_is_allowed(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The other half of the mutation check, and the property the refusal must not
+    # break: writing the value the fallback would have supplied is the same model
+    # as omitting it, so it stays clean on a paired zone.
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "sim"}
+        ),
+    )
     assert rules(minimal_model) == set()
+
+
+def test_a_divergent_counterpart_on_an_untwinned_zone_is_refused_with_its_own_hint(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # One rule, two hints. On a `single` zone the value states a fact about a
+    # side the zone does not have, which is a different thing to tell the author
+    # than what the generator would have emitted for a side that exists.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "real"}
+        ),
+    )
+    findings = referential.check(load(minimal_model))
+    refusal = next(f for f in findings if f.rule == "divergent-counterpart-backend")
+    assert "twin.sides: single" in (refusal.hint or "")
 
 
 def test_a_counterpart_backend_the_type_does_not_declare_is_refused(

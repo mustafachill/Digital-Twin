@@ -1,17 +1,27 @@
 # ADR-0048: Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts
 
-- **Status:** Proposed (corrected 2026-08-30) — **the refusal this record decides is still not
-  built, and the second half of the sentence below is now false: a pair has been brought up.**
+- **Status:** Accepted on clause 1 (corrected 2026-08-30; promoted 2026-08-31) — **clause 1 is
+  built and binding; clauses 2 and 3 are not, and neither is promoted by this.**
   See the section "Correction — 2026-08-30: a pair has come up, and the counterpart backends
-  this record refuses are still accepted", below.
-  **Nothing in the promotion split changes.** Clause 1's refusal does not exist —
-  `tools/tests/test_validate_referential.py::test_a_physical_counterpart_on_a_paired_zone_is_allowed`
-  asserts that a model whose two sides name different backends validates cleanly, which is
-  precisely what clause 1 would refuse — so this record stays `Proposed` on the condition it set
-  for itself, not for want of a pair.
+  this record refuses are still accepted", below, and "Promotion — 2026-08-31: clause 1 only",
+  after it. In one line each:
+  - **Clause 1 is `Accepted`.** `divergent-counterpart-backend` exists in
+    `cite_tools.validate.referential` and refuses any asset whose
+    `effective_counterpart_backend` differs from its `hardware.backend`. Violating it is an
+    `ESCALATE`.
+  - **Clause 2 is not built and is not promoted.** No per-side artifact set exists. The
+    commitment stands exactly as written and still has no test date.
+  - **Clause 3 did not land with clause 1, so it is not promoted either** — this block saying
+    so is the condition below working. `hosted_by` is still emitted into the bring-up plan and
+    still read by nothing.
+
+  Everything from "nothing in this record is implemented" onward was written against
+  `9233766` and is superseded for clause 1 only; the paragraph is left in place per the
+  corrections rule.
   **nothing in this record is implemented, and nothing has ever brought
   a pair up.** **[Corrected 2026-08-30 — see the Correction section above; the first half
-  stands, the second does not.]** Every claim below was established against the tree at
+  stands, the second does not.]** **[Superseded for clause 1 on 2026-08-31 — see the
+  Promotion section below; clause 1 is implemented, clauses 2 and 3 are not.]** Every claim below was established against the tree at
   `9233766` rather than
   taken from another record; the commands are in *Context*. In summary, at that commit:
   - `model/facility/zones.yaml` declares `twin.sides: single`, so nothing in this repository
@@ -65,6 +75,47 @@
   [`naming-and-namespaces.md`](../architecture/naming-and-namespaces.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §3 and §8, charter §4 (P1, P2, P5, P6, P7) and §8
+
+## Promotion — 2026-08-31: clause 1 only
+
+**What landed.** `_counterpart_backend_matches_the_plant` in
+`tools/cite_tools/validate/referential.py`, emitting `divergent-counterpart-backend` on any
+asset whose `effective_counterpart_backend` differs from its `hardware.backend`. Keyed on
+difference, not on the literal `real`. Two hints, one rule, as decided.
+
+**The condition clause 1 set for itself, met item by item**, in
+`tools/tests/test_validate_referential.py`:
+
+| The condition asked for | The test |
+|---|---|
+| a model whose two sides name different backends is refused | `test_a_physical_counterpart_on_a_paired_zone_is_refused` — the rewrite of `..._is_allowed`, asserting `rules(...) == {"divergent-counterpart-backend"}` |
+| a model whose sides agree is not | `test_a_counterpart_naming_the_backend_it_already_has_is_allowed`, plus the untouched `test_a_paired_zone_alone_is_valid` |
+| a mutation check that the new rule is what refuses | the set **equality** above: the model is otherwise clean, so removing the rule restores the empty set the test used to assert. Verified by removing the call and re-running: **4 failed, 22 passed**; restored: 26 passed |
+
+`test_the_refusal_is_keyed_on_difference_rather_than_on_a_physical_backend` drives a `real`
+plant with a `sim` counterpart on an untwinned zone — a case no other rule touches — so the
+key is asserted rather than described.
+
+**The two test debts in *Consequences* are paid.**
+`test_a_physical_counterpart_on_a_paired_zone_is_allowed` is rewritten rather than deleted,
+and its comment corrected: the vocabulary claim was right, the claim about the tree was not.
+`test_a_physical_counterpart_reaches_the_plan` keeps passing because it calls the generator
+and not the validator, and its comment now says exactly that instead of "Phase 2.B as a data
+change" — the record predicted that this is how a wrong claim survives, and it survived.
+
+**Clause 3 did not land, and this block naming it is the split condition working.**
+`hosted_by` is still emitted and still read by nothing; removing it is a plan-schema change
+that moves `cite_bringup.plan`, its tests, the committed `cite_generated/` tree and
+`MODEL_HASH`, and it was out of the scope this change was given. The argument for doing it
+before something starts reading the field is unchanged and is now overdue rather than merely
+pending.
+
+**What this promotion does not evidence.** Nothing here brings a pair up, and nothing here
+touches the generator. The refusal is a validation-time fact about the model, tested on a
+fixture; that is the whole of what clause 1 promised and the whole of what is claimed.
+`physical-plant-on-paired-zone`'s hint now names this rule, because it recommends the
+encoding this rule refuses and a reader following it would otherwise meet a second refusal
+with no explanation.
 
 ## Correction — 2026-08-30: a pair has come up, and the counterpart backends this record refuses are still accepted
 

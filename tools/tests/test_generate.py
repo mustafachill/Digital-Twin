@@ -1060,17 +1060,14 @@ class TestTwinSidesAndTheGazeboPartition:
         added, do not relax it: state which fact made the sides differ and why
         the copy is not a copy.
 
-        **It is blind to the divergence that actually matters, and that is not a
-        gap to be closed here.** The premise above — that both sides answer all
-        three backend call sites identically — holds because a 2.A counterpart is
-        a second simulation. **`counterpart_backend: real` validates cleanly
-        today**: `physical-plant-on-paired-zone` refuses a physical *plant* and
-        says nothing about a physical counterpart, and
-        `test_a_physical_counterpart_reaches_the_plan` asserts that it reaches
-        the plan. Such a counterpart would be handed the plant's description with
-        the `gz_ros2_control` plugin and `use_sim_time: true`, and `hosted_by`
-        derived from the plant's backend alone — a real cell driven by artifacts
-        that describe a simulated one.
+        **It is blind to the divergence that actually matters, and the answer to
+        that is now a refusal one layer up rather than anything here.** The
+        premise above — that both sides answer all three backend call sites
+        identically — holds because a 2.A counterpart is a second simulation. A
+        counterpart naming a different backend would be handed the plant's
+        description, the plant backend's `ros2_control` plugin and the plant's
+        `use_sim_time`, with `hosted_by` derived from the plant's backend alone:
+        one cell driven by artifacts that describe the other.
 
         **This tripwire cannot fire on that**, and the reason is structural
         rather than an oversight: it compares the artifacts pairing produces
@@ -1079,12 +1076,15 @@ class TestTwinSidesAndTheGazeboPartition:
         **reflex duplication** — a generator emitting a byte-identical second
         world or second controller config — and nothing else.
 
-        **Phase 2.B's owner owes either a refusal or a per-side artifact set**,
-        and it is one or the other: either `counterpart_backend: real` is refused
-        at validation until the artifacts can differ, or the generator emits a
-        per-side set and this test is rewritten around what legitimately differs.
-        That is an architectural decision and belongs in `docs/adr/`, not in a
-        test's docstring and not in this change.
+        **The choice this docstring declined to make is made, and it went to the
+        refusal.** ADR-0048 clause 1 is the referential rule
+        `divergent-counterpart-backend`, which refuses any asset whose two sides
+        name different backends until the generator can honour them; clause 2
+        commits to the per-side artifact set that lifts it, and is not built.
+        So the premise this test rests on is now *enforced* rather than a
+        coincidence of the committed model, and the change that lands clause 2
+        owes this test its rewrite — around what legitimately differs, per
+        ADR-0048's own statement of that invariant.
         """
         before = artifacts(real_model)
         self._pair(real_model, edit_yaml)
@@ -1229,8 +1229,22 @@ class TestTwinSidesAndTheGazeboPartition:
     def test_a_physical_counterpart_reaches_the_plan(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        # Phase 2.B as a data change: one key on the arm that acquired hardware,
-        # and nothing else in the model moves.
+        """The plan is the one artifact that states the counterpart's backend.
+
+        **This test calls the generator and not the validator, and that is now
+        the whole of what it claims.** Its comment said "Phase 2.B as a data
+        change" until ADR-0048 clause 1 landed, and it kept passing afterwards
+        for exactly that reason — which is how a wrong claim survives a change
+        that contradicts it. The model below is refused by
+        `divergent-counterpart-backend`, so `./scripts/validate-model` would not
+        accept it and `./scripts/sim` would never see this plan; what is asserted
+        here is that the *emission* is per-asset and reaches the right manager,
+        which is the property clause 2 builds on.
+
+        ADR-0041 Decision 3's promise that 2.B is a data change is narrowed
+        rather than withdrawn: the model edit is still one line, and what was
+        never true is that the generator was ready for it.
+        """
         self._pair(real_model, edit_yaml)
         edit_yaml(
             real_model / "assets/instances/arms.yaml",

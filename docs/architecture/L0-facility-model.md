@@ -61,6 +61,18 @@
   `counterpart_backend`. It is a cross-document rule — the zone holds one half and the
   instance the other — so it lives in `cite_tools.validate.referential`, as
   `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it.
+  **A second refusal sits beside it and closes the other half of the same cross product:**
+  no asset's `counterpart_backend` may differ from its `backend`, on a paired zone or a
+  `single` one, as `divergent-counterpart-backend`
+  ([ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md), clause 1).
+  The encoding is unchanged and stays the 2.B encoding; what is refused is *generating* from
+  it. All three generator sites that branch on a backend read `hardware.backend` — the
+  plant's — so a divergent counterpart was handed the plant's description, plugin and
+  `use_sim_time`, validated cleanly and was committed under ADR-0021. It is a cross-*field*
+  equality rather than a cross-document one, so pydantic could state it only as a validator
+  the exported schema would not carry — which is the same reason it lives here. **It is
+  temporary by construction**: ADR-0048 clause 2 fixes the per-side artifact set that lifts
+  it, and that set does not exist, so the refusal's own message names the record.
   **Each side carries two isolations, and both are emitted for every side including a `single`
   zone's plant.** The plan's `sides:` entry states a `gz_partition` and a `domain_offset`,
   formed side by side in `cite_tools.model.ids` from one side identity, because neither
