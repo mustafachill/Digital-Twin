@@ -85,6 +85,9 @@
   [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md),
   [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md) (which answers this
   record's deferral and implements clause 4 alongside it),
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md) (which answers the first two items of
+  *What this record does not decide*, and reports the `domain_bridge` coverage this record
+  left unverified),
   [ADR-0011](0011-twin-maturity-model-and-modes.md),
   [ADR-0004](0004-facility-model-single-source-of-truth.md),
   [ADR-0005](0005-ros2-control-sim-real-boundary.md),
@@ -936,11 +939,20 @@ not.
 - **The mirroring mechanism.** What crosses the boundary, in which direction, at what rate, in
   what message, and how it is triggered. This record settles only that whatever crosses, crosses
   in L5, and names the two transport candidates with the criterion for choosing between them.
+  **[2026-08-31: decided by [ADR-0050](0050-what-crosses-the-twin-boundary.md) clause 1, on this
+  record's own criterion — contexts in one process, and `domain_bridge` refused. That record also
+  answers the coverage question this one left open: at `0.5.0` in the Jazzy image the
+  configuration path carries topics only, services are a compile-time C++ template, and a survey
+  of the installed headers found no action support.]**
 - **The divergence metric.** What is computed, against what reference, and whether `valid` is
   even true under `MODE_VIRTUAL_LEAD` — which [L5](../architecture/L5-twin-synchronization.md)
   lists as an open question and which nothing here closes. ADR-0041 is also explicit that **no
   number produced in 2.A is a fidelity result**, and separating the sides by domain does not
   change that by one word.
+  **[2026-08-31: decided by [ADR-0050](0050-what-crosses-the-twin-boundary.md) decision 3.
+  `valid` is false under `MODE_VIRTUAL_LEAD`, because that mode is defined by the absence of the
+  reverse flow the metric's second operand comes from. The sentence about 2.A is untouched and
+  is restated there in force.]**
 - **Whether `SHADOW` needs a full second simulation at all.** ADR-0041 leaves that fork open on
   measured grounds and states that no later document may cite it as having picked one. This
   record does not pick one either: it is about how two sides are separated *if* two sides are
