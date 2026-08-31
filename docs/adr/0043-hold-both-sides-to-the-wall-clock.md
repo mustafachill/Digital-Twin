@@ -1,6 +1,13 @@
 # ADR-0043: Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently
 
-- **Status:** Proposed (corrected 2026-08-29 and 2026-08-30) — **half 2 has been measured
+- **Status:** Proposed (corrected 2026-08-29 and 2026-08-30) — **half 2 is restated by
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md), 2026-08-31, and half 1 is
+  untouched.** That record keeps the 1.0 floor and moves it onto *capacity*, measured with this
+  world's throttle lifted, because under half 1 a measured real-time factor is capped at the
+  declared factor by construction — so half 2 as worded below is a test no machine passes.
+  **Read ADR-0049 before citing half 2, and do not cite half 2's wording as the requirement.**
+  The rest of this block stands as written.
+  **half 2 has been measured
   and is NOT MET.** A pair came up on 2026-08-30, both sides were sampled in the same window,
   and each ran at about 0.88 — roughly 12 % short of the 1.0 this record requires. The reason
   this record stays `Proposed` has therefore changed underneath it: it is no longer that half 2
