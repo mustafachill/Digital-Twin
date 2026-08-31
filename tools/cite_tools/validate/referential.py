@@ -42,6 +42,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _no_pose_cycles(model)
     findings += _hardware_backends_exist(model)
     findings += _paired_zone_has_no_physical_plant(model)
+    findings += _counterpart_backend_matches_the_plant(model)
     findings += _configuration_matches_category(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
@@ -311,7 +312,82 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
                 f"`counterpart_backend: {asset.hardware.backend}` and leave `backend: "
                 f"{ids.SIMULATION_BACKEND}`; that is the same two machines, it is what "
                 "charter §8's Phase 2 scopes, and it is the encoding MODE_VIRTUAL_LEAD "
-                "describes (ADR-0041, Decision 3).",
+                "describes (ADR-0041, Decision 3). Note that "
+                "`divergent-counterpart-backend` then refuses that encoding as well, "
+                "until the generator emits a per-side artifact set: the vocabulary is "
+                "right and the generator is not ready for it (ADR-0048).",
+            )
+        )
+    return findings
+
+
+def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding]:
+    """An asset's two sides must name one backend, because they are handed one artifact set.
+
+    A schema cannot say this either, and for a different reason than
+    `physical-plant-on-paired-zone`: this is a cross-FIELD equality, between two
+    siblings of the same object. pydantic could express it only as a validator,
+    which the exported JSON Schema would not carry, so stating it there would
+    make the schema claim a constraint it does not enforce. This package's own
+    docstring fixes that split, and this rule sits beside the one that closed
+    the other half of the same cross product (ADR-0048, clause 1).
+
+    WHY IT IS KEYED ON DIFFERENCE RATHER THAN ON `real`. The defect is not that
+    a side is physical. Every generator site that branches on a backend reads
+    `hardware.backend` — the PLANT's — and none of the three has ever been asked
+    which side it is generating for: the `ros2_control` plugin
+    (`cite_tools.model.resolve`, consumed by `generate.description`),
+    `use_sim_time` (`generate.control`) and `hosted_by` (`generate.bringup`). So
+    whatever the counterpart names, it is handed artifacts derived from the
+    other side's answer. Keying on the literal `real` would leave a third
+    backend to rediscover exactly this gap.
+
+    WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
+    `backend` stays legal and stays byte-identical to omitting it, which is the
+    property `test_writing_the_counterpart_backend_it_already_has_changes_nothing`
+    pins; the fallback in `HardwareSelection` is what makes those the same model,
+    and this rule reads through it rather than around it.
+
+    THE REFUSAL IS TEMPORARY BY CONSTRUCTION and the message says so. ADR-0048
+    clause 2 fixes the shape that lifts it — the description and the controller
+    configuration become per-side, the side goes in a file path and never in a
+    ROS name — and this rule is deleted by the change that builds it.
+    """
+    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
+    findings: list[Finding] = []
+    for asset in model.assets:
+        plant = asset.hardware.backend
+        counterpart = asset.hardware.effective_counterpart_backend
+        if counterpart == plant:
+            continue
+        if asset.zone in paired:
+            hint = (
+                "All three generator sites that branch on a backend read the plant's, so "
+                f"the counterpart would be handed the plant's description, the {plant!r} "
+                "backend's `ros2_control` plugin, "
+                f"`use_sim_time: {'true' if plant == ids.SIMULATION_BACKEND else 'false'}` "
+                "in its controller configuration and a plan stating where the plant's "
+                "controller manager is hosted — a description of the other side's machine, "
+                "generated and committed without a word of warning. ADR-0048 refuses the "
+                "combination until the generator emits a per-side artifact set (its clause "
+                "2); until then both sides of a paired zone name one backend, and "
+                f"`physical-plant-on-paired-zone` fixes which: {ids.SIMULATION_BACKEND!r}."
+            )
+        else:
+            hint = (
+                f"zone {asset.zone!r} declares `twin.sides: single`, so there is no "
+                "counterpart side for this value to describe: no generated artifact "
+                "carries it and nothing reads it. Remove it. If the facility really has "
+                "two sides, pair the zone — but ADR-0048 refuses a divergent counterpart "
+                "there too, until the generator emits a per-side artifact set."
+            )
+        findings.append(
+            error(
+                "divergent-counterpart-backend",
+                f"assets.{asset.id}.hardware.counterpart_backend",
+                f"counterpart side names backend {counterpart!r} while the plant side "
+                f"names {plant!r}, and the generator emits one artifact set for both sides",
+                hint,
             )
         )
     return findings
