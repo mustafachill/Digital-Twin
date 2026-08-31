@@ -310,6 +310,30 @@ references, all under `cite_description`, and 13 visual references, all still un
 pair came up on hulls, both sides announcing readiness, and `./scripts/scenario bringup`
 passes against them.
 
+### Corrected 2026-08-31: the substituted root did not resolve the way the vendor's does
+
+`generate/description.py` emitted `file://$(find <package>)/<root>` unconditionally, and the
+root it substitutes for does not: `xarm_device_macro.xacro` sets `mesh_path` to
+`file://$(find xarm_description)/meshes` for a Gazebo plugin and to
+`package://xarm_description/meshes` for anything else. So with a derived set selected and
+`backend: real`, one description came out with **`package://` visuals and `file://`
+collisions** — the collision half an absolute path into the generating machine's install
+prefix, which is unportable, and which is the half a planner uses. It was right on `sim`,
+where every scenario runs, and wrong on `real`, where nothing runs yet; that is why nothing
+saw it.
+
+The scheme is now L0 data — `description.collision.root_uri_scheme`, one entry per declared
+backend, **required whenever a derived set is declared and with no default**, so that
+flipping `select` is still one field and adding a backend is a decision rather than an
+omission. Deriving it in the generator was the alternative and was rejected: it would put the
+vendor's three Gazebo plugin class strings into a generator whose entire knowledge of the
+vendor package is meant to be model data (`DescriptionSpec`'s docstring).
+
+Two things follow that are not this record's own. Patch 03's header claimed *"the only
+asymmetry is the vendor's own"* — true of the patch, false of the system, and corrected in
+place. And the L0 change moves `MODEL_HASH`; no other generated artifact moves, because the
+shipped selection still emits no collision argument at all.
+
 ### What promotion still needs, stated so it cannot be mistaken for done
 
 **Only clause 2 of the amended gate**, unchanged: the friction-grasp campaign

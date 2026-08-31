@@ -39,9 +39,24 @@
 # `common_link_collision` is reached identically whichever `ros2_control_plugin`
 # is loaded - the collision geometry of a link is a fact about the link, not about
 # the backend - so a description generated with a hull root collides against hulls
-# on the simulated path and on the physical one alike. The only asymmetry is the
-# vendor's own: `mesh_path` resolves to `file://` for a Gazebo plugin and
-# `package://` otherwise, and this patch does not touch that.
+# on the simulated path and on the physical one alike. The only asymmetry this
+# PATCH introduces is none, and the vendor's own remains: `mesh_path` resolves to
+# `file://` for a Gazebo plugin and `package://` otherwise, and this patch does
+# not touch that.
+#
+# [Corrected 2026-08-31.] This paragraph used to end "the only asymmetry is the
+# vendor's own". That was a claim about the SYSTEM, and it stopped being true the
+# moment cite_tools emitted a root of its own. `generate/description.py` wrote
+# `file://$(find ...)` unconditionally, so with a derived set selected and
+# `backend: real` a description came out with `package://` visuals and `file://`
+# collisions - two halves of one description resolving differently, the collision
+# half an absolute path into the generating machine's install prefix, and that is
+# the half a planner uses. The parameter this patch adds is neutral about the
+# scheme, as it should be; what was wrong was the caller. The scheme is now L0
+# data, `description.collision.root_uri_scheme`, one entry per declared backend
+# and no default. Read this paragraph as a statement about the patch and check
+# the caller separately - that distinction is exactly what the original sentence
+# lost.
 diff --git a/xarm_description/urdf/common/common.link.xacro b/xarm_description/urdf/common/common.link.xacro
 --- a/xarm_description/urdf/common/common.link.xacro
 +++ b/xarm_description/urdf/common/common.link.xacro

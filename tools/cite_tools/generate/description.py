@@ -226,7 +226,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         (name, _binding_value(asset, binding, cell))
         for name, binding in sorted(spec.bound_args.items())
     ]
-    args += _collision_args(spec)
+    args += _collision_args(spec, asset)
 
     return _ArmView(
         id=asset.id,
@@ -240,7 +240,16 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
     )
 
 
-def _collision_args(spec: Any) -> list[tuple[str, str]]:
+#: How a collision-mesh root is spelled in each scheme. The vendor's two spellings
+#: of its own root, and nothing else may introduce a third — a scheme this map does
+#: not know is a model error rather than a string built inline.
+_ROOT_URI = {
+    "file": "file://$(find {package})/{root}",
+    "package": "package://{package}/{root}",
+}
+
+
+def _collision_args(spec: Any, asset: ResolvedAsset) -> list[tuple[str, str]]:
     """The collision-mesh root, if the type binds one (ADR-0028).
 
     Empty whenever the selected set is the vendor's own meshes, and that emptiness
@@ -249,18 +258,35 @@ def _collision_args(spec: Any) -> list[tuple[str, str]]:
     changed the output when nothing was selected would have made the byte-identity
     check unable to tell "the default is unchanged" from "the default moved".
 
-    `file://$(find <package>)` rather than `package://`, because that is what the
-    vendor's own `mesh_path` resolves to on the plugin this cell runs
-    (`xarm_device_macro.xacro` picks `file://` for every Gazebo plugin), and a
-    collision root in a different scheme from the visual root beside it is a
-    difference nobody would have chosen. `$(find ...)` is expanded by xacro rather
-    than here, so the generated artifact carries no absolute path and is identical
-    in every checkout.
+    The scheme comes from the model, per backend, because the root this replaces
+    branches on the backend and this one has to branch with it.
+    `xarm_device_macro.xacro` sets `mesh_path` to `file://$(find ...)` for a Gazebo
+    plugin and `package://` for anything else; this function emitted `file://`
+    unconditionally, so `backend: real` produced a description whose visuals
+    resolved through the package path and whose collisions were absolute paths into
+    the generating machine's install prefix. That is unportable, and it is the half
+    a planner uses.
+
+    Deriving it here instead would mean writing the vendor's three Gazebo plugin
+    class strings into the generator, which is the knowledge `DescriptionSpec`'s
+    docstring says this generator does not have: its entire knowledge of the vendor
+    package is model data. `$(find ...)` is expanded by xacro rather than here, so
+    the generated artifact carries no absolute path and is identical in every
+    checkout.
     """
     selected = spec.collision.selected if spec.collision else None
     if selected is None or selected.kind == "vendor_meshes":
         return []
-    return [(spec.collision.root_arg, f"file://$(find {selected.package})/{selected.root}")]
+    backend = asset.instance.hardware.backend
+    try:
+        scheme = spec.collision.scheme_for(backend)
+    except KeyError as exc:
+        raise BindingError(
+            f"type {asset.asset_type.id!r} binds a collision root, and asset "
+            f"{asset.id!r} loads backend {backend!r}: {exc}"
+        ) from exc
+    root = _ROOT_URI[scheme].format(package=selected.package, root=selected.root)
+    return [(spec.collision.root_arg, root)]
 
 
 def _mount_link(asset: ResolvedAsset) -> str:

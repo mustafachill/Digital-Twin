@@ -292,6 +292,25 @@ class CollisionSpec(Strict):
     #: description. Vendor-specific by nature, exactly like ``bound_args``, and it
     #: is what makes this mechanism usable by a description other than this one.
     root_arg: str | None = None
+    #: Backend id -> the URI scheme the vendor's own mesh root resolves to under
+    #: that backend. Model data for the same reason ``root_arg`` is: it is a fact
+    #: about the vendor description, and a generator that knew it would be a
+    #: generator that knows the vendor's plugin class strings.
+    #:
+    #: It exists because the substituted root has to branch the way the root it
+    #: substitutes for does, and it did not. ``xarm_device_macro.xacro`` sets
+    #: ``mesh_path`` to ``file://$(find xarm_description)/meshes`` for a Gazebo
+    #: plugin and ``package://xarm_description/meshes`` for anything else; the
+    #: generator emitted ``file://`` unconditionally. Under ``backend: real`` that
+    #: produced a description whose visuals were ``package://`` and whose
+    #: collisions were absolute paths into the generating machine's install
+    #: prefix — unportable, and it is the half a planner uses. Patch 03's header
+    #: claimed *"the only asymmetry is the vendor's own"*, which stopped being
+    #: true the moment this generator emitted one of its own.
+    #:
+    #: Required whenever a derived set is declared, not merely when one is
+    #: selected, so that flipping ``select`` stays a one-field change.
+    root_uri_scheme: dict[Identifier, Literal["file", "package"]] = Field(default_factory=dict)
     sets: list[CollisionMeshSet] = Field(min_length=1)
 
     @property
@@ -311,7 +330,30 @@ class CollisionSpec(Strict):
                 "a derived collision set needs root_arg: without a macro parameter to "
                 "carry the root, the set is generated and never reaches the description"
             )
+        if any(s.kind != "vendor_meshes" for s in self.sets) and not self.root_uri_scheme:
+            raise ValueError(
+                "a declared derived collision set needs root_uri_scheme: the substituted "
+                "root has to resolve the way the root it replaces does, and the vendor "
+                "branches that on the backend. Required on DECLARATION rather than on "
+                "selection, so that flipping `select` stays a one-field change."
+            )
         return self
+
+    def scheme_for(self, backend: str) -> str:
+        """The URI scheme for one backend, or a raise. Never a default.
+
+        A default here would be a silently wrong description on whichever backend
+        nobody thought about — which is exactly how the unconditional `file://`
+        survived: it was right on `sim`, where every scenario runs, and wrong on
+        `real`, where nothing runs yet.
+        """
+        try:
+            return self.root_uri_scheme[backend]
+        except KeyError:
+            raise KeyError(
+                f"collision.root_uri_scheme names no scheme for backend {backend!r}; "
+                f"have {sorted(self.root_uri_scheme)}"
+            ) from None
 
 
 class DescriptionSpec(Strict):
@@ -906,6 +948,34 @@ class AssetType(Strict):
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
     grasp: GraspSpec | None = None
+
+    @model_validator(mode="after")
+    def _every_backend_answers_the_collision_scheme(self) -> AssetType:
+        """A backend with no URI scheme is a backend nobody decided about.
+
+        Checked here rather than on `CollisionSpec` because this is the only class
+        that can see both halves. Adding a hardware backend to a type that binds
+        collision geometry is now a change that has to state how meshes resolve
+        under it, which is the question `backend: real` answered wrongly by
+        omission for as long as the field did not exist.
+        """
+        spec = self.description.collision
+        if spec is None or not spec.root_uri_scheme:
+            return self
+        missing = sorted(set(self.hardware_backends) - set(spec.root_uri_scheme))
+        unknown = sorted(set(spec.root_uri_scheme) - set(self.hardware_backends))
+        if missing:
+            raise ValueError(
+                f"collision.root_uri_scheme names no scheme for backend(s) {missing}; "
+                "every declared backend needs one, because the vendor resolves its own "
+                "mesh root differently under each"
+            )
+        if unknown:
+            raise ValueError(
+                f"collision.root_uri_scheme names backend(s) {unknown} that this type "
+                "does not declare"
+            )
+        return self
 
     @property
     def emits_vendor_description(self) -> bool:

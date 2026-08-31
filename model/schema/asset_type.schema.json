@@ -316,6 +316,19 @@
           "default": null,
           "title": "Root Arg"
         },
+        "root_uri_scheme": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "enum": [
+                "file",
+                "package"
+              ],
+              "type": "string"
+            }
+          },
+          "title": "Root Uri Scheme",
+          "type": "object"
+        },
         "select": {
           "pattern": "^[a-z][a-z0-9_]*$",
           "title": "Select",

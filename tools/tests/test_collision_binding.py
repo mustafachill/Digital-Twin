@@ -27,7 +27,14 @@ from cite_tools.model.schema import CollisionMeshSet, CollisionSpec
 from cite_tools.validate import Severity, physical
 
 ARM_TYPE = "assets/types/robots/xarm5.yaml"
+ARM_INSTANCES = "assets/instances/arms.yaml"
 ARM_DESCRIPTION = "description/cell_a_arm_1.urdf.xacro"
+
+
+def _use_real_backend(document: dict) -> None:
+    """Every arm on the hardware backend, which is the case R-04 got wrong."""
+    for asset in document["assets"]:
+        asset["hardware"]["backend"] = "real"
 
 
 def artifacts(path: Path) -> dict[str, str]:
@@ -135,6 +142,94 @@ class TestSelectingADerivedSet:
         generated = artifacts(real_model)
         assert "cite_description" not in generated["package.xml"]
         assert "cite_description" not in generated[ARM_DESCRIPTION]
+
+
+class TestTheRootResolvesTheWayTheVendorsDoes:
+    """R-04. The substituted root has to branch on the backend, and it did not.
+
+    `xarm_device_macro.xacro` sets `mesh_path` to `file://$(find ...)` for a
+    Gazebo plugin and `package://` for anything else. The generator emitted
+    `file://` unconditionally, which was right on `sim` — where every scenario
+    runs — and wrong on `real`, where nothing runs yet. The result was a
+    description whose visual half resolved through the package path and whose
+    collision half was absolute paths into the generating machine's install
+    prefix: unportable, and the half a planner uses.
+    """
+
+    def test_a_gazebo_backend_gets_the_file_scheme(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+        description = artifacts(real_model)[ARM_DESCRIPTION]
+        assert (
+            'collision_mesh_path="file://$(find cite_description)'
+            '/meshes/collision/xarm5/convex_hull"' in description
+        )
+
+    def test_the_real_backend_gets_the_package_scheme(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The case the unconditional `file://` got wrong."""
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+        edit_yaml(real_model / ARM_INSTANCES, _use_real_backend)
+        description = artifacts(real_model)[ARM_DESCRIPTION]
+        assert (
+            'collision_mesh_path="package://cite_description'
+            '/meshes/collision/xarm5/convex_hull"' in description
+        )
+        assert "file://" not in description
+
+    def test_no_generated_collision_root_is_an_absolute_path(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Whatever the backend, the artifact carries no path from this machine.
+
+        `$(find ...)` is expanded by xacro at load time; a literal `/Users/...`
+        or `/opt/...` in a committed artifact is a description that only resolves
+        on the machine that generated it.
+        """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+        for mutate in (None, _use_real_backend):
+            if mutate is not None:
+                edit_yaml(real_model / ARM_INSTANCES, mutate)
+            line = next(
+                text
+                for text in artifacts(real_model)[ARM_DESCRIPTION].splitlines()
+                if "collision_mesh_path" in text
+            )
+            assert "$(find" in line or line.count("package://") == 1
+            assert str(real_model) not in line
+
+    def test_a_backend_with_no_scheme_is_refused_at_load(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Never a default: a silently wrong scheme is how this defect survived."""
+        edit_yaml(
+            real_model / ARM_TYPE,
+            lambda d: d["asset_type"]["description"]["collision"]["root_uri_scheme"].pop("real"),
+        )
+        with pytest.raises(Exception, match="root_uri_scheme"):
+            load(real_model)
+
+    def test_a_declared_derived_set_must_state_its_schemes(self) -> None:
+        """Required on DECLARATION, so that flipping `select` stays one field."""
+        with pytest.raises(ValidationError, match="root_uri_scheme"):
+            CollisionSpec(
+                select="vendor_meshes",
+                root_arg="collision_mesh_path",
+                sets=[
+                    CollisionMeshSet(id="vendor_meshes", kind="vendor_meshes"),
+                    CollisionMeshSet(
+                        id="convex_hull",
+                        kind="convex_hull",
+                        package="cite_description",
+                        root="meshes/x",
+                        source_package="xarm_description",
+                        source_root="meshes",
+                        meshes=["a.stl"],
+                    ),
+                ],
+            )
 
 
 class TestTheSchemaRefusesAnUnusableDeclaration:

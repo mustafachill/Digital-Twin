@@ -130,6 +130,25 @@ asset_type:
       # external/patches/03-xarm_ros2-collision-mesh-root.patch; read that
       # patch's header before assuming the vendor offers it.
       root_arg: collision_mesh_path
+      # HOW A SUBSTITUTED ROOT RESOLVES, PER BACKEND. The vendor branches its own
+      # `mesh_path` on the loaded ros2_control plugin -- `file://$(find
+      # xarm_description)/meshes` for a Gazebo plugin, `package://` for anything
+      # else (xarm_device_macro.xacro) -- so the root that REPLACES it has to
+      # branch the same way, or the two halves of one description resolve
+      # differently. The generator emitted `file://` unconditionally until
+      # 2026-08-31, which was right on `sim` (where every scenario runs) and wrong
+      # on `real` (where nothing runs yet): the visuals came out `package://` and
+      # the collisions came out absolute paths into the generating machine's
+      # install prefix, which is the half a planner uses.
+      #
+      # Here rather than in the generator for the same reason `root_arg` is: it is
+      # a fact about xarm_description, and a generator that derived it would be a
+      # generator carrying the vendor's plugin class strings. Every declared
+      # backend needs an entry -- adding one without deciding is a model error,
+      # never a default.
+      root_uri_scheme:
+        sim: file
+        real: package
       sets:
         - id: vendor_meshes
           kind: vendor_meshes
