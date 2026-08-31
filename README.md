@@ -137,7 +137,7 @@ directly — they route to the right environment automatically.
 | `./scripts/test` | Host tooling tests, then ROS tests. |
 | `./scripts/lint` · `format` | Check · apply formatting and static analysis. |
 | `./scripts/validate-model` | Validate the facility model. Runs anywhere. |
-| `./scripts/sim [--headless]` | Launch the simulated cell. |
+| `./scripts/sim [--headless] [--pair]` | Launch the simulated cell; `--pair` brings up both sides of a twin pair. |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
 | `./scripts/audit-deps [--image]` | Scan dependencies for known vulnerabilities. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |

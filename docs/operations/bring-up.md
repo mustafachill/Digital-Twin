@@ -192,7 +192,9 @@ model and the same solver, so any agreement between them is agreement of a thing
   ADR-0041's open questions are still open.
 - **Real-time factor is not a bring-up condition.** ADR-0043 requires both sides to sustain
   1.0 concurrently and **nothing in bring-up measures it**, so a side can be up, slow, and
-  indistinguishable from a healthy one here.
+  indistinguishable from a healthy one here. Measured by hand on a pair on 2026-08-30, that
+  requirement is **not met** — see ADR-0043's correction of that date for the figures. A pair
+  that comes up is not a pair that is keeping time.
 
 ## Physical cell — Phase 2
 

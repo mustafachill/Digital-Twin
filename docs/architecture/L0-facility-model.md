@@ -73,10 +73,15 @@
   performs, and one derived from the model is identical in every clone, so two checkouts of one
   commit would discover each other. The base travels in `CITE_DOMAIN_BASE` and
   `cite_bringup.plan.resolve_domain_id` adds them, once.
-  **What is NOT built:** nothing brings a second side up. `twin.sides: pair` today emits a
-  second `sides:` entry — with the counterpart's partition and its offset — and each asset's
+  **What L0 emits for a pair, and what it does not:** `twin.sides: pair` emits a second
+  `sides:` entry — with the counterpart's partition and its offset — and each asset's
   counterpart backend into the bring-up plan; there is no second world, no second controller
-  manager and no second set of node names. Do not read a paired model as a running pair, and
+  manager and no second set of node names, because a counterpart is the same generated
+  artifacts started in a different environment. **A pair is brought up by `./scripts/sim --pair`
+  as of 2026-08-30** ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md));
+  this document said "nothing brings a second side up" until then. **The shipped model is still
+  `single`**, so nothing in this repository is paired without an L0 edit that moves
+  `MODEL_HASH`. Do not read a paired model as a running pair, and
   read the emitted plan rather than this sentence for what a change produces: a list of what a
   change does not do is a claim with an expiry date.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)

@@ -1,7 +1,57 @@
 # ADR-0047: Bring a pair up as two independent launches, joined by a supervisor that sees only processes
 
-- **Status:** Proposed — **nothing in this record is implemented, and nothing has ever
-  brought a pair up.** At `5c2990f`:
+- **Status:** Accepted — **promoted 2026-08-30 by the change that first brought two sides up
+  under one supervisor** (`b3b7b66`), on the three conditions this record set for itself and on
+  nothing else. They are not of equal strength, and the difference is the first thing a reader
+  needs.
+
+  | Condition, as this record worded it | What holds it |
+  |---|---|
+  | *a run in which both sides announce readiness and the supervisor reports the pair up* | **Three runs on one machine, reported by the implementing agent of `b3b7b66` in that commit's message. Not re-taken by review. No test and no CI step covers it.** |
+  | *a test that a side which fails to announce ends the pair with a non-zero status naming that side* | `test_a_side_that_exits_before_announcing_ends_the_pair` — a side exits 7, the pair exits 1 reporting `plant exited 7` and `stopping counterpart` — with `test_a_side_that_never_announces_and_never_exits_fires_the_ceiling` for the last row of clause 4's table |
+  | *a structural test that the supervisor's import graph does not reach `rclpy`* | `test_the_supervisors_import_graph_does_not_reach_a_ros_client_library`, kept honest by `test_the_walk_follows_a_first_party_import_out_of_this_package`, which asserts the walk still reaches `rclpy` through `cite_runtime` so that a narrowed walk fails there instead of turning the check green |
+
+  **The first condition asks for a run and not for a test, and that was deliberate.** This
+  record's own *Consequences* state that the existing scenario mechanism cannot host a pair —
+  `launch_test` with `IncludeLaunchDescription` puts the launch in the test process, which holds
+  one context on one domain — and its *What this record does not decide* leaves open whether a
+  paired scenario exists at all. A condition demanding an automated paired run would have been
+  unsatisfiable by construction. **It is honoured as written, and its weakness is named here
+  rather than absorbed:** three runs on one machine, by the agent that wrote the code, is the
+  size of that evidence.
+
+  **What promotion does NOT claim.**
+  - **Nothing automated brings a pair up.** A regression in the witness, the token, the gate it
+    hangs on, or either side's bring-up would not fail CI. The residual closes when a paired
+    harness exists — the shape this record declines to design — and until then the run has to be
+    taken by hand.
+  - **The shipped model is not paired.** `model/facility/zones.yaml` declares
+    `twin: {sides: single}`, so `./scripts/sim --pair` refuses on a clean checkout rather than
+    inventing a second side. Reproducing the run means editing L0 and regenerating, which moves
+    `MODEL_HASH`. The pair is a mechanism the repository can run, not a configuration it ships.
+  - **Nothing here is a fidelity claim, and 2.A produces none** — both sides run the same L0
+    model and the same solver.
+  - **Real-time factor is still not a bring-up condition**, exactly as clause 4 says. It has
+    since been measured on a pair and the requirement is **not met**; the figures and their
+    provenance are [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s 2026-08-30 correction
+    and are deliberately not copied here.
+  - **Two hazards are recorded in `cite_bringup/pair.py` rather than fixed**, both by the change
+    that landed: a `Queue.put` from a signal handler can deadlock the supervisor against
+    `_join`'s own `events.get`, with the ceiling unable to fire because the stuck call is what
+    enforces it (never observed; the repair is a self-pipe and a reader thread); and
+    `READY_CEILING_S` is stated rather than derived, so if a side's own gate ceilings ever sum
+    past it, the pair reports the ceiling for a side that was about to fail with a better
+    diagnosis.
+
+  **The ceiling has fired once on a real cause, which is worth recording.** The first paired
+  attempt did not join: `install(PROGRAMS)` does not set the executable bit under a symlink
+  install, launch reports a failure to exec on its own logger without emitting `ProcessExited`,
+  so no gate fired and nothing downstream noticed. The only mechanism that reported it was clause
+  4's last row — *this side never announced readiness and never exited*. That row was written for
+  a hypothetical and met a real one on its first outing.
+
+  **When written this record was `Proposed` and nothing was implemented**, and that block is kept
+  rather than replaced. At `5c2990f`:
   - `model/facility/zones.yaml:23` declares `twin.sides: single`, so the committed model
     describes one side.
   - **`twin.sides: pair` emits only the counterpart's partition and each asset's backend**,
@@ -25,7 +75,9 @@
     `scripts`, `workspace` or `tools`. A supervisor cannot resolve a side's domain until that
     lands, so the implementation order is fixed: ADR-0044 clause 4, then this.
 
-  Every "will" and "must" below is a commitment, not a description.
+  Every "will" and "must" below was a commitment rather than a description **when this record
+  was written; the four clauses are now built, and the table at the top of this block is what
+  holds each of them.**
   **Promoted to `Accepted` by the change that first brings two sides up under one supervisor**,
   with all three of: a run in which both sides announce readiness and the supervisor reports
   the pair up; a test that a side which fails to announce ends the pair with a non-zero status

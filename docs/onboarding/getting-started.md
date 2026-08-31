@@ -59,7 +59,7 @@ are real.
 | `./scripts/lint` | Lint everything lintable on this machine. |
 | `./scripts/format` | Apply formatting in place. |
 | `./scripts/validate-model` | Validate the L0 facility model. Runs anywhere. |
-| `./scripts/sim [--headless]` | Launch the simulated cell. |
+| `./scripts/sim [--headless] [--pair]` | Launch the simulated cell. `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
@@ -108,9 +108,10 @@ domain, because both sides carry byte-identical names by rule and one ROS graph
 cannot hold two of them ([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)).
 `scripts/_lib.sh` allocates an odd base per checkout and the counterpart takes
 the even number above it, so no counterpart can ever land on another checkout's
-plant. What you get by default — from `./scripts/enter`, `./scripts/sim` and
-`./scripts/scenario` alike — is the **plant**, which is the side every script
-here addresses. `./scripts/doctor` prints it and says which side it is;
+plant. What you get by default — from `./scripts/enter`, `./scripts/scenario` and
+`./scripts/sim` without `--pair` alike — is the **plant**, which is the side
+every script here addresses; `./scripts/sim --pair` starts both sides, each on
+its own domain, and leaves your shell on the plant's. `./scripts/doctor` prints it and says which side it is;
 `docs/operations/troubleshooting.md` has the recipe for resolving any side's
 domain from the plan.
 

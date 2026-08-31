@@ -1,17 +1,27 @@
 # ADR-0043: Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently
 
-- **Status:** Proposed (corrected 2026-08-29) — **half 1 is implemented, half 2 is not, and
-  this record went on saying neither was.** `tools/cite_tools/generate/world.py` sets
+- **Status:** Proposed (corrected 2026-08-29 and 2026-08-30) — **half 2 has been measured
+  and is NOT MET.** A pair came up on 2026-08-30, both sides were sampled in the same window,
+  and each ran at about 0.88 — roughly 12 % short of the 1.0 this record requires. The reason
+  this record stays `Proposed` has therefore changed underneath it: it is no longer that half 2
+  cannot be measured, it is that the cell does not meet it. See the section
+  "Correction — 2026-08-30: half 2 is measurable, was measured, and is not met", below. **A
+  second correction sits above the first**, which is the 2026-08-29 one this block names next.
+  **half 1 is implemented, half 2 is not, and this record went on saying neither was.**
+  `tools/cite_tools/generate/world.py` sets
   `REAL_TIME_FACTOR = 1.0` and the generated `workspace/src/cite_generated/worlds/cell_a.sdf`
   carries `<real_time_factor>1</real_time_factor>`. See the section
   "Correction — 2026-08-29: half 1 is implemented and measured, and the status line still said
   nothing was", below.
   **The record stays `Proposed` because half 2 is not merely unmeasured — it is unmeasurable
-  today.** Promotion needs the *concurrent* measurement of both sides sustaining 1.0, a
+  today.** **[Corrected 2026-08-30 — see the Correction section above.]** Promotion needs the
+  *concurrent* measurement of both sides sustaining 1.0, a
   concurrent measurement needs two sides, and nothing has ever brought a pair up
-  ([ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)). Nothing in the tree
-  measures a real-time factor during a run at all; the figures in the correction below were
-  taken by hand, off a published campaign's method, and no CI step or scenario asserts one.
+  ([ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)).
+  **[Corrected 2026-08-30 — see the Correction section above.]** Nothing in the tree
+  measures a real-time factor during a run at all; the figures in the 2026-08-29 correction
+  below were taken by hand, off a published campaign's method, and no CI step or scenario
+  asserts one.
   **When written this record was `Proposed` and nothing was implemented**, and that sentence
   is kept rather than replaced: at `f1f914f` `world.py` set `REAL_TIME_FACTOR = 0.0` and the
   generated world carried `<real_time_factor>0</real_time_factor>`.
@@ -20,6 +30,8 @@
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md)
 - **Related:** [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md),
   [ADR-0042](0042-partition-gazebo-transport-per-side.md),
+  [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md) (the pair that made half 2
+  measurable, and which explicitly does not police it at bring-up),
   [ADR-0028](0028-convex-hull-collision-meshes.md),
   [ADR-0011](0011-twin-maturity-model-and-modes.md),
   [ADR-0021](0021-generated-artifacts-are-committed.md),
@@ -28,6 +40,72 @@
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
   charter §4 (P1, P4, P6, P8)
+
+## Correction — 2026-08-30: half 2 is measurable, was measured, and is not met
+
+**What was wrong.** *"Half 2 is not merely unmeasured — it is unmeasurable today"*, and the
+premise it rested on: *"a concurrent measurement needs two sides, and nothing has ever brought
+a pair up"*. A pair came up on 2026-08-30 under `./scripts/sim --pair`
+([ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)), which removed the
+obstacle, and the measurement was then taken. **"Unmeasurable" was never a property of the
+quantity — it was a property of the tree on the day the sentence was written**, and a status
+line that states one as the other goes stale silently the moment the tree moves.
+
+**The verdict changes with it, and in the direction that matters.** This record stayed
+`Proposed` because half 2 could not be checked. It stays `Proposed` now because half 2 **was
+checked and failed**. Those are different sentences: the first is a gap in the instruments,
+the second is a gap in the machine, and only the second is a finding about the system.
+
+### The measurement, and this is the only place its figures are stated
+
+**Not a campaign, and it must not be cited as one.** [`docs/measurements/`](../measurements/README.md)
+requires a `criteria.md` written and committed **before the first trial**, plus the `raw/` the
+harness recorded and the `harness/` that recorded it. This has none of the three. Publishing it
+under that name would supply the one property that makes a campaign worth reading — thresholds
+chosen before the data — by asserting it, which is worse than not publishing it at all. It is
+recorded here, at the strength it has, because this is the record whose claim it falsifies.
+
+| What | Value |
+|---|---|
+| Real-time factor, per side, both sides sampled in the same wall-clock window | **0.877 – 0.887**, four windows |
+| Distance from the requirement | about **12 %** short of 1.0 |
+| Machine | **one**, the implementing agent's; both cells **idle**, holding home pose |
+| Thresholds registered in advance | **none** |
+| Who took it, and where it is otherwise recorded | the implementing agent of `b3b7b66`, in that commit's message. **Not re-taken by review** |
+| Method | not published. Nothing in the tree measures a real-time factor during a run — `grep -rn real_time_factor workspace tools tests scripts` reaches the generator, its template, two world files and two generator tests, and no measurement |
+
+**It replicates a prediction, which is the strongest thing about it.**
+[`2026-08-28-second-world-cost`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md)'s
+`PAIRHULL_1` measured two idle cells with **vendor** collision meshes at **0.864 and 0.869**,
+and its own words for that row are *"fails the condition by 13 %"*. The figures above are the
+same shape, with half 1's throttle now in the world and — as the implementing agent reports it
+— on a different host. Read the campaign for the rest of that table; nothing here restates it.
+
+**What it does not say.** It is four windows, not a rate. Both cells were idle, so it is not a
+measurement of a pair doing work — and the campaign's own rule 5 is that an idle margin is not
+a work allowance. Nothing here isolates the throttle: half 1 is a ceiling and cannot lift a
+cell that is below it, so the 0.88 is what the host delivers rather than what the world permits.
+
+**What survives, and it is the whole decision.** Both halves stand exactly as written. Half 2
+is a requirement on the machine, and a requirement is not falsified by a machine failing it —
+it is now a **measured gap** instead of an open question, which is what this record asked for.
+The lever the second-world campaign names for closing it is
+[ADR-0028](0028-convex-hull-collision-meshes.md)'s hulls, whose row in the same table meets the
+condition with margin; ADR-0028 is still `Proposed` and `assets/` still holds only its README
+and its manifest.
+
+**What promotion would now take.** The concurrent measurement exists, so what is missing is no
+longer an instrument but a result: both sides sustaining 1.0 in the same window, on a stated
+machine, against thresholds registered before the trial — which is a campaign, not a run. Until
+then this record is a requirement the cell does not meet, and no document may write it as one it
+does.
+
+**How the error survived.** The sentence was true when written and was written as though it
+were a property of the requirement. Nothing re-reads a status line when an unrelated branch
+lands, and the branch that made the measurement possible was ADR-0047's, which named this record
+only to say that it does **not** police a pair's real-time factor at bring-up. The transferable
+part: **"cannot be measured" is a claim about the tree and expires with it, so it belongs next
+to the thing that would lift it** — here, "when a pair comes up" — rather than stated flat.
 
 ## Correction — 2026-08-29: half 1 is implemented and measured, and the status line still said nothing was
 

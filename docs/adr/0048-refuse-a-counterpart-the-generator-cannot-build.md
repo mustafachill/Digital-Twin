@@ -1,7 +1,18 @@
 # ADR-0048: Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts
 
-- **Status:** Proposed — **nothing in this record is implemented, and nothing has ever brought
-  a pair up.** Every claim below was established against the tree at `9233766` rather than
+- **Status:** Proposed (corrected 2026-08-30) — **the refusal this record decides is still not
+  built, and the second half of the sentence below is now false: a pair has been brought up.**
+  See the section "Correction — 2026-08-30: a pair has come up, and the counterpart backends
+  this record refuses are still accepted", below.
+  **Nothing in the promotion split changes.** Clause 1's refusal does not exist —
+  `tools/tests/test_validate_referential.py::test_a_physical_counterpart_on_a_paired_zone_is_allowed`
+  asserts that a model whose two sides name different backends validates cleanly, which is
+  precisely what clause 1 would refuse — so this record stays `Proposed` on the condition it set
+  for itself, not for want of a pair.
+  **nothing in this record is implemented, and nothing has ever brought
+  a pair up.** **[Corrected 2026-08-30 — see the Correction section above; the first half
+  stands, the second does not.]** Every claim below was established against the tree at
+  `9233766` rather than
   taken from another record; the commands are in *Context*. In summary, at that commit:
   - `model/facility/zones.yaml` declares `twin.sides: single`, so nothing in this repository
     is paired.
@@ -54,6 +65,41 @@
   [`naming-and-namespaces.md`](../architecture/naming-and-namespaces.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §3 and §8, charter §4 (P1, P2, P5, P6, P7) and §8
+
+## Correction — 2026-08-30: a pair has come up, and the counterpart backends this record refuses are still accepted
+
+**What was wrong.** One clause of one sentence: *"nothing has ever brought a pair up."* True at
+`9233766` and false at `b3b7b66`, which brought both sides of a pair up under
+[ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)'s supervisor — three runs on
+one machine, reported by the implementing agent and covered by no test. This record was written
+one commit before that landed, which is the shortest life any status claim in this repository has
+had, and the reason to correct it rather than shrug is that the sentence is load-bearing for a
+reader deciding whether the generator gap below is urgent: it is more urgent now, not less.
+
+**A second occurrence is marked in place.** The same false claim appears in *Options
+considered*, under Option B's first rejection reason, and is marked there rather than repaired
+— together with the reason its conclusion survives it.
+
+**What is unchanged, and it is everything this record decides.** Clause 1's refusal is not
+implemented and clause 2's generator does not exist. The cell of the cross product this record
+is about — a paired zone whose two sides name different backends — still validates cleanly, and
+the test that says so is
+`tools/tests/test_validate_referential.py::test_a_physical_counterpart_on_a_paired_zone_is_allowed`,
+which asserts `rules(minimal_model) == set()` for exactly that model. The rule that does exist,
+`physical-plant-on-paired-zone`, refuses a *plant* with a real backend and is a different rule
+predating this record.
+
+**What the pair changes about the risk.** Before `b3b7b66` the gap was reachable only in theory,
+because no counterpart was ever started. Now a counterpart is started by
+`./scripts/sim --pair`, is handed the plant's artifacts by construction, and would be handed
+them just as silently on a model that asked for a real backend on that side. Nothing between L0
+and bring-up would say so.
+
+**How the error survived.** It did not survive review; it was overtaken by the branch that
+merged one commit later. The transferable part is that **a status block written against a named
+commit ages at the rate of the branch beside it**, and a record written to unblock a piece of
+work will usually be falsified by that work. Writing "at `9233766`" is what made this cheap to
+find and repair.
 
 ## Context
 
@@ -187,7 +233,10 @@ written down in `test_only_the_plugin_differs_between_backends`.
 
 - **Nothing can test it.** No pair has ever been brought up — ADR-0041, ADR-0043, ADR-0044 and
   ADR-0047 are all `Proposed` and their pair-side clauses all unimplemented — and no hardware
-  exists. Per-side artifacts for a `real` side would ship as generator output whose only
+  exists. **[Corrected 2026-08-30 — see the Correction section above: a pair has been brought
+  up, ADR-0041 and ADR-0047 are `Accepted`. The conclusion is unchanged: both sides of that
+  pair are `sim`, no hardware exists, so a `real` counterpart's artifacts still have no
+  consumer that can test them.]** Per-side artifacts for a `real` side would ship as generator output whose only
   consumer is a machine nobody has, and it would be *believed*, because it validates and looks
   finished. That is charter §4's P6 and CLAUDE.md §4's "a capability marked complete in
   documentation without a test proving it", arriving as generated bytes rather than as prose.
