@@ -15,6 +15,47 @@ The rule that matters: **git holds what the simulator loads, and a record of
 where everything else came from.** A fresh clone plus `./scripts/fetch-assets`
 must be enough to reproduce a working scene.
 
+### How a simulator asset is reached at runtime
+
+The simulator and the planner load a mesh by URI, and a URI names a package.
+[`cite_description`](../workspace/src/cite_description/README.md) installs
+`assets/meshes` into `share/cite_description/meshes`, so a mesh here is reachable
+as `package://cite_description/meshes/<path>` or
+`file://$(find cite_description)/meshes/<path>`. It is the **only** package
+permitted to install from this directory: two would make "where an asset lives"
+and "how an asset is reached" two different answers.
+
+## Derived assets
+
+Some simulator assets are not captured or authored — they are **derived** from a
+dependency this repository pins. The convex-hull collision meshes
+([ADR-0028](../docs/adr/0028-convex-hull-collision-meshes.md)) are the first:
+each one is the convex hull of a vendor mesh from the `xarm_ros2` commit
+`external/cite.repos` names.
+
+A derived asset is committed like any other simulator asset, and it carries one
+thing an authored asset does not: **the file it came from, the commit that file
+is pinned at, and what both hash to**. That lives in the `derived:` section of
+`manifest.yaml`, which is written by
+
+```bash
+./scripts/enter dev python3 -m cite_tools.cli hulls --model model --write
+```
+
+and checked, without writing, by the same command without `--write`.
+
+**Why the provenance is not optional here.** A derived asset can go stale in a
+way an authored one cannot: a vendor bump changes the source, every gate passes,
+and the tree still holds a hull of the arm the project used to have — a collision
+shape that does not match the robot, which presents as a planner bug. The digests
+are what make that state detectable. `tools/tests/test_hulls_match_the_vendor.py`
+runs the comparison wherever the vendor source is imported.
+
+**The `derived:` section is machine-written.** Everything above its markers in
+`manifest.yaml` is hand-written and is preserved untouched; the region between
+them is replaced whole. Sixty checksums maintained by hand is a discipline that
+fails silently, which is the weakness ADR-0012 already names.
+
 ## Why a manifest instead of Git LFS
 
 Raw scans are write-once and rarely re-fetched — the working set is the
@@ -42,6 +83,15 @@ Two representations, always separate:
   dense mesh used for collision is the most reliable way to destroy Gazebo's
   real-time factor and to produce contact behaviour nobody can explain. The
   `model-validator` agent rejects it.
+
+  **The three arms do exactly this today, deliberately.** For the xArm variant
+  this project models the vendor's own collision directory *is* its visual
+  directory, so twelve links per arm collide against a rendering mesh. Hulls of
+  all thirteen collision meshes are derived and committed below, and the L0 model
+  can select them per robot type — but the shipped default is still the vendor's,
+  because ADR-0028's promotion gate requires the friction-grasp campaign re-run
+  against hull geometry first. This paragraph says what the tree does, not what
+  the rule above wishes it did (P7).
 
 ## Registration
 

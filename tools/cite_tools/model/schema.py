@@ -208,6 +208,104 @@ class Kinematics(Strict):
     max_reach_m: Annotated[float, Field(gt=0.0)]
 
 
+class CollisionMeshSet(Strict):
+    """One selectable collision-geometry set for a vendor-described type (ADR-0028).
+
+    A vendor description is *invoked, never ingested*, so nothing in this layer
+    may open a vendor file to discover what its links collide against. This class
+    is how the model states it instead — and stating it is what lets
+    ``validate.physical`` fire on a vendor description at all, which ADR-0028
+    decision 4 requires and which was impossible while the only collision
+    geometry L0 knew about was an authored ``Body``.
+
+    Two kinds, and the asymmetry between them is deliberate:
+
+    * ``vendor_meshes`` carries no paths. It names the vendor's own choice — for
+      the variant we model that choice is *the visual meshes* — and exists so
+      that a type can say so out loud rather than by omission.
+    * ``convex_hull`` names a derived asset set produced by ``cite_tools.meshes``
+      from the vendor meshes listed in ``meshes``. Those paths are relative to
+      both roots, because the binding replaces one mesh **root** with another in
+      the vendor description: a collision reference resolves under our root only
+      if its relative path is unchanged. The mirror is the mechanism.
+    """
+
+    id: Identifier
+    kind: Literal["vendor_meshes", "convex_hull"]
+    #: The ament package whose ``share/`` holds the derived meshes, and the
+    #: directory under it. Together they form the root the description is handed.
+    package: str | None = None
+    root: str | None = None
+    #: Where the meshes were derived FROM. Recorded here rather than only in
+    #: ``assets/manifest.yaml`` because it is what makes the set regenerable: the
+    #: pipeline reads these, not the manifest, so the manifest can never be the
+    #: thing that decides what the hull is derived from.
+    source_package: str | None = None
+    source_root: str | None = None
+    #: Mesh paths, relative to both roots. Exhaustive for the links of this
+    #: description that carry collision geometry — a missing entry is a collision
+    #: reference that resolves to nothing once the root is substituted.
+    meshes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _kind_carries_its_fields(self) -> CollisionMeshSet:
+        derived = (self.package, self.root, self.source_package, self.source_root)
+        if self.kind == "vendor_meshes":
+            if any(derived) or self.meshes:
+                raise ValueError(
+                    "a vendor_meshes set names no paths: it IS the vendor's own choice, "
+                    "and listing paths here would be a second place for them to be wrong"
+                )
+            return self
+        if not all(derived) or not self.meshes:
+            raise ValueError(
+                "a convex_hull set needs package, root, source_package, source_root "
+                "and at least one mesh; without them nothing can produce or find it"
+            )
+        return self
+
+
+class CollisionSpec(Strict):
+    """Which collision geometry a vendor-described type's links use (ADR-0028).
+
+    The choice is per type rather than per link, and that is a decision with a
+    reason. The mechanism underneath is the substitution of one mesh *root* for
+    another in the vendor description, which is not something a single link can
+    have an opinion about. Per-link exceptions are foreseen — ADR-0028 expects the
+    gripper fingers to need one, because a convex hull fills the gap between the
+    pads — but the exception it describes is *a primitive instead of a mesh*,
+    which this field could never express whatever its granularity. That is a
+    different mechanism and belongs to the change that measures it.
+    """
+
+    #: The ``id`` of the set in ``sets`` that is bound into the description.
+    select: Identifier
+    #: The vendor macro parameter through which a collision-mesh root reaches the
+    #: description. Vendor-specific by nature, exactly like ``bound_args``, and it
+    #: is what makes this mechanism usable by a description other than this one.
+    root_arg: str | None = None
+    sets: list[CollisionMeshSet] = Field(min_length=1)
+
+    @property
+    def selected(self) -> CollisionMeshSet:
+        """The bound set. Guaranteed present by ``_select_names_a_set``."""
+        return next(s for s in self.sets if s.id == self.select)
+
+    @model_validator(mode="after")
+    def _select_names_a_set(self) -> CollisionSpec:
+        ids = [s.id for s in self.sets]
+        if len(set(ids)) != len(ids):
+            raise ValueError("collision set ids must be unique")
+        if self.select not in ids:
+            raise ValueError(f"select {self.select!r} names no set; have {sorted(ids)}")
+        if self.selected.kind != "vendor_meshes" and not self.root_arg:
+            raise ValueError(
+                "a derived collision set needs root_arg: without a macro parameter to "
+                "carry the root, the set is generated and never reaches the description"
+            )
+        return self
+
+
 class DescriptionSpec(Strict):
     """How a type becomes geometry.
 
@@ -227,6 +325,12 @@ class DescriptionSpec(Strict):
         default_factory=dict,
         description="macro parameter -> generator binding name; an unknown binding is an error",
     )
+    #: What the links of a vendor description collide against (ADR-0028).
+    #: Optional on the class because most types provide a ``body`` instead;
+    #: ``validate.physical`` requires it of every type whose vendor description
+    #: this generator actually emits, which is the set of types where its absence
+    #: means "nobody has looked".
+    collision: CollisionSpec | None = None
     body: Body | None = None
 
 
@@ -794,6 +898,19 @@ class AssetType(Strict):
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
     grasp: GraspSpec | None = None
+
+    @property
+    def emits_vendor_description(self) -> bool:
+        """Whether the generator emits a vendor macro invocation for this type.
+
+        Derived, and derived HERE, because two modules need the same answer and a
+        second copy of the predicate would drift: ``generate.description`` uses it
+        to decide what to emit, and ``validate.physical`` uses it to decide whose
+        collision geometry it is entitled to demand a declaration of. A type that
+        names a macro but is built into another type's description — the parallel
+        gripper is the one in this model — is not emitted and is not asked.
+        """
+        return self.description.provider == "xacro_macro" and self.category == "robot"
 
 
 # --------------------------------------------------------------------------- #

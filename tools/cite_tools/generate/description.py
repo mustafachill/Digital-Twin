@@ -226,6 +226,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         (name, _binding_value(asset, binding, cell))
         for name, binding in sorted(spec.bound_args.items())
     ]
+    args += _collision_args(spec)
 
     return _ArmView(
         id=asset.id,
@@ -237,6 +238,29 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         mount_link=_mount_link(asset),
         args=tuple(sorted(args)),
     )
+
+
+def _collision_args(spec: Any) -> list[tuple[str, str]]:
+    """The collision-mesh root, if the type binds one (ADR-0028).
+
+    Empty whenever the selected set is the vendor's own meshes, and that emptiness
+    is load-bearing: the shipped model selects `vendor_meshes`, so this generator
+    emits exactly the bytes it emitted before the field existed. A binding that
+    changed the output when nothing was selected would have made the byte-identity
+    check unable to tell "the default is unchanged" from "the default moved".
+
+    `file://$(find <package>)` rather than `package://`, because that is what the
+    vendor's own `mesh_path` resolves to on the plugin this cell runs
+    (`xarm_device_macro.xacro` picks `file://` for every Gazebo plugin), and a
+    collision root in a different scheme from the visual root beside it is a
+    difference nobody would have chosen. `$(find ...)` is expanded by xacro rather
+    than here, so the generated artifact carries no absolute path and is identical
+    in every checkout.
+    """
+    selected = spec.collision.selected if spec.collision else None
+    if selected is None or selected.kind == "vendor_meshes":
+        return []
+    return [(spec.collision.root_arg, f"file://$(find {selected.package})/{selected.root}")]
 
 
 def _mount_link(asset: ResolvedAsset) -> str:
@@ -261,11 +285,7 @@ def body_views(cell: ResolvedCell) -> tuple[_BodyView, ...]:
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
     bodies = body_views(cell)
-    arms = tuple(
-        _arm_view(a, cell)
-        for a in cell.assets
-        if a.asset_type.description.provider == "xacro_macro" and a.asset_type.category == "robot"
-    )
+    arms = tuple(_arm_view(a, cell) for a in cell.assets if a.asset_type.emits_vendor_description)
 
     env = environment()
     artifacts = [

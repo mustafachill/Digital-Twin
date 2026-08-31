@@ -43,8 +43,23 @@ class TestTheRealCellIsSound:
     def test_no_physical_errors(self, real_model: Path) -> None:
         assert physical_rules(real_model) == set()
 
-    def test_no_physical_warnings(self, real_model: Path) -> None:
-        assert physical_rules(real_model, Severity.WARNING) == set()
+    def test_the_only_physical_warning_is_the_one_the_project_has_decided_to_carry(
+        self, real_model: Path
+    ) -> None:
+        """One warning, named, and it is a state rather than a defect in the model.
+
+        `collision-reuses-visual-mesh` fires on `xarm5` because the shipped model
+        selects the vendor's own collision meshes, which for this variant are its
+        rendering meshes. That is deliberate and is not something to fix here:
+        ADR-0028 decides on convex hulls, the hulls are generated and available as
+        a selectable set, and its amended promotion gate requires the
+        friction-grasp campaign re-run against them before the default may move.
+
+        This test used to assert `== set()`. It is written as an exact set rather
+        than as "ignore this rule" so that a SECOND warning still fails it, and so
+        that the day the default moves this line is the one that has to change.
+        """
+        assert physical_rules(real_model, Severity.WARNING) == {"collision-reuses-visual-mesh"}
 
 
 class TestReach:
