@@ -145,6 +145,108 @@ _TABLE: Mapping[int, Route] = {
 }
 
 
+#: **Which sides are under command in each mode, whoever is commanding them.**
+#:
+#: This is not :data:`_TABLE`. `_TABLE` answers *where does L5 send a goal*;
+#: this answers *which side is being driven at all*, including by callers L5
+#: never sees. The two differ in exactly the modes where a side is commanded on
+#: its own side: `REAL` and `SHADOW` carry no command across the boundary, and
+#: the physical side is being driven in both.
+#:
+#: Read out of `TwinMode.msg`, mode by mode, and out of nothing else — that
+#: file's per-mode comment is the one statement of what a mode means (P1):
+#:
+#: * `SIM` — "physical idle, virtual commanded" -> the plant.
+#: * `REAL` — "physical commanded, virtual idle" -> the counterpart.
+#: * `SHADOW` — "physical commanded, virtual follows its state" -> the
+#:   counterpart. The plant follows; a follower is not commanded.
+#: * `VALIDATED` — "both commanded" -> both.
+#: * `CLOSED_LOOP` — "physical commanded only after the virtual validates it"
+#:   -> both. The gate decides WHEN, never WHETHER.
+#: * `VIRTUAL_LEAD` — "virtual commanded; the far side follows and actuates"
+#:   -> both. The far side actuates, which is what separates this row from
+#:   `SHADOW`'s follower.
+#:
+#: **This table is what the hardware gate is computed from** (`cite_twin.mode`),
+#: which is why it is here beside the routing table rather than in the mode
+#: server: a mode that dispatches a goal to a side it does not list as commanded
+#: would be a contradiction between two tables, and the check below refuses to
+#: import in that state rather than letting one of them be believed.
+_COMMANDED: Mapping[int, tuple[str, ...]] = {
+    TwinMode.MODE_SIM: (PLANT_SIDE,),
+    TwinMode.MODE_REAL: (COUNTERPART_SIDE,),
+    TwinMode.MODE_SHADOW: (COUNTERPART_SIDE,),
+    TwinMode.MODE_VALIDATED: _BOTH_SIDES,
+    TwinMode.MODE_CLOSED_LOOP: _BOTH_SIDES,
+    TwinMode.MODE_VIRTUAL_LEAD: _BOTH_SIDES,
+}
+
+
+def _declared_modes() -> tuple[int, ...]:
+    """Every `TwinMode.MODE_*` constant the message declares.
+
+    `dir()` rather than `vars()`: rosidl exposes a message's constants as
+    properties on its METACLASS, so the class's own `__dict__` does not hold
+    them and a `vars()` scan would silently find nothing.
+    """
+    return tuple(
+        getattr(TwinMode, name) for name in dir(TwinMode) if name.startswith("MODE_")
+    )
+
+
+def _refuse_to_import_a_mode_no_table_knows_about() -> None:
+    """Fail the import when a mode exists that either table has not been told about.
+
+    The alternative was discovered rather than chosen: a mode absent from
+    `_COMMANDED` would be judged as commanding nothing, so a seventh mode would
+    arrive **ungated** while every test that names modes by hand kept passing.
+    This is the same guard `cite_twin.boundary` puts on `SKILL_ACTION_TYPES`,
+    for the same reason and with the same cost — the package refuses to load
+    until whoever added the mode has said what it does.
+    """
+    declared = set(_declared_modes())
+    for name, table in (("_TABLE", _TABLE), ("_COMMANDED", _COMMANDED)):
+        missing = declared - set(table)
+        if missing:
+            raise ImportError(
+                f"TwinMode declares mode(s) {sorted(missing)} that cite_twin.routing's "
+                f"{name} does not know about. What crosses the boundary in a mode, and "
+                "which sides that mode commands, are decided in the mode set and read "
+                "here - never defaulted, because a defaulted mode is an ungated one."
+            )
+    for mode, chosen in _TABLE.items():
+        undeclared = set(chosen.sides) - set(_COMMANDED.get(mode, ()))
+        if undeclared:
+            raise ImportError(
+                f"mode {mode} dispatches a goal to {sorted(undeclared)}, which "
+                "_COMMANDED does not list as commanded in it. The two tables answer "
+                "different questions and the second must contain the first: a side "
+                "L5 sends a goal to is a side under command by definition."
+            )
+
+
+_refuse_to_import_a_mode_no_table_knows_about()
+
+
+def commanded_sides(mode: int) -> tuple[str, ...]:
+    """Return every side under command in ``mode``, whoever commands it.
+
+    The superset of :func:`route`'s sides, and the one the hardware gate is
+    computed from: *placing physical actuation under an authority that was not
+    previously commanding it* (`cross-cutting-safety.md`) is a question about
+    which sides the mode drives, not about which of them L5 happens to be the
+    caller for. `REAL` is the case that separates the two — L5 dispatches
+    nothing in it and the physical side is being driven.
+
+    A mode no table knows about commands **both** sides. That is the
+    conservative answer and it is unreachable in a loaded package — the import
+    check above refuses a declared mode that is missing here — so it only ever
+    answers for an integer that is not a mode at all, which `cite_twin.mode`
+    has already refused by name before it asks.
+    """
+    return _COMMANDED.get(mode, _BOTH_SIDES)
+
+
 def route(mode: int) -> Route:
     """Return the sides a goal entering L5 in ``mode`` is dispatched to.
 

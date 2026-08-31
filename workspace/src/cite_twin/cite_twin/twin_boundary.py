@@ -85,11 +85,16 @@ from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, Twi
 from cite_interfaces.qos import LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
+from action_msgs.msg import GoalStatus
 from cite_twin.boundary import (
     address,
     asset_namespace,
     BoundaryError,
+    CUSTODY_FIELDS,
+    off_executor,
+    IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS,
     JOINT_STATE_INTERFACE,
+    measurement_fields,
     operator_endpoint,
     SideContext,
     SKILL_ACTION_TYPES,
@@ -113,12 +118,69 @@ from sensor_msgs.msg import JointState
 #: bounded by this number is executed by a simulator.
 SERVER_WAIT_S = 30.0
 
+#: **How one operator result is ranked out of one result per side, worst first.**
+#:
+#: Ranked by CONSEQUENCE, and every row carries the reason it sits where it
+#: does. The rule this replaced was "a cancellation outranks a failure, then the
+#: first non-success in side order", which meant that a far side reporting
+#: `MOTION_INTERRUPTED` — ADR-0037's `ESCALATE` row, *an arm stopped part-way
+#: and is holding position* — was reported to the operator as a goal cancelled
+#: cleanly, whenever any side had also been cancelled. The worse fact about the
+#: cell won.
+#:
+#: 1. `SAFETY_BLOCKED` — a side refused on safety. Nothing may outrank a safety
+#:    refusal; it is the one answer that must never be summarised away.
+#: 2. `HARDWARE_FAULT` — a machine is faulted and needs a person.
+#: 3. `MOTION_INTERRUPTED` — an arm is stopped part-way, holding position, for a
+#:    reason nothing established (ADR-0037). It outranks `CANCELLED`
+#:    deliberately: a cancel that left an arm mid-path is that arm, not a tidy
+#:    stop, and L4's policy row for it is `ESCALATE`.
+#: 4. `HARDWARE`-adjacent execution failures — `EXECUTION_FAILED`,
+#:    `PLANNING_FAILED`, `UNREACHABLE`: the goal did not happen and the arm is
+#:    at an endpoint. Ranked under `MOTION_INTERRUPTED` because ADR-0037's whole
+#:    point is that the two want different answers from L4.
+#: 5. `PRECONDITION_FAILED`, `NOT_IMPLEMENTED` — the goal never started.
+#: 6. `TIMEOUT` — bounded, with a defined outcome, and the outcome is in the
+#:    custody fields rather than here.
+#: 7. `CANCELLED` — the operator asked for it, so it is reported only when
+#:    nothing worse also happened.
+#:
+#: `SUCCESS` is not in the table: it is reported only when EVERY side succeeded,
+#: which is a conjunction rather than a rank.
+AGGREGATE_RANKING: tuple[int, ...] = (
+    ResultCode.SAFETY_BLOCKED,
+    ResultCode.HARDWARE_FAULT,
+    ResultCode.MOTION_INTERRUPTED,
+    ResultCode.EXECUTION_FAILED,
+    ResultCode.PLANNING_FAILED,
+    ResultCode.UNREACHABLE,
+    ResultCode.PRECONDITION_FAILED,
+    ResultCode.NOT_IMPLEMENTED,
+    ResultCode.TIMEOUT,
+    ResultCode.CANCELLED,
+)
+
 #: How often a divergence sample is published, per asset, in seconds.
 #:
 #: A publication rate rather than a timing guess: nothing is sequenced on it and
 #: no state transition waits for it (P4). It is a node parameter so a deployment
 #: can change it without a rebuild.
 DIVERGENCE_PERIOD_S = 1.0
+
+
+@dataclass(frozen=True)
+class _SideOutcome:
+    """What one side answered: the code, and the typed result behind it.
+
+    The payload is kept rather than reduced to a code, because the fields that
+    are not the code are the ones L5 has to decide about — custody above all.
+    `None` means the side produced no result message at all, which is not the
+    same as a result whose code is a failure and must not be flattened into
+    one.
+    """
+
+    code: ResultCode
+    payload: object | None
 
 
 @dataclass(frozen=True)
@@ -177,8 +239,19 @@ class TwinBoundary:
             manager.asset: manager.counterpart_backend
             for manager in plan.controller_managers
         }
+        # Both sides, read per asset, because the hardware gate asks which
+        # sides the requested mode commands and what each of them loads -
+        # never which mode it is (see cite_twin.mode).
         self._authority = ModeAuthority(
-            Deployment(self._far_side_backends),
+            Deployment(
+                {
+                    manager.asset: {
+                        PLANT_SIDE: manager.backend,
+                        COUNTERPART_SIDE: manager.counterpart_backend,
+                    }
+                    for manager in plan.controller_managers
+                }
+            ),
             partial(require_hardware_opt_in, plan, environ),
         )
 
@@ -354,44 +427,72 @@ class TwinBoundary:
             callback_group=self._group,
         )
 
-    def _execute(self, skill: _SkillEndpoint, goal_handle):
+    async def _execute(self, skill: _SkillEndpoint, goal_handle):
+        """Run one operator goal, off the executor, and return its result.
+
+        **A coroutine, and the `await` is the point.** Everything this goal does
+        is blocking and unbounded — see :meth:`_await_far_side_goals` — so it
+        runs on a thread of L5's own and this callback yields the executor
+        thread back to the pool for the duration. The cancel that bounds the
+        goal is served by that pool, so it must never be queued behind the goal
+        it bounds (`cite_twin.boundary.off_executor`).
+        """
+        return await off_executor(
+            self._plant.executor,
+            partial(self._run_goal, skill, goal_handle),
+            name=f"twin-goal-{skill.asset}-{skill.field}",
+        )
+
+    def _run_goal(self, skill: _SkillEndpoint, goal_handle):
         """Dispatch one operator goal to the sides the mode routes it to.
+
+        Runs on its own thread, never on an executor thread.
 
         **Every refusal is an ABORT carrying a `ResultCode`, never a goal
         rejection.** A rejected goal carries no result, so a caller learns that
         the twin said no and never learns why; every L3 result in this project
         is typed and this one is too (P3).
-
-        Blocking here is deliberate and the executor was chosen for it: the
-        plant's executor is multi-threaded and this server is in a reentrant
-        callback group, so the responses this method waits for are served by
-        other threads of the same executor while this one waits. On a
-        single-threaded executor the wait for the PLANT's own goal would
-        deadlock against itself.
         """
         with self._lock:
             mode = self._authority.mode
         chosen = route(mode)
-        result = skill.action_type.Result()
         if not chosen.accepted:
-            result.result = ResultCode(code=chosen.code, detail=chosen.detail)
-            goal_handle.abort()
             self._log.warning(
                 f"{skill.endpoint} refused in {MODE_NAMES.get(mode, mode)}: {chosen.detail}"
             )
-            return result
+            goal_handle.abort()
+            return _uncommanded_result(
+                skill, ResultCode(code=chosen.code, detail=chosen.detail)
+            )
+
+        # Asked between acceptance and the far-side wait, because there is a
+        # wait in between: `wait_for_server` can take SERVER_WAIT_S, and a goal
+        # cancelled inside that window used to be dispatched anyway and then
+        # cancelled mid-motion — an arm that moved because nobody asked the
+        # question. Nothing was commanded, so custody is unchanged.
+        if goal_handle.is_cancel_requested:
+            goal_handle.canceled()
+            return _uncommanded_result(
+                skill,
+                ResultCode(
+                    code=ResultCode.CANCELLED,
+                    detail=(
+                        "cancelled after acceptance and before any side was "
+                        "commanded; no goal was dispatched."
+                    ),
+                ),
+            )
 
         dispatched = self._dispatch(skill, goal_handle, chosen.sides)
         if isinstance(dispatched, ResultCode):
-            result.result = dispatched
             goal_handle.abort()
-            return result
+            return _uncommanded_result(skill, dispatched)
 
-        aggregate = self._await_far_side_goals(dispatched, goal_handle)
-        result.result = aggregate
-        if aggregate.code == ResultCode.SUCCESS:
+        outcomes = self._await_far_side_goals(dispatched, goal_handle)
+        result = _compose_result(skill, chosen.sides, outcomes)
+        if result.result.code == ResultCode.SUCCESS:
             goal_handle.succeed()
-        elif aggregate.code == ResultCode.CANCELLED:
+        elif result.result.code == ResultCode.CANCELLED:
             goal_handle.canceled()
         else:
             goal_handle.abort()
@@ -446,7 +547,9 @@ class TwinBoundary:
         """
         goal_handle.publish_feedback(message.feedback)
 
-    def _await_far_side_goals(self, sent: Mapping[str, Future], goal_handle) -> ResultCode:
+    def _await_far_side_goals(
+        self, sent: Mapping[str, Future], goal_handle
+    ) -> dict[str, _SideOutcome]:
         """Wait for every dispatched goal, forwarding a cancel to all of them.
 
         **No deadline, deliberately.** ADR-0045 records what a wall-clock
@@ -461,23 +564,27 @@ class TwinBoundary:
         reported.
         """
         handles: dict[str, object] = {}
-        results: dict[str, ResultCode] = {}
+        outcomes: dict[str, _SideOutcome] = {}
         for side_name, future in sent.items():
             handle = _wait(future, goal_handle, handles.values())
             if handle is None or not handle.accepted:
-                results[side_name] = ResultCode(
-                    code=ResultCode.PRECONDITION_FAILED,
-                    detail=f"side {side_name!r} rejected the goal",
+                outcomes[side_name] = _SideOutcome(
+                    code=ResultCode(
+                        code=ResultCode.PRECONDITION_FAILED,
+                        detail=f"side {side_name!r} rejected the goal",
+                    ),
+                    payload=None,
                 )
                 continue
             handles[side_name] = handle
 
         for side_name, handle in handles.items():
             future = handle.get_result_async()
-            outcome = _wait(future, goal_handle, handles.values())
-            results[side_name] = _result_code_of(side_name, outcome)
+            outcomes[side_name] = _outcome_of(
+                side_name, _wait(future, goal_handle, handles.values())
+            )
 
-        return _aggregate(results)
+        return outcomes
 
     # ------------------------------------------------------------------ #
     # 3. The divergence monitor
@@ -587,31 +694,128 @@ def _age(operand: Operand | None, now: float) -> float:
     return max(0.0, now - operand.received_wall_s)
 
 
-def _aggregate(results: Mapping[str, ResultCode]) -> ResultCode:
+def _aggregate(
+    order: tuple[str, ...], outcomes: Mapping[str, _SideOutcome]
+) -> ResultCode:
     """One result for the operator, from one per side.
 
-    Success only where every side succeeded. A cancellation outranks a failure
-    because the operator asked for it and it is what happened; otherwise the
-    first non-success in side order is reported, with the side named, so that
-    "the twin failed" is never the whole of what a caller is told.
+    Success only where every side succeeded. Otherwise the worst consequence in
+    :data:`AGGREGATE_RANKING` is reported, with every side named in `detail`, so
+    that "the twin failed" is never the whole of what a caller is told.
+
+    A code no rank knows about is reported ahead of everything ranked rather
+    than behind it: an answer this function has not been taught to weigh is not
+    thereby a mild one, and reporting it is how the omission is noticed.
+
+    ``order`` is the route's own tuple. A code outside the ranking is broken by
+    that order and never alphabetically — sorting side names put `counterpart`
+    ahead of `plant` for no reason anybody chose.
     """
-    if not results:
+    if not outcomes:
         return ResultCode(
             code=ResultCode.PRECONDITION_FAILED, detail="no side evaluated the goal"
         )
+    ordered = [side for side in order if side in outcomes]
+    ordered += [side for side in outcomes if side not in ordered]
     detail = "; ".join(
-        f"{side}: {result.detail or _code_name(result.code)}"
-        for side, result in sorted(results.items())
+        f"{side}: {outcomes[side].code.detail or _code_name(outcomes[side].code.code)}"
+        for side in ordered
     )
-    codes = {result.code for result in results.values()}
-    if codes == {ResultCode.SUCCESS}:
+    codes = [outcomes[side].code.code for side in ordered]
+    if set(codes) == {ResultCode.SUCCESS}:
         return ResultCode(code=ResultCode.SUCCESS, detail=detail)
-    if ResultCode.CANCELLED in codes:
-        return ResultCode(code=ResultCode.CANCELLED, detail=detail)
-    for _side, result in sorted(results.items()):
-        if result.code != ResultCode.SUCCESS:
-            return ResultCode(code=result.code, detail=detail)
+    unranked = [
+        code
+        for code in codes
+        if code != ResultCode.SUCCESS and code not in AGGREGATE_RANKING
+    ]
+    if unranked:
+        return ResultCode(code=unranked[0], detail=detail)
+    for ranked in AGGREGATE_RANKING:
+        if ranked in codes:
+            return ResultCode(code=ranked, detail=detail)
     return ResultCode(code=ResultCode.SUCCESS, detail=detail)
+
+
+def _uncommanded_result(skill: _SkillEndpoint, code: ResultCode):
+    """The result for a goal no side was ever sent.
+
+    Every field but the code stays at its default, and that is justified here
+    and only here: this goal commanded nothing, so it took no custody and
+    produced no measurement. `holding=false` after such a refusal is a statement
+    about THIS goal — it did not pick anything up — and not a claim that the
+    gripper is empty, which L5 has no way to know and does not make.
+    """
+    result = skill.action_type.Result()
+    result.result = code
+    return result
+
+
+def _compose_result(
+    skill: _SkillEndpoint, order: tuple[str, ...], outcomes: Mapping[str, _SideOutcome]
+):
+    """Build the operator's result from one result per side, field by field.
+
+    **The rule, and it is applied per field rather than per message.**
+
+    * The code is :func:`_aggregate`'s.
+    * A CUSTODY field is the logical OR over the dispatched sides — *somebody is
+      holding it* — with a side that returned no result counting as holding.
+      Never the type default: ADR-0038 decision 5 and ADR-0046 both key on this
+      bit, and in 2.B the gripper is physical.
+    * A MEASUREMENT field is one side's number and is not aggregable, so the
+      plant's is forwarded whole (ADR-0044 clause 5) and the `detail` says so.
+      Where the plant returned nothing, none is forwarded and the `detail` says
+      that instead — a `PoseStamped` with an empty `frame_id` is the one signal
+      the typed contract offers for "not measured", and inventing the
+      counterpart's number under the plant's name would be worse than none.
+    """
+    aggregate = _aggregate(order, outcomes)
+    result = skill.action_type.Result()
+
+    for field in CUSTODY_FIELDS.get(skill.field, ()):
+        held = [
+            True if outcomes[side].payload is None
+            else bool(getattr(outcomes[side].payload, field))
+            for side in order
+            if side in outcomes
+        ]
+        if (
+            aggregate.code == ResultCode.SUCCESS
+            and not any(held)
+            and field in IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS.get(skill.field, ())
+        ):
+            # Every side said it succeeded and none of them says it is holding
+            # the piece. `Pick.action` calls that pair impossible, so one side
+            # is defective, and L5 laundering it in EITHER direction would ship
+            # a custody belief nobody measured. It reports the contradiction.
+            aggregate = ResultCode(
+                code=ResultCode.EXECUTION_FAILED,
+                detail=(
+                    f"a side returned SUCCESS with {field}=false, which "
+                    f"{skill.action_type.__name__}.action calls impossible and a defect "
+                    f"in the skill server; L5 will not report it as a success. "
+                    f"{aggregate.detail}"
+                ),
+            )
+        setattr(result, field, any(held))
+
+    source = outcomes.get(PLANT_SIDE)
+    measurements = measurement_fields(skill.field, skill.action_type)
+    if source is not None and source.payload is not None:
+        for field in measurements:
+            setattr(result, field, getattr(source.payload, field))
+        carried = f"measurements are the {PLANT_SIDE}'s"
+    else:
+        carried = (
+            f"no measurement is carried: the {PLANT_SIDE} returned no result, and "
+            "one side's number may not be reported under the other's name"
+        )
+    result.result = ResultCode(
+        code=aggregate.code,
+        detail=f"{aggregate.detail} [{carried}: {', '.join(measurements) or 'none'}]",
+    )
+    return result
 
 
 def _code_name(code: int) -> str:
@@ -625,20 +829,69 @@ def _mode_name(mode: int) -> str:
     return MODE_NAMES.get(mode, str(mode))
 
 
-def _result_code_of(side_name: str, outcome) -> ResultCode:
+def _outcome_of(side_name: str, outcome) -> _SideOutcome:
+    """Read one side's answer, from the goal STATUS first and the payload second.
+
+    **The status is the authority on whether the goal succeeded**, and until
+    2026-08-31 this function discarded it and read success out of a payload
+    field whose default is `SUCCESS = 0`. rclpy's `ActionServer` catches an
+    exception raised in an execute callback, **aborts the goal and returns a
+    default-constructed result** — so a far side that threw was reported to the
+    operator as a clean success, with `holding=false` beside it.
+
+    The payload is still read, because it is where this project's own vocabulary
+    lives: an abort carrying `MOTION_INTERRUPTED` must reach L4 as that and not
+    as a generic failure (ADR-0037).
+    """
     if outcome is None:
-        return ResultCode(
-            code=ResultCode.CANCELLED,
-            detail=f"side {side_name!r} was still running when this goal ended",
+        return _SideOutcome(
+            code=ResultCode(
+                code=ResultCode.CANCELLED,
+                detail=f"side {side_name!r} was still running when this goal ended",
+            ),
+            payload=None,
         )
-    result = getattr(outcome, "result", None)
-    code = getattr(result, "result", None)
+    payload = getattr(outcome, "result", None)
+    code = getattr(payload, "result", None)
+    status = getattr(outcome, "status", GoalStatus.STATUS_UNKNOWN)
+
+    if status == GoalStatus.STATUS_CANCELED:
+        return _SideOutcome(
+            code=ResultCode(
+                code=ResultCode.CANCELLED,
+                detail=f"side {side_name!r} cancelled the goal",
+            ),
+            payload=payload,
+        )
     if code is None:
-        return ResultCode(
-            code=ResultCode.EXECUTION_FAILED,
-            detail=f"side {side_name!r} returned no ResultCode",
+        # Revived by the status check above: while success was read out of the
+        # payload alone, this branch was unreachable, because a missing payload
+        # produced code 0 and read as SUCCESS.
+        return _SideOutcome(
+            code=ResultCode(
+                code=ResultCode.EXECUTION_FAILED,
+                detail=f"side {side_name!r} returned no ResultCode",
+            ),
+            payload=payload,
         )
-    return code
+    if status == GoalStatus.STATUS_SUCCEEDED:
+        return _SideOutcome(code=code, payload=payload)
+    if code.code != ResultCode.SUCCESS:
+        return _SideOutcome(code=code, payload=payload)
+    # Aborted, or a status nothing here knows about, with a payload that says
+    # SUCCESS. The status wins: a default-constructed result is what an
+    # uncaught exception in an execute callback produces.
+    return _SideOutcome(
+        code=ResultCode(
+            code=ResultCode.EXECUTION_FAILED,
+            detail=(
+                f"side {side_name!r} ended in goal status {status} carrying no "
+                "ResultCode of its own; a default-constructed result is what an "
+                "uncaught exception in an execute callback returns."
+            ),
+        ),
+        payload=payload,
+    )
 
 
 def _wait(future: Future, goal_handle, handles) -> object | None:

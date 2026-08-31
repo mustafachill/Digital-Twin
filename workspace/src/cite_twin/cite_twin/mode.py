@@ -41,6 +41,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from cite_interfaces.msg import ResultCode, TwinMode
+from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, PLANT_SIDE
 
 #: Every mode, under the name every document writes it by. Mapped rather than
 #: formatted, for the reason `cite_facility.topology_server.STATION_TYPES` is: a
@@ -68,24 +69,42 @@ MODE_NAMES: Mapping[int, str] = {
 #: supportable.
 INITIAL_MODE = TwinMode.MODE_SIM
 
-#: The modes whose ENTRY places physical actuation under an authority that was
-#: not previously commanding it, whatever the far side turns out to be.
+#: **THERE IS NO LIST OF GATED MODES IN THIS MODULE, AND THAT IS THE POINT.**
 #:
-#: `cross-cutting-safety.md` owns this list and the criterion behind it; this is
-#: a mapping of two of its three rows onto constants, not a second list. Both
-#: mean physical actuation whoever asks, which is why neither needs the far
-#: side's backend to be resolved before it is judged
-#: (`L5-twin-synchronization.md`, open questions).
+#: There was one until 2026-08-31: `{REAL, CLOSED_LOOP}`, plus `VIRTUAL_LEAD`
+#: against a non-simulated far side, which is `cross-cutting-safety.md`'s three
+#: rows transcribed. **`VALIDATED` was not in it**, and `VALIDATED` dispatches
+#: the operator's goal to both sides by byte-identical code to `VIRTUAL_LEAD`'s
+#: — so on a 2.B plan `SetMode(VIRTUAL_LEAD)` was refused `SAFETY_BLOCKED`,
+#: `SetMode(VALIDATED)` was accepted with no gate and no `force`, and a goal
+#: then reached the physical arm. A transcribed list cannot notice that, and a
+#: seventh mode would rediscover it. Adding `VALIDATED` to the list would be
+#: exactly the resemblance reasoning the criterion was written to replace.
 #:
-#: A fourth candidate is judged against the criterion in that document. It is
-#: not added here by resemblance to these two.
-COMMANDS_HARDWARE_ON_ENTRY = frozenset({TwinMode.MODE_REAL, TwinMode.MODE_CLOSED_LOOP})
-
-#: The third row, which is the one that is NOT self-identifying from the
-#: requested value. Entering it is dangerous exactly where the far side actuates
-#: hardware, which is a per-(asset, side) fact and has to be resolved per asset
-#: before the transition is decided.
-COMMANDS_HARDWARE_AGAINST_A_REAL_FAR_SIDE = TwinMode.MODE_VIRTUAL_LEAD
+#: What replaces it is the criterion itself, computed:
+#:
+#: > a transition belongs here when it **places physical actuation under an
+#: > authority that was not previously commanding it**
+#: > (`cross-cutting-safety.md`)
+#:
+#: read as two questions, both answered by data: *which sides does this mode
+#: command* — `cite_twin.routing.commanded_sides`, the superset of the sides it
+#: dispatches a goal to — and *is any of those sides, for any asset in scope,
+#: something other than a simulation*, which the generated plan states. Nothing
+#: about which modes are dangerous is written in this module, so `mode.py` and
+#: `routing.py` cannot drift apart: a mode added to one is refused by the other
+#: at import.
+#:
+#: **What that changes, stated so it is reviewed rather than discovered.**
+#: Against a non-simulated far side the gate now also covers `VALIDATED` — the
+#: hole — and `SHADOW`, which is the criterion applied where the list never
+#: asked: `TwinMode.msg` says the physical side is commanded in `SHADOW`, so
+#: entering it makes a physical machine the commanded side of this twin.
+#: Against a wholly simulated deployment, `REAL` and `CLOSED_LOOP` are no longer
+#: *reported* as commanding hardware — there is no hardware in such a deployment
+#: for them to command, and the injected check is plan-scoped, so it never
+#: refused them there in any case. **No refusal that used to happen stops
+#: happening; two modes gain one.**
 
 #: The one far-side backend that cannot reach a physical machine.
 #:
@@ -119,11 +138,19 @@ class Deployment:
     cannot support rather than accepting it and producing an invalid metric
     forever. This is that fact, as much of it as the generated plan carries.
 
-    `far_side_backends` is keyed by asset id, and a value of `None` means the
-    zone declares no far side for that asset at all. It comes from the plan's
-    `counterpart_backend`, which a paired zone states for every asset — so
-    `None` means "there is no such side" and never "the model left the key out"
-    (ADR-0041 Decision 3).
+    `backends` is keyed by asset id and then by SIDE NAME, and a value of
+    `None` means the zone declares no such side for that asset at all. It comes
+    from the plan's `backend` and `counterpart_backend`, which a paired zone
+    states for every asset — so `None` means "there is no such side" and never
+    "the model left the key out" (ADR-0041 Decision 3).
+
+    **Both sides and not only the far one.** `require_hardware_opt_in` reads
+    both, for the reason its own docstring gives — a backend is selected per
+    (asset, side) — and a gate that claims to apply the same check has to ask
+    the same question of the same data. That the plant is always `sim` on a
+    paired zone is a refusal in the L0 validator (ADR-0041 Decision 3) and not a
+    fact this module may assume: assuming it is what a list does, and reading it
+    costs one key.
 
     **What the plan does not carry, and what is therefore NOT refused here.**
     ADR-0050 decision 4 leaves open whether a `SHADOW`-only deployment ships a
@@ -134,7 +161,26 @@ class Deployment:
     is a residual and not a check that was decided against.
     """
 
-    far_side_backends: Mapping[str, str | None]
+    backends: Mapping[str, Mapping[str, str | None]]
+
+    @staticmethod
+    def paired(far_side_backends: Mapping[str, str | None]) -> Deployment:
+        """A zone whose plant is simulated, stated by far-side backend alone.
+
+        The shape of every paired zone this repository can generate, and the one
+        a test states most readably. A constructor and not the representation —
+        nothing downstream stops asking per side.
+        """
+        return Deployment(
+            {
+                asset: {PLANT_SIDE: SIMULATION_BACKEND, COUNTERPART_SIDE: backend}
+                for asset, backend in far_side_backends.items()
+            }
+        )
+
+    def backend(self, asset: str, side: str) -> str | None:
+        """What ``side`` loads for ``asset``, or `None` where there is no such side."""
+        return self.backends[asset].get(side)
 
     def assets_in_scope(self, asset_id: str) -> tuple[str, ...]:
         """Return the assets a request naming ``asset_id`` decides for.
@@ -146,12 +192,12 @@ class Deployment:
         an answer for the third (`cross-cutting-safety.md`).
         """
         if asset_id == "":
-            return tuple(sorted(self.far_side_backends))
-        if asset_id not in self.far_side_backends:
+            return tuple(sorted(self.backends))
+        if asset_id not in self.backends:
             raise ModeError(
                 ResultCode.PRECONDITION_FAILED,
                 f"no asset {asset_id!r} in this zone; it has "
-                f"{', '.join(repr(name) for name in sorted(self.far_side_backends))}.",
+                f"{', '.join(repr(name) for name in sorted(self.backends))}.",
             )
         return (asset_id,)
 
@@ -159,19 +205,40 @@ class Deployment:
         """Whether every asset the request decides for has a far side at all."""
         assets = self.assets_in_scope(asset_id)
         return bool(assets) and all(
-            self.far_side_backends[asset] is not None for asset in assets
+            self.backend(asset, COUNTERPART_SIDE) is not None for asset in assets
         )
 
-    def physical_far_sides(self, asset_id: str) -> tuple[str, ...]:
-        """Return the assets in scope whose far side actuates hardware, sorted.
-
-        An allowlist: anything that is not :data:`SIMULATION_BACKEND` is
-        hardware. A far side that does not exist is not hardware.
-        """
+    def assets_without_a_far_side(self, asset_id: str) -> tuple[str, ...]:
+        """The assets in scope for which this zone declares no counterpart."""
         return tuple(
             asset
             for asset in self.assets_in_scope(asset_id)
-            if (backend := self.far_side_backends[asset]) is not None
+            if self.backend(asset, COUNTERPART_SIDE) is None
+        )
+
+    def physical_sides_commanded(self, mode: int, asset_id: str) -> tuple[str, ...]:
+        """Name every (asset, side) ``mode`` commands that is not a simulation.
+
+        **The gate, as data.** Which sides a mode commands is
+        `cite_twin.routing`'s; what each side loads is the generated plan's;
+        this function does the intersection and knows nothing about which modes
+        are dangerous.
+
+        An allowlist and never a denylist: anything that is not
+        :data:`SIMULATION_BACKEND` is hardware, so a backend nobody anticipated
+        is refused rather than silently permitted. A side that does not exist
+        commands nothing.
+
+        Named `(asset, side)` and not by asset alone, because that is the
+        granularity at which a backend is selected, and because a refusal that
+        cannot say *which side* of which asset is the physical one sends its
+        reader to look at the wrong half of the cell.
+        """
+        return tuple(
+            f"{asset} ({side} {backend!r})"
+            for asset in self.assets_in_scope(asset_id)
+            for side in commanded_sides(mode)
+            if (backend := self.backend(asset, side)) is not None
             and backend != SIMULATION_BACKEND
         )
 
@@ -283,9 +350,7 @@ class ModeAuthority:
             # monitor is built to report rather than hide.
             if not force:
                 without = ", ".join(
-                    asset
-                    for asset in assets
-                    if self._deployment.far_side_backends[asset] is None
+                    self._deployment.assets_without_a_far_side(asset_id)
                 )
                 raise ModeError(
                     ResultCode.PRECONDITION_FAILED,
@@ -314,17 +379,14 @@ class ModeAuthority:
     def _commands_hardware(self, mode: int, asset_id: str) -> bool:
         """Whether entering ``mode`` places physical actuation under a new authority.
 
-        Evaluated for the mode being ENTERED, so a request for the mode already
-        in force is not a transition and the caller above answers it before this
-        value is used.
+        The criterion, computed — see the block comment where the list used to
+        be. Evaluated for the mode being ENTERED, so a request for the mode
+        already in force is not a transition and the caller above answers it
+        before this value is used.
         """
         if mode == self._mode:
             return False
-        if mode in COMMANDS_HARDWARE_ON_ENTRY:
-            return True
-        if mode == COMMANDS_HARDWARE_AGAINST_A_REAL_FAR_SIDE:
-            return bool(self._deployment.physical_far_sides(asset_id))
-        return False
+        return bool(self._deployment.physical_sides_commanded(mode, asset_id))
 
     def _require_hardware_opt_in(self, mode: int, asset_id: str) -> None:
         try:
@@ -333,8 +395,9 @@ class ModeAuthority:
         # message, and a narrower clause here would be a second statement of
         # which exception type that check raises.
         except Exception as refusal:
-            physical = self._deployment.physical_far_sides(asset_id)
-            named = ", ".join(physical) if physical else "this zone"
+            named = ", ".join(
+                self._deployment.physical_sides_commanded(mode, asset_id)
+            )
             raise ModeError(
                 ResultCode.SAFETY_BLOCKED,
                 f"entering {MODE_NAMES[mode]} would place physical actuation under an "

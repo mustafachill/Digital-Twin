@@ -71,6 +71,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
+from rclpy.task import Future
 
 #: The fixed root of every name in this system.
 #:
@@ -115,6 +116,105 @@ if set(SKILL_ACTION_TYPES) != _DECLARED:
         f"lists have drifted: the plan declares {sorted(_DECLARED)} and this module knows "
         f"{sorted(SKILL_ACTION_TYPES)}. A skill L5 does not know about is a skill an "
         "operator cannot reach through the twin boundary, silently."
+    )
+
+
+#: **Which result field of each action states CUSTODY of a work-piece.**
+#:
+#: L5 aggregates two sides into one result, so every field of that result is a
+#: statement L5 is making about two cells at once, and the fields below are the
+#: ones a wrong statement is dangerous in. This project's recovery logic keys on
+#: exactly this bit: ADR-0046 refuses a retry for a station that still holds its
+#: piece, and ADR-0038 decision 5 records what a retry begun with a wrong
+#: custody belief does — `Pick`'s first physical act is to open the gripper, at
+#: the home pose, dropping a part no planner knows is held.
+#:
+#: **Until 2026-08-31 L5 built a fresh result, set `.result`, and shipped every
+#: other field at its type default.** So a `Pick` returning `SUCCESS` carried
+#: `holding=false` — the state `Pick.action`'s own comment calls *"impossible
+#: and would be a defect in the skill server"* — and a `Transfer` returning
+#: `TIMEOUT` carried `still_holding=false`, which that action documents as the
+#: upstream robot having released ownership. **The belief was not merely wrong;
+#: it was manufactured**, and in 2.B the gripper is physical.
+#:
+#: The aggregate is the LOGICAL OR over the sides the goal was dispatched to —
+#: *somebody is holding it* — and a dispatched side that returned no result at
+#: all counts as holding, because unknown custody has to fall on the side that
+#: makes L4 escalate rather than the side that makes it open a gripper.
+CUSTODY_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "move_to": (),
+    "pick": ("holding",),
+    "place": (),
+    "grasp": ("holding",),
+    "transfer": ("still_holding",),
+}
+
+#: The custody fields on which `SUCCESS` and `false` cannot both be true.
+#:
+#: `Pick.holding` and nothing else, because `Pick.action` is the one that says
+#: so: "false with SUCCESS is impossible and would be a defect in the skill
+#: server". `Grasp.holding` is legitimately false on a SUCCESS — an open command
+#: succeeds holding nothing — and `Transfer.still_holding` is false on a
+#: SUCCESS by definition, the piece having been handed over.
+#:
+#: Where a side returns that impossible pair, L5 does not launder it in either
+#: direction: it refuses the SUCCESS and names the side (see `_compose_result`).
+IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS: Mapping[str, tuple[str, ...]] = {
+    "pick": ("holding",),
+}
+
+
+def _refuse_an_undeclared_custody_field() -> None:
+    """Fail the import when a result grows a boolean nothing has classified.
+
+    A boolean on an action result is custody-shaped, and the defect this whole
+    table exists to fix was a boolean shipped at its type default. So the rule
+    is not "list the ones you know about": every boolean on every routed
+    result must be declared here, and a new one fails this import until
+    somebody decides what an aggregate of two sides means for it.
+    """
+    for field, action_type in SKILL_ACTION_TYPES.items():
+        declared = set(CUSTODY_FIELDS.get(field, ()))
+        booleans = {
+            name
+            for name, kind in action_type.Result.get_fields_and_field_types().items()
+            if kind == "boolean"
+        }
+        if booleans != declared:
+            raise ImportError(
+                f"{action_type.__name__}.Result declares boolean field(s) "
+                f"{sorted(booleans)} and cite_twin classifies {sorted(declared)} as "
+                "custody. Every boolean on a routed result must be decided: L5 "
+                "aggregates two sides, and a boolean it has not decided about ships "
+                "at its type default, which is how a manufactured custody belief "
+                "reaches L4 (ADR-0038 decision 5, ADR-0046)."
+            )
+        for name in set(IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS.get(field, ())) - declared:
+            raise ImportError(
+                f"{action_type.__name__}.Result has no custody field {name!r}."
+            )
+
+
+_refuse_an_undeclared_custody_field()
+
+
+def measurement_fields(field: str, action_type: type) -> tuple[str, ...]:
+    """Every result field that is one side's MEASUREMENT rather than an aggregate.
+
+    Derived as "not the result code, and not custody", so a field added to an
+    action is treated as a measurement rather than being silently dropped — and
+    a boolean cannot arrive this way, the import check above having refused it.
+
+    A measurement is not aggregable: a pose reached by two arms is two poses,
+    and their mean is a place neither arm went. L5 therefore forwards ONE
+    side's, the plant's, because that is the side the operator is on (ADR-0044
+    clause 5) — and where the plant returned nothing, forwards none, leaving the
+    fields at their defaults with the result's `detail` saying so.
+    """
+    return tuple(
+        name
+        for name in action_type.Result.get_fields_and_field_types()
+        if name != "result" and name not in CUSTODY_FIELDS.get(field, ())
     )
 
 
@@ -209,14 +309,23 @@ class SideContext:
     question the compiler will not answer — *which context is this call on?* —
     is answered by which object the call went through.
 
-    **The executor is multi-threaded and the reason is deliberate.** L5's
-    operator endpoint dispatches a goal and then waits for two far-side goals to
-    finish. That wait is inside a callback, which CLAUDE.md §10 forbids doing on
-    a single-threaded executor with a default callback group, and would deadlock
-    on the plant's own side: the responses being waited for need the same
-    executor that is blocked. A multi-threaded executor with reentrant groups is
-    the shape that makes the wait safe, and it is chosen here rather than
-    discovered later.
+    **NO IN-FLIGHT GOAL OCCUPIES A THREAD OF THIS EXECUTOR**, and that is the
+    property the stop path rests on rather than the thread count below. A goal's
+    unbounded wait runs on a thread of L5's own (:func:`off_executor`) and the
+    callback that started it yields immediately, so a cancel, a `SetMode` call
+    and the divergence timer are served whatever is in flight.
+
+    It was not so until 2026-08-31. Every in-flight goal parked a thread of this
+    pool for as long as its far sides took, the cancel that the README called
+    *"the bound"* is itself executor work, and the bound was therefore starved by
+    the thing it was meant to bound: two blocking handlers on a two-thread
+    executor were measured serving **1 timer tick in 3 s where 15 were due**.
+    Raising the thread count would have moved the number at which that happens
+    and not removed it.
+
+    The executor stays multi-threaded and the callback groups stay reentrant,
+    because concurrency is still wanted between a cancel, a service call and a
+    timer — but nothing here depends on how many threads there are.
     """
 
     def __init__(self, side: SideAddress, node_name: str = NODE_NAME) -> None:
@@ -290,6 +399,47 @@ def _signal_handlers_installed() -> bool:
 def _mark_signal_handlers_installed() -> None:
     with _INSTALLED:
         _INSTALLED_FLAG[0] = True
+
+
+def off_executor(executor, work, name: str) -> Future:
+    """Run ``work`` on a thread of L5's own and hand back a Future to await.
+
+    **The whole of the stop-path fix, in one function.** An `rclpy` action
+    server may declare a coroutine execute callback; awaiting inside it returns
+    the executor thread to the pool until the awaited Future completes. So the
+    goal's blocking half — waiting for a far side's server, its acceptance and
+    its result, with no deadline (ADR-0045) — runs here, off the executor
+    entirely, and the executor keeps serving the endpoints that can stop it.
+
+    **ADR-0045's rule is not reversed by this.** There is still no deadline on
+    the far side. What changed is where the waiting happens: not in the pool
+    that also has to answer the cancel.
+
+    **One thread per in-flight goal, and that is the cost.** It is bounded by
+    how many goals an operator has outstanding and by nothing else, which is
+    worse than a pool and better than the pool it replaced — a queued goal would
+    be a second, invisible bound on dispatch, and the previous arrangement spent
+    the same threads out of the one pool the stop path needs.
+
+    The Future is created against ``executor`` because `rclpy.task.Task` refuses
+    to await a future belonging to another executor. It is completed from the
+    worker thread, which is what wakes the awaiting task.
+    """
+    done = Future(executor=executor)
+
+    def run() -> None:
+        try:
+            done.set_result(work())
+        # Broad: this thread is the last frame of a goal, and an exception that
+        # escaped here would be swallowed by `threading` and leave the caller
+        # awaiting a Future nobody will ever complete. Handing it to the Future
+        # re-raises it inside the awaiting callback, where rclpy's own handling
+        # aborts the goal.
+        except BaseException as error:  # noqa: B036
+            done.set_exception(error)
+
+    threading.Thread(target=run, name=name, daemon=True).start()
+    return done
 
 
 def twin_endpoints() -> tuple[str, ...]:

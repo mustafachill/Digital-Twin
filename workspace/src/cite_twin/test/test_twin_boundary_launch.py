@@ -232,19 +232,54 @@ class TestTheTwinBoundary(unittest.TestCase):
         self.assertFalse(response.accepted)
         self.assertEqual(response.result.code, ResultCode.SAFETY_BLOCKED)
 
-    def test_an_accepted_transition_is_published(self):
+    def test_entering_validated_against_a_real_far_side_is_refused(self):
+        """**This test asserted the bypass until 2026-08-31.**
+
+        It read `assertTrue(response.accepted)`, and it passed: the gate was a
+        transcribed list of three modes, `VALIDATED` was not in it, and
+        `VALIDATED` dispatches the operator's goal to both sides by
+        byte-identical code to `VIRTUAL_LEAD`'s. So on this very plan — one
+        physical far side, `CITE_ALLOW_HARDWARE` unset —
+        `SetMode(VIRTUAL_LEAD)` was refused `SAFETY_BLOCKED` and
+        `SetMode(VALIDATED)` was accepted with no gate, after which a goal
+        reached `arm_2`'s physical far side. A passing test is what checked it
+        in.
+
+        What an accepted transition looks like is now asserted where one is
+        possible: `test_twin_boundary_paired_launch.py`, whose counterpart is
+        simulated throughout.
+        """
         self._reset_to_sim()
-        before = len(self.modes)
         response = self._request(TwinMode.MODE_VALIDATED, "measuring the instrument")
-        self.assertTrue(response.accepted, response.result.detail)
-        self.assertEqual(response.current_mode, TwinMode.MODE_VALIDATED)
-        self._spin_until(
-            lambda: len(self.modes) > before, "the new mode was published"
-        )
-        latest = self.modes[-1]
-        self.assertEqual(latest.mode, TwinMode.MODE_VALIDATED)
-        self.assertEqual(latest.reason, "measuring the instrument")
-        self.assertFalse(latest.transition_in_progress)
+        self.assertFalse(response.accepted, response.result.detail)
+        self.assertEqual(response.result.code, ResultCode.SAFETY_BLOCKED)
+        self.assertIn(PHYSICAL_ASSET, response.result.detail)
+        self.assertEqual(response.current_mode, TwinMode.MODE_SIM)
+
+    def test_no_mode_but_sim_is_reachable_on_this_plan(self):
+        """The criterion, at the point of transition, against every mode there is.
+
+        Not a list of three: every mode this message declares commands the
+        counterpart except `SIM`, and this plan's counterpart is physical for
+        one asset — so on this deployment the gate refuses all five, and `SIM`
+        is reachable because it is already in force.
+        """
+        self._reset_to_sim()
+        modes = [
+            getattr(TwinMode, name)
+            for name in dir(TwinMode)
+            if name.startswith("MODE_")
+        ]
+        self.assertGreaterEqual(len(modes), 6)
+        for mode in modes:
+            if mode == TwinMode.MODE_SIM:
+                continue
+            response = self._request(mode, "checking every row of the gate")
+            self.assertFalse(response.accepted, f"mode {mode} was accepted")
+            self.assertEqual(
+                response.result.code, ResultCode.SAFETY_BLOCKED, f"mode {mode}"
+            )
+            self.assertEqual(response.current_mode, TwinMode.MODE_SIM)
 
     # ------------------------------------------------------------------ #
     # 2. Command routing

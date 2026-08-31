@@ -22,7 +22,13 @@ nobody has added yet is refused rather than defaulted.
 from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
-from cite_twin.routing import COUNTERPART_SIDE, PLANT_SIDE, reverse_state_flow, route
+from cite_twin.routing import (
+    commanded_sides,
+    COUNTERPART_SIDE,
+    PLANT_SIDE,
+    reverse_state_flow,
+    route,
+)
 import pytest
 
 DECLARED_MODES = [getattr(TwinMode, name) for name in dir(TwinMode) if name.startswith("MODE_")]
@@ -70,6 +76,61 @@ def test_a_seventh_mode_is_refused_rather_than_defaulted() -> None:
     chosen = route(200)
     assert not chosen.accepted
     assert chosen.code == ResultCode.PRECONDITION_FAILED
+
+
+class TestWhichSidesAModeCommands:
+    """The table the hardware gate is computed from (`cite_twin.mode`).
+
+    Not the routing table: this one answers *which side is being driven at
+    all*, including by callers L5 never sees. The gate needs the wider
+    question, because `cross-cutting-safety.md`'s criterion is about physical
+    actuation and not about who placed the call.
+    """
+
+    @pytest.mark.parametrize("mode", DECLARED_MODES)
+    def test_a_side_a_goal_is_dispatched_to_is_a_side_under_command(
+        self, mode: int
+    ) -> None:
+        """**The invariant that makes the two tables one decision.**
+
+        The routing table must be a subset of this one. If a mode dispatched a
+        goal to a side it did not list as commanded, the gate would judge the
+        mode harmless while L5 sent it a goal — which is the shape of the
+        `VALIDATED` hole, in the other direction. The package refuses to import
+        in that state; this is the assertion that says so out loud.
+        """
+        assert set(route(mode).sides) <= set(commanded_sides(mode))
+
+    def test_the_table_written_out_by_hand(self) -> None:
+        """Read off `TwinMode.msg`'s per-mode comment, mode by mode.
+
+        Written down rather than derived, so that a change to the table has to
+        disagree with a reader here before it reaches the gate.
+        """
+        assert commanded_sides(TwinMode.MODE_SIM) == (PLANT_SIDE,)
+        assert commanded_sides(TwinMode.MODE_REAL) == (COUNTERPART_SIDE,)
+        assert commanded_sides(TwinMode.MODE_SHADOW) == (COUNTERPART_SIDE,)
+        for mode in (
+            TwinMode.MODE_VALIDATED,
+            TwinMode.MODE_CLOSED_LOOP,
+            TwinMode.MODE_VIRTUAL_LEAD,
+        ):
+            assert commanded_sides(mode) == (PLANT_SIDE, COUNTERPART_SIDE)
+
+    def test_a_value_that_is_not_a_mode_commands_both_sides(self) -> None:
+        """The conservative answer, for the one caller that can reach it.
+
+        A declared mode missing from the table fails the import, so this only
+        ever answers for an integer that is not a mode — and answering "neither
+        side" there would report an unknown mode as harmless.
+        """
+        assert commanded_sides(200) == (PLANT_SIDE, COUNTERPART_SIDE)
+
+    def test_every_declared_mode_is_in_both_tables(self) -> None:
+        """The import guard's own assertion, so its absence is a failure here too."""
+        for mode in DECLARED_MODES:
+            assert commanded_sides(mode), mode
+            assert route(mode).detail != "", mode
 
 
 class TestTheReverseStateFlow:

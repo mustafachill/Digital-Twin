@@ -26,18 +26,30 @@ answers are driven here without touching the process environment.
 from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
-from cite_twin.mode import Deployment, ModeAuthority
+from cite_twin.mode import Deployment, MODE_NAMES, ModeAuthority
+from cite_twin.routing import commanded_sides, route
 import pytest
 
 #: A Phase 2.A pair: three arms, every far side a second simulation.
-SIMULATED = Deployment({"arm_1": "sim", "arm_2": "sim", "arm_3": "sim"})
+SIMULATED = Deployment.paired({"arm_1": "sim", "arm_2": "sim", "arm_3": "sim"})
 
 #: Phase 2.B's planned state, and the one `cross-cutting-safety.md` insists is
 #: not an edge case: one physical arm beside two simulated ones.
-MIXED = Deployment({"arm_1": "sim", "arm_2": "uf_robot_hardware", "arm_3": "sim"})
+MIXED = Deployment.paired(
+    {"arm_1": "sim", "arm_2": "uf_robot_hardware", "arm_3": "sim"}
+)
 
 #: A zone with no counterpart at all.
-UNPAIRED = Deployment({"arm_1": None})
+UNPAIRED = Deployment.paired({"arm_1": None})
+
+#: Every mode the message declares, read off the message.
+#:
+#: `dir()` rather than `vars()`: rosidl exposes a message's constants as
+#: properties on its METACLASS, so the class's own `__dict__` does not hold them
+#: and a `vars()` scan would silently find nothing and pass.
+ALL_MODES = sorted(
+    getattr(TwinMode, name) for name in dir(TwinMode) if name.startswith("MODE_")
+)
 
 
 def _granted() -> None:
@@ -124,27 +136,109 @@ class TestADeploymentWithNoFarSide:
         assert verdict.accepted
 
 
-class TestTheHardwareGate:
-    """`cross-cutting-safety.md`'s three transitions, at the point of transition."""
+class TestTheGateIsDerivedAndNotListed:
+    """The criterion, applied to every mode the message declares.
 
-    @pytest.mark.parametrize(
-        "mode", [TwinMode.MODE_REAL, TwinMode.MODE_CLOSED_LOOP]
-    )
-    def test_the_two_self_identifying_modes_are_gated_whatever_the_far_side_is(
+    The gate this class holds is not a list of modes. It is
+    `cross-cutting-safety.md`'s criterion computed from two data: which sides a
+    mode commands (`cite_twin.routing`) and what each side loads (the generated
+    plan). These tests are what makes that checkable rather than asserted, and
+    the first of them is the one the branch did not have.
+    """
+
+    @pytest.mark.parametrize("mode", ALL_MODES)
+    def test_every_mode_that_dispatches_a_goal_is_refused_without_the_opt_in(
         self, mode: int
     ) -> None:
-        """REAL and CLOSED_LOOP mean physical actuation whoever asks."""
-        verdict = authority(SIMULATED, _refused).request(mode, "", "because", force=False)
-        assert not verdict.accepted
-        assert verdict.code == ResultCode.SAFETY_BLOCKED
+        """**The regression.** A mode L5 sends a goal in reaches the far arm.
 
-    @pytest.mark.parametrize(
-        "mode", [TwinMode.MODE_REAL, TwinMode.MODE_CLOSED_LOOP]
-    )
-    def test_force_does_not_skip_them(self, mode: int) -> None:
-        verdict = authority(SIMULATED, _refused).request(mode, "", "because", force=True)
-        assert not verdict.accepted
+        Where that far side is physical, entering the mode places physical
+        actuation under an authority that was not commanding it, whatever the
+        mode is called. `VALIDATED` and `VIRTUAL_LEAD` dispatch by
+        byte-identical code, and until 2026-08-31 only the second was gated —
+        `SetMode(VALIDATED)` was accepted against `MIXED` with no opt-in and a
+        goal then reached `arm_2`'s physical far side.
+
+        Driven off `route()` rather than off a list of mode names, so a seventh
+        mode that dispatches a goal fails here on the day it is added.
+        """
+        if not route(mode).accepted:
+            pytest.skip(f"{MODE_NAMES[mode]} dispatches no goal; covered below")
+        verdict = authority(MIXED, _refused).request(mode, "", "because", force=False)
+        assert not verdict.accepted, f"{MODE_NAMES[mode]} reached a physical far side"
         assert verdict.code == ResultCode.SAFETY_BLOCKED
+        assert "arm_2" in verdict.detail
+
+    @pytest.mark.parametrize("mode", ALL_MODES)
+    def test_every_mode_that_commands_a_physical_side_is_refused_without_the_opt_in(
+        self, mode: int
+    ) -> None:
+        """The same question asked of the wider set, which is the criterion's own.
+
+        A mode commands a side whether or not L5 is the caller — `REAL` and
+        `SHADOW` drive the physical side from its own callers — so the gate is
+        computed over `commanded_sides` and this test is driven off the same
+        function. `SIM` is the one mode that commands only the plant.
+        """
+        verdict = authority(MIXED, _refused).request(mode, "", "because", force=False)
+        if "counterpart" in commanded_sides(mode):
+            assert not verdict.accepted, MODE_NAMES[mode]
+            assert verdict.code == ResultCode.SAFETY_BLOCKED
+        else:
+            assert verdict.accepted, verdict.detail
+
+    def test_the_gate_matrix_written_out_by_hand(self) -> None:
+        """The same answers, stated rather than derived, so both can be wrong apart.
+
+        A test that computes its expectation from the table under test proves
+        the plumbing and not the answer. This one writes the answer down: on a
+        cell with one physical far side, every mode but `SIM` is refused, and
+        that includes `SHADOW` — `TwinMode.msg` says the physical side is
+        commanded in it, and the transcribed list never asked.
+        """
+        expected = {
+            TwinMode.MODE_SIM: True,
+            TwinMode.MODE_REAL: False,
+            TwinMode.MODE_SHADOW: False,
+            TwinMode.MODE_VALIDATED: False,
+            TwinMode.MODE_CLOSED_LOOP: False,
+            TwinMode.MODE_VIRTUAL_LEAD: False,
+        }
+        assert set(expected) == set(ALL_MODES), (
+            "a mode was added to TwinMode and this matrix was not updated; decide "
+            "what it commands rather than letting it default"
+        )
+        actual = {
+            mode: authority(MIXED, _refused)
+            .request(mode, "", "because", force=False)
+            .accepted
+            for mode in expected
+        }
+        assert actual == expected
+
+    @pytest.mark.parametrize("mode", ALL_MODES)
+    def test_force_skips_none_of_them(self, mode: int) -> None:
+        """`SetMode.srv`: "Never skips a safety check - no value of this field can do that"."""
+        verdict = authority(MIXED, _refused).request(mode, "", "because", force=True)
+        if "counterpart" in commanded_sides(mode):
+            assert not verdict.accepted, MODE_NAMES[mode]
+            assert verdict.code == ResultCode.SAFETY_BLOCKED
+
+    @pytest.mark.parametrize("mode", ALL_MODES)
+    def test_a_wholly_simulated_deployment_gates_nothing_and_claims_nothing(
+        self, mode: int
+    ) -> None:
+        """No side of such a deployment can actuate anything, so nothing is gated.
+
+        And `commands_hardware` says so. It used to report `True` for `REAL` and
+        `CLOSED_LOOP` here while the plan-scoped check it was gating on could
+        not refuse — a flag that claimed a gate nothing applied.
+        """
+        verdict = authority(SIMULATED, _refused).request(
+            mode, "", "because", force=False
+        )
+        assert verdict.accepted, verdict.detail
+        assert not verdict.commands_hardware
 
     def test_virtual_lead_against_a_simulated_far_side_is_not_gated(self) -> None:
         """The third transition is the only one that is not self-identifying.
@@ -189,7 +283,7 @@ class TestTheHardwareGate:
 
     def test_a_backend_nobody_anticipated_counts_as_hardware(self) -> None:
         """An allowlist: a hardware path is never reachable by omission."""
-        deployment = Deployment({"arm_1": "some_future_driver"})
+        deployment = Deployment.paired({"arm_1": "some_future_driver"})
         verdict = authority(deployment, _refused).request(
             TwinMode.MODE_VIRTUAL_LEAD, "", "because", force=False
         )
@@ -230,12 +324,7 @@ class TestAcceptedTransitions:
         Asked of every constant rather than of a list here, so a seventh mode
         fails this test rather than being silently unreachable.
         """
-        # `dir()` rather than `vars()`: rosidl exposes a message's constants as
-        # properties on its METACLASS, so the class's own __dict__ does not hold
-        # them and a `vars()` scan would silently find nothing and pass.
-        modes = [
-            getattr(TwinMode, name) for name in dir(TwinMode) if name.startswith("MODE_")
-        ]
+        modes = ALL_MODES
         assert len(modes) >= 6
         for mode in modes:
             verdict = authority(SIMULATED, _granted).request(
