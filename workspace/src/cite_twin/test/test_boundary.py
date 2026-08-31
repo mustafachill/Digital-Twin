@@ -27,7 +27,12 @@ against produces no symptom at run time.
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
+from ament_index_python.packages import get_package_share_directory
 from cite_bringup.plan import default_plan_path, load, SkillActions
+import cite_twin
 from cite_twin.boundary import (
     asset_namespace,
     BoundaryError,
@@ -40,6 +45,9 @@ from cite_twin.boundary import (
 import pytest
 
 PLAN = load(default_plan_path("cell_a"))
+
+#: This package's own source, read from where it was installed from.
+PACKAGE_SOURCE = Path(cite_twin.__file__).resolve().parent
 
 
 def side_owned_names() -> set[str]:
@@ -149,6 +157,95 @@ class TestTheAssetNamespaceIsReadOffTheModel:
     def test_it_names_the_asset(self) -> None:
         for manager in PLAN.controller_managers:
             assert asset_namespace(manager).endswith(f"/{manager.asset}")
+
+
+class TestL5StartsNothingAndNothingStartsL5:
+    """ADR-0047 clause 2 in both directions, checked by reading source.
+
+    That record gives process supervision to a component holding no ROS context
+    and defines L5 by *deciding what crosses*. A promise that a component starts
+    no processes is not reviewable; a scan is. `cite_bringup` already has the
+    same shape of guard for its own supervisor, and its reasoning is that one.
+    """
+
+    #: Imports that would mean this package had grown the ability to start a
+    #: process. `launch` and `launch_ros` are here because a
+    #: `launch_ros.actions.Node` inside L5 is the tidiest possible way to break
+    #: the clause.
+    FORBIDDEN_IMPORTS = frozenset(
+        {"subprocess", "multiprocessing", "launch", "launch_ros", "pty"}
+    )
+
+    #: And the ways to start one without importing anything new.
+    FORBIDDEN_CALLS = frozenset(
+        {
+            "os.system",
+            "os.popen",
+            "os.fork",
+            "os.forkpty",
+            "os.execv",
+            "os.execvp",
+            "os.spawnv",
+            "os.spawnvp",
+            "os.posix_spawn",
+        }
+    )
+
+    def test_no_module_here_can_start_a_process(self) -> None:
+        """Parsed rather than grepped, so a mention in prose is not a finding.
+
+        A `grep` for these names fails on the comment that explains why they are
+        forbidden, which is how a guard gets deleted for being wrong.
+        """
+        for module in sorted(PACKAGE_SOURCE.glob("*.py")):
+            tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = {alias.name.split(".")[0] for alias in node.names}
+                elif isinstance(node, ast.ImportFrom):
+                    roots = {(node.module or "").split(".")[0]}
+                elif isinstance(node, ast.Call):
+                    assert _dotted(node.func) not in self.FORBIDDEN_CALLS, (
+                        f"{module.name} calls {_dotted(node.func)}. L5 may not start "
+                        "processes (ADR-0047 clause 2), and a mode may not "
+                        "instantiate anything (ADR-0050 decision 4)."
+                    )
+                    continue
+                else:
+                    continue
+                forbidden = roots & self.FORBIDDEN_IMPORTS
+                assert not forbidden, (
+                    f"{module.name} imports {sorted(forbidden)}. L5 may not start "
+                    "processes (ADR-0047 clause 2), and a mode may not instantiate "
+                    "anything (ADR-0050 decision 4)."
+                )
+
+    def test_no_bring_up_starts_the_twin_boundary(self) -> None:
+        """A solo bring-up must be exactly what it was before this package existed.
+
+        L5 is a paired component: it needs a zone declaring two sides, and the
+        shipped model declares one. A launch graph that started it would fail
+        every single-sided bring-up, which is every bring-up anyone runs.
+        """
+        launch_file = (
+            Path(get_package_share_directory("cite_bringup"))
+            / "launch"
+            / "simulation.launch.py"
+        )
+        assert launch_file.is_file(), launch_file
+        assert "cite_twin" not in launch_file.read_text(encoding="utf-8")
+
+
+def _dotted(node: ast.expr) -> str:
+    """Render `os.system` from the AST node that calls it, or "" for anything else."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return ""
+    parts.append(node.id)
+    return ".".join(reversed(parts))
 
 
 def test_every_skill_the_plan_declares_is_routable() -> None:
