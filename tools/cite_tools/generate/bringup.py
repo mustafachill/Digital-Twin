@@ -42,6 +42,16 @@ class _ManagerView:
     counterpart_backend: str | None
     hosted_by: str
     description_topic: str
+    #: Where this asset's joint state arrives, which is `joint_state_broadcaster`'s
+    #: own topic under the controller manager's namespace.
+    #:
+    #: Emitted for the same reason `description_topic` is: a consumer that
+    #: composed the name itself would be the second place it is written, and
+    #: renaming it would leave that consumer reporting nothing while looking
+    #: correct. L5's divergence monitor had exactly that hand-written leaf, and
+    #: its failure mode is a monitor that reports UNMEASURED forever - which is
+    #: also what a healthy monitor reports before a side is up.
+    joint_state_topic: str
     description: str
     spawn_xyz_m: str
     spawn_rpy_rad: str
@@ -373,6 +383,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             # manager per model is what keeps a manager from claiming hardware
             # that belongs to another arm.
             description_topic=f"{asset.namespace}/robot_description",
+            joint_state_topic=f"{asset.namespace}/joint_states",
             description=(f"package://cite_generated/description/{cell.zone}_{asset.id}.urdf.xacro"),
             spawn_xyz_m=" ".join(fmt(v) for v in asset.world_pose.xyz_m),
             spawn_rpy_rad=" ".join(fmt(v) for v in asset.world_pose.rpy_rad),

@@ -79,6 +79,7 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_1/robot_description
+      joint_state_topic: /cite/cell_a/arm_1/joint_states
       description: package://cite_generated/description/cell_a_arm_1.urdf.xacro
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model
@@ -213,6 +214,7 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_2/robot_description
+      joint_state_topic: /cite/cell_a/arm_2/joint_states
       description: package://cite_generated/description/cell_a_arm_2.urdf.xacro
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model
@@ -347,6 +349,7 @@ plan:
       # the spawner's service-availability wait is the synchronisation point.
       hosted_by: simulator
       description_topic: /cite/cell_a/arm_3/robot_description
+      joint_state_topic: /cite/cell_a/arm_3/joint_states
       description: package://cite_generated/description/cell_a_arm_3.urdf.xacro
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model

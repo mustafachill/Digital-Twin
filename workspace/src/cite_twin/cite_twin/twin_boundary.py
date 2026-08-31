@@ -94,7 +94,6 @@ from cite_twin.boundary import (
     CUSTODY_FIELDS,
     off_executor,
     IMPOSSIBLE_WHEN_FALSE_ON_SUCCESS,
-    JOINT_STATE_INTERFACE,
     measurement_fields,
     operator_endpoint,
     SideContext,
@@ -344,7 +343,10 @@ class TwinBoundary:
         self._subscriptions = []
         for side_name, side in self._sides.items():
             for manager in plan.controller_managers:
-                topic = f"{asset_namespace(manager)}/{JOINT_STATE_INTERFACE}"
+                # The plan's own name. Composing it here would be the second
+                # place it is written, and a rename would leave this monitor
+                # reporting UNMEASURED forever while looking correct.
+                topic = manager.joint_state_topic
                 self._subscriptions.append(
                     side.node.create_subscription(
                         JointState,

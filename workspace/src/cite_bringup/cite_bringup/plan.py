@@ -322,6 +322,9 @@ class ControllerManager:
     counterpart_backend: str | None
     hosted_by: str
     description_topic: str
+    #: Where this asset's joint state is published, stated by the plan rather
+    #: than composed by a consumer (see the generator's own note).
+    joint_state_topic: str
     description: Path
     spawn_xyz_m: tuple[float, float, float]
     spawn_rpy_rad: tuple[float, float, float]
@@ -926,6 +929,7 @@ def _manager(entry: object, index: int) -> ControllerManager:
         counterpart_backend=_optional(entry, "counterpart_backend"),
         hosted_by=_require(entry, "hosted_by", where),
         description_topic=_require(entry, "description_topic", where),
+        joint_state_topic=_require(entry, "joint_state_topic", where),
         description=resolve_uri(_require(entry, "description", where)),
         spawn_xyz_m=_triple(_require(entry, "spawn_xyz_m", where), "spawn_xyz_m", where),
         spawn_rpy_rad=_triple(_require(entry, "spawn_rpy_rad", where), "spawn_rpy_rad", where),

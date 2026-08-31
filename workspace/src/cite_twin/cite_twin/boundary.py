@@ -269,18 +269,6 @@ def asset_namespace(manager: ControllerManager) -> str:
     return namespace
 
 
-#: The interface an arm's joint state arrives on, under the asset's namespace.
-#:
-#: **A leaf written by hand, and the one name in this package that the plan does
-#: not carry.** It is `joint_state_broadcaster`'s own topic, formed upstream, and
-#: the generated plan states the broadcaster's controller name without stating
-#: what it publishes. So this is a second statement of a name in the sense P1
-#: cares about, mitigated only by the namespace above being read rather than
-#: composed. What closes it is the plan carrying the topic, which is generator
-#: work and is deliberately not done here.
-JOINT_STATE_INTERFACE = "joint_states"
-
-
 @dataclass(frozen=True)
 class SideAddress:
     """Which side, and which ROS domain it is on.

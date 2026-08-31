@@ -123,6 +123,7 @@ def test_stage_grouping_is_deterministic() -> None:
         counterpart_backend=None,
         hosted_by="simulator",
         description_topic="/robot_description",
+        joint_state_topic="/cite/cell_a/arm_1/joint_states",
         description=Path("/dev/null"),
         spawn_xyz_m=(0.0, 0.0, 0.0),
         spawn_rpy_rad=(0.0, 0.0, 0.0),
@@ -190,6 +191,7 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
                     "backend": "sim",
                     "hosted_by": "simulator",
                     "description_topic": "/robot_description",
+                    "joint_state_topic": "/cite/cell_a/arm_1/joint_states",
                     "description": (
                         "package://cite_generated/description/cell_a_arm_1.urdf.xacro"
                     ),

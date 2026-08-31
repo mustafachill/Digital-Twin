@@ -158,6 +158,22 @@ class TestTheAssetNamespaceIsReadOffTheModel:
         for manager in PLAN.controller_managers:
             assert asset_namespace(manager).endswith(f"/{manager.asset}")
 
+    def test_the_joint_state_topic_comes_from_the_plan(self) -> None:
+        """**R-04.** The one leaf this package used to write by hand.
+
+        `JOINT_STATE_INTERFACE = "joint_states"` was guarded by nothing:
+        renaming it to `"joint_state"` left every test green, and the failure
+        mode is a monitor that reports UNMEASURED forever - which is exactly
+        what a healthy monitor reports before a side is up, and exactly what
+        the launch test asserts is correct. The generator now emits the topic
+        beside `description_topic` and L5 reads it.
+        """
+        for manager in PLAN.controller_managers:
+            assert manager.joint_state_topic.startswith(
+                f"{asset_namespace(manager)}/"
+            ), manager.asset
+            assert manager.joint_state_topic != manager.description_topic
+
 
 class TestL5StartsNothingAndNothingStartsL5:
     """ADR-0047 clause 2 in both directions, checked by reading source.
@@ -166,59 +182,178 @@ class TestL5StartsNothingAndNothingStartsL5:
     and defines L5 by *deciding what crosses*. A promise that a component starts
     no processes is not reviewable; a scan is. `cite_bringup` already has the
     same shape of guard for its own supervisor, and its reasoning is that one.
+
+    **WHAT THE FIRST VERSION OF THIS GUARD MISSED**, each verified by mutation
+    on 2026-08-31 - every one of them was inserted into a module of this package
+    and left the suite green:
+
+    * `from os import system`, which the import branch classified as an import
+      of `os` and the call branch never saw, because `system(...)` has no dot.
+    * `import os as _o` followed by `_o.system(...)`, for the same reason in
+      reverse: the dotted name did not match a list written in terms of `os`.
+    * `os.execl` and `os.posix_spawnp`, siblings of names the list did contain.
+      A list of nine functions from a module that has thirty is a list that will
+      be wrong again, so the rule is now a shape and not a roster.
+    * `importlib.import_module` and `__import__`, which fetch a module the
+      scanner cannot see the name of.
+    * `asyncio.create_subprocess_exec`.
+
+    **And it followed nothing.** L5 imports `cite_bringup`, and two modules of
+    that package - `pair.py` and `gz.py` - import `subprocess` because starting
+    processes is their job. Importing one of them would have given L5 the
+    ability while every module of this package stayed clean. The scan now walks
+    the first-party import graph from this package's own modules, so what is
+    checked is what L5 can reach rather than what L5 contains.
     """
 
     #: Imports that would mean this package had grown the ability to start a
     #: process. `launch` and `launch_ros` are here because a
     #: `launch_ros.actions.Node` inside L5 is the tidiest possible way to break
-    #: the clause.
+    #: the clause; `asyncio` because `create_subprocess_exec` is in it.
     FORBIDDEN_IMPORTS = frozenset(
-        {"subprocess", "multiprocessing", "launch", "launch_ros", "pty"}
-    )
-
-    #: And the ways to start one without importing anything new.
-    FORBIDDEN_CALLS = frozenset(
         {
-            "os.system",
-            "os.popen",
-            "os.fork",
-            "os.forkpty",
-            "os.execv",
-            "os.execvp",
-            "os.spawnv",
-            "os.spawnvp",
-            "os.posix_spawn",
+            "subprocess",
+            "multiprocessing",
+            "launch",
+            "launch_ros",
+            "pty",
+            "asyncio",
         }
     )
 
-    def test_no_module_here_can_start_a_process(self) -> None:
+    #: Names in `os` that start a process, as a SHAPE rather than a roster.
+    #:
+    #: Every one of `os`'s process-starting functions is `system`, or begins
+    #: with one of these. A roster of nine was wrong about `execl` and
+    #: `posix_spawnp` on the day it was written.
+    FORBIDDEN_OS_PREFIXES = ("exec", "spawn", "fork", "posix_spawn", "popen")
+    FORBIDDEN_OS_NAMES = frozenset({"system", "startfile"})
+
+    #: Ways to fetch a module whose name this scanner cannot read.
+    OPAQUE_IMPORTS = frozenset({"__import__", "importlib.import_module"})
+
+    #: The first-party packages a module of this one may import. Anything else
+    #: is third-party or standard library and is judged by the rules above.
+    FIRST_PARTY = ("cite_bringup", "cite_facility", "cite_interfaces", "cite_runtime")
+
+    def test_no_module_l5_can_reach_is_able_to_start_a_process(self) -> None:
         """Parsed rather than grepped, so a mention in prose is not a finding.
 
         A `grep` for these names fails on the comment that explains why they are
         forbidden, which is how a guard gets deleted for being wrong.
         """
-        for module in sorted(PACKAGE_SOURCE.glob("*.py")):
-            tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    roots = {alias.name.split(".")[0] for alias in node.names}
-                elif isinstance(node, ast.ImportFrom):
-                    roots = {(node.module or "").split(".")[0]}
-                elif isinstance(node, ast.Call):
-                    assert _dotted(node.func) not in self.FORBIDDEN_CALLS, (
-                        f"{module.name} calls {_dotted(node.func)}. L5 may not start "
-                        "processes (ADR-0047 clause 2), and a mode may not "
-                        "instantiate anything (ADR-0050 decision 4)."
+        for module, reached_from in sorted(_reachable_modules(self.FIRST_PARTY)):
+            self._check(module, reached_from)
+
+    def test_the_walk_reaches_beyond_this_package(self) -> None:
+        """A guard on the guard: a walk that resolved nothing would pass silently.
+
+        L5 imports `cite_bringup.plan` and `cite_facility.model_info`, so both
+        must be in the set the scan covers. If they are not, the resolver has
+        stopped following imports and the check above is checking one package.
+        """
+        reached = {module.name for module, _ in _reachable_modules(self.FIRST_PARTY)}
+        assert "plan.py" in reached
+        assert "model_info.py" in reached
+
+    def test_it_would_catch_a_module_that_can_start_a_process(self) -> None:
+        """The anti-vacuous half, stated against `cite_bringup.pair` itself.
+
+        That module imports `subprocess` because supervising processes is its
+        job (ADR-0047), and nothing here may import it. Asserting that the
+        scanner objects to it is what shows the scanner objects to anything.
+        """
+        pair = (
+            Path(__file__).resolve().parents[2]
+            / "cite_bringup/cite_bringup/pair.py"
+        )
+        assert pair.is_file(), pair
+        with pytest.raises(AssertionError):
+            self._check(pair, "a deliberate probe")
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "from os import system\nsystem('true')\n",
+            "import os as _o\n_o.system('true')\n",
+            "import os\nos.execl('/bin/true', 'true')\n",
+            "import os\nos.posix_spawnp('true', [], {})\n",
+            "import importlib\nimportlib.import_module('subprocess')\n",
+            "__import__('subprocess')\n",
+            "import asyncio\n",
+            "import subprocess\n",
+            "from launch_ros.actions import Node\n",
+        ],
+    )
+    def test_each_way_around_the_guard_is_now_caught(self, source: str) -> None:
+        """One case per hole the review found, driven through the scanner itself."""
+        with pytest.raises(AssertionError):
+            self._check_source(source, "a probe", "probe.py")
+
+    def test_the_scanner_permits_what_this_package_actually_does(self) -> None:
+        """It must not object to `os.environ`, which L5 reads on every start."""
+        self._check_source(
+            "import os\nfrom pathlib import Path\nvalue = os.environ.get('X')\n",
+            "a probe",
+            "probe.py",
+        )
+
+    def _check(self, module: Path, reached_from: str) -> None:
+        self._check_source(
+            module.read_text(encoding="utf-8"), reached_from, module.name
+        )
+
+    def _check_source(self, source: str, reached_from: str, name: str) -> None:
+        where = f"{name} (reached from {reached_from})"
+        tree = ast.parse(source, filename=name)
+        #: Which local name refers to `os`, so that `import os as _o` is not a
+        #: way past a rule written in terms of the word "os".
+        os_aliases = {"os"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".")[0]
+                    assert root not in self.FORBIDDEN_IMPORTS, (
+                        f"{where} imports {root}. L5 may not start processes "
+                        "(ADR-0047 clause 2), and a mode may not instantiate "
+                        "anything (ADR-0050 decision 4)."
                     )
-                    continue
-                else:
-                    continue
-                forbidden = roots & self.FORBIDDEN_IMPORTS
-                assert not forbidden, (
-                    f"{module.name} imports {sorted(forbidden)}. L5 may not start "
-                    "processes (ADR-0047 clause 2), and a mode may not instantiate "
+                    if alias.name == "os":
+                        os_aliases.add(alias.asname or "os")
+            elif isinstance(node, ast.ImportFrom):
+                root = (node.module or "").split(".")[0]
+                assert root not in self.FORBIDDEN_IMPORTS, (
+                    f"{where} imports from {root}. L5 may not start processes "
+                    "(ADR-0047 clause 2)."
+                )
+                if node.module == "os":
+                    for alias in node.names:
+                        assert not self._starts_a_process(alias.name), (
+                            f"{where} imports os.{alias.name} directly, which is "
+                            "how a call with no dot in it gets past a scanner "
+                            "that only reads dotted names."
+                        )
+            elif isinstance(node, ast.Call):
+                called = _dotted(node.func)
+                assert called not in self.OPAQUE_IMPORTS, (
+                    f"{where} calls {called}, which fetches a module this scan "
+                    "cannot read the name of. L5 may not start processes "
+                    "(ADR-0047 clause 2), and a guard that can be stepped around "
+                    "by spelling a name at runtime is not a guard."
+                )
+                head, _, attribute = called.rpartition(".")
+                assert not (
+                    head in os_aliases and self._starts_a_process(attribute)
+                ), (
+                    f"{where} calls {called}. L5 may not start processes "
+                    "(ADR-0047 clause 2), and a mode may not instantiate "
                     "anything (ADR-0050 decision 4)."
                 )
+
+    def _starts_a_process(self, name: str) -> bool:
+        return name in self.FORBIDDEN_OS_NAMES or name.startswith(
+            self.FORBIDDEN_OS_PREFIXES
+        )
 
     def test_no_bring_up_starts_the_twin_boundary(self) -> None:
         """A solo bring-up must be exactly what it was before this package existed.
@@ -246,6 +381,53 @@ def _dotted(node: ast.expr) -> str:
         return ""
     parts.append(node.id)
     return ".".join(reversed(parts))
+
+
+
+
+def _reachable_modules(first_party: tuple[str, ...]) -> set[tuple[Path, str]]:
+    """Every source file L5 can reach, by following first-party imports.
+
+    Starts at this package's own modules and follows any `import cite_*` or
+    `from cite_*.x import y` to the file behind it, transitively. A module that
+    cannot be resolved to a file - an interface package's generated Python, for
+    instance - is skipped rather than guessed at, and the guard above asserts
+    that the walk still reaches the two modules L5 is known to import, so a
+    resolver that silently stopped resolving fails.
+    """
+    sources = Path(__file__).resolve().parents[2]
+    found: set[tuple[Path, str]] = set()
+    seen: set[Path] = set()
+    queue = [(module, "cite_twin") for module in sorted(PACKAGE_SOURCE.glob("*.py"))]
+    while queue:
+        module, reached_from = queue.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        found.add((module, reached_from))
+        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                # Both spellings: `from cite_bringup.plan import load` names the
+                # module, and `from cite_facility import model_info` names it in
+                # the alias. Reading only the first missed every module imported
+                # the second way.
+                module_name = node.module or ""
+                names = [module_name] + [
+                    f"{module_name}.{alias.name}" for alias in node.names
+                ]
+            else:
+                continue
+            for name in names:
+                parts = name.split(".")
+                if parts[0] not in first_party or len(parts) < 2:
+                    continue
+                candidate = sources / parts[0] / parts[0] / f"{parts[-1]}.py"
+                if candidate.is_file():
+                    queue.append((candidate, module.name))
+    return found
 
 
 def test_every_skill_the_plan_declares_is_routable() -> None:
