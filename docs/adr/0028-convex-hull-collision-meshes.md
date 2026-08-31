@@ -537,12 +537,17 @@ selected while the SRDF's matrix names the vendor's.
 
 None of these is a defect in a hull. Each is a gate that proves less than it appears to.
 
-- **The tested hull-writing loop is dead; the live one is untested.** The write path that has
-  unit tests is not the path `./scripts/hulls --write` takes. What actually writes the files
-  is exercised only by being run by hand.
+- **The tested hull-writing loop is dead; the live one is untested.** `meshes.build` has unit
+  tests and **no production caller** — `grep` finds it in `tools/tests/test_meshes.py` and
+  nowhere else. What `./scripts/hulls --write` actually runs is `cli._hull_set`, which nothing
+  automated exercises. Two write paths, and the tests are on the one that is not used.
 - **`test_a_permuted_input_gives_the_same_bytes` passes with the canonicalisation removed.**
-  The property it names is real and the test does not hold it; the guard that does is
-  vendor-gated and skips on the host job, which is the job most contributors run.
+  Verified: replacing `np.unique(triangles.reshape(-1, 3), axis=0)` in `convex_hull` with the
+  raw reshape leaves that test green, and the **only** test that fails is
+  `test_hulls_match_the_vendor.py::test_re_deriving_reproduces_the_committed_bytes` — which is
+  `@needs_vendor` and skips on a host without the import, the job most contributors run. The
+  new `./scripts/hulls` step in `lint` catches it too and is gated on the same condition, so
+  it adds a caller rather than a platform.
 - **Nothing checks that the declared mesh list stays exhaustive.** The list in L0 is exhaustive
   today and the binding substitutes a root wholesale, so a vendor bump that adds a
   collision-bearing link — or an L0 change that pushes `model_num` to 1305 or above, which
