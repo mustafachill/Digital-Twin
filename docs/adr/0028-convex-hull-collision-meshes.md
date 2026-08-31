@@ -368,14 +368,15 @@ correction of 2026-08-31 below.
 
 **This record said in three places that a convex hull "fills the space between the fingers".
 It does not, and the sentence has to go because it is the hypothesis clause 2 of the
-promotion gate would be tested against.** The three places were this section's Consequences
-bullet, the same claim restated in `model/assets/types/robots/xarm5.yaml`, and
-`CollisionSpec`'s docstring in `tools/cite_tools/model/schema.py`; a fourth restatement, in
+promotion gate would be tested against.** The three places were this record's own
+Consequences bullet under *"What this costs us"*, the same claim restated in
+`model/assets/types/robots/xarm5.yaml`, and `CollisionSpec`'s docstring in
+`tools/cite_tools/model/schema.py`; a fourth restatement, in
 [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s revisit list, is corrected with them.
 All four now point here.
 
 **Why it was wrong, structurally.** Each link is hulled independently — the L0 set names
-thirteen mesh files and `cite-model hulls` derives one hull per file. `left_finger` and
+thirteen mesh files and `./scripts/hulls` derives one hull per file. `left_finger` and
 `right_finger` are two of them, so the space between the fingers is the space between two
 separate collision bodies, and no per-link hull can occupy it. Filling it would take a hull
 over the *assembly*, which this pipeline never computes.
