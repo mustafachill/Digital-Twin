@@ -59,10 +59,10 @@ from cite_interfaces.qos import LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_twin.divergence import UNMEASURED
 import launch
+from launch_ros.actions import Node
 import launch_testing
 import launch_testing.actions
 import launch_testing.markers
-from launch_ros.actions import Node
 import pytest
 import rclpy
 from rclpy.action import ActionClient
@@ -88,7 +88,7 @@ SETTLE_S = 20.0
 
 
 def _paired_plan() -> Path:
-    """The generated plan, plus the counterpart the shipped model does not declare."""
+    """Write the generated plan, plus a counterpart the shipped model lacks."""
     document = yaml.safe_load(default_plan_path("cell_a").read_text())
     plan = document["plan"]
     plan["sides"].append(

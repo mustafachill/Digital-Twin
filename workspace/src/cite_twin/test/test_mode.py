@@ -41,11 +41,11 @@ UNPAIRED = Deployment({"arm_1": None})
 
 
 def _granted() -> None:
-    """The hardware opt-in, given."""
+    """Grant the hardware opt-in."""
 
 
 def _refused() -> None:
-    """The hardware opt-in, withheld, the way `require_hardware_opt_in` withholds it."""
+    """Withhold it, the way `require_hardware_opt_in` withholds it."""
     raise RuntimeError("CITE_ALLOW_HARDWARE is not set to 1")
 
 

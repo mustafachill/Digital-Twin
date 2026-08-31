@@ -29,12 +29,12 @@ from __future__ import annotations
 
 from cite_interfaces.msg import TwinMode
 from cite_twin.divergence import (
-    DEFICIT_BOUND_S,
-    MODES_THAT_DEFINE_THE_COMPARISON,
-    PAIRING_WINDOW_S,
-    Operand,
     assess,
     compare,
+    DEFICIT_BOUND_S,
+    MODES_THAT_DEFINE_THE_COMPARISON,
+    Operand,
+    PAIRING_WINDOW_S,
 )
 import pytest
 
@@ -59,7 +59,9 @@ def operand(
 
 class TestTheGateIsStructurallyShut:
     def test_the_deficit_bound_is_unset_and_that_is_the_decision(self) -> None:
-        """ADR-0049 decision 2 refuses to set it: naming a figure now would be
+        """Keep the deficit bound unset, because that is the decision.
+
+        ADR-0049 decision 2 refuses to set it: naming a figure now would be
         deciding what a campaign will find. `None` is therefore not a missing
         value waiting to be filled in by whoever wants a green sample.
 

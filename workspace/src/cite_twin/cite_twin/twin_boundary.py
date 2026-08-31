@@ -73,29 +73,29 @@ import threading
 import time
 
 from cite_bringup.plan import (
-    Plan,
-    PlanError,
     default_plan_path,
     domain_base,
     load,
+    Plan,
+    PlanError,
     require_hardware_opt_in,
 )
 from cite_facility import model_info
 from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, TwinMode
 from cite_interfaces.qos import LATCHED, STATE
 from cite_interfaces.srv import SetMode
-from cite_runtime.runtime import SHUTDOWN_EXCEPTIONS, caused_by_shutdown
+from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
-    JOINT_STATE_INTERFACE,
-    SKILL_ACTION_TYPES,
-    BoundaryError,
-    SideContext,
     address,
     asset_namespace,
+    BoundaryError,
+    JOINT_STATE_INTERFACE,
     operator_endpoint,
+    SideContext,
+    SKILL_ACTION_TYPES,
 )
-from cite_twin.divergence import UNMEASURED, Operand, assess, compare
-from cite_twin.mode import MODE_NAMES, SIMULATION_BACKEND, Deployment, ModeAuthority
+from cite_twin.divergence import assess, compare, Operand, UNMEASURED
+from cite_twin.mode import Deployment, MODE_NAMES, ModeAuthority, SIMULATION_BACKEND
 from cite_twin.routing import COUNTERPART_SIDE, PLANT_SIDE, route
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -309,8 +309,15 @@ class TwinBoundary:
         response.accepted = verdict.accepted
         response.result = ResultCode(code=verdict.code, detail=verdict.detail)
         response.current_mode = verdict.mode
-        level = self._log.info if verdict.accepted else self._log.warning
-        level(f"SetMode({_mode_name(request.mode)}): {verdict.detail}")
+        # Two call sites rather than one and a chosen method: rclpy memoises a
+        # logger by CALL SITE and raises `Logger severity cannot be changed
+        # between calls` when one line logs at two severities. It killed this
+        # process the first time a transition was refused.
+        line = f"SetMode({_mode_name(request.mode)}): {verdict.detail}"
+        if verdict.accepted:
+            self._log.info(line)
+        else:
+            self._log.warning(line)
         return response
 
     def _publish_mode(self) -> None:

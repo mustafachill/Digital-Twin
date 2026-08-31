@@ -137,7 +137,7 @@ class Deployment:
     far_side_backends: Mapping[str, str | None]
 
     def assets_in_scope(self, asset_id: str) -> tuple[str, ...]:
-        """The assets a request naming ``asset_id`` decides for.
+        """Return the assets a request naming ``asset_id`` decides for.
 
         Empty `asset_id` is facility-wide (`TwinMode.msg`), and a facility-wide
         request is emphatically **not** the per-asset question asked once:
@@ -163,7 +163,7 @@ class Deployment:
         )
 
     def physical_far_sides(self, asset_id: str) -> tuple[str, ...]:
-        """The assets in scope whose far side actuates hardware, sorted.
+        """Return the assets in scope whose far side actuates hardware, sorted.
 
         An allowlist: anything that is not :data:`SIMULATION_BACKEND` is
         hardware. A far side that does not exist is not hardware.

@@ -146,7 +146,7 @@ _TABLE: Mapping[int, Route] = {
 
 
 def route(mode: int) -> Route:
-    """The sides a goal entering L5 in ``mode`` is dispatched to.
+    """Return the sides a goal entering L5 in ``mode`` is dispatched to.
 
     A mode this table does not know about is refused rather than defaulted. The
     project has already added a sixth mode, and a router that treated an
@@ -165,7 +165,7 @@ def route(mode: int) -> Route:
 
 
 def reverse_state_flow(mode: int) -> tuple[str, ...]:
-    """The sides whose STATE crosses into L5 in ``mode``, per the same table.
+    """Return the sides whose STATE crosses into L5 in ``mode``, per the same table.
 
     Consumed by L5 and never republished (ADR-0050 decision 1b). It is the
     monitor's second operand, and its absence is why `VIRTUAL_LEAD` cannot

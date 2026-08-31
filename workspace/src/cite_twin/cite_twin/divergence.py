@@ -184,7 +184,7 @@ class Conditions:
 
     @property
     def valid(self) -> bool:
-        """The conjunction. All five, never four."""
+        """Report the conjunction. All five terms, never four."""
         return (
             self.mode_defines_the_comparison
             and self.operands_paired_in_window
@@ -262,7 +262,7 @@ def _deficit_within_bound(
 
 
 def compare(plant: Operand | None, counterpart: Operand | None) -> Comparison:
-    """The joint-space comparison of two operands, whatever their validity.
+    """Compare two operands in joint space, whatever the sample's validity.
 
     Computed rather than skipped when the conjunction fails, so that the
     arithmetic is exercised on every cycle and cannot rot behind a gate that is

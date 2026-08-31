@@ -97,9 +97,11 @@ class TestTheReverseStateFlow:
 
 
 def test_the_two_side_identities_are_not_positions() -> None:
-    """ADR-0044: a plan whose `sides:` list is addressed by index is one
-    reordering away from handing a caller the counterpart while calling it the
-    plant. Nothing in this module resolves a side by index.
+    """Address a side by identity, never by position.
+
+    ADR-0044: a plan whose `sides:` list is addressed by index is one reordering
+    away from handing a caller the counterpart while calling it the plant.
+    Nothing in this module resolves a side by index.
     """
     assert PLANT_SIDE != COUNTERPART_SIDE
     assert PLANT_SIDE == "plant"

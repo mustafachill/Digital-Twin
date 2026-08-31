@@ -27,15 +27,15 @@ against produces no symptom at run time.
 
 from __future__ import annotations
 
-from cite_bringup.plan import SkillActions, default_plan_path, load
+from cite_bringup.plan import default_plan_path, load, SkillActions
 from cite_twin.boundary import (
+    asset_namespace,
+    BoundaryError,
+    operator_endpoint,
     ROOT,
     SKILL_ACTION_TYPES,
-    TWIN_SCOPE,
-    BoundaryError,
-    asset_namespace,
-    operator_endpoint,
     twin_endpoints,
+    TWIN_SCOPE,
 )
 import pytest
 
@@ -117,9 +117,11 @@ class TestTheOperatorEndpointIsDerivedRatherThanComposed:
             operator_endpoint("/somebody_elses/topic")
 
     def test_the_root_is_not_decided_here(self) -> None:
-        """It is read back off a name rather than composed, so a generated name
-        that stopped starting with `/cite` fails rather than producing a
-        plausible endpoint under a scope nobody reserved.
+        """Read the root back off a name rather than composing one.
+
+        A generated name that stopped starting with `/cite` then fails here
+        rather than producing a plausible endpoint under a scope nobody
+        reserved.
         """
         assert TWIN_SCOPE.startswith(f"{ROOT}/")
 

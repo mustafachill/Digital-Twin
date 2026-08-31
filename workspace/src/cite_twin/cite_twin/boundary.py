@@ -63,7 +63,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 import threading
 
-from cite_bringup.plan import ControllerManager, Plan, SkillActions, resolve_domain_id
+from cite_bringup.plan import ControllerManager, Plan, resolve_domain_id, SkillActions
 from cite_interfaces.action import Grasp, MoveTo, Pick, Place, Transfer
 from cite_interfaces.msg import DivergenceMetrics, TwinMode
 from cite_interfaces.srv import SetMode
@@ -123,7 +123,7 @@ class BoundaryError(Exception):
 
 
 def operator_endpoint(name: str) -> str:
-    """The `/cite/twin/...` name L5 advertises for a side-owned interface.
+    """Form the `/cite/twin/...` name L5 advertises for a side-owned interface.
 
     `/cite/cell_a/arm_1/move_to` becomes `/cite/twin/cell_a/arm_1/move_to`.
 
@@ -148,7 +148,7 @@ def operator_endpoint(name: str) -> str:
 
 
 def asset_namespace(manager: ControllerManager) -> str:
-    """The `/cite/<zone>/<asset>` namespace an asset's interfaces live under.
+    """Return the `/cite/<zone>/<asset>` namespace an asset's interfaces live under.
 
     Read off a name the plan already carries rather than composed, for the same
     reason :func:`operator_endpoint` is: the zone and the asset are stated once,
