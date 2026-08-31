@@ -94,6 +94,18 @@ The lever the second-world campaign names for closing it is
 condition with margin; ADR-0028 is still `Proposed` and `assets/` still holds only its README
 and its manifest.
 
+**[Amended 2026-08-31: the lever has been pulled and it was not enough.]** ADR-0028 is now
+implemented — the hulls exist, are committed, and are selectable per robot type from L0, with
+the shipped default deliberately left on the vendor meshes. A pair was measured on this
+project's development host with each geometry, both sides sampled concurrently over 120 s
+windows; the figures are in ADR-0028's implementation note and are deliberately not copied
+here (P1). **Hulls move a pair materially and do not reach 1.0.** So half 2 is still a
+measured gap and this record still stays `Proposed`; what changed is that the campaign's
+predicted margin does not reproduce on this host, and the sentence above about `assets/` is
+superseded. That measurement is one machine with no thresholds registered in advance — it is
+not the campaign the next paragraph asks for, and it does not become one by being about the
+right quantity.
+
 **What promotion would now take.** The concurrent measurement exists, so what is missing is no
 longer an instrument but a result: both sides sustaining 1.0 in the same window, on a stated
 machine, against thresholds registered before the trial — which is a campaign, not a run. Until

@@ -1,10 +1,17 @@
 # ADR-0028: Generate convex-hull collision meshes as project assets, bound through L0
 
-- **Status:** Proposed — **decided in principle, nothing implemented.** No hull exists:
-  `assets/` contains only `README.md` and `manifest.yaml`, no `assets/meshes/` directory has
-  been created, and the L0 schema has no field through which a collision mesh could be bound
-  to a vendor-described type. Promoted to `Accepted` by the change that lands the first hull
-  and its binding (P7). **[Amended 2026-08-29: that condition is necessary and is no longer
+- **Status:** Proposed — **implemented and not promoted, which is the amended gate working
+  exactly as it was written to.** All four parts of the Decision are in the tree as of
+  2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
+  superseded and is corrected in place below. **The shipped default is still the vendor's
+  meshes**, and it stays there until clause 2 of the promotion gate is satisfied — see the
+  section "Implementation note — 2026-08-31" for what landed and what promotion still needs.
+  **[Superseded 2026-08-31, kept for the record:]** *"decided in principle, nothing
+  implemented. No hull exists: `assets/` contains only `README.md` and `manifest.yaml`, no
+  `assets/meshes/` directory has been created, and the L0 schema has no field through which a
+  collision mesh could be bound to a vendor-described type. Promoted to `Accepted` by the
+  change that lands the first hull and its binding (P7)."*
+  **[Amended 2026-08-29: that condition is necessary and is no longer
   sufficient — see the amendment section named below.]**
   **Amended 2026-08-29, and the amendment tightens the promotion condition rather than the
   decision.** The re-measurement this record demanded now exists and supports it: it is the
@@ -208,6 +215,108 @@ The part that transfers: this record set its own promotion condition in terms of
 behaviour* (the filled concavity). Those are not the same test, and a condition written
 against the work would have been satisfied by a change that never asked the question the
 record itself raised. A promotion condition has to name the measurement, not the commit.
+
+## Implementation note — 2026-08-31: all four parts landed, the default did not move
+
+**Clause 1 of the promotion gate is satisfied and clause 2 is not, so the status stays
+`Proposed`.** That is the amendment above working as written: the change that landed the
+hulls is not the change that may promote this record.
+
+### What is in the tree
+
+- **Decision 1, the pipeline.** `cite_tools.meshes` plus `cite-model hulls`, host-agnostic,
+  unit-tested. Without `--write` it re-derives every declared mesh from the vendor file and
+  compares byte for byte, so a hull that has gone stale against a vendor bump is a failure
+  rather than a silence. `scipy` is a new dependency in layer 3 of `requirements/README.md`.
+- **Decision 2, the assets.** Thirteen hulls under
+  `assets/meshes/collision/xarm5/convex_hull/`, each with the digest of the vendor file it
+  came from, that file's pinned commit and its own digest, in a machine-written `derived:`
+  region of `assets/manifest.yaml`. A new ament package, `cite_description` — charter §7's
+  L1 package, created for the first thing that needed it — installs `assets/meshes` so the
+  URIs resolve.
+- **Decision 3, the L0 binding.** `DescriptionSpec.collision` declares the available sets and
+  which one is bound; the generator emits the root as the *vendor macro parameter the model
+  names*, exactly as every other vendor argument is bound. It is **per robot type**, and the
+  per-link exception this record foresees for the gripper fingers is deliberately not
+  attempted: that exception is *a primitive instead of a mesh*, which is a different
+  mechanism, not a finer granularity of this one.
+- **Decision 4, the validator.** `validate.physical._vendor_collision_is_declared` reads that
+  declaration. A vendor description that declares nothing is an ERROR; one that declares the
+  vendor's own meshes is a WARNING. **WARNING is a compromise and it is recorded as one:** the
+  shipped state is deliberately still the vendor's meshes, and an ERROR would fail
+  `./scripts/validate-model` on a state this record requires the project to stay in until
+  clause 2 is met. `--strict` makes it an error today, and the change that moves the default
+  must make it one unconditionally.
+- **The vendor patch this needed.** `external/patches/03-xarm_ros2-collision-mesh-root.patch`.
+  The vendor's `mesh_path` roots visuals and collisions together and is a property rather than
+  a parameter, so there was no caller-facing way to say where collision geometry lives. The
+  patch adds one parameter, defaulted to empty, and empty means "with the visuals" — so every
+  other caller in the vendor tree expands unchanged.
+
+### The geometry, and where it disagrees with the campaign by two triangles
+
+The count reproduces: **98,292 vendor triangles across the twelve rendering meshes**, exactly
+as the Context section states and as the second-world campaign independently recomputed. The
+hulls come to **9,812** rather than the campaign's 9,810 — a **10.02x** reduction. The two
+triangles are not a discrepancy to resolve: they are the different, and deliberately
+stricter, canonicalisation this pipeline applies to make the output reproducible on a second
+machine. The thirteenth mesh, the vendor's own `end_tool` collision proxy, goes 260 -> 180.
+
+### What reproducibility cost, because the record asked for byte-identity
+
+Decision 1 requires "a regenerated hull is byte-identical or the change is real". Reaching
+that took three canonicalisations and **the third was only visible across machines**: with the
+input and the output sorted, three of the thirteen meshes still hashed differently on macOS
+and in the Linux container under the *same pinned scipy*. Identical hull vertex sets,
+identical face counts, different diagonals across the flat faces. Each facet is therefore
+re-triangulated by the pipeline rather than taken as Qhull cut it. The residual that remains
+is coarser and is stated in the module: Qhull could still *merge* facets differently between
+versions.
+
+### The speed figures, and their strength
+
+**These are not a campaign.** One machine, no thresholds registered in advance, no directory
+in `docs/measurements/`, taken by the implementing agent of this change. They are recorded
+here for the same reason ADR-0043's are, and must be cited with their strength or not at all.
+
+A **pair** was measured the way the second-world campaign measures one — `d(sim)/d(real)` from
+each side's own `/world/cell_a/stats`, both sides sampled concurrently in one 120 s wall
+window, never Gazebo's `real_time_factor` field. Two windows per condition:
+
+| condition | plant | counterpart |
+|---|---|---|
+| vendor meshes | 0.8655, 0.8495 | 0.8697, 0.8541 |
+| convex hulls | 0.9497, 0.9488 | 0.9490, 0.9492 |
+
+**Hulls move it materially and do not reach 1.0.** The gain is about **1.10x** per side, which
+is below the 1.25-2.0 band the second-world campaign's `G` fell in for a solo cell — a
+different quantity on a different host, and not a contradiction, but not a confirmation
+either. **The finding that matters is the negative one: [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s
+requirement that both sides sustain 1.0 concurrently is still NOT met**, on this host, with
+hulls. That record's 2026-08-30 correction predicted 1.162/1.173 from the campaign's figures;
+this host does not reach it. No ceiling, tolerance or `real_time_factor` was touched.
+
+### That the hulls actually render, which is a different question from that they are fast
+
+Verified at runtime rather than by reading the generator. With `select: convex_hull` the
+description published on a **running** cell's `robot_description` carries **13 collision mesh
+references, all under `cite_description`, and 13 visual references, all still under
+`xarm_description`** — so the substitution reached the collision geometry and nothing else. A
+pair came up on hulls, both sides announcing readiness, and `./scripts/scenario bringup`
+passes against them.
+
+### What promotion still needs, stated so it cannot be mistaken for done
+
+**Only clause 2 of the amended gate**, unchanged: the friction-grasp campaign
+([`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md))
+re-run against hull geometry, with its already-written thresholds, and its result published.
+Both geometries now exist and are selectable by one field, which is what that A/B needs.
+
+**Nothing in this section is evidence for it.** No grasp was attempted under hull geometry by
+the change that wrote this, deliberately: a casual opinion about grasp quality from an
+incidental run would poison a campaign whose thresholds are pre-registered. The speed figures
+above are a cost measurement and say nothing about the filled concavity between the pads,
+which is this record's own principal risk.
 
 ## Context
 

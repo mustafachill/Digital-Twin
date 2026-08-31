@@ -62,16 +62,22 @@ account of a flake; each was caught by someone re-running, never by someone read
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **331** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-29).
-  It said **302** until 2026-08-29. **Collection and a run are different numbers, and so are
+  `tools/tests/` holds **411** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-31).
+  It said **302** until 2026-08-29 and **331** until 2026-08-31. **Collection and a run are
+  different numbers, and so are
   these trees**: what `./scripts/test` reports is in the packages bullet below, and its host
   half walks `tests/` as well as `tools/`, so it is a larger number for a reason and not a
   correction to this one.
-- **Nine first-party packages exist**, and `workspace/src/external/` adds the twelve from
-  `xarm_ros2`. `./scripts/build` is a blocking CI step. Eight of the nine are
+- **Ten first-party packages exist**, and `workspace/src/external/` adds the twelve from
+  `xarm_ros2`. `./scripts/build` is a blocking CI step. Eight of the ten are
   `cite_interfaces`, `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`,
   `cite_skills`, `cite_orchestration` and `cite_simulation`. The ninth is
+  **`cite_description`, added 2026-08-31** — charter §7's L1 package, created for the first
+  thing that needed it. It holds **no code and no node**: it installs `assets/meshes` into its
+  share directory so that a `package://` or `file://$(find cite_description)` URI resolves,
+  and it is the only package permitted to install from `assets/`. Its admission test is in
+  its own `package.xml`. The tenth is
   **`cite_test_hardware`, which is test-only and deliberately not in charter §7's tree**:
   §7 is the production structure, and the package is barred from production use by its own
   `on_init` rather than by convention
@@ -82,21 +88,25 @@ account of a flake; each was caught by someone re-running, never by someone read
   mechanism only — signals, shutdown, spin-and-exit for `rclpy` nodes — and exists rather
   than a helper landing in `cite_interfaces`
   ([ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md), charter v1.7).
-  **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_description`, `cite_control` and
-  `cite_hardware` do not exist**; those six plus the eight named above are the fourteen
-  charter §7 lists. `./scripts/doctor`'s `workspace/src` line counts every `package.xml`
-  beneath it, so it reads **9** before `./scripts/bootstrap` has imported the manifest —
-  measured on macOS in this checkout on 2026-08-29. **The post-import figure is now measured
-  at this commit**: `./scripts/build` reported `Summary: 21 packages finished` in this
-  checkout on 2026-08-29, and `find workspace/src -name package.xml | wc -l` agrees at
-  **21** — the nine plus the twelve. This line carried **20** until 2026-08-29, which was
-  CI's figure at `60eb4a5`, before `cite_test_hardware` existed.
+  **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_control` and
+  `cite_hardware` do not exist**; those five plus the nine named above are the fourteen
+  charter §7 lists. `cite_description` was in this list until 2026-08-31.
+  `./scripts/doctor`'s `workspace/src` line counts every `package.xml`
+  beneath it and read **22** in this checkout on 2026-08-31, with the manifest imported. **The
+  pre-import figure is not measured at this commit**: it was 9 on 2026-08-29 and one
+  first-party package has been added since, so anyone quoting it should re-run `doctor` on a
+  checkout that has not bootstrapped rather than take 10 from this sentence.
+  `./scripts/build` reported `Summary: 22 packages finished` in this
+  checkout on 2026-08-31, and `find workspace/src -name package.xml | wc -l` agrees at
+  **22** — the ten plus the twelve. This line carried **20** until 2026-08-29, which was
+  CI's figure at `60eb4a5`, before `cite_test_hardware` existed, and **21** until 2026-08-31.
   **`./scripts/test` counts by a run and reports three numbers, not one**, in this checkout on
-  2026-08-29: `113 passed, 0 failed (shell gate self-tests)`; `367 passed, 1 skipped` for the
+  2026-08-31: `124 passed, 0 failed (shell gate self-tests)`; `447 passed, 1 skipped` for the
   host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
-  collection above; and, over the nine first-party packages, nine per-package summaries
-  totalling **854 tests, 0 failures, 52 skipped**. It builds and tests the nine only — the
-  twelve imported packages are built and not tested here.
+  collection above; and, over the ten first-party packages, ten per-package summaries
+  totalling **962 tests, 0 failures, 52 skipped**. It builds and tests the ten only — the
+  twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
+  2026-08-29.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -191,8 +201,8 @@ account of a flake; each was caught by someone re-running, never by someone read
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1048 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-08-29; it said **661** until then. Most of the difference is the
+  runs, and reported `1085 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-08-31; it said **661** until 2026-08-29 and **1048** until then. Most of the difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
   --name-only 60eb4a5..HEAD -- docs/measurements` counts **368** files added there since the
   figure was taken — so **this number tracks how much evidence is committed and is not a
@@ -649,13 +659,32 @@ account of a flake; each was caught by someone re-running, never by someone read
     is. The OMPL fallback remains unseeded and unseedable. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
     determinism, and do not upgrade the claim on the strength of the planner alone.
-  - **Twelve links per arm use their visual mesh as collision geometry**, which §10 below names
-    as a defect class. **The 0.14 real-time factor used to be quoted here and is not what makes
+  - **Twelve links per arm still use their visual mesh as collision geometry, and as of
+    2026-08-31 that is a SELECTED state rather than the only one.** §10 below names it as a
+    defect class. **The 0.14 real-time factor used to be quoted here and is not what makes
     this urgent** — a one-core allocation is what produced that figure, not collision geometry;
-    see the bullet above and ADR-0028's 2026-08-29 correction. What the case now rests on is
+    see the bullet above and ADR-0028's 2026-08-29 correction. What the case rests on is
     the second-world campaign's measured cost of collision geometry, cited in ADR-0028 rather
-    than copied. ADR-0028 decides the fix and is still `Proposed`: `assets/` holds only its
-    README and manifest.
+    than copied.
+    **ADR-0028 is implemented in full and is still `Proposed`, which is its own amended gate
+    working.** All four parts of its decision are in the tree: a `tools/` pipeline
+    (`cite-model hulls`), thirteen derived hulls committed under
+    `assets/meshes/collision/xarm5/convex_hull/` with per-file provenance in
+    `assets/manifest.yaml`, a per-robot-type `description.collision` field in L0 that selects
+    between the two geometries, and a validator that now fires on a vendor description
+    instead of returning an empty list for it. **`assets/` no longer holds only its README and
+    manifest**, and that sentence stood here until 2026-08-31.
+    **The shipped default is unchanged and moving it is not a one-line edit.** ADR-0028's
+    promotion gate requires the friction-grasp campaign re-run against hull geometry first,
+    and that campaign has not been run — so nothing here is evidence about grasping, and no
+    document may say hulls are safe for this cell. What landing them buys today is that
+    **both geometries exist and are one field apart**, which is what that A/B needs.
+    **The speed figures are in ADR-0028's implementation note and are not copied here (P1).**
+    Their strength: one machine, two 120 s windows per condition, both sides of a pair sampled
+    concurrently, no thresholds registered in advance, no directory in `docs/measurements/`.
+    Their verdict is a negative one worth carrying: **hulls move a pair materially and still do
+    not reach the 1.0 [ADR-0043](docs/adr/0043-hold-both-sides-to-the-wall-clock.md) requires**,
+    so that record's gap is narrowed and not closed. No ceiling or tolerance was touched.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.

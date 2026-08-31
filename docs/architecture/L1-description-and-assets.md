@@ -10,8 +10,14 @@
   body**, and an indexing beam's along-belt mounting is **derived from the part** rather than
   authored ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)); five
   rules in `cite_tools.validate.geometric` refuse the model shapes that would break it.
-  **Not built:** no first-party meshes or materials exist — `assets/` holds only its README
-  and manifest — and the scan pipeline is Phase 3.
+  **Not built:** no first-party *materials* exist and the scan pipeline is Phase 3.
+  **Changed 2026-08-31:** `assets/` no longer holds only its README and manifest. Thirteen
+  **derived** collision meshes are committed under `assets/meshes/collision/xarm5/convex_hull/`
+  — convex hulls of the vendor meshes `external/cite.repos` pins, produced by
+  `cite-model hulls` and installed by the new `cite_description` package. They are *derived*
+  rather than authored, so the source of each shape is still the vendor file; each carries
+  the digest of that file in `assets/manifest.yaml`, and `cite-model hulls` re-derives and
+  compares rather than trusting them.
   **Removed:** the contact-triggered grasp attachment plugin, per
   [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). No `<plugin>` element in any
   generated arm description assists a grasp; see "Grasping is not simulated" below.
