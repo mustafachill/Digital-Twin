@@ -5,7 +5,10 @@
   `TwinMode`, `SetMode`, `DivergenceMetrics`, `ModelVersion` — and every asset instance in
   L0 carries a `registration` block, currently `unregistered` for all three arms. Nothing
   consumes any of it.
-- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
+  **What crosses the boundary, and what a divergence number means, are now recorded** in
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) — which is `Proposed` and
+  implemented by nothing, so this status line is unchanged by it.
+- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
 
 ## Responsibility
 
@@ -109,6 +112,27 @@ there, and no such server exists. See
 [cross-cutting-safety.md](cross-cutting-safety.md), which carries the same three and the
 same residual.
 
+### What crosses the boundary
+
+Decided in [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) and deliberately not
+restated here (P1). The four things a reader of this document needs to know it says, each
+with the clause that carries it:
+
+- **L5 is one process per zone holding one ROS context per side**, and **nothing is
+  republished across the boundary** — what crosses, crosses in L5's own memory. `domain_bridge`
+  is refused for everything L5 does today, on the criterion
+  [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md) clause 3 set: a bridge
+  copies, and cannot refuse, transform, timestamp or gate.
+- **The command that crosses is an L3 goal**, at the action boundary. Nothing below L3 ever
+  crosses — no trajectory, no controller setpoint — and `/clock` never crosses in any mode.
+- **In `VIRTUAL_LEAD` the operator's command enters L5**, under `/cite/twin/`, and is
+  dispatched to both sides' L3. Both sides then plan independently, so the operator is not on
+  present evidence watching the path the far arm will take; ADR-0050 carries the argument and
+  the rejected alternative.
+- **Which side is which is a derivation, not a choice.** On a paired zone the plant is always
+  `sim`, so the mode table's *physical* side is the `counterpart` and its *virtual* side is the
+  `plant`.
+
 ### Divergence measurement is the point
 
 P8: *the twin measures itself.* An unmeasured claim of fidelity is not a claim.
@@ -123,6 +147,15 @@ P8: *the twin measures itself.* An unmeasured claim of fidelity is not a claim.
 
 Each is published continuously, recorded by L6, and trended by L7. **"Our twin is
 accurate" is not a sentence this project is allowed to write without a number next to it.**
+
+**A published number is not a readable one, and the difference is decided in
+[ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md).** A divergence sample compares two
+states that were **independently evaluated from the same command**; `valid` is a conjunction
+over the mode, the pairing window, both sides' clock deficit
+([ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md)), the model version and the
+frame correspondence, so a term with no instrument makes it false. Read that record before
+computing or interpreting one; it also states that `asset_id` is never empty, because there is
+no facility-level divergence number.
 
 ### Registration is what makes measurements transferable
 
@@ -142,6 +175,13 @@ Mirroring across two clocks is meaningless without a shared time base. Simulatio
 correspondence and clock synchronisation (NTP at minimum) on the physical side. A mixed
 time base produces divergence numbers that look plausible and mean nothing.
 
+**The correspondence is decided:** two paired samples are paired on the **wall clock**, never
+on either side's simulated clock, and each side's clock deficit over the window rides with the
+sample ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3, from
+[ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)'s refusal to slave one side's
+clock to the other's and
+[ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md)'s deficit argument).
+
 ## Failure modes
 
 | Failure | How it shows | Detection |
@@ -157,18 +197,21 @@ time base produces divergence numbers that look plausible and mean nothing.
 
 - **Divergence thresholds.** What error is acceptable is an empirical question that needs
   real hardware. Until Phase 2 we can only build the measurement, not set the bound.
-- **Mirroring transport.** Whether physical state reaches the virtual model over plain ROS
-  2 across the lab network, or needs a dedicated bridge with its own QoS and latency
-  budget.
+- **Mirroring transport across a lab network.** The *mechanism* is decided —
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) clause 1, one process holding a
+  context per side — and it was decided against a measurement taken on **one host**
+  ([`2026-08-28-second-world-cost`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+  its Q5). What is still open is 2.B's question: whether a physical cell on the far side of a
+  lab network needs its own QoS and latency budget, which nothing has measured.
 - **What `CLOSED_LOOP` validation actually checks** before permitting physical execution.
   This is the crux of L3-level maturity and deserves its own ADR when Phase 5 approaches.
-- **Whether divergence is defined under `VIRTUAL_LEAD`.** Both sides move, so the metric is
-  in principle computable — but nothing mirrors back, and `DivergenceMetrics.msg` enumerates
-  `SHADOW` and `VALIDATED` as modes it is meaningful in without claiming the list is
-  complete. Whether `valid` is true in this mode is undecided; ADR-0041 does not decide it
-  and neither does this document. Until it is decided, the message's general rule governs —
-  `valid` is false whenever the mode makes divergence undefined — and that rule answers the
-  question conservatively rather than pre-empting it.
+- ~~**Whether divergence is defined under `VIRTUAL_LEAD`.**~~ **Decided** by
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3: `valid` is false, and
+  the reason is structural rather than semantic — the mode is *defined* by there being no
+  reverse flow, so the metric's second operand does not exist. That record also removes
+  `SHADOW` from the modes the metric is meaningful in, against `DivergenceMetrics.msg`'s own
+  header, and puts the obligation to correct that header on the implementing change. **The
+  message still carries the superseded sentence at this commit.**
 - **Whether the far side's backend should be observable alongside the mode.** The other two
   dangerous transitions are self-identifying from the requested value alone: `REAL` and
   `CLOSED_LOOP` mean physical actuation whoever asks. **`VIRTUAL_LEAD` does not.** Its
@@ -180,6 +223,13 @@ time base produces divergence numbers that look plausible and mean nothing.
   exists, must resolve the far side's backend per asset before it decides the transition —
   and for a facility-wide request that means every asset. See
   [cross-cutting-safety.md](cross-cutting-safety.md) and `SetMode.srv`'s header.
-- **Multiple physical assets, partially twinned.** With one real arm and two simulated,
-  what does a facility-level divergence number even mean? Probably per-asset metrics with
-  no aggregate — but it needs deciding rather than defaulting.
+  **One half of this is now decided and the other half is not.**
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 5 puts the far side's
+  backend on the **divergence sample**, so a recording says whether it was taken against
+  hardware. Whether it also belongs beside the **mode**, which is what an operator watches, is
+  untouched by that record and stays open here.
+- ~~**Multiple physical assets, partially twinned.**~~ **Decided** by
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3, in the direction this
+  question guessed and with a reason: per-asset metrics, no aggregate, `asset_id` never empty.
+  Validity is per asset because whether a far side actuates hardware is a per-`(asset, side)`
+  fact, so an aggregate would average numbers whose terms differ.

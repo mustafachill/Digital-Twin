@@ -51,6 +51,8 @@
   [ADR-0028](0028-convex-hull-collision-meshes.md),
   [ADR-0042](0042-partition-gazebo-transport-per-side.md),
   [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md),
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md) (the L5 design this record's open
+  questions were left for),
   [L5](../architecture/L5-twin-synchronization.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   charter §2 (maturity levels), charter §8 (Phase 2), charter §4 (P1, P2, P5, P7, P8)
@@ -703,6 +705,12 @@ and nothing in this project may cite the mode's existence as one.
 
 - **When the `SHADOW` fork is decided.** L5 owes an answer to whether the mode decides that a
   simulator is instantiated at all. This record names the question; it does not answer it.
+  **[2026-08-31: half answered, and the half that is answered is a refusal.
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md) decision 4 decides that the **mode never
+  instantiates anything** — instantiation is a bring-up fact and mode is a runtime knob, on
+  this record's own test — and leaves the fork itself open, restating it: the cheap side in
+  `SHADOW` is the side that *follows*, which under Decision 3's side naming is the **plant**
+  and not the counterpart.]**
 - **When 2.B lands.** The counterpart is replaced by hardware and this record's central claim
   — that the shape of what the plant talks to did not change — is testable for the first
   time. If anything in the L5 interface has to change at that point, this decision failed at

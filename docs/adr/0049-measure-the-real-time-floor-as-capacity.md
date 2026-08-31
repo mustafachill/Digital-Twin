@@ -27,6 +27,8 @@
   [ADR-0042](0042-partition-gazebo-transport-per-side.md),
   [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md),
   [ADR-0011](0011-twin-maturity-model-and-modes.md),
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md) (which answers decision 3's "where that
+  value rides, and what it is called"),
   [L5](../architecture/L5-twin-synchronization.md),
   [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
