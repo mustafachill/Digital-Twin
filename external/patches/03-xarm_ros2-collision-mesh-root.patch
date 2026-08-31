@@ -1,0 +1,121 @@
+# Repo:     external/xarm_ros2
+# Upstream: https://github.com/xArm-Developer/xarm_ros2/issues/ (not yet filed)
+# Reason:   For the xArm variant this project models, the vendor's own
+#           `collision_dir` IS its `visual_dir` (xarm5.urdf.xacro, the `unless`
+#           branch taken when `model_num < 1305`), and the gripper passes one
+#           `mesh_filename` to both `common_link_visual` and
+#           `common_link_collision` unconditionally. Twelve links per arm
+#           therefore collide against a rendering mesh - 98,292 triangles - which
+#           CLAUDE.md §10 names as a defect class and ADR-0028 decides to fix with
+#           convex hulls generated as project assets. There is no caller-facing
+#           way to say where collision meshes live: `mesh_path` roots the visuals
+#           and the collisions together, and it is a property rather than a
+#           parameter. This patch adds the one parameter that lets a caller root
+#           collision geometry somewhere else, and changes nothing else.
+#
+#           What goes wrong without it: the only ways left are to switch the
+#           model to the `xarm5_1305` variant - a different robot, with different
+#           kinematics and inertials, which would silently change what the twin
+#           claims to represent - or to rewrite the vendor descriptions in our own
+#           tree. ADR-0028 rejects both, as options B and C.
+#
+# Removal:  Delete when xarm_ros2 lets a caller root collision meshes separately
+#           from visual meshes, by any spelling. Check `common_link_collision` and
+#           `xarm_device_macro.xacro` on any version bump: if upstream has
+#           parameterised the collision root, this patch will conflict rather than
+#           silently introduce a second one.
+#
+# Backwards compatibility, and it is the property that makes this patch safe.
+# `collision_mesh_path` defaults to the empty string in both places, and empty
+# means "root collision geometry with the visuals". Every existing caller -
+# `xarm_device`, the standalone gripper macros, `uf850`, `lite6`, every entry
+# point in the vendor tree - passes nothing and expands to the same bytes it
+# expanded to before. That is verified in this repository rather than asserted:
+# the generated `cell_a_arm_*.urdf.xacro` still names
+# `.../xarm_description/meshes/...` for all 13 collision meshes with the shipped
+# L0 default, which selects the vendor set.
+#
+# Scope on the hardware path (P2). This one IS symmetric, unlike patch 02.
+# `common_link_collision` is reached identically whichever `ros2_control_plugin`
+# is loaded - the collision geometry of a link is a fact about the link, not about
+# the backend - so a description generated with a hull root collides against hulls
+# on the simulated path and on the physical one alike. The only asymmetry this
+# PATCH introduces is none, and the vendor's own remains: `mesh_path` resolves to
+# `file://` for a Gazebo plugin and `package://` otherwise, and this patch does
+# not touch that.
+#
+# [Corrected 2026-08-31.] This paragraph used to end "the only asymmetry is the
+# vendor's own". That was a claim about the SYSTEM, and it stopped being true the
+# moment cite_tools emitted a root of its own. `generate/description.py` wrote
+# `file://$(find ...)` unconditionally, so with a derived set selected and
+# `backend: real` a description came out with `package://` visuals and `file://`
+# collisions - two halves of one description resolving differently, the collision
+# half an absolute path into the generating machine's install prefix, and that is
+# the half a planner uses. The parameter this patch adds is neutral about the
+# scheme, as it should be; what was wrong was the caller. The scheme is now L0
+# data, `description.collision.root_uri_scheme`, one entry per declared backend
+# and no default. Read this paragraph as a statement about the patch and check
+# the caller separately - that distinction is exactly what the original sentence
+# lost.
+diff --git a/xarm_description/urdf/common/common.link.xacro b/xarm_description/urdf/common/common.link.xacro
+--- a/xarm_description/urdf/common/common.link.xacro
++++ b/xarm_description/urdf/common/common.link.xacro
+@@ -50,18 +50,27 @@
+     </visual>
+   </xacro:macro>
+   
+-  <xacro:macro name="common_link_collision" params="mesh_filename add_mesh_suffix:=true origin_xyz:='0 0 0' origin_rpy:='0 0 0' other_mesh_suffix:=''">
++  <xacro:macro name="common_link_collision" params="mesh_filename add_mesh_suffix:=true origin_xyz:='0 0 0' origin_rpy:='0 0 0' other_mesh_suffix:='' collision_mesh_path:=^|''">
++    <!-- Collision geometry may be rooted somewhere other than the visual meshes.
++
++         `collision_mesh_path` is inherited from the enclosing scope (`^`) and
++         falls back to `mesh_path`, so every existing caller is unaffected: a
++         description that sets nothing collides against exactly the files it
++         collided against before. A caller that does set it replaces the collision
++         root and nothing else - the relative paths below are unchanged, which is
++         what lets one root substitute for another. -->
++    <xacro:property name="collision_root" value="${collision_mesh_path if collision_mesh_path != '' else mesh_path}"/>
+     <collision>
+       <geometry>
+         <xacro:if value="${add_mesh_suffix}">
+-          <mesh filename="${mesh_path}/${mesh_filename}.${mesh_suffix}"/>
++          <mesh filename="${collision_root}/${mesh_filename}.${mesh_suffix}"/>
+         </xacro:if>
+         <xacro:unless value="${add_mesh_suffix}">
+           <xacro:if value="${other_mesh_suffix != ''}">
+-            <mesh filename="${mesh_path}/${mesh_filename}.${other_mesh_suffix}"/>
++            <mesh filename="${collision_root}/${mesh_filename}.${other_mesh_suffix}"/>
+           </xacro:if>
+           <xacro:unless value="${other_mesh_suffix != ''}">
+-            <mesh filename="${mesh_path}/${mesh_filename}"/>
++            <mesh filename="${collision_root}/${mesh_filename}"/>
+           </xacro:unless>
+         </xacro:unless>
+       </geometry>
+diff --git a/xarm_description/urdf/xarm_device_macro.xacro b/xarm_description/urdf/xarm_device_macro.xacro
+--- a/xarm_description/urdf/xarm_device_macro.xacro
++++ b/xarm_description/urdf/xarm_device_macro.xacro
+@@ -39,6 +39,7 @@
+     default_gripper_baud:=2000000 
+     model1300:=false
+     robot_sn:='' 
++    collision_mesh_path:=''
+     mesh_suffix:='stl' 
+     kinematics_suffix:=''
+     gripper_version:='G1'
+@@ -63,6 +64,15 @@
+     <xacro:unless value="${ros2_control_plugin == 'gazebo_ros2_control/GazeboSystem' or ros2_control_plugin == 'ign_ros2_control/IgnitionSystem' or ros2_control_plugin == 'gz_ros2_control/GazeboSimSystem'}">
+       <xacro:property name="mesh_path" value="package://xarm_description/meshes" scope="parent"/>
+     </xacro:unless> 
++
++    <!-- Where collision geometry is rooted, when it is not rooted with the
++         visuals. Empty means "with the visuals", which is what every caller that
++         says nothing gets, and is the behaviour this file had before the
++         parameter existed. Global rather than parent scope because
++         `common_link_collision` is reached through two more macro frames
++         (xarmN_robot -> xarmN_urdf), and a value that stops one frame short is a
++         collision root that is silently ignored. -->
++    <xacro:property name="collision_mesh_path" value="${collision_mesh_path}" scope="global"/>
+ 
+     <!-- include common.link.xacro -->
+     <xacro:include filename="$(find xarm_description)/urdf/common/common.link.xacro" />

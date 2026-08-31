@@ -94,6 +94,18 @@ The lever the second-world campaign names for closing it is
 condition with margin; ADR-0028 is still `Proposed` and `assets/` still holds only its README
 and its manifest.
 
+**[Amended 2026-08-31: the lever has been pulled and it was not enough.]** ADR-0028 is now
+implemented — the hulls exist, are committed, and are selectable per robot type from L0, with
+the shipped default deliberately left on the vendor meshes. A pair was measured on this
+project's development host with each geometry, both sides sampled concurrently over 120 s
+windows; the figures are in ADR-0028's implementation note and are deliberately not copied
+here (P1). **Hulls move a pair materially and do not reach 1.0.** So half 2 is still a
+measured gap and this record still stays `Proposed`; what changed is that the campaign's
+predicted margin does not reproduce on this host, and the sentence above about `assets/` is
+superseded. That measurement is one machine with no thresholds registered in advance — it is
+not the campaign the next paragraph asks for, and it does not become one by being about the
+right quantity.
+
 **What promotion would now take.** The concurrent measurement exists, so what is missing is no
 longer an instrument but a result: both sides sustaining 1.0 in the same window, on a stated
 machine, against thresholds registered before the trial — which is a campaign, not a run. Until
@@ -442,10 +454,16 @@ measurement and should be re-taken on the target machine.
 - **If the friction-grasp re-run says that hulls break the grasp.** Item 1 above rests on
   [ADR-0028](0028-convex-hull-collision-meshes.md), and that record's 2026-08-29 amendment
   gates its own promotion on a measurement that **can fail**: the friction-grasp campaign must
-  be re-run under hull collision geometry, and no grasp has ever been attempted under one. A
-  convex hull fills the space between the gripper fingers, and grasping in this cell is held
-  by friction alone ([ADR-0029](0029-simulated-grasping-by-friction.md)), so the contact
-  surface *is* the mechanism. **If that re-run fails, the only demonstrated path to "both
+  be re-run under hull collision geometry, and no grasp has ever been attempted under one.
+  Grasping in this cell is held by friction alone
+  ([ADR-0029](0029-simulated-grasping-by-friction.md)), so the contact surface *is* the
+  mechanism, and the hull changes it. **[Corrected 2026-08-31: this sentence said that a
+  convex hull "fills the space between the gripper fingers". It does not — each link is
+  hulled separately, so that space lies between two collision bodies, and the aperture at the
+  pads is unchanged to 0.01 mm. What the hull does change is the relief shoulder at each end
+  of each pad; ADR-0028's correction of the same date has the measurements and names the
+  three quantities a re-run must report. The risk to item 1 is unchanged in kind — the
+  contact surface still moves — but it is not either residual the campaign has published.]** **If that re-run fails, the only demonstrated path to "both
   sides sustain 1.0" on a machine of the campaign host's class is gone** — the pair meeting
   the condition met it with hulls, and the same pair with vendor meshes missed it.
   Two fallbacks, named now so that the answer is not improvised then:

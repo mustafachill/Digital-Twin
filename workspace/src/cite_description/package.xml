@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_description</name>
+  <version>0.1.0</version>
+  <description>
+    L1: the project's own description assets, installed so that a `package://`
+    or `file://$(find cite_description)` URI resolves to them.
+
+    This is charter §7's `cite_description`, created for the first thing that
+    needed it: the convex-hull collision meshes ADR-0028 decides on. It holds no
+    code and no node.
+
+    ADMISSION TEST, in the style ADR-0034 and ADR-0040 set for the two packages
+    that came before it, because a package named for a layer will otherwise
+    accumulate whatever that layer touched. Something belongs here only if all
+    three hold:
+
+      1. it is GEOMETRY OR MATERIAL a simulator or a planner loads by URI —
+         a mesh, a material, a texture — and not configuration, code or data;
+      2. it is OURS: authored here, or DERIVED here from a pinned dependency.
+         Third-party geometry is imported by `external/cite.repos` and never
+         copied into this tree (ADR-0008);
+      3. it is NOT generated from the L0 facility model. Everything that is lives
+         in `cite_generated`, whole, and is diffed against a fresh generator run
+         (ADR-0021). A hull is derived from a VENDOR MESH rather than from the
+         model, and `./scripts/validate-model` must keep running on a machine
+         that has no vendor checkout — which is exactly why the two are separate
+         packages rather than one.
+
+    WHAT IT INSTALLS AND WHERE THAT COMES FROM. The files live in `assets/` at
+    the repository root, where ADR-0012's storage policy puts simulator assets and
+    where ADR-0028 says hulls go. This package installs that directory rather than
+    holding a second copy of it, so `assets/` stays the one place an asset lives
+    and this package stays the one place an asset is installed from.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

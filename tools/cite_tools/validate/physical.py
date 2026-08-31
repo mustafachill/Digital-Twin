@@ -51,6 +51,7 @@ def check(model: FacilityModel) -> list[Finding]:
         findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
         findings += _followers_can_still_correct(asset_type)
         findings += _result_timeout_outlasts_the_stall_search(asset_type)
+        findings += _vendor_collision_is_declared(asset_type)
 
         body = asset_type.description.body
         if body is None:
@@ -95,8 +96,11 @@ def _inertia_is_possible(inertial: Inertial, where: str) -> list[Finding]:
     findings: list[Finding] = []
     matrix = _matrix(inertial)
 
-    # Positive definite. eigvalsh is exact enough here and is why scipy is not a
-    # dependency (requirements/tools.txt says so explicitly).
+    # Positive definite. `numpy.linalg.eigvalsh` is exact enough here, so this
+    # check needs nothing beyond numpy — which is what the comment beside numpy's
+    # pin says. It used to add "and is why scipy is not a dependency"; scipy is
+    # one since 2026-08-31, for the hull pipeline (ADR-0028), and this check is
+    # still not why.
     eigenvalues = np.linalg.eigvalsh(matrix)
     if float(eigenvalues.min()) <= 0.0:
         findings.append(
@@ -182,8 +186,75 @@ def _com_inside_geometry(body: Body, where: str) -> list[Finding]:
     return []
 
 
+def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
+    """The other half of the rule below: it reaches a *vendor* description.
+
+    ADR-0028 decision 4. ``_collision_is_not_a_visual_mesh`` returns an empty list
+    for every ``xacro_macro`` type, because it reads ``description.body`` and a
+    vendor-described type has none — so the single most consequential rule in L1
+    could never fire on the twelve links per arm where the failure it names
+    actually occurs. Its silence had been read as evidence for as long as it had
+    existed.
+
+    Nothing here opens a vendor file; the model declares what its links collide
+    against (``CollisionSpec``) and this reads the declaration. Two outcomes:
+
+    * **No declaration at all** is an ERROR. A vendor description whose collision
+      geometry nobody has stated is exactly the state that made this rule silent,
+      and it is the one case where "we do not know" is the answer.
+    * **A declaration of ``vendor_meshes``** is a WARNING, and the severity is the
+      compromise this change makes rather than a judgement that it is mild. It is
+      the shipped state today and stays so deliberately: ADR-0028's promotion gate
+      requires the friction-grasp campaign re-run against hull geometry before the
+      default may move, and an ERROR here would fail ``./scripts/validate-model``
+      on a state this project has decided to remain in until that measurement
+      exists. ``--strict`` turns it into one for anyone who wants the harder
+      question answered. **Promote it to ERROR in the change that moves the
+      default**, and not before.
+    """
+    if not asset_type.emits_vendor_description:
+        return []
+    where = f"types.{asset_type.id}.description.collision"
+    collision = asset_type.description.collision
+    if collision is None:
+        return [
+            error(
+                "vendor-collision-undeclared",
+                where,
+                "a vendor description is emitted for this type and nothing states what "
+                "its links collide against",
+                "L1: a vendor macro is invoked, never ingested, so no check here can "
+                "discover this by reading the vendor's files. Declare it (ADR-0028) or "
+                "the most consequential rule in this layer stays silent on this type.",
+            )
+        ]
+    if collision.selected.kind != "vendor_meshes":
+        return []
+    alternatives = sorted(s.id for s in collision.sets if s.kind != "vendor_meshes")
+    return [
+        warning(
+            "collision-reuses-visual-mesh",
+            where,
+            f"this type's links collide against the vendor's own meshes "
+            f"(set {collision.select!r})",
+            "For the xArm variant this model describes, the vendor's collision_dir IS "
+            "its visual_dir, so those are rendering meshes. ADR-0028 is the decision; "
+            + (
+                f"the set(s) {alternatives} are generated and available."
+                if alternatives
+                else "no alternative set is declared."
+            ),
+        )
+    ]
+
+
 def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[Finding]:
-    """The single most consequential rule in L1, checked mechanically."""
+    """The single most consequential rule in L1, checked mechanically.
+
+    This half covers bodies we author. The vendor half is
+    ``_vendor_collision_is_declared`` above, which reads a declaration because it
+    is not permitted to read a vendor file.
+    """
     body = asset_type.description.body
     if body is None:
         return []

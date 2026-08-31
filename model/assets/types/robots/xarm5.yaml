@@ -80,6 +80,118 @@ asset_type:
       # the physical gripper is bounded too — it is not, and the header says why.
       gripper_max_drive_rate_rad_s: instance.end_effector.max_drive_rate_rad_s
 
+    # What this description's links actually collide against (ADR-0028).
+    #
+    # WHY THIS BLOCK EXISTS AT ALL. A vendor description is invoked, never
+    # ingested, so nothing in the generator or the validators may open a vendor
+    # file to find out. The consequence was not a missing check but a silent one:
+    # `validate.physical._collision_is_not_a_visual_mesh` — documented in its own
+    # docstring as "the single most consequential rule in L1" — reads
+    # `description.body`, every vendor-described type leaves `body` unset, and so
+    # the rule returned an empty list for exactly the links where the failure it
+    # names occurs. It had been passing on this type for as long as it existed.
+    # This block is what it now reads.
+    #
+    # WHAT THE VENDOR ACTUALLY DOES, which is why `vendor_meshes` is a real
+    # answer and not a placeholder. `xarm5.urdf.xacro` takes its `unless` branch
+    # for this variant (`model1300: false` and `mesh_suffix: stl` put `model_num`
+    # at -1), and that branch sets `collision_dir` to `xarm5/visual`. The gripper
+    # does the same unconditionally, passing one `mesh_filename` to both
+    # `common_link_visual` and `common_link_collision` on all seven of its links.
+    # Twelve links per arm therefore collide against a rendering mesh.
+    collision:
+      # THE SHIPPED DEFAULT IS THE VENDOR'S MESHES, DELIBERATELY, AND MOVING IT
+      # IS NOT A ONE-LINE CHANGE OF THIS VALUE.
+      #
+      # ADR-0028's amended promotion gate requires the friction-grasp campaign
+      # (docs/measurements/2026-08-25-friction-grasp/) re-run against hull
+      # geometry before hulls may be selected. The campaign that motivated hulls
+      # measured what they COST and never measured what they BREAK, and the
+      # record's own warning is about this cell's grasp: the pads hold a part by
+      # friction alone (ADR-0029), so the contact surface IS the mechanism, and
+      # the hull changes it. Selecting `convex_hull` here without that measurement
+      # would replace a working, measured line with an unmeasured geometry.
+      #
+      # WHAT THE HULL CHANGES, AND WHAT IT DOES NOT. This comment said until
+      # 2026-08-31 that "a convex hull fills the space between the fingers". It
+      # does not: each link is hulled separately, so that space lies between two
+      # collision bodies. Measured at the shipped 45 mm command, the aperture is
+      # 44.99 mm on BOTH geometries over the whole 37 mm pad. What does change is
+      # the 2.0 mm relief step at each end of each pad, which the hull ramps
+      # across, adding two inclined wedges inside the part's envelope. Read
+      # ADR-0028's correction of 2026-08-31 before designing the re-run: it names
+      # the three quantities to measure, and none of them is either residual the
+      # friction-grasp campaign has already published.
+      select: vendor_meshes
+      # The vendor macro parameter that carries a collision-mesh root. Named here
+      # rather than in the generator for the same reason every entry in
+      # `bound_args` is: it is a fact about xarm_description, and a vendor rename
+      # should be a one-line model diff. It arrives with
+      # external/patches/03-xarm_ros2-collision-mesh-root.patch; read that
+      # patch's header before assuming the vendor offers it.
+      root_arg: collision_mesh_path
+      # HOW A SUBSTITUTED ROOT RESOLVES, PER BACKEND. The vendor branches its own
+      # `mesh_path` on the loaded ros2_control plugin -- `file://$(find
+      # xarm_description)/meshes` for a Gazebo plugin, `package://` for anything
+      # else (xarm_device_macro.xacro) -- so the root that REPLACES it has to
+      # branch the same way, or the two halves of one description resolve
+      # differently. The generator emitted `file://` unconditionally until
+      # 2026-08-31, which was right on `sim` (where every scenario runs) and wrong
+      # on `real` (where nothing runs yet): the visuals came out `package://` and
+      # the collisions came out absolute paths into the generating machine's
+      # install prefix, which is the half a planner uses.
+      #
+      # Here rather than in the generator for the same reason `root_arg` is: it is
+      # a fact about xarm_description, and a generator that derived it would be a
+      # generator carrying the vendor's plugin class strings. Every declared
+      # backend needs an entry -- adding one without deciding is a model error,
+      # never a default.
+      root_uri_scheme:
+        sim: file
+        real: package
+      sets:
+        - id: vendor_meshes
+          kind: vendor_meshes
+        - id: convex_hull
+          kind: convex_hull
+          # Where the derived meshes are installed. `cite_description` is the L1
+          # package that installs `assets/meshes` into its share directory, so
+          # this root and the vendor's differ only in which package they name.
+          package: cite_description
+          root: meshes/collision/xarm5/convex_hull
+          source_package: xarm_description
+          source_root: meshes
+          # EXHAUSTIVE, and it has to be. The binding replaces the collision mesh
+          # ROOT, so every collision reference in the expanded description
+          # resolves under the new root — a mesh missing from this list is a
+          # collision shape that resolves to nothing. These thirteen are the
+          # complete set, read off the expanded `cell_a_arm_1.urdf.xacro` rather
+          # than off the vendor's source: five arm links, one end-tool proxy on
+          # `link5`, and seven gripper links.
+          #
+          # `end_tool/collision/end_tool.stl` is the one entry that is NOT a
+          # rendering mesh — it is the vendor's own 260-triangle collision proxy —
+          # and it is hulled anyway, because the root substitution is wholesale
+          # and a copy of the vendor's file into our tree would be vendored
+          # third-party source (ADR-0008).
+          #
+          # `xarm5/visual/link5.stl` is deliberately absent: it is a VISUAL mesh
+          # only. The vendor's `link5_collision` points at the end tool instead.
+          meshes:
+            - xarm5/visual/link_base.stl
+            - xarm5/visual/link1.stl
+            - xarm5/visual/link2.stl
+            - xarm5/visual/link3.stl
+            - xarm5/visual/link4.stl
+            - end_tool/collision/end_tool.stl
+            - gripper/xarm/base_link.stl
+            - gripper/xarm/left_outer_knuckle.stl
+            - gripper/xarm/left_finger.stl
+            - gripper/xarm/left_inner_knuckle.stl
+            - gripper/xarm/right_outer_knuckle.stl
+            - gripper/xarm/right_finger.stl
+            - gripper/xarm/right_inner_knuckle.stl
+
   # The plugin class string is authored exactly once, here. That is what makes
   # ADR-0005's "the only thing that differs is which plugin is loaded" true by
   # construction rather than by discipline. One test mirrors the value in order to

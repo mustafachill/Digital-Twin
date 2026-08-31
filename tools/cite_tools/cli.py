@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 from rich.console import Console
 from rich.table import Table
 
 from cite_tools import generate as gen
+from cite_tools import manifest, meshes
 from cite_tools.generate.moveit import PlanningConfigurationError
 from cite_tools.model import export
 from cite_tools.model.loader import ModelError, load
@@ -319,6 +321,192 @@ def show(
         raise typer.Exit(code=1)
 
     console.print(table)
+
+
+@app.command()
+def hulls(
+    model: ModelOption = Path("model"),
+    write: Annotated[
+        bool, typer.Option("--write", help="Rewrite the hull meshes and the manifest region.")
+    ] = False,
+) -> None:
+    """Derive the convex-hull collision meshes the model declares (ADR-0028).
+
+    Not part of ``validate``, and the separation is deliberate.
+    ``./scripts/validate-model`` must run anywhere — that is what makes the L0
+    layer checkable from a laptop that could never build the simulator — and this
+    command reads the **vendor** meshes, which exist only after ``vcs import``.
+    Folding it in would make the model unvalidatable on a host without a ROS
+    checkout, to gain nothing: the hulls are committed, so nothing regenerates
+    them on a normal run.
+
+    Without ``--write`` it checks, which is the form a gate uses: every declared
+    mesh is hulled again from the vendor file and compared byte for byte against
+    what is committed, and the manifest region is compared against what the same
+    inputs produce. A drift here is a stale hull, which is a collision shape that
+    does not match the arm — ADR-0028 names that failure as one that looks like a
+    planner bug.
+    """
+    try:
+        facility_model = load(model)
+    except ModelError as exc:
+        err_console.print(f"[red]error[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    repo_root = model.resolve().parent
+    sets = [
+        (asset_type, mesh_set)
+        for asset_type in facility_model.types
+        if asset_type.description.collision is not None
+        for mesh_set in asset_type.description.collision.sets
+        if mesh_set.kind == "convex_hull"
+    ]
+    if not sets:
+        console.print("[yellow]SKIP[/yellow] no type declares a derived collision set")
+        return
+
+    entries: list[dict] = []
+    problems: list[str] = []
+    for asset_type, mesh_set in sets:
+        # Both are guaranteed non-empty by `CollisionMeshSet`'s own validator for
+        # a `convex_hull` set; the assertion is for the type checker, and if it
+        # ever fires the schema has stopped enforcing what it says it does.
+        assert mesh_set.source_package and mesh_set.source_root
+        source_root = _vendor_share(repo_root, mesh_set.source_package) / mesh_set.source_root
+        if not source_root.is_dir():
+            problems.append(
+                f"{asset_type.id}/{mesh_set.id}: the vendor meshes are not in this checkout "
+                f"({source_root}). Run ./scripts/bootstrap."
+            )
+            continue
+        dest_root = repo_root / "assets" / _asset_subdir(mesh_set)
+        try:
+            entries.append(
+                _hull_set(asset_type, mesh_set, source_root, dest_root, repo_root, write, problems)
+            )
+        except meshes.MeshError as exc:
+            problems.append(f"{asset_type.id}/{mesh_set.id}: {exc}")
+
+    manifest_path = repo_root / "assets" / "manifest.yaml"
+    text = manifest_path.read_text()
+    try:
+        updated = manifest.replace(text, entries)
+    except manifest.ManifestError as exc:
+        err_console.print(f"[red]error[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if write:
+        if problems:
+            for problem in problems:
+                err_console.print(f"[red]error[/red] {problem}")
+            raise typer.Exit(code=1)
+        manifest_path.write_text(updated)
+        console.print(f"[green]wrote[/green] {manifest_path}")
+        total = sum(len(e["meshes"]) for e in entries)
+        console.print(f"[green]ok[/green] {len(entries)} set(s), {total} mesh(es)")
+        return
+
+    if updated != text:
+        problems.append(
+            "assets/manifest.yaml's derived region does not match the meshes on disk — "
+            "run `cite-model hulls --write`"
+        )
+    for problem in problems:
+        err_console.print(f"[red]error[/red] {problem}")
+    if problems:
+        raise typer.Exit(code=1)
+    total = sum(len(e["meshes"]) for e in entries)
+    console.print(f"[green]ok[/green] {len(entries)} set(s), {total} mesh(es) match the vendor")
+
+
+def _asset_subdir(mesh_set) -> str:
+    """Where a set lives under ``assets/``, derived from where it is installed from.
+
+    The ament package installs ``assets/meshes`` as ``share/<pkg>/meshes``, so the
+    set's ``root`` is its path under ``assets/`` with the leading ``meshes``
+    retained. Derived rather than declared twice: a second field naming the source
+    directory would be the same path written down again, and it is exactly the
+    kind of pair that drifts (P1).
+    """
+    return mesh_set.root
+
+
+def _vendor_share(repo_root: Path, package: str) -> Path:
+    """The vendor package's source directory in this checkout.
+
+    The SOURCE tree, not the install tree. The hull must be a function of the
+    bytes the manifest pins, and an install tree is a build artefact that a
+    ``--symlink-install`` may or may not be pointing at those bytes.
+    """
+    return repo_root / "workspace" / "src" / "external" / "xarm_ros2" / package
+
+
+def _hull_set(asset_type, mesh_set, source_root, dest_root, repo_root, write, problems) -> dict:
+    records = []
+    for relative in sorted(mesh_set.meshes):
+        source = source_root / relative
+        if not source.is_file():
+            raise meshes.MeshError(f"declared collision mesh is missing: {relative}")
+        payload, source_triangles, triangles = meshes.hull_bytes(source)
+        target = dest_root / relative
+        if write:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+        elif not target.is_file():
+            problems.append(f"{asset_type.id}/{mesh_set.id}: {relative} has no committed hull")
+        elif target.read_bytes() != payload:
+            problems.append(
+                f"{asset_type.id}/{mesh_set.id}: {relative} does not match a hull of the "
+                "vendor mesh it is derived from"
+            )
+        records.append(
+            {
+                "path": relative,
+                "source_sha256": meshes.sha256_of(source),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "source_triangles": source_triangles,
+                "triangles": triangles,
+                "bytes": len(payload),
+            }
+        )
+    return {
+        "id": f"{asset_type.id}_{mesh_set.id}",
+        "description": (
+            f"Convex hulls of the vendor collision meshes for asset type {asset_type.id}"
+        ),
+        "kind": mesh_set.kind,
+        "tool": "cite-model hulls",
+        "source": {
+            "type": "vcs",
+            "repo": "external/xarm_ros2",
+            "version": pinned_version(repo_root, "xarm_ros2"),
+            "package": mesh_set.source_package,
+            "root": mesh_set.source_root,
+        },
+        "dest": f"assets/{_asset_subdir(mesh_set)}",
+        "installed_as": f"package://{mesh_set.package}/{mesh_set.root}",
+        "meshes": records,
+    }
+
+
+def pinned_version(repo_root: Path, repo: str) -> str:
+    """The commit the vcs manifest pins for a repository.
+
+    Read rather than restated. A hull's provenance is only as good as the version
+    it names, and a version copied by hand into the asset manifest would be a
+    second place for the pin to live — the thing `external/cite.repos` exists to
+    be the only one of (ADR-0008, P1).
+
+    Public because the check that the recorded version is still the pinned one has
+    to read the pin the same way this does. A second parser in the test would be a
+    second place for the manifest's own format to be understood, and the two would
+    agree right up to the day one of them was updated.
+    """
+    document = yaml.safe_load((repo_root / "external" / "cite.repos").read_text()) or {}
+    for name, entry in (document.get("repositories") or {}).items():
+        if Path(name).name == repo:
+            return str(entry.get("version", "unknown"))
+    return "unknown"
 
 
 def main() -> None:  # pragma: no cover - thin wrapper
