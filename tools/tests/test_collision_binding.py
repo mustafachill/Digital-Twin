@@ -15,6 +15,7 @@ Three things are checked here and they answer three different questions:
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -80,13 +81,23 @@ class TestSelectingADerivedSet:
 
         If selecting a set moved a joint, renamed a link or changed a controller,
         the A/B comparison the campaign needs would be measuring two things.
+
+        Multiset difference, and it was set difference until 2026-08-31. A line
+        that already appears once and is emitted a second time is `in` the
+        before-text, so it entered neither `added` nor `removed` and the assertion
+        below passed while the generated xacro carried a duplicated vendor
+        argument. Verified by mutation: making the generator emit the collision
+        argument AND duplicate an existing one left all fourteen tests green.
+        `Counter` counts occurrences, which is the question this test means to ask.
         """
         before = artifacts(real_model)[ARM_DESCRIPTION]
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         after = artifacts(real_model)[ARM_DESCRIPTION]
 
-        added = [line for line in after.splitlines() if line not in before.splitlines()]
-        removed = [line for line in before.splitlines() if line not in after.splitlines()]
+        before_lines = Counter(before.splitlines())
+        after_lines = Counter(after.splitlines())
+        added = list((after_lines - before_lines).elements())
+        removed = list((before_lines - after_lines).elements())
         assert removed == []
         assert len(added) == 1
         assert "collision_mesh_path" in added[0]
