@@ -40,7 +40,17 @@ V6_LOAD_DRIFT = 0.50
 
 
 def load(raw: Path) -> list[dict]:
-    return [json.loads(p.read_text()) for p in sorted(raw.glob("*.json")) if p.name != "summary.json"]
+    # `.host.json` is this campaign's addition and matches `*.json` too. Excluded here
+    # rather than renamed, because the sidecars are already committed and a rename would
+    # rewrite collected data. Found after the last trial: the ghost records were all
+    # `valid=False` under V3, so no pooled median, ratio or exclusion set moved -- the
+    # bug inflated `n_records` from 24 to 48 and duplicated the per-trial listing. Both
+    # summaries are compared in ANALYSIS.md's deviations.
+    return [
+        json.loads(p.read_text())
+        for p in sorted(raw.glob("*.json"))
+        if p.name != "summary.json" and not p.name.endswith(".host.json")
+    ]
 
 
 def condition_of(label: str) -> tuple[str, str, str, int]:
