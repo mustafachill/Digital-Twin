@@ -21,6 +21,15 @@
   **One thing named here as owed its own record still has none:** the
   `cite_skills::gripper_is_holding` margin defect in the last section below is untouched by
   the branch, exactly as decision 5's neighbouring paragraph asks.
+  **[Overtaken 2026-09-01 — the sentence above is kept as written and is no longer true of
+  the tree.]** That record is
+  [ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md), `Proposed`, and it
+  **chooses nothing**: it states the defect as a band, weighs six options and leaves the
+  choice to the project owner. It reproduces this record's arithmetic exactly and adds two
+  things this record did not have — the 46.6 mm example describes a *declared work-piece*,
+  which `default-grasp-width-never-closes` already refuses at validate time, and the defect
+  has never been observed firing in any run anyone has looked at. **The defect itself is
+  still untouched**, and the clause above stays true of this record's own branch.
 - **Date:** 2026-08-29
 - **Deciders:** Docs-writer agent, from the project owner's root-cause investigation of the
   three `continuous_line` CI cycle failures recorded in [CLAUDE.md §2](../../CLAUDE.md)
@@ -507,6 +516,12 @@ document, and none is a premise of any decision above.
    did next.
 
 ## A separate defect, found in the same investigation, owed its own record
+
+**[2026-09-01: that record is now written —
+[ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md). It is `Proposed`, it
+chooses nothing, and it corrects the reading of the example below: 46.6 mm as a *declared
+work-piece* is a model `default-grasp-width-never-closes` already refuses. Nothing in this
+section is rewritten.]**
 
 **It is not folded into this one and must not be.** `cite_skills::gripper_is_holding`
 (`gripper.cpp:106-117`) requires the reached width to exceed the commanded width by more than

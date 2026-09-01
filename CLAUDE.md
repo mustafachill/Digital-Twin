@@ -629,8 +629,21 @@ account of a flake; each was caught by someone re-running, never by someone read
     on custody rather than on a result code, and on the branch above that entrance is closed
     with the others: the misreported grasp still happens, and the station now escalates instead
     of dead-ending. **The defect itself is untouched** — a real grasp is still reported empty —
-    and **ADR-0045 names it as owed its own record and deliberately does not fold it in; that
-    record does not exist yet.**
+    and **the record ADR-0045 says is owed now exists**:
+    [ADR-0052](docs/adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md), `Proposed`,
+    which **chooses nothing** — it states the defect as a **band** rather than as the 46.6 mm
+    example, weighs six options, and leaves the choice to the project owner. This bullet said
+    "that record does not exist yet" until 2026-09-01.
+    **Two things in that record change how this bullet should be read, and its figures are
+    cited and not copied here (P1).** The 46.6 mm example describes a *declared work-piece*,
+    and `default-grasp-width-never-closes` already refuses that model at validate time; the
+    doors that are open are a caller-supplied `grasp_width_m`, which nothing validates, and a
+    stall landing short of the part's nominal width, which the cell does. And the defect has
+    **never been observed firing**: all 47 trials of the
+    [2026-09-01 hull-grasp campaign](docs/measurements/2026-09-01-hull-grasp/ANALYSIS.md)
+    were reported `holding`, and how close the worst of them came is computed in ADR-0052 from
+    that campaign's committed raw — a quantity the campaign itself did not publish, taken for
+    another question, on one machine, with no thresholds registered in advance for this one.
   - **No vendor-described link's mass or inertia tensor is validated by anything, and this
     is the same structural blindness ADR-0028 just fixed for collision geometry.** The
     validator reads `description.body`; every vendor-described type leaves `body` unset; so
