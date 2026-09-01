@@ -1,0 +1,9 @@
+{
+ "label": "SOLO_HULL_FREE_1",
+ "host_load1_before": 3.48,
+ "host_load1_after": 5.58,
+ "host_started_epoch": 1788285143,
+ "host_ended_epoch": 1788285371,
+ "base_commit": "1520cb5906ae2debc9ade19f1f07e7f1a168f520",
+ "worktree_clean_outside_campaign": "0"
+}

@@ -1,0 +1,9 @@
+{
+ "label": "PAIR_VENDOR_THROTTLED_1",
+ "host_load1_before": 2.63,
+ "host_load1_after": 7.30,
+ "host_started_epoch": 1788282849,
+ "host_ended_epoch": 1788283141,
+ "base_commit": "1520cb5906ae2debc9ade19f1f07e7f1a168f520",
+ "worktree_clean_outside_campaign": "0"
+}

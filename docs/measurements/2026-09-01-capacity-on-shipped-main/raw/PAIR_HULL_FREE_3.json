@@ -1,0 +1,37 @@
+{
+ "label": "PAIR_HULL_FREE_3",
+ "topology": "pair",
+ "expected_sides": [
+  "plant",
+  "counterpart"
+ ],
+ "settle_s": 30.0,
+ "window_s": 120.0,
+ "configuration": {
+  "real_time_factor": "0",
+  "max_step_size": "0.001",
+  "collision_mesh_path": "file://$(find cite_description)/meshes/collision/xarm5/convex_hull",
+  "collision_geometry": "convex_hull"
+ },
+ "load_before": [
+  1.3974609375,
+  4.67626953125,
+  6.68896484375
+ ],
+ "started_wall": 1788289977.4797862,
+ "verdict": "DISCARDED",
+ "discard_reason": "a side exited before every side announced readiness (V3)",
+ "ready_sides": [
+  "counterpart"
+ ],
+ "ready_at": {
+  "counterpart": 1788290016.7658577
+ },
+ "load_after": [
+  4.73876953125,
+  5.74169921875,
+  6.8857421875
+ ],
+ "sim_exit_status": 1,
+ "ended_wall": 1788290099.0463145
+}

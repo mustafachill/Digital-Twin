@@ -1,0 +1,9 @@
+{
+ "label": "SOLO_HULL_THROTTLED_2",
+ "host_load1_before": 4.15,
+ "host_load1_after": 5.35,
+ "host_started_epoch": 1788287089,
+ "host_ended_epoch": 1788287320,
+ "base_commit": "5d98d15827f115b58a784addf7fd1be02fcdfb8d",
+ "worktree_clean_outside_campaign": "0"
+}

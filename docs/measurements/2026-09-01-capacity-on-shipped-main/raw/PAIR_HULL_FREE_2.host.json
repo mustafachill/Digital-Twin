@@ -1,0 +1,9 @@
+{
+ "label": "PAIR_HULL_FREE_2",
+ "host_load1_before": 4.13,
+ "host_load1_after": 7.87,
+ "host_started_epoch": 1788287385,
+ "host_ended_epoch": 1788287680,
+ "base_commit": "5d98d15827f115b58a784addf7fd1be02fcdfb8d",
+ "worktree_clean_outside_campaign": "0"
+}

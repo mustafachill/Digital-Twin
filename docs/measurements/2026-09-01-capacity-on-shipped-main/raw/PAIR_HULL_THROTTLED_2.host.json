@@ -1,0 +1,9 @@
+{
+ "label": "PAIR_HULL_THROTTLED_2",
+ "host_load1_before": 3.53,
+ "host_load1_after": 6.01,
+ "host_started_epoch": 1788286744,
+ "host_ended_epoch": 1788287024,
+ "base_commit": "5d98d15827f115b58a784addf7fd1be02fcdfb8d",
+ "worktree_clean_outside_campaign": "0"
+}
