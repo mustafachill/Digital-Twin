@@ -24,8 +24,12 @@
   **Violated:** this layer's own first rule, below. Twelve links per arm collide against
   their *visual* mesh, and the validator written to catch that cannot fire on a vendor
   description. See [ADR-0028](../adr/0028-convex-hull-collision-meshes.md), which is
-  `Proposed` with nothing yet in `assets/`; the section "Visual and collision geometry are
-  always separate" states the rule, not the current state.
+  `Proposed`: the hulls exist and are selectable by one L0 field, and the shipped selection is
+  still `vendor_meshes` because its promotion gate is unmet. **Clause 2 of that gate cannot be
+  met as written** — the campaign it demanded measured the predicted mechanism not to occur —
+  and it is restated by [ADR-0051](../adr/0051-restate-the-hull-grasp-gate.md), which is also
+  `Proposed`. The section "Visual and collision geometry are always separate" below states the
+  rule, not the current state.
   **Changed 2026-08-29:** the generated world declares `real_time_factor` **1.0** rather than
   `0`. `0` is Gazebo's unthrottled value and overrode SDFormat's own default; the new value
   is a **ceiling**, so on a machine already below real time it changes nothing and cannot

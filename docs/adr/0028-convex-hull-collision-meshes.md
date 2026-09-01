@@ -4,7 +4,18 @@
   exactly as it was written to.** All four parts of the Decision are in the tree as of
   2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
   superseded and is corrected in place below.
-  **Corrected 2026-09-01: the implementation note's speed conclusion does not stand.** Its
+  **Corrected twice on 2026-09-01. The newer correction is the one to read first: clause 2 of
+  the promotion gate, as written, cannot be met** — it asks for the consequences of a mechanism
+  the campaign it demanded has measured not to occur, and the wedges it predicted sit 0.41 mm of
+  aperture behind the pad plane on the same rigid link. **The decision stands entire, clause 1
+  is untouched, the status does not move and the shipped default is still the vendor's meshes.**
+  Clause 2 is restated — not relaxed — by
+  [ADR-0051](0051-restate-the-hull-grasp-gate.md), which also makes the range of work-piece
+  widths the finding covers binding on L0. See the section "Correction — 2026-09-01: clause 2
+  asks for a measurement of a mechanism that does not occur", immediately after this block, and
+  **read it before citing any gate clause or any gripper prediction below.**
+  **The older 2026-09-01 correction: the implementation note's speed conclusion does not
+  stand.** Its
   *"hulls move it materially and do not reach 1.0"* was read off a **throttled** measurement,
   which could not have exceeded 1.0 whatever the machine did; measured as capacity on the same
   machine, the hull pair clears the floor. **The decision, the gate and the shipped default are
@@ -17,7 +28,10 @@
   **Read "Correction — 2026-08-31: the gripper risk is real and it is not a filled
   inter-finger gap" before designing that measurement**: this record's stated hypothesis for
   it was wrong, and a re-run aimed at the sentence it used to carry would pass without asking
-  the question.
+  the question. **[Corrected 2026-09-01 (the newer of the two corrections) — that measurement
+  has since been designed against the 2026-08-31 hypothesis and run, and that hypothesis is
+  wrong too. Read the newest correction section, named above, before reading this line as
+  standing guidance.]**
   **[Superseded 2026-08-31, kept for the record:]** *"decided in principle, nothing
   implemented. No hull exists: `assets/` contains only `README.md` and `manifest.yaml`, no
   `assets/meshes/` directory has been created, and the L0 schema has no field through which a
@@ -60,7 +74,79 @@
   [L1](../architecture/L1-description-and-assets.md), [`../../assets/README.md`](../../assets/README.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md),
-  CLAUDE.md §10, charter §4 (P1, P5, P8)
+  CLAUDE.md §10, charter §4 (P1, P5, P8),
+  [ADR-0051](0051-restate-the-hull-grasp-gate.md) (which restates the promotion gate's clause 2;
+  added by the second 2026-09-01 correction),
+  [`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md)
+  (the clause 2 campaign, added by the same correction)
+
+## Correction — 2026-09-01: clause 2 asks for a measurement of a mechanism that does not occur
+
+**This is the second correction dated 2026-09-01 and the newest on this record. The other
+three are left exactly as they stand**, and the one immediately below this section is today's
+other one — the implementation note's speed conclusion. **No status moves here, nothing is
+promoted, and the shipped `select: vendor_meshes` is untouched.** What replaces the clause is
+[ADR-0051](0051-restate-the-hull-grasp-gate.md), which **restates it rather than relaxing it**
+and is `Proposed`.
+
+**What was wrong.** Two claims, both in the correction of 2026-08-31, and the second of them
+became a promotion condition:
+
+- the inference *"both shoulders lie inside the part's envelope"*. It compares the shoulder's
+  aperture against the part's **width**, at the **commanded** 45 mm — a configuration a gripper
+  holding a 50 mm rigid part never occupies. The comparison that decides contact is the shoulder
+  against the **pad plane**;
+- the prediction built on it — two inclined wedges contacting the part's flat face at a slope,
+  hence a net translation, possibly a pitch about the finger-pivot axis, and a contact patch
+  growing from 37 mm to 44 mm. **Measured, none of it happens**, and the patch got *shorter*,
+  not longer.
+
+**So clause 2 of the promotion gate, as written, cannot be met.** It asks a campaign to report
+the consequences of a mechanism that does not occur, and no amount of measuring produces them.
+
+**What is true, measured**, from
+[`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md)
+— 47 trials, thresholds registered before the first trial, machine named, figures **cited and
+not copied** (P1):
+
+- The hull's wedges are recessed **0.41 mm of aperture behind the pad plane, on the same rigid
+  link.** That is arithmetic on **this record's own two audit numbers** — 45.40 mm at the
+  z = 134 shoulder against 44.99 mm at the pad — and needs none of the campaign's apparatus. The
+  campaign measures the same clearance independently at **0.42 mm**; the two agree to 0.01 mm.
+- Because both surfaces belong to one rigid link, that recess does not vary with aperture, so a
+  flat face resting on the pad is clear of the wedges **at any aperture**. The jaws stall on a
+  50 mm rigid part at a measured **~50.0 mm**, not at the commanded 44.99 mm.
+- **The campaign's verdict is INCONCLUSIVE**, by its own rule S, registered before its first
+  trial. It must be cited as that. A campaign that cannot see the mechanism has not tested the
+  prediction, and its silence about the grasp is not a pass.
+
+**What survives, plainly.** **The decision stands entire, all four parts**, and clause 1 of the
+gate is untouched. **The geometry audit of 2026-08-31 is confirmed** — its aperture figures are
+right, and they are what makes the clearance computable. **The question clause 2 was written to
+force is not withdrawn**: ADR-0051's restatement keeps it and asks for evidence that can exist.
+And this record's statement of its own principal risk — *"a part that is held slightly
+elsewhere, not a part that is not held"* — is neither confirmed nor refuted in general: it was
+not observed at the 50 mm width, and **no narrower work-piece has been tested**, which is the
+validity range ADR-0051 makes binding.
+
+**What this does not claim.** It does **not** promote this record and may not be cited as doing
+so. Every grasp-outcome difference the campaign measured is **below the effect size registered
+in advance**, in the hull's favour or not, and the campaign refused to call any of them; the
+honest statement is *no distinguishable difference at that n*, never *hulls grasp better*. The
+one metric it DETECTED is a **control** — the jaws stall 5.6 mrad earlier on hulls — and it is
+**unexplained**. Both residuals, and what would settle them, are ADR-0051 decision 4.
+
+**How the error survived.** This record caught one false gripper mechanism on 2026-08-31 and
+replaced it, the same day, with a second one derived the same way: from a static audit taken at
+a **commanded** configuration, with no step asking whether the system ever occupies it. The
+audit's numbers were never wrong; both errors were in what was compared against what — first a
+hull against the wrong space, then a shoulder against the part's width instead of against the
+pad plane. Then the gate was written against the new mechanism, so an unobserved prediction
+became a promotion condition, and the only thing that could have caught it was the campaign that
+eventually did. The transferable part is two sentences: **an audit taken at a commanded value
+must state whether the machine ever reaches that value**, and **a promotion gate must not be
+written against a mechanism nothing has yet observed** — name the measurement, as this record's
+own 2026-08-29 amendment says, but not the mechanism's fingerprint.
 
 ## Correction — 2026-09-01: the implementation note's speed conclusion was read off the wrong quantity
 
@@ -293,6 +379,13 @@ binding". **That is necessary and is not sufficient.** ADR-0028 moves to `Accept
    is the campaign to repeat, and the question it must answer is whether the hull geometry
    changes grasp behaviour. Its thresholds are already written down, which is what makes the
    comparison meaningful.
+   **[Corrected 2026-09-01 — see the newest Correction section above. This clause, as sharpened
+   by the 2026-08-31 correction, cannot be met: it asks for the consequences of a mechanism the
+   re-run measured not to occur. The re-run exists and is published; the clause that replaces
+   this one is [ADR-0051](0051-restate-the-hull-grasp-gate.md) decision 1, which restates it
+   rather than relaxing it and adds the range of work-piece widths the finding covers. **The
+   question above is not withdrawn** and the amendment's own lesson — a promotion condition
+   names the measurement, not the commit — stands.]**
 
 Until both hold, hulls may be generated, measured and reviewed, and this record stays
 `Proposed`. **No document may cite the speed result as having settled this decision**, and no
@@ -435,6 +528,12 @@ shipped selection still emits no collision argument at all.
 
 ### What promotion still needs, stated so it cannot be mistaken for done
 
+**[Corrected 2026-09-01 — see the newest Correction section above. The re-run this section asks
+for has been run and published, and it establishes that clause 2 as written cannot be met.
+What promotion needs today is the restated clause,
+[ADR-0051](0051-restate-the-hull-grasp-gate.md) decision 1, and that record's decision 2 says
+what the promoting change has to do. The two paragraphs below are left as they stand.]**
+
 **Only clause 2 of the amended gate**, unchanged: the friction-grasp campaign
 ([`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md))
 re-run against hull geometry, with its already-written thresholds, and its result published.
@@ -493,7 +592,11 @@ the meshes in.
   steps instead. Aperture goes **48.99 → 46.28 mm at z = 132**, **48.99 → 45.40 mm at
   z = 134** and **48.99 → 47.66 mm at z = 173**. The 50 mm work-piece spans z ≈ 128.4–178.4,
   so both shoulders lie inside the part's envelope *in both geometries* — the hull's are
-  1.2–1.9 mm deeper.
+  1.2–1.9 mm deeper. **[Corrected 2026-09-01 — see the newest Correction section above. The
+  aperture figures are confirmed; the sentence after them does not follow from them. It
+  compares the shoulder against the part's width at the *commanded* 45 mm, and the jaws stall
+  on this part at ~50.0 mm. Compared against the *pad plane*, which is what decides contact,
+  the z = 134 shoulder is 0.41 mm of aperture clear at every aperture.]**
 - **The outer-knuckle hook narrows**, z = 55–68 mm, throat **67.6 → 40.4 mm**. That is 60 mm
   below the part and below a pinch the vendor already has, so it is a planning effect and not
   a grasp effect.
@@ -508,6 +611,11 @@ symmetric in length. So:
 - expect a **small net translation of the part along the jaw axis during closure**;
 - possibly a **pitch about the finger-pivot axis**;
 - an **effective contact patch growing from 37 mm to 44 mm**.
+
+**[Corrected 2026-09-01 — see the newest Correction section above. The whole of this
+prediction, including the paragraph above the three bullets, is measured false for a 50 mm
+part: the wedges never contact it, no bullet was detected at its registered effect size, and
+the contact patch got *shorter*. The wedges are real; the contact is not.]**
 
 **Nothing here predicts a failed grasp.** The pad still makes first contact, at the same
 width, everywhere along it. The risk this record should have been naming is a part that is
@@ -531,6 +639,13 @@ trial:
 Its existing thresholds still apply to the quantities they were written for. These three have
 no pre-registered threshold and must get one *before* the first trial, exactly as that
 campaign's own rule requires.
+
+**[Corrected 2026-09-01 — see the newest Correction section above. This section's instruction
+was followed exactly: the campaign registered thresholds for all three quantities before its
+first trial and reported all three. What it found is that the mechanism they were chosen to
+detect does not occur, so the three quantities are the right instruments aimed at a
+non-event. That is why clause 2 as written cannot be met, and it is
+[ADR-0051](0051-restate-the-hull-grasp-gate.md) that restates it.]**
 
 **This correction promotes nothing.** The status stays `Proposed`, the shipped default stays
 `vendor_meshes`, and clause 2 remains unsatisfied.
@@ -974,6 +1089,12 @@ real-time factor is earned by re-measuring RTF and `joint_states` frequency agai
   is the pair of inclined wedges the hull adds at each pad's own relief steps — see the
   correction section named above. `end_tool` is now a second candidate for this same
   exception, for a different reason; see the note under the implementation note.]**
+  **[Corrected again 2026-09-01 — see the newest Correction section above. The wedges exist and
+  do not touch a 50 mm part, so neither stated mechanism has been observed to produce a wrong
+  grasp. The condition in this bullet stands unchanged as a condition; what is withdrawn is the
+  claim that the wedges are the mechanism that would trigger it. A **narrower** work-piece is
+  the untested case, and [ADR-0051](0051-restate-the-hull-grasp-gate.md) decision 3 makes
+  declaring one a precondition rather than a surprise.]**
 - **When the RTF re-measurement lands.** If 0.14 does not move materially, the bottleneck is
   elsewhere — three controller managers at 150 Hz, or the physics step itself — and this
   record must not be cited as having fixed it. **[2026-08-29: two campaigns have landed and
