@@ -11,6 +11,20 @@ alone.
 | `run_campaign.sh` | The block sequence: revert, configure, build, trial, sweep, revert, for every cell of the 2x2 and its solo baseline. |
 | `analyse.py` | Applies `criteria.md` §7's validity rules to `raw/` and produces the tables in `ANALYSIS.md`. Written after the data was collected; the rules it applies were not. |
 
+## The shakedown that preceded the freeze
+
+One mechanics shakedown was run before the first campaign trial, to establish that a pair
+comes up under this harness at all and how long it takes. **Its data is not used and is
+not in `raw/`**; it wrote to a scratch directory that was deleted. It produced one change
+to `run_campaign.sh` — a 60 s quiesce before each trial, so that V6's load average is read
+from a settled machine rather than from the previous trial's teardown — and that change
+was committed before any `raw/` file existed. Nothing in `criteria.md` moved.
+
+It also corrected one expectation in `criteria.md` §4 in the campaign's favour: world
+statistics arrive at about **10 Hz**, not the 5 Hz registered there, so an interval is
+about 100 ms rather than 200 ms. The registered resolution limit was conservative and
+still holds in kind — a single 1 ms step is well below it.
+
 ## Reproduction
 
 From the repository root, on a host where `./scripts/doctor` exits 0:

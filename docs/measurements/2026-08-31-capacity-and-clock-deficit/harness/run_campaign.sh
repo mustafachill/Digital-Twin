@@ -35,6 +35,11 @@ for b in $(seq 1 "$BLOCKS"); do
         if [ -f "$RAW/$LABEL.json" ]; then echo "== skip $LABEL (already collected)"; continue; fi
         echo "===== $LABEL ====="
         revert
+        # A settled machine before V6's load average is read, and before the cell
+        # starts. A teardown's own cost was still on the 1-minute average when the
+        # shakedown read it. This is a quiesce for an instrument, not a step of the
+        # bring-up sequence -- nothing here waits for a cell to be ready (P4).
+        sleep 60
         python3 "$HERE/configure.py" --topology "$topo" --geometry "$geom" --throttle "$thr" || { revert; continue; }
         "$ROOT/scripts/build" --packages-select cite_generated cite_description >/dev/null 2>&1
         "$ROOT/scripts/enter" dev bash -lc \
