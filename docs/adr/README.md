@@ -173,3 +173,4 @@ not rewritten either.
 | [0049](0049-measure-the-real-time-floor-as-capacity.md) | Keep the real-time floor and measure it as capacity, not as a throttled rate | Proposed (corrected 2026-09-01) |
 | [0050](0050-what-crosses-the-twin-boundary.md) | Cross the twin boundary in L5's own memory, and say when a divergence number may be believed | Proposed (corrected 2026-08-31) |
 | [0051](0051-restate-the-hull-grasp-gate.md) | Restate ADR-0028's grasp gate, and bind it to the work-piece width it was measured at | Accepted |
+| [0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md) | Decide what separates a real grasp from a stall on nothing | Proposed — **and it chooses nothing**: it states the defect [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) says is owed, the band it produces, and six options; the choice among them is the project owner's and has not been taken |
