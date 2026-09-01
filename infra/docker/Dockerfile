@@ -147,15 +147,50 @@ RUN python3 -m venv "$CITE_VENV" \
 # UID/GID are build args so that files created in the mounted workspace are
 # owned by the host user. Getting this wrong produces root-owned build
 # artifacts that the host cannot delete.
+#
+# Ubuntu 24.04 — and therefore ros:jazzy-ros-base-noble, which derives from it —
+# now ships a default `ubuntu` user at UID 1000 / GID 1000. On the most common
+# host there is (a fresh Ubuntu 24.04 desktop whose first interactive login is
+# UID 1000 / GID 1000) that pre-existing occupant collides with the `cite` user
+# we must create at the host's IDs. The old code hid the resulting groupadd /
+# useradd failures behind `2>/dev/null || true`, so the build "succeeded" while
+# `cite` was never created and every container then died at start with
+# "unable to find user cite: no matching entries in passwd file".
+#
+# So we evict whoever currently holds the requested UID/GID *first* — the
+# `ubuntu` user is the known culprit, but this handles any pre-existing occupant
+# by number rather than by name — then create `cite`. Removing an account that
+# is not in the way matches nothing and is a no-op, so this stays idempotent for
+# every UID/GID combination (1000/1000, the 1001/1001 defaults, a 501/20 macOS
+# host, …). The `|| true` masking is gone: user creation now fails the build.
 ARG USERNAME=cite
 ARG USER_UID=1001
 ARG USER_GID=1001
-RUN groupadd --gid "$USER_GID" "$USERNAME" 2>/dev/null || true \
- && useradd --uid "$USER_UID" --gid "$USER_GID" -m -s /bin/bash "$USERNAME" 2>/dev/null || true \
+# The `|| true` below guards only the *lookups*: when the UID/GID is free,
+# getent exits non-zero and (under the image's `-o pipefail` shell) would abort
+# the whole chain. It never guards user creation, which stays hard. userdel runs
+# without `--remove` — which would return non-zero merely because the base image
+# ships no mail spool — and the evicted home directory is deleted explicitly.
+RUN existing_user="$(getent passwd "$USER_UID" | cut -d: -f1 || true)" \
+ && existing_home="$(getent passwd "$USER_UID" | cut -d: -f6 || true)" \
+ && if [ -n "$existing_user" ]; then userdel "$existing_user" && rm -rf "$existing_home"; fi \
+ && existing_group="$(getent group "$USER_GID" | cut -d: -f1 || true)" \
+ && if [ -n "$existing_group" ]; then groupdel "$existing_group"; fi \
+ && groupadd --gid "$USER_GID" "$USERNAME" \
+ && useradd --uid "$USER_UID" --gid "$USER_GID" -m -s /bin/bash "$USERNAME" \
  && apt-get update && apt-get install -y --no-install-recommends sudo \
  && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME" \
  && chmod 0440 "/etc/sudoers.d/$USERNAME" \
  && rm -rf /var/lib/apt/lists/*
+
+# Build-time assertion (charter P6): prove `cite` resolves at exactly the
+# requested UID/GID. If the collision handling above ever regresses, this fails
+# the build here — the earliest, cheapest place — instead of shipping an image
+# that is unusable the moment a container starts. This is the in-image test for
+# this change.
+RUN id "$USERNAME" \
+ && [ "$(id -u "$USERNAME")" = "$USER_UID" ] \
+ && [ "$(id -g "$USERNAME")" = "$USER_GID" ]
 
 RUN rosdep update --rosdistro "$ROS_DISTRO" || true
 
