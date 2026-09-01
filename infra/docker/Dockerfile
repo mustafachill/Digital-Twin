@@ -166,13 +166,24 @@ RUN python3 -m venv "$CITE_VENV" \
 ARG USERNAME=cite
 ARG USER_UID=1001
 ARG USER_GID=1001
-# The `|| true` below guards only the *lookups*: when the UID/GID is free,
-# getent exits non-zero and (under the image's `-o pipefail` shell) would abort
-# the whole chain. It never guards user creation, which stays hard. userdel runs
+# A build as root (USER_UID/USER_GID of 0) is rejected up front: the eviction
+# below would otherwise resolve to `userdel root && rm -rf /root` / `groupdel
+# root` and produce a broken image. Only 0 is rejected — every other host ID,
+# including sub-1000 macOS values such as 501/20 (which legitimately evicts the
+# image's gid-20 `dialout` group), is valid and must keep working.
+#
+# The `|| true` below guards only the *lookup*: when the UID is free, getent
+# exits non-zero and (under the image's `-o pipefail` shell) would abort the
+# whole chain. The passwd line is captured once and both fields are read from
+# it. The `|| true` never guards user creation, which stays hard. userdel runs
 # without `--remove` — which would return non-zero merely because the base image
 # ships no mail spool — and the evicted home directory is deleted explicitly.
-RUN existing_user="$(getent passwd "$USER_UID" | cut -d: -f1 || true)" \
- && existing_home="$(getent passwd "$USER_UID" | cut -d: -f6 || true)" \
+RUN if [ "$USER_UID" = "0" ] || [ "$USER_GID" = "0" ]; then \
+      echo "USER_UID/USER_GID of 0 (root) is not supported; build as a non-root host user" >&2; exit 1; \
+    fi \
+ && existing_passwd="$(getent passwd "$USER_UID" || true)" \
+ && existing_user="$(echo "$existing_passwd" | cut -d: -f1)" \
+ && existing_home="$(echo "$existing_passwd" | cut -d: -f6)" \
  && if [ -n "$existing_user" ]; then userdel "$existing_user" && rm -rf "$existing_home"; fi \
  && existing_group="$(getent group "$USER_GID" | cut -d: -f1 || true)" \
  && if [ -n "$existing_group" ]; then groupdel "$existing_group"; fi \
