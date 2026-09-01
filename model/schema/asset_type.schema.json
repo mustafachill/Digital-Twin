@@ -1100,6 +1100,17 @@
         "tip_link_suffix": {
           "title": "Tip Link Suffix",
           "type": "string"
+        },
+        "vendor_self_collision_matrix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorSelfCollisionMatrix"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1157,6 +1168,56 @@
         "stopped_velocity_tolerance_rad_s"
       ],
       "title": "TrajectoryConstraints",
+      "type": "object"
+    },
+    "VendorSelfCollisionMatrix": {
+      "additionalProperties": false,
+      "description": "L0 declaring what the vendor's self-collision matrix was computed against.\n\nADR-0028 decision 4's shape, applied to the second thing the vendor knows and\nthis model could not see. That decision closed a structural hole for collision\n**meshes** — a vendor description is invoked and never ingested, so no rule\nhere may open a vendor file, and the rule that would have caught a rendering\nmesh reused as collision geometry returned an empty list for exactly the links\nwhere it occurs. The fix was to make L0 *declare* what the vendor does, so the\nrule had something to fire on.\n\n**The identical hole is open for the self-collision matrix, and since\n2026-09-01 it has a measured consequence.** The SRDF is invoked, not copied,\nso its matrix is a function of the vendor's collision geometry — and this type\nnow binds convex hulls of that geometry instead. A hull is never smaller than\nwhat it replaces, so the pairing is broken in one direction only: a pair the\nvendor **disabled** can interpenetrate under hulls, and MoveIt will never\ncheck it.\n\nSo this block is not documentation. It is the declaration a validator rule\nreads (``physical._vendor_self_collision_matrix_is_acknowledged``), and its\nabsence — or its naming a collision set other than the one bound — is a model\nERROR. **That is deliberately a declarable state rather than an unshippable\none**: a check that fails on the shipped configuration the moment it exists is\na blocker, not a guard, and would have been reverted rather than answered.\nDeclaring it costs an author one block and the audit that fills it.\n\n**What it does NOT do**: it does not fix the mismatch, license it, or claim\nthe figures are still current. Bind a different set and the acknowledgement\nstops matching, which is the point.",
+      "properties": {
+        "audit": {
+          "title": "Audit",
+          "type": "string"
+        },
+        "audited_for": {
+          "title": "Audited For",
+          "type": "string"
+        },
+        "enabled_configurations_newly_colliding": {
+          "title": "Enabled Configurations Newly Colliding",
+          "type": "integer"
+        },
+        "enabled_configurations_sampled": {
+          "title": "Enabled Configurations Sampled",
+          "type": "integer"
+        },
+        "pairs_disabled_by_vendor": {
+          "title": "Pairs Disabled By Vendor",
+          "type": "integer"
+        },
+        "pairs_disabled_interpenetrating": {
+          "title": "Pairs Disabled Interpenetrating",
+          "type": "integer"
+        },
+        "pairs_enabled_by_vendor": {
+          "title": "Pairs Enabled By Vendor",
+          "type": "integer"
+        },
+        "pairs_with_geometry": {
+          "title": "Pairs With Geometry",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "audited_for",
+        "audit",
+        "pairs_with_geometry",
+        "pairs_enabled_by_vendor",
+        "pairs_disabled_by_vendor",
+        "enabled_configurations_sampled",
+        "enabled_configurations_newly_colliding",
+        "pairs_disabled_interpenetrating"
+      ],
+      "title": "VendorSelfCollisionMatrix",
       "type": "object"
     }
   },

@@ -74,8 +74,18 @@ class TestTheShippedDefault:
 
         Selecting the vendor's set has to leave the description exactly as it was
         before this field existed — that is what makes it a real answer rather
-        than a differently-spelled hull, and it is the answer ADR-0051's range
-        rule tells a model author to reach for.
+        than a differently-spelled hull.
+
+        **THE VENDOR'S SET IS A CONDITIONAL ANSWER AND THIS DOCSTRING USED TO
+        STATE IT FLATLY**, as "the answer ADR-0051's range rule tells a model
+        author to reach for", three classes above one asserting that reaching for
+        it is an ERROR. Both sentences were in this file and they contradicted
+        each other, because for one day the code did too. The rule now: selecting
+        the vendor's set is an ERROR *while a derived alternative is available for
+        the parts this facility declares*, and is silent where the range rule
+        refuses that alternative — so it is the remedy exactly when the range rule
+        fires, and a defect otherwise. `TestTheRemedyTheHintNamesIsAValidModel` in
+        `test_validate_geometric.py` holds both halves.
         """
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         description = artifacts(real_model)[ARM_DESCRIPTION]
@@ -338,6 +348,17 @@ class TestTheValidatorReachesAVendorDescription:
         default, and not before. The default has moved, so colliding a rendering
         mesh is once again the plain defect CLAUDE.md §10 names, with a generated
         alternative one field away.
+
+        **"With a generated alternative one field away" is the condition, not
+        decoration.** Where the range rule refuses that alternative — a work-piece
+        narrower than the width the geometry was argued over, or one whose width
+        L0 cannot compute — this finding is silent, because the vendor's set is
+        then the only legal selection and refusing it too would leave a required
+        field with no valid value. That is the state this branch shipped for one
+        day. The model here declares a 50 mm part, so the alternative is available
+        and the finding stands;
+        `test_validate_geometric.TestTheRemedyTheHintNamesIsAValidModel` asserts
+        the other side.
         """
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         findings = physical.check(load(real_model))

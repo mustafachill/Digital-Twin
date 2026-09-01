@@ -71,6 +71,36 @@ is how the wrong claim survived review in the first place. So:
 If the *decision* is what turned out wrong, this is not a correction. Write a new ADR and
 set this one to `Superseded by NNNN`.
 
+## In-place markers
+
+Rule 2 above puts `**[Corrected YYYY-MM-DD — …]**` beside a sentence that is now false. Four
+markers of that shape are in use, and until 2026-09-01 only the first was written down here —
+which is how a fourth spelling got invented without anyone noticing there were three.
+
+They differ in **what happened to the sentence**, and picking the wrong one tells the reader
+the wrong thing about why it is still there.
+
+| Marker | Use it when | What the reader learns |
+|---|---|---|
+| `**[Corrected YYYY-MM-DD — …]**` | The sentence was **wrong when written**, and something later measured it. | Do not believe it. See the Correction section. |
+| `**[Amended YYYY-MM-DD — …]**` | The sentence was right and the **decision it states has been changed** by a later amendment. | It is superseded by a decision, not by a measurement. |
+| `**[Overtaken YYYY-MM-DD — …]**` | The sentence was right when written and **events since made it false**, with nobody wrong. A count that moved, a default that flipped, a campaign that has since been run. | It is stale, not mistaken. |
+| `**[Replaced YYYY-MM-DD, kept for the record:]** *"…"*` | A **status line** was rewritten and the old wording is quoted after the marker. | This is what the status used to say. |
+
+Three rules about them.
+
+1. **`Superseded` is a status value, not an in-place marker.** It means *this whole record
+   was replaced by ADR NNNN*, and using the word inside a record's body — especially inside
+   the status block of an `Accepted` record — says the opposite of what is true. That is why
+   the fourth row is `Replaced`. One in-place use survives, in
+   [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md)'s status block, and it
+   stays: a record's text is not rewritten to satisfy a convention written after it.
+2. **A marker never edits the sentence it marks.** It stands after it, for the same reason
+   corrections do not rewrite: how the wrong claim survived is the valuable part.
+3. **A marker is not a substitute for a section.** `Corrected` and `Amended` require the
+   section rule 1 describes; `Overtaken` and `Replaced` do not, because nothing was measured
+   false — but both must name the record or the change that overtook them.
+
 [ADR-0022](0022-gripper-as-ros2-control-controller.md) is the worked example of a
 correction. [ADR-0023](0023-simulated-grasping-via-attachment.md) is the worked example of
 the distinction: it was corrected on 2026-08-25 for a claim, and superseded by

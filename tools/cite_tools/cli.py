@@ -188,9 +188,24 @@ def validate(
         gen.write(_generate(facility_model), generated_dir(model))
 
     findings = referential.check(facility_model)
+    # Referential integrity is the ONLY level whose failure may stop another
+    # level from running, and this used to read "any error at all".
+    #
+    # The distinction is not tidiness. Resolving a dangling reference raises
+    # rather than reporting, so a referential error genuinely makes the levels
+    # below unrunnable. A *physical* error does not: the model still resolves and
+    # the generators still run. Gating on the combined set meant one physical
+    # error silenced the geometric level **and the committed-vs-fresh diff below**
+    # — the hand-edit detector ADR-0021 rests on — and the state a contributor
+    # reaches by putting `select: vendor_meshes` back without regenerating is
+    # exactly that state: the collision error was reported and three stale
+    # descriptions and a stale MODEL_HASH were not. A check that switches itself
+    # off in the presence of an unrelated finding is worse than one that is
+    # missing, because its silence reads as a pass.
+    model_resolves = not any(f.severity is Severity.ERROR for f in findings)
     findings += physical.check(facility_model)
 
-    if not any(f.severity is Severity.ERROR for f in findings):
+    if model_resolves:
         for zone in facility_model.zones:
             try:
                 findings += geometric.check(resolve(facility_model, zone.id))
@@ -206,7 +221,7 @@ def validate(
     # generator run. This is the hand-edit check, and it only means anything
     # because generation is deterministic (ADR-0004).
     generated_problems: list[str] = []
-    if not any(f.severity is Severity.ERROR for f in findings) and not schema_problems:
+    if model_resolves and not schema_problems:
         artifacts = _generate(facility_model)
         generated_problems = _determinism_problems(model, artifacts)
         generated_problems += gen.differences(artifacts, generated_dir(model))

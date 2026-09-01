@@ -15,7 +15,7 @@
   **Everything below the amendment is left exactly as it stood**, including the sentence that
   the status stays `Proposed` and the shipped default stays on the vendor's meshes; both were
   true when written and neither is now.
-  **[Superseded 2026-09-01, kept for the record:]** *"Proposed — implemented and not promoted,
+  **[Replaced 2026-09-01, kept for the record:]** *"Proposed — implemented and not promoted,
   which is the amended gate working exactly as it was written to."* All four parts of the
   Decision are in the tree as of
   2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
@@ -50,7 +50,7 @@
   has since been designed against the 2026-08-31 hypothesis and run, and that hypothesis is
   wrong too. Read the newest correction section, named above, before reading this line as
   standing guidance.]**
-  **[Superseded 2026-08-31, kept for the record:]** *"decided in principle, nothing
+  **[Replaced 2026-08-31, kept for the record:]** *"decided in principle, nothing
   implemented. No hull exists: `assets/` contains only `README.md` and `manifest.yaml`, no
   `assets/meshes/` directory has been created, and the L0 schema has no field through which a
   collision mesh could be bound to a vendor-described type. Promoted to `Accepted` by the
@@ -197,10 +197,123 @@ left in the sections below so that nobody has to assemble them.
   metric the campaign detected at its registered effect size and it survived the block rule. The
   campaign was not looking there. ADR-0051 decision 4 names what would settle it; nothing here
   does.
+  **[Added 2026-09-01: the leading candidate is now DISFAVOURED and not eliminated.]** The
+  candidate ADR-0051 decision 4 names first — some hulled link other than the two pads touching
+  the part — was tested against static geometry by the safety audit of that date, and it does
+  not survive well: across the full drive stroke against a 50 x 50 mm face the closest non-pad
+  link stays **5.04 - 5.16 mm** clear and the hull moves that by **≤ 0.001 mm**; the pad's own
+  contact surface is unchanged at triangle level (22 faces, 1098.1 mm², same plane, both
+  geometries); and tilting the face 2° to 40° keeps first contact at the pad's distal edge on
+  both. **This is static geometry, not a run**, and the residual is not explained — nobody may
+  write that it is. The observation that would settle it is unchanged: one block with the
+  contact filter widened to every collision pair involving the work-piece.
 - **The narrow-part case is untested.** No work-piece narrower than the range has been run
   against a derived set, and two things move together at a narrower width that the campaign
   separated neither of. That is why 2d is a refusal in the validator and not a sentence in a
   file.
+
+### The interim self-collision check this record named is built, in a different shape
+
+**Added 2026-09-01 by the review of the promoting change**, after a safety audit measured the
+half nobody had. This record's residuals section names an interim measure — *"a check that
+fails when a derived set is selected while the SRDF's matrix names the vendor's"* — and it now
+exists, **keyed on an L0 declaration rather than on the selection alone.** The reasoning is
+recorded because the first answer to this was to decline it, and the reason that answer was
+wrong is the useful part.
+
+**Why not the shape this record named.** Written that way the check fails on the shipped
+configuration the moment it exists: a derived set *is* selected and the SRDF's matrix *is* the
+vendor's, so it has no passing state to move towards. That is a **blocker**, not an interim
+measure — either carried on every run, which is the state ADR-0051's rule exists to avoid, or
+reverted. **But declining it left the residual with the largest measured effect guarded by
+nothing**, while the narrow-part residual — which has no measurement at all — got a validator
+rule in the same change. That asymmetry is what settled it.
+
+**The shape that works is this record's own decision 4, applied a second time.** Decision 4
+closed an identical structural hole for collision *meshes*: a vendor description is invoked and
+never ingested, so no rule may open a vendor file, and the rule that would have caught the
+defect returned an empty list for exactly the links where it occurs. The fix was to make **L0
+declare what the vendor does**. So:
+
+`model/assets/types/robots/xarm5.yaml` now carries `planning.vendor_self_collision_matrix`,
+naming the collision set the vendor's matrix was audited against and the audit's figures, and
+`cite_tools.validate.physical._vendor_self_collision_matrix_is_acknowledged` fails a model that
+binds a derived set, invokes the vendor's SRDF macro, and **carries no acknowledgement — or one
+audited against a different set.** The state becomes *declarable* instead of either silent or
+unshippable, and changing either side reopens it. It is a guard, not a fix: it checks that a
+human wrote the mismatch down, and it verifies no figure in the declaration.
+
+**The sizing, which is what the declaration carries**, read from the generated SRDF and the
+vendor macro by the model-validator review, and — for the second half — measured by the safety
+audit of 2026-09-01:
+
+- **78** geometry-bearing link pairs on the arm: **34** the vendor's macro leaves **enabled**,
+  **44** it **disables**.
+- The enabled half is covered by this record's own configuration sampling: **9 of 484** (1.9 %)
+  newly self-colliding under hulls.
+- **The disabled half had never been measured, and it is the half MoveIt never checks.** Four
+  pairs interpenetrate under hulls where the vendor metal is 1.57 to 31.77 mm apart:
+  `left_inner_knuckle`/`left_outer_knuckle` (**100 %** of 200 sampled configurations),
+  `left_outer_knuckle`/`xarm_gripper_base_link` (**100 %**), `link3`/`link5` (7.1 % of 2025),
+  `link2`/`link5` (1.0 % of 2744), `link2`/`link4` (0.25 %). The right-side gripper pairs
+  mirror the left by construction.
+- **No pair carries `reason="Always"`**, and a hull contains the mesh it replaces, so "a pair
+  that always collided no longer touches" **cannot occur**. The asymmetry runs one way: a hull
+  can make a disabled pair touch, never the reverse.
+
+**The runtime consequence today, and the one that is one edit away.** The 44 disabled pairs
+have **no effect on the running cell**: MoveIt's allowed collision matrix excludes them from
+planning, and Gazebo computes no same-model self-contacts — `grep -rn self_collide` returns
+nothing anywhere relevant and SDFormat defaults it false. **That default is the only thing
+holding it.** Setting `<self_collide>true</self_collide>` is an ordinary fidelity improvement
+nothing here argues against, and under hulls it would put permanent contact between the gripper
+linkage from the instant the model spawns — the drive joint stalls, `gripper_is_holding`
+reports an empty grasp on every pick, and the hardware backend does none of that, which makes
+it a **P2 divergence with the simulation as the broken half.** `cite_tools.generate` now
+refuses to emit that combination. The interpenetration is measured and exhaustive over the
+sampled stroke; **the consequence is reasoned from SDFormat's documented semantics and has not
+been observed on a running cell**, and must not be written up as though it had.
+
+**The obvious next step is not obviously right.** Regenerating the matrix from the *selected*
+geometry would disable pairs on the strength of hull material that does not exist. On this arm
+nothing is lost, because the always-interpenetrating hull pairs are the gripper linkage the
+vendor already disables and whose real gap is 1.57 mm — **but that is a measured fact about
+this robot, not a property of hulls**, and it is recorded here because until 2026-09-01 the
+tree did not carry it. Re-deriving the matrix per selected set, as a generated artifact,
+remains owed its own record.
+
+**Also done, and smaller.** The generated SRDF's own header now says the pairing is broken, in
+the file a MoveIt debugger opens first (`tools/cite_tools/templates/moveit/srdf.xacro.j2`, and
+the same sentence on `PlanningSpec`). It used to read *"the self-collision matrix, which is a
+property of the vendor's geometry rather than of our facility"* — a pairing that stopped
+holding on 2026-09-01.
+
+### The hull adds no clearance, in any external direction
+
+**Added 2026-09-01, and it is here because the opposite is the natural inference.** "Twelve
+links per arm now collide against a proper collision shape" reads as "the arm is fatter, so it
+stops sooner". It is not.
+
+Measured by the safety audit over **20,000 random directions on all thirteen hulls: the hull's
+support function exceeds its source's by +0.000000 mm.** Every gram of added material is inside
+a concavity. An object approaching a link convexly from outside therefore contacts it at
+exactly the same distance as before.
+
+Two consequences to carry:
+
+- **ADR-0027's sampling residual is completely unaffected.** `ValidateSolution` checks
+  trajectory waypoints and interpolates nothing between them at a 0.1 s step, so a tool point
+  above 0.40 m/s can step past the 40 mm beam housings in the generated planning scene.
+  Tunnelling is an approach from outside; the hull narrows that window by nothing.
+- **Hulls may never be cited as margin in a safety case.** What they buy is simulation capacity
+  and contact fidelity, not clearance.
+
+**What is still unmeasured** is environment clearance at the cell's actual working poses. At
+`home` and `hold-up` every hull-to-scene clearance is identical to the vendor's to 0.00 mm, and
+per link a hull can eat at most its own concavity depth — 14.07 mm at the gripper base,
+21.76 mm at `link4`, 60 - 62 mm at `link2`/`link3`. Static geometry cannot settle it; the cheap
+settlement is to replay the trajectories the existing scenarios produce and report per-waypoint
+minimum link-to-object distance under both geometries.
 
 **And every figure behind 2b is one machine at one `max_step_size`.** That constant is a
 generator constant, ADR-0029's friction campaign found grasp behaviour strongly sensitive to it

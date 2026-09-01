@@ -701,8 +701,12 @@ account of a flake; each was caught by someone re-running, never by someone read
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
     determinism, and do not upgrade the claim on the strength of the planner alone.
   - **Twelve links per arm collided against their visual mesh until 2026-09-01. They now
-    collide against derived convex hulls, and what is open is the three residuals promotion did
-    not close.** §10 below names the defect class. **The shipped selection is
+    collide against derived convex hulls, and what is open is the residuals promotion did
+    not close.** §10 below names the defect class. **Do not state how many residuals there are
+    here** — this bullet said "three" for one day and the list it pointed at had four, dropping
+    the narrow-part case that the new validator rule exists for; read ADR-0028's amendment of
+    2026-09-01 and its "Residuals recorded 2026-08-31" section, which is where they are kept.
+    **The shipped selection is
     `convex_hull`** — `grep -n "select:" model/assets/types/robots/xarm5.yaml` is the
     instrument, and `./scripts/validate-model` exits 0 on it, reporting the model valid.
     Selecting the vendor's meshes is now an **ERROR** in
@@ -730,19 +734,63 @@ account of a flake; each was caught by someone re-running, never by someone read
     2c is a **geometric** clearance argument computed twice by instruments that share nothing,
     agreeing to 0.01 mm. Read ADR-0028's amendment of 2026-09-01 for all four sub-clauses with
     the strength of each; it is not restated here.
-    **The evidence is bounded to this cell's 50 mm cube, and the bound is enforced rather than
-    written down.** A narrower part closes the jaws further and has never been tested against a
+    **The evidence is bounded to a work-piece no narrower than 50.0 mm — the width the
+    2026-09-01 campaign ran at — and the bound is enforced rather than written down.** Say it
+    that way and not as "this cell's 50 mm cube": today's L0 cube is 50 mm too, and **those are
+    two quantities that agree by coincidence**. The code keeps them apart on purpose, because a
+    range derived from L0 would make the check `narrowest >= narrowest`, which cannot fail.
+    A narrower part closes the jaws further and has never been tested against a
     derived set, so `_derived_collision_is_within_its_measured_range` in the same validator
     **fails** a model that binds a derived set while declaring one — declaring a narrow part is
     the act ADR-0051 says reopens clause 2, and this rule is the only thing that will say so.
-    **Three residuals are open and `Accepted` closes none of them**, all in ADR-0028's
-    amendment with their figures: the generated SRDF still invokes the **vendor's**
-    self-collision matrix, computed against vendor geometry, and nothing checks the pairing;
-    `end_tool` is the one link where the hull trades fidelity for a negligible share of the
-    saving; and one campaign metric — the jaws stalling marginally earlier on hulls — was
-    DETECTED, is a **control**, and is **unexplained**. Every figure behind the grasp clause is
-    **one machine, one arm, one part, one `max_step_size`**, and Phase 3's physics retune
-    reopens it.
+    **The rule has a stated edge and one remaining silence, and this file asserted the
+    enforcement without either until 2026-09-01.** A work-piece whose width L0 cannot compute —
+    a **mesh** part — is its own ERROR since that date (`derived-collision-range-unstated`);
+    before it, changing the cube to a mesh switched the range rule *and*
+    `default-grasp-width-never-closes` off in one line with no finding at all. What stays
+    silent is a facility that declares **no work-piece whatsoever**: the derived set then ships
+    against a width nobody has stated, and the rule's own docstring records that as a gap
+    rather than as coverage. **Selecting the vendor's meshes is legal wherever that rule
+    fires** — it has to be, or a narrow part would have no valid collision selection at all,
+    which is the state this branch shipped for one day.
+    **Residuals are open and `Accepted` closes none of them**, all in ADR-0028's amendment and
+    residuals section with their figures — do not count them here: the generated SRDF still
+    invokes the **vendor's** self-collision matrix, computed against vendor geometry, and the
+    mismatch is now **declared in L0 and held by a validator rule** in ADR-0028 decision 4's
+    shape rather than checked — declaring is not fixing, and the rule verifies no figure in the
+    declaration; `end_tool` is the one link where the hull trades
+    fidelity for a negligible share of the saving; one campaign metric — the jaws stalling
+    marginally earlier on hulls — was DETECTED, is a **control**, and is **unexplained**; the
+    **narrow-part case is untested**, which is what the validator rule above refuses rather
+    than fixes; and four pipeline gates prove less than they appear to. **Half of the
+    CPU-architecture residual is retired and half is not**: CI run `33479867459` on `main`
+    reports `ok 1 set(s), 13 mesh(es) match the vendor` on ubuntu-24.04, so the committed hulls
+    re-derive byte-identically on x86_64 — that is the *derivation*, and it says nothing about
+    the shipped *selection*, which no CI run has ever brought a cell up on. Every figure behind
+    the grasp clause is **one machine, one arm, one part, one `max_step_size`**, and Phase 3's
+    physics retune reopens it.
+    **A HULL ADDS NO CLEARANCE, AND THE OPPOSITE IS THE NATURAL INFERENCE FROM EVERYTHING
+    ABOVE.** Over 20,000 random directions on all thirteen hulls the hull's support function
+    exceeds its source's by **+0.000000 mm** — every gram of added material is inside a
+    concavity. So **ADR-0027's sampling residual is untouched** (a tool point above 0.40 m/s
+    still steps past a 40 mm beam housing; tunnelling is an approach from outside), and **hulls
+    may never be cited as margin in a safety case.**
+    **One hull property is load-bearing on a setting nothing here sets, and the generator now
+    refuses the combination.** Under hulls the gripper linkage interpenetrates in **every**
+    sampled configuration where the vendor geometry keeps 1.57 mm, and SDFormat's
+    `<self_collide>` default of `false` is the only thing making that inert. Enabling it — an
+    ordinary fidelity improvement — would stall the drive joint at spawn and report every grasp
+    empty **on the simulated side only**, which is a **P2 divergence with the simulation as the
+    broken half**. The interpenetration is measured and exhaustive over the sampled stroke; the
+    consequence is **reasoned from SDFormat's documented semantics and has not been observed on
+    a running cell**, and may not be written up as though it had.
+    **NO SCENARIO OR CI FIGURE ANYWHERE IN THIS SECTION WAS MEASURED WITH HULLS.** `bringup`'s
+    12 of 12, the pick-and-place cycle, the six-run `continuous_line` table and the whole
+    teardown-family split were all taken with **vendor** collision geometry, and **no CI run
+    has ever brought this cell up against the hulls** — the selection moved on 2026-09-01 and
+    every one of those runs predates it. Read them as evidence about the cell that was, and
+    **do not widen any ceiling to absorb whatever CI shows next**; a ceiling widened to fit a
+    geometry change is a measurement thrown away.
     **The capacity case is separate and was never grasp evidence.** Measured as capacity with
     the world's throttle lifted by
     [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](docs/measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)

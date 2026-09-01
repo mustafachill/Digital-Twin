@@ -46,6 +46,27 @@
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
 
+  <!-- For test_expanded_collision_references_are_covered, which expands the
+       generated arm description and requires every collision mesh it names to be
+       one this package installs. `xacro` runs the expansion, `xarm_description`
+       is the vendor package the generated file includes, and
+       `ament_index_python` resolves a `package://` mesh URI on the hardware
+       backend's spelling. A test that only ran where the vendor package happened
+       to be built would be a test that reports nothing on the machine that needs
+       it.
+
+       `cite_generated` is deliberately NOT among them, and it cannot be: since
+       2026-09-01 its generated `package.xml` declares an `exec_depend` on THIS
+       package, because the descriptions it emits resolve their collision meshes
+       here — so depending on it in either direction closes a cycle and colcon
+       refuses to order the workspace at all. The test reads the generated
+       description out of the SOURCE tree instead, which `./scripts/validate-model`
+       already proves byte-identical to a fresh generator run (ADR-0021), so
+       nothing is lost by not depending on the installed copy. -->
+  <test_depend>xacro</test_depend>
+  <test_depend>xarm_description</test_depend>
+  <test_depend>ament_index_python</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

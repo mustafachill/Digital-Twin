@@ -44,7 +44,21 @@ MIN_MEASURED_FOLLOWER_HEADROOM = 0.25
 #: The narrowest work-piece, in metres, over which a **derived** collision set has
 #: been shown not to change how this cell holds a part.
 #:
-#: ADR-0051 decision 3 states it and this is the one place it is a number (P1).
+#: **It is 50.0 mm, the width the 2026-09-01 campaign ran at**, and that sentence
+#: is the whole of its definition. It is NOT "this cell's cube": today's L0 cube
+#: happens to be 50 mm too, and the two are different quantities that agree by
+#: coincidence of history. Deriving this from L0 would turn the rule below into
+#: ``narrowest >= narrowest``, which cannot fail — so the two stay separate on
+#: purpose, and the day someone changes the cube this constant must not move with
+#: it. A narrower part is what the rule refuses; a narrower part that has been
+#: measured is what moves this number.
+#:
+#: ADR-0051 decision 3 is the decision, and **it writes ``0.050 m`` literally too**
+#: — this module is where the threshold is *enforced*, not the only place it is
+#: spelled, and the two have to move together. (This comment claimed to be "the one
+#: place it is a number" until 2026-09-01, which the record it cites already
+#: falsified on the day it was written.)
+#:
 #: It is not a safety factor and not a round figure chosen for comfort: it is the
 #: width of the part the clause-2 campaign actually ran, and the clearance argument
 #: that lets a hull ship is an argument about *this* width. A rigid part with a
@@ -60,13 +74,19 @@ def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
     seen_tensors: dict[tuple[float, ...], list[str]] = {}
     narrowest_workpiece = _narrowest_workpiece_width_m(model)
+    unstated_workpieces = _workpieces_without_a_stated_width(model)
 
     for asset_type in model.types:
         findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
-        findings += _derived_collision_is_within_its_measured_range(asset_type, narrowest_workpiece)
+        findings += _derived_collision_is_within_its_measured_range(
+            asset_type, narrowest_workpiece, unstated_workpieces
+        )
         findings += _followers_can_still_correct(asset_type)
         findings += _result_timeout_outlasts_the_stall_search(asset_type)
-        findings += _vendor_collision_is_declared(asset_type)
+        findings += _vendor_collision_is_declared(
+            asset_type, narrowest_workpiece, unstated_workpieces
+        )
+        findings += _vendor_self_collision_matrix_is_acknowledged(asset_type)
 
         body = asset_type.description.body
         if body is None:
@@ -201,7 +221,46 @@ def _com_inside_geometry(body: Body, where: str) -> list[Finding]:
     return []
 
 
-def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
+def _no_derived_set_may_be_bound(
+    narrowest_workpiece_m: float | None, unstated_workpieces: tuple[str, ...]
+) -> str | None:
+    """Why a derived collision set is refused for this facility, or ``None``.
+
+    One predicate, read by both collision rules, and having exactly one is the
+    point. ``_derived_collision_is_within_its_measured_range`` refuses a derived
+    set when this returns a reason; ``_vendor_collision_is_declared`` stays silent
+    about the vendor's meshes when it does, because then **the vendor's set is the
+    only selection left** and refusing it too would leave the model author no
+    legal value for a required field.
+
+    That contradiction shipped on 2026-09-01 and is what this function exists to
+    remove: both rules were ERRORs, each hint pointed at the other's state, and a
+    40 mm work-piece was refused `convex_hull` for being outside the measured range
+    **and** refused `vendor_meshes` for reusing a rendering mesh. A narrow part was
+    unmodellable, which is not a policy anyone chose. The vendor's meshes are the
+    geometry this cell shipped and measured for months; they are a worse collision
+    surface and they are a legal one.
+    """
+    if unstated_workpieces:
+        return (
+            f"the narrowest work-piece this facility declares has no stated width "
+            f"({', '.join(unstated_workpieces)})"
+        )
+    if narrowest_workpiece_m is not None and narrowest_workpiece_m < NARROWEST_MEASURED_WORKPIECE_M:
+        return (
+            f"the narrowest work-piece this facility declares is "
+            f"{narrowest_workpiece_m * 1000.0:.1f} mm, below the "
+            f"{NARROWEST_MEASURED_WORKPIECE_M * 1000.0:.1f} mm the geometry that promoted "
+            "a derived set was argued over"
+        )
+    return None
+
+
+def _vendor_collision_is_declared(
+    asset_type: AssetType,
+    narrowest_workpiece_m: float | None,
+    unstated_workpieces: tuple[str, ...],
+) -> list[Finding]:
     """The other half of the rule below: it reaches a *vendor* description.
 
     ADR-0028 decision 4. ``_collision_is_not_a_visual_mesh`` returns an empty list
@@ -230,6 +289,17 @@ def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
       collision geometry is once again the plain defect CLAUDE.md §10 names —
       with, now, a generated alternative one field away. ``--strict`` no longer
       has anything to add here.
+
+    **ONE CONDITION ON THE SECOND OUTCOME, ADDED 2026-09-01 BY THE REVIEW OF THE
+    CHANGE THAT SHIPPED IT.** ``vendor_meshes`` is a legal selection for a type
+    whose derived sets ``_no_derived_set_may_be_bound`` refuses — that function is
+    the single predicate both collision rules read, and it exists because without
+    it the two rules contradicted each other: a 40 mm work-piece was refused
+    ``convex_hull`` for being outside the measured range **and** refused
+    ``vendor_meshes`` for reusing a rendering mesh, so a narrow part had no valid
+    collision selection at all. This finding is a defect **relative to an
+    alternative that is actually available**; where none is, it is not a defect but
+    the state of the evidence, and the rule below is the one that says so.
     """
     if not asset_type.emits_vendor_description:
         return []
@@ -250,6 +320,9 @@ def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
     if collision.selected.kind != "vendor_meshes":
         return []
     alternatives = sorted(s.id for s in collision.sets if s.kind != "vendor_meshes")
+    refused = _no_derived_set_may_be_bound(narrowest_workpiece_m, unstated_workpieces)
+    if alternatives and refused is not None:
+        return []
     return [
         error(
             "collision-reuses-visual-mesh",
@@ -259,12 +332,111 @@ def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
             "For the xArm variant this model describes, the vendor's collision_dir IS "
             "its visual_dir, so those are rendering meshes. ADR-0028 is the decision; "
             + (
-                f"the set(s) {alternatives} are generated and available."
+                f"the set(s) {alternatives} are generated and available, and this "
+                "facility's declared work-pieces are inside the range they were "
+                "measured over (ADR-0051 decision 3)."
                 if alternatives
                 else "no alternative set is declared."
             ),
         )
     ]
+
+
+def _vendor_self_collision_matrix_is_acknowledged(asset_type: AssetType) -> list[Finding]:
+    """A derived collision set and the vendor's matrix must be declared together.
+
+    ADR-0028's interim check, built 2026-09-01 in the shape ADR-0028 decision 4
+    already established for the identical structural hole one layer down.
+
+    THE HOLE. The SRDF is *invoked*, never copied, so its self-collision matrix
+    is a function of the **vendor's** collision geometry. This type now binds
+    convex hulls of that geometry. A hull is never smaller than what it replaces,
+    so the failure runs one way: **a pair the vendor DISABLED can interpenetrate
+    under hulls, and MoveIt never checks a disabled pair.** The opposite —
+    an always-colliding pair that stops touching — cannot occur, and no pair on
+    this arm carries ``reason="Always"`` anyway.
+
+    WHY THIS SHAPE AND NOT THE ONE ADR-0028 NAMED. That record asks for "a check
+    that fails when a derived set is selected while the SRDF's matrix names the
+    vendor's". Written that way it fails on the shipped configuration the moment
+    it exists, with no passing state to move towards — a **blocker**, which gets
+    reverted rather than answered, and this project has watched a carried finding
+    become invisible before. Keyed on an L0 *declaration* instead, the state
+    becomes declarable: the model says what the vendor's matrix was audited
+    against, the rule holds the two together, and **changing either one reopens
+    it**. That is exactly what decision 4 did for collision meshes.
+
+    WHAT IT DOES NOT DO, stated so nobody reads the green as safety. It does not
+    check the matrix, re-derive it, or verify a figure in the declaration. It
+    checks that a human wrote one down against the set actually bound. The
+    numbers are the audit's, and the audit is static geometry on one reading.
+
+    AND THE OBVIOUS NEXT STEP IS NOT OBVIOUSLY RIGHT. Regenerating the matrix
+    from the *selected* geometry would disable pairs on the strength of hull
+    material that does not exist — a hull fills concavities, so two links whose
+    hulls interpenetrate may have millimetres of real metal between them. On this
+    arm nothing is lost, because the always-interpenetrating hull pairs are the
+    gripper linkage the vendor already disables; that is a measured fact and not
+    a general one.
+    """
+    if not asset_type.emits_vendor_description:
+        return []
+    collision = asset_type.description.collision
+    if collision is None or collision.selected.kind == "vendor_meshes":
+        return []
+    planning = asset_type.planning
+    if planning is None or planning.srdf_macro is None:
+        return []
+
+    where = f"types.{asset_type.id}.planning.vendor_self_collision_matrix"
+    hint = (
+        "ADR-0028: the SRDF is invoked rather than copied, so its matrix is a property of "
+        "the vendor's collision geometry, and this type binds a hull of that geometry "
+        "instead. A hull is never smaller than what it replaces, so a pair the vendor "
+        "DISABLED can interpenetrate while MoveIt never checks it. Declare the "
+        "acknowledgement with the audit that produced its figures, or select the vendor's "
+        "collision set. Do not answer this by regenerating the matrix against hulls: that "
+        "disables pairs on the strength of material a hull invented."
+    )
+    acknowledged = planning.vendor_self_collision_matrix
+    if acknowledged is None:
+        return [
+            error(
+                "vendor-self-collision-matrix-unacknowledged",
+                where,
+                f"this type binds the derived collision set {collision.select!r} and "
+                f"invokes the vendor SRDF macro {planning.srdf_macro!r}, whose "
+                "self-collision matrix was computed against the vendor's geometry; "
+                "nothing in the model acknowledges the mismatch",
+                hint,
+            )
+        ]
+    declared = {s.id for s in collision.sets}
+    if acknowledged.audited_for not in declared:
+        return [
+            error(
+                "vendor-self-collision-matrix-unacknowledged",
+                where,
+                f"the acknowledgement names collision set "
+                f"{acknowledged.audited_for!r}, which this type does not declare "
+                f"(declared: {sorted(declared)})",
+                hint,
+            )
+        ]
+    if acknowledged.audited_for != collision.select:
+        return [
+            error(
+                "vendor-self-collision-matrix-unacknowledged",
+                where,
+                f"this type binds {collision.select!r} and the acknowledgement was "
+                f"audited against {acknowledged.audited_for!r}, so it covers geometry "
+                "this model no longer loads",
+                "An acknowledgement that survives a geometry change reads as coverage "
+                "and is not. Re-run the audit against the set now bound and restate the "
+                "figures, or bind the set it was taken against. " + hint,
+            )
+        ]
+    return []
 
 
 def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[Finding]:
@@ -306,6 +478,13 @@ def _narrowest_workpiece_width_m(model: FacilityModel) -> float | None:
     ``None`` when no work-piece has known extents — none declared, or a mesh part
     whose geometry L1 owns — so that the rule below falls back to the bound it
     can still derive instead of inventing one.
+
+    **``None`` is two different states and this function cannot tell them apart**,
+    which is why ``_workpieces_without_a_stated_width`` exists beside it. "This
+    facility handles no parts" and "this facility handles a part nobody has stated
+    the width of" deserve different answers, and collapsing them here is what let a
+    one-line edit — a mesh work-piece — switch off both this rule's consumers at
+    once with no finding at all.
     """
     by_id = {t.id: t for t in model.types}
     widths = [
@@ -317,6 +496,37 @@ def _narrowest_workpiece_width_m(model: FacilityModel) -> float | None:
         and (extents := body.horizontal_extents_m) is not None
     ]
     return min(widths) if widths else None
+
+
+def _workpieces_without_a_stated_width(model: FacilityModel) -> tuple[str, ...]:
+    """Declared work-piece types whose horizontal footprint is not a stated number.
+
+    The complement of ``_narrowest_workpiece_width_m``'s input, and it is a
+    finding rather than a silence. A mesh work-piece — or one with no
+    ``description.body`` at all — carries its extents in a file L1 owns, so
+    nothing at L0 can measure across it. That is a legitimate way to describe a
+    part; it is not a legitimate way to acquire a *bound*, and the rules that want
+    one have to be told rather than left to read ``None``.
+
+    Both consumers used to fall silent on it together
+    (``default-grasp-width-never-closes`` and
+    ``derived-collision-outside-measured-range``), so one line in L0 removed two
+    bounds and reported nothing. This closes the half where the silence is
+    load-bearing: a derived collision set bound against a width nobody has stated
+    is exactly the act ADR-0051 decision 3 refuses. **The grasp-width half is
+    deliberately still a silence** — its weak bound survives, and widening that
+    rule was not this review's finding.
+    """
+    by_id = {t.id: t for t in model.types}
+    return tuple(
+        sorted(
+            name
+            for name in model.facility.workpiece_models
+            if (asset_type := by_id.get(name)) is not None
+            and asset_type.category == "workpiece"
+            and ((body := asset_type.description.body) is None or body.horizontal_extents_m is None)
+        )
+    )
 
 
 def _gripper_goal_tolerance(asset_type: AssetType) -> float | None:
@@ -471,7 +681,9 @@ def _default_grasp_width_can_close(
 
 
 def _derived_collision_is_within_its_measured_range(
-    asset_type: AssetType, narrowest_workpiece_m: float | None
+    asset_type: AssetType,
+    narrowest_workpiece_m: float | None,
+    unstated_workpieces: tuple[str, ...],
 ) -> list[Finding]:
     """A derived collision set ships against a width, not against every width.
 
@@ -499,6 +711,15 @@ def _derived_collision_is_within_its_measured_range(
     available and never destructive — select the vendor's set — so refusing costs a
     model author one field and no measurement.
 
+    **THAT ESCAPE HATCH IS NOW REAL, AND IT WAS NOT WHEN THIS RULE SHIPPED.** The
+    same change made ``_vendor_collision_is_declared`` refuse ``vendor_meshes``
+    unconditionally, so for one day both rules were ERRORs and the answer each hint
+    named was refused by the other: a 40 mm cube reported
+    ``derived-collision-outside-measured-range`` on ``convex_hull`` and
+    ``collision-reuses-visual-mesh`` on ``vendor_meshes``, and had no legal
+    selection at all. ``_no_derived_set_may_be_bound`` is now the one predicate
+    both rules read, and the vendor's set is silent wherever this rule fires.
+
     WHAT MUST BE MEASURED BEFORE A NARROWER PART MAY SHIP AGAINST A DERIVED SET,
     in ADR-0051 decision 3's order and not repeated in detail here:
 
@@ -510,35 +731,63 @@ def _derived_collision_is_within_its_measured_range(
        with the contact-patch and contact-normal instruments pre-registered as
        before.
 
-    WHAT THIS DOES NOT COVER, said rather than left to be found. It reads the same
-    ``_narrowest_workpiece_width_m`` as the rule above, so a facility that declares
-    no work-piece, or one whose parts are meshes, gets no bound and no finding —
-    the derived set then ships against a width nobody has stated, which is a
-    weaker silence than a wrong answer but is still a silence. It also says
-    nothing about *shape*: the clearance argument wants a rigid part with a flat
-    grasped face, and a horizontal extent is all L0 records.
+    A WORK-PIECE WITH NO STATED WIDTH IS ITS OWN FINDING, since 2026-09-01, and
+    this paragraph used to record it as a gap instead. ``_narrowest_workpiece_width_m``
+    returns ``None`` for a **mesh** work-piece as well as for a facility that
+    declares none, and returning ``[]`` on ``None`` meant one line in L0 — change
+    the cube to a mesh — shipped a 20 mm part against the hulls with this rule
+    silent, which is precisely the act ADR-0051 decision 3 says reopens clause 2.
+    ``derived-collision-range-unstated`` now says so. It is an ERROR for the same
+    reason the width case is: the vendor's set is available, costs one field, and
+    the alternative is a bound nobody can check.
+
+    WHAT THIS STILL DOES NOT COVER, said rather than left to be found. A facility
+    that declares **no work-piece at all** gets no bound and no finding — the
+    derived set then ships against a width nobody has stated, which is a weaker
+    silence than a wrong answer but is still a silence, and it is a silence about
+    a facility that handles nothing rather than about a part. It also says nothing
+    about *shape*: the clearance argument wants a rigid part with a flat grasped
+    face, and a horizontal extent is all L0 records.
     """
     collision = asset_type.description.collision
     if collision is None or collision.selected.kind == "vendor_meshes":
         return []
+    where = f"types.{asset_type.id}.description.collision"
+    remedy = (
+        "ADR-0051 decision 3: a work-piece outside that range may not ship against a "
+        "derived collision set until clause 2 has been answered at its width, and "
+        "declaring one reopens the clause. The pads hold by friction alone (ADR-0029), "
+        "so the contact surface is the mechanism and a narrower part closes the jaws "
+        "past the aperture the clearance was computed at. Either select the vendor's "
+        "set for this type — which is legal here, and this validator will not fault it "
+        "while this finding stands — or take the two measurements ADR-0051 names, in "
+        "its order, and move the range with the evidence."
+    )
+    if unstated_workpieces:
+        return [
+            error(
+                "derived-collision-range-unstated",
+                where,
+                f"this type binds the derived collision set {collision.select!r} while "
+                f"the work-piece type(s) {list(unstated_workpieces)} state no horizontal "
+                "extents, so the width the derived geometry would be judged against "
+                "cannot be computed at all",
+                "A mesh work-piece carries its extents in a file L1 owns, so no rule here "
+                "can measure across it, and a bound nobody can compute is not a bound. " + remedy,
+            )
+        ]
     if narrowest_workpiece_m is None or narrowest_workpiece_m >= NARROWEST_MEASURED_WORKPIECE_M:
         return []
     return [
         error(
             "derived-collision-outside-measured-range",
-            f"types.{asset_type.id}.description.collision",
+            where,
             f"this type binds the derived collision set {collision.select!r} while the "
             f"narrowest work-piece this facility declares is "
             f"{narrowest_workpiece_m * 1000.0:.1f} mm, below the "
             f"{NARROWEST_MEASURED_WORKPIECE_M * 1000.0:.1f} mm the geometry that promoted "
             "that set was argued over",
-            "ADR-0051 decision 3: a work-piece narrower than that range may not ship "
-            "against a derived collision set until clause 2 has been answered at its "
-            "width, and declaring one reopens the clause. The pads hold by friction alone "
-            "(ADR-0029), so the contact surface is the mechanism and a narrower part "
-            "closes the jaws past the aperture the clearance was computed at. Either "
-            "select the vendor's set for this type, or take the two measurements ADR-0051 "
-            "names, in its order, and move the range with the evidence.",
+            remedy,
         )
     ]
 

@@ -61,6 +61,23 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_declared_collision_meshes_are_installable
     test/test_declared_collision_meshes_are_installable.py)
+
+  # The other half of the same question, and the one no host-side check can
+  # answer: does the DESCRIPTION name only meshes the model declared?
+  #
+  # The binding substitutes a collision-mesh ROOT wholesale, so a link whose
+  # mesh_filename the vendor macro composes differently — one `bound_args` entry
+  # is enough — resolves under the new root to a file nothing derived. Gazebo
+  # answers that with a log warning and a body that collides with nothing.
+  # Expansion is the only instrument that sees it: `hulls` compares the declared
+  # list against the vendor, the test above compares it against what is
+  # installed, and the L0 validators cannot know which links the vendor emits.
+  # ADR-0028 names this check; it did not exist until 2026-09-01.
+  #
+  # It needs `xacro`, the vendor package and this package's own install tree,
+  # which is why it is a package test in the container and not a `tools/` one.
+  ament_add_pytest_test(test_expanded_collision_references_are_covered
+    test/test_expanded_collision_references_are_covered.py)
 endif()
 
 ament_package()

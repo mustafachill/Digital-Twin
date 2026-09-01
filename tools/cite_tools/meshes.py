@@ -15,9 +15,14 @@ vendor file (P1).
 **What it is not.** It does not decide *which* geometry a description collides
 against. That is L0 data — ``description.collision.select`` on the robot type —
 and this module only produces the alternative so that the model has something to
-select. Producing a hull and binding it are deliberately separate, because the
-project ships the vendor meshes until the friction-grasp campaign has been re-run
-against hulls (ADR-0028's amended promotion gate).
+select. Producing a hull and binding it are deliberately separate, and they stay
+separate now that the binding has moved: **the shipped selection has been
+`convex_hull` since 2026-09-01** (ADR-0028, `Accepted` against the clause
+[ADR-0051] restates). This paragraph said until that date that "the project ships
+the vendor meshes until the friction-grasp campaign has been re-run against
+hulls"; the campaign has been run and published, and the vendor's set is now the
+declared fallback rather than the default. Which set a description binds is still
+none of this module's business — ask ``description.collision.select`` in L0.
 
 **Determinism.** ADR-0028 requires that a regenerated hull be byte-identical or
 the change be real, which is what makes a committed derived asset checkable.

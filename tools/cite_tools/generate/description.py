@@ -253,10 +253,20 @@ def _collision_args(spec: Any, asset: ResolvedAsset) -> list[tuple[str, str]]:
     """The collision-mesh root, if the type binds one (ADR-0028).
 
     Empty whenever the selected set is the vendor's own meshes, and that emptiness
-    is load-bearing: the shipped model selects `vendor_meshes`, so this generator
-    emits exactly the bytes it emitted before the field existed. A binding that
-    changed the output when nothing was selected would have made the byte-identity
-    check unable to tell "the default is unchanged" from "the default moved".
+    is load-bearing: selecting `vendor_meshes` emits exactly the bytes this
+    generator emitted before the field existed. A binding that changed the output
+    when nothing was selected would have made the byte-identity check unable to
+    tell "the default is unchanged" from "the default moved".
+
+    **The shipped model no longer selects `vendor_meshes`.** It selected it until
+    2026-09-01; ADR-0028 is `Accepted` against the clause ADR-0051 restates and
+    `select` is `convex_hull`, so the emptiness above describes the *fallback*
+    rather than the shipped path. This paragraph said the opposite until
+    2026-09-01, and worse: it asserted a byte-identity property — "this generator
+    emits exactly the bytes it emitted before the field existed" — as a statement
+    about the shipped output, which stopped being true the moment the field moved.
+    A reader relying on it would have expected three unchanged descriptions.
+    `tools/tests/test_collision_binding.py` holds both halves.
 
     The scheme comes from the model, per backend, because the root this replaces
     branches on the backend and this one has to branch with it.

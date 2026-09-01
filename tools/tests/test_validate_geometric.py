@@ -571,8 +571,27 @@ class TestDerivedCollisionGeometryIsBoundToAWidth:
     """
 
     RULE = "derived-collision-outside-measured-range"
+    UNSTATED = "derived-collision-range-unstated"
     WORKPIECE = "assets/types/workpieces/workpiece.yaml"
     ARM = "assets/types/robots/xarm5.yaml"
+
+    def _mesh_the_part(self, model: Path, edit_yaml: Callable) -> None:
+        """Give the cube a mesh collision body, which is what removes its width.
+
+        Collision only. `horizontal_extents_m` reads the collision geometry, so
+        this is the smallest edit that makes the width unknowable, and leaving the
+        visual a box keeps `collision-reuses-visual-mesh` on the authored body out
+        of the result — a second finding would make the assertions below ambiguous
+        about which rule fired.
+        """
+
+        def mutate(document: dict) -> None:
+            document["asset_type"]["description"]["body"]["collision"] = {
+                "kind": "mesh",
+                "uri": "package://cite_description/meshes/workpiece.stl",
+            }
+
+        edit_yaml(model / self.WORKPIECE, mutate)
 
     def _narrow_the_part(self, model: Path, edit_yaml: Callable, width_m: float) -> None:
         """Narrow the cube across its horizontal footprint, and only there.
@@ -627,10 +646,16 @@ class TestDerivedCollisionGeometryIsBoundToAWidth:
         narrow part is not this rule's business there — which is also why the
         finding can tell a model author to select them. If this fired on both
         selections it would be a rule about work-pieces, not about the binding.
+
+        The second assertion is the one this test lacked until 2026-09-01, and
+        lacking it is what let the contradiction ship: "this rule went quiet" is
+        true of a remedy and of a dead end alike. `TestTheRemedyTheHintNamesIsAValidModel`
+        below asks the whole question; this keeps the local half honest.
         """
         self._narrow_the_part(real_model, edit_yaml, 0.040)
         self._select_vendor(real_model, edit_yaml)
         assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+        assert "collision-reuses-visual-mesh" not in physical_rules(real_model, Severity.ERROR)
 
     def test_it_reads_the_selection_and_not_the_declaration(
         self, real_model: Path, edit_yaml: Callable
@@ -675,12 +700,58 @@ class TestDerivedCollisionGeometryIsBoundToAWidth:
         against a range nobody has stated. The rule says nothing — it has nothing
         to say — and the docstring on `_derived_collision_is_within_its_measured_range`
         records that as a gap rather than as coverage.
+
+        This is the case that stays silent. The one beside it — a work-piece that
+        IS declared and states no width — does not, since 2026-09-01.
         """
         edit_yaml(
             real_model / "facility/facility.yaml",
             lambda d: d["facility"].__setitem__("workpiece_models", []),
         )
         assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+        assert self.UNSTATED not in physical_rules(real_model, Severity.ERROR)
+
+    def test_a_mesh_workpiece_against_a_derived_set_is_its_own_finding(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The rule used to be switched off by omission, and this is that omission.
+
+        `_narrowest_workpiece_width_m` returns `None` for a mesh work-piece as
+        well as for a facility that declares none, and returning `[]` on `None`
+        made those two states one. So changing the cube's collision geometry to a
+        mesh — one line in L0 — shipped a part of *any* width against the hulls
+        with this rule silent, which is exactly the act ADR-0051 decision 3 says
+        reopens ADR-0028's clause 2.
+
+        The width is unknowable here rather than merely unfavourable, so the
+        finding is a different one: `derived-collision-range-unstated`.
+        """
+        self._mesh_the_part(real_model, edit_yaml)
+        assert self.UNSTATED in physical_rules(real_model, Severity.ERROR)
+        assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+
+    def test_the_unstated_finding_names_the_type_and_the_remedy(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """A refusal naming neither the part nor the way out sends someone reading code."""
+        self._mesh_the_part(real_model, edit_yaml)
+        finding = next(f for f in physical.check(load(real_model)) if f.rule == self.UNSTATED)
+        assert finding.where == "types.xarm5.description.collision"
+        assert "workpiece" in finding.message
+        assert "ADR-0051" in (finding.hint or "")
+
+    def test_the_vendor_set_stays_legal_for_a_mesh_workpiece(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The same escape hatch as for a narrow part, on the other refusal.
+
+        Both collision rules read one predicate, so wherever the derived set is
+        refused the vendor's set is not faulted — including here, where the width
+        cannot be computed at all.
+        """
+        self._mesh_the_part(real_model, edit_yaml)
+        self._select_vendor(real_model, edit_yaml)
+        assert physical_rules(real_model, Severity.ERROR) == set()
 
     def test_the_finding_names_both_widths(self, real_model: Path, edit_yaml: Callable) -> None:
         """A refusal that does not say what it refused sends someone reading code.
@@ -694,6 +765,112 @@ class TestDerivedCollisionGeometryIsBoundToAWidth:
         assert "40.0 mm" in finding.message
         assert "50.0 mm" in finding.message
         assert "ADR-0051" in (finding.hint or "")
+
+
+class TestTheRemedyTheHintNamesIsAValidModel:
+    """R-01. The escape hatch both collision rules point at has to exist.
+
+    For one day it did not. `_derived_collision_is_within_its_measured_range`
+    justified its ERROR severity by saying the correct answer *"is always
+    available and never destructive — select the vendor's set"*, and the same
+    change made `_vendor_collision_is_declared` refuse the vendor's set
+    unconditionally. A 40 mm cube reported one rule on `convex_hull` and the other
+    on `vendor_meshes`, so a narrow part had **no legal collision selection**, and
+    both of the tests written for the hatch asserted only that one rule had gone
+    quiet — which is true of a contradiction as well as of a remedy.
+
+    So this class asserts the thing those tests could not: after applying the
+    remedy the hint gives, **the model is valid**. Not "the rule stopped firing".
+    """
+
+    WORKPIECE = TestDerivedCollisionGeometryIsBoundToAWidth.WORKPIECE
+    ARM = TestDerivedCollisionGeometryIsBoundToAWidth.ARM
+
+    #: Narrow enough to be outside the measured range, wide enough that the
+    #: gripper's own bound is untouched: `default_grasp_width_m` is 45 mm and the
+    #: discrimination margin at that command is about 2.12 mm, so 48 mm clears
+    #: `default-grasp-width-never-closes` and nothing else in the validator has an
+    #: opinion. Anything narrower would make this test pass or fail for a second
+    #: reason, which is how a "the model is valid" assertion turns into noise.
+    NARROW_M = 0.048
+
+    def _narrow(self, model: Path, edit_yaml: Callable) -> None:
+        TestDerivedCollisionGeometryIsBoundToAWidth()._narrow_the_part(
+            model, edit_yaml, self.NARROW_M
+        )
+
+    def test_the_narrow_part_is_refused_the_derived_set(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The premise, asserted first so the test below cannot pass vacuously.
+
+        If 48 mm did not trip the range rule, the remedy assertion would be
+        checking that a model nobody faulted is valid.
+        """
+        self._narrow(real_model, edit_yaml)
+        assert physical_rules(real_model, Severity.ERROR) == {
+            "derived-collision-outside-measured-range"
+        }
+
+    def test_taking_the_remedy_leaves_the_model_valid(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The finding, and the reason this class exists.
+
+        `physical_rules(...) == set()` on BOTH severities: the vendor selection
+        has to be silent rather than demoted, because a warning would still fail
+        `validate --strict` and would leave the author of a narrow part carrying a
+        finding for making the only choice available to them.
+        """
+        self._narrow(real_model, edit_yaml)
+        edit_yaml(
+            real_model / self.ARM,
+            lambda d: d["asset_type"]["description"]["collision"].__setitem__(
+                "select", "vendor_meshes"
+            ),
+        )
+        assert physical_rules(real_model, Severity.ERROR) == set()
+        assert physical_rules(real_model, Severity.WARNING) == set()
+
+    def test_the_vendor_selection_is_still_refused_inside_the_range(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The hatch is conditional, and this is what stops it being an opt-out.
+
+        With the shipped 50 mm part — inside the range — the derived set is
+        available and selecting the vendor's rendering meshes is the plain defect
+        CLAUDE.md §10 names. The condition is "the range rule fires", never "the
+        author would rather not".
+        """
+        edit_yaml(
+            real_model / self.ARM,
+            lambda d: d["asset_type"]["description"]["collision"].__setitem__(
+                "select", "vendor_meshes"
+            ),
+        )
+        assert "collision-reuses-visual-mesh" in physical_rules(real_model, Severity.ERROR)
+
+    def test_a_type_with_no_alternative_is_still_refused(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The hatch needs an alternative to be a hatch.
+
+        Drop the derived set from the type entirely and the vendor's meshes are
+        not a fallback, they are the only geometry declared — and the finding
+        ADR-0028 decision 4 exists for is exactly that state. A narrow part must
+        not excuse it.
+        """
+        TestDerivedCollisionGeometryIsBoundToAWidth()._narrow_the_part(
+            real_model, edit_yaml, self.NARROW_M
+        )
+
+        def only_vendor(document: dict) -> None:
+            collision = document["asset_type"]["description"]["collision"]
+            collision["select"] = "vendor_meshes"
+            collision["sets"] = [s for s in collision["sets"] if s["kind"] == "vendor_meshes"]
+
+        edit_yaml(real_model / self.ARM, only_vendor)
+        assert "collision-reuses-visual-mesh" in physical_rules(real_model, Severity.ERROR)
 
 
 class TestIndexingBeams:

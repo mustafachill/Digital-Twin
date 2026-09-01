@@ -15,7 +15,7 @@
   **Decision 4's two residuals are open and this status does not close them**, nor does it make
   the campaign under *Evidence* anything other than what it is: **INCONCLUSIVE on its own
   question, by a rule it wrote before it had any data.**
-  **[Superseded 2026-09-01, kept for the record:]** *"Proposed — nothing in the tree changes
+  **[Replaced 2026-09-01, kept for the record:]** *"Proposed — nothing in the tree changes
   with this record, and it promotes nothing. ADR-0028 stays `Proposed`,
   `description.collision.select` on `model/assets/types/robots/xarm5.yaml` stays
   `vendor_meshes`, and no generated artifact, ceiling, tolerance or threshold moves. This

@@ -37,14 +37,52 @@
   because the mechanism it was built to detect does not occur; the gate's clause 2 was
   **restated, not relaxed**, by [ADR-0051](../adr/0051-restate-the-hull-grasp-gate.md), now
   `Accepted`, and what carries it is a geometric clearance argument obtained twice by
-  independent means. **That argument is bounded to a work-piece no narrower than this cell's
-  50 mm cube**, and the bound is enforced by
+  independent means. **That argument is bounded to a work-piece no narrower than 50.0 mm, the
+  width the 2026-09-01 campaign ran at** — not "this cell's cube", which is a different
+  quantity that happens to equal it today — and the bound is enforced by
   `validate.physical._derived_collision_is_within_its_measured_range` rather than written down.
-  **Three residuals are open and promotion closed none of them:** the generated SRDF still
-  invokes the vendor's self-collision matrix, computed against vendor geometry; `end_tool` is
-  the one link where the hull trades fidelity for a negligible share of the saving; and one
-  campaign metric was DETECTED, is a control, and is unexplained. ADR-0028's amendment of
-  2026-09-01 lists them with their figures; they are cited here and not copied.
+  **Residuals are open and promotion closed none of them**, and their count is deliberately not
+  stated here: the generated SRDF still invokes the vendor's self-collision matrix, computed
+  against vendor geometry — **the mismatch is now declared in L0 and held by a validator rule
+  rather than merely noted**, in the shape ADR-0028 decision 4 established, but declaring it is
+  not fixing it; `end_tool` is the one link where the hull trades fidelity for a negligible
+  share of the saving; one campaign metric was DETECTED, is a control, and is unexplained; and
+  the narrow-part case is untested, which is what the validator rule above refuses rather than
+  fixes. ADR-0028's amendment of 2026-09-01 and its residuals section list them with their
+  figures; they are cited here and not copied.
+
+  **A hull adds NO clearance, and the opposite is the natural inference from everything above.**
+  Measured over 20,000 random directions on all thirteen hulls, the hull's support function
+  exceeds its source's by **+0.000000 mm** — every gram of added material is inside a concavity,
+  so an object approaching a link convexly from outside contacts it at exactly the same
+  distance. Two consequences: **[ADR-0027](../adr/0027-pilz-planning-pipeline.md)'s sampling
+  residual is completely unaffected** — a tool point above 0.40 m/s can still step past a 40 mm
+  beam housing, because tunnelling is an approach from outside — and **hulls may never be cited
+  as margin in a safety case.** What they buy is simulation capacity and contact fidelity.
+
+  **One hull property is load-bearing on a setting nothing in this tree sets.** Under hulls the
+  gripper linkage interpenetrates in **every** sampled configuration, where the vendor geometry
+  keeps 1.57 mm; SDFormat's model-level `<self_collide>` default of `false` is the only thing
+  making that inert. Enabling it — an ordinary fidelity improvement — would stall the drive
+  joint at spawn and report every grasp empty, on the simulated side only, which is a P2
+  divergence. `cite_tools.generate` refuses to emit that combination rather than leaving the
+  dependency in a comment. The interpenetration is measured; the consequence is reasoned from
+  SDFormat's semantics and has not been observed on a running cell.
+
+  **One P2 asymmetry is known and bounded, and it lives in the description rather than in the
+  hardware plugin.** P2's wording is that *"only the loaded `ros2_control` hardware plugin
+  differs"*; the collision root this binding emits carries a **second** difference — its URI
+  **scheme**, `file://$(find cite_description)` on the simulated backend and
+  `package://cite_description` on the hardware one. **It is not a P2 break**, and both the code
+  and the model reviews of 2026-09-01 checked it rather than assuming: same package, same root,
+  the same thirteen meshes, and no topic, action, controller, joint or frame name touched. It
+  exists because the vendor's own `xarm_device_macro.xacro` branches its visual `mesh_path` the
+  same way, and emitting one scheme unconditionally is what produced a description with
+  `package://` visuals and absolute-path collisions — the half a planner uses. Its guard is
+  `TestTheRootResolvesTheWayTheVendorsDoes` in `tools/tests/test_collision_binding.py`, which
+  regenerates both backends and requires each scheme. **Recorded here because until 2026-09-01
+  the only statement of it was a comment inside that test**, and a P2 exception that lives in a
+  test docstring is an exception nobody reviewing P2 will find.
   **Changed 2026-08-29:** the generated world declares `real_time_factor` **1.0** rather than
   `0`. `0` is Gazebo's unthrottled value and overrode SDFormat's own default; the new value
   is a **ceiling**, so on a machine already below real time it changes nothing and cannot
