@@ -332,7 +332,27 @@ the commanded one and not the achieved one.
 **One machine, 47 trials, one timestep, one part.** Nothing here is a claim about CI, about
 x86_64, or about any other host.
 
-## 9. Reproducing it
+## 9. Provenance — the branch is shared, and two commits on it are not this campaign's
+
+`measure/hull-grasp` was branched from `main` at `d79a856`, and **two documentation commits
+by a concurrent agent working in the same checkout landed on it** before this campaign's
+first commit: `79bb040` and `7997d04`, which amend `CLAUDE.md`, four ADRs including
+[ADR-0028](../../adr/0028-convex-hull-collision-meshes.md), and
+`docs/operations/bring-up.md`. They are recorded here rather than moved: they are another
+agent's work, this campaign does not own `docs/adr/` or `CLAUDE.md`, and rewriting a shared
+branch's history to tidy a provenance note would be the more destructive act. **Whoever
+merges this branch is merging them too and should know that.**
+
+**They do not reach the measurement.** Both commits are documentation only — no `model/`,
+no generator, no `workspace/src/`, no scenario. And the ADR-0028 amendment among them is
+about the capacity campaign; it says in as many words that the promotion gate is untouched
+and clause 2 is still the friction-grasp re-run, which is what this campaign executed.
+
+The two commits this campaign owns are `b690c41` (criteria and harness, before the first
+trial) and `9824a0c` (data and this write-up). Together they touch this directory and one
+line-block of `../README.md`, and nothing else.
+
+## 10. Reproducing it
 
     docs/measurements/2026-09-01-hull-grasp/harness/run_campaign.sh 2 12
     .venv/bin/python docs/measurements/2026-09-01-hull-grasp/harness/analyse.py
