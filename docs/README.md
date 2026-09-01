@@ -27,6 +27,7 @@ disagreement is a defect in the loser — fix it, do not leave both standing.
 | How do I bring up / calibrate / recover the cell? | [`operations/`](operations/README.md) |
 | What number backs that claim? | [`measurements/`](measurements/README.md) |
 | Where do I read more? | [`reference/`](reference/README.md) |
+| What is still open? | [`open-work.md`](open-work.md) — a **dated snapshot**, not a tracker. Charter §11 names the issue tracker as the home of live work; none is configured, so this file carries the list between sessions and goes stale the moment work resumes. Check the command each item names, never the file. |
 
 ## Reading order for a new contributor
 
