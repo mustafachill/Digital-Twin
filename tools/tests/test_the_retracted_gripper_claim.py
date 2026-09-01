@@ -1,10 +1,22 @@
-"""The gripper claim ADR-0028 retracted on 2026-08-31, held out of the tree.
+"""The gripper claims ADR-0028 retracted, held out of the tree. Two of them now.
 
 ADR-0028 said in four places that a convex hull *"fills the space between the
 fingers"*. It does not, and the reason it mattered is not style: that sentence was
 the hypothesis clause 2 of the promotion gate would have been tested against, and
 a friction-grasp re-run designed to look for a filled inter-finger gap would have
 found no difference and read as a clean pass.
+
+**Its replacement was wrong in the same way, and that is why this file grew.**
+The 2026-08-31 correction replaced it with *"both shoulders lie inside the part's
+envelope"* and a prediction of inclined wedges pressing on the part — derived
+from the same static audit, at a *commanded* aperture the gripper never occupies
+while holding this cell's 50 mm part. It became a promotion condition before
+anyone checked it, and the campaign of 2026-09-01 measured it not to occur. The
+change that retracted it corrected four files and extended no guard, which is
+precisely the omission this file exists to close, so both spellings are in
+``RETRACTED`` now. **The pattern to carry is not either sentence: it is that an
+audit taken at a commanded value must state whether the machine ever reaches that
+value.**
 
 Two things are checked here, and they are different in kind.
 
@@ -34,15 +46,73 @@ from cite_tools.model.loader import load
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "assets" / "manifest.yaml"
 
-#: The two spellings the retracted claim was written in.
+#: Every spelling of a retracted gripper-geometry claim.
+#:
+#: The first three are the 2026-08-31 retraction: a hull *fills the space between
+#: the fingers*. The last two are the **second** mechanism, retracted 2026-09-01
+#: and derived exactly the same way — from a static audit taken at a *commanded*
+#: aperture the gripper never occupies while holding this cell's part. Both were
+#: stated as fact, both were falsified by measurement, and the second one had
+#: become a promotion condition before anyone checked it.
+#:
+#: **The second one is here because a claim retracted in prose is retracted by
+#: nothing.** The change that retracted it corrected four files and extended no
+#: guard, which is the same omission that let the first survive four restatements
+#: and two reviews.
 RETRACTED = (
     "fills the space between the fingers",
     "fills the space between the gripper fingers",
     "fills the gap between the pads",
+    "both shoulders lie inside the part's envelope",
+    "wedges inside the part's envelope",
 )
 
+#: Why each claim was retracted, so the failure message names the right
+#: measurement instead of the first one this file was written for.
+_FILLED_GAP = (
+    "ADR-0028's correction of 2026-08-31 retracted it: each link is hulled "
+    "separately, so that space lies between two collision bodies."
+)
+_SHOULDERS = (
+    "ADR-0028's correction of 2026-09-01 retracted it: the audit it came from was "
+    "taken at a commanded aperture the gripper never occupies while holding this "
+    "cell's part, and the wedges sit 0.41 mm of aperture behind the pad plane on "
+    "the same rigid link. Measured in docs/measurements/2026-09-01-hull-grasp/."
+)
+WHY_RETRACTED = {
+    "fills the space between the fingers": _FILLED_GAP,
+    "fills the space between the gripper fingers": _FILLED_GAP,
+    "fills the gap between the pads": _FILLED_GAP,
+    "both shoulders lie inside the part's envelope": _SHOULDERS,
+    "wedges inside the part's envelope": _SHOULDERS,
+}
+
 #: A retraction says so beside the quotation. An assertion does not.
-RETRACTION_MARKERS = ("Corrected", "corrected", "It does not", "it does not", "does not")
+#:
+#: The last two entries were added on 2026-09-01 with the second claim, and each
+#: is here because a real retraction in this repository is worded that way and
+#: would otherwise have been reported as a re-assertion:
+#:
+#: * ``What was wrong`` — ADR-0028's correction of 2026-09-01 opens the paragraph
+#:   that retracts the shoulder inference with exactly that heading, and then
+#:   argues rather than negating, so no "does not" falls inside the window;
+#: * ``was not observed`` — the frozen campaign
+#:   ``docs/measurements/2026-09-01-hull-grasp/`` refutes the wedge prediction in
+#:   those words. A published campaign is not edited to satisfy a guard, so the
+#:   guard learns the wording instead.
+#:
+#: **This widens the vocabulary and it does not weaken the question**, which is
+#: still "does a negation stand beside this sentence". Every marker here is
+#: language a re-assertion has no reason to carry.
+RETRACTION_MARKERS = (
+    "Corrected",
+    "corrected",
+    "It does not",
+    "it does not",
+    "does not",
+    "What was wrong",
+    "was not observed",
+)
 
 #: How much text around an occurrence is read looking for a marker. Wide enough to
 #: span the sentence that retracts it, narrow enough that a marker elsewhere in the
@@ -118,6 +188,15 @@ class TestTheFingersAreHulledIndependently:
 
 
 class TestTheClaimDoesNotComeBack:
+    def test_every_retracted_claim_carries_its_reason(self) -> None:
+        """Otherwise the guard fires and then dies of a `KeyError` in its message.
+
+        A guard that crashes where it means to report is a guard nobody reads,
+        and the message is the whole value here: the next person meets a sentence
+        they believe and has to be told which measurement retracted it.
+        """
+        assert set(RETRACTED) == set(WHY_RETRACTED)
+
     @pytest.mark.parametrize("claim", RETRACTED)
     def test_every_occurrence_is_inside_its_own_retraction(self, claim: str) -> None:
         offenders: list[str] = []
@@ -135,7 +214,6 @@ class TestTheClaimDoesNotComeBack:
                 start = text.find(claim, start + 1)
         assert not offenders, (
             f"{claim!r} is stated as fact at: {', '.join(offenders)}. "
-            "ADR-0028's correction of 2026-08-31 retracted it: each link is hulled "
-            "separately, so that space lies between two collision bodies. Quote it only "
-            "inside its own retraction."
+            f"{WHY_RETRACTED[claim]} Quote it only inside its own retraction, with a "
+            "negation beside it."
         )

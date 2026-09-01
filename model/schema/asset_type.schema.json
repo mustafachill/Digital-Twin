@@ -302,7 +302,7 @@
     },
     "CollisionSpec": {
       "additionalProperties": false,
-      "description": "Which collision geometry a vendor-described type's links use (ADR-0028).\n\nThe choice is per type rather than per link, and that is a decision with a\nreason. The mechanism underneath is the substitution of one mesh *root* for\nanother in the vendor description, which is not something a single link can\nhave an opinion about. Per-link exceptions are foreseen — ADR-0028 expects the\ngripper fingers to need one — but the exception it describes is *a primitive\ninstead of a mesh*, which this field could never express whatever its\ngranularity. That is a different mechanism and belongs to the change that\nmeasures it.\n\nThis docstring said until 2026-08-31 that the exception was needed \"because a\nconvex hull fills the gap between the pads\". It does not: each link is hulled\nseparately, so that gap lies between two collision bodies, and the aperture at\nthe pads is unchanged to 0.01 mm. What makes the fingers still need the\nexception is the 2.0 mm relief step at each end of each pad, which the hull\nramps across. ADR-0028's correction of 2026-08-31 carries the measurements and\nnames what a re-run has to report.",
+      "description": "Which collision geometry a vendor-described type's links use (ADR-0028).\n\nThe choice is per type rather than per link, and that is a decision with a\nreason. The mechanism underneath is the substitution of one mesh *root* for\nanother in the vendor description, which is not something a single link can\nhave an opinion about. Per-link exceptions are foreseen — ADR-0028 expects the\ngripper fingers to need one — but the exception it describes is *a primitive\ninstead of a mesh*, which this field could never express whatever its\ngranularity. That is a different mechanism and belongs to the change that\nmeasures it.\n\nThis docstring said until 2026-08-31 that the exception was needed \"because a\nconvex hull fills the gap between the pads\". It does not: each link is hulled\nseparately, so that gap lies between two collision bodies, and the aperture at\nthe pads is unchanged to 0.01 mm.\n\nIt then said, until 2026-09-01, that \"what makes the fingers still need the\nexception is the 2.0 mm relief step at each end of each pad, which the hull\nramps across\". **That is a second wrong mechanism derived the same way as the\nfirst**, from a static audit taken at a *commanded* aperture the gripper never\noccupies while holding this cell's part. The ramps are real; they are recessed\nbehind the pad plane on the same rigid link, so a flat face resting on the pad\nis clear of them at every aperture. Both errors and the measurement that\nsettled them are in ADR-0028's corrections of 2026-08-31 and 2026-09-01 and in\nADR-0051, which restates the promotion gate around them.\n\n**So no measured mechanism requires the exception today, and it is still\nforeseen rather than retired.** What is untested is a work-piece narrow enough\nto close the jaws past the pad plane's recess — ADR-0051 decision 3 makes\ndeclaring one a model error, enforced by\n``validate.physical._derived_collision_is_within_its_measured_range``, and\nnames what must be measured first. If that case ever needs answering with\ngeometry, the answer is the per-link exception above, which this field still\ncannot express.",
       "properties": {
         "root_arg": {
           "anyOf": [
@@ -1100,6 +1100,17 @@
         "tip_link_suffix": {
           "title": "Tip Link Suffix",
           "type": "string"
+        },
+        "vendor_self_collision_matrix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorSelfCollisionMatrix"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1157,6 +1168,56 @@
         "stopped_velocity_tolerance_rad_s"
       ],
       "title": "TrajectoryConstraints",
+      "type": "object"
+    },
+    "VendorSelfCollisionMatrix": {
+      "additionalProperties": false,
+      "description": "L0 declaring what the vendor's self-collision matrix was computed against.\n\nADR-0028 decision 4's shape, applied to the second thing the vendor knows and\nthis model could not see. That decision closed a structural hole for collision\n**meshes** — a vendor description is invoked and never ingested, so no rule\nhere may open a vendor file, and the rule that would have caught a rendering\nmesh reused as collision geometry returned an empty list for exactly the links\nwhere it occurs. The fix was to make L0 *declare* what the vendor does, so the\nrule had something to fire on.\n\n**The identical hole is open for the self-collision matrix, and since\n2026-09-01 it has a measured consequence.** The SRDF is invoked, not copied,\nso its matrix is a function of the vendor's collision geometry — and this type\nnow binds convex hulls of that geometry instead. A hull is never smaller than\nwhat it replaces, so the pairing is broken in one direction only: a pair the\nvendor **disabled** can interpenetrate under hulls, and MoveIt will never\ncheck it.\n\nSo this block is not documentation. It is the declaration a validator rule\nreads (``physical._vendor_self_collision_matrix_is_acknowledged``), and its\nabsence — or its naming a collision set other than the one bound — is a model\nERROR. **That is deliberately a declarable state rather than an unshippable\none**: a check that fails on the shipped configuration the moment it exists is\na blocker, not a guard, and would have been reverted rather than answered.\nDeclaring it costs an author one block and the audit that fills it.\n\n**What it does NOT do**: it does not fix the mismatch, license it, or claim\nthe figures are still current. Bind a different set and the acknowledgement\nstops matching, which is the point.",
+      "properties": {
+        "audit": {
+          "title": "Audit",
+          "type": "string"
+        },
+        "audited_for": {
+          "title": "Audited For",
+          "type": "string"
+        },
+        "enabled_configurations_newly_colliding": {
+          "title": "Enabled Configurations Newly Colliding",
+          "type": "integer"
+        },
+        "enabled_configurations_sampled": {
+          "title": "Enabled Configurations Sampled",
+          "type": "integer"
+        },
+        "pairs_disabled_by_vendor": {
+          "title": "Pairs Disabled By Vendor",
+          "type": "integer"
+        },
+        "pairs_disabled_interpenetrating": {
+          "title": "Pairs Disabled Interpenetrating",
+          "type": "integer"
+        },
+        "pairs_enabled_by_vendor": {
+          "title": "Pairs Enabled By Vendor",
+          "type": "integer"
+        },
+        "pairs_with_geometry": {
+          "title": "Pairs With Geometry",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "audited_for",
+        "audit",
+        "pairs_with_geometry",
+        "pairs_enabled_by_vendor",
+        "pairs_disabled_by_vendor",
+        "enabled_configurations_sampled",
+        "enabled_configurations_newly_colliding",
+        "pairs_disabled_interpenetrating"
+      ],
+      "title": "VendorSelfCollisionMatrix",
       "type": "object"
     }
   },

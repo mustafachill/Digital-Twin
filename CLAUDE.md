@@ -700,73 +700,121 @@ account of a flake; each was caught by someone re-running, never by someone read
     is. The OMPL fallback remains unseeded and unseedable. See
     `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
     determinism, and do not upgrade the claim on the strength of the planner alone.
-  - **Twelve links per arm still use their visual mesh as collision geometry, and as of
-    2026-08-31 that is a SELECTED state rather than the only one.** §10 below names it as a
-    defect class. **The 0.14 real-time factor used to be quoted here and is not what makes
-    this urgent** — a one-core allocation is what produced that figure, not collision geometry;
-    see the bullet above and ADR-0028's 2026-08-29 correction. What the case rests on is
-    the second-world campaign's measured cost of collision geometry, cited in ADR-0028 rather
-    than copied.
-    **ADR-0028 is implemented in full and is still `Proposed`, which is its own amended gate
-    working.** All four parts of its decision are in the tree: a `tools/` pipeline
-    (`cite-model hulls`), thirteen derived hulls committed under
-    `assets/meshes/collision/xarm5/convex_hull/` with per-file provenance in
-    `assets/manifest.yaml`, a per-robot-type `description.collision` field in L0 that selects
-    between the two geometries, and a validator that now fires on a vendor description
-    instead of returning an empty list for it. **`assets/` no longer holds only its README and
-    manifest**, and that sentence stood here until 2026-08-31.
-    **The shipped default is unchanged and moving it is not a one-line edit.** ADR-0028's
-    promotion gate requires the friction-grasp campaign re-run against hull geometry first,
-    and that campaign has not been run — so nothing here is evidence about grasping, and no
-    document may say hulls are safe for this cell. What landing them buys today is that
-    **both geometries exist and are one field apart**, which is what that A/B needs.
-    **"One field apart" was false when it was written and is true as of 2026-08-31.** The
-    generated `package.xml` derived its dependencies from the description and SRDF packages
-    only, so flipping the field emitted `$(find cite_description)` into all three arm
-    descriptions while the generated package still declared neither it nor anything else new
-    — and a build scoped with `--packages-up-to cite_bringup` succeeded, leaving
-    `robot_state_publisher` to die with `PackageNotFoundError` when the cell came up. The
-    derivation now follows the selected set, and the test that had *asserted* `package.xml`
-    does not move was the thing holding it shut.
-    **The speed figures are in ADR-0028's implementation note and are not copied here (P1).**
-    Their strength: one machine, two 120 s windows per condition, both sides of a pair sampled
-    concurrently, no thresholds registered in advance, no directory in `docs/measurements/`.
-    **Their verdict was read off the wrong quantity, and this file carried it until 2026-09-01:**
-    *"hulls move a pair materially and still do not reach the 1.0 ADR-0043 requires, so that
-    record's gap is narrowed and not closed"*. Every figure behind that sentence was taken with
-    the world's throttle in force, and under that throttle a measured real-time factor is
-    **capped at 1.0 by construction**
-    ([ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md)) — so it could not
-    have reached 1.0 whatever the machine did. Read as **capacity** by
+  - **Twelve links per arm collided against their visual mesh until 2026-09-01. They now
+    collide against derived convex hulls, and what is open is the residuals promotion did
+    not close.** §10 below names the defect class. **Do not state how many residuals there are
+    here** — this bullet said "three" for one day and the list it pointed at had four, dropping
+    the narrow-part case that the new validator rule exists for; read ADR-0028's amendment of
+    2026-09-01 and its "Residuals recorded 2026-08-31" section, which is where they are kept.
+    **The shipped selection is
+    `convex_hull`** — `grep -n "select:" model/assets/types/robots/xarm5.yaml` is the
+    instrument, and `./scripts/validate-model` exits 0 on it, reporting the model valid.
+    Selecting the vendor's meshes is now an **ERROR** in
+    `cite_tools.validate.physical._vendor_collision_is_declared` rather than the WARNING it was
+    from 2026-08-31; `--strict` no longer changes that answer.
+    **This bullet said until 2026-09-01 that ADR-0028's gate "requires the friction-grasp
+    campaign re-run against hull geometry first, and that campaign has not been run", and
+    described the shipped default as the vendor's meshes. Both are now false.**
+    **ADR-0028 is `Accepted` as of 2026-09-01, and it was promoted on a campaign whose verdict
+    was INCONCLUSIVE. Do not read the promotion as a clean grasp result.** The campaign is
+    [`docs/measurements/2026-09-01-hull-grasp/`](docs/measurements/2026-09-01-hull-grasp/ANALYSIS.md)
+    — 47 trials, thresholds registered before the first trial, machine named — and its own
+    pre-registered rule S fired: the mechanism the three instruments were chosen to detect
+    **does not occur**, so the campaign has not tested the prediction and its silence about the
+    grasp may not be read as "no change". **The campaign's figures are cited and not copied
+    (P1); read it rather than taking a number from here, and never write that hulls grasp
+    better — every outcome difference it measured is below the effect size it registered in
+    advance, in either direction, and the honest statement is "no distinguishable difference at
+    this n".**
+    **Promotion rests on a restated clause, not on that null.** ADR-0028's clause 2 as written
+    asked for the consequences of the non-occurring mechanism and could not be met by any
+    campaign; [ADR-0051](docs/adr/0051-restate-the-hull-grasp-gate.md) **restates it rather
+    than relaxing it** — the same route ADR-0049 took with ADR-0043's half 2 — and is
+    `Accepted` on the project owner's ratification of that wording. What carries the clause's
+    2c is a **geometric** clearance argument computed twice by instruments that share nothing,
+    agreeing to 0.01 mm. Read ADR-0028's amendment of 2026-09-01 for all four sub-clauses with
+    the strength of each; it is not restated here.
+    **The evidence is bounded to a work-piece no narrower than 50.0 mm — the width the
+    2026-09-01 campaign ran at — and the bound is enforced rather than written down.** Say it
+    that way and not as "this cell's 50 mm cube": today's L0 cube is 50 mm too, and **those are
+    two quantities that agree by coincidence**. The code keeps them apart on purpose, because a
+    range derived from L0 would make the check `narrowest >= narrowest`, which cannot fail.
+    A narrower part closes the jaws further and has never been tested against a
+    derived set, so `_derived_collision_is_within_its_measured_range` in the same validator
+    **fails** a model that binds a derived set while declaring one — declaring a narrow part is
+    the act ADR-0051 says reopens clause 2, and this rule is the only thing that will say so.
+    **The rule has a stated edge and one remaining silence, and this file asserted the
+    enforcement without either until 2026-09-01.** A work-piece whose width L0 cannot compute —
+    a **mesh** part — is its own ERROR since that date (`derived-collision-range-unstated`);
+    before it, changing the cube to a mesh switched the range rule *and*
+    `default-grasp-width-never-closes` off in one line with no finding at all. What stays
+    silent is a facility that declares **no work-piece whatsoever**: the derived set then ships
+    against a width nobody has stated, and the rule's own docstring records that as a gap
+    rather than as coverage. **Selecting the vendor's meshes is legal wherever that rule
+    fires** — it has to be, or a narrow part would have no valid collision selection at all,
+    which is the state this branch shipped for one day.
+    **Residuals are open and `Accepted` closes none of them**, all in ADR-0028's amendment and
+    residuals section with their figures — do not count them here: the generated SRDF still
+    invokes the **vendor's** self-collision matrix, computed against vendor geometry, and the
+    mismatch is now **declared in L0 and held by a validator rule** in ADR-0028 decision 4's
+    shape rather than checked — declaring is not fixing, and the rule verifies no figure in the
+    declaration; `end_tool` is the one link where the hull trades
+    fidelity for a negligible share of the saving; one campaign metric — the jaws stalling
+    marginally earlier on hulls — was DETECTED, is a **control**, and is **unexplained**; the
+    **narrow-part case is untested**, which is what the validator rule above refuses rather
+    than fixes; and four pipeline gates prove less than they appear to. **Half of the
+    CPU-architecture residual is retired and half is not**: CI run `33479867459` on `main`
+    reports `ok 1 set(s), 13 mesh(es) match the vendor` on ubuntu-24.04, so the committed hulls
+    re-derive byte-identically on x86_64 — that is the *derivation*, and it says nothing about
+    the shipped *selection*, which no CI run has ever brought a cell up on. Every figure behind
+    the grasp clause is **one machine, one arm, one part, one `max_step_size`**, and Phase 3's
+    physics retune reopens it.
+    **A HULL ADDS NO CLEARANCE, AND THE OPPOSITE IS THE NATURAL INFERENCE FROM EVERYTHING
+    ABOVE.** Over 20,000 random directions on all thirteen hulls the hull's support function
+    exceeds its source's by **+0.000000 mm** — every gram of added material is inside a
+    concavity. So **ADR-0027's sampling residual is untouched** (a tool point above 0.40 m/s
+    still steps past a 40 mm beam housing; tunnelling is an approach from outside), and **hulls
+    may never be cited as margin in a safety case.**
+    **One hull property is load-bearing on a setting nothing here sets, and the generator now
+    refuses the combination.** Under hulls the gripper linkage interpenetrates in **every**
+    sampled configuration where the vendor geometry keeps 1.57 mm, and SDFormat's
+    `<self_collide>` default of `false` is the only thing making that inert. Enabling it — an
+    ordinary fidelity improvement — would stall the drive joint at spawn and report every grasp
+    empty **on the simulated side only**, which is a **P2 divergence with the simulation as the
+    broken half**. The interpenetration is measured and exhaustive over the sampled stroke; the
+    consequence is **reasoned from SDFormat's documented semantics and has not been observed on
+    a running cell**, and may not be written up as though it had.
+    **NO SCENARIO OR CI FIGURE ANYWHERE IN THIS SECTION WAS MEASURED WITH HULLS.** `bringup`'s
+    12 of 12, the pick-and-place cycle, the six-run `continuous_line` table and the whole
+    teardown-family split were all taken with **vendor** collision geometry, and **no CI run
+    has ever brought this cell up against the hulls** — the selection moved on 2026-09-01 and
+    every one of those runs predates it. Read them as evidence about the cell that was, and
+    **do not widen any ceiling to absorb whatever CI shows next**; a ceiling widened to fit a
+    geometry change is a measurement thrown away.
+    **The capacity case is separate and was never grasp evidence.** Measured as capacity with
+    the world's throttle lifted by
     [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](docs/measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
-    — the 2x2 that record asked for, 24 trials, thresholds registered before the first trial,
-    machine named — the same lever on the same machine **clears the 1.0 floor with hulls and
-    misses it with the shipped vendor meshes**. Cite the campaign for both figures; they are not
-    copied here. Each of the three records now carries its own 2026-09-01 correction: ADR-0028's
-    is on the implementation note, ADR-0043's is on the amendment that repeated it, and
-    ADR-0049's is on the four claims the campaign changed there.
-    **None of that promotes anything and none of it is evidence about grasping.** ADR-0028's
-    gate clause 2 is still the friction-grasp campaign re-run under hull geometry; the campaign
-    above measured **cost and never correctness**, and says so itself; and ADR-0049 sets no
-    capacity margin above 1.0, so nothing here shows a requirement passing. **Two readings that
-    campaign asks of anyone citing it:** every capacity figure it reports is a **lower bound**,
-    because its host could not be made quiet — of the order of 1.5 - 2 cores busy with nothing
-    of the campaign running, recorded before the first trial; and one validity rule was **found
-    to read the container VM's load rather than the host's and was applied literally anyway**,
-    excluding 4 of 24 trials, with the unexcluded medians larger in every case and no conclusion
-    changing sign. No ceiling or tolerance was touched.
-    **A geometry audit and a code review on 2026-08-31 found the hulls themselves correct,
-    reproducible and reaching only collision geometry, and found the record wrong about the
-    risk it names.** ADR-0028 said in four places that a hull *"fills the space between the
-    fingers"*; it does not, because each link is hulled separately, and **that sentence was the
-    hypothesis the promotion gate's measurement would have been designed against** — a re-run
-    looking for a filled gap would find nothing and read as a clean pass. What the hull does
-    change at the gripper, what a re-run must therefore report, and four residuals recorded
-    rather than fixed — an untested CPU architecture, `end_tool` as a second exception
-    candidate, a vendor self-collision matrix that no longer matches the geometry, and four
-    pipeline gates that prove less than they appear to — are in ADR-0028's corrections and its
-    "Residuals recorded 2026-08-31" section, **not copied here** (P1). **Nothing in that work
-    touched grasp behaviour and none of it is evidence for or against the gate.**
+    — 24 trials, thresholds registered before the first trial, machine named — the same lever on
+    the same machine **clears the 1.0 floor with hulls and misses it with vendor meshes**. Cite
+    it; the figures are not copied here. **It does not show a requirement passing:** ADR-0049
+    sets no capacity margin above 1.0, every capacity figure it reports is a **lower bound**
+    because its host could not be made quiet, and one of its validity rules was found to read
+    the container VM's load rather than the host's and was applied literally anyway, excluding
+    4 of 24 trials with the unexcluded medians larger in every case. **This file carried a
+    verdict read off the wrong quantity until 2026-09-01** — *"hulls move a pair materially and
+    still do not reach the 1.0 ADR-0043 requires"* — taken with the world's throttle in force,
+    under which a measured real-time factor is **capped at 1.0 by construction**
+    ([ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md)).
+    **Two earlier lessons this bullet keeps.** ADR-0028 said in four places that a hull
+    *"fills the space between the fingers"*; it does not, because each link is hulled
+    separately, and **that sentence was the hypothesis the gate's measurement would have been
+    designed against**. Its replacement — inclined wedges contacting the part at each pad's
+    relief step — was derived the same way from the same static audit at a **commanded**
+    aperture the gripper never occupies, and **is wrong too**: the wedges sit behind the pad
+    plane on the same rigid link. Two mechanisms, both stated as fact, both falsified by
+    measurement. **An audit taken at a commanded value must state whether the machine ever
+    reaches that value, and a promotion gate must not be written against a mechanism nothing
+    has observed.**
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.

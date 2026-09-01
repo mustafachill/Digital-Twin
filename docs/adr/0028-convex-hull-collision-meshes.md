@@ -1,7 +1,23 @@
 # ADR-0028: Generate convex-hull collision meshes as project assets, bound through L0
 
-- **Status:** Proposed — **implemented and not promoted, which is the amended gate working
-  exactly as it was written to.** All four parts of the Decision are in the tree as of
+- **Status:** Accepted (amended 2026-08-29 and 2026-09-01; corrected 2026-08-29, 2026-08-31 and
+  twice on 2026-09-01) — **promoted on 2026-09-01, against the clause
+  [ADR-0051](0051-restate-the-hull-grasp-gate.md) restates, by the change that moved
+  `description.collision.select` to `convex_hull`.**
+  **The campaign that satisfied clause 2a returned INCONCLUSIVE on its own question**, by a
+  rule it registered before its first trial, and that sentence travels with the promotion:
+  what carries 2c is a *geometric* clearance argument obtained twice by independent means, not
+  a null result. **Read "Amendment — 2026-09-01: clause 2 is adopted as ADR-0051 restates it,
+  and this record is promoted" first** — it is the newest section, it states the evidence clause
+  by clause with the strength of each, and it lists the four things promotion does **not**
+  establish, chief among them that the self-collision matrix is still the vendor's and that no
+  work-piece narrower than the promoted range has ever been tested.
+  **Everything below the amendment is left exactly as it stood**, including the sentence that
+  the status stays `Proposed` and the shipped default stays on the vendor's meshes; both were
+  true when written and neither is now.
+  **[Replaced 2026-09-01, kept for the record:]** *"Proposed — implemented and not promoted,
+  which is the amended gate working exactly as it was written to."* All four parts of the
+  Decision are in the tree as of
   2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
   superseded and is corrected in place below.
   **Corrected twice on 2026-09-01. The newer correction is the one to read first: clause 2 of
@@ -9,6 +25,8 @@
   the campaign it demanded has measured not to occur, and the wedges it predicted sit 0.41 mm of
   aperture behind the pad plane on the same rigid link. **The decision stands entire, clause 1
   is untouched, the status does not move and the shipped default is still the vendor's meshes.**
+  **[Amended 2026-09-01, later the same day — the status and the default both moved; see the
+  amendment section named above. The rest of this paragraph stands.]**
   Clause 2 is restated — not relaxed — by
   [ADR-0051](0051-restate-the-hull-grasp-gate.md), which also makes the range of work-piece
   widths the finding covers binding on L0. See the section "Correction — 2026-09-01: clause 2
@@ -32,7 +50,7 @@
   has since been designed against the 2026-08-31 hypothesis and run, and that hypothesis is
   wrong too. Read the newest correction section, named above, before reading this line as
   standing guidance.]**
-  **[Superseded 2026-08-31, kept for the record:]** *"decided in principle, nothing
+  **[Replaced 2026-08-31, kept for the record:]** *"decided in principle, nothing
   implemented. No hull exists: `assets/` contains only `README.md` and `manifest.yaml`, no
   `assets/meshes/` directory has been created, and the L0 schema has no field through which a
   collision mesh could be bound to a vendor-described type. Promoted to `Accepted` by the
@@ -79,6 +97,228 @@
   added by the second 2026-09-01 correction),
   [`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md)
   (the clause 2 campaign, added by the same correction)
+
+## Amendment — 2026-09-01: clause 2 is adopted as ADR-0051 restates it, and this record is promoted
+
+**This is an amendment, not a correction, and it is the newest section on this record. The
+three corrections and the earlier amendment below are left exactly as they stand** — including
+the two corrections dated the same day, which sit immediately after this section and which a
+reader should meet next. **Nothing in this record was measured false here.** What changes is
+one clause of the promotion gate, adopted from another record, and the status that clause
+governs.
+
+### The clause, adopted verbatim
+
+ADR-0051 restates this record's gate clause 2 rather than relaxing it. **Its decision 1 is the
+wording, and it is quoted here as a single block** so that this record's gate is readable
+without a second hop, and quoted rather than paraphrased so that there is one text and not two
+(P1). Where they could ever disagree, **ADR-0051's copy is the original**.
+
+> **Clause 2 (restated by ADR-0051).** ADR-0028 moves to `Accepted` only when, in addition to
+> clause 1, all four of the following hold.
+>
+> **2a — the A/B exists and is published.** The friction-grasp campaign has been re-run against
+> hull collision geometry on the shipped cell, published under
+> [`docs/measurements/`](../measurements/README.md), with its thresholds registered before its
+> first trial, its machine named, and the three quantities ADR-0028's correction of 2026-08-31
+> requires reported per trial.
+>
+> **2b — no registered grasp metric is worse under hulls.** In that campaign, no pre-registered
+> metric is DETECTED in the hull's disfavour at its own registered effect size, and its
+> repetition and flung rules hold on the hull arm. A metric the campaign's own resolution rules
+> refuse is evidence for neither side and does not satisfy this clause; neither does a
+> difference below the size registered in advance as interesting, **in either direction**.
+>
+> **2c — where the predicted mechanism did not occur, its absence is geometric, independently
+> obtained, and bounded.** The record states from the geometry why the mechanism does not occur,
+> by two computations that do not share an instrument, and states the interval of work-piece
+> widths over which the statement holds. An absence inferred only from a null result does not
+> satisfy this clause.
+>
+> **2d — the validity range is declared here and binds L0.** Promotion carries the range of
+> 2c with it. A work-piece narrower than that range may not ship against a derived collision set
+> until 2a - 2c have been answered at its width; declaring one reopens clause 2.
+
+**Clause 1 is untouched** and was satisfied on 2026-08-31; see the implementation note below.
+**The question clause 2 was written to force is not withdrawn** — *does hull collision geometry
+change how this cell holds a part?* — and the restatement exists because the clause as written
+asked for the consequences of a mechanism the campaign measured not to occur, which is the
+correction immediately below this section.
+
+### Status: `Accepted`, clause by clause, with the strength of each
+
+The evidence is
+[`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md),
+whose figures are **cited and not copied** (P1). Read it rather than taking a number from here.
+
+- **2a — satisfied.** The campaign exists, is published with its `criteria.md` committed before
+  its first trial, names its machine, and reports all three quantities the correction of
+  2026-08-31 demanded, per trial. **Its verdict on its own question is INCONCLUSIVE**, by a rule
+  it registered in advance, and that is not a defect in it: rule S fired because the mechanism
+  those three instruments were chosen to detect does not occur. **This record is promoted on a
+  campaign that returned INCONCLUSIVE, and that sentence must travel with the promotion.**
+- **2b — satisfied**, at **n = 24 vendor and 23 hull**, on **one machine**, at **one physics
+  timestep**, with **one part** and **one arm**. No pre-registered metric was DETECTED in the
+  hull's disfavour; the repetition and flung rules held on the hull arm. **This is not a claim
+  that hulls grasp better.** Every outcome difference the campaign measured is below the effect
+  size it registered in advance, in the hull's favour or not, and it declined to call any of
+  them. **The honest statement is "no distinguishable difference at this n".**
+- **2c — satisfied, over the range in ADR-0051 decision 3.** Two computations that share no
+  instrument agree to **0.01 mm**: the arithmetic on this record's own geometry audit of
+  2026-08-31, and the campaign's independent measurement from the running cell at the settled
+  hold. Because both surfaces belong to **one rigid link**, the recess does not vary with
+  aperture, so the absence is geometric rather than inferred from a null.
+- **2d — carried by the change that lands this amendment.** `description.collision.select` on
+  `model/assets/types/robots/xarm5.yaml` is `convex_hull`; the generated descriptions, the model
+  hash and the generated `package.xml` move with it and nothing else does; and the range is
+  enforced rather than written down —
+  `cite_tools.validate.physical._derived_collision_is_within_its_measured_range` refuses a model
+  that binds a derived set while declaring a work-piece narrower than the range, as an **ERROR**.
+  The same change makes `_vendor_collision_is_declared`'s vendor-mesh finding an ERROR
+  unconditionally, which that rule's own docstring required of the change that moves the default.
+
+### What promotion does not establish
+
+**Four things stay open, and `Accepted` closes none of them.** They are listed here rather than
+left in the sections below so that nobody has to assemble them.
+
+- **The self-collision matrix is still the vendor's, and it was computed against vendor
+  geometry.** A convex hull is never smaller than what it replaces, so the matrix a promoted
+  hull runs against is a function of a different collision set. The measured narrowing is in
+  "Promoting hulls means the self-collision matrix no longer matches its geometry" below, and
+  **that section is now describing the shipped state rather than a hypothetical.** Nothing in
+  this repository checks the pairing.
+- **`end_tool` is the one link where the hull trades fidelity for almost nothing.** It closes a
+  through-feature and adds volume in exchange for **0.09 %** of the triangle reduction — the
+  figure is this record's own, under "`end_tool` is the one link where the hull is worse", and
+  it is not restated here. It is a candidate for the per-link exception this record foresees,
+  `CollisionSpec` cannot express one, and shipping hulls ships this trade.
+- **The 5.6 mrad earlier stall is DETECTED, is a control, and is unexplained.** It is the one
+  metric the campaign detected at its registered effect size and it survived the block rule. The
+  campaign was not looking there. ADR-0051 decision 4 names what would settle it; nothing here
+  does.
+  **[Added 2026-09-01: the leading candidate is now DISFAVOURED and not eliminated.]** The
+  candidate ADR-0051 decision 4 names first — some hulled link other than the two pads touching
+  the part — was tested against static geometry by the safety audit of that date, and it does
+  not survive well: across the full drive stroke against a 50 x 50 mm face the closest non-pad
+  link stays **5.04 - 5.16 mm** clear and the hull moves that by **≤ 0.001 mm**; the pad's own
+  contact surface is unchanged at triangle level (22 faces, 1098.1 mm², same plane, both
+  geometries); and tilting the face 2° to 40° keeps first contact at the pad's distal edge on
+  both. **This is static geometry, not a run**, and the residual is not explained — nobody may
+  write that it is. The observation that would settle it is unchanged: one block with the
+  contact filter widened to every collision pair involving the work-piece.
+- **The narrow-part case is untested.** No work-piece narrower than the range has been run
+  against a derived set, and two things move together at a narrower width that the campaign
+  separated neither of. That is why 2d is a refusal in the validator and not a sentence in a
+  file.
+
+### The interim self-collision check this record named is built, in a different shape
+
+**Added 2026-09-01 by the review of the promoting change**, after a safety audit measured the
+half nobody had. This record's residuals section names an interim measure — *"a check that
+fails when a derived set is selected while the SRDF's matrix names the vendor's"* — and it now
+exists, **keyed on an L0 declaration rather than on the selection alone.** The reasoning is
+recorded because the first answer to this was to decline it, and the reason that answer was
+wrong is the useful part.
+
+**Why not the shape this record named.** Written that way the check fails on the shipped
+configuration the moment it exists: a derived set *is* selected and the SRDF's matrix *is* the
+vendor's, so it has no passing state to move towards. That is a **blocker**, not an interim
+measure — either carried on every run, which is the state ADR-0051's rule exists to avoid, or
+reverted. **But declining it left the residual with the largest measured effect guarded by
+nothing**, while the narrow-part residual — which has no measurement at all — got a validator
+rule in the same change. That asymmetry is what settled it.
+
+**The shape that works is this record's own decision 4, applied a second time.** Decision 4
+closed an identical structural hole for collision *meshes*: a vendor description is invoked and
+never ingested, so no rule may open a vendor file, and the rule that would have caught the
+defect returned an empty list for exactly the links where it occurs. The fix was to make **L0
+declare what the vendor does**. So:
+
+`model/assets/types/robots/xarm5.yaml` now carries `planning.vendor_self_collision_matrix`,
+naming the collision set the vendor's matrix was audited against and the audit's figures, and
+`cite_tools.validate.physical._vendor_self_collision_matrix_is_acknowledged` fails a model that
+binds a derived set, invokes the vendor's SRDF macro, and **carries no acknowledgement — or one
+audited against a different set.** The state becomes *declarable* instead of either silent or
+unshippable, and changing either side reopens it. It is a guard, not a fix: it checks that a
+human wrote the mismatch down, and it verifies no figure in the declaration.
+
+**The sizing, which is what the declaration carries**, read from the generated SRDF and the
+vendor macro by the model-validator review, and — for the second half — measured by the safety
+audit of 2026-09-01:
+
+- **78** geometry-bearing link pairs on the arm: **34** the vendor's macro leaves **enabled**,
+  **44** it **disables**.
+- The enabled half is covered by this record's own configuration sampling: **9 of 484** (1.9 %)
+  newly self-colliding under hulls.
+- **The disabled half had never been measured, and it is the half MoveIt never checks.** Four
+  pairs interpenetrate under hulls where the vendor metal is 1.57 to 31.77 mm apart:
+  `left_inner_knuckle`/`left_outer_knuckle` (**100 %** of 200 sampled configurations),
+  `left_outer_knuckle`/`xarm_gripper_base_link` (**100 %**), `link3`/`link5` (7.1 % of 2025),
+  `link2`/`link5` (1.0 % of 2744), `link2`/`link4` (0.25 %). The right-side gripper pairs
+  mirror the left by construction.
+- **No pair carries `reason="Always"`**, and a hull contains the mesh it replaces, so "a pair
+  that always collided no longer touches" **cannot occur**. The asymmetry runs one way: a hull
+  can make a disabled pair touch, never the reverse.
+
+**The runtime consequence today, and the one that is one edit away.** The 44 disabled pairs
+have **no effect on the running cell**: MoveIt's allowed collision matrix excludes them from
+planning, and Gazebo computes no same-model self-contacts — `grep -rn self_collide` returns
+nothing anywhere relevant and SDFormat defaults it false. **That default is the only thing
+holding it.** Setting `<self_collide>true</self_collide>` is an ordinary fidelity improvement
+nothing here argues against, and under hulls it would put permanent contact between the gripper
+linkage from the instant the model spawns — the drive joint stalls, `gripper_is_holding`
+reports an empty grasp on every pick, and the hardware backend does none of that, which makes
+it a **P2 divergence with the simulation as the broken half.** `cite_tools.generate` now
+refuses to emit that combination. The interpenetration is measured and exhaustive over the
+sampled stroke; **the consequence is reasoned from SDFormat's documented semantics and has not
+been observed on a running cell**, and must not be written up as though it had.
+
+**The obvious next step is not obviously right.** Regenerating the matrix from the *selected*
+geometry would disable pairs on the strength of hull material that does not exist. On this arm
+nothing is lost, because the always-interpenetrating hull pairs are the gripper linkage the
+vendor already disables and whose real gap is 1.57 mm — **but that is a measured fact about
+this robot, not a property of hulls**, and it is recorded here because until 2026-09-01 the
+tree did not carry it. Re-deriving the matrix per selected set, as a generated artifact,
+remains owed its own record.
+
+**Also done, and smaller.** The generated SRDF's own header now says the pairing is broken, in
+the file a MoveIt debugger opens first (`tools/cite_tools/templates/moveit/srdf.xacro.j2`, and
+the same sentence on `PlanningSpec`). It used to read *"the self-collision matrix, which is a
+property of the vendor's geometry rather than of our facility"* — a pairing that stopped
+holding on 2026-09-01.
+
+### The hull adds no clearance, in any external direction
+
+**Added 2026-09-01, and it is here because the opposite is the natural inference.** "Twelve
+links per arm now collide against a proper collision shape" reads as "the arm is fatter, so it
+stops sooner". It is not.
+
+Measured by the safety audit over **20,000 random directions on all thirteen hulls: the hull's
+support function exceeds its source's by +0.000000 mm.** Every gram of added material is inside
+a concavity. An object approaching a link convexly from outside therefore contacts it at
+exactly the same distance as before.
+
+Two consequences to carry:
+
+- **ADR-0027's sampling residual is completely unaffected.** `ValidateSolution` checks
+  trajectory waypoints and interpolates nothing between them at a 0.1 s step, so a tool point
+  above 0.40 m/s can step past the 40 mm beam housings in the generated planning scene.
+  Tunnelling is an approach from outside; the hull narrows that window by nothing.
+- **Hulls may never be cited as margin in a safety case.** What they buy is simulation capacity
+  and contact fidelity, not clearance.
+
+**What is still unmeasured** is environment clearance at the cell's actual working poses. At
+`home` and `hold-up` every hull-to-scene clearance is identical to the vendor's to 0.00 mm, and
+per link a hull can eat at most its own concavity depth — 14.07 mm at the gripper base,
+21.76 mm at `link4`, 60 - 62 mm at `link2`/`link3`. Static geometry cannot settle it; the cheap
+settlement is to replay the trajectories the existing scenarios produce and report per-waypoint
+minimum link-to-object distance under both geometries.
+
+**And every figure behind 2b is one machine at one `max_step_size`.** That constant is a
+generator constant, ADR-0029's friction campaign found grasp behaviour strongly sensitive to it
+across a 4x change, and **Phase 3's physics retune reopens 2b** — ADR-0051 decision 5, carried
+here because a promoted record is where people stop reading.
 
 ## Correction — 2026-09-01: clause 2 asks for a measurement of a mechanism that does not occur
 

@@ -100,29 +100,47 @@ asset_type:
     # `common_link_visual` and `common_link_collision` on all seven of its links.
     # Twelve links per arm therefore collide against a rendering mesh.
     collision:
-      # THE SHIPPED DEFAULT IS THE VENDOR'S MESHES, DELIBERATELY, AND MOVING IT
-      # IS NOT A ONE-LINE CHANGE OF THIS VALUE.
+      # THE SHIPPED DEFAULT IS THE DERIVED HULLS, AS OF 2026-09-01, AND IT IS
+      # BOUND TO A WORK-PIECE WIDTH. It is not a free choice of this value.
       #
-      # ADR-0028's amended promotion gate requires the friction-grasp campaign
-      # (docs/measurements/2026-08-25-friction-grasp/) re-run against hull
-      # geometry before hulls may be selected. The campaign that motivated hulls
-      # measured what they COST and never measured what they BREAK, and the
-      # record's own warning is about this cell's grasp: the pads hold a part by
-      # friction alone (ADR-0029), so the contact surface IS the mechanism, and
-      # the hull changes it. Selecting `convex_hull` here without that measurement
-      # would replace a working, measured line with an unmeasured geometry.
+      # This comment said until 2026-09-01 that moving it required a measurement
+      # that had not been taken. That measurement exists —
+      # docs/measurements/2026-09-01-hull-grasp/ — and its verdict on its own
+      # question is INCONCLUSIVE by a rule it registered before its first trial,
+      # because the mechanism it was designed to detect does not occur. ADR-0051
+      # restates ADR-0028's gate clause 2 around evidence that can exist rather
+      # than relaxing it, and ADR-0028 is promoted against the restated clause.
+      # Cite those two records for every figure; none is copied here (P1).
       #
-      # WHAT THE HULL CHANGES, AND WHAT IT DOES NOT. This comment said until
-      # 2026-08-31 that "a convex hull fills the space between the fingers". It
-      # does not: each link is hulled separately, so that space lies between two
-      # collision bodies. Measured at the shipped 45 mm command, the aperture is
-      # 44.99 mm on BOTH geometries over the whole 37 mm pad. What does change is
-      # the 2.0 mm relief step at each end of each pad, which the hull ramps
-      # across, adding two inclined wedges inside the part's envelope. Read
-      # ADR-0028's correction of 2026-08-31 before designing the re-run: it names
-      # the three quantities to measure, and none of them is either residual the
-      # friction-grasp campaign has already published.
-      select: vendor_meshes
+      # WHY THE CONTACT SURFACE IS THE MECHANISM, WHICH HAS NOT CHANGED. The pads
+      # hold a part by friction alone (ADR-0029) — no simulation aid attaches
+      # anything — so the geometry of the pad and its surroundings IS how a grasp
+      # is held, and a collision-geometry switch is a change to the grasp until
+      # something measures otherwise. That is why this field was gated at all.
+      #
+      # WHAT THE HULL CHANGES, AND WHAT IT DOES NOT. Measured at the shipped
+      # 45 mm command, the aperture is 44.99 mm on BOTH geometries over the whole
+      # 37 mm pad. What the hull does change is the 2.0 mm relief step at each end
+      # of each pad, which it ramps across. This comment said until 2026-09-01
+      # that the ramps land "inside the part's envelope"; that does not hold, and
+      # it was corrected on that date in ADR-0028. The ramps are
+      # recessed behind the pad plane on the SAME RIGID LINK, so a flat face
+      # resting on the pad is clear of them at any aperture, and the jaws stall on
+      # the part the campaign ran well wider than the commanded width. That is
+      # ADR-0028's newest correction and ADR-0051's decision 1 (2c).
+      #
+      # THE FINDING IS BOUNDED, AND THE BOUND IS ENFORCED RATHER THAN WRITTEN
+      # HERE. It holds for a rigid part with a flat grasped face that stalls the
+      # jaws at 50.0 mm or wider — that figure is THE WIDTH THE 2026-09-01
+      # CAMPAIGN RAN AT, and it is not "this cell's cube", which is a different
+      # quantity that happens to equal it today. A NARROWER part closes the jaws
+      # further and has never been tested against a derived set. ADR-0051
+      # decision 3 states the range and what must be measured before such a part
+      # ships;
+      # `validate.physical._derived_collision_is_within_its_measured_range`
+      # refuses the combination, so declaring one is a model error and not a
+      # surprise. Do not restate the range here — read it from that rule.
+      select: convex_hull
       # The vendor macro parameter that carries a collision-mesh root. Named here
       # rather than in the generator for the same reason every entry in
       # `bound_args` is: it is a fact about xarm_description, and a vendor rename
@@ -345,13 +363,54 @@ asset_type:
     # would put the gripper's length quietly into every placement error.
     tip_link_suffix: link_tcp
     # The SRDF is invoked, not copied — same rule as the description. It carries
-    # the self-collision matrix, which is a fact about the vendor's geometry.
+    # the self-collision matrix, which the vendor computed against the VENDOR'S
+    # collision geometry. Since 2026-09-01 this type does not load that geometry
+    # (see `description.collision.select`), so the block below is required and
+    # `validate.physical._vendor_self_collision_matrix_is_acknowledged` refuses a
+    # model that omits it.
     srdf_package: xarm_moveit_config
     srdf_file: srdf/xarm_macro.srdf.xacro
     srdf_macro: xarm_macro_srdf
     srdf_args:
       dof: 5
       robot_type: xarm
+
+    # WHAT THE VENDOR'S MATRIX WAS COMPUTED AGAINST, DECLARED (ADR-0028).
+    #
+    # This is decision 4's shape applied a second time. A vendor description is
+    # invoked and never ingested, so no rule here may open a vendor file to find
+    # out what the vendor knows; the fix is for L0 to declare it, so that a rule
+    # has something to fire on. Decision 4 did that for collision MESHES. This
+    # does it for the matrix that was computed against them.
+    #
+    # WHY IT IS REQUIRED RATHER THAN ADVISORY. A convex hull is never smaller than
+    # the mesh it replaces, so the mismatch runs one way: a pair the vendor
+    # DISABLED can interpenetrate under hulls, and MoveIt never checks a disabled
+    # pair. That is the half ADR-0028's own 484-configuration audit did not cover.
+    # Declaring it makes the state shippable and traceable; omitting it is a model
+    # error. Bind a different collision set and this stops matching, which is the
+    # whole point — an acknowledgement that survived a geometry change would read
+    # as coverage and would not be.
+    #
+    # WHAT IT IS NOT. It is not a fix, a licence, or a claim that the arm is safe.
+    # It is not checked against the vendor's file by anything. And it must not be
+    # answered by regenerating the matrix against hulls: that would disable pairs
+    # on the strength of material a hull invented, filling concavities where the
+    # real metal is millimetres apart.
+    vendor_self_collision_matrix:
+      audited_for: convex_hull
+      audit: docs/adr/0028-convex-hull-collision-meshes.md
+      # Static geometry, one reading, no simulation. The enabled half is
+      # ADR-0028's own configuration sampling; the disabled half is the safety
+      # audit of 2026-09-01 and is the first measurement of that side. Read the
+      # record for what each number is and is not — the two halves were measured
+      # by different instruments and are not comparable as a ratio.
+      pairs_with_geometry: 78
+      pairs_enabled_by_vendor: 34
+      pairs_disabled_by_vendor: 44
+      enabled_configurations_sampled: 484
+      enabled_configurations_newly_colliding: 9
+      pairs_disabled_interpenetrating: 4
     kinematics_plugin: kdl_kinematics_plugin/KDLKinematicsPlugin
     kinematics_resolution: 0.005
     kinematics_timeout_s: 0.05

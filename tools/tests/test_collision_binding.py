@@ -2,9 +2,9 @@
 
 Three things are checked here and they answer three different questions:
 
-* the **default does not move** — with the shipped selection the generated
-  description is what it was before the field existed, which is what lets the
-  byte-identity check tell "unchanged" from "changed";
+* the **shipped selection is what it says it is** — it moved from the vendor's
+  meshes to the derived hulls on 2026-09-01 (ADR-0028, promoted against the clause
+  ADR-0051 restates), and it moves again only by changing a test;
 * **selecting a set actually reaches the description**, and reaches it as the
   vendor macro parameter the model names rather than as a value the generator
   invented, **and the generated package declares what that description now
@@ -47,27 +47,54 @@ def _select(document: dict, set_id: str) -> None:
 
 
 class TestTheShippedDefault:
-    def test_the_vendor_set_is_what_ships(self, real_model: Path) -> None:
+    def test_the_derived_set_is_what_ships(self, real_model: Path) -> None:
         """Stated as a test so that moving it cannot be a quiet edit.
 
-        ADR-0028's promotion gate requires the friction-grasp campaign re-run
-        against hull geometry before the default may move. Whoever moves it will
-        have to change this test, and that is the point.
+        This asserted `vendor_meshes` until 2026-09-01, with a docstring saying
+        that whoever moved it would have to change this test, and that that was
+        the point. It moved: ADR-0028 is `Accepted` against the clause ADR-0051
+        restates, and the shipped selection is the derived hulls. The assertion
+        keeps its shape and changes its side, so moving it back is the same
+        deliberate act.
         """
         model = load(real_model)
         arm = next(t for t in model.types if t.id == "xarm5")
         assert arm.description.collision is not None
-        assert arm.description.collision.select == "vendor_meshes"
-        assert arm.description.collision.selected.kind == "vendor_meshes"
+        assert arm.description.collision.select == "convex_hull"
+        assert arm.description.collision.selected.kind == "convex_hull"
 
-    def test_the_vendor_selection_emits_no_collision_argument(self, real_model: Path) -> None:
+    def test_the_shipped_selection_emits_the_collision_argument(self, real_model: Path) -> None:
+        description = artifacts(real_model)[ARM_DESCRIPTION]
+        assert "collision_mesh_path" in description
+
+    def test_the_vendor_selection_emits_no_collision_argument(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The other side of the substitution, kept because it is the fallback.
+
+        Selecting the vendor's set has to leave the description exactly as it was
+        before this field existed — that is what makes it a real answer rather
+        than a differently-spelled hull.
+
+        **THE VENDOR'S SET IS A CONDITIONAL ANSWER AND THIS DOCSTRING USED TO
+        STATE IT FLATLY**, as "the answer ADR-0051's range rule tells a model
+        author to reach for", three classes above one asserting that reaching for
+        it is an ERROR. Both sentences were in this file and they contradicted
+        each other, because for one day the code did too. The rule now: selecting
+        the vendor's set is an ERROR *while a derived alternative is available for
+        the parts this facility declares*, and is silent where the range rule
+        refuses that alternative — so it is the remedy exactly when the range rule
+        fires, and a defect otherwise. `TestTheRemedyTheHintNamesIsAValidModel` in
+        `test_validate_geometric.py` holds both halves.
+        """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         description = artifacts(real_model)[ARM_DESCRIPTION]
         assert "collision_mesh_path" not in description
 
 
 class TestSelectingADerivedSet:
-    def test_the_root_reaches_the_vendor_macro(self, real_model: Path, edit_yaml: Callable) -> None:
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+    def test_the_root_reaches_the_vendor_macro(self, real_model: Path) -> None:
+        """No mutation: this is the shipped selection since 2026-09-01."""
         description = artifacts(real_model)[ARM_DESCRIPTION]
         assert (
             'collision_mesh_path="file://$(find cite_description)'
@@ -90,6 +117,7 @@ class TestSelectingADerivedSet:
         argument AND duplicate an existing one left all fourteen tests green.
         `Counter` counts occurrences, which is the question this test means to ask.
         """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         before = artifacts(real_model)[ARM_DESCRIPTION]
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         after = artifacts(real_model)[ARM_DESCRIPTION]
@@ -113,6 +141,7 @@ class TestSelectingADerivedSet:
         dependencies for started naming a package it did not list. A dependency
         derivation that a test pins shut is not a derivation.
         """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         before = artifacts(real_model)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         after = artifacts(real_model)
@@ -127,7 +156,7 @@ class TestSelectingADerivedSet:
         }
 
     def test_the_generated_package_declares_the_set_it_installs_from(
-        self, real_model: Path, edit_yaml: Callable
+        self, real_model: Path
     ) -> None:
         """Every `$(find X)` in a generated description needs X in `package.xml`.
 
@@ -136,20 +165,24 @@ class TestSelectingADerivedSet:
         because nothing declares the ordering, and `robot_state_publisher` then
         dies with `PackageNotFoundError: cite_description` when the cell comes up.
         """
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         generated = artifacts(real_model)
         description = generated[ARM_DESCRIPTION]
         assert "$(find cite_description)" in description
         assert "<exec_depend>cite_description</exec_depend>" in generated["package.xml"]
 
-    def test_a_declared_but_unselected_set_brings_no_dependency(self, real_model: Path) -> None:
+    def test_a_declared_but_unselected_set_brings_no_dependency(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
         """The other direction, and it is why the derivation reads `selected`.
 
-        `convex_hull` is declared on the shipped type and is not bound. Nothing
-        loads it, so `cite_generated` must not depend on it — and if it did, the
-        shipped default would stop emitting the bytes it emitted before the field
-        existed, which is the property the byte-identity check rests on.
+        Select the vendor's meshes and `convex_hull` is still declared on the
+        type. Nothing loads it, so `cite_generated` must not depend on it — a
+        derivation that read the declared sets instead of the bound one would make
+        every model that merely *offers* a hull depend on the package that holds
+        it. This ran without a mutation until 2026-09-01, when the shipped
+        selection moved and the unselected set became the vendor's.
         """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         generated = artifacts(real_model)
         assert "cite_description" not in generated["package.xml"]
         assert "cite_description" not in generated[ARM_DESCRIPTION]
@@ -167,10 +200,7 @@ class TestTheRootResolvesTheWayTheVendorsDoes:
     prefix: unportable, and the half a planner uses.
     """
 
-    def test_a_gazebo_backend_gets_the_file_scheme(
-        self, real_model: Path, edit_yaml: Callable
-    ) -> None:
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
+    def test_a_gazebo_backend_gets_the_file_scheme(self, real_model: Path) -> None:
         description = artifacts(real_model)[ARM_DESCRIPTION]
         assert (
             'collision_mesh_path="file://$(find cite_description)'
@@ -181,7 +211,6 @@ class TestTheRootResolvesTheWayTheVendorsDoes:
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         """The case the unconditional `file://` got wrong."""
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         edit_yaml(real_model / ARM_INSTANCES, _use_real_backend)
         description = artifacts(real_model)[ARM_DESCRIPTION]
         assert (
@@ -199,7 +228,6 @@ class TestTheRootResolvesTheWayTheVendorsDoes:
         or `/opt/...` in a committed artifact is a description that only resolves
         on the machine that generated it.
         """
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
         for mutate in (None, _use_real_backend):
             if mutate is not None:
                 edit_yaml(real_model / ARM_INSTANCES, mutate)
@@ -298,17 +326,58 @@ class TestTheValidatorReachesAVendorDescription:
     names actually occurs, for as long as it had existed.
     """
 
-    def test_the_shipped_model_is_warned_about_and_not_failed(self, real_model: Path) -> None:
+    def test_the_shipped_model_does_not_trip_it(self, real_model: Path) -> None:
+        """The shipped selection is the hulls, so the rule has nothing to say.
+
+        This test asserted the opposite until 2026-09-01 — one WARNING on
+        `xarm5`, and no error anywhere — because the shipped selection was the
+        vendor's own rendering meshes and the project had decided to stay there
+        until ADR-0028's gate was met.
+        """
+        findings = physical.check(load(real_model))
+        assert not [f for f in findings if f.rule == "collision-reuses-visual-mesh"]
+        assert not [f for f in findings if f.severity is Severity.ERROR]
+
+    def test_selecting_the_vendor_meshes_is_now_an_error(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """WARNING until 2026-09-01, and the promotion is what this change is.
+
+        `_vendor_collision_is_declared`'s docstring recorded the severity as a
+        compromise and said in terms: promote it in the change that moves the
+        default, and not before. The default has moved, so colliding a rendering
+        mesh is once again the plain defect CLAUDE.md §10 names, with a generated
+        alternative one field away.
+
+        **"With a generated alternative one field away" is the condition, not
+        decoration.** Where the range rule refuses that alternative — a work-piece
+        narrower than the width the geometry was argued over, or one whose width
+        L0 cannot compute — this finding is silent, because the vendor's set is
+        then the only legal selection and refusing it too would leave a required
+        field with no valid value. That is the state this branch shipped for one
+        day. The model here declares a 50 mm part, so the alternative is available
+        and the finding stands;
+        `test_validate_geometric.TestTheRemedyTheHintNamesIsAValidModel` asserts
+        the other side.
+        """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         findings = physical.check(load(real_model))
         reuse = [f for f in findings if f.rule == "collision-reuses-visual-mesh"]
         assert [f.where for f in reuse] == ["types.xarm5.description.collision"]
-        assert reuse[0].severity is Severity.WARNING
-        assert not [f for f in findings if f.severity is Severity.ERROR]
+        assert reuse[0].severity is Severity.ERROR
 
-    def test_selecting_hulls_silences_it(self, real_model: Path, edit_yaml: Callable) -> None:
-        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
-        findings = physical.check(load(real_model))
-        assert not [f for f in findings if f.rule == "collision-reuses-visual-mesh"]
+    def test_the_vendor_selection_fails_validation_without_strict(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The severity change is the whole of the behaviour change, so assert it.
+
+        `--strict` used to be the only way to make this question hard, and a
+        severity that only `--strict` reads is a severity `./scripts/validate-model`
+        never enforces. Now the ordinary run refuses.
+        """
+        edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
+        errors = [f for f in physical.check(load(real_model)) if f.severity is Severity.ERROR]
+        assert [f.rule for f in errors] == ["collision-reuses-visual-mesh"]
 
     def test_an_undeclared_vendor_description_is_an_error(
         self, real_model: Path, edit_yaml: Callable

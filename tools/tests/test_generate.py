@@ -208,11 +208,27 @@ class TestSimRealParity:
             == real["control/cell_a_arm_1_controllers.yaml"]
         )
 
-        # The description differs in exactly one respect: the plugin class. Only
-        # arm_1 was switched, so arm_2's and arm_3's descriptions must be
-        # untouched — a backend is a per-instance choice, not a global mode.
+        # The description differs in exactly two lines, and the second of them
+        # arrived on 2026-09-01 when the shipped collision selection moved to the
+        # derived hulls (ADR-0028). Only arm_1 was switched, so arm_2's and
+        # arm_3's descriptions must be untouched — a backend is a per-instance
+        # choice, not a global mode.
+        #
+        # WHY A SECOND DIFFERING LINE IS NOT A P2 BREAK, checked below rather than
+        # asserted here. `xarm_device_macro.xacro` resolves its OWN mesh root as
+        # `file://$(find xarm_description)/meshes` under a Gazebo plugin and
+        # `package://xarm_description/meshes` under anything else, so the root
+        # that REPLACES it has to branch the same way or the two halves of one
+        # description resolve differently (ADR-0028's correction of 2026-08-31,
+        # and `CollisionSpec.root_uri_scheme`). That asymmetry has always been in
+        # the vendor's expansion; binding a derived root is what made it visible
+        # in an artifact this test can read. **The geometry is identical on both
+        # backends** — same package, same root, same thirteen meshes — and P2's
+        # subjects (topic, action, controller, joint and frame names) are
+        # untouched. So the assertion is tightened rather than widened: the
+        # collision line has to differ in its URI SCHEME and in nothing else.
         differing = [
-            a
+            (a, b)
             for a, b in zip(
                 sim["description/cell_a_arm_1.urdf.xacro"].splitlines(),
                 real["description/cell_a_arm_1.urdf.xacro"].splitlines(),
@@ -220,7 +236,17 @@ class TestSimRealParity:
             )
             if a != b
         ]
-        assert all("ros2_control_plugin" in line for line in differing), differing
+        plugin = [pair for pair in differing if "ros2_control_plugin" in pair[0]]
+        rest = [pair for pair in differing if "ros2_control_plugin" not in pair[0]]
+        assert len(plugin) == 1, differing
+        assert len(rest) == 1, differing
+
+        sim_line, real_line = rest[0]
+        assert "collision_mesh_path" in sim_line, differing
+        assert sim_line.replace("file://$(find cite_description)", "") == real_line.replace(
+            "package://cite_description", ""
+        ), (sim_line, real_line)
+
         for other in ("arm_2", "arm_3"):
             key = f"description/cell_a_{other}.urdf.xacro"
             assert sim[key] == real[key], f"{other} changed when only arm_1 was switched"

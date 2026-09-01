@@ -1,7 +1,16 @@
 # cite_description
 
 **Status:** `PARTIAL` — it installs one asset set, the convex-hull collision
-meshes for `xarm5` (ADR-0028). Nothing selects them by default.
+meshes for `xarm5` (ADR-0028), and that is the partial half: L1 holds meshes,
+materials and scans, and this package holds one set of meshes.
+
+**What is not partial any more is whether anything loads it.** This line said
+*"Nothing selects them by default"* until 2026-09-01. Since that date
+`model/assets/types/robots/xarm5.yaml` selects `convex_hull`, so **this package
+holds the cell's shipped collision geometry**: the three generated arm
+descriptions resolve their collision meshes through it, `cite_generated`'s
+generated `package.xml` declares an `exec_depend` on it, and
+`robot_state_publisher` cannot bring an arm up without it.
 
 L1. The project's own description assets, installed so a simulator or a planner
 can reach them by URI. No code, no node, no launch file.

@@ -1,22 +1,38 @@
 # ADR-0051: Restate ADR-0028's grasp gate, and bind it to the work-piece width it was measured at
 
-- **Status:** Proposed — **nothing in the tree changes with this record, and it promotes
-  nothing.** [ADR-0028](0028-convex-hull-collision-meshes.md) stays `Proposed`,
+- **Status:** Accepted — **the project owner ratified the restated clause in decision 1 on
+  2026-09-01**, which is the promotion condition this record wrote for itself. The clause
+  restates ADR-0028's gate; it does not relax it, and ratification changes no threshold,
+  ceiling or tolerance anywhere.
+  **Ratifying the clause and satisfying it are two acts, and both have now happened, in that
+  order and in separate changes** — decision 2 required the promoting change to be separate
+  from this record, and it is: [ADR-0028](0028-convex-hull-collision-meshes.md) is `Accepted`
+  as of 2026-09-01, `description.collision.select` on
+  `model/assets/types/robots/xarm5.yaml` is `convex_hull`, and decision 3's range is enforced
+  by `cite_tools.validate.physical._derived_collision_is_within_its_measured_range` rather than
+  stated in prose. See ADR-0028's section "Amendment — 2026-09-01: clause 2 is adopted as
+  ADR-0051 restates it, and this record is promoted" for the evidence clause by clause.
+  **Decision 4's two residuals are open and this status does not close them**, nor does it make
+  the campaign under *Evidence* anything other than what it is: **INCONCLUSIVE on its own
+  question, by a rule it wrote before it had any data.**
+  **[Replaced 2026-09-01, kept for the record:]** *"Proposed — nothing in the tree changes
+  with this record, and it promotes nothing. ADR-0028 stays `Proposed`,
   `description.collision.select` on `model/assets/types/robots/xarm5.yaml` stays
-  `vendor_meshes`, and no generated artifact, ceiling, tolerance or threshold moves. **This
-  record makes a promotion possible; it does not make one.** That is a separate change, and
-  what it has to do is decision 2 below.
-  **This record is promoted to `Accepted` when the project owner ratifies the restated clause
-  in decision 1.** Until then ADR-0028's gate is the one ADR-0028 carries, corrected on
+  `vendor_meshes`, and no generated artifact, ceiling, tolerance or threshold moves. This
+  record makes a promotion possible; it does not make one. That is a separate change, and
+  what it has to do is decision 2 below. This record is promoted to `Accepted` when the project
+  owner ratifies the restated clause in decision 1."* Until that ratification, ADR-0028's gate
+  was the one ADR-0028 carried, corrected on
   2026-09-01 to say that its clause 2 as written cannot be met — see that record's section
   "Correction — 2026-09-01: clause 2 asks for a measurement of a mechanism that does not
   occur", which points here.
 - **Date:** 2026-09-01
 - **Deciders:** **Project owner**, on the shape: restate the gate rather than relax it, and
   keep promotion in a separate change. **The clause text below is the docs-writer agent's**,
-  drafted from the campaign named under *Evidence*, and is owed the owner's ratification —
+  drafted from the campaign named under *Evidence*, and was owed the owner's ratification —
   the same split [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) records for the
-  restatement it made.
+  restatement it made. **That ratification was given on 2026-09-01**, which is what moves this
+  record to `Accepted`; the wording of decision 1 is unchanged by it.
 - **Related:** [ADR-0028](0028-convex-hull-collision-meshes.md) (whose gate clause 2 this
   record restates; clause 1 is untouched and ADR-0028 is **not** superseded),
   [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) (the precedent for this shape —

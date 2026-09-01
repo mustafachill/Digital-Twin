@@ -71,6 +71,36 @@ is how the wrong claim survived review in the first place. So:
 If the *decision* is what turned out wrong, this is not a correction. Write a new ADR and
 set this one to `Superseded by NNNN`.
 
+## In-place markers
+
+Rule 2 above puts `**[Corrected YYYY-MM-DD — …]**` beside a sentence that is now false. Four
+markers of that shape are in use, and until 2026-09-01 only the first was written down here —
+which is how a fourth spelling got invented without anyone noticing there were three.
+
+They differ in **what happened to the sentence**, and picking the wrong one tells the reader
+the wrong thing about why it is still there.
+
+| Marker | Use it when | What the reader learns |
+|---|---|---|
+| `**[Corrected YYYY-MM-DD — …]**` | The sentence was **wrong when written**, and something later measured it. | Do not believe it. See the Correction section. |
+| `**[Amended YYYY-MM-DD — …]**` | The sentence was right and the **decision it states has been changed** by a later amendment. | It is superseded by a decision, not by a measurement. |
+| `**[Overtaken YYYY-MM-DD — …]**` | The sentence was right when written and **events since made it false**, with nobody wrong. A count that moved, a default that flipped, a campaign that has since been run. | It is stale, not mistaken. |
+| `**[Replaced YYYY-MM-DD, kept for the record:]** *"…"*` | A **status line** was rewritten and the old wording is quoted after the marker. | This is what the status used to say. |
+
+Three rules about them.
+
+1. **`Superseded` is a status value, not an in-place marker.** It means *this whole record
+   was replaced by ADR NNNN*, and using the word inside a record's body — especially inside
+   the status block of an `Accepted` record — says the opposite of what is true. That is why
+   the fourth row is `Replaced`. One in-place use survives, in
+   [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md)'s status block, and it
+   stays: a record's text is not rewritten to satisfy a convention written after it.
+2. **A marker never edits the sentence it marks.** It stands after it, for the same reason
+   corrections do not rewrite: how the wrong claim survived is the valuable part.
+3. **A marker is not a substitute for a section.** `Corrected` and `Amended` require the
+   section rule 1 describes; `Overtaken` and `Replaced` do not, because nothing was measured
+   false — but both must name the record or the change that overtook them.
+
 [ADR-0022](0022-gripper-as-ros2-control-controller.md) is the worked example of a
 correction. [ADR-0023](0023-simulated-grasping-via-attachment.md) is the worked example of
 the distinction: it was corrected on 2026-08-25 for a claim, and superseded by
@@ -119,7 +149,7 @@ not rewritten either.
 | [0025](0025-qos-profiles-in-cite-interfaces.md) | Ship the QoS profiles as a library inside `cite_interfaces` | Accepted |
 | [0026](0026-joint-space-goals-on-under-six-dof-arms.md) | Plan to joint-space goals obtained by solving IK on the exact pose | Accepted (corrected 2026-08-27) |
 | [0027](0027-pilz-planning-pipeline.md) | Plan station-to-station motion with Pilz, keeping OMPL as the fallback | Accepted (corrected 2026-08-26 and 2026-08-27) |
-| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Proposed (amended and corrected 2026-08-29; implemented 2026-08-31, not promoted — see its implementation note; corrected twice 2026-09-01 — the implementation note's speed conclusion, and clause 2 of the promotion gate, which cannot be met as written and is restated by [0051](0051-restate-the-hull-grasp-gate.md)) |
+| [0028](0028-convex-hull-collision-meshes.md) | Generate convex-hull collision meshes as project assets, bound through L0 | Accepted (amended 2026-08-29 and 2026-09-01; corrected 2026-08-29, 2026-08-31 and twice on 2026-09-01) — implemented 2026-08-31 and **promoted 2026-09-01** against the clause [0051](0051-restate-the-hull-grasp-gate.md) restates, on a campaign whose own verdict was INCONCLUSIVE; see its amendment of that date for the evidence clause by clause and for the four things promotion does not establish |
 | [0029](0029-simulated-grasping-by-friction.md) | Rest simulated grasping on friction, and remove the attachment plugin | Accepted (corrected 2026-08-26) |
 | [0030](0030-facility-model-describes-the-workpiece.md) | Describe the work-piece in the facility model, as an asset type with no instances | Accepted |
 | [0031](0031-refuse-direct-handoff-without-orientation-certainty.md) | Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation | Accepted (corrected 2026-08-26) |
@@ -142,4 +172,4 @@ not rewritten either.
 | [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Accepted on clause 1 (corrected 2026-08-30; promoted 2026-08-31) — clauses 2 and 3 unbuilt, see its status block |
 | [0049](0049-measure-the-real-time-floor-as-capacity.md) | Keep the real-time floor and measure it as capacity, not as a throttled rate | Proposed (corrected 2026-09-01) |
 | [0050](0050-what-crosses-the-twin-boundary.md) | Cross the twin boundary in L5's own memory, and say when a divergence number may be believed | Proposed (corrected 2026-08-31) |
-| [0051](0051-restate-the-hull-grasp-gate.md) | Restate ADR-0028's grasp gate, and bind it to the work-piece width it was measured at | Proposed |
+| [0051](0051-restate-the-hull-grasp-gate.md) | Restate ADR-0028's grasp gate, and bind it to the work-piece width it was measured at | Accepted |

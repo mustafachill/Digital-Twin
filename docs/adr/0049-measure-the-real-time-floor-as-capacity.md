@@ -369,7 +369,15 @@ speed figure. See the Correction section above.]** Independently of that,
 [ADR-0028](0028-convex-hull-collision-meshes.md) forbids exactly this move: clause 2 of its
 promotion gate is the friction-grasp campaign re-run under hull geometry, that campaign has not
 been run, and the record says in terms that no status may move on a real-time-factor figure
-alone. This record touches neither the gate nor the shipped default.
+alone. **[Overtaken 2026-09-01, later the same day: the campaign has since been run and
+published as
+[`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md),
+ADR-0028's clause 2 was restated by [ADR-0051](0051-restate-the-hull-grasp-gate.md), and
+ADR-0028 is `Accepted` with the shipped default now the hulls. **Option D is still not
+available and this paragraph's point is unchanged**: what promoted ADR-0028 was a grasp
+campaign and a geometric clearance argument, and **no status moved on a real-time-factor
+figure** — which is the sentence that mattered here.]** This record touches neither the gate
+nor the shipped default.
 
 ### Option E — buy the rate back by lowering the simulation's own rates
 
@@ -421,7 +429,12 @@ measured and bought against.
 4. **Nothing is bought, tuned, promoted or widened on this evidence.** Explicitly: no machine is
    specified for purchase; no scenario wall-clock ceiling is changed, and none may be widened to
    absorb a real-time factor ([`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md));
-   ADR-0028 is not promoted and the shipped collision geometry stays vendor; the generated world
+   ADR-0028 is not promoted and the shipped collision geometry stays vendor **[Overtaken
+   2026-09-01, later the same day: ADR-0028 is `Accepted` and the shipped collision geometry is
+   now the derived hulls. **Nothing in this clause is weakened by that** — it was promoted on
+   grasp evidence and a geometric clearance argument, by a separate change, and **nothing here
+   was bought, tuned or widened on this record's evidence**, which is what the clause says.]**;
+   the generated world
    keeps `real_time_factor` `1.0`; `twin: {sides: single}` stays; and **half 2 in either shape
    remains outside bring-up**, exactly as [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)
    clause 4 states — a side may still be up, slow, and indistinguishable from a healthy one.

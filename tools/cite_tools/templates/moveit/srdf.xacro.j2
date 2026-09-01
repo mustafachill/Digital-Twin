@@ -3,10 +3,19 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ arm.id }}">
 
   <!-- The vendor SRDF macro, invoked with our prefix — never copied. It carries
-       the self-collision matrix, which is a property of the vendor's geometry
-       rather than of our facility; re-deriving it here would mean inventing an
-       answer the vendor already has, and getting it wrong is how a planner
-       starts refusing valid states or permitting invalid ones. -->
+       the self-collision matrix, which the vendor computed against the vendor's
+       own collision geometry; re-deriving it here would mean inventing an answer
+       the vendor already has, and getting it wrong is how a planner starts
+       refusing valid states or permitting invalid ones.
+
+       READ THIS BEFORE TRUSTING THE MATRIX. Since 2026-09-01 this cell's arms do
+       NOT collide against the geometry that matrix was computed against: L0
+       selects convex hulls of the vendor meshes (ADR-0028, `Accepted`), and a
+       hull is never smaller than what it replaces. So the pairing between the
+       matrix and the geometry is broken, deliberately and knowingly, and nothing
+       in this repository checks it. ADR-0028's amendment of 2026-09-01 sizes it —
+       and records why the interim check that record named was considered and
+       declined. -->
   <xacro:include filename="$(find {{ arm.srdf_package }})/{{ arm.srdf_file }}"/>
   <xacro:{{ arm.srdf_macro }}
 {% for name, value in arm.srdf_args %}

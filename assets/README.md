@@ -92,14 +92,29 @@ Two representations, always separate:
   real-time factor and to produce contact behaviour nobody can explain. The
   `model-validator` agent rejects it.
 
-  **The three arms do exactly this today, deliberately.** For the xArm variant
-  this project models the vendor's own collision directory *is* its visual
-  directory, so twelve links per arm collide against a rendering mesh. Hulls of
-  all thirteen collision meshes are derived and committed below, and the L0 model
-  can select them per robot type — but the shipped default is still the vendor's,
-  because ADR-0028's promotion gate requires the friction-grasp campaign re-run
-  against hull geometry first. This paragraph says what the tree does, not what
-  the rule above wishes it did (P7).
+  **The three arms did exactly this until 2026-09-01, deliberately, and no
+  longer do.** For the xArm variant this project models the vendor's own
+  collision directory *is* its visual directory, so twelve links per arm collided
+  against a rendering mesh. Hulls of all thirteen collision meshes are derived and
+  committed below, the L0 model selects them per robot type, and **the shipped
+  selection is the hulls**: ADR-0028 is `Accepted`, and selecting the vendor's
+  meshes is now an error rather than a warning in `cite_tools.validate.physical`.
+  **What promoted it was not a clean grasp result.** The campaign that record's
+  gate demanded
+  ([`../docs/measurements/2026-09-01-hull-grasp/`](../docs/measurements/2026-09-01-hull-grasp/ANALYSIS.md))
+  returned **INCONCLUSIVE on its own question**, because the mechanism it was
+  built to detect does not occur; the gate's clause 2 was **restated rather than
+  relaxed** by [ADR-0051](../docs/adr/0051-restate-the-hull-grasp-gate.md), and
+  what carries it is a geometric clearance argument bounded to a work-piece no
+  narrower than **50.0 mm, the width the 2026-09-01 campaign ran at** — a bound
+  the validator enforces. It is not "this cell's cube": today's cube is 50 mm
+  too, and the two are separate quantities that happen to agree, kept separate in
+  the code because a bound read out of L0 could never fail. Read ADR-0028's
+  amendment of 2026-09-01 for the residuals promotion left open; **their count is
+  not stated here**, because it was stated as three for one day and there were
+  four.
+  This paragraph says what the tree does, not what the rule above wishes it did
+  (P7).
 
 ## Registration
 

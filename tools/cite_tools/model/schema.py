@@ -280,10 +280,26 @@ class CollisionSpec(Strict):
     This docstring said until 2026-08-31 that the exception was needed "because a
     convex hull fills the gap between the pads". It does not: each link is hulled
     separately, so that gap lies between two collision bodies, and the aperture at
-    the pads is unchanged to 0.01 mm. What makes the fingers still need the
+    the pads is unchanged to 0.01 mm.
+
+    It then said, until 2026-09-01, that "what makes the fingers still need the
     exception is the 2.0 mm relief step at each end of each pad, which the hull
-    ramps across. ADR-0028's correction of 2026-08-31 carries the measurements and
-    names what a re-run has to report.
+    ramps across". **That is a second wrong mechanism derived the same way as the
+    first**, from a static audit taken at a *commanded* aperture the gripper never
+    occupies while holding this cell's part. The ramps are real; they are recessed
+    behind the pad plane on the same rigid link, so a flat face resting on the pad
+    is clear of them at every aperture. Both errors and the measurement that
+    settled them are in ADR-0028's corrections of 2026-08-31 and 2026-09-01 and in
+    ADR-0051, which restates the promotion gate around them.
+
+    **So no measured mechanism requires the exception today, and it is still
+    foreseen rather than retired.** What is untested is a work-piece narrow enough
+    to close the jaws past the pad plane's recess — ADR-0051 decision 3 makes
+    declaring one a model error, enforced by
+    ``validate.physical._derived_collision_is_within_its_measured_range``, and
+    names what must be measured first. If that case ever needs answering with
+    geometry, the answer is the per-link exception above, which this field still
+    cannot express.
     """
 
     #: The ``id`` of the set in ``sets`` that is bound into the description.
@@ -813,6 +829,65 @@ class GraspSpec(Strict):
         return 1.0 - (self.max_drive_rate_rad_s / self.follower_max_rate_rad_s)
 
 
+class VendorSelfCollisionMatrix(Strict):
+    """L0 declaring what the vendor's self-collision matrix was computed against.
+
+    ADR-0028 decision 4's shape, applied to the second thing the vendor knows and
+    this model could not see. That decision closed a structural hole for collision
+    **meshes** — a vendor description is invoked and never ingested, so no rule
+    here may open a vendor file, and the rule that would have caught a rendering
+    mesh reused as collision geometry returned an empty list for exactly the links
+    where it occurs. The fix was to make L0 *declare* what the vendor does, so the
+    rule had something to fire on.
+
+    **The identical hole is open for the self-collision matrix, and since
+    2026-09-01 it has a measured consequence.** The SRDF is invoked, not copied,
+    so its matrix is a function of the vendor's collision geometry — and this type
+    now binds convex hulls of that geometry instead. A hull is never smaller than
+    what it replaces, so the pairing is broken in one direction only: a pair the
+    vendor **disabled** can interpenetrate under hulls, and MoveIt will never
+    check it.
+
+    So this block is not documentation. It is the declaration a validator rule
+    reads (``physical._vendor_self_collision_matrix_is_acknowledged``), and its
+    absence — or its naming a collision set other than the one bound — is a model
+    ERROR. **That is deliberately a declarable state rather than an unshippable
+    one**: a check that fails on the shipped configuration the moment it exists is
+    a blocker, not a guard, and would have been reverted rather than answered.
+    Declaring it costs an author one block and the audit that fills it.
+
+    **What it does NOT do**: it does not fix the mismatch, license it, or claim
+    the figures are still current. Bind a different set and the acknowledgement
+    stops matching, which is the point.
+    """
+
+    #: The ``id`` of the collision set this acknowledgement was audited against.
+    #: A model that binds a different set is not covered by it, and the rule says
+    #: so — an acknowledgement that survived a geometry change would be worse than
+    #: none, because it would read as coverage.
+    audited_for: str
+    #: Where the audit is published. A declaration whose figures nobody can find
+    #: is a number with no provenance (P8).
+    audit: str
+    #: Link pairs on this type that carry geometry at all, and the vendor's split
+    #: of them. ENABLED pairs are the ones MoveIt checks; DISABLED pairs are the
+    #: ones it never will, which is why the mismatch matters at all.
+    pairs_with_geometry: int
+    pairs_enabled_by_vendor: int
+    pairs_disabled_by_vendor: int
+    #: The enabled half, audited by SAMPLING CONFIGURATIONS — how many were tried
+    #: and how many newly self-collide under the audited set. These two are counts
+    #: of configurations, not of pairs, and they are written as separate fields
+    #: because a rate stated without its denominator is the thing this project
+    #: keeps having to correct.
+    enabled_configurations_sampled: int
+    enabled_configurations_newly_colliding: int
+    #: The disabled half, audited by PAIR: how many of the pairs the vendor
+    #: disables interpenetrate under the audited set. This is the half ADR-0028's
+    #: own audit did not cover, and the one with a measured consequence.
+    pairs_disabled_interpenetrating: int
+
+
 class PlanningSpec(Strict):
     """How this type is planned for, and where its SRDF comes from.
 
@@ -826,13 +901,23 @@ class PlanningSpec(Strict):
     end_effector_group_suffix: str | None = None
     tip_link_suffix: str
     #: The vendor SRDF macro, invoked with our prefix rather than copied. It
-    #: carries the self-collision matrix, which is a property of the vendor's
-    #: geometry and not of our facility — re-deriving it here would be inventing
+    #: carries the self-collision matrix, which the vendor computed against the
+    #: vendor's own collision geometry — re-deriving it here would be inventing
     #: an answer the vendor already has.
+    #:
+    #: Since 2026-09-01 the arms collide against convex hulls of those meshes
+    #: rather than the meshes (ADR-0028), so the matrix and the geometry it was
+    #: computed against no longer pair. That is knowing and unchecked; ADR-0028's
+    #: amendment of that date sizes it and records the check that was declined.
     srdf_package: str | None = None
     srdf_file: str | None = None
     srdf_macro: str | None = None
     srdf_args: dict[str, str | bool | int | float] = Field(default_factory=dict)
+    #: Required when this type binds a DERIVED collision set and invokes the
+    #: vendor's SRDF macro, because then the matrix above describes geometry the
+    #: type no longer loads. Optional otherwise — a type on the vendor's own
+    #: meshes has nothing to acknowledge. See `VendorSelfCollisionMatrix`.
+    vendor_self_collision_matrix: VendorSelfCollisionMatrix | None = None
     #: Kinematics solver, and the planning-time limits MoveIt applies.
     kinematics_plugin: str = "kdl_kinematics_plugin/KDLKinematicsPlugin"
     kinematics_resolution: float = 0.005
