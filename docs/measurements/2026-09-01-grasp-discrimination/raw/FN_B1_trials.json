@@ -1,0 +1,1122 @@
+[
+  {
+    "trial": 1,
+    "label": "FN_B1",
+    "commanded_width_m": 0.042,
+    "model": "gd_part_FN_B1_001",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.9,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.407463554585548,
+    "drive_samples": 3523,
+    "reached_width_m_i2": 0.04980430148885203,
+    "threshold_m_i2": 0.0021060542624354397,
+    "margin_m_i2": 0.007804301488852028,
+    "ratio_i2": 3.7056507175779694,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04958828025579932,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12901,
+    "contact_messages_in_window": 5267,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3781,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 30.5
+  },
+  {
+    "trial": 2,
+    "label": "FN_B1",
+    "commanded_width_m": 0.045,
+    "model": "gd_part_FN_B1_002",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.41444968320595815,
+    "drive_samples": 3479,
+    "reached_width_m_i2": 0.049067873057876646,
+    "threshold_m_i2": 0.0021104466112801495,
+    "margin_m_i2": 0.0040678730578766475,
+    "ratio_i2": 1.927493941867199,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04964404110029242,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 13537,
+    "contact_messages_in_window": 5722,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 4235,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 30.2
+  },
+  {
+    "trial": 3,
+    "label": "FN_B1",
+    "commanded_width_m": 0.047,
+    "model": "gd_part_FN_B1_003",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.2,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.412942337838759,
+    "drive_samples": 3363,
+    "reached_width_m_i2": 0.049226896299259755,
+    "threshold_m_i2": 0.0021095076137824464,
+    "margin_m_i2": 0.002226896299259755,
+    "ratio_i2": 1.0556474338894777,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04979851619132705,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12742,
+    "contact_messages_in_window": 4961,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3463,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 29.1
+  },
+  {
+    "trial": 4,
+    "label": "FN_B1",
+    "commanded_width_m": 0.048,
+    "model": "gd_part_FN_B1_004",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.1,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 2,
+    "pick_detail": "nothing was picked up: commanded 48.0 mm, reached 49.1 mm, stalled=true. The gripper stopped short of its command, but not by enough width to be a part: a close that ends within the controller's own goal tolerance reports a little more width than it actually reached, and that phantom margin is what this rejects. Either nothing was between the pads, or the gripper jammed or fouled its own fingers",
+    "pick_reported_holding": false,
+    "pick_succeeded": false,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": false,
+    "q_at_stall_rad": 0.41442281760757443,
+    "drive_samples": 3031,
+    "reached_width_m_i2": 0.04907070796721797,
+    "threshold_m_i2": 0.0021104299173785286,
+    "margin_m_i2": 0.0010707079672179695,
+    "ratio_i2": 0.507341162291686,
+    "predicate_i2": false,
+    "i4_reports": [
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04904807289060606,
+    "i4_holding": false,
+    "i4_effort_n": 60.0,
+    "contact_messages": 10412,
+    "contact_messages_in_window": 2710,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 1197,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 25.9
+  },
+  {
+    "trial": 5,
+    "label": "FN_B1",
+    "commanded_width_m": 0.042,
+    "model": "gd_part_FN_B1_005",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.40734980913346214,
+    "drive_samples": 3364,
+    "reached_width_m_i2": 0.049816278987793644,
+    "threshold_m_i2": 0.002105981896918479,
+    "margin_m_i2": 0.007816278987793641,
+    "ratio_i2": 3.711465421061121,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04957075789223133,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12822,
+    "contact_messages_in_window": 4952,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3471,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 29.1
+  },
+  {
+    "trial": 6,
+    "label": "FN_B1",
+    "commanded_width_m": 0.045,
+    "model": "gd_part_FN_B1_006",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.4074428193546527,
+    "drive_samples": 3347,
+    "reached_width_m_i2": 0.04980648495808524,
+    "threshold_m_i2": 0.002106041072591995,
+    "margin_m_i2": 0.004806484958085243,
+    "ratio_i2": 2.282237046863334,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04969425278779958,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 13408,
+    "contact_messages_in_window": 5566,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 4086,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 29.5
+  },
+  {
+    "trial": 7,
+    "label": "FN_B1",
+    "commanded_width_m": 0.047,
+    "model": "gd_part_FN_B1_007",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.4064065058810059,
+    "drive_samples": 3299,
+    "reached_width_m_i2": 0.049915593796315695,
+    "threshold_m_i2": 0.002105380712045076,
+    "margin_m_i2": 0.002915593796315695,
+    "ratio_i2": 1.384829726821052,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04978929561259172,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12787,
+    "contact_messages_in_window": 4954,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3455,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 29.1
+  },
+  {
+    "trial": 8,
+    "label": "FN_B1",
+    "commanded_width_m": 0.048,
+    "model": "gd_part_FN_B1_008",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 2,
+    "pick_detail": "nothing was picked up: commanded 48.0 mm, reached 49.9 mm, stalled=true. The gripper stopped short of its command, but not by enough width to be a part: a close that ends within the controller's own goal tolerance reports a little more width than it actually reached, and that phantom margin is what this rejects. Either nothing was between the pads, or the gripper jammed or fouled its own fingers",
+    "pick_reported_holding": false,
+    "pick_succeeded": false,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": false,
+    "q_at_stall_rad": 0.40763998905424287,
+    "drive_samples": 2963,
+    "reached_width_m_i2": 0.04978572196568668,
+    "threshold_m_i2": 0.0021061664571557556,
+    "margin_m_i2": 0.0017857219656866805,
+    "ratio_i2": 0.8478541473394201,
+    "predicate_i2": false,
+    "i4_reports": [
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04904461798519327,
+    "i4_holding": false,
+    "i4_effort_n": 60.0,
+    "contact_messages": 10674,
+    "contact_messages_in_window": 2891,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 1377,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 26.0
+  },
+  {
+    "trial": 9,
+    "label": "FN_B1",
+    "commanded_width_m": 0.042,
+    "model": "gd_part_FN_B1_009",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 48.1,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.4235263264991731,
+    "drive_samples": 3444,
+    "reached_width_m_i2": 0.04810881789351268,
+    "threshold_m_i2": 0.0021159994394191407,
+    "margin_m_i2": 0.006108817893512676,
+    "ratio_i2": 2.8869657428593634,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 48.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04871316553811959,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 13271,
+    "contact_messages_in_window": 5498,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 4014,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 29.4
+  },
+  {
+    "trial": 10,
+    "label": "FN_B1",
+    "commanded_width_m": 0.045,
+    "model": "gd_part_FN_B1_010",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.40627214671288375,
+    "drive_samples": 3361,
+    "reached_width_m_i2": 0.04992973736824938,
+    "threshold_m_i2": 0.0021052949299891093,
+    "margin_m_i2": 0.004929737368249379,
+    "ratio_i2": 2.3415899112410252,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04970327502886684,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12671,
+    "contact_messages_in_window": 4809,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3324,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 28.4
+  },
+  {
+    "trial": 11,
+    "label": "FN_B1",
+    "commanded_width_m": 0.047,
+    "model": "gd_part_FN_B1_011",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.40591673023805985,
+    "drive_samples": 3444,
+    "reached_width_m_i2": 0.04996714817588971,
+    "threshold_m_i2": 0.0021050678299285954,
+    "margin_m_i2": 0.0029671481758897084,
+    "ratio_i2": 1.4095261604897336,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04970329564987741,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12943,
+    "contact_messages_in_window": 5095,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3599,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 28.9
+  },
+  {
+    "trial": 12,
+    "label": "FN_B1",
+    "commanded_width_m": 0.048,
+    "model": "gd_part_FN_B1_012",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 2,
+    "pick_detail": "nothing was picked up: commanded 48.0 mm, reached 50.0 mm, stalled=true. The gripper stopped short of its command, but not by enough width to be a part: a close that ends within the controller's own goal tolerance reports a little more width than it actually reached, and that phantom margin is what this rejects. Either nothing was between the pads, or the gripper jammed or fouled its own fingers",
+    "pick_reported_holding": false,
+    "pick_succeeded": false,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": false,
+    "q_at_stall_rad": 0.4060923892713705,
+    "drive_samples": 3012,
+    "reached_width_m_i2": 0.049948658973791166,
+    "threshold_m_i2": 0.0021051801038178557,
+    "margin_m_i2": 0.0019486589737911647,
+    "ratio_i2": 0.9256495300602396,
+    "predicate_i2": false,
+    "i4_reports": [
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04946439341526938,
+    "i4_holding": false,
+    "i4_effort_n": 60.0,
+    "contact_messages": 10441,
+    "contact_messages_in_window": 2603,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 1089,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 25.4
+  },
+  {
+    "trial": 13,
+    "label": "FN_B1",
+    "commanded_width_m": 0.042,
+    "model": "gd_part_FN_B1_013",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.40800489835564596,
+    "drive_samples": 3332,
+    "reached_width_m_i2": 0.04974729186373931,
+    "threshold_m_i2": 0.0021063982950352534,
+    "margin_m_i2": 0.007747291863739306,
+    "ratio_i2": 3.677980504446641,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 42.0,
+        "reached_mm": 49.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.049563265310955874,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12480,
+    "contact_messages_in_window": 4637,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3152,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 28.2
+  },
+  {
+    "trial": 14,
+    "label": "FN_B1",
+    "commanded_width_m": 0.045,
+    "model": "gd_part_FN_B1_014",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.40702955991751255,
+    "drive_samples": 3341,
+    "reached_width_m_i2": 0.04984999930825007,
+    "threshold_m_i2": 0.0021057780061596687,
+    "margin_m_i2": 0.004849999308250072,
+    "ratio_i2": 2.3031864204409045,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 49.1,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.0490914784933939,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12820,
+    "contact_messages_in_window": 5008,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3524,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 28.6
+  },
+  {
+    "trial": 15,
+    "label": "FN_B1",
+    "commanded_width_m": 0.047,
+    "model": "gd_part_FN_B1_015",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 0,
+    "pick_detail": "",
+    "pick_reported_holding": true,
+    "pick_succeeded": true,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": true,
+    "q_at_stall_rad": 0.4064284254345888,
+    "drive_samples": 3393,
+    "reached_width_m_i2": 0.04991328633838219,
+    "threshold_m_i2": 0.002105394703050659,
+    "margin_m_i2": 0.0029132863383821914,
+    "ratio_i2": 1.3837245501572317,
+    "predicate_i2": true,
+    "i4_reports": [
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 49.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04982224664830982,
+    "i4_holding": true,
+    "i4_effort_n": 60.0,
+    "contact_messages": 12681,
+    "contact_messages_in_window": 4858,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 3362,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 28.7
+  },
+  {
+    "trial": 16,
+    "label": "FN_B1",
+    "commanded_width_m": 0.048,
+    "model": "gd_part_FN_B1_016",
+    "mu": 1.0,
+    "homed": true,
+    "pick_reports": [
+      {
+        "commanded_mm": 88.9,
+        "reached_mm": 88.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      },
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 49.9,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "pick_accepted": true,
+    "pick_result_code": 2,
+    "pick_detail": "nothing was picked up: commanded 48.0 mm, reached 49.9 mm, stalled=true. The gripper stopped short of its command, but not by enough width to be a part: a close that ends within the controller's own goal tolerance reports a little more width than it actually reached, and that phantom margin is what this rejects. Either nothing was between the pads, or the gripper jammed or fouled its own fingers",
+    "pick_reported_holding": false,
+    "pick_succeeded": false,
+    "reached_grasping_phase": true,
+    "reached_retreating_phase": false,
+    "q_at_stall_rad": 0.4060454485655854,
+    "drive_samples": 3024,
+    "reached_width_m_i2": 0.049953599870584925,
+    "threshold_m_i2": 0.0021051501076465363,
+    "margin_m_i2": 0.001953599870584924,
+    "ratio_i2": 0.9280097716019696,
+    "predicate_i2": false,
+    "i4_reports": [
+      {
+        "commanded_mm": 48.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i4_result_code": 0,
+    "i4_reached_width_m": 0.04999090671272398,
+    "i4_holding": false,
+    "i4_effort_n": 60.0,
+    "contact_messages": 10623,
+    "contact_messages_in_window": 2796,
+    "finger_contact_points_max": 40,
+    "finger_contact_messages": 1284,
+    "release_reports": [
+      {
+        "commanded_mm": 80.0,
+        "reached_mm": 79.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "ok": true,
+    "wall_s": 25.6
+  }
+]

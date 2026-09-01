@@ -1,0 +1,170 @@
+[INFO] [1788278362.902624884] [cite.cell_a.arm_1.description_publisher]: Robot initialized
+[INFO] [1788278362.905075467] [cite.cell_a.arm_1.controller_manager]: Using Steady (Monotonic) clock for triggering controller manager cycles.
+[INFO] [1788278362.909395759] [cite.cell_a.arm_1.controller_manager]: Subscribing to '/cite/cell_a/arm_1/robot_description' topic for robot description.
+[INFO] [1788278362.910402176] [cite.cell_a.arm_1.controller_manager]: update rate is 150 Hz
+[INFO] [1788278362.910469176] [cite.cell_a.arm_1.controller_manager]: Overruns handling is : enabled
+[INFO] [1788278362.910495009] [cite.cell_a.arm_1.controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[WARN] [1788278362.910596926] [cite.cell_a.arm_1.controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[INFO] [1788278363.092156551] [cite.cell_a.arm_1.controller_manager]: Received robot description from topic.
+[INFO] [1788278363.093854842] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint5' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+  has velocity limits: true [3.14]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [20]
+  angle wraparound: false'
+[INFO] [1788278363.094008259] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint5' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.094084884] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint4' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-1.69297, 3.14159]
+  has velocity limits: true [3.14]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [20]
+  angle wraparound: false'
+[INFO] [1788278363.094198467] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint4' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.094274176] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint2' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-2.059, 2.0944]
+  has velocity limits: true [3.14]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.094416676] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint2' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.094502176] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint3' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-3.927, 0.19198]
+  has velocity limits: true [3.14]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [30]
+  angle wraparound: false'
+[INFO] [1788278363.094628759] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint3' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.094688967] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint1' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+  has velocity limits: true [3.14]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.094791217] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint1' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.094884551] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [2]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095023426] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095083134] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_finger_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [2]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095185717] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_finger_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095235592] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_outer_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [2]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095336509] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_outer_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095396717] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_left_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [2]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095499842] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_left_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095580467] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_left_finger_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [2]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095730592] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_left_finger_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095802217] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_drive_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+  has velocity limits: true [1]
+  has acceleration limits: false [nan]
+  has deceleration limits: false [nan]
+  has jerk limits: false [nan]
+  has effort limits: true [50]
+  angle wraparound: false'
+[INFO] [1788278363.095902634] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_drive_joint' in hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.095956342] [cite.cell_a.arm_1.controller_manager]: Enforcing command limits is enabled...
+[INFO] [1788278363.096752301] [cite.cell_a.arm_1.controller_manager]: Loading hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278363.097020967] [cite.cell_a.arm_1.controller_manager]: Loaded hardware 'arm_1_gz_ros2_control/GazeboSimSystem' from plugin 'mock_components/GenericSystem'
+[INFO] [1788278363.097124634] [cite.cell_a.arm_1.controller_manager]: Initialize hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278363.101032009] [cite.cell_a.arm_1.controller_manager]: Successful initialization of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.101236009] [cite.cell_a.arm_1.controller_manager]: Loading hardware 'arm_1_XArmGripperSystem' 
+[INFO] [1788278363.102821342] [cite.cell_a.arm_1.controller_manager]: Loaded hardware 'arm_1_XArmGripperSystem' from plugin 'cite_test_hardware/JointStopSystem'
+[INFO] [1788278363.102913009] [cite.cell_a.arm_1.controller_manager]: Initialize hardware 'arm_1_XArmGripperSystem' 
+[WARN] [1788278363.105602884] [cite.cell_a.arm_1.controller_manager.hardware_component.system.arm_1_XArmGripperSystem]: 'arm_1_XArmGripperSystem' is the ADR-0040 TEST FIXTURE. 'arm_1_drive_joint' has hard stops at [-1.000000, 0.432577] and 6 joint(s) report a differentiated velocity. Nothing about this component describes real hardware.
+[INFO] [1788278363.105685967] [cite.cell_a.arm_1.controller_manager]: Successful initialization of hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.105768551] [cite.cell_a.arm_1.controller_manager]: Activating component 'arm_1_XArmGripperSystem'.
+[INFO] [1788278363.105792801] [resource_manager]: 'configure' hardware 'arm_1_XArmGripperSystem' 
+[INFO] [1788278363.105815592] [resource_manager]: Successful 'configure' of hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.105844259] [resource_manager]: 'activate' hardware 'arm_1_XArmGripperSystem' 
+[INFO] [1788278363.105869801] [resource_manager]: Successful 'activate' of hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278363.105922551] [cite.cell_a.arm_1.controller_manager]: Activating component 'arm_1_gz_ros2_control/GazeboSimSystem'.
+[INFO] [1788278363.105959134] [resource_manager]: 'configure' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278363.105978176] [resource_manager]: Successful 'configure' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.105995634] [resource_manager]: 'activate' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278363.106015676] [resource_manager]: Successful 'activate' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278363.106040967] [cite.cell_a.arm_1.controller_manager]: Registering statistics for : arm_1_XArmGripperSystem
+[INFO] [1788278363.106083842] [cite.cell_a.arm_1.controller_manager]: Registering statistics for : arm_1_gz_ros2_control/GazeboSimSystem
+[INFO] [1788278363.106136009] [cite.cell_a.arm_1.controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[INFO] [1788278363.313684176] [cite.cell_a.arm_1.controller_manager]: Loading controller : 'arm_1_joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[INFO] [1788278363.314031176] [cite.cell_a.arm_1.controller_manager]: Loading controller 'arm_1_joint_state_broadcaster'
+[INFO] [1788278363.317928467] [cite.cell_a.arm_1.controller_manager]: Controller 'arm_1_joint_state_broadcaster' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml --params-file /tmp/fp_rig_7tzq4sdd.yaml 
+[INFO] [1788278363.334902926] [cite.cell_a.arm_1.controller_manager]: Configuring controller: 'arm_1_joint_state_broadcaster'
+[INFO] [1788278363.335084509] [cite.cell_a.arm_1.arm_1_joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[INFO] [1788278363.347045676] [cite.cell_a.arm_1.controller_manager]: Activating controllers: [ arm_1_joint_state_broadcaster ]
+[INFO] [1788278363.353238634] [cite.cell_a.arm_1.controller_manager]: Successfully switched controllers!
+
+== spawner arm_1_joint_state_broadcaster rc=0 ==
+[INFO] [1788278363.060714009] [spawner_arm_1_joint_state_broadcaster]: waiting for service /cite/cell_a/arm_1/controller_manager/list_controllers to become available...
+[INFO] [1788278363.334136342] [spawner_arm_1_joint_state_broadcaster]: Loaded arm_1_joint_state_broadcaster
+[INFO] [1788278363.360834134] [spawner_arm_1_joint_state_broadcaster]: Configured and activated arm_1_joint_state_broadcaster
+[INFO] [1788278364.550702176] [cite.cell_a.arm_1.controller_manager]: Loading controller : 'arm_1_gripper_controller' of type 'position_controllers/GripperActionController'
+[INFO] [1788278364.551196718] [cite.cell_a.arm_1.controller_manager]: Loading controller 'arm_1_gripper_controller'
+[INFO] [1788278364.554966760] [cite.cell_a.arm_1.controller_manager]: Controller 'arm_1_gripper_controller' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml --params-file /tmp/fp_rig_7tzq4sdd.yaml 
+[WARN] [1788278364.564105843] [cite.cell_a.arm_1.arm_1_gripper_controller]: [Deprecated]: the `position_controllers/GripperActionController` and `effort_controllers::GripperActionController` controllers are replaced by 'parallel_gripper_controllers/GripperActionController' controller
+[INFO] [1788278364.569285843] [cite.cell_a.arm_1.controller_manager]: Configuring controller: 'arm_1_gripper_controller'
+[INFO] [1788278364.569466593] [cite.cell_a.arm_1.arm_1_gripper_controller]: Action status changes will be monitored at 20.000000 Hz.
+[INFO] [1788278364.573943885] [cite.cell_a.arm_1.controller_manager]: Activating controllers: [ arm_1_gripper_controller ]
+[INFO] [1788278364.583774051] [cite.cell_a.arm_1.controller_manager]: Successfully switched controllers!
+
+== spawner arm_1_gripper_controller rc=0 ==
+[INFO] [1788278363.788091134] [spawner_arm_1_gripper_controller]: waiting for service /cite/cell_a/arm_1/controller_manager/list_controllers to become available...
+[INFO] [1788278364.568289176] [spawner_arm_1_gripper_controller]: Loaded arm_1_gripper_controller
+[INFO] [1788278364.587551926] [spawner_arm_1_gripper_controller]: Configured and activated arm_1_gripper_controller
+[INFO] [1788278364.752524343] [cite.cell_a.arm_1.arm_1_gripper_controller]: Received & accepted new action goal
+[ERROR] [1788278364.758944093] [cite.cell_a.arm_1.controller_manager]: Command of at least one joint is out of limits (throttled log). Joint: 'arm_1_drive_joint', (actual: [Joint: 'arm_1_drive_joint', position: 0.000000, velocity: 0.000000], command: [Joint: 'arm_1_drive_joint', position: 0.452793], limited: [Joint: 'arm_1_drive_joint', position: 0.006667]) with desired period : 0.006667 sec.
+[WARN] [1788278365.191986343] [cite.cell_a.arm_1.controller_manager.hardware_component.system.arm_1_XArmGripperSystem]: 'arm_1_drive_joint/position' has reached a declared stop at 0.432577 and is being held there while the trajectory advances without it.
+[INFO] [1788278365.506364218] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [1788278365.506441302] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[INFO] [1788278365.506896677] [cite.cell_a.arm_1.controller_manager]: Shutdown request received....
+[INFO] [1788278365.507060385] [cite.cell_a.arm_1.controller_manager]: Shutting down all controllers in the controller manager.
+[INFO] [1788278365.507325302] [cite.cell_a.arm_1.controller_manager]: Deactivating controller 'arm_1_gripper_controller'
+[INFO] [1788278365.507715427] [cite.cell_a.arm_1.controller_manager]: Shutting down controller 'arm_1_gripper_controller'
+[INFO] [1788278365.508671343] [cite.cell_a.arm_1.controller_manager]: Deactivating controller 'arm_1_joint_state_broadcaster'
+[INFO] [1788278365.509034385] [cite.cell_a.arm_1.controller_manager]: Shutting down controller 'arm_1_joint_state_broadcaster'
+[INFO] [1788278365.509425135] [resource_manager]: 'deactivate' hardware 'arm_1_XArmGripperSystem' 
+[INFO] [1788278365.510058343] [resource_manager]: Successful 'deactivate' of hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278365.510459760] [resource_manager]: 'shutdown' hardware 'arm_1_XArmGripperSystem' 
+[INFO] [1788278365.510600260] [resource_manager]: Successful 'shutdown' of hardware 'arm_1_XArmGripperSystem'
+[INFO] [1788278365.510784885] [resource_manager]: 'deactivate' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278365.511104177] [resource_manager]: Successful 'deactivate' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278365.511216218] [resource_manager]: 'shutdown' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[INFO] [1788278365.511450635] [resource_manager]: Successful 'shutdown' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[INFO] [1788278365.511595260] [cite.cell_a.arm_1.controller_manager]: Shutting down the controller manager.
+[ERROR] [1788278365.512119010] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ERROR] [1788278365.512119052] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[INFO] [1788278365.515058968] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Async messages lost 0
+[INFO] [1788278365.515220052] [cite.cell_a.arm_1.controller_manager.pal_statistics]: publish_async_failures_ 0
+[INFO] [1788278365.516765135] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Async messages lost 0
+[INFO] [1788278365.516855760] [cite.cell_a.arm_1.controller_manager.pal_statistics]: publish_async_failures_ 0
