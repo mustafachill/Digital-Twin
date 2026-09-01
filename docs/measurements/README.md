@@ -18,6 +18,13 @@ inspection of code.
 | [`2026-08-27-teardown-signal-family/`](2026-08-27-teardown-signal-family/results.md) | Does breaking the `SkillServer` reference cycle change the rate at which `skill_server` dies on a signal at teardown? | **Inconclusive, by its own rule 1.** The rig did not reproduce the defect at all in the pre-fix arm, so the clean post-fix arm evidences nothing. What did move is a leaked `class_loader` library, deterministically. 41 valid runs. |
 | [`2026-08-28-second-world-cost/`](2026-08-28-second-world-cost/ANALYSIS.md) | Can two simulations coexist on one host, what does the second cost, and what dominates the step? | Two coexist, and **`ROS_DOMAIN_ID` is not what keeps them apart** — Gazebo transport needs `GZ_PARTITION`. A second world costs about a quarter of a world. Collision geometry is **34 % of the step**, and hulls buy **1.5x**. The headline ratio is **refused by the campaign's own validity rule**. |
 | [`2026-08-29-real-time-factor-conditions/`](2026-08-29-real-time-factor-conditions/ANALYSIS.md) | What real-time factor does this cell achieve, under what condition, and is the recorded 0.14 wrong? | **Conditional, not wrong.** It reproduces on this host — both halves of the recorded pair together — when the cell is confined to about **one CPU core**; unconfined it idles above real time. Bring-up and load are rejected as the condition. No ceiling is too tight or too loose, and Gazebo's own `real_time_factor` field **over-reports by up to 4.15x under starvation**. 18 cells. |
+| [`2026-08-31-capacity-and-clock-deficit/`](2026-08-31-capacity-and-clock-deficit/ANALYSIS.md) | Is this host short of the real-time floor once the throttle is lifted, and what does the clock deficit look like? | **Short by 1.11x with the shipped vendor meshes; clears the floor by 1.19x with hulls** — measured as capacity, on a **named** machine. The deficit is a **steady drip where the machine is short and rare discrete overruns where it has headroom**. The cross-host 1.23x discrepancy ADR-0049 refused to spend money on is **the throttle**, reproduced on one machine. 24 trials, 2x2, both sides concurrent. |
+
+Read the sixth alongside the fifth and the second. It is the campaign ADR-0049 asked for, and
+it is the first in this directory to **name its machine** — which is a decision clause of that
+record, and which no earlier campaign satisfies. It also demonstrates the failure ADR-0049
+derived from upstream source: a throttled real-time factor compresses everything above 1.0 onto
+1.0, and reading one as a capacity changed an ADR's stated conclusion.
 
 Read the second alongside the first: it corrects two of the first campaign's published
 readings, and the corrections are listed in its own *Corrections to the friction campaign*
