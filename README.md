@@ -39,18 +39,19 @@ A capability is listed as working only when something proves it.
 
 | | State | What proves it |
 |---|---|---|
-| Charter, architecture, ADRs | **Written** — 33 decisions recorded, 8 layers specified | Each layer document carries a status marker; `./scripts/doctor` checks both |
-| Environment, dependencies, CI | **Working** — one command from clone to a built container | `./scripts/doctor` exits 0 |
-| Supply-chain and CVE scanning | **Working** — zero known vulnerabilities in the Python tooling layer | `./scripts/audit-deps`. It does not cover the ROS packages or the pinned external sources, and says so |
-| L0 facility model and generators | **Working** — the whole cell is declared in `model/`, and every derived artifact is generated from it byte-identically | `./scripts/validate-model`, which prints the cardinality; the host suite in `tools/tests/` |
-| Typed interfaces | **Working** — frozen against a stored baseline; the count is in [`docs/interfaces/README.md`](./docs/interfaces/README.md) | Contract test in `cite_interfaces` |
-| Simulated cell bring-up | **Working** — 3 arms, 9 controllers, MoveIt and the planning scene per arm | `./scripts/scenario bringup`, a blocking CI gate |
-| L3 skills | **Partial** — all 6 have a server; `Transfer` has never been run against the simulator, because nothing calls it | `MoveTo`, `Pick`, `Place`, `Grasp`, `Detect` asserted in scenarios; `Transfer` by unit test only |
-| Pick-and-place cycle, one arm | **Partial** — the cycle completes and a friction grasp holds the part; the scenario is a merge gate, but it is still not reproducible | `./scripts/scenario pick_and_place`, a blocking CI gate |
-| Line orchestration from the topology | **Partial** — L4 builds the line from L0, owns handoff, recovery and the belt setpoint, and **no arm moves in any of its own tests** | Unit tests against fake action servers; motion is evidenced only by `./scripts/scenario continuous_line` |
-| Grasping | **By friction, no simulation aid** — repeatable in position, **not in orientation** | [`docs/measurements/`](./docs/measurements/README.md), 3 published campaigns |
-| Sensor-driven three-robot line | **Runs, not finished** — Phase 1.D. The beams are bridged to ROS, `Detect` reads them, L4 indexes the belts, and the milestone ladder has been reported complete. Not every piece completed every run, and no campaign measures it | `./scripts/scenario continuous_line`, run as `continue-on-error` in CI; the qualified count is in [CLAUDE.md §2](./CLAUDE.md) |
-| Physical hardware integration | Phase 2 — no hardware path has been run | — |
+| Charter, architecture, ADRs | **Written** — one design document per layer, L0 to L7, and a decision record for every locked technology and boundary choice | `./scripts/doctor`'s `ADR index` line counts the records — **51, all indexed**, in this checkout on 2026-09-01 — and its `ADR references` and `status markers` lines check that every reference resolves and every design document declares a marker. `ls docs/architecture/L[0-7]-*.md` returns 8. **Run `doctor` rather than reading the ADR figure here; it moves whenever a decision is recorded.** `ls docs/adr/[0-9]*.md` returns one more, because the glob also matches the template |
+| Environment, dependencies, CI | **Working** — one command from clone to a built container | `./scripts/doctor` exits 0 — `22 passed, 0 failed, 4 skipped` in this checkout on 2026-09-01, the skips being the vendor source `./scripts/bootstrap` imports. **`doctor` does not build the image**: CI builds it on every run (`.github/workflows/ci.yml`), and the clone-to-green walk that exercised the whole path by hand is recorded in [CLAUDE.md §2](./CLAUDE.md) |
+| Supply-chain and CVE scanning | **Working** — `./scripts/audit-deps` found no known vulnerabilities in the Python tooling layer on 2026-09-01. **A scan answers for the day it runs, not for the commit** | `./scripts/audit-deps`. It scans the two host requirement files only: not the ROS packages, not the pinned external sources, and not the container's OS packages unless given `--image`. It says so itself |
+| L0 facility model and generators | **Working** — the whole cell is declared in `model/`, and every derived artifact is generated from it byte-identically | `./scripts/validate-model`, which exits 0 and prints the cardinality — **ask it for the numbers; they are deliberately not written out here**. The host suite in `tools/tests/` |
+| Typed interfaces | **Working** — frozen against a stored baseline; the count is in [`docs/interfaces/README.md`](./docs/interfaces/README.md) | Contract test in `cite_interfaces`, against `test/interfaces.baseline` |
+| Simulated cell bring-up | **Working, but not on every run** — 3 arms, 9 controllers, MoveIt and the planning scene per arm. The scenario has failed its own `MoveTo` assertion on developer machines; a failure there is a finding to investigate, not a flake to re-run past | `./scripts/scenario bringup`, a blocking CI gate run twice per CI run (`.github/workflows/ci.yml`). The arm and controller counts are in the generated plan, `workspace/src/cite_generated/bringup/cell_a_plan.yaml`; the pass record and its qualifications are in [CLAUDE.md §2](./CLAUDE.md) |
+| L3 skills | **Partial** — all 6 have a server; `Transfer` has never been run against the simulator, because nothing calls it | Five servers in `cite_skills/src/skill_server.cpp` and one in `detection_server.cpp`; `MoveTo`, `Pick`, `Place`, `Grasp`, `Detect` asserted in scenarios; `Transfer` by unit test only |
+| Pick-and-place cycle, one arm | **Partial** — the cycle completes and a friction grasp holds the part; the scenario is a merge gate, but it is still not reproducible | `./scripts/scenario pick_and_place`, a blocking CI gate (`.github/workflows/ci.yml`) |
+| Line orchestration from the topology | **Partial** — L4 builds the line from L0, owns handoff, recovery and the belt setpoint, and **no arm moves in any of its own tests** | Unit tests against the fake arm in `cite_orchestration/test/fake_arm.cpp`; motion is evidenced only by `./scripts/scenario continuous_line` |
+| Grasping | **By friction, no simulation aid** — repeatable in position, **not in orientation** | [`docs/measurements/`](./docs/measurements/README.md) holds **8** published campaigns (`find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l`, 2026-09-01) — **not all of them are about grasping**; that directory's own README says which is which. Cite a campaign; the numbers are not copied here |
+| Sensor-driven three-robot line | **Runs, not finished** — Phase 1.D. The beams are bridged to ROS, `Detect` reads them, L4 indexes the belts, and the milestone ladder has been reported complete. Not every piece completed every run, and no campaign measures it | `./scripts/scenario continuous_line`, run as `continue-on-error` in CI (`.github/workflows/ci.yml`); the qualified count is in [CLAUDE.md §2](./CLAUDE.md) |
+| Twin pair, and the L5 boundary | **Mechanism only** — `./scripts/sim --pair` starts two sides under a process supervisor, and `cite_twin` holds the mode server, command routing and the divergence monitor. The shipped model declares `sides: single`, so `--pair` refuses on a clean checkout and nothing starts `cite_twin`; **no scenario and no CI step brings a pair up**; and every divergence sample the code can produce is invalid, because one of its terms has no instrument. Phase 2.A produces no fidelity number and closes no clause of the Phase 2 exit criterion (charter §8) | Package tests in `cite_bringup` and `cite_twin`, including a paired launch test that crosses a goal between two fake sides in two processes. A pair of real cells has come up three times, on one machine, by hand — [ADR-0047](./docs/adr/0047-two-independent-launches-joined-not-sequenced.md) and [CLAUDE.md §2](./CLAUDE.md). `grep -rn -- --pair tests .github` returns nothing |
+| Physical hardware integration | Phase 2.B — no hardware path has been run | — |
 | CITE facility 3D scan | Phase 3 | — |
 | Data platform and operator HMI | Phase 4 | — |
 
@@ -155,18 +156,21 @@ Quality gate before any handoff:
 The rules are in [`CLAUDE.md`](./CLAUDE.md); the reasoning behind each one is in
 [`docs/adr/`](./docs/adr/README.md). Three things are worth knowing before you read code:
 
-- **Decisions are recorded before they are implemented.** Twenty-nine ADRs cover every
-  locked technology and boundary choice, each stating what it costs as well as what it buys.
-  One of them has been superseded on the evidence of a measurement campaign, and the record
-  it replaced is kept in place rather than deleted.
+- **Decisions are recorded before they are implemented.** Every locked technology and
+  boundary choice has an ADR, each stating what it costs as well as what it buys. The count
+  is in the status table above, beside the command that produces it. One record has been
+  superseded on the evidence of a measurement campaign and is kept in place rather than
+  deleted; several more carry dated corrections, which are listed with the record in
+  [`docs/adr/README.md`](./docs/adr/README.md).
 - **Documentation is a contract, not a description.** Layer documents carry a status
   marker — `DESIGNED`, `PARTIAL`, or `BUILT` — so a specification is never mistaken for
   something that exists.
-- **Review is partly automated.** Eleven specialist agents run against changes, including
-  two written for this domain: one that validates the facility model and its generated
-  artifacts (inertia tensors, collision geometry, interface matching), and one that audits
-  every code path capable of moving a robot. The roster and its dispatch rules live in
-  `.claude/`, which is local tooling and is not distributed with the repository.
+- **Review is partly automated.** A roster of specialist agents runs against changes,
+  including two written for this domain: one that validates the facility model and its
+  generated artifacts (inertia tensors, collision geometry, interface matching), and one that
+  audits every code path capable of moving a robot. The roster and its dispatch rules live in
+  `.claude/`, which is local tooling and is not distributed with the repository — **so nothing
+  here about it is checkable from a clone**, and this paragraph deliberately states no count.
 
 Some standing prohibitions, so they are not a surprise in review: no hand-edited generated
 artifacts, no structured data in a `std_msgs/String`, no `sleep` used to sequence startup,
@@ -206,7 +210,7 @@ Every row has an ADR recording why it was chosen and what it cost.
 what-we-are-doing.md   the charter — what we are building and why
 CLAUDE.md              the rulebook — how to work here
 model/                 L0: the facility model — the single source of truth
-workspace/src/         the ROS 2 workspace (7 first-party packages + imported sources)
+workspace/src/         the ROS 2 workspace — first-party packages and imported sources
 tools/                 host-agnostic Python tooling — no ROS dependency
 assets/                3D assets and the scan pipeline
 infra/docker/          container image and compose services

@@ -1,6 +1,19 @@
 # ADR-0047: Bring a pair up as two independent launches, joined by a supervisor that sees only processes
 
-- **Status:** Accepted — **promoted 2026-08-30 by the change that first brought two sides up
+- **Status:** Accepted (corrected 2026-09-01) — **the decision and all four clauses stand; one
+  citation inside them does not.** Clause 4's closing sentence, the *What we will have to
+  revisit* item that repeats it, and the fourth bullet of *What promotion does NOT claim*
+  below all name ADR-0043's half 2 — *both sides sustaining a real-time factor of 1.0* — as the
+  requirement, and [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s status line now says
+  not to cite that wording. **The observation those sentences make is unchanged**, and it was
+  re-checked in code on 2026-09-01: nothing in the paired bring-up path measures either of the
+  two quantities [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) restates half 2
+  as, so a side may still be up, slow, and indistinguishable from a healthy one here. Nothing
+  about a pair is re-graded, and no evidence is added or withdrawn. See the section
+  "Correction — 2026-09-01: clause 4 cites a requirement whose wording has been retired, and
+  the observation it makes survives it", below.
+
+  **Promoted 2026-08-30 by the change that first brought two sides up
   under one supervisor** (`b3b7b66`), on the three conditions this record set for itself and on
   nothing else. They are not of equal strength, and the difference is the first thing a reader
   needs.
@@ -94,12 +107,94 @@
   [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md),
   [ADR-0042](0042-partition-gazebo-transport-per-side.md),
   [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md),
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) (which restates ADR-0043's
+  half 2, and whose decision 4 cites clause 4 below — added by the 2026-09-01 correction),
   [ADR-0038](0038-stop-the-line-without-ending-the-process.md),
   [`cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md),
   [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md),
   [L5](../architecture/L5-twin-synchronization.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+  (added by the 2026-09-01 correction),
   [`../../CLAUDE.md`](../../CLAUDE.md) §7, charter §4 (P4, P6, P7)
+
+## Correction — 2026-09-01: clause 4 cites a requirement whose wording has been retired, and the observation it makes survives it
+
+**This is the first correction on this record. No status moves, no clause changes, and nothing
+here is evidence about a pair.** What is wrong is a **citation**, not a finding: clause 4's
+closing sentence, the *What we will have to revisit* item that repeats it, and the fourth
+bullet of *What promotion does NOT claim* in the status block all point a reader at ADR-0043
+half 2's wording — *both sides sustaining a real-time factor of 1.0* — which
+[ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s status line now says not to cite as the
+requirement.
+
+### 1. What clause 4 meant, and that part stands entire
+
+The sentence is an observation about **this record's own scope**. It says that no bring-up
+condition on either side checks how fast that side is running, so a side that is up and slow
+announces readiness exactly as a healthy one does, and the supervisor grades the pair without
+ever having asked. **That is still what the code does** — re-read for this correction and
+tabulated in section 3. The intent survives intact; only the name of the quantity the clause
+declines to check has moved underneath it.
+
+### 2. The quantity was restated, not relaxed
+
+[ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) keeps the 1.0 floor and puts it on
+two quantities: **capacity**, both sides sampled concurrently with the generated world's
+throttle lifted, and the accumulated **clock deficit** in seconds, sampled with that throttle
+in force. The reason half 2's wording had to go is structural rather than editorial — ADR-0043
+half 1 puts `real_time_factor` `1.0` into the generated world, SDFormat's factor is a ceiling,
+and a rate measured under a ceiling is capped at it by construction, so half 2 as worded is a
+test no machine passes and an adequate machine answers it much as an over-provisioned one
+does. That mechanism is read in upstream source in ADR-0049 and is not restated here (P1).
+
+The campaign that measured both quantities is
+[`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+— both geometries by both throttle states, both sides of every pair sampled in one window,
+thresholds registered before the first trial, on a **named** machine. **Its figures are cited
+and not copied**; read its §3 - §6 for them, and note its own rule that every capacity figure
+it reports is a lower bound. Two things about it change how the sentences below should be read:
+**ADR-0049 sets neither of its two thresholds**, so the requirement is unmet under the new
+shape as well as the old, and **ADR-0049 is itself `Proposed`** — the project owner ratified
+its decision on 2026-08-31, and ratification is not promotion.
+
+### 3. Is the observation still true under the new wording? Yes, and it was checked in code
+
+Read on 2026-09-01, first in the paired bring-up path and then in the tree at large.
+
+| Where such a check would have to live | What is there |
+|---|---|
+| `cite_bringup/readiness_witness.py` | Waits for every skill and detection action server the plan names to answer, under a wall-clock deadline whose expiry is a failure, and for nothing else. Its docstring already bars a performance figure from readiness and already names ADR-0049's two quantities. |
+| `cite_bringup/pair.py` | `_verdict` prints `ready=` and `status=` per side and grades the pair on those two facts alone. `READY_CEILING_S` is a ceiling on a failure whose comment says it may never be widened to absorb a slow host, and names ADR-0049 as the record that finding belongs to. |
+| `cite_bringup/plan.py` | No field for either quantity. The generated plan states each side's partition and domain offset, not its speed. |
+| The tree at large | `grep -rn real_time_factor workspace/src tools tests scripts` reaches the world generator, its template, two world files and two test files. **No measurement of either quantity during a run, anywhere.** |
+
+**So the clause's warning still stands under the new wording**: a side can be up, slow, and
+indistinguishable from a healthy one at the point this supervisor reports.
+
+**What has changed is that this is now a decision rather than an omission.** ADR-0049
+decision 4 keeps half 2 **in either shape** outside bring-up, and cites this record's clause 4
+for it. Making readiness depend on a performance figure would turn a slow host into a bring-up
+failure, which is the opposite of what a ceiling on a failure means.
+
+**One thing moved since, and it is not in bring-up.** L5 exists: `cite_twin`'s divergence
+monitor names each side's accumulated clock deficit as a term of a sample's validity, with the
+bound deliberately unset and **no instrument to fill the term** — `clock_deficit_s` is `None`
+on every operand, and the package's own paired launch test asserts the sample is invalid for
+exactly that reason. **The quantity now has a consumer and still has no producer.** Nothing in
+bring-up reads it, and nothing there changes what this supervisor may observe.
+
+### 4. How the error survived
+
+The sentence was true when it was written, and nobody re-read it when the record it cites
+retired the wording. **A citation ages exactly like a count, and nothing in this repository
+treats it that way.** The one instrument that exists,
+`tools/tests/test_superseded_real_time_requirement.py`, was built to keep half 2's wording out
+of *source* and exempts Markdown on purpose — a record has to be able to quote what it corrects
+— so no check was ever going to point at this paragraph, and none should. What found it was
+someone reading the decision text against ADR-0043's status line. The transferable part: when a
+record you cite gains a correction, every sentence that cites it is inside that correction's
+blast radius, and only a reader can walk it.
 
 ## Decision
 
@@ -204,7 +299,9 @@ must never be widened to absorb a slow host** — see
 hardware opt-in both fire before a side runs anything, so they arrive as row 1 and the report
 must name the side. ADR-0043's half 2 — both sides sustaining real-time factor 1.0 — is **not**
 a bring-up condition and nothing measures it, so a side can be up, slow, and indistinguishable
-from a healthy one here.
+from a healthy one here. **[Corrected 2026-09-01 — see the Correction section above. The
+quantity is now ADR-0049's capacity and clock deficit; the observation stands, re-checked in
+code.]**
 
 ## Context
 
@@ -417,6 +514,10 @@ Chosen.
 - **When something measures real-time factor during a run.** ADR-0043's half 2 is a per-side
   condition that this record explicitly does not police. Whether one side falling below 1.0 is a
   pair-level failure is a decision nobody can take until it is measurable.
+  **[Corrected 2026-09-01 — see the Correction section above. Half 2's wording is retired and
+  ADR-0049 carries the requirement as capacity plus a clock-deficit bound; the quantities have
+  since been measured by a campaign, and what is still absent is an instrument that measures
+  either one *during a run*, which is what this item is waiting for.]**
 - **If a zone ever runs more than two sides.** The join generalises to N; ADR-0044 clause 4's
   domain allocation does not, and it is the binding constraint.
 
