@@ -205,19 +205,43 @@ def test_the_generated_tree_and_the_model_never_name_it():
     )
 
 
+def _is_a_launch_file(relative: str) -> bool:
+    """Whether this path is a launch file, by directory component or by shape.
+
+    Deliberately NOT expressed in terms of `_may_name_it`, and read by nothing
+    else. See `test_no_launch_file_names_it` for why the independence is the
+    point; the two clauses are here so that neither form can be added later
+    without both being considered.
+    """
+    return 'launch' in Path(relative).parts[:-1] or relative.endswith('.launch.py')
+
+
 def test_no_launch_file_names_it():
-    """Asserted by name too, for the same reason as the test above it.
+    """Asserted by name too, and this is now the ONLY thing refusing some of them.
 
     A launch file is the one thing that starts processes, and the whole claim is
-    that no production launch path can reach the fixture. `_may_name_it` would
-    already refuse a `launch/` directory, because it is neither markdown nor a
-    test; this says so directly so that a future relaxation of that function
-    cannot take launch files with it.
+    that no production launch path can reach the fixture.
+
+    **`_may_name_it` no longer refuses every launch file, so this test is not a
+    restatement of it.** Since `docs/measurements/` became a permitted context, the
+    sweep above PERMITS a `launch/` directory inside a published campaign — a
+    `harness/launch/rig.launch.py` and a `raw/launch/run.log` alike — and this test
+    is the only thing that refuses either. It is also the only thing that refuses a
+    launch file identified by its SHAPE rather than by a directory component: a
+    `harness/rig.launch.py` has no `launch` component at all, so the sweep permits
+    it under the campaign context and the directory clause alone missed it.
+
+    It must stay independent of `_may_name_it` rather than being deduplicated
+    against it, because a future relaxation of that function cannot then take
+    launch files with it. That independence has a price, recorded in ADR-0040's
+    2026-09-01 amendment: a campaign that publishes a `launch/` directory naming
+    the fixture takes `main` red, and a campaign is frozen once its first trial has
+    run, so the fix would have to be here rather than in the campaign.
     """
     offenders = sorted(
         relative
         for relative, text in _searchable_files()
-        if TOKEN in text and 'launch' in Path(relative).parts[:-1]
+        if TOKEN in text and _is_a_launch_file(relative)
     )
     assert not offenders, (
         f'{TOKEN} is named in a launch file: {offenders}. A test fixture a real '
@@ -269,6 +293,79 @@ def test_published_evidence_may_name_the_fixture():
         f'campaign is frozen once its first trial has run '
         f'(docs/measurements/README.md), so this guard cannot be satisfied by '
         f'editing it, and it is reachable from no launch path (ADR-0040).'
+    )
+
+
+#: Launch files inside a published campaign, which `_may_name_it` PERMITS — the
+#: first by the campaign context, the second by it too, because it carries no
+#: `launch` directory component for the shape clause to have keyed on either. Both
+#: must still be refused by `test_no_launch_file_names_it`, which is the only thing
+#: left that refuses them. Literal paths, none of them committed: a real one would
+#: make this a statement about today's tree rather than about the rule.
+LAUNCH_FILES_A_CAMPAIGN_COULD_PUBLISH = (
+    'docs/measurements/2026-09-01-a-campaign/harness/launch/rig.launch.py',
+    'docs/measurements/2026-09-01-a-campaign/harness/rig.launch.py',
+)
+
+#: One directory outside the permitted root, and one directory whose name merely
+#: starts with it. Both must be refused, and each fails a different way of widening
+#: `PUBLISHED_CAMPAIGNS`: the first if it is relaxed to a parent directory, the
+#: second if its trailing slash is dropped. Neither is caught by the contexts above,
+#: because neither is a context a running system reads.
+JUST_OUTSIDE_THE_PERMITTED_ROOT = (
+    'docs/architecture/anything.py',
+    'docs/measurements2/harness/x.py',
+)
+
+
+def test_a_launch_file_in_a_published_campaign_is_still_refused():
+    """The by-name test is strictly stricter than the sweep, and this pins both halves.
+
+    `_may_name_it` permits everything under `docs/measurements/`, launch files
+    included, so `test_no_launch_file_names_it` is what stands between a campaign
+    and a launch file naming the fixture. It has to catch the shape as well as the
+    directory: `harness/rig.launch.py` names no `launch` directory, and until
+    2026-09-01 nothing in this file refused it at all.
+    """
+    permitted_by_the_sweep = [
+        relative
+        for relative in LAUNCH_FILES_A_CAMPAIGN_COULD_PUBLISH
+        if not _may_name_it(relative)
+    ]
+    assert not permitted_by_the_sweep, (
+        f'these paths are refused by the sweep, so this test no longer pins what it '
+        f'says it pins: {permitted_by_the_sweep}. Rewrite it against paths the sweep '
+        f'permits, or delete it.'
+    )
+    missed = [
+        relative
+        for relative in LAUNCH_FILES_A_CAMPAIGN_COULD_PUBLISH
+        if not _is_a_launch_file(relative)
+    ]
+    assert not missed, (
+        f'a launch file naming {TOKEN} would be refused by nothing: {missed}. The '
+        f'sweep permits a published campaign; this test is the only thing that '
+        f'refuses a launch file inside one (ADR-0040).'
+    )
+
+
+def test_the_permitted_root_is_no_wider_than_it_says():
+    """A path one directory out, and a directory whose name merely starts with it.
+
+    The negative control above is satisfied by a rule far looser than the one
+    written: widening `PUBLISHED_CAMPAIGNS` to `docs/` leaves every context a
+    running system reads refused, so nothing failed. These two paths are what make
+    the root itself the thing under test.
+    """
+    permitted = [
+        relative
+        for relative in JUST_OUTSIDE_THE_PERMITTED_ROOT
+        if _may_name_it(relative)
+    ]
+    assert not permitted, (
+        f'{TOKEN} would be permitted outside the published-campaign root: {permitted}. '
+        f'The permission is for `{PUBLISHED_CAMPAIGNS}` and nothing above it or beside '
+        f'it (ADR-0040).'
     )
 
 

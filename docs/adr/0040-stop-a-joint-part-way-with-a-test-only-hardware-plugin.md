@@ -8,8 +8,9 @@
   false or misleading — the mechanism that kills the velocity state, both unreachability
   arguments in decision 2, and how one mutation row reads. See the section
   "Correction — 2026-08-28: the velocity mechanism, two unreachability arguments, and how one
-  mutation row reads", immediately below. It stays `Proposed`: whether the charter records
-  this package is a user decision that has not been taken.
+  mutation row reads", below the amendment and left exactly as it stands. It stays
+  `Proposed`: whether the charter records this package is a user decision that has not been
+  taken.
   **That decision has since been taken — 2026-08-28, charter v1.8 (§7, §14).** The package is
   **not** added to §7's tree; instead §7 now records that its `workspace/src/` tree is the
   *production* structure and that test-only packages are deliberately outside it, with this
@@ -19,8 +20,9 @@
   **Amended 2026-09-01.** The guard test that enforces decision 2's "checked, not
   structural" bullet was broader than the bullet, and a published campaign fell into the
   gap. See "Amendment — 2026-09-01: a published campaign is a permitted context for the
-  fixture's name", below the correction. The decision, the implementation and decision 2's
-  claim are all unchanged.
+  fixture's name", the first section below and above the 2026-08-28 correction, so that the
+  newest state is what a reader meets first ([`README.md`](README.md) rule 7). The decision,
+  the implementation and decision 2's claim are all unchanged.
 - **Date:** 2026-08-28
 - **Deciders:** Coder agent, on the gap
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) records in its correction
@@ -33,6 +35,87 @@
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md),
   charter §4 (P1, P2, P4, P5, P6, P9)
+
+## Amendment — 2026-09-01: a published campaign is a permitted context for the fixture's name
+
+`workspace/src/cite_test_hardware/test/test_unreachable.py` is the guard test decision 2's
+third bullet asks for. **It enforced more than that bullet claims.** The bullet says the
+plugin class name appears *"nowhere in `model/`, nowhere in `workspace/src/cite_generated/`,
+and in no `launch/` directory"*. The guard refused the token in **any** file anywhere in the
+repository that was not the fixture's own package, not markdown, not under a `test/` or
+`tests/` directory, and not one of two named build-wiring files.
+
+The gap between those two statements closed on a real file, and it closed by taking `main`
+red. The 2026-09-01 grasp-discrimination campaign
+([`docs/measurements/2026-09-01-grasp-discrimination/`](../measurements/2026-09-01-grasp-discrimination/ANALYSIS.md))
+used `JointStopSystem` as an instrument, and said so in the three places a campaign has to
+say it: its harness names the plugin as a constant, its reproduction command checks the
+package is installed, and one shakedown log records the controller manager loading the
+plugin. `./scripts/test` failed on a clean checkout of `main` from the commit that published
+that evidence, and every completed `main` CI run since `734a26d` has failed identically. No
+count is given on purpose: the number was already stale by one when this amendment was
+written, and a count in prose here has no instrument beside it.
+
+**The guard is what changed, and `docs/measurements/` is now a fourth permitted context.**
+Three reasons, in the order they bind:
+
+- **A campaign cannot be edited.** `docs/measurements/README.md` freezes `harness/` and
+  `raw/` once the first trial has run. Editing them to satisfy a guard means they are no
+  longer the code that produced the results and the logs that recorded them — so this was a
+  guard that could not be satisfied honestly, which is the failure mode `_may_name_it`'s own
+  docstring already records for the path allow-list it replaced.
+- **A campaign directory is reachable from no launch path.** Nothing in `scripts/`,
+  `workspace/` or `.github/` invokes anything beneath it.
+- **It is none of the three locations this record names.** Widening to it therefore moves no
+  claim in decision 2.
+
+**What this does not do.** `model/`, `workspace/src/cite_generated/` and every `launch/`
+directory are still refused. Two tests assert those three locations by name, precisely so
+that a relaxation of `_may_name_it` cannot take them with it, and this relaxation is the
+first one they were written against — **and for one of the three the by-name test is now the
+only thing left refusing it.** `model/` and `workspace/src/cite_generated/` are refused twice
+over, by the sweep and again by name. A `launch/` directory **inside a published campaign**
+is not: the sweep permits everything under `docs/measurements/`, so
+`test_no_launch_file_names_it` is the whole of that refusal. Being independent of
+`_may_name_it` is what makes it worth having, and it is not redundant with the sweep; do not
+deduplicate it against the predicate. It keys on a launch file's **shape** as well as on a
+`launch` directory component, because a campaign's `harness/rig.launch.py` carries no such
+component and was, until this was written, refused by nothing at all.
+
+Every other context a running system reads is still refused: a description, a world, a controller configuration, a
+bring-up plan, and any non-test source file in any package. `docs/measurements/` was **not**
+added to the guard's `SKIPPED` subtrees, which mean "not this repository's to answer for";
+the campaigns are ours, and a named permitted context is the shape that says so. Four tests
+now pin both directions against literal path strings rather than against the tree, so
+neither the permission nor the refusals depend on what happens to be committed. Three of the
+four tuples are written paths that are not committed; the fourth,
+`PUBLISHED_EVIDENCE_THAT_NAMES_IT`, is three real files, written out rather than discovered
+so that the test survives the campaign being archived.
+
+**The residual this leaves, stated so the next campaign author meets it before publishing.**
+A campaign that publishes a file naming the fixture under a `harness/launch/` directory, or
+under any name ending `.launch.py`, takes `main` red — and a campaign is frozen by
+`docs/measurements/README.md` once its first trial has run, so it cannot be fixed where it
+occurs. That is the deliberate price of keeping the by-name test independent, and it is
+accepted rather than overlooked: a launch file is the one artifact that starts processes, and
+a guard on it that a relaxation elsewhere can switch off is not a guard. The fix, should it
+ever fire, belongs in `test_no_launch_file_names_it` and in this record, not in the
+campaign.
+
+**And it does not move what is load-bearing.** As the 2026-08-28 correction records, the
+guarantee that the fixture cannot be a hardware backend is `JointStopSystem::on_init`
+refusing to initialise, not the absence of a name; against a description that names the
+fixture with no `stop_joint`, the guard test was already the weaker of the two statements.
+**That is not the whole of it, and the difference is worth stating.** `on_init` refuses a
+description it cannot serve; it does not refuse a well-formed one, and
+`cite_test_hardware/test/test_refusal.cpp`'s `AWellFormedFixtureInitialises` asserts exactly
+that — a description naming the fixture with valid parameters initialises `SUCCESS`. Against
+that case the text guard is not redundant with `on_init`: what refuses it is this guard and
+`./scripts/validate-model`'s byte-diff of the generated tree, and the L0 model having no way
+to express a `stop_joint` is what stops such a description being generated in the first
+place. What is weakened by this amendment is a claim about text in a directory that starts
+no process.
+
 
 ## Correction — 2026-08-28: the velocity mechanism, two unreachability arguments, and how one mutation row reads
 
@@ -184,56 +267,6 @@ this checkout while writing this correction. The **run** figures were not re-run
 spread in item 4 are the reproducing agent's measurements, on one machine, with no
 thresholds registered in advance. They are recorded because they are the only measurements
 of these things that exist, not because they have been replicated.
-
-
-## Amendment — 2026-09-01: a published campaign is a permitted context for the fixture's name
-
-`workspace/src/cite_test_hardware/test/test_unreachable.py` is the guard test decision 2's
-third bullet asks for. **It enforced more than that bullet claims.** The bullet says the
-plugin class name appears *"nowhere in `model/`, nowhere in `workspace/src/cite_generated/`,
-and in no `launch/` directory"*. The guard refused the token in **any** file anywhere in the
-repository that was not the fixture's own package, not markdown, not under a `test/` or
-`tests/` directory, and not one of two named build-wiring files.
-
-The gap between those two statements closed on a real file, and it closed by taking `main`
-red. The 2026-09-01 grasp-discrimination campaign
-([`docs/measurements/2026-09-01-grasp-discrimination/`](../measurements/2026-09-01-grasp-discrimination/ANALYSIS.md))
-used `JointStopSystem` as an instrument, and said so in the three places a campaign has to
-say it: its harness names the plugin as a constant, its reproduction command checks the
-package is installed, and one shakedown log records the controller manager loading the
-plugin. `./scripts/test` failed on a clean checkout of `main` from the commit that published
-that evidence, and four consecutive `main` CI runs failed identically.
-
-**The guard is what changed, and `docs/measurements/` is now a fourth permitted context.**
-Three reasons, in the order they bind:
-
-- **A campaign cannot be edited.** `docs/measurements/README.md` freezes `harness/` and
-  `raw/` once the first trial has run. Editing them to satisfy a guard means they are no
-  longer the code that produced the results and the logs that recorded them — so this was a
-  guard that could not be satisfied honestly, which is the failure mode `_may_name_it`'s own
-  docstring already records for the path allow-list it replaced.
-- **A campaign directory is reachable from no launch path.** Nothing in `scripts/`,
-  `workspace/` or `.github/` invokes anything beneath it.
-- **It is none of the three locations this record names.** Widening to it therefore moves no
-  claim in decision 2.
-
-**What this does not do.** `model/`, `workspace/src/cite_generated/` and every `launch/`
-directory are still refused, each by the sweep and again by a test that names it — those two
-tests exist precisely so that a relaxation of `_may_name_it` cannot take them with it, and
-this relaxation is the first one they were written against. Every other context a running
-system reads is still refused: a description, a world, a controller configuration, a
-bring-up plan, and any non-test source file in any package. `docs/measurements/` was **not**
-added to the guard's `SKIPPED` subtrees, which mean "not this repository's to answer for";
-the campaigns are ours, and a named permitted context is the shape that says so. Two tests
-added with this change pin both directions against synthetic path strings rather than
-against the tree, so neither the permission nor the refusals depend on what happens to be
-committed.
-
-**And it does not move what is load-bearing.** As the 2026-08-28 correction records, the
-guarantee that the fixture cannot be a hardware backend is `JointStopSystem::on_init`
-refusing to initialise, not the absence of a name; the guard test was already the weaker of
-the two statements. What is weakened by this amendment is a claim about text in a directory
-that starts no process.
 
 
 ## Context
@@ -425,9 +458,13 @@ worth being precise about which parts are structural and which are merely checke
   `./scripts/validate-model`, which byte-diffs the generated tree against a fresh generator
   run — but "already covered by another gate" is not the same as tested, so a guard test
   asserts it directly.
-  **[Amended 2026-09-01 — see the Amendment section above. This bullet's claim is unchanged
-  and all three locations are still refused; what changed is the guard, which enforced more
-  than the bullet claims and now permits a fourth context, `docs/measurements/`.]**
+  **No in-place marker stands beside this bullet, and that is deliberate.** Every marker
+  [`README.md`](README.md)'s table defines says something happened to the sentence — it was
+  wrong, its decision changed, or events overtook it — and none of those is true here: the
+  claim is unchanged and all three locations are still refused. What changed is the guard
+  test, which enforced more than this bullet claims and now permits a fourth context,
+  `docs/measurements/`. That is the Amendment section above; read it for what the guard now
+  does and does not refuse.
 
 ### 3. The rig runs the real stack, and reads every number it can from the generated tree
 
