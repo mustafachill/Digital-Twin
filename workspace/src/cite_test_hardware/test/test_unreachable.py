@@ -60,6 +60,11 @@ BUILD_WIRING = (
     'workspace/src/cite_bringup/CMakeLists.txt',
 )
 
+#: Published measurement evidence. A campaign that used the fixture as an
+#: instrument records that it did, in a `harness/` and a `raw/` that
+#: `docs/measurements/README.md` freezes once the first trial has run.
+PUBLISHED_CAMPAIGNS = 'docs/measurements/'
+
 
 def _may_name_it(relative: str) -> bool:
     """Whether this file is allowed to contain the token.
@@ -71,13 +76,25 @@ def _may_name_it(relative: str) -> bool:
     it being written. A guard nobody can satisfy honestly gets widened until it
     guards nothing.
 
-    Three contexts may name it, and each is a place from which nothing can be
+    Four contexts may name it, and each is a place from which nothing can be
     loaded:
 
       * the fixture's own package;
       * PROSE — any markdown file, anywhere. A decision record and a README have
         to be able to say what exists;
-      * a TEST — any file under a `test/` or `tests/` directory, at any depth.
+      * a TEST — any file under a `test/` or `tests/` directory, at any depth;
+      * PUBLISHED EVIDENCE — anything under `docs/measurements/`. A campaign that
+        used the fixture as an instrument has to be able to say so in the code that
+        produced its numbers and in the logs that recorded them, and a campaign's
+        `harness/` and `raw/` are frozen by `docs/measurements/README.md` once its
+        first trial has run — so this is a context that CANNOT be edited afterwards
+        without the campaign ceasing to be the thing that produced its results. It
+        is reachable from no launch path: nothing in `scripts/`, `workspace/` or
+        `.github/` invokes anything under that directory. And it is none of the
+        three locations ADR-0040 decision 2 actually names — `model/`,
+        `workspace/src/cite_generated/` and a `launch/` directory — so refusing it
+        made this guard broader than the claim it exists to enforce, which is how
+        publishing a campaign came to turn `main` red.
 
     Plus the two build files that declare it as a test dependency of the one test
     that uses it.
@@ -87,6 +104,8 @@ def _may_name_it(relative: str) -> bool:
     plan, the L0 model, and any non-test source file in any package.
     """
     if relative.startswith(OWN_PACKAGE) or relative in BUILD_WIRING:
+        return True
+    if relative.startswith(PUBLISHED_CAMPAIGNS):
         return True
     if relative.endswith('.md'):
         return True
@@ -124,7 +143,7 @@ def _searchable_files():
 
 
 def test_the_fixture_is_named_only_where_a_test_may_name_it():
-    """Nothing outside a test, a build file for that test, or a document.
+    """Nothing outside a test, a build file for that test, a document or a campaign.
 
     The failure this catches is a description, a launch file or a bring-up plan
     that names the fixture — which would put a component that exists to stop an
@@ -203,4 +222,71 @@ def test_no_launch_file_names_it():
     assert not offenders, (
         f'{TOKEN} is named in a launch file: {offenders}. A test fixture a real '
         f'bring-up can start is a hazard, not a fixture (ADR-0040).'
+    )
+
+
+#: The three files the 2026-09-01 grasp-discrimination campaign committed that name
+#: the fixture — its harness, its reproduction command, and one run log in which the
+#: controller manager reports loading the plugin. Written out here rather than
+#: discovered, so that this test says what it means even after the campaign is
+#: archived, moved or deleted.
+PUBLISHED_EVIDENCE_THAT_NAMES_IT = (
+    'docs/measurements/2026-09-01-grasp-discrimination/harness/measure_fp.py',
+    'docs/measurements/2026-09-01-grasp-discrimination/harness/run_fp.sh',
+    'docs/measurements/2026-09-01-grasp-discrimination/raw/shakedown/logs/'
+    'FP_SHAKEDOWN_002_47.15.log',
+)
+
+#: One path per context a running system reads: a launch file, the L0 model, the
+#: generated bring-up plan, and an ordinary source file in an ordinary package.
+#: Synthetic on purpose — a real path would make this test a statement about what
+#: happens to be committed today rather than about the rule.
+CONTEXTS_A_RUNNING_SYSTEM_READS = (
+    'workspace/src/cite_simulation/launch/anything.launch.py',
+    'model/assets/types/robots/x.yaml',
+    'workspace/src/cite_generated/bringup/cell_a_plan.yaml',
+    'workspace/src/cite_skills/src/skill_server.cpp',
+)
+
+
+def test_published_evidence_may_name_the_fixture():
+    """Asserted against strings, so the sweep above cannot be the only thing saying so.
+
+    The sweep is silent whenever the repository happens to contain no campaign that
+    used the fixture — which is most of this project's history and was the state on
+    the day the rule was written. Naming the paths here makes the permission a
+    property of `_may_name_it` rather than of what is on disk, so that narrowing the
+    rule back fails immediately instead of waiting for the next campaign to be
+    published and take `main` red with it.
+    """
+    refused = [
+        relative
+        for relative in PUBLISHED_EVIDENCE_THAT_NAMES_IT
+        if not _may_name_it(relative)
+    ]
+    assert not refused, (
+        f'published campaign evidence is refused the fixture name: {refused}. A '
+        f'campaign is frozen once its first trial has run '
+        f'(docs/measurements/README.md), so this guard cannot be satisfied by '
+        f'editing it, and it is reachable from no launch path (ADR-0040).'
+    )
+
+
+def test_the_contexts_a_running_system_reads_are_still_refused():
+    """The other direction of the same rule, and the reason it is safe to widen.
+
+    Adding a fourth permitted context is only defensible if the contexts the guard
+    exists for are demonstrably untouched by it. The sweeps above assert that
+    over the tree; this asserts it over the rule, so that a fifth context added
+    later cannot pass by being written loosely enough to swallow one of these.
+    """
+    permitted = [
+        relative
+        for relative in CONTEXTS_A_RUNNING_SYSTEM_READS
+        if _may_name_it(relative)
+    ]
+    assert not permitted, (
+        f'{TOKEN} would be permitted somewhere a running system reads: {permitted}. '
+        f'A production launch path that can reach the fixture is a hazard, not a '
+        f'fixture (ADR-0040).'
     )
