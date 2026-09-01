@@ -19,6 +19,22 @@ inspection of code.
 | [`2026-08-28-second-world-cost/`](2026-08-28-second-world-cost/ANALYSIS.md) | Can two simulations coexist on one host, what does the second cost, and what dominates the step? | Two coexist, and **`ROS_DOMAIN_ID` is not what keeps them apart** — Gazebo transport needs `GZ_PARTITION`. A second world costs about a quarter of a world. Collision geometry is **34 % of the step**, and hulls buy **1.5x**. The headline ratio is **refused by the campaign's own validity rule**. |
 | [`2026-08-29-real-time-factor-conditions/`](2026-08-29-real-time-factor-conditions/ANALYSIS.md) | What real-time factor does this cell achieve, under what condition, and is the recorded 0.14 wrong? | **Conditional, not wrong.** It reproduces on this host — both halves of the recorded pair together — when the cell is confined to about **one CPU core**; unconfined it idles above real time. Bring-up and load are rejected as the condition. No ceiling is too tight or too loose, and Gazebo's own `real_time_factor` field **over-reports by up to 4.15x under starvation**. 18 cells. |
 | [`2026-08-31-capacity-and-clock-deficit/`](2026-08-31-capacity-and-clock-deficit/ANALYSIS.md) | Is this host short of the real-time floor once the throttle is lifted, and what does the clock deficit look like? | **Short by 1.11x with the shipped vendor meshes; clears the floor by 1.19x with hulls** — measured as capacity, on a **named** machine. The deficit is a **steady drip where the machine is short and rare discrete overruns where it has headroom**. The cross-host 1.23x discrepancy ADR-0049 refused to spend money on is **the throttle**, reproduced on one machine. 24 trials, 2x2, both sides concurrent. |
+| [`2026-09-01-hull-grasp/`](2026-09-01-hull-grasp/ANALYSIS.md) | Does convex-hull collision geometry change the grasp? | **Inconclusive, by its own rule S** — and the reason is the finding: the hull's wedges sit **0.41 mm behind the pad plane on the same rigid link** and never touch the part, so the mechanism [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) predicted does not occur. No outcome differs; the only DETECTED metric is a control — the jaws stall **5.6 mrad earlier**. The contact patch got **shorter**, not longer, and two rules refuse to call it. 47 trials. |
+
+Read the eighth with [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) open. It is
+clause 2 of that record's promotion gate, and it is the second campaign here whose headline
+is an **inconclusive** produced by a rule written before the data. The rule fired because
+neither contact metric moved, and the campaign was then obliged by that same rule to say
+whether the predicted mechanism was ever within reach of the part. It was not: the record's
+own two figures — a pad aperture of 44.99 mm and a hulled relief shoulder at 45.40 mm on the
+same link — already say the shoulder is recessed behind the pad, and the campaign measures
+that clearance independently. **The geometry audit ADR-0028 published is confirmed; the
+inference drawn from it is not.**
+
+It is also the campaign whose pre-registered effect sizes did the most work. Eleven of its
+eighteen metrics separate at `p < 0.01` and exactly one of them separates by as much as the
+size registered in advance as interesting. A campaign reporting the other ten as findings
+would have been reporting its own sample size.
 
 Read the sixth alongside the fifth and the second. It is the campaign ADR-0049 asked for, and
 it is the first in this directory to **name its machine** — which is a decision clause of that

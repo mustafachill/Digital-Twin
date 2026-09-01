@@ -1,0 +1,2 @@
+ 1:02  up 8 days,  6:39, 1 user, load averages: 5.72 9.48 9.41
+/dev/disk3s1s1   460Gi    16Gi    66Gi    20%    459k  697M    0%   /

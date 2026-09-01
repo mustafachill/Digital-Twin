@@ -1,0 +1,462 @@
+{
+  "metrics": {
+    "patch_len_left_mm_median": {
+      "family": "M3",
+      "vendor_median": 37.49937030633855,
+      "hull_median": 36.30148865230498,
+      "hl_shift": -0.5700263454554602,
+      "p": 0.08668425440088967,
+      "vendor_iqr": 0.1440698484137357,
+      "mis": 2.0,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          37.49935916910425,
+          37.50775596954549
+        ],
+        "HULL": [
+          37.183461192699696,
+          35.465532707156314
+        ]
+      },
+      "within_block_spread": 1.717928485543382
+    },
+    "patch_len_right_mm_median": {
+      "family": "M3",
+      "vendor_median": 37.49968737832026,
+      "hull_median": 29.094541851022043,
+      "hl_shift": -1.9992198019466443,
+      "p": 0.18348917031903877,
+      "vendor_iqr": 3.576557826602695,
+      "mis": 2.0,
+      "unit": "mm",
+      "verdict": "UNRESOLVED (R)",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          33.34859970109786,
+          37.499834359902415
+        ],
+        "HULL": [
+          28.005066158620025,
+          35.50061455795577
+        ]
+      },
+      "within_block_spread": 7.495548399335746
+    },
+    "normal_approach_component_max": {
+      "family": "M4",
+      "vendor_median": 0.0026367880498886853,
+      "hull_median": 0.005787071440469278,
+      "hl_shift": 0.0019090015000408477,
+      "p": 0.0036735529912251485,
+      "vendor_iqr": 0.003247985815726325,
+      "mis": 0.02,
+      "unit": "-",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.003275408032478002,
+          0.0025314791284175246
+        ],
+        "HULL": [
+          0.006013425434881879,
+          0.005108261670084142
+        ]
+      },
+      "within_block_spread": 0.0009051637647977369
+    },
+    "normal_approach_component_median": {
+      "family": "M4",
+      "vendor_median": 0.0022873072605374394,
+      "hull_median": 0.00543464819410487,
+      "hl_shift": 0.002239737963387281,
+      "p": 0.003431365281801478,
+      "vendor_iqr": 0.0033003577755744786,
+      "mis": 0.02,
+      "unit": "-",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.002549673973447842,
+          0.002244598118549026
+        ],
+        "HULL": [
+          0.005731745437991299,
+          0.005020428534863126
+        ]
+      },
+      "within_block_spread": 0.000711316903128173
+    },
+    "d_approach_mm": {
+      "family": "M1",
+      "vendor_median": 0.23701607969159322,
+      "hull_median": 0.19167855361887365,
+      "hl_shift": -0.04078901769469234,
+      "p": 0.0012853244374971225,
+      "vendor_iqr": 0.033713138777563545,
+      "mis": 0.2,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          0.232250081218216,
+          0.24319102103927126
+        ],
+        "HULL": [
+          0.1981817636787786,
+          0.18176599845654007
+        ]
+      },
+      "within_block_spread": 0.016415765222238532
+    },
+    "d_close_mm": {
+      "family": "M1",
+      "vendor_median": 0.5268511285905443,
+      "hull_median": 0.12566717147826376,
+      "hl_shift": -0.22864450257931634,
+      "p": 0.014456735717226877,
+      "vendor_iqr": 0.13418492196049964,
+      "mis": 0.2,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          0.5176969317375857,
+          0.5268511285905443
+        ],
+        "HULL": [
+          0.12130937554128145,
+          0.43239820600068857
+        ]
+      },
+      "within_block_spread": 0.3110888304594071
+    },
+    "d_pivot_mm": {
+      "family": "M1",
+      "vendor_median": -0.12157212649256711,
+      "hull_median": -0.09238277933955898,
+      "hl_shift": 0.02279105063883516,
+      "p": 0.07410948534781449,
+      "vendor_iqr": 0.0352542624000914,
+      "mis": 0.2,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          -0.11213090677531298,
+          -0.13580986903620385
+        ],
+        "HULL": [
+          -0.09075155104848573,
+          -0.0984477606619725
+        ]
+      },
+      "within_block_spread": 0.023678962260890862
+    },
+    "pitch_pivot_deg": {
+      "family": "M2",
+      "vendor_median": 0.18086983687228958,
+      "hull_median": 0.008780592219119497,
+      "hl_shift": -0.07810816212973853,
+      "p": 0.049074580236834524,
+      "vendor_iqr": 0.19182383733664887,
+      "mis": 0.5,
+      "unit": "deg",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          0.16016542677710854,
+          0.18086983687228958
+        ],
+        "HULL": [
+          0.007605846920215795,
+          0.09159948785777869
+        ]
+      },
+      "within_block_spread": 0.0839936409375629
+    },
+    "roll_close_deg": {
+      "family": "M2",
+      "vendor_median": 0.04761869319642462,
+      "hull_median": 0.027280454717070177,
+      "hl_shift": -0.007481020012107096,
+      "p": 0.13617780785090194,
+      "vendor_iqr": 0.02090873799389812,
+      "mis": 0.5,
+      "unit": "deg",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          0.038435925645813294,
+          0.051218738055318916
+        ],
+        "HULL": [
+          0.026970188878722146,
+          0.05571766267893662
+        ]
+      },
+      "within_block_spread": 0.028747473800214477
+    },
+    "yaw_approach_deg": {
+      "family": "M2",
+      "vendor_median": 0.004374983201608368,
+      "hull_median": 0.00025457064240079345,
+      "hl_shift": -0.024302824726773548,
+      "p": 0.002574207102792592,
+      "vendor_iqr": 0.029499491778546962,
+      "mis": 0.5,
+      "unit": "deg",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 21,
+      "block_medians": {
+        "VENDOR": [
+          0.010900224731799272,
+          0.003979549235177114
+        ],
+        "HULL": [
+          8.595878992903004e-05,
+          0.0002987514257254193
+        ]
+      },
+      "within_block_spread": 0.006920675496622159
+    },
+    "twist_max_deg": {
+      "family": "C1",
+      "vendor_median": 2.22466986460078,
+      "hull_median": 0.4367454948147046,
+      "hl_shift": -1.519446348370121,
+      "p": 0.00012238687597447415,
+      "vendor_iqr": 4.798622158495693,
+      "mis": 5.0,
+      "unit": "deg",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          2.22466986460078,
+          1.9970809896334043
+        ],
+        "HULL": [
+          0.44704014336871095,
+          0.42786768091672106
+        ]
+      },
+      "within_block_spread": 0.22758887496737557
+    },
+    "carry_rot_world_vertical_deg": {
+      "family": "C2",
+      "vendor_median": 0.021881263468456334,
+      "hull_median": 0.0038759535928953614,
+      "hl_shift": -0.013870742116602042,
+      "p": 0.002601145896053401,
+      "vendor_iqr": 0.09631206952371292,
+      "mis": 2.0,
+      "unit": "deg",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.05254266383611937,
+          0.01554670982183505
+        ],
+        "HULL": [
+          0.0030837272910220945,
+          0.004533112220908715
+        ]
+      },
+      "within_block_spread": 0.03699595401428432
+    },
+    "q_at_stall_rad": {
+      "family": "C4",
+      "vendor_median": 0.4164576213390256,
+      "hull_median": 0.4085253105103414,
+      "hl_shift": -0.0055939356803121065,
+      "p": 0.00022221306584099067,
+      "vendor_iqr": 0.0032310036538427678,
+      "mis": 0.005,
+      "unit": "rad",
+      "verdict": "DETECTED",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.4160649952521306,
+          0.4164587041066279
+        ],
+        "HULL": [
+          0.40850095673049286,
+          0.40935438172506877
+        ]
+      },
+      "within_block_spread": 0.0008534249945759131
+    },
+    "place_err_m": {
+      "family": "C3",
+      "vendor_median": 0.0015556353864974019,
+      "hull_median": 0.0009022280054302623,
+      "hl_shift": -0.00048568771941955214,
+      "p": 0.0029900680111842443,
+      "vendor_iqr": 0.002999349529752307,
+      "mis": 0.01,
+      "unit": "m",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.001336245170853993,
+          0.0020999386748824906
+        ],
+        "HULL": [
+          0.0008490897739752046,
+          0.0009249310980494804
+        ]
+      },
+      "within_block_spread": 0.0007636935040284975
+    },
+    "slip_max_mm": {
+      "family": "C3",
+      "vendor_median": 2.8114886373178205,
+      "hull_median": 1.5064171331231568,
+      "hl_shift": -1.2223361666310828,
+      "p": 1.8012300116581444e-05,
+      "vendor_iqr": 1.200725360992191,
+      "mis": 2.0,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          2.870947138429004,
+          2.8114886373178205
+        ],
+        "HULL": [
+          1.4329623243436453,
+          1.5272147713632098
+        ]
+      },
+      "within_block_spread": 0.09425244701956448
+    },
+    "lift_m": {
+      "family": "C3",
+      "vendor_median": 0.11950162557666189,
+      "hull_median": 0.11959440340452843,
+      "hl_shift": 4.5645602332000657e-05,
+      "p": 0.5873528750166327,
+      "vendor_iqr": 0.0003413679446957474,
+      "mis": 0.01,
+      "unit": "m",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.11953224141635921,
+          0.11947351474210138
+        ],
+        "HULL": [
+          0.11961647331556285,
+          0.11956723573206851
+        ]
+      },
+      "within_block_spread": 5.8726674257825184e-05
+    },
+    "v_max_mps": {
+      "family": "C3",
+      "vendor_median": 0.2253420234774654,
+      "hull_median": 0.272984893420211,
+      "hl_shift": 0.037806508060976504,
+      "p": 0.0027894222766906497,
+      "vendor_iqr": 0.058364788135275236,
+      "mis": 0.05,
+      "unit": "m/s",
+      "verdict": "UNRESOLVED (R)",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          0.2192673684001774,
+          0.24066281822579325
+        ],
+        "HULL": [
+          0.2627050689599772,
+          0.2786267473289273
+        ]
+      },
+      "within_block_spread": 0.021395449825615837
+    },
+    "pad_separation_mm_mean": {
+      "family": "C4",
+      "vendor_median": 101.731031252568,
+      "hull_median": 101.86041264548876,
+      "hl_shift": 0.118694433115337,
+      "p": 0.0004638769027320738,
+      "vendor_iqr": 0.11399981960913408,
+      "mis": 0.5,
+      "unit": "mm",
+      "verdict": "not detected",
+      "n_vendor": 24,
+      "n_hull": 23,
+      "block_medians": {
+        "VENDOR": [
+          101.68181953565414,
+          101.74176084207242
+        ],
+        "HULL": [
+          101.86018682387343,
+          101.86041264548876
+        ]
+      },
+      "within_block_spread": 0.059941306418281215
+    }
+  },
+  "outcomes": {
+    "VENDOR": {
+      "n": 24,
+      "success": 23,
+      "wilson": 0.7975777375115778,
+      "slip_over_5mm": 5,
+      "slip_rate_positive": 24,
+      "n_rates": 24,
+      "flung": 0,
+      "holding": 24,
+      "picked": 24,
+      "placed": 24
+    },
+    "HULL": {
+      "n": 23,
+      "success": 23,
+      "wilson": 0.8568788745827373,
+      "slip_over_5mm": 0,
+      "slip_rate_positive": 23,
+      "n_rates": 23,
+      "flung": 0,
+      "holding": 23,
+      "picked": 23,
+      "placed": 23
+    }
+  }
+}
