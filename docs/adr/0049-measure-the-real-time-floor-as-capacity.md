@@ -14,6 +14,15 @@
   — the capacity margin above 1.0, and the operating deficit bound — have been set by that
   campaign or by the record it forces. **Promotion is not a claim that the requirement is met.**
   It is a claim that the requirement is checkable, which today it is not.
+  **Corrected 2026-09-01, and the decision stands entire.** The campaign this record asked for
+  has run, and it corrects four supporting claims here: the cross-host discrepancy is
+  reproduced whole on one machine at two throttle settings; the deficit's stated shape fits one regime of two; the
+  threshold shape decision 1 proposes does not bound the worst single interval, which is what a
+  mirroring path meets; and the throttle loss does not add to the capacity margin. **The
+  second of the three promotion conditions above is now satisfied and the third is not** —
+  neither threshold is set — **so the status does not move.** See the section "Correction —
+  2026-09-01: the campaign this record asked for has run, and it corrects four things here — one
+  of them a proposal", immediately after this block.
 - **Date:** 2026-08-31
 - **Deciders:** Docs-writer agent, from the four measurements named in *Context*. **The clause
   that refuses to relax the floor is not this agent's** — it is the project owner's standing
@@ -33,10 +42,134 @@
   [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
+  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+  (the campaign of revisit item 1, added by the 2026-09-01 correction),
   charter §4 (P2, P6, P7, P8), charter §8 (Phase 2).
   **This record changes no clause of charter §8's Phase 2 exit criterion**, which is a
   physical arm driving its twin with a defended fidelity number and does not mention
   real-time factor; read there rather than taking it from here.
+
+## Correction — 2026-09-01: the campaign this record asked for has run, and it corrects four things here — one of them a proposal
+
+**This is the first correction on this record. No status moves, neither threshold is set, and
+nothing is bought, tuned, promoted or widened** — decision 4 is untouched, and the campaign
+below declines to set either threshold for the same reason this record declines to.
+
+Everything below is from
+[`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md),
+the 2x2 of *What we will have to revisit* item 1: 24 trials, both geometries by both throttle
+states, both sides of every pair sampled in one window, thresholds registered before the first
+trial, and a **named machine** — which its §1 records as the first any real-time figure in this
+repository has been attached to. **Its figures are cited and not copied** (P1); read its
+§3 - §6 rather than taking a number from here.
+
+### 1. The cross-host discrepancy is the throttle, and the comparison needs no second host
+
+*The evidence cannot size a target machine* is built on two hosts differing by about 1.23 on
+the hull pair while agreeing on the vendor pair. **The campaign reproduces both hull figures on
+one machine in one afternoon, differing only by throttle state** — block-paired, so that host
+drift between blocks cancels. Its §6 has the two gains and the block values.
+
+**The two numbers were never the same quantity.** One is a capacity and the other is a
+throttled cap, and a cap cannot show a gain it has already clipped. That is explanation 1 in
+*Context* — the one this record called "an unlikely *whole* explanation" — being the whole
+explanation, for the reason it did not consider.
+
+**What follows for the three hypotheses.** Explanation 1 is measured. Explanation 3 — that the
+two hosts are one machine — gets **provenance evidence and not proof**, and the campaign's §1
+puts it no higher than *very probably*: the container allocation matches the second-world
+campaign's to three decimals and the solo figures reproduce it within a few per cent, and that
+campaign still names no machine. **Explanation 2, a memory-bound vendor condition, is left
+without the motive it had and is not refuted** — nothing tested it, and the campaign's §9 hands it back rather than
+estimating it, because separating memory bandwidth from that host's own contention needs
+hardware performance counters and `perf` does not work under Docker Desktop's kernel.
+
+**The clause this discharges.** Revisit item 2's *"Nothing may be bought before it has an
+answer"* is **discharged**: it has an answer. It is not a licence to buy — decision 4 stands
+untouched, and what a purchase would now need is a second machine and a condition that is not
+idle — the campaign's §9 lists both as things it did not measure.
+
+### 2. The deficit's shape fits one regime of two
+
+*Context* says **"the deficit is a sum of discrete overrun events, not a steady rate"**, derived
+from the loop. Measured, that is true where the throttle binds and false where the machine is
+short, and the campaign's §5 has both:
+
+- **Where the machine has headroom** — its solo vendor cell — the description is exactly right:
+  about half the intervals fall behind at all, the median loses nothing measurable, and the top
+  1 % of intervals carries **49.3 %** of the whole deficit.
+- **Where the machine is short** — its vendor pair — **every one of 7,154 intervals fell
+  behind**, and the top 1 % carries **4.9 %** against the 1 % a perfectly uniform loss would
+  carry. That is a steady rate, and the throttle is irrelevant to it because the cell never
+  reaches the ceiling.
+
+The consequence for whoever sets the bound: it is a bound on a quantity with **two regimes**, a
+single scalar in seconds describes one of them, and a mean hides both. The intervals are about
+100 ms, so none of this resolves a single physics step (its §5).
+
+### 3. The threshold shape this record *proposes* does not bound the quantity a mirroring path meets
+
+**This is the sharpest of the four, and it is against decision 2 rather than against decision 1
+— it constrains what the reserved threshold may be, and does not restate the decision.**
+
+Decision 1 asks for the operating deficit as *"a sum in seconds rather than a ratio, because a
+sum is directly comparable to a latency"*, the latency being ADR-0043's p99 one-way mirroring
+figure. But what a mirroring path actually meets is **the worst single interval**, and the
+campaign measured it at **38 - 94 ms** across conditions — one to two orders above that p99.
+**A bound on a window total does not bound it.** Its hull pair carries an average deficit of
+0.0057 s/s and one interval of 65.5 ms inside the same window: a path sized on the window total
+would not see that event coming.
+
+So a deficit bound written only as seconds-per-window is satisfiable by a run that breaks the
+thing the bound exists to protect. Whoever sets it under decision 2 must bound the tail as well
+as the total, and say which of the two regimes each half is for.
+
+### 4. The throttle loss and the capacity shortfall do not stack
+
+Decision 2 reasons that the capacity margin must absorb the throttle loss — *"the throttle loss
+established above adds to it"*. Measured, **the throttle costs a pair with no headroom 0.999,
+which is nothing**, because a ceiling clips only where there is something to clip. The same
+throttle costs a solo hull cell 41 % of its speed. The margin still has to absorb run-to-run
+spread and the fact that every trial anywhere is idle; it does not have to absorb this.
+
+### What this does not settle, and it is most of the question
+
+- **Neither threshold is set, and the campaign deliberately did not set one.** Its `criteria.md`
+  §2 forbids it and its §8 says only where each threshold would have to live.
+- **The data cannot discriminate a margin.** The two shipped-relevant configurations sit at
+  **0.898** and **1.194**, so **any margin between zero and nineteen per cent separates them
+  identically**. The campaign says this of itself and does not try.
+- **Every capacity figure it reports is a lower bound.** Its `criteria.md` §8 recorded, before
+  the first trial, that the host could not be made quiet — of the order of 1.5 - 2 cores busy on
+  a 12-core machine with nothing of the campaign running. That direction cannot manufacture
+  headroom.
+- **A validity rule was found to read the wrong load and was applied literally anyway.** V6 reads
+  the container VM's load average rather than the macOS host's; it excluded 4 of 24 trials, the
+  unexcluded medians are **larger in every case**, and no conclusion changes sign (its
+  Deviation 1). A reader who finds that later should find it already recorded here.
+- **Nothing measured a pair doing work**, a second machine, or a divergence number.
+
+### What this means for this record's promotion, which it does not reach
+
+Promotion needs all three of the status block's conditions. **The second is now satisfied** —
+the campaign exists, with thresholds registered before its first trial and its machine named.
+**The third is not**: neither threshold is set. On the first: an instrument satisfying decision
+5's three constraints now exists as that campaign's **frozen harness**, which reaches each
+side's statistics through `cite_bringup.gz` carrying that side's partition, computes
+`d(sim)/d(real)` over a stated window, and addresses a side by name. It lives under
+`docs/measurements/`, not in `workspace/`, `tools/`, `tests/` or `scripts/` — **nothing in the
+runtime tree measures either quantity during a run, and no bring-up, scenario or CI step reaches
+that harness.** Whether a campaign-frozen harness discharges condition 1 is the record owner's
+call and is **not decided here**. Condition 3 alone keeps the status where it is.
+
+**How the error survived.** Items 1 and 4 are the same error and it is this record's own
+discovery turned on the record: having established that the throttle caps the instrument, it
+went on reading throttled figures — two of its four sources — as though they measured the
+machine, and built a cross-host argument on a ratio of a capacity to a cap. The transferable
+part is narrow and mechanical: **the moment you establish that an instrument is capped, every
+figure you are about to reason with has to be labelled with its throttle state before it is
+compared to anything** — which is what this record's own decision 6 requires of *future*
+figures, and never applied to the four it had in front of it.
 
 ## Context
 
@@ -68,6 +201,9 @@ both hosts and with and without the throttle. Hulls — the lever the campaign n
 the gap — moved a pair by about **1.35x** on the campaign host, enough to clear 1.0, and by
 about **1.10x** on the host of the two later sets, not enough. Both gains are ratios computed
 here from the two sources' own tables; the tables are theirs.
+**[Corrected 2026-09-01 — see the Correction section above. Both hull gains have since been
+reproduced on one machine in one afternoon, differing only by throttle state; there are not two
+hosts in that comparison.]**
 
 ### The requirement cannot be satisfied as written, and that is a property of the requirement
 
@@ -120,7 +256,9 @@ bound. The argument therefore forbids operating **materially** below real time, 
 discharged by a machine "hitting 1.0", because under half 1 nothing can.
 
 And under the loop read above, **the deficit is a sum of discrete overrun events, not a steady
-rate.** Its distribution is the quantity, and a mean real-time factor over a window hides it.
+rate.** **[Corrected 2026-09-01 — see the Correction section above. This holds where the
+throttle binds and fails where the machine is short, and it is now measured in both regimes.]**
+Its distribution is the quantity, and a mean real-time factor over a window hides it.
 Nothing has measured that distribution.
 
 ### The evidence cannot size a target machine
@@ -138,8 +276,15 @@ Computed here from the two sources' tables, both sides, paired:
 A single per-core-throughput scalar cannot produce both. Whatever separates the two hosts is
 not a property that multiplies both geometries, so **a purchase sized on that ratio would be
 sized against a model this evidence does not support.**
+**[Corrected 2026-09-01 — see the Correction section above. The 1.23 is a comparison of two
+different quantities, a capacity against a throttled cap, and one machine produces both. The
+conclusion that a purchase may not be sized on this evidence survives for other reasons the
+correction states.]**
 
-Three explanations are open and none is tested:
+Three explanations are open and none is tested: **[Corrected 2026-09-01 — explanation 1 is
+now measured and is the whole of it; explanation 3 is answered for this host by provenance
+evidence; explanation 2 keeps its status of untested and loses its motive. See the Correction
+section above.]**
 
 1. **The throttle.** The campaign's hull pair ran unthrottled; the later one ran with half 1 in
    the world. This is a real confound and it is one variable. It is also, on the arithmetic
@@ -217,7 +362,10 @@ on one or two machines nobody has identified.
 ### Option D — promote hulls and declare the gap closed
 
 Not available, and it is worth stating why so that nobody reaches for it. On the host of the
-later measurements hulls do not reach 1.0 at all. Independently of that,
+later measurements hulls do not reach 1.0 at all. **[Corrected 2026-09-01 — that reading is
+throttled; measured as capacity on that same machine the hull pair clears 1.0. Option D is
+still *not* available, on the second reason below, which is the one that never depended on a
+speed figure. See the Correction section above.]** Independently of that,
 [ADR-0028](0028-convex-hull-collision-meshes.md) forbids exactly this move: clause 2 of its
 promotion gate is the friction-grasp campaign re-run under hull geometry, that campaign has not
 been run, and the record says in terms that no status may move on a real-time-factor figure
@@ -255,7 +403,11 @@ measured and bought against.
    because a sum is directly comparable to a latency and composes across a run.
 2. **Neither threshold is set here.** The capacity margin above 1.0 is not zero — the campaign's
    own rule that an idle margin is not a work allowance says so, and the throttle loss
-   established above adds to it — and this record does not know how large it is. The deficit
+   established above adds to it — and this record does not know how large it is. **[Corrected
+   2026-09-01 — the throttle loss does *not* add to it: measured, the throttle costs a pair
+   with no headroom nothing at all, because a ceiling only clips where there is something to
+   clip. The rest of the sentence stands. Two further constraints on both thresholds, including
+   one this decision's own shape does not meet, are in the Correction section above.]** The deficit
    bound is a statement about what a divergence measurement can tolerate, which is L5's
    question and unanswered. **Naming either figure now would be deciding what a campaign will
    find.**
@@ -335,7 +487,10 @@ their answers is predicted here.**
    machine.** This is what decides whether ADR-0043's per-core-throughput model holds and
    whether hypothesis 2 in *Context* — a memory-bound vendor condition — is worth pursuing.
    **Nothing may be bought before it has an answer**, because the two candidate answers point at
-   different hardware.
+   different hardware. **[Discharged 2026-09-01 — see the Correction section above. Both figures
+   were reproduced on one machine by throttle state, so this item has its answer and the clause
+   it gates is discharged. It buys no purchase: decision 4 stands, and what the machine question
+   now needs is named in the correction.]**
 3. **Attribute the cost that survives hulls.** The campaign left the majority of the arms' cost
    split between articulated-body dynamics and three controller managers stepping at 150 Hz
    inside `gz sim`, and could not separate them with the profiler that build exposes. Ablation on

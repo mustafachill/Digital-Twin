@@ -1,6 +1,6 @@
 # ADR-0043: Hold both sides to the wall clock — throttle the generated world, and require RTF >= 1.0 on both concurrently
 
-- **Status:** Proposed (corrected 2026-08-29, 2026-08-30 and 2026-08-31) — **half 1 stands
+- **Status:** Proposed (corrected 2026-08-29, 2026-08-30, 2026-08-31 and 2026-09-01) — **half 1 stands
   exactly as written and is implemented; half 2 does not stand as worded.** It is restated by
   [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md), whose decision the project owner
   ratified on 2026-08-31, because under half 1 a measured real-time factor is capped at the
@@ -14,8 +14,15 @@
   not an artefact of the wording**; the requirement's shape is part of the gap and not the whole
   of it. **Read ADR-0049 before citing half 2, and do not cite half 2's wording as the
   requirement.** See the section "Correction — 2026-08-31: half 2 as worded is a test no machine
-  passes, and this record's own table said so", below. **Three corrections sit here, newest
-  first.**
+  passes, and this record's own table said so", below.
+  **Corrected again 2026-09-01, and half 2 is still unmet.** *"The machine is genuinely short"*
+  now has the unthrottled measurement it was asserted without: with the throttle lifted, a
+  vendor pair on a named machine is short of the 1.0 floor by a factor of 1.11 — so it is the
+  machine and not the instrument. In the same section, two sentences below that say hulls do
+  not reach 1.0 are corrected: they repeat a throttled reading of ADR-0028's figures, and
+  **nothing about hulls is promoted by the correction.** See the section "Correction —
+  2026-09-01: the shortfall is now measured as capacity, and the hull sentences below do not
+  stand", below. **Four corrections sit here, newest first.**
   **half 2 has been measured
   and is NOT MET.** A pair came up on 2026-08-30, both sides were sampled in the same window,
   and each ran at about 0.88 — roughly 12 % short of the 1.0 this record requires. The reason
@@ -55,7 +62,71 @@
   [`cross-cutting-testing.md`](../architecture/cross-cutting-testing.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
   [`docs/measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md),
+  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+  (added by the 2026-09-01 correction),
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md),
   charter §4 (P1, P4, P6, P8)
+
+## Correction — 2026-09-01: the shortfall is now measured as capacity, and the hull sentences below do not stand
+
+**Four corrections now sit here, newest first; the three below are left exactly as they stand.**
+**No status moves, no threshold is set, and half 2 is still unmet in both shapes.** This section
+adds evidence for a claim the record already makes and corrects two sentences that repeat
+another record's conclusion; it re-argues nothing.
+
+### The evidence the 2026-08-31 correction could not have
+
+That correction concluded **"the machine is genuinely short"** from a throttled figure, and said
+in the same breath that **this record holds no capacity number for any host**. It now has one,
+for the shipped vendor geometry, from
+[`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+— a 2x2 of both geometries by both throttle states, 24 trials, both sides of every pair sampled
+in one window, thresholds registered before the first trial, on a **named** machine.
+
+**With the throttle lifted, a vendor pair on that machine is short of the 1.0 floor by a factor
+of 1.11**, missing it by about the same eighth it missed by throttled. That one figure is quoted
+because it is the evidence this section exists to add; the ranges, the per-condition table and
+every other figure stay where they were measured (P1) — read the campaign's §3 and §4.
+
+**So the shortfall is the machine and not the instrument.** That is what the earlier correction
+asserted and could not show, because a throttled measurement cannot distinguish an adequate
+machine from an over-provisioned one. **Every capacity figure in that campaign is a lower
+bound** — its `criteria.md` §8 recorded before the first trial that the host could not be made
+quiet, of the order of 1.5 - 2 cores busy on a 12-core machine with nothing of the campaign
+running — and that cuts in the direction that matters here: a lower bound below the floor is
+still below the floor. Two further readings that campaign asks of anyone citing it: it applied a
+validity rule that was **found to read the container VM's load rather than the host's** and
+applied it literally anyway, excluding 4 of 24 trials, with the unexcluded medians **larger in
+every case** and no conclusion changing sign; and **every cell in it is idle**, so an idle
+margin is not a work allowance.
+
+**Nothing about this discharges anything.** The floor is [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md)'s
+capacity floor, its margin above 1.0 is unset, its deficit bound is unset, and the campaign
+declines to set either. Half 2 remains unmet under both shapes.
+
+### The hull sentences in the 2026-08-30 correction's amendment do not stand
+
+**What was wrong.** *"Hulls move a pair materially and do not reach 1.0"* and *"the campaign's
+predicted margin does not reproduce on this host"*, in the `[Amended 2026-08-31]` block below.
+Both are this record repeating ADR-0028's implementation note, whose figures were taken with
+half 1's throttle in force and therefore could not have exceeded 1.0 whatever the machine did.
+Measured as capacity on the same machine, the capacity campaign's hull pair clears the floor
+and the predicted margin does reproduce.
+
+**What survives.** Everything the amendment was written to say. ADR-0028 is implemented, the
+shipped default is still the vendor meshes, and **hulls promote nothing** — that record's gate
+clause 2 is the friction-grasp re-run, which has not happened, and the campaign above measured
+cost and never correctness. The argument is ADR-0028's own 2026-09-01 correction and is not
+duplicated here (P1).
+
+**How the error survived.** This record copied a sibling record's conclusion rather than its
+figures — correctly, under P1 — and a conclusion carries no throttle state with it. The
+2026-08-31 correction on this very record had established that the throttle caps the
+instrument, in a section sitting above the sentence it invalidates, and the two were never read
+against each other. The transferable part: **P1 says cite a figure rather than copying it, and
+a cited conclusion still has to be re-checked against every condition the citing record
+knows** — because the condition that invalidates it may be a fact this record holds and the
+cited one does not.
 
 ## Correction — 2026-08-31: half 2 as worded is a test no machine passes, and this record's own table said so
 
@@ -196,7 +267,12 @@ windows; the figures are in ADR-0028's implementation note and are deliberately 
 here (P1). **Hulls move a pair materially and do not reach 1.0.** So half 2 is still a
 measured gap and this record still stays `Proposed`; what changed is that the campaign's
 predicted margin does not reproduce on this host, and the sentence above about `assets/` is
-superseded. That measurement is one machine with no thresholds registered in advance — it is
+superseded. **[Corrected 2026-09-01 — see the Correction section above. Both sentences are
+this record repeating ADR-0028's conclusion, which was read off a throttled table; measured as
+capacity on the same machine the hull pair clears 1.0 and the predicted margin does reproduce.
+ADR-0028's own 2026-09-01 correction is where that is argued, and it promotes nothing. The
+sentence about `assets/` is unaffected, and half 2 is *still unmet* for the reasons the
+correction gives.]** That measurement is one machine with no thresholds registered in advance — it is
 not the campaign the next paragraph asks for, and it does not become one by being about the
 right quantity.
 
