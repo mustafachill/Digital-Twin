@@ -107,3 +107,35 @@ from holding the next trial's partition. `sweep()` checks that rather than assum
 **The checkout is a git worktree** with its own compose project, its own named build volumes
 and its own `ROS_DOMAIN_ID` pair, so no other checkout on this machine shares a build tree or
 a DDS domain with it. That isolation is why a stale build cannot answer for a fresh one here.
+
+## The shakedown that preceded the first trial
+
+One mechanics shakedown was run after the harness was committed and **before the first
+campaign trial**, to establish that a pair comes up under this harness on this commit at all
+and how long a trial takes. It ran the paired, hull, throttle-lifted condition once.
+
+**Its data is not used and is not in `raw/`**; it wrote to `.campaign-shakedown/`, which was
+deleted. **It produced no change to any file here** — the mechanics worked first time — and
+nothing in `criteria.md` moved.
+
+What it established, and what it was used for:
+
+- **A trial costs about 287 s** end to end for a pair, of which 45 s is bring-up, 30 s is the
+  registered settle and 120 s is the window. With the 60 s quiesce, the flip and the selective
+  build, one condition is about 6 minutes, so the registered 24 trials are about 2.5 hours —
+  comfortably inside the 5-hour resource stopping rule `criteria.md` §6 registered. **That rule
+  was registered before this was known and is not adjusted by it.**
+- **V5's inputs move as they should.** The installed world read `<real_time_factor>0` and the
+  installed arm description bound
+  `file://$(find cite_description)/meshes/collision/xarm5/convex_hull` after the flip, read
+  from `ros2 pkg prefix cite_generated` rather than from the source tree. `./scripts/build` is
+  symlink-install, so the selective build returns in under a second and the installed
+  artifacts still move — worth knowing before mistaking a fast build for a build that did
+  nothing.
+- **Both sides produce a parsable window**, 1194 samples each over 120 s, largest inter-sample
+  gap 0.30 s. That is the ~10 Hz `criteria.md` §4 carries forward.
+
+**Its figure is recorded here and is not a result**: the two sides read 1.2371 and 1.2369.
+One run, discarded, reported so that nobody can suspect the campaign of having been run until
+it read well. It is not in `raw/`, it enters no median, and no rule was written or moved after
+seeing it.
