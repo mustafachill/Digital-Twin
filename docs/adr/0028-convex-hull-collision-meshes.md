@@ -3,7 +3,15 @@
 - **Status:** Proposed — **implemented and not promoted, which is the amended gate working
   exactly as it was written to.** All four parts of the Decision are in the tree as of
   2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
-  superseded and is corrected in place below. **The shipped default is still the vendor's
+  superseded and is corrected in place below.
+  **Corrected 2026-09-01: the implementation note's speed conclusion does not stand.** Its
+  *"hulls move it materially and do not reach 1.0"* was read off a **throttled** measurement,
+  which could not have exceeded 1.0 whatever the machine did; measured as capacity on the same
+  machine, the hull pair clears the floor. **The decision, the gate and the shipped default are
+  untouched** — clause 2 is still the friction-grasp re-run, that campaign measured cost and
+  never correctness, and **nothing about hulls is cleared to ship by it.** See the section
+  "Correction — 2026-09-01: the implementation note's speed conclusion was read off the wrong
+  quantity", immediately after this block. **The shipped default is still the vendor's
   meshes**, and it stays there until clause 2 of the promotion gate is satisfied — see the
   section "Implementation note — 2026-08-31" for what landed and what promotion still needs.
   **Read "Correction — 2026-08-31: the gripper risk is real and it is not a filled
@@ -47,9 +55,86 @@
   [ADR-0027](0027-pilz-planning-pipeline.md),
   [ADR-0029](0029-simulated-grasping-by-friction.md),
   [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md) (added by the 2026-08-29 amendment),
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md) (added by the 2026-09-01
+  correction, which is where the throttled reading of this record's speed figures is fixed),
   [L1](../architecture/L1-description-and-assets.md), [`../../assets/README.md`](../../assets/README.md),
   [`docs/measurements/2026-08-28-second-world-cost/`](../measurements/2026-08-28-second-world-cost/ANALYSIS.md),
+  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md),
   CLAUDE.md §10, charter §4 (P1, P5, P8)
+
+## Correction — 2026-09-01: the implementation note's speed conclusion was read off the wrong quantity
+
+**Three correction sections and one amendment now sit in this record; this is the newest and
+the others are left exactly as they stand.** **No status moves here, and this section may not
+be read as clearing hulls to ship** — see "What this does not do", below, before citing it.
+
+**What was wrong.** The implementation note's *"Hulls move it materially and do not reach
+1.0"*, its *"about 1.10x per side"* gain, and its closing comparison against ADR-0043's
+predicted 1.162/1.173. Every figure in the table those sentences read — the row clustering at
+**0.949** — was taken with the generated world's throttle in force, and under that throttle a
+measured real-time factor is **capped at the declared 1.0 by construction**
+([ADR-0049](0049-measure-the-real-time-floor-as-capacity.md), read in upstream `gz-sim`
+source). A measurement that cannot exceed 1.0 was compared against 1.0 and reported as failing
+to reach it.
+
+**What is true, measured.** The campaign ADR-0049 asked for —
+[`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md),
+24 trials, a 2x2 of both geometries by both throttle states, both sides of every pair sampled
+in one window, thresholds registered before the first trial and its machine named — measured
+the same lever on the same machine as **capacity**, with the throttle lifted. **The hull pair
+clears the 1.0 floor and the vendor pair does not.** The figures, the margins and the
+block-paired hull gains at each throttle setting are that campaign's and are cited rather than
+copied (P1); read its §3, §4 and §6 rather than taking a number from this paragraph.
+
+**This is ADR-0049's cap effect caught changing a record's conclusion**, which is exactly the
+failure that record derived from source and predicted would be sitting in existing figures.
+Two things it costs this record specifically: the *"1.10x on this host against 1.35x on the
+campaign host"* discrepancy that ADR-0049 reasoned around is reproduced whole on one machine
+at two throttle settings, so it needs no second host; and ADR-0043's predicted margin, recorded
+here and in that record as not reproducing, does reproduce once the quantity is the one the
+prediction was about.
+
+**Three things the campaign says about its own figures, carried here because a reader who
+cites it should meet them at the same time.**
+
+- **Every capacity figure it reports is a lower bound.** Its `criteria.md` §8 measured the
+  host's contention *before* the first trial — of the order of 1.5 - 2 cores busy on a 12-core
+  machine with nothing of the campaign running — and recorded that it could not be made quiet.
+  That direction cannot manufacture headroom.
+- **One validity rule was found to read the wrong load and was applied literally anyway.** V6
+  reads the container VM's load average, not the macOS host's, so it tested how far the
+  previous trial's teardown had drained; it excluded 4 of 24 trials. The unexcluded medians
+  are **larger in every case** and no conclusion changes sign (its Deviation 1).
+- **It measured cost, and never correctness.** Its §9 says so in terms.
+
+### What this does not do
+
+**It promotes nothing, and the promotion gate is untouched.** Clause 2 of the amended gate —
+the friction-grasp campaign
+([`../measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md))
+re-run against hull geometry, against its already-written thresholds, reporting the three
+quantities the 2026-08-31 gripper correction names — is unsatisfied, and this campaign is not
+it and does not bear on it. The status stays `Proposed`, the shipped default stays on the
+vendor meshes, and **no document may read this section as evidence that hulls are safe for
+this cell.**
+
+**It does not establish that any requirement passes, either.** ADR-0049 keeps the 1.0 floor
+and **sets neither of its two thresholds**; the capacity margin above 1.0 is reserved by its
+decision 2 and is not set here. Every cell in the campaign is **idle at home pose**, and an
+idle margin is not a work allowance. So "the hull pair measured above 1.0 on this machine,
+idle" is the whole of the claim.
+
+**How the error survived.** The note asked *"how fast does a hull cell run?"* and answered it
+correctly with an instrument whose ceiling was the very number it then compared against. What
+it never asked is what a **passing** measurement would have looked like — the question
+ADR-0043's 2026-08-31 correction had, on the same day, named as the only way to tell a
+requirement nothing can pass from a machine that keeps failing one. That lesson was written
+into the record that raised it and nowhere else, so the figures already sitting in *this*
+record, taken with the capped instrument and compared against the cap, were never re-read
+against it. The transferable part: **when one record establishes that an instrument is
+capped, every figure anywhere that was taken with that instrument and compared against the cap
+is stale that same day** — the fix belongs in a grep across the tree, not in the record that
+made the discovery.
 
 ## Correction — 2026-08-29: the 0.14 real-time factor is stated as a fact and carries no condition
 
@@ -301,13 +386,19 @@ window, never Gazebo's `real_time_factor` field. Two windows per condition:
 | vendor meshes | 0.8655, 0.8495 | 0.8697, 0.8541 |
 | convex hulls | 0.9497, 0.9488 | 0.9490, 0.9492 |
 
-**Hulls move it materially and do not reach 1.0.** The gain is about **1.10x** per side, which
+**Hulls move it materially and do not reach 1.0.** **[Corrected 2026-09-01 — see the
+Correction section above. Every figure in the table is throttled, so it could not have
+exceeded 1.0 whatever the machine did; read as capacity, the same lever on the same machine
+clears the floor.]** The gain is about **1.10x** per side, which
 is below the 1.25-2.0 band the second-world campaign's `G` fell in for a solo cell — a
 different quantity on a different host, and not a contradiction, but not a confirmation
-either. **The finding that matters is the negative one: [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s
+either. **[Corrected 2026-09-01 — the 1.10x is the *throttled* gain, and the capacity gain on
+this machine is larger; see the Correction section above.]** **The finding that matters is the negative one: [ADR-0043](0043-hold-both-sides-to-the-wall-clock.md)'s
 requirement that both sides sustain 1.0 concurrently is still NOT met**, on this host, with
 hulls. That record's 2026-08-30 correction predicted 1.162/1.173 from the campaign's figures;
-this host does not reach it. No ceiling, tolerance or `real_time_factor` was touched.
+this host does not reach it. **[Corrected 2026-09-01 — both sentences are read off the
+throttled table above. The capacity measurement exceeds that prediction; what remains true is
+that nothing here establishes a *pass*, for the reasons the Correction section gives.]** No ceiling, tolerance or `real_time_factor` was touched.
 
 ### That the hulls actually render, which is a different question from that they are fast
 

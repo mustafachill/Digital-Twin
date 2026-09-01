@@ -513,14 +513,27 @@ account of a flake; each was caught by someone re-running, never by someone read
   [ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md) and in ADR-0043's
   2026-08-31 correction — which also records that ADR-0043's own throttled/unthrottled idle rows
   were the evidence against its own requirement and were never read against each other.
-  **The machine is nevertheless genuinely short**: the paired shortfall is about an eighth, far
-  outside anything a throttle loss accounts for. The project owner **ratified ADR-0049's
+  **The machine is nevertheless genuinely short, and as of 2026-09-01 that is measured rather
+  than inferred**: the paired shortfall is about an eighth, far outside anything a throttle loss
+  accounts for, and
+  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](docs/measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+  measures the shipped vendor pair short of the 1.0 floor **with the throttle lifted** — so it
+  is the machine and not the instrument. **The factor is the campaign's and is cited, not copied
+  (P1)**, and every capacity figure in it is a **lower bound**, because its host could not be
+  made quiet. The project owner **ratified ADR-0049's
   decision on 2026-08-31** — the 1.0 floor is kept, not relaxed, and moves onto **capacity**
   measured with the throttle lifted, plus a second requirement on the **accumulated clock
   deficit** in seconds, measured with the throttle in force. **Ratification is not promotion**:
-  ADR-0049 stays `Proposed`, **neither of its two thresholds is set**, and nothing in the tree
-  measures either quantity — so half 2 is unmet under the new shape as well as the old, and
-  nothing can be shown to *pass*, only to fail. ADR-0043 stays `Proposed` too, and no longer for
+  ADR-0049 stays `Proposed` and **neither of its two thresholds is set** — the campaign it asked
+  for has run and **deliberately set neither**, and it records that the two shipped-relevant
+  configurations sit far enough apart that any margin between zero and nineteen per cent
+  separates them identically. **Nothing in `workspace/`, `tools/`, `tests/` or `scripts/`
+  measures either quantity during a run** (`grep -rn real_time_factor workspace tools tests
+  scripts` reaches the generator, its template, two world files and two test files, and no
+  measurement, in this checkout on 2026-09-01); the only instrument that exists is that
+  campaign's **frozen harness** under `docs/measurements/`, which no bring-up, scenario or CI
+  step reaches. So half 2 is unmet under the new shape as well as the old, and nothing can be
+  shown to *pass*, only to fail. ADR-0043 stays `Proposed` too, and no longer for
   the "unmeasurable today" reason it used to give. **No scenario ceiling was changed and
   none may be widened to absorb this.** The lever the campaign named is
   [ADR-0028](docs/adr/0028-convex-hull-collision-meshes.md)'s hulls; it has been pulled and it
@@ -718,9 +731,30 @@ account of a flake; each was caught by someone re-running, never by someone read
     **The speed figures are in ADR-0028's implementation note and are not copied here (P1).**
     Their strength: one machine, two 120 s windows per condition, both sides of a pair sampled
     concurrently, no thresholds registered in advance, no directory in `docs/measurements/`.
-    Their verdict is a negative one worth carrying: **hulls move a pair materially and still do
-    not reach the 1.0 [ADR-0043](docs/adr/0043-hold-both-sides-to-the-wall-clock.md) requires**,
-    so that record's gap is narrowed and not closed. No ceiling or tolerance was touched.
+    **Their verdict was read off the wrong quantity, and this file carried it until 2026-09-01:**
+    *"hulls move a pair materially and still do not reach the 1.0 ADR-0043 requires, so that
+    record's gap is narrowed and not closed"*. Every figure behind that sentence was taken with
+    the world's throttle in force, and under that throttle a measured real-time factor is
+    **capped at 1.0 by construction**
+    ([ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md)) — so it could not
+    have reached 1.0 whatever the machine did. Read as **capacity** by
+    [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](docs/measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md)
+    — the 2x2 that record asked for, 24 trials, thresholds registered before the first trial,
+    machine named — the same lever on the same machine **clears the 1.0 floor with hulls and
+    misses it with the shipped vendor meshes**. Cite the campaign for both figures; they are not
+    copied here. Each of the three records now carries its own 2026-09-01 correction: ADR-0028's
+    is on the implementation note, ADR-0043's is on the amendment that repeated it, and
+    ADR-0049's is on the four claims the campaign changed there.
+    **None of that promotes anything and none of it is evidence about grasping.** ADR-0028's
+    gate clause 2 is still the friction-grasp campaign re-run under hull geometry; the campaign
+    above measured **cost and never correctness**, and says so itself; and ADR-0049 sets no
+    capacity margin above 1.0, so nothing here shows a requirement passing. **Two readings that
+    campaign asks of anyone citing it:** every capacity figure it reports is a **lower bound**,
+    because its host could not be made quiet — of the order of 1.5 - 2 cores busy with nothing
+    of the campaign running, recorded before the first trial; and one validity rule was **found
+    to read the container VM's load rather than the host's and was applied literally anyway**,
+    excluding 4 of 24 trials, with the unexcluded medians larger in every case and no conclusion
+    changing sign. No ceiling or tolerance was touched.
     **A geometry audit and a code review on 2026-08-31 found the hulls themselves correct,
     reproducible and reaching only collision geometry, and found the record wrong about the
     risk it names.** ADR-0028 said in four places that a hull *"fills the space between the
