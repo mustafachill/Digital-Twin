@@ -735,20 +735,37 @@ that names that date was taken then, in this checkout, at `dd93488`.
     with the others: the misreported grasp still happens, and the station now escalates instead
     of dead-ending. **The defect itself is untouched** — a real grasp is still reported empty —
     and **the record ADR-0045 says is owed now exists**:
-    [ADR-0052](docs/adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md), `Proposed`,
-    which **chooses nothing** — it states the defect as a **band** rather than as the 46.6 mm
-    example, weighs six options, and leaves the choice to the project owner. This bullet said
-    "that record does not exist yet" until 2026-09-01.
+    [ADR-0052](docs/adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md), which states
+    the defect as a **band** rather than as the 46.6 mm example and weighs six options. This
+    bullet said "that record does not exist yet" until 2026-09-01.
+    **It said the record chooses nothing until later that same day, and it now chooses.** The
+    project owner took **option F on 2026-09-01** — judge the grasp against the part rather
+    than against the commanded width — and the record is `Accepted`. **`Accepted` here means a
+    decision and a specification and nothing else: no line of code, no threshold and no test
+    moved, and the defect is exactly as live as it was.** The mechanism F is given, the answer
+    for a facility handling more than one part, what the validator rule becomes, and the gate
+    the implementing change has to pass are that record's amendment of that date. **Read it
+    rather than taking a shape from here** — it decides a plan-level delivery and two new L0
+    fields, and an exhaustive summary of a specification in a rulebook is a claim with an
+    expiry date.
     **Two things in that record change how this bullet should be read, and its figures are
     cited and not copied here (P1).** The 46.6 mm example describes a *declared work-piece*,
     and `default-grasp-width-never-closes` already refuses that model at validate time; the
     doors that are open are a caller-supplied `grasp_width_m`, which nothing validates, and a
-    stall landing short of the part's nominal width, which the cell does. And the defect has
-    **never been observed firing**: all 47 trials of the
-    [2026-09-01 hull-grasp campaign](docs/measurements/2026-09-01-hull-grasp/ANALYSIS.md)
-    were reported `holding`, and how close the worst of them came is computed in ADR-0052 from
-    that campaign's committed raw — a quantity the campaign itself did not publish, taken for
-    another question, on one machine, with no thresholds registered in advance for this one.
+    stall landing short of the part's nominal width, which the cell does.
+    **This bullet said until 2026-09-01 that the defect has "never been observed firing". That
+    is now false and the correction is the whole reason the decision could be taken.** The
+    campaign the record's gate asked for has run —
+    [`docs/measurements/2026-09-01-grasp-discrimination/`](docs/measurements/2026-09-01-grasp-discrimination/ANALYSIS.md),
+    thresholds registered before the first trial, machine named — and it **observed** a real
+    grasp reported empty, witnessed by the work-piece's own contact sensor, and separately
+    **reproduced** a stall on nothing reported as a grasp. **Both directions fire.** It is
+    still not a rate: one machine, one arm, one part, one timestep, and it took a commanded
+    width above the ceiling the validator enforces. **Cite the campaign; its own write-up asks
+    that its figures stay in its directory, and the four the decision rests on are quoted in
+    ADR-0052 and nowhere else.** Its verdict on whether the stall distribution moves with the
+    commanded width is **INCONCLUSIVE** by two of its own pre-registered rules, and ADR-0052
+    §A.9 records that F's threshold may depend on the question that verdict leaves open.
   - **No vendor-described link's mass or inertia tensor is validated by anything, and this
     is the same structural blindness ADR-0028 just fixed for collision geometry.** The
     validator reads `description.body`; every vendor-described type leaves `body` unset; so
