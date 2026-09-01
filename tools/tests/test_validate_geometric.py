@@ -43,23 +43,22 @@ class TestTheRealCellIsSound:
     def test_no_physical_errors(self, real_model: Path) -> None:
         assert physical_rules(real_model) == set()
 
-    def test_the_only_physical_warning_is_the_one_the_project_has_decided_to_carry(
-        self, real_model: Path
-    ) -> None:
-        """One warning, named, and it is a state rather than a defect in the model.
+    def test_no_physical_warnings(self, real_model: Path) -> None:
+        """Back to an empty set, and the round trip is worth stating.
 
-        `collision-reuses-visual-mesh` fires on `xarm5` because the shipped model
-        selects the vendor's own collision meshes, which for this variant are its
-        rendering meshes. That is deliberate and is not something to fix here:
-        ADR-0028 decides on convex hulls, the hulls are generated and available as
-        a selectable set, and its amended promotion gate requires the
-        friction-grasp campaign re-run against them before the default may move.
+        This assertion read `== set()` until 2026-08-31, when the collision
+        declaration ADR-0028 added made `collision-reuses-visual-mesh` reach a
+        vendor description for the first time and the shipped model started
+        carrying it — a warning the project had decided to carry, written as an
+        exact set so that a SECOND warning still failed and so that the day the
+        default moved, this line was the one that had to change.
 
-        This test used to assert `== set()`. It is written as an exact set rather
-        than as "ignore this rule" so that a SECOND warning still fails it, and so
-        that the day the default moves this line is the one that has to change.
+        That day is 2026-09-01. The shipped selection is the derived hulls
+        (ADR-0028, `Accepted` against the clause ADR-0051 restates), the rule is
+        an ERROR again rather than a WARNING, and the model no longer
+        trips it. The exact-set form is kept for the reason it was chosen.
         """
-        assert physical_rules(real_model, Severity.WARNING) == {"collision-reuses-visual-mesh"}
+        assert physical_rules(real_model, Severity.WARNING) == set()
 
 
 class TestReach:
@@ -548,6 +547,153 @@ class TestDefaultGraspWidth:
 
         edit_yaml(real_model / self.EFFECTOR, mutate)
         assert physical_rules(real_model) == set()
+
+
+class TestDerivedCollisionGeometryIsBoundToAWidth:
+    """ADR-0051 decision 3, which named this rule and did not write it.
+
+    The hulls ship (ADR-0028, promoted 2026-09-01) on a campaign whose verdict on
+    its own question was INCONCLUSIVE. What carries the promotion instead is a
+    geometric clearance argument, and that argument was made over one part at one
+    width: the hull's ramps sit behind the pad plane, and a 50 mm part stalls the
+    jaws before it can reach them. A NARROWER part closes the jaws further, and
+    nothing has measured whether they touch then.
+
+    So the tests below are not a shape check. They are a check that **declaring a
+    narrower part is refused**, which is the only moment anyone would find out.
+
+    THE HAPPY PATH IS THE LEAST INTERESTING CASE HERE, deliberately. The campaign
+    this rule comes out of shipped a pre-flight check naming a directory that does
+    not exist; it reported nothing in all four of its blocks and nobody noticed,
+    because a check that cannot fail is indistinguishable from one that passes.
+    Every case below that matters makes the rule *fire* or proves it stays silent
+    for a stated reason.
+    """
+
+    RULE = "derived-collision-outside-measured-range"
+    WORKPIECE = "assets/types/workpieces/workpiece.yaml"
+    ARM = "assets/types/robots/xarm5.yaml"
+
+    def _narrow_the_part(self, model: Path, edit_yaml: Callable, width_m: float) -> None:
+        """Narrow the cube across its horizontal footprint, and only there.
+
+        Height is left alone: the rule reads the horizontal extents, which is what
+        a parallel gripper closes across, and moving the height would change what
+        the geometric rules see for no reason this test cares about.
+        """
+
+        def mutate(document: dict) -> None:
+            body = document["asset_type"]["description"]["body"]
+            for geometry in (body["visual"], body["collision"]):
+                _, _, height = geometry["size_m"]
+                geometry["size_m"] = [width_m, width_m, height]
+
+        edit_yaml(model / self.WORKPIECE, mutate)
+
+    def _select_vendor(self, model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            model / self.ARM,
+            lambda d: d["asset_type"]["description"]["collision"].__setitem__(
+                "select", "vendor_meshes"
+            ),
+        )
+
+    def test_the_shipped_model_is_inside_the_range(self, real_model: Path) -> None:
+        """50 mm against a range that starts at 50 mm: the boundary is inclusive.
+
+        The range is the width the campaign ran, so the part it ran on has to be
+        inside it or the promotion it carries refers to nothing.
+        """
+        assert self.RULE not in physical_rules(real_model)
+
+    def test_a_narrower_part_against_a_derived_set_is_refused(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The case the rule exists for, and it is an ERROR.
+
+        40 mm is inside every other bound in this file — the gripper opens to it,
+        the default grasp width still clears the discrimination margin at it — so
+        nothing else in the validator would say a word.
+        """
+        self._narrow_the_part(real_model, edit_yaml, 0.040)
+        assert self.RULE in physical_rules(real_model, Severity.ERROR)
+
+    def test_a_narrower_part_against_the_vendor_set_is_silent(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The other half, and it is what makes the finding actionable.
+
+        The vendor's meshes carry no clearance argument to be outside of, so a
+        narrow part is not this rule's business there — which is also why the
+        finding can tell a model author to select them. If this fired on both
+        selections it would be a rule about work-pieces, not about the binding.
+        """
+        self._narrow_the_part(real_model, edit_yaml, 0.040)
+        self._select_vendor(real_model, edit_yaml)
+        assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+
+    def test_it_reads_the_selection_and_not_the_declaration(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """`convex_hull` stays DECLARED under the vendor selection above.
+
+        Both sets are declared on this type whichever is bound, so a rule that
+        keyed on "a derived set exists" would refuse a narrow part on a cell that
+        loads none of it.
+        """
+        self._narrow_the_part(real_model, edit_yaml, 0.040)
+        self._select_vendor(real_model, edit_yaml)
+        model = load(real_model)
+        collision = model.asset_type("xarm5").description.collision
+        assert collision is not None
+        assert {s.id for s in collision.sets} == {"vendor_meshes", "convex_hull"}
+        assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+
+    def test_the_boundary_itself_is_accepted_and_a_hair_below_it_is_not(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Where the rule turns over, asserted rather than left to the reader.
+
+        Written against the constant rather than against 0.050 so that moving the
+        range with new evidence moves this test with it instead of leaving it to
+        assert a number the module no longer holds.
+        """
+        self._narrow_the_part(real_model, edit_yaml, physical.NARROWEST_MEASURED_WORKPIECE_M)
+        assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+
+        self._narrow_the_part(
+            real_model, edit_yaml, physical.NARROWEST_MEASURED_WORKPIECE_M - 0.0001
+        )
+        assert self.RULE in physical_rules(real_model, Severity.ERROR)
+
+    def test_a_facility_with_no_workpiece_is_not_judged(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Stated rather than left as an absence, because it is a real silence.
+
+        With no work-piece declared there is no width, so the derived set ships
+        against a range nobody has stated. The rule says nothing — it has nothing
+        to say — and the docstring on `_derived_collision_is_within_its_measured_range`
+        records that as a gap rather than as coverage.
+        """
+        edit_yaml(
+            real_model / "facility/facility.yaml",
+            lambda d: d["facility"].__setitem__("workpiece_models", []),
+        )
+        assert self.RULE not in physical_rules(real_model, Severity.ERROR)
+
+    def test_the_finding_names_both_widths(self, real_model: Path, edit_yaml: Callable) -> None:
+        """A refusal that does not say what it refused sends someone reading code.
+
+        Both numbers, because the author needs to know which one to move: the
+        part they just declared, and the range it fell out of.
+        """
+        self._narrow_the_part(real_model, edit_yaml, 0.040)
+        finding = next(f for f in physical.check(load(real_model)) if f.rule == self.RULE)
+        assert finding.where == "types.xarm5.description.collision"
+        assert "40.0 mm" in finding.message
+        assert "50.0 mm" in finding.message
+        assert "ADR-0051" in (finding.hint or "")
 
 
 class TestIndexingBeams:

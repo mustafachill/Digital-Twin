@@ -116,7 +116,12 @@ and the predicted margin does reproduce.
 **What survives.** Everything the amendment was written to say. ADR-0028 is implemented, the
 shipped default is still the vendor meshes, and **hulls promote nothing** — that record's gate
 clause 2 is the friction-grasp re-run, which has not happened, and the campaign above measured
-cost and never correctness. The argument is ADR-0028's own 2026-09-01 correction and is not
+cost and never correctness. **[Overtaken 2026-09-01, later the same day: that re-run has since
+been published, ADR-0028's clause 2 was restated by
+[ADR-0051](0051-restate-the-hull-grasp-gate.md), ADR-0028 is `Accepted` and the shipped default
+is now the hulls. Read ADR-0028's amendment of 2026-09-01. **Nothing about half 2 of this
+record changes**: the campaign above still measured cost and never correctness, and it is still
+not evidence that any requirement here passes.]** The argument is ADR-0028's own 2026-09-01 correction and is not
 duplicated here (P1).
 
 **How the error survived.** This record copied a sibling record's conclusion rather than its
@@ -261,7 +266,9 @@ and its manifest.
 
 **[Amended 2026-08-31: the lever has been pulled and it was not enough.]** ADR-0028 is now
 implemented — the hulls exist, are committed, and are selectable per robot type from L0, with
-the shipped default deliberately left on the vendor meshes. A pair was measured on this
+the shipped default deliberately left on the vendor meshes. **[Overtaken 2026-09-01: the
+shipped default is now the hulls; see ADR-0028's amendment of that date. The figures below and
+this record's own verdict are unaffected.]** A pair was measured on this
 project's development host with each geometry, both sides sampled concurrently over 120 s
 windows; the figures are in ADR-0028's implementation note and are deliberately not copied
 here (P1). **Hulls move a pair materially and do not reach 1.0.** So half 2 is still a

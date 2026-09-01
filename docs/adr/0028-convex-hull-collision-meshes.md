@@ -1,7 +1,23 @@
 # ADR-0028: Generate convex-hull collision meshes as project assets, bound through L0
 
-- **Status:** Proposed — **implemented and not promoted, which is the amended gate working
-  exactly as it was written to.** All four parts of the Decision are in the tree as of
+- **Status:** Accepted (amended 2026-08-29 and 2026-09-01; corrected 2026-08-29, 2026-08-31 and
+  twice on 2026-09-01) — **promoted on 2026-09-01, against the clause
+  [ADR-0051](0051-restate-the-hull-grasp-gate.md) restates, by the change that moved
+  `description.collision.select` to `convex_hull`.**
+  **The campaign that satisfied clause 2a returned INCONCLUSIVE on its own question**, by a
+  rule it registered before its first trial, and that sentence travels with the promotion:
+  what carries 2c is a *geometric* clearance argument obtained twice by independent means, not
+  a null result. **Read "Amendment — 2026-09-01: clause 2 is adopted as ADR-0051 restates it,
+  and this record is promoted" first** — it is the newest section, it states the evidence clause
+  by clause with the strength of each, and it lists the four things promotion does **not**
+  establish, chief among them that the self-collision matrix is still the vendor's and that no
+  work-piece narrower than the promoted range has ever been tested.
+  **Everything below the amendment is left exactly as it stood**, including the sentence that
+  the status stays `Proposed` and the shipped default stays on the vendor's meshes; both were
+  true when written and neither is now.
+  **[Superseded 2026-09-01, kept for the record:]** *"Proposed — implemented and not promoted,
+  which is the amended gate working exactly as it was written to."* All four parts of the
+  Decision are in the tree as of
   2026-08-31; the sentence above them, "decided in principle, nothing implemented", is
   superseded and is corrected in place below.
   **Corrected twice on 2026-09-01. The newer correction is the one to read first: clause 2 of
@@ -9,6 +25,8 @@
   the campaign it demanded has measured not to occur, and the wedges it predicted sit 0.41 mm of
   aperture behind the pad plane on the same rigid link. **The decision stands entire, clause 1
   is untouched, the status does not move and the shipped default is still the vendor's meshes.**
+  **[Amended 2026-09-01, later the same day — the status and the default both moved; see the
+  amendment section named above. The rest of this paragraph stands.]**
   Clause 2 is restated — not relaxed — by
   [ADR-0051](0051-restate-the-hull-grasp-gate.md), which also makes the range of work-piece
   widths the finding covers binding on L0. See the section "Correction — 2026-09-01: clause 2
@@ -79,6 +97,115 @@
   added by the second 2026-09-01 correction),
   [`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md)
   (the clause 2 campaign, added by the same correction)
+
+## Amendment — 2026-09-01: clause 2 is adopted as ADR-0051 restates it, and this record is promoted
+
+**This is an amendment, not a correction, and it is the newest section on this record. The
+three corrections and the earlier amendment below are left exactly as they stand** — including
+the two corrections dated the same day, which sit immediately after this section and which a
+reader should meet next. **Nothing in this record was measured false here.** What changes is
+one clause of the promotion gate, adopted from another record, and the status that clause
+governs.
+
+### The clause, adopted verbatim
+
+ADR-0051 restates this record's gate clause 2 rather than relaxing it. **Its decision 1 is the
+wording, and it is quoted here as a single block** so that this record's gate is readable
+without a second hop, and quoted rather than paraphrased so that there is one text and not two
+(P1). Where they could ever disagree, **ADR-0051's copy is the original**.
+
+> **Clause 2 (restated by ADR-0051).** ADR-0028 moves to `Accepted` only when, in addition to
+> clause 1, all four of the following hold.
+>
+> **2a — the A/B exists and is published.** The friction-grasp campaign has been re-run against
+> hull collision geometry on the shipped cell, published under
+> [`docs/measurements/`](../measurements/README.md), with its thresholds registered before its
+> first trial, its machine named, and the three quantities ADR-0028's correction of 2026-08-31
+> requires reported per trial.
+>
+> **2b — no registered grasp metric is worse under hulls.** In that campaign, no pre-registered
+> metric is DETECTED in the hull's disfavour at its own registered effect size, and its
+> repetition and flung rules hold on the hull arm. A metric the campaign's own resolution rules
+> refuse is evidence for neither side and does not satisfy this clause; neither does a
+> difference below the size registered in advance as interesting, **in either direction**.
+>
+> **2c — where the predicted mechanism did not occur, its absence is geometric, independently
+> obtained, and bounded.** The record states from the geometry why the mechanism does not occur,
+> by two computations that do not share an instrument, and states the interval of work-piece
+> widths over which the statement holds. An absence inferred only from a null result does not
+> satisfy this clause.
+>
+> **2d — the validity range is declared here and binds L0.** Promotion carries the range of
+> 2c with it. A work-piece narrower than that range may not ship against a derived collision set
+> until 2a - 2c have been answered at its width; declaring one reopens clause 2.
+
+**Clause 1 is untouched** and was satisfied on 2026-08-31; see the implementation note below.
+**The question clause 2 was written to force is not withdrawn** — *does hull collision geometry
+change how this cell holds a part?* — and the restatement exists because the clause as written
+asked for the consequences of a mechanism the campaign measured not to occur, which is the
+correction immediately below this section.
+
+### Status: `Accepted`, clause by clause, with the strength of each
+
+The evidence is
+[`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md),
+whose figures are **cited and not copied** (P1). Read it rather than taking a number from here.
+
+- **2a — satisfied.** The campaign exists, is published with its `criteria.md` committed before
+  its first trial, names its machine, and reports all three quantities the correction of
+  2026-08-31 demanded, per trial. **Its verdict on its own question is INCONCLUSIVE**, by a rule
+  it registered in advance, and that is not a defect in it: rule S fired because the mechanism
+  those three instruments were chosen to detect does not occur. **This record is promoted on a
+  campaign that returned INCONCLUSIVE, and that sentence must travel with the promotion.**
+- **2b — satisfied**, at **n = 24 vendor and 23 hull**, on **one machine**, at **one physics
+  timestep**, with **one part** and **one arm**. No pre-registered metric was DETECTED in the
+  hull's disfavour; the repetition and flung rules held on the hull arm. **This is not a claim
+  that hulls grasp better.** Every outcome difference the campaign measured is below the effect
+  size it registered in advance, in the hull's favour or not, and it declined to call any of
+  them. **The honest statement is "no distinguishable difference at this n".**
+- **2c — satisfied, over the range in ADR-0051 decision 3.** Two computations that share no
+  instrument agree to **0.01 mm**: the arithmetic on this record's own geometry audit of
+  2026-08-31, and the campaign's independent measurement from the running cell at the settled
+  hold. Because both surfaces belong to **one rigid link**, the recess does not vary with
+  aperture, so the absence is geometric rather than inferred from a null.
+- **2d — carried by the change that lands this amendment.** `description.collision.select` on
+  `model/assets/types/robots/xarm5.yaml` is `convex_hull`; the generated descriptions, the model
+  hash and the generated `package.xml` move with it and nothing else does; and the range is
+  enforced rather than written down —
+  `cite_tools.validate.physical._derived_collision_is_within_its_measured_range` refuses a model
+  that binds a derived set while declaring a work-piece narrower than the range, as an **ERROR**.
+  The same change makes `_vendor_collision_is_declared`'s vendor-mesh finding an ERROR
+  unconditionally, which that rule's own docstring required of the change that moves the default.
+
+### What promotion does not establish
+
+**Four things stay open, and `Accepted` closes none of them.** They are listed here rather than
+left in the sections below so that nobody has to assemble them.
+
+- **The self-collision matrix is still the vendor's, and it was computed against vendor
+  geometry.** A convex hull is never smaller than what it replaces, so the matrix a promoted
+  hull runs against is a function of a different collision set. The measured narrowing is in
+  "Promoting hulls means the self-collision matrix no longer matches its geometry" below, and
+  **that section is now describing the shipped state rather than a hypothetical.** Nothing in
+  this repository checks the pairing.
+- **`end_tool` is the one link where the hull trades fidelity for almost nothing.** It closes a
+  through-feature and adds volume in exchange for **0.09 %** of the triangle reduction — the
+  figure is this record's own, under "`end_tool` is the one link where the hull is worse", and
+  it is not restated here. It is a candidate for the per-link exception this record foresees,
+  `CollisionSpec` cannot express one, and shipping hulls ships this trade.
+- **The 5.6 mrad earlier stall is DETECTED, is a control, and is unexplained.** It is the one
+  metric the campaign detected at its registered effect size and it survived the block rule. The
+  campaign was not looking there. ADR-0051 decision 4 names what would settle it; nothing here
+  does.
+- **The narrow-part case is untested.** No work-piece narrower than the range has been run
+  against a derived set, and two things move together at a narrower width that the campaign
+  separated neither of. That is why 2d is a refusal in the validator and not a sentence in a
+  file.
+
+**And every figure behind 2b is one machine at one `max_step_size`.** That constant is a
+generator constant, ADR-0029's friction campaign found grasp behaviour strongly sensitive to it
+across a 4x change, and **Phase 3's physics retune reopens 2b** — ADR-0051 decision 5, carried
+here because a promoted record is where people stop reading.
 
 ## Correction — 2026-09-01: clause 2 asks for a measurement of a mechanism that does not occur
 

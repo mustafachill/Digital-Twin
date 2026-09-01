@@ -16,6 +16,7 @@
   <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
   <license>Apache-2.0</license>
 
+  <exec_depend>cite_description</exec_depend>
   <exec_depend>xarm_description</exec_depend>
   <exec_depend>xarm_moveit_config</exec_depend>
 

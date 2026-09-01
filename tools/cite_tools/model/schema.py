@@ -280,10 +280,26 @@ class CollisionSpec(Strict):
     This docstring said until 2026-08-31 that the exception was needed "because a
     convex hull fills the gap between the pads". It does not: each link is hulled
     separately, so that gap lies between two collision bodies, and the aperture at
-    the pads is unchanged to 0.01 mm. What makes the fingers still need the
+    the pads is unchanged to 0.01 mm.
+
+    It then said, until 2026-09-01, that "what makes the fingers still need the
     exception is the 2.0 mm relief step at each end of each pad, which the hull
-    ramps across. ADR-0028's correction of 2026-08-31 carries the measurements and
-    names what a re-run has to report.
+    ramps across". **That is a second wrong mechanism derived the same way as the
+    first**, from a static audit taken at a *commanded* aperture the gripper never
+    occupies while holding this cell's part. The ramps are real; they are recessed
+    behind the pad plane on the same rigid link, so a flat face resting on the pad
+    is clear of them at every aperture. Both errors and the measurement that
+    settled them are in ADR-0028's corrections of 2026-08-31 and 2026-09-01 and in
+    ADR-0051, which restates the promotion gate around them.
+
+    **So no measured mechanism requires the exception today, and it is still
+    foreseen rather than retired.** What is untested is a work-piece narrow enough
+    to close the jaws past the pad plane's recess — ADR-0051 decision 3 makes
+    declaring one a model error, enforced by
+    ``validate.physical._derived_collision_is_within_its_measured_range``, and
+    names what must be measured first. If that case ever needs answering with
+    geometry, the answer is the per-link exception above, which this field still
+    cannot express.
     """
 
     #: The ``id`` of the set in ``sets`` that is bound into the description.

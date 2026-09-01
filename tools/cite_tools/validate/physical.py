@@ -41,6 +41,20 @@ TRIANGLE_TOLERANCE = 1e-6
 #: is what the warning says; it does not claim the value fails.
 MIN_MEASURED_FOLLOWER_HEADROOM = 0.25
 
+#: The narrowest work-piece, in metres, over which a **derived** collision set has
+#: been shown not to change how this cell holds a part.
+#:
+#: ADR-0051 decision 3 states it and this is the one place it is a number (P1).
+#: It is not a safety factor and not a round figure chosen for comfort: it is the
+#: width of the part the clause-2 campaign actually ran, and the clearance argument
+#: that lets a hull ship is an argument about *this* width. A rigid part with a
+#: flat grasped face stalls the jaws wider than the commanded aperture, and the
+#: hull's ramps sit behind the pad plane on the same rigid link, so the part never
+#: reaches them. A narrower part closes the jaws further and moves the pad plane
+#: along the tool axis as it does; whether the ramps then touch is **unverified**,
+#: and the campaign tested none.
+NARROWEST_MEASURED_WORKPIECE_M = 0.050
+
 
 def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
@@ -49,6 +63,7 @@ def check(model: FacilityModel) -> list[Finding]:
 
     for asset_type in model.types:
         findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
+        findings += _derived_collision_is_within_its_measured_range(asset_type, narrowest_workpiece)
         findings += _followers_can_still_correct(asset_type)
         findings += _result_timeout_outlasts_the_stall_search(asset_type)
         findings += _vendor_collision_is_declared(asset_type)
@@ -197,20 +212,24 @@ def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
     existed.
 
     Nothing here opens a vendor file; the model declares what its links collide
-    against (``CollisionSpec``) and this reads the declaration. Two outcomes:
+    against (``CollisionSpec``) and this reads the declaration. Two outcomes, and
+    **both are ERRORs since 2026-09-01**:
 
     * **No declaration at all** is an ERROR. A vendor description whose collision
       geometry nobody has stated is exactly the state that made this rule silent,
       and it is the one case where "we do not know" is the answer.
-    * **A declaration of ``vendor_meshes``** is a WARNING, and the severity is the
-      compromise this change makes rather than a judgement that it is mild. It is
-      the shipped state today and stays so deliberately: ADR-0028's promotion gate
-      requires the friction-grasp campaign re-run against hull geometry before the
-      default may move, and an ERROR here would fail ``./scripts/validate-model``
-      on a state this project has decided to remain in until that measurement
-      exists. ``--strict`` turns it into one for anyone who wants the harder
-      question answered. **Promote it to ERROR in the change that moves the
-      default**, and not before.
+    * **A declaration of ``vendor_meshes``** is an ERROR too. It was a WARNING
+      until 2026-09-01, and that severity was recorded as a compromise rather than
+      a judgement that the state is mild: the shipped selection *was* the vendor's
+      meshes, deliberately, because ADR-0028's promotion gate was unmet, and an
+      ERROR would have failed ``./scripts/validate-model`` on a state the project
+      had decided to remain in. The docstring's instruction was to **promote it in
+      the change that moves the default, and not before**. That change is this
+      one: ADR-0028 is `Accepted` against the clause ADR-0051 restates, the
+      shipped selection is the derived hulls, and reusing a rendering mesh as
+      collision geometry is once again the plain defect CLAUDE.md §10 names —
+      with, now, a generated alternative one field away. ``--strict`` no longer
+      has anything to add here.
     """
     if not asset_type.emits_vendor_description:
         return []
@@ -232,7 +251,7 @@ def _vendor_collision_is_declared(asset_type: AssetType) -> list[Finding]:
         return []
     alternatives = sorted(s.id for s in collision.sets if s.kind != "vendor_meshes")
     return [
-        warning(
+        error(
             "collision-reuses-visual-mesh",
             where,
             f"this type's links collide against the vendor's own meshes "
@@ -447,6 +466,79 @@ def _default_grasp_width_can_close(
             "cite_skills::gripper_is_holding demands twice that bias before it calls "
             "anything a grasp. Below this margin a real grasp reads as free air and the "
             "skill reports a part it is not holding.",
+        )
+    ]
+
+
+def _derived_collision_is_within_its_measured_range(
+    asset_type: AssetType, narrowest_workpiece_m: float | None
+) -> list[Finding]:
+    """A derived collision set ships against a width, not against every width.
+
+    ADR-0051 decision 3, which names this rule and deliberately does not write it:
+    *"If that rule is not written, the precondition is prose"*. This is the rule.
+
+    WHY THERE IS A RANGE AT ALL. ADR-0028's hulls are `Accepted` on a campaign
+    whose verdict on its own question was INCONCLUSIVE, and what carries the
+    promotion in its place is a **geometric** clearance argument: the hull's ramps
+    are recessed behind the pad plane on the same rigid link, so the part never
+    reaches them. That argument is bounded by the width at which the jaws stall,
+    and the campaign ran one part at one width. Cite ADR-0051 for the geometry and
+    for both computations; it is not restated here (P1).
+
+    WHY THIS IS AN ERROR AND NOT A WARNING. Declaring a narrower part is precisely
+    the act ADR-0051 says reopens ADR-0028's clause 2, and this rule is the only
+    thing in the tree that will say so — nothing downstream of L0 can tell that a
+    part is outside the range the geometry was argued over, because both geometries
+    load and run. A warning is what the project already tried for the state this
+    rule replaces, and the campaign that settled the geometry shipped a pre-flight
+    check that named a directory that does not exist, reported nothing in all four
+    of its blocks, and was noticed by nobody: **a check that cannot fail is
+    indistinguishable from one that passes**, and one whose finding is routinely
+    carried is barely better. It also has a correct answer that is always
+    available and never destructive — select the vendor's set — so refusing costs a
+    model author one field and no measurement.
+
+    WHAT MUST BE MEASURED BEFORE A NARROWER PART MAY SHIP AGAINST A DERIVED SET,
+    in ADR-0051 decision 3's order and not repeated in detail here:
+
+    1. the static geometry audit re-run at that part's **achieved** stall aperture
+       and pad-plane registration, reporting shoulder-to-pad-plane clearance as a
+       function of height along the pad — cheap, and it settles two other open
+       questions at the same time;
+    2. **if that clearance does not hold**, the clause-2 A/B re-run at that width,
+       with the contact-patch and contact-normal instruments pre-registered as
+       before.
+
+    WHAT THIS DOES NOT COVER, said rather than left to be found. It reads the same
+    ``_narrowest_workpiece_width_m`` as the rule above, so a facility that declares
+    no work-piece, or one whose parts are meshes, gets no bound and no finding —
+    the derived set then ships against a width nobody has stated, which is a
+    weaker silence than a wrong answer but is still a silence. It also says
+    nothing about *shape*: the clearance argument wants a rigid part with a flat
+    grasped face, and a horizontal extent is all L0 records.
+    """
+    collision = asset_type.description.collision
+    if collision is None or collision.selected.kind == "vendor_meshes":
+        return []
+    if narrowest_workpiece_m is None or narrowest_workpiece_m >= NARROWEST_MEASURED_WORKPIECE_M:
+        return []
+    return [
+        error(
+            "derived-collision-outside-measured-range",
+            f"types.{asset_type.id}.description.collision",
+            f"this type binds the derived collision set {collision.select!r} while the "
+            f"narrowest work-piece this facility declares is "
+            f"{narrowest_workpiece_m * 1000.0:.1f} mm, below the "
+            f"{NARROWEST_MEASURED_WORKPIECE_M * 1000.0:.1f} mm the geometry that promoted "
+            "that set was argued over",
+            "ADR-0051 decision 3: a work-piece narrower than that range may not ship "
+            "against a derived collision set until clause 2 has been answered at its "
+            "width, and declaring one reopens the clause. The pads hold by friction alone "
+            "(ADR-0029), so the contact surface is the mechanism and a narrower part "
+            "closes the jaws past the aperture the clearance was computed at. Either "
+            "select the vendor's set for this type, or take the two measurements ADR-0051 "
+            "names, in its order, and move the range with the evidence.",
         )
     ]
 

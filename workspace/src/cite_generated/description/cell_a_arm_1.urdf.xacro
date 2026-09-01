@@ -25,6 +25,7 @@
       attach_rpy="0 0 0"
       attach_to="arm_1_mount"
       attach_xyz="0 0 0"
+      collision_mesh_path="file://$(find cite_description)/meshes/collision/xarm5/convex_hull"
       create_attach_link="false"
       dof="5"
       effort_control="false"

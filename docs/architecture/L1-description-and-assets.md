@@ -21,15 +21,30 @@
   **Removed:** the contact-triggered grasp attachment plugin, per
   [ADR-0029](../adr/0029-simulated-grasping-by-friction.md). No `<plugin>` element in any
   generated arm description assists a grasp; see "Grasping is not simulated" below.
-  **Violated:** this layer's own first rule, below. Twelve links per arm collide against
-  their *visual* mesh, and the validator written to catch that cannot fire on a vendor
-  description. See [ADR-0028](../adr/0028-convex-hull-collision-meshes.md), which is
-  `Proposed`: the hulls exist and are selectable by one L0 field, and the shipped selection is
-  still `vendor_meshes` because its promotion gate is unmet. **Clause 2 of that gate cannot be
-  met as written** — the campaign it demanded measured the predicted mechanism not to occur —
-  and it is restated by [ADR-0051](../adr/0051-restate-the-hull-grasp-gate.md), which is also
-  `Proposed`. The section "Visual and collision geometry are always separate" below states the
-  rule, not the current state.
+  **Changed 2026-09-01, and it retires this layer's longest-standing violation:** the shipped
+  collision selection is `convex_hull`. Twelve links per arm collided against their *visual*
+  mesh until that date, and the validator written to catch it could not fire on a vendor
+  description at all. Both are closed —
+  [ADR-0028](../adr/0028-convex-hull-collision-meshes.md) is `Accepted`, the hulls are bound
+  through the one L0 field it added, and
+  `validate.physical._vendor_collision_is_declared` now fails a vendor-mesh selection as an
+  **error** rather than warning about it. So the section "Visual and collision geometry are
+  always separate" below states the rule **and** the current state, which it has never done
+  before. **What the promotion rests on is not a clean grasp result**: the campaign ADR-0028's
+  gate demanded
+  ([`docs/measurements/2026-09-01-hull-grasp/`](../measurements/2026-09-01-hull-grasp/ANALYSIS.md))
+  returned **INCONCLUSIVE on its own question** by a rule registered before its first trial,
+  because the mechanism it was built to detect does not occur; the gate's clause 2 was
+  **restated, not relaxed**, by [ADR-0051](../adr/0051-restate-the-hull-grasp-gate.md), now
+  `Accepted`, and what carries it is a geometric clearance argument obtained twice by
+  independent means. **That argument is bounded to a work-piece no narrower than this cell's
+  50 mm cube**, and the bound is enforced by
+  `validate.physical._derived_collision_is_within_its_measured_range` rather than written down.
+  **Three residuals are open and promotion closed none of them:** the generated SRDF still
+  invokes the vendor's self-collision matrix, computed against vendor geometry; `end_tool` is
+  the one link where the hull trades fidelity for a negligible share of the saving; and one
+  campaign metric was DETECTED, is a control, and is unexplained. ADR-0028's amendment of
+  2026-09-01 lists them with their figures; they are cited here and not copied.
   **Changed 2026-08-29:** the generated world declares `real_time_factor` **1.0** rather than
   `0`. `0` is Gazebo's unthrottled value and overrode SDFormat's own default; the new value
   is a **ceiling**, so on a machine already below real time it changes nothing and cannot
