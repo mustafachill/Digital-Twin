@@ -33,13 +33,21 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 criterion MET, and records in the same place what that closure rests on and what it does
 not cover. Nothing below is retired by the closure — the gap list is still the gap list.
 **Phase 2 has since split into 2.A and 2.B (charter v1.9, 2026-08-29) and 2.A's mechanism is
-in the tree: a pair has come up, three times on one machine, covered by no test.** The charter
-describes the target; the repository is partway there. Check before assuming.
+in the tree: a pair has come up, three times on one machine, covered by no test, and an L5
+package has since landed beside it — `cite_twin` exists, and what it is and is not is the
+Phase 2.A bullet below.** The charter describes the target; the repository is partway there.
+Check before assuming.
 
 **Every count below names the command that reproduces it, and every figure names who
 measured it and over how many runs.** That is what P7 costs, and this section is where it is
-kept or lost. This file has carried a wrong asset count, a wrong pass count and a wrong
-account of a flake; each was caught by someone re-running, never by someone reading.
+kept or lost. This file has carried a wrong asset count, a wrong pass count, a wrong
+account of a flake and a wrong package count; each was caught by someone re-running, never by
+someone reading. The fourth is the most recent: `cite_twin` landed, nothing re-ran the
+commands below, and **every reproducible count in this section but one was stale at once** —
+packages, build, all three `test` figures, the collection, lint, the ADR index and the CI
+table. The exception was `./scripts/validate-model`, which had not moved.
+**The re-audit of 2026-09-01 re-ran every command this section names**, and every figure below
+that names that date was taken then, in this checkout, at `dd93488`.
 
 - **Phase 1.A is closed.** Container image, the `./scripts/*` contract, dependency
   manifests, CI, and the asset policy all exist and work. `external/cite.repos` pins
@@ -55,22 +63,31 @@ account of a flake; each was caught by someone re-running, never by someone read
   `./scripts/validate-model` diffs it against a fresh generator run *and* regenerates in a
   second interpreter under a different hash seed to prove the output is byte-identical; it
   exits 0, reporting `1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` in
-  this checkout on 2026-08-29. The seventh type is the reference work-piece, which has no
+  this checkout on 2026-09-01 — re-run on that date and **unchanged since 2026-08-29**, which
+  is the one figure in this section the re-audit did not have to move. The seventh type is the reference work-piece, which has no
   instances on purpose (ADR-0030).
   **Ask `./scripts/validate-model` for the cardinality; do not read it out of prose.** This
   file said "fourteen instances" until 2026-08-27 and it was fifteen — one addition, at
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **411** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-31).
-  It said **302** until 2026-08-29 and **331** until 2026-08-31. **Collection and a run are
+  `tools/tests/` holds **902** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-01).
+  It said **302** until 2026-08-29, **331** until 2026-08-31 and **411** until 2026-09-01.
+  **Most of that last jump is one parametrized guard and not 491 new cases**: eleven test
+  files were added between `29068d4` and this commit, and
+  `tools/tests/test_superseded_real_time_requirement.py` alone contributes **304** of the 902,
+  because it parametrizes over every tracked source file. So this figure tracks the size of
+  the source tree as well as the size of the suite — the same caveat the `lint` bullet below
+  carries, for the same reason. Break it down with
+  `--collect-only -q | sed 's/::.*//' | sort | uniq -c` rather than reading a coverage claim
+  into it. **Collection and a run are
   different numbers, and so are
   these trees**: what `./scripts/test` reports is in the packages bullet below, and its host
   half walks `tests/` as well as `tools/`, so it is a larger number for a reason and not a
   correction to this one.
-- **Ten first-party packages exist**, and `workspace/src/external/` adds the twelve from
-  `xarm_ros2`. `./scripts/build` is a blocking CI step. Eight of the ten are
+- **Eleven first-party packages exist**, and `workspace/src/external/` adds the twelve from
+  `xarm_ros2`. `./scripts/build` is a blocking CI step. Eight of the eleven are
   `cite_interfaces`, `cite_runtime`, `cite_facility`, `cite_generated`, `cite_bringup`,
   `cite_skills`, `cite_orchestration` and `cite_simulation`. The ninth is
   **`cite_description`, added 2026-08-31** — charter §7's L1 package, created for the first
@@ -78,6 +95,8 @@ account of a flake; each was caught by someone re-running, never by someone read
   share directory so that a `package://` or `file://$(find cite_description)` URI resolves,
   and it is the only package permitted to install from `assets/`. Its admission test is in
   its own `package.xml`. The tenth is
+  **`cite_twin`, charter §7's L5 package, which now exists** — the Phase 2.A bullet below is
+  where what it does and does not do is kept, and it is not restated here. The eleventh is
   **`cite_test_hardware`, which is test-only and deliberately not in charter §7's tree**:
   §7 is the production structure, and the package is barred from production use by its own
   `on_init` rather than by convention
@@ -88,25 +107,35 @@ account of a flake; each was caught by someone re-running, never by someone read
   mechanism only — signals, shutdown, spin-and-exit for `rclpy` nodes — and exists rather
   than a helper landing in `cite_interfaces`
   ([ADR-0034](docs/adr/0034-process-lifecycle-mechanism-in-cite-runtime.md), charter v1.7).
-  **`cite_twin`, `cite_telemetry`, `cite_safety`, `cite_control` and
-  `cite_hardware` do not exist**; those five plus the nine named above are the fourteen
-  charter §7 lists. `cite_description` was in this list until 2026-08-31.
+  **`cite_telemetry`, `cite_safety`, `cite_control` and
+  `cite_hardware` do not exist**; those four plus the ten named above are the fourteen
+  charter §7 lists (`cite_test_hardware` is not one of the fourteen). `cite_description` was
+  in the does-not-exist list until 2026-08-31 and **`cite_twin` was in it until 2026-09-01**
+  — this bullet said "ten first-party packages" and named five that do not exist while
+  `workspace/src/cite_twin/package.xml` was committed and building. The instrument that
+  settles it is `find workspace/src -name package.xml -not -path '*/external/*' | wc -l`,
+  which reads **11** in this checkout on 2026-09-01.
   `./scripts/doctor`'s `workspace/src` line counts every `package.xml`
-  beneath it and read **22** in this checkout on 2026-08-31, with the manifest imported. **The
-  pre-import figure is not measured at this commit**: it was 9 on 2026-08-29 and one
-  first-party package has been added since, so anyone quoting it should re-run `doctor` on a
-  checkout that has not bootstrapped rather than take 10 from this sentence.
-  `./scripts/build` reported `Summary: 22 packages finished` in this
-  checkout on 2026-08-31, and `find workspace/src -name package.xml | wc -l` agrees at
-  **22** — the ten plus the twelve. This line carried **20** until 2026-08-29, which was
-  CI's figure at `60eb4a5`, before `cite_test_hardware` existed, and **21** until 2026-08-31.
+  beneath it and read **23** in this checkout on 2026-09-01, with the manifest imported; it
+  read **22** on 2026-08-31. **The pre-import figure is measured at this commit and is 11**,
+  from the same `doctor` line run on this worktree before `./scripts/bootstrap` imported
+  `external/cite.repos` on 2026-09-01. It was 9 on 2026-08-29 and was unmeasured between.
+  `./scripts/build` reported `Summary: 23 packages finished` in this
+  checkout on 2026-09-01, and `find workspace/src -name package.xml | wc -l` agrees at
+  **23** — the eleven plus the twelve. This line carried **20** until 2026-08-29, which was
+  CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
+  **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one**, in this checkout on
-  2026-08-31: `124 passed, 0 failed (shell gate self-tests)`; `447 passed, 1 skipped` for the
+  2026-09-01: `124 passed, 0 failed (shell gate self-tests)`; `938 passed, 1 skipped` for the
   host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
-  collection above; and, over the ten first-party packages, ten per-package summaries
-  totalling **962 tests, 0 failures, 52 skipped**. It builds and tests the ten only — the
+  collection above; and, over the eleven first-party packages, eleven per-package summaries
+  totalling **1217 tests, 0 failures, 56 skipped**. It builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
-  2026-08-29.
+  2026-08-29 and 124 / 447 / 962 on 2026-08-31.
+  **The per-package total is a sum this file performs and `test` does not print**: the script
+  emits one `Summary:` line per package and no grand total, so the 1217 and the 56 were added
+  up by hand from the eleven lines. The two host figures are printed verbatim and were taken
+  from `./scripts/test --host-only`, which runs the same two host suites.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -124,9 +153,11 @@ account of a flake; each was caught by someone re-running, never by someone read
   `the MoveTo goal was never accepted` assertion failed **one local run of four** on 2026-08-29,
   on the merged Phase 2.A branch, reported by the implementing agent — one more event, on one
   machine, with nothing registered in advance, and not a rate either. Against that,
-  `bringup` has passed **12 of 12** in CI: it runs twice per run and the six runs listed in
-  the `continuous_line` bullet below all passed it (`grep "Scenario 'bringup'"` over each
-  run's `gh run view --log`, 2026-08-29). Treat a `bringup` failure as a finding to
+  `bringup` has passed **36 of 36** in CI: it runs twice per run and the eighteen runs listed
+  in the `continuous_line` bullet below all passed it twice (`grep "Scenario 'bringup'"` over
+  each run's `gh run view --log`, re-read over all eighteen on 2026-09-01). It said
+  **12 of 12 across the six** until 2026-09-01, which was right over the six runs that
+  existed then. Treat a `bringup` failure as a finding to
   investigate, not as a known flake to re-run past.
 - **Motion is planned by Pilz.** ADR-0027 is implemented and merged: L0 declares the
   pipeline choice and the limits, the generator emits `cell_a_arm_*_planning_pipelines.yaml`
@@ -201,11 +232,13 @@ account of a flake; each was caught by someone re-running, never by someone read
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1085 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-08-31; it said **661** until 2026-08-29 and **1048** until then. Most of the difference is the
+  runs, and reported `1267 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-01; it said **661** until 2026-08-29, **1048** until 2026-08-31 and
+  **1085** until 2026-09-01. Most of the difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
-  --name-only 60eb4a5..HEAD -- docs/measurements` counts **368** files added there since the
-  figure was taken — so **this number tracks how much evidence is committed and is not a
+  --name-only 60eb4a5..HEAD -- docs/measurements` counts **523** files added there since the
+  first of those figures was taken, and read 368 on 2026-08-31 — so **this number tracks how
+  much evidence is committed and is not a
   measure of coverage.** Run `lint` rather than quoting it. The one exemption is
   `docs/reference/v1-lessons.md`, which quotes the
   original Turkish as primary-source evidence. The limits — chiefly that ASCII-only Turkish and
@@ -231,8 +264,11 @@ account of a flake; each was caught by someone re-running, never by someone read
   not gated.** The flag is off by default, so an interactive run still answers the strict
   question. Read `scripts/scenario`'s header and the phase-split block in `scripts/_lib.sh`
   before treating a teardown failure as a gate — and never answer one by widening a tolerance.
-- **The line has completed in three of the six CI runs that have driven it, and this is the
-  least-settled claim in this file.**
+- **The line has completed in fourteen of the eighteen CI runs that have driven it, and this
+  is still the least-settled claim in this file.** It read "three of the six" until
+  2026-09-01, and **the extra twelve runs make the count look better without making the
+  finding go away**: the three-of-six failures are all still there, they are still
+  unreproduced locally, and a fourth failure with a different signature has joined them.
   `./scripts/scenario continuous_line` drives the three-arm sensor-driven line: the aid
   topics are bridged, `Detect` turns a beam level into a typed `DetectionEvent`, L4 stops the
   belt on that edge and restarts it on `CompleteHandoff` (ADR-0032), and the beam indexes on
@@ -260,10 +296,10 @@ account of a flake; each was caught by someone re-running, never by someone read
     teardown passing separately. It is better than anything above it. **The tester's own
     reading is that it is one good sample and not a new baseline**, and that is how it is
     recorded here. Do not promote a gate on it.
-  **CI has now run it six times, and this is the only body of `continuous_line` evidence
-  nobody's local environment could have flattered.** Every one of the six was on `main`, on a
-  runner nobody prepared. Read by grepping each run's log for the scenario's own verdict line,
-  because **the step conclusion lies**: the step is `continue-on-error`, and
+  **CI has now run it eighteen times, and this is the only body of `continuous_line` evidence
+  nobody's local environment could have flattered.** Every one of the eighteen was on `main`,
+  on a runner nobody prepared. Read by grepping each run's log for the scenario's own verdict
+  line, because **the step conclusion lies**: the step is `continue-on-error`, and
   `gh run view <id> --json jobs` reports it `success` whether the scenario passed or failed —
   verified on 2026-08-29 against `33158091922`, whose `continuous_line` is *known* to have
   failed and which the API still calls `success`. The instrument is
@@ -276,15 +312,44 @@ account of a flake; each was caught by someone re-running, never by someone read
   | `33235590086` | 2026-08-29 | `f1f914f` | passed |
   | `33241186260` | 2026-08-29 | `7afb2c6` | passed |
   | `33244350584` | 2026-08-29 | `3d23999` | passed |
-  | `33261637940` | 2026-08-29 | `29068d4` (this commit) | **failed** — 2 of 3 |
+  | `33261637940` | 2026-08-29 | `29068d4` | **failed** — 2 of 3 |
+  | `33288010305` | 2026-08-30 | `b8a6c10` | passed |
+  | `33290887432` | 2026-08-30 | `3f68a47` | passed |
+  | `33298445106` | 2026-08-30 | `5c2990f` | passed |
+  | `33331623351` | 2026-08-30 | `aafae47` | passed |
+  | `33343317444` | 2026-08-31 | `3b8cd19` | **failed** — see below, a different signature |
+  | `33377192704` | 2026-08-31 | `b6efc95` | passed |
+  | `33398446772` | 2026-08-31 | `35ff5be` | passed |
+  | `33424510102` | 2026-08-31 | `d35eca9` | passed |
+  | `33438471901` | 2026-08-31 | `d7b1097` | passed |
+  | `33472144723` | 2026-09-01 | `d79a856` | passed |
+  | `33479867459` | 2026-09-01 | `2cf66df` | passed |
+  | `33485617966` | 2026-09-01 | `c0badfb` | passed |
 
-  Teardown passed in all six. **Three of six is a count over the runs that exist, not a rate**
-  — no thresholds were registered in advance and the six sit at six different commits.
-  **All three failures have the identical signature**, which is the finding: a work-piece
+  **Fourteen of eighteen is a count over the runs that exist, not a rate** — no thresholds were
+  registered in advance and the eighteen sit at eighteen different commits. The table said
+  **three of six** until 2026-09-01, which was right over the six runs that existed then; the
+  twelve rows below `29068d4` were read on 2026-09-01 by the instrument named above, over every
+  completed `main` run since. **The run at this commit, `dd93488`, is excluded because it had
+  not finished when the table was read**, so the next reader should expect nineteen.
+  **Teardown is not answered by this table for the twelve new rows.** CI passes
+  `--teardown-advisory`, and `scripts/_lib.sh`'s `scenario_verdict` returns 0 — printing
+  `passed` — when only teardown assertions failed, so the verdict line the instrument greps
+  reports **the cycle and nothing else**. Teardown passed in the first six, read separately at
+  the time; for the twelve it is **unread**, not clean.
+  **The fourth failure is not the other three, and that is the finding of this re-audit.**
+  `33343317444` never reached a milestone at all: its cycle assertion is
+  `subprocess.TimeoutExpired` on `ros2 run ros_gz_sim create -file /tmp/cite_workpiece.sdf`
+  after **120 s**, so the work-piece was never spawned and the line was never given anything to
+  carry. That is the spawn path, not the transfer stall — one event, on one machine nobody
+  prepared, with nothing registered in advance, and **not attributed**: it is not established
+  whether it is the partition defect class §10 names, a starved runner, or something else, and
+  it must not be folded into the three below on the strength of sharing a scenario name.
+  **The other three failures have the identical signature**, which is the finding: a work-piece
   reaches milestone 2 of 10, `lifted(station_transfer_1: cell_a__table_pick__surface)`, never
   reaches milestone 3, `on_link(station_transfer_1: cell_a__conveyor_1__infeed)`, and times
   out on the 420 s leg ceiling with `station_transfer_1` reporting `WAITING`, occupancy 1/1
-  and the piece still assigned to it. **In all three `LineState` read `RUNNING` with
+  and the piece still assigned to it. **In all three of those `LineState` read `RUNNING` with
   `blocked_reason=none stall_reasons=none`.** `station_transfer_1`'s inbound edge in the
   generated topology is `via: null`, so ADR-0039's detector has no belt setpoint to read and
   is structurally silent there — the blind spot that record names.
@@ -483,9 +548,48 @@ account of a flake; each was caught by someone re-running, never by someone read
   it names itself**: its promotion condition also requires a source scan over `tests/` that
   fails when a harness enters a ROS graph outside one stated door, that guard does not exist,
   and `grep -n rclpy.init tests/scenarios/*.py` still returns three bare calls.
-  **`MODE_VIRTUAL_LEAD` is vocabulary only**: `grep -rn MODE_VIRTUAL_LEAD workspace/src` reaches the message, the interface
-  baseline and one comment — nothing routes on it, `SetMode` has no server, and `cite_twin`
-  does not exist.
+  **`MODE_VIRTUAL_LEAD` was vocabulary only until 2026-09-01 and is not any more.** This file
+  said *"nothing routes on it, `SetMode` has no server, and `cite_twin` does not exist"*, and
+  all three clauses are now false. `cite_twin` is on disk, in charter §7's tree and built by
+  `./scripts/build`, and `grep -rn MODE_VIRTUAL_LEAD workspace/src` now also reaches
+  `cite_twin/cite_twin/routing.py` **twice, once in each of that module's two tables** — which
+  is what "routes on it" means. Run the grep for the full set rather than taking a list from
+  here; it reaches `mode.py`, `cite_bringup/plan.py` and the package's tests as well.
+  **What is wired, read from the source on 2026-09-01.** `cite_twin/twin_boundary.py` is one
+  node holding **one ROS context per side** — the only component with endpoints in both
+  domains (ADR-0044 clause 3) — and it `create_service`s `SetMode` on
+  `SetMode.Request.SERVICE`, publishes `TwinMode` latched and `DivergenceMetrics` per asset,
+  and serves the L3 skill actions with an `ActionClient` per (side, skill). Nothing is
+  republished across the boundary; what crosses, crosses in that process's memory (ADR-0050).
+  `mode.py` decides one `SetMode` call and **computes** which transitions are gated instead of
+  listing them: the gate is `commanded_sides(mode)` from `routing.py` intersected with the
+  backend the generated plan declares for each (asset, side), and it is evaluated **before**
+  `force` is read anywhere, so `force` is structurally unable to skip it. `routing.py` holds
+  ADR-0050 decision 2's table and refuses to import if `TwinMode` declares a mode either table
+  has not been told about. `MODE_VIRTUAL_LEAD` dispatches to both sides in that table.
+  **What L5 is not, and this is the part to carry.** **Nothing starts it.** `twin_boundary.py`
+  is installed as a program and appears in **no launch file** — `grep -rn twin_boundary
+  workspace/src` outside `cite_twin` returns nothing, and the generated bring-up plan has no
+  entry for it, so `./scripts/sim` in any form brings up no L5 at all. **No scenario and no CI
+  step reaches it**: `grep -rn -- --pair tests .github` and `grep -rn cite_twin tests .github
+  scripts` both return nothing on 2026-09-01, so a regression in the boundary, the mode gate or
+  the monitor fails no gate outside the package's own tests. What holds it is those tests, which
+  `./scripts/test` runs — five pytest modules and two launch tests, driving the node against
+  **fake sides**, which bring no cell up and move no arm. **Nothing here is evidence about
+  motion, and 2.A produces no fidelity number in any case** (charter §8).
+  **The divergence metric has a consumer and no producer, and that is by decision rather than
+  by omission.** ADR-0050 decision 3's conjunction has five terms, and term 3 — each side's
+  accumulated clock deficit, within ADR-0049's bound — is **false for every sample by
+  construction**, for two independent reasons that are both in the code: `DEFICIT_BOUND_S` is
+  `None` (ADR-0049 decision 2 declines to set it) and the one production caller that builds an
+  `Operand`, at `twin_boundary.py:713`, passes `clock_deficit_s=None` because nothing in this
+  tree measures it. So **`valid` cannot be true today**, the node publishes samples that name
+  the term that failed, and the package's own paired launch test asserts exactly that —
+  `self.assertFalse(sample.valid, "the clock-deficit term has no instrument")`, in
+  `test_twin_boundary_paired_launch.py`, after requiring both operands to have arrived. Four of
+  `DivergenceMetrics`' six fields carry NaN rather than zero, because they are uncomputed rather
+  than invalidated. **Do not make `valid` true by weakening a term**; the module says so itself,
+  and no number it produces is a fidelity number.
   **The throttle is a ceiling, and ADR-0043's other half is now measured and NOT MET.**
   SDFormat's `real_time_factor` bounds how fast a server may run and cannot make a slow one
   faster, so it binds only where the cell has spare capacity: on the machine that measured it,
@@ -555,7 +659,8 @@ account of a flake; each was caught by someone re-running, never by someone read
     `AwaitTrigger` on a beam the part is **already breaking**, and waits out the leg ceiling —
     while `LineState` reports `RUNNING`, so nothing escalates and the scenario's fail-fast —
     which keys on `BLOCKED`, `FAULTED` **and `STALLED`** in the tree today
-    (`tests/scenarios/continuous_line.py:458`), and this file said only the first two —
+    (`STOPPED_STATES`, `tests/scenarios/continuous_line.py:465`; it was line 458 until
+    2026-09-01, and the set is unchanged), and this file said only the first two —
     correctly stays quiet, because the line publishes none of the three. Seen twice,
     reported by the project owner on 2026-08-27. ADR-0038 records why this is deliberately **not** fixed: the
     cheap fix restarts the belt, the retry begins with `MoveToHome` carrying whatever the arm
@@ -798,7 +903,7 @@ account of a flake; each was caught by someone re-running, never by someone read
     consequence is **reasoned from SDFormat's documented semantics and has not been observed on
     a running cell**, and may not be written up as though it had.
     **NO SCENARIO OR CI FIGURE ANYWHERE IN THIS SECTION WAS MEASURED WITH HULLS.** `bringup`'s
-    12 of 12, the pick-and-place cycle, the six-run `continuous_line` table and the whole
+    36 of 36, the pick-and-place cycle, the eighteen-run `continuous_line` table and the whole
     teardown-family split were all taken with **vendor** collision geometry, and **no CI run
     has ever brought this cell up against the hulls** — the selection moved on 2026-09-01 and
     every one of those runs predates it. Read them as evidence about the cell that was, and
@@ -866,25 +971,33 @@ account of a flake; each was caught by someone re-running, never by someone read
     passed. **Never cite "CI is green" as evidence that a capability works; cite the step that
     gates it** — and note that **the step's own conclusion is not the step's result either**:
     GitHub reports a `continue-on-error` step as `success` when it failed, so the log is the
-    only instrument. See the table in the `continuous_line` bullet, where three of six CI runs
-    failed the cycle in the same way.
+    only instrument. See the table in the `continuous_line` bullet, where four of eighteen CI
+    runs failed the cycle — three of them in the same way and the fourth on a different
+    signature entirely.
   - **The clean-clone walk of 2026-08-27 demonstrated clone-to-green, not a running line.** It
     ran `doctor` (23 passed, 0 failed), `build` (19 packages, before `cite_runtime` existed),
     `test` and `lint`, all clean, from a fresh clone of the remote with zero deviations — and
     **stopped at `lint` without launching the cell**. The clone-to-running-cell half is
     evidenced by the CI runs above, each of which brought the cell up twice from a checkout —
-    `bringup` has passed 12 of 12 across the six — and by nothing else.
-  - **The cycle clause is the least-settled of them**, and it has got weaker rather than
-    stronger. Three CI failures are now part of its record, not one, and all three stopped the
-    same piece at the same milestone. See the `continuous_line` bullet above, including that a
+    `bringup` has passed 36 of 36 across the eighteen — and by nothing else.
+  - **The cycle clause is the least-settled of them.** Four CI failures are now part of its
+    record, not one: three stopped the same piece at the same milestone, and the fourth never
+    spawned a work-piece at all. **Twelve more CI runs have passed the cycle since 2026-08-29,
+    and that does not settle the clause** — it was closed on one run with no thresholds
+    registered in advance, and a longer unregistered tally is a longer unregistered tally. See
+    the `continuous_line` bullet above, including that a
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **48 records, all indexed** in this checkout on 2026-08-30 — it
-    said 46 the day before, 43 earlier that day, and 40 before that — the newest being
-    [ADR-0048](docs/adr/0048-refuse-a-counterpart-the-generator-cannot-build.md).
+    `ADR index` line reported **51 records, all indexed** in this checkout on 2026-09-01 — it
+    said 48 on 2026-08-30, 46 the day before that, 43 earlier that day, and 40 before that —
+    the newest being
+    [ADR-0051](docs/adr/0051-restate-the-hull-grasp-gate.md), with
+    [ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md) and
+    [ADR-0050](docs/adr/0050-what-crosses-the-twin-boundary.md) between.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; both numbers are right and
+    also matches `0000-template.md`; it read **52** on 2026-09-01, against `doctor`'s 51, so the
+    relation held on re-audit. Both numbers are right and
     they count different things, so name the command with the number. **This figure moves
     every time a decision is recorded, which is often — run `doctor` rather than quoting the
     number here.** The breakdown of corrected,
