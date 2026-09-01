@@ -26,7 +26,8 @@ docs/measurements/2026-09-01-grasp-discrimination/harness/run_fn_campaign.sh
 | `measure_fp.py` | FP — the twelve stop widths and the control, through `cite_test_hardware/JointStopSystem` |
 | `run_fp.sh` | the FP block: domain guard, fixture presence check, one launch per stop width |
 | `measure_fn.py` | FN — sixteen trials against one running cell, four commanded widths interleaved |
-| `run_fn_block.sh` | one FN block: domain guard, bring-up, trials, teardown sweep |
+| `run_fn_block.sh` | one FN block: domain guard, bring-up, trials, teardown sweep. **FN_B1 used this.** |
+| `run_fn_block_after_ready.sh` | the same block, gated on the cell's own `CITE_SIDE_READY` token before the harness starts. **FN_B2 used this**, after three attempts through `run_fn_block.sh` were discarded by V1 for reading the description before `robot_state_publisher` was serving. `measure_fn.py` — the code that produces every FN figure — is byte-identical for both. `ANALYSIS.md` deviation D-1. |
 | `run_fn_campaign.sh` | two FN blocks with a quiesce and a load reading between them |
 | `analyse.py` | `criteria.md` §7's decision rules, applied to `raw/` |
 
