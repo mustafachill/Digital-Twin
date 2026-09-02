@@ -1,0 +1,13 @@
+pick frame at (-0.475, 0.0, 0.6)
+[1/11] refusal code=5 moved=1.8973538018496328e-19
+[2/11] refusal code=5 moved=8.131516293641283e-20
+[3/11] refusal code=5 moved=2.439454888092385e-19
+[4/11] pick45 w_cmd=45.0 w_reached=0.04899936628571003 holding_F=True contact=40 (33.5s)
+[5/11] grasp48 w_cmd=48.0 w_reached=0.0499627241256831 holding_F=True contact=40 (26.5s)
+[6/11] pick45 w_cmd=45.0 w_reached=0.049674067145352 holding_F=True contact=40 (31.4s)
+[7/11] grasp48 w_cmd=48.0 w_reached=0.049921550242853684 holding_F=True contact=40 (25.0s)
+[8/11] pick45 w_cmd=45.0 w_reached=0.048568090562598185 holding_F=True contact=40 (30.1s)
+[9/11] grasp48 w_cmd=48.0 w_reached=0.04935459555169832 holding_F=True contact=40 (28.0s)
+[10/11] pick45 w_cmd=45.0 w_reached=0.04867439157472797 holding_F=True contact=40 (29.9s)
+[11/11] grasp48 w_cmd=48.0 w_reached=0.0499226602025428 holding_F=True contact=40 (24.4s)
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/harness/../raw/D_B1_trials.json: 11 trials

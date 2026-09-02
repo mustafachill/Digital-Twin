@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/workspace/docs/measurements/2026-09-02-option-f-regions/harness/measure_arm_d.py", line 481, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/workspace/docs/measurements/2026-09-02-option-f-regions/harness/measure_arm_d.py", line 155, in main
+    pick_xyz = driver.resolve(cell.PICK_FRAME)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/docs/measurements/2026-09-02-option-f-regions/harness/cell.py", line 407, in resolve
+    tf = self.spin_until(
+         ^^^^^^^^^^^^^^^^
+  File "/workspace/docs/measurements/2026-09-02-option-f-regions/harness/cell.py", line 394, in spin_until
+    raise TimeoutError(f"timed out after {ceiling_s:.0f}s waiting for {what}")
+TimeoutError: timed out after 420s waiting for a transform from cite_world to cell_a__table_pick__surface
