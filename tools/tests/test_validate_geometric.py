@@ -751,7 +751,21 @@ class TestDerivedCollisionGeometryIsBoundToAWidth:
         """
         self._mesh_the_part(real_model, edit_yaml)
         self._select_vendor(real_model, edit_yaml)
-        assert physical_rules(real_model, Severity.ERROR) == set()
+        # NOT `== set()` SINCE 2026-09-01, and the difference is a real finding
+        # rather than a loosened assertion. ADR-0052's option F judges a grasp
+        # against the width of the parts the facility declares, so a mesh
+        # work-piece leaves the L3 predicate with no reference at all and
+        # `workpiece-width-unstated-for-a-grasping-facility` refuses it — for a
+        # reason that has nothing to do with which collision set is selected, and
+        # that the vendor's set cannot answer.
+        #
+        # What THIS class exists to protect is intact and is what is asserted:
+        # wherever the derived set is refused, the vendor's set is not faulted.
+        # The remaining finding is named explicitly rather than filtered by
+        # prefix, so a THIRD rule appearing here still fails this test.
+        assert physical_rules(real_model, Severity.ERROR) == {
+            "workpiece-width-unstated-for-a-grasping-facility"
+        }
 
     def test_the_finding_names_both_widths(self, real_model: Path, edit_yaml: Callable) -> None:
         """A refusal that does not say what it refused sends someone reading code.
@@ -786,17 +800,48 @@ class TestTheRemedyTheHintNamesIsAValidModel:
     WORKPIECE = TestDerivedCollisionGeometryIsBoundToAWidth.WORKPIECE
     ARM = TestDerivedCollisionGeometryIsBoundToAWidth.ARM
 
-    #: Narrow enough to be outside the measured range, wide enough that the
-    #: gripper's own bound is untouched: `default_grasp_width_m` is 45 mm and the
-    #: discrimination margin at that command is about 2.12 mm, so 48 mm clears
-    #: `default-grasp-width-never-closes` and nothing else in the validator has an
-    #: opinion. Anything narrower would make this test pass or fail for a second
-    #: reason, which is how a "the model is valid" assertion turns into noise.
+    #: Narrow enough to be outside the measured range that ADR-0051 bounds a
+    #: derived collision set to. 48 mm against the shipped 50 mm.
     NARROW_M = 0.048
 
+    #: The grasp default this narrow part is declared WITH, and it is not an
+    #: accident of arithmetic — it is the model edit a narrower part now obliges.
+    #:
+    #: This class used to declare the part alone, on the stated grounds that at
+    #: 48 mm "nothing else in the validator has an opinion". Since 2026-09-01
+    #: something else does. ADR-0052's `stall-band-admits-a-stall-on-nothing`
+    #: requires the grasp window's narrow edge — the part less the declared band —
+    #: to stay above `default_grasp_width_m` plus its discrimination margin, and
+    #: at 48 mm with the shipped 45 mm default it does not: the window opens to
+    #: 45.615 mm against a floor of 47.138 mm. That is the rule working, not the
+    #: rule intruding. A gripper commanded to 45 mm cannot discriminate a grasp on
+    #: a 48 mm part, whatever collision geometry is loaded.
+    #:
+    #: 42 mm rather than the 43.5 mm the arithmetic just allows, so that this
+    #: fixture sits clear of that boundary instead of riding it — a "the model is
+    #: valid" assertion that happens to be one edit from invalid is noise of the
+    #: same kind the previous comment was guarding against.
+    NARROW_DEFAULT_GRASP_M = 0.042
+
+    #: The end effector whose grasp default moves with the part.
+    EFFECTOR = "assets/types/end_effectors/xarm_parallel_gripper.yaml"
+
     def _narrow(self, model: Path, edit_yaml: Callable) -> None:
+        """Declare the narrow part, and the grasp default it obliges.
+
+        Both edits together, because a narrow part declared alone is not a model
+        anyone could ship: it fails ADR-0052's band rule, and this class's subject
+        is what a narrow part costs at the COLLISION selection rather than what it
+        costs at the gripper.
+        """
         TestDerivedCollisionGeometryIsBoundToAWidth()._narrow_the_part(
             model, edit_yaml, self.NARROW_M
+        )
+        edit_yaml(
+            model / self.EFFECTOR,
+            lambda d: d["asset_type"]["grasp"].__setitem__(
+                "default_grasp_width_m", self.NARROW_DEFAULT_GRASP_M
+            ),
         )
 
     def test_the_narrow_part_is_refused_the_derived_set(
