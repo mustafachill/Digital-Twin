@@ -26,7 +26,7 @@ The last row is new. Reproduce each figure rather than quoting it from here.
 
 | | | Command |
 |---|---|---|
-| Environment | 25 passed, 0 failed, 1 skipped | `./scripts/doctor` |
+| Environment | 29 passed, 0 failed, 1 skipped, **in the container** | `./scripts/enter dev ./scripts/doctor` |
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
@@ -38,6 +38,26 @@ The last row is new. Reproduce each figure rather than quoting it from here.
 **The last row is one run and is not a rate.** No thresholds were registered in advance, and it
 says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
 it is kept.
+
+**The environment row was re-measured on 2026-09-02 at `51195e0` and it moved; the rest of the
+table was not re-measured that day.** It read `25 passed, 0 failed, 1 skipped` until then. Two
+things about that row, both read from `scripts/doctor` rather than assumed:
+
+- **Say which side of the container the reading is from.** `doctor` is the one command in
+  CLAUDE.md §7's table that does **not** re-execute itself inside the container — `build`, `test`,
+  `sim`, `scenario` and `audit-deps` all call `require_ros_env` and `doctor` does not. On a
+  Linux machine with Docker but no native ROS, the **host** `./scripts/doctor` therefore reports
+  `✗ ros 2 — no /opt/ros/jazzy/setup.bash` and **exits 1**; it read `25 passed, 1 failed,
+  0 skipped` here on 2026-09-02. The container reading is the meaningful one.
+- **The figure depends on whether a build tree is present**, which is why two readings taken on
+  the same day can differ by one. **Measured here:** `29 passed, 0 failed, 1 skipped`, with the
+  one skip being `docker … not installed` inside the container and `build fingerprint` passing.
+  **Reported separately on the same day and not re-taken here:** `28 passed, 0 failed,
+  2 skipped`. **Read from `scripts/doctor:149-164`,** the branch that accounts for the
+  difference: an empty `workspace/build` is reported as a **skip** (`build tree … absent`) and a
+  matching one as a **pass** (`build fingerprint … matches`), which moves exactly one check
+  between the two columns. That the second reading was taken without a build tree is the
+  explanation this makes available, **not something observed**. Run it rather than quoting it.
 
 Phase 1 is closed (charter §8, exit criterion MET 2026-08-28). Phase 2 has split into 2.A and
 2.B; 2.A's bring-up mechanism exists and **closes no clause** of the Phase 2 exit criterion.
@@ -157,17 +177,37 @@ reaches.
 
 ## 2. Known defects
 
-### #36 — The grasp predicate: decided, specified, not implemented
-**This is the most actionable item in the file.** The owner chose **option F** on 2026-09-01 —
+### #36 — The grasp predicate: decided, specified, implemented; the gate is not fully cleared
+**Updated 2026-09-02 at `51195e0`. The rest of this file is still the 2026-09-01 snapshot.**
+This heading read *"decided, specified, not implemented"* until then, and the body below it said
+what the implementing change *must* carry. **The change landed on 2026-09-01**, about two hours
+after the commit this snapshot was taken at — `abdae38` is 19:10 and the five commits run
+21:08 to 21:44, same day, `git log -1 --format=%ad --date=iso` on each — and nothing re-read
+this item.
+
+The owner chose **option F** on 2026-09-01 —
 judge the grasp against the part rather than against the commanded width — and
 [ADR-0052](adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md) is `Accepted` with the
-mechanism specified in its 2026-09-01 amendment, §A.1–A.11.
+mechanism specified in its 2026-09-01 amendment, §A.1–A.11. **The record's status did not move
+when the implementation landed and does not move here.**
 
-Both error directions are now measured
+Both error directions were measured on the **superseded** predicate
 ([`2026-09-01-grasp-discrimination`](measurements/2026-09-01-grasp-discrimination/ANALYSIS.md)):
 a real grasp reported empty, and a stall on nothing reported as a grasp.
 
-**What the implementing change must carry**, from the amendment:
+**What landed**, in five commits ending `d3eeac4`, all ancestors of `main`
+(`git merge-base --is-ancestor <sha> main`): `53f1d58` declares the stall band and the
+work-piece interval in L0; `7a3e4d3` carries both into the generated bring-up plan; `3f6fe6f`
+replaces the predicate; `f14d189` and `d3eeac4` are the tests.
+`cite_skills::gripper_is_holding` now takes a `WorkpieceWidths` argument and judges the
+**reached** width against the declared interval widened by a stall band at each edge, and its
+own comment states that `report.commanded_width_m` is deliberately not read
+(`workspace/src/cite_skills/src/gripper.cpp:142-161`). The shipped band is
+`stall_band_narrow_m: 0.002385` / `stall_band_wide_m: 0.002385` in
+`model/assets/types/end_effectors/xarm_parallel_gripper.yaml`.
+
+**What the implementing change had to carry**, from the amendment — kept because it is what the
+change is judged against, not because it is outstanding:
 - The predicate reads the **interval of declared work-piece widths**, never "the part" —
   `Pick.Goal.workpiece_id` is an instance id minted by `WorkpieceRegistry::mint_id`, and
   `WorkpieceRecord` carries no type. Option F's own text claimed otherwise and is corrected.
@@ -177,13 +217,29 @@ a real grasp reported empty, and a stall on nothing reported as a grasp.
 - `default-grasp-width-never-closes` keeps its number and changes its job; two new ERROR rules
   are specified.
 - The caller door half-closes: a supplied width can no longer move the band, but a wider one
-  still ends the close on goal tolerance.
+  still ends the close on goal tolerance. `cite_skills::resolve_grasp_width` now returns
+  `GraspWidthSource::Refused` for a requested or configured width inside
+  `gripper_discrimination_margin_m` of the narrowest declared part
+  (`workspace/src/cite_skills/src/gripper.cpp:107-139`).
 - **P2 is a constraint, not a caveat.** The campaign establishes nothing about the physical
   gripper — there is no `GripperActionController` on that path at all.
 
-The promotion gate is written in the amendment and is cheap to satisfy: the campaign's harness
-produces the false-negative figure on every close and its `JointStopSystem` rig produces the
-false-positive side.
+**What is open now.** Two things, and neither is closed by the implementation landing.
+
+- **§A.10's gate is not fully met.** Item 2's second bullet asks for the false-positive flip
+  bracketed to at least **0.05 mm**; the campaign that ran the gate on the implemented
+  predicate,
+  [`2026-09-02-option-f-regions`](measurements/2026-09-02-option-f-regions/ANALYSIS.md), has a
+  **2.00 mm** stop grid and locates the flip only to (46.00, 48.00] mm at the narrow side. It
+  says so about itself, in its §2.2 and again in its §9. What would close it is the flip located
+  to the width the gate names; this file does not prescribe how.
+- **Whether the removed monotonicity term `reached > commanded` returns is an open project-owner
+  decision.** The same campaign **REPRODUCED** the region dropping it opens: a drive joint
+  jammed part-way through an opening stroke, inside the window, on jaws opening onto nothing,
+  reports `holding = true` on **9 of 9** valid in-window jams, where the superseded predicate
+  reports `false` on all nine, and the two controls outside the window are rejected. That is a
+  direction ADR-0052 §A.3 **permits** by design. The campaign registered before its first trial
+  that it does not take the decision, and neither does this file.
 
 ### #25 — A gripper controller over plain mock hardware reports a grasp on empty air
 `mock_components::GenericSystem::read()` never writes the velocity state when the command

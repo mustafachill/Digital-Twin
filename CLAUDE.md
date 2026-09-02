@@ -79,23 +79,29 @@ date it is that value's history and not a current reading.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **927** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-01 at
-  `abdae38`).
-  It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01
-  and **902** later the same day.
-  **The last move is entirely tree growth and not one new case**, and this is the clearest
+  `tools/tests/` holds **973** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-02 at
+  `51195e0`).
+  It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
+  **902** later that day and **927** until 2026-09-02.
+  **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
   suite
   changed, and the count still rose by 25. **Two files parametrize over the tree**, not one:
-  `tools/tests/test_superseded_real_time_requirement.py` contributes **321** of the 927
+  `tools/tests/test_superseded_real_time_requirement.py` contributes **341** of the 973
   because it parametrizes over every tracked source file, and
-  `tools/tests/test_interface_counts.py` contributes **138** because
+  `tools/tests/test_interface_counts.py` contributes **142** because
   `test_no_document_states_a_wrong_interface_count` parametrizes over every tracked document.
-  Measured in a worktree at `e51238e` those two read **304** and **131**, so they account for
-  +24 of the +25 between the two figures. This file named only the first of the two until
-  2026-09-01.
+  Those two read **321** and **138** at `abdae38`, and **304** and **131** in a worktree at
+  `e51238e`, so they account for +24 of the +25 between those two figures. This file named only
+  the first of the two until 2026-09-01.
+  **The 927 → 973 move is both kinds at once and reconciles exactly**, measured in this checkout
+  on 2026-09-02 by the breakdown command below. `tools/tests/test_stall_band.py` is new and
+  collects **22** — it is the L0 half of ADR-0052's option F, landed at `53f1d58` — while the two
+  parametrized files above grew by **20** and **4** as the source and documentation trees grew.
+  22 + 20 + 4 = 46, which is the whole of the move; `tools/tests/test_validate_geometric.py` was
+  edited over the same span and collects the same **64** it did before.
   **The remaining +1 is an unresolved disagreement and is left stated rather than smoothed
   over.** That same worktree at `e51238e` collects **903**, not the **902** recorded above,
   and no test file changed between the two commits. Whether a worktree's tracked-file set
@@ -151,23 +157,28 @@ date it is that value's history and not a current reading.
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one**, in this checkout on
-  2026-09-01 at `abdae38`: `124 passed, 0 failed (shell gate self-tests)`; `963 passed, 1
+  2026-09-02 at `51195e0`: `124 passed, 0 failed (shell gate self-tests)`; `1009 passed, 1
   skipped` for the
   host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
   collection above; and, over the eleven first-party packages, eleven per-package summaries
-  totalling **1221 tests, 0 failures, 56 skipped**. It builds and tests the eleven only — the
+  totalling **1250 tests, 0 failures, 56 skipped**. It builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
-  2026-08-29, 124 / 447 / 962 on 2026-08-31 and 124 / 938 / 1217 earlier on 2026-09-01.
-  **Two arithmetic checks tie these to the collection above, and they are what separates a
-  re-measurement from a guess.** The host half moved 938 → 963, **+25**, the same step the
-  `tools/tests` collection took, which is what has to happen if the host half walks `tools/`
-  and nothing in `tools/` changed. The per-package total moved 1217 → 1221, **+4**, and four
-  is the number of tests the three commits since `f859cb3` add under `workspace/src`. The
-  shell gate did not move.
+  2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01 and
+  124 / 963 / 1221 later the same day.
+  **One arithmetic check ties the host half to the collection above, and it is what separates a
+  re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
+  `tools/tests` collection took over the same span, which is what has to happen if the host half
+  walks `tools/`. The check held at the move before it too: 938 → 963, **+25**, against the
+  collection's own +25. **The per-package total carries no such tie and is not given one here.**
+  Its 1217 → 1221 step was the four tests the three commits after `f859cb3` added under
+  `workspace/src`; the 1221 → 1250 step, **+29**, was **not** reconciled against the
+  `workspace/src` diff, and that is left stated rather than asserted. The shell gate did not
+  move in either step.
   **The per-package total is a sum this file performs and `test` does not print**: the script
-  emits one `Summary:` line per package and no grand total, so the 1221 and the 56 were added
-  up by hand from the eleven lines. The two host figures are printed verbatim and were taken
-  from `./scripts/test --host-only`, which runs the same two host suites.
+  emits one `Summary:` line per package and no grand total, so the 1250 and the 56 were
+  added up by hand from the eleven lines. The two host figures are printed verbatim. All three
+  were taken from one full `./scripts/test` run rather than from `--host-only`, which runs the
+  same two host suites and stops there.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -267,18 +278,25 @@ date it is that value's history and not a current reading.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1430 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-01 at `abdae38`; it said **661** until 2026-08-29, **1048** until
-  2026-08-31, **1085** earlier on 2026-09-01 and **1267** later the same day. Most of the
+  runs, and reported `1540 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-02 at `51195e0`; it said **661** until 2026-08-29, **1048** until
+  2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day and **1430** until
+  2026-09-02. Most of the
   difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
-  --name-only 60eb4a5..HEAD -- docs/measurements` counts **684** files added there since the
-  first of those figures was taken, and read 368 on 2026-08-31 and 523 earlier on 2026-09-01 —
+  --name-only 60eb4a5..HEAD -- docs/measurements` counts **791** files added there since the
+  first of those figures was taken, and read 368 on 2026-08-31, 523 earlier on 2026-09-01 and
+  684 later that day —
   so **this number tracks how
   much evidence is committed and is not a
-  measure of coverage.** The last move demonstrates it arithmetically: the walk grew by
-  **163** and `git diff --diff-filter=A --name-only dd93488..HEAD -- docs/measurements` counts
-  **161** files added under that one directory over the same span. Run `lint` rather than
+  measure of coverage.** The last two moves demonstrate it arithmetically. The 1267 → 1430 move:
+  the walk grew by
+  **163** and `git diff --diff-filter=A --name-only dd93488..HEAD -- docs/measurements` counted
+  **161** files added under that one directory over the same span. The 1430 → 1540 move closes
+  exactly: the walk grew by **110**, `git diff --diff-filter=A --name-only abdae38..HEAD` counts
+  **110** tracked files added over that span with **107** of them under `docs/measurements`, and
+  `--diff-filter=D` and `--diff-filter=R` both count **0**, so nothing left the walk to offset
+  it. Run `lint` rather than
   quoting it. The one exemption is
   `docs/reference/v1-lessons.md`, which quotes the
   original Turkish as primary-source evidence. The limits — chiefly that ASCII-only Turkish and
@@ -781,38 +799,80 @@ date it is that value's history and not a current reading.
     unit or launch test; **none of them is held by a run of the cell in which this failure
     occurred**, because no such run has been taken since. Until one is, this is still the
     failure this project has the most evidence for, and nobody may write that it is fixed.
-  - **A real grasp can be reported empty, and that is a separate defect owed its own record.**
-    `cite_skills::gripper_is_holding` (`gripper.cpp:106-117`) requires the reached width to
-    exceed the commanded width by more than **twice** the linkage's own width tolerance at
+  - **A real grasp could be reported empty; the predicate that did it was replaced on
+    2026-09-01, and the replacement opens a region of its own.**
+    **The arithmetic in this paragraph is about the superseded predicate** and is kept because
+    it is what ADR-0052 is a record of and what both grasp campaigns measured. Until 2026-09-01
+    `cite_skills::gripper_is_holding` required the reached width to
+    exceed the **commanded** width by more than **twice** the linkage's own width tolerance at
     that drive angle. Recomputed from the L0 linkage dimensions for ADR-0045 and reproducing
     exactly: against a commanded 45.0 mm, a genuine 46.6 mm stall leaves 1.6 mm of margin
-    against a 2.12 mm threshold, so `Pick` returns `EXECUTION_FAILED` with an empty-grasp
-    description while the part is in the jaws. **This is arithmetic over the shipped
-    constants, not an observed run** — nothing has attributed a CI failure to it.
+    against a 2.12 mm threshold, so `Pick` returned `EXECUTION_FAILED` with an empty-grasp
+    description while the part was in the jaws. **That was arithmetic over the shipped
+    constants, not an observed run** — no CI failure was ever attributed to it — and it was
+    observed firing later, which is the paragraph below.
     `EXECUTION_FAILED` shares the `RETRY_SAME` branch with `TIMEOUT`, so it used to reach the
     same dead end as the item above by a different entrance — a second reason ADR-0046 refuses
     on custody rather than on a result code, and on the branch above that entrance is closed
-    with the others: the misreported grasp still happens, and the station now escalates instead
-    of dead-ending. **The defect itself is untouched** — a real grasp is still reported empty —
-    and **the record ADR-0045 says is owed now exists**:
+    with the others: the misreported grasp still happened, and the station now escalates instead
+    of dead-ending. **The record ADR-0045 says is owed exists**:
     [ADR-0052](docs/adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md), which states
     the defect as a **band** rather than as the 46.6 mm example and weighs six options. This
     bullet said "that record does not exist yet" until 2026-09-01.
     **It said the record chooses nothing until later that same day, and it now chooses.** The
     project owner took **option F on 2026-09-01** — judge the grasp against the part rather
-    than against the commanded width — and the record is `Accepted`. **`Accepted` here means a
-    decision and a specification and nothing else: no line of code, no threshold and no test
-    moved, and the defect is exactly as live as it was.** The mechanism F is given, the answer
+    than against the commanded width — and the record is `Accepted`. The mechanism F is given,
+    the answer
     for a facility handling more than one part, what the validator rule becomes, and the gate
     the implementing change has to pass are that record's amendment of that date. **Read it
     rather than taking a shape from here** — it decides a plan-level delivery and two new L0
     fields, and an exhaustive summary of a specification in a rulebook is a claim with an
     expiry date.
-    **Two things in that record change how this bullet should be read, and its figures are
+    **This bullet said until 2026-09-02 that "`Accepted` here means a decision and a
+    specification and nothing else: no line of code, no threshold and no test moved, and the
+    defect is exactly as live as it was." That is false, and it was false the day after it was
+    written.** Option F is implemented and on `main`, in five commits ending `d3eeac4` on
+    2026-09-01: `53f1d58` declares the band and the work-piece interval in L0, `7a3e4d3` carries
+    both into the generated bring-up plan, `3f6fe6f` replaces the predicate, and `f14d189` and
+    `d3eeac4` are the tests — `git merge-base --is-ancestor <sha> main` succeeds for each.
+    `cite_skills::gripper_is_holding` now takes a `WorkpieceWidths` argument and judges the
+    **reached** width against the facility's declared work-piece interval, widened by a stall
+    band at each edge; its own comment states that `report.commanded_width_m` is **deliberately
+    not read**, so the quantity the defect was about has left the decision entirely
+    (`workspace/src/cite_skills/src/gripper.cpp:142-161`).
+    **The implementation landing promotes nothing.** ADR-0052 was already `Accepted` when the
+    owner chose F and it is `Accepted` now; no status moved. Note that the record's own status
+    block still says `cite_skills::gripper_is_holding` **is untouched**, which was true when it
+    was written and is not now.
+    **§A.10's gate is not fully met, and the campaign that ran it says so about itself.**
+    [`docs/measurements/2026-09-02-option-f-regions/`](docs/measurements/2026-09-02-option-f-regions/ANALYSIS.md)
+    — thresholds registered before the first trial, machine named, measured on the **implemented**
+    predicate at `d3eeac4` — reports in its own §2.2 and §9 that item 2's second bullet is **not
+    met here**: the gate asks for the false-positive flip bracketed to at least **0.05 mm**, that
+    arm's stop grid is **2.00 mm**, and the flip is located only to (46.00, 48.00] mm at the
+    narrow side. **Do not read "implemented" as "the gate cleared."**
+    **And that campaign REPRODUCED a region the new predicate opens.** A drive joint jammed
+    part-way through an **opening** stroke, inside the window, on jaws opening onto nothing,
+    reports `holding = true` on **9 of 9** valid in-window jams, where the superseded predicate
+    reports `false` on all nine; the two controls outside the window are rejected, so the window
+    is what decides. This is a direction ADR-0052 §A.3's specification **permits** — F drops the
+    monotonicity term `reached > commanded` by design — and the measurement is what dropping it
+    costs on that rig. **Whether that term returns is an open project-owner decision**, and the
+    campaign registered before its first trial that it does not take it. Nothing here settles
+    it; do not write as though it were settled.
+    **Two things in that record change how the superseded account above should be read, and its
+    figures are
     cited and not copied here (P1).** The 46.6 mm example describes a *declared work-piece*,
-    and `default-grasp-width-never-closes` already refuses that model at validate time; the
-    doors that are open are a caller-supplied `grasp_width_m`, which nothing validates, and a
+    and `default-grasp-width-never-closes` already refused that model at validate time; the
+    doors that were open were a caller-supplied `grasp_width_m`, which nothing validated, and a
     stall landing short of the part's nominal width, which the cell does.
+    **The caller door is closed by the same change.** `cite_skills::resolve_grasp_width` now
+    refuses a requested *or* configured width — `GraspWidthSource::Refused`, rather than
+    executing it and judging afterwards — whenever it lands within
+    `gripper_discrimination_margin_m` of the narrowest declared part
+    (`workspace/src/cite_skills/src/gripper.cpp:107-139`). **The second door is not a door into
+    the same defect any more**, because F does not read the command at all; what it opens
+    instead is the region the 2026-09-02 campaign reproduced, above.
     **This bullet said until 2026-09-01 that the defect has "never been observed firing". That
     is now false and the correction is the whole reason the decision could be taken.** The
     campaign the record's gate asked for has run —
