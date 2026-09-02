@@ -1076,7 +1076,7 @@ def _skill_parameters(plan: Plan, manager) -> dict:
 
 
 def _workpiece_parameters(plan: Plan) -> dict:
-    """The work-piece width interval, under the names the skill server declares.
+    """Return the work-piece interval, under the names the skill server declares.
 
     Empty where the zone declares no part width. That is a real state and not a
     fault here — a facility that grasps nothing has no predicate to configure —

@@ -95,6 +95,20 @@ if(BUILD_TESTING)
   # answers. So the test can stop simulated time while wall time runs, which is
   # the only way to tell the two deadlines apart.
   add_launch_test(test/test_gripper_deadline_launch.py TIMEOUT 600)
+
+  # ADR-0052. The grasp predicate judges a stall against the width of the parts
+  # this facility declares rather than against the width it commanded, and this
+  # drives that decision through a real GripperActionController over the same
+  # `cite_test_hardware/JointStopSystem` the two rigs above use — with the stops
+  # on the gripper's drive joint instead of an arm joint, so the jaws come to
+  # rest at a declared width and the controller reports the stall a part
+  # produces.
+  #
+  # `launch_testing.parametrize` runs the whole rig TWICE, once with the stop
+  # inside the window and once outside it, because the stop is read at `on_init`
+  # from the description and no goal can move it. Hence a timeout of twice the
+  # one above; still no Gazebo.
+  add_launch_test(test/test_grasp_predicate_launch.py TIMEOUT 1200)
 endif()
 
 ament_package()

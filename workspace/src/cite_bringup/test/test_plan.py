@@ -49,6 +49,7 @@ from cite_bringup.plan import (
     RosDomainMismatchError,
     Side,
     SideNotDeclaredError,
+    Workpieces,
 )
 import pytest
 import yaml
@@ -467,6 +468,118 @@ def test_every_gripper_key_is_one_the_skill_server_declares() -> None:
         f"{sorted(undeclared)} are delivered to the skill server and declared by it "
         f"nowhere in {SKILL_SERVER.name}, so rclcpp drops them without a word"
     )
+
+
+# --- The work-piece interval, which does NOT ride the gripper block ----------
+#
+# ADR-0052 option F: `cite_skills::gripper_is_holding` judges a stall against the
+# width of the parts this facility handles rather than against the width it
+# commanded. The band is an end-effector property and travels on the gripper
+# channel above; the interval is a FACILITY fact and is stated once per zone in
+# the plan's own `plan:` block. Every key on the gripper tuple is sourced from
+# the end-effector type, and a part width is not a property of an end effector.
+
+
+def test_the_generated_plan_states_the_work_piece_interval() -> None:
+    plan = load(_generated())
+    assert plan.workpieces is not None, (
+        "the generated plan states no `workpieces:` block, so no skill server would "
+        "be told what a stall is judged against (ADR-0052 §A.4)"
+    )
+    assert plan.workpieces.narrowest_width_m > 0.0
+    assert plan.workpieces.widest_width_m >= plan.workpieces.narrowest_width_m
+
+
+def test_the_interval_is_one_per_zone_and_not_one_per_manager() -> None:
+    """Where it is stated is the decision, so where it is NOT is worth pinning."""
+    document = _document()
+    assert "workpieces" in document["plan"]
+    for manager in document["plan"]["controller_managers"]:
+        assert not [key for key in manager if "workpiece" in key], (
+            f"{manager['asset']}'s block carries a work-piece width. It is a fact "
+            f"about the facility, and a tuple named for the gripper carrying one is "
+            f"how a name stops meaning anything"
+        )
+
+
+def test_a_plan_without_the_interval_loads_and_says_none(tmp_path: Path) -> None:
+    """Absent is a real state, and it is `None` rather than a manufactured width.
+
+    A facility that grasps nothing has no predicate to configure. Where the
+    absence IS a fault it is a fault at L0, and
+    `workpiece-width-unstated-for-a-grasping-facility` refuses the model before a
+    plan is generated at all — so defaulting a width here would put a number the
+    model never stated inside the predicate.
+    """
+    document = _document()
+    del document["plan"]["workpieces"]
+    assert load(_written(tmp_path, document)).workpieces is None
+
+
+def test_a_half_stated_interval_is_refused(tmp_path: Path) -> None:
+    """A window with one edge is not a window.
+
+    Defaulting the missing edge from the stated one would make L3 admit every
+    stall above the narrow edge, which is the option ADR-0052 rejects, reached by
+    omission rather than by decision.
+    """
+    for key in ("narrowest_width_m", "widest_width_m"):
+        document = _document()
+        del document["plan"]["workpieces"][key]
+        with pytest.raises(PlanError):
+            load(_written(tmp_path, document))
+
+
+def test_an_inverted_interval_is_refused(tmp_path: Path) -> None:
+    """An empty window reports every grasp empty, which is silence at the point of use.
+
+    Refused here, where it names the pair, rather than at L3, where the symptom
+    is a cell that picks nothing up and says nothing about why.
+    """
+    document = _document()
+    document["plan"]["workpieces"]["widest_width_m"] = 0.01
+    with pytest.raises(PlanError, match="empty"):
+        load(_written(tmp_path, document))
+
+
+def test_a_zero_width_is_refused(tmp_path: Path) -> None:
+    """Zero is not a width; it is the sentinel the skill server refuses on.
+
+    Letting it through here would open the predicate's window onto a fully closed
+    gripper, and the plan is where the pair is stated as a pair.
+    """
+    document = _document()
+    document["plan"]["workpieces"]["narrowest_width_m"] = 0.0
+    with pytest.raises(PlanError):
+        load(_written(tmp_path, document))
+
+
+def test_the_interval_reaches_the_skill_server_under_names_it_declares(
+) -> None:
+    """The same guard `GRIPPER_KEYS` gets, for the keys that do not travel with them.
+
+    `rclcpp` ignores an override for a parameter that was never declared: launch
+    accepts it, the node discards it, and neither says so. These two arrive by a
+    different route from the gripper keys and so are covered by no test that
+    walks that tuple.
+    """
+    source = SKILL_SERVER.read_text()
+    for key in ("workpiece_narrowest_width_m", "workpiece_widest_width_m"):
+        assert f'declare_parameter("{key}"' in source, (
+            f"{key} is delivered to the skill server and declared by it nowhere in "
+            f"{SKILL_SERVER.name}, so rclcpp drops it without a word"
+        )
+
+
+def test_workpieces_is_a_record_rather_than_a_pair_of_floats() -> None:
+    """Two numbers whose order decides the answer are not interchangeable.
+
+    Named fields rather than a tuple, so that a caller cannot silently swap them
+    — which produces an empty window and a cell that reports every grasp empty.
+    """
+    interval = Workpieces(narrowest_width_m=0.04, widest_width_m=0.05)
+    assert interval.narrowest_width_m == 0.04
+    assert interval.widest_width_m == 0.05
 
 
 def test_a_gripper_key_the_plan_omits_is_absent_rather_than_zero(tmp_path: Path) -> None:
