@@ -73,28 +73,39 @@ Three reasons, in the order they bind:
 directory are still refused. Two tests assert those three locations by name, precisely so
 that a relaxation of `_may_name_it` cannot take them with it, and this relaxation is the
 first one they were written against — **and for one of the three the by-name test is now the
-only thing left refusing it.** `model/` and `workspace/src/cite_generated/` are refused twice
-over, by the sweep and again by name. A `launch/` directory **inside a published campaign**
-is not: the sweep permits everything under `docs/measurements/`, so
-`test_no_launch_file_names_it` is the whole of that refusal. Being independent of
-`_may_name_it` is what makes it worth having, and it is not redundant with the sweep; do not
-deduplicate it against the predicate. It keys on a launch file's **shape** as well as on a
-`launch` directory component, because a campaign's `harness/rig.launch.py` carries no such
-component and was, until this was written, refused by nothing at all.
+only thing left refusing it.** For every file either tree currently holds, `model/` and
+`workspace/src/cite_generated/` are refused twice over, by the sweep and again by name —
+though that is a fact about today's tree and not about the rule: the sweep permits any `.md`
+anywhere, so a `model/README.md` would be refused by the by-name test alone. No such file
+exists, and the by-name test is the load-bearing half in either case. A `launch/` directory
+**inside a published campaign** is not doubly refused at all: the sweep permits everything
+under `docs/measurements/`, so `test_no_launch_file_names_it` is the whole of that refusal.
+Being independent of `_may_name_it` is what makes it worth having, and it is not redundant
+with the sweep; do not deduplicate it against the predicate. It keys on a launch file's
+**shape** as well as on a `launch` directory component, because a campaign's
+`harness/rig.launch.py` carries no such component and was, until this was written, refused by
+nothing at all. The shape clause spells out all three of ROS 2's launch frontends —
+`.launch.py`, `.launch.xml`, `.launch.yaml` — as **exact** suffixes; it covered only the
+first until 2026-09-01, and it may not be loosened to a substring test, because
+`docs/measurements/` holds 47 files named `*.launch.log` that are bring-up logs rather than
+launch files.
 
 Every other context a running system reads is still refused: a description, a world, a controller configuration, a
 bring-up plan, and any non-test source file in any package. `docs/measurements/` was **not**
 added to the guard's `SKIPPED` subtrees, which mean "not this repository's to answer for";
 the campaigns are ours, and a named permitted context is the shape that says so. Four tests
 now pin both directions against literal path strings rather than against the tree, so
-neither the permission nor the refusals depend on what happens to be committed. Three of the
-four tuples are written paths that are not committed; the fourth,
-`PUBLISHED_EVIDENCE_THAT_NAMES_IT`, is three real files, written out rather than discovered
-so that the test survives the campaign being archived.
+neither the permission nor the refusals depend on what happens to be committed. Four of the
+five tuples are written paths that are not committed; the fifth,
+`PUBLISHED_EVIDENCE_THAT_NAMES_IT`, is the three **non-markdown** files the 2026-09-01
+grasp-discrimination campaign committed that name the fixture, written out rather than
+discovered so that the test survives the campaign being archived. (That campaign names it in
+three markdown files besides, which the sweep permits anywhere as prose.)
 
 **The residual this leaves, stated so the next campaign author meets it before publishing.**
 A campaign that publishes a file naming the fixture under a `harness/launch/` directory, or
-under any name ending `.launch.py`, takes `main` red — and a campaign is frozen by
+under any name ending `.launch.py`, `.launch.xml` or `.launch.yaml`, takes `main` red — and a
+campaign is frozen by
 `docs/measurements/README.md` once its first trial has run, so it cannot be fixed where it
 occurs. That is the deliberate price of keeping the by-name test independent, and it is
 accepted rather than overlooked: a launch file is the one artifact that starts processes, and

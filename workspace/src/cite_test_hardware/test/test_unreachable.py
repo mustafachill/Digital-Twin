@@ -205,15 +205,29 @@ def test_the_generated_tree_and_the_model_never_name_it():
     )
 
 
+#: ROS 2's three launch frontends, as exact suffixes. Deliberately not a looser
+#: test such as `'.launch' in name`: `docs/measurements/` holds 47 files named
+#: `*.launch.log` — bring-up logs a campaign captured, not launch files — and
+#: `CAMPAIGN_FILES_THAT_ARE_NOT_LAUNCH_FILES` below is what refuses that
+#: loosening, because none of the 47 names the fixture and so the live sweep
+#: would not notice it.
+LAUNCH_FILE_SUFFIXES = ('.launch.py', '.launch.xml', '.launch.yaml')
+
+
 def _is_a_launch_file(relative: str) -> bool:
     """Whether this path is a launch file, by directory component or by shape.
 
-    Deliberately NOT expressed in terms of `_may_name_it`, and read by nothing
-    else. See `test_no_launch_file_names_it` for why the independence is the
-    point; the two clauses are here so that neither form can be added later
-    without both being considered.
+    Deliberately NOT expressed in terms of `_may_name_it`, and read by no
+    production code, and by two tests in this file. See
+    `test_no_launch_file_names_it` for why the independence is the point; the two
+    clauses are here so that neither form can be added later without both being
+    considered, and each is pinned by at least one entry in
+    `LAUNCH_FILES_A_CAMPAIGN_COULD_PUBLISH` that the other clause misses.
     """
-    return 'launch' in Path(relative).parts[:-1] or relative.endswith('.launch.py')
+    return (
+        'launch' in Path(relative).parts[:-1]
+        or relative.endswith(LAUNCH_FILE_SUFFIXES)
+    )
 
 
 def test_no_launch_file_names_it():
@@ -249,11 +263,13 @@ def test_no_launch_file_names_it():
     )
 
 
-#: The three files the 2026-09-01 grasp-discrimination campaign committed that name
-#: the fixture — its harness, its reproduction command, and one run log in which the
-#: controller manager reports loading the plugin. Written out here rather than
-#: discovered, so that this test says what it means even after the campaign is
-#: archived, moved or deleted.
+#: The three NON-MARKDOWN files the 2026-09-01 grasp-discrimination campaign
+#: committed that name the fixture — its harness, its reproduction command, and one
+#: run log in which the controller manager reports loading the plugin. The campaign
+#: names it in three markdown files besides, which the sweep permits anywhere as
+#: prose and which say nothing about the permission this pins. Written out here
+#: rather than discovered, so that this test says what it means even after the
+#: campaign is archived, moved or deleted.
 PUBLISHED_EVIDENCE_THAT_NAMES_IT = (
     'docs/measurements/2026-09-01-grasp-discrimination/harness/measure_fp.py',
     'docs/measurements/2026-09-01-grasp-discrimination/harness/run_fp.sh',
@@ -296,15 +312,39 @@ def test_published_evidence_may_name_the_fixture():
     )
 
 
-#: Launch files inside a published campaign, which `_may_name_it` PERMITS — the
-#: first by the campaign context, the second by it too, because it carries no
-#: `launch` directory component for the shape clause to have keyed on either. Both
-#: must still be refused by `test_no_launch_file_names_it`, which is the only thing
-#: left that refuses them. Literal paths, none of them committed: a real one would
-#: make this a statement about today's tree rather than about the rule.
+#: Launch files inside a published campaign, every one of which `_may_name_it`
+#: PERMITS under the campaign context, and which `test_no_launch_file_names_it` is
+#: therefore the only thing left refusing. Each clause of `_is_a_launch_file` is
+#: pinned here by an entry the other clause misses, so that dropping either one
+#: fails this test rather than passing unnoticed:
+#:
+#:   * the first carries no launch-file suffix and is caught by the DIRECTORY
+#:     clause alone — the `raw/launch/run.log` case;
+#:   * the last three carry no `launch` directory component and are caught by the
+#:     SHAPE clause alone, one per ROS 2 launch frontend;
+#:   * the second is caught by both, which is the ordinary case.
+#:
+#: Literal paths, none of them committed: a real one would make this a statement
+#: about today's tree rather than about the rule.
 LAUNCH_FILES_A_CAMPAIGN_COULD_PUBLISH = (
+    'docs/measurements/2026-09-01-a-campaign/raw/launch/run.log',
     'docs/measurements/2026-09-01-a-campaign/harness/launch/rig.launch.py',
     'docs/measurements/2026-09-01-a-campaign/harness/rig.launch.py',
+    'docs/measurements/2026-09-01-a-campaign/harness/rig.launch.xml',
+    'docs/measurements/2026-09-01-a-campaign/harness/rig.launch.yaml',
+)
+
+#: The other direction of the same predicate: ordinary campaign files that are NOT
+#: launch files and must stay permitted, since refusing one would take `main` red
+#: for a campaign that cannot be edited to satisfy the guard. The third is the
+#: shape that makes the suffix test's exactness load-bearing — `docs/measurements/`
+#: holds 47 files named `*.launch.log` today, and none of them names the fixture,
+#: so a suffix test loosened to `'.launch' in name` would be caught by nothing in
+#: the live tree. This entry is what catches it instead.
+CAMPAIGN_FILES_THAT_ARE_NOT_LAUNCH_FILES = (
+    'docs/measurements/2026-09-01-a-campaign/harness/measure.py',
+    'docs/measurements/2026-09-01-a-campaign/harness/run.sh',
+    'docs/measurements/2026-09-01-a-campaign/raw/IDLE_1.launch.log',
 )
 
 #: One directory outside the permitted root, and one directory whose name merely
@@ -326,6 +366,10 @@ def test_a_launch_file_in_a_published_campaign_is_still_refused():
     and a launch file naming the fixture. It has to catch the shape as well as the
     directory: `harness/rig.launch.py` names no `launch` directory, and until
     2026-09-01 nothing in this file refused it at all.
+
+    Both directions are pinned, because the predicate can fail either way. Too
+    narrow and a campaign's launch file is refused by nothing; too wide and an
+    ordinary `*.launch.log` takes `main` red in a directory nobody may edit.
     """
     permitted_by_the_sweep = [
         relative
@@ -346,6 +390,17 @@ def test_a_launch_file_in_a_published_campaign_is_still_refused():
         f'a launch file naming {TOKEN} would be refused by nothing: {missed}. The '
         f'sweep permits a published campaign; this test is the only thing that '
         f'refuses a launch file inside one (ADR-0040).'
+    )
+    overreached = [
+        relative
+        for relative in CAMPAIGN_FILES_THAT_ARE_NOT_LAUNCH_FILES
+        if _is_a_launch_file(relative)
+    ]
+    assert not overreached, (
+        f'ordinary published campaign files are being read as launch files: '
+        f'{overreached}. A campaign is frozen once its first trial has run '
+        f'(docs/measurements/README.md), so a predicate that overreaches here takes '
+        f'`main` red somewhere that cannot be edited to satisfy it.'
     )
 
 
