@@ -20,9 +20,19 @@ defence is that it is dated and says so.
 
 ## Where the repository stood when this was written
 
-`main` at `abdae38`, clean and pushed. This table was first taken at `3725af5`; every one of
-its original seven rows was re-measured at `abdae38` on 2026-09-01 and **none of them moved**.
-The last row is new. Reproduce each figure rather than quoting it from here.
+`main` at `51195e0`, clean and pushed — `git rev-parse main origin/main` agrees on 2026-09-02.
+This table was first taken at `3725af5`; every one of its original seven rows was re-measured at
+`abdae38` on 2026-09-01 and **none of them moved**, and the head line read `abdae38` until
+2026-09-02. The last row is new. Reproduce each figure rather than quoting it from here.
+**Seven of the eight rows were re-measured on 2026-09-02 at `51195e0`, and one moved.**
+Measurement campaigns went **10 → 11**: `2026-09-02-option-f-regions/` is the eleventh, its
+first file committed at `79ae6d9` on 2026-09-01 and its analysis at `51195e0`.
+The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
+15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
+indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
+`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:143`. **The row not re-measured
+is the last one**, which needs `gh` against a CI run, and the environment row's own history is
+the note below.
 
 | | | Command |
 |---|---|---|
@@ -30,7 +40,7 @@ The last row is new. Reproduce each figure rather than quoting it from here.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 10 | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 11 | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
 | CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
@@ -39,8 +49,8 @@ The last row is new. Reproduce each figure rather than quoting it from here.
 says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
 it is kept.
 
-**The environment row was re-measured on 2026-09-02 at `51195e0` and it moved; the rest of the
-table was not re-measured that day.** It read `25 passed, 0 failed, 1 skipped` until then. Two
+**The environment row was re-measured on 2026-09-02 at `51195e0` and it moved.** It read
+`25 passed, 0 failed, 1 skipped` until then. Two
 things about that row, both read from `scripts/doctor` rather than assumed:
 
 - **Say which side of the container the reading is from.** `doctor` is the one command in

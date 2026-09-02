@@ -5,13 +5,22 @@
   can build it, are in the section "Amendment — 2026-09-01: option F is chosen, and this is
   what F is", immediately below. Read it before the body: everything below it that says the
   choice has not been taken was true when written and is not now.
-  **Nothing in the tree changes with this record or with that amendment.**
+  **[Falsified 2026-09-01, kept for the record — see "Amendment — 2026-09-02: option F is
+  implemented, and half of its gate is met" below, which is where the four clauses in this
+  paragraph are answered one by one:]**
+  *"**Nothing in the tree changes with this record or with that amendment.**
   `cite_skills::gripper_is_holding` is untouched,
   `tools/cite_tools/validate/physical.py` is untouched, no threshold, ceiling or
-  tolerance moves, and no test is added or removed. **The defect is still live.** What is
-  `Accepted` is the decision and the specification, not an implementation, and the gate the
-  implementing change has to pass is §A.10 of the amendment — which replaces §"When this
+  tolerance moves, and no test is added or removed. **The defect is still live.**"*
+  Option F was implemented and merged on `main` in five commits ending `d3eeac4`, **about
+  nine hours after that sentence was committed and on the same day** — `5a929c4` at 12:19
+  and `53f1d58` at 21:08, both 2026-09-01 (`git log --date=iso`). **The status does not move
+  with it**: what is `Accepted` is the decision and the specification, an implementation is not
+  a promotion, and the gate
+  the implementing change has to pass is §A.10 of the amendment — which replaces §"When this
   record is promoted" below, whose clause 1 the owner's choice has now satisfied.
+  **§A.10 item 1 is met and item 2 is not**, so **the defect is still not recorded as
+  closed**.
   **One supporting claim in the body is also corrected on the same date** — option F's own
   paragraph names a lookup that cannot be written. See the section "Correction — 2026-09-01:
   option F names a lookup that cannot be written", which follows the amendment. **The decision
@@ -68,6 +77,14 @@
   named, and **choosing none of A-F itself**. Verdicts: false negative **OBSERVED**, false
   positive **REPRODUCED**, the two arithmetics **IMMATERIAL**, the unvalidated caller door
   **DEMONSTRATED**, and D2 **INCONCLUSIVE** by two of its own rules.
+  **Added 2026-09-02, and it is the campaign §A.10 item 2 asks for, on the *implemented*
+  predicate at `d3eeac4`:**
+  [`docs/measurements/2026-09-02-option-f-regions/`](../measurements/2026-09-02-option-f-regions/ANALYSIS.md)
+  — 97 trials plus an 18-trial refinement grid, thresholds registered before the first trial
+  at a stated `criteria.md` hash, machine named, and **deciding nothing itself**. Verdicts,
+  per arm: B **REPRODUCED**, A **NOT REPRODUCED** with rule N-A applying, C **NOT CROSSED**
+  with rule W firing, D **NOT OBSERVED** with rule M applying. **It does not meet item 2** —
+  see the 2026-09-02 amendment §B.3.
 
 ## Amendment — 2026-09-01: option F is chosen, and this is what F is
 
@@ -484,6 +501,158 @@ because a `grep` for `workpiece_id` in `cite_skills` returns six log lines and n
 that absence reads as "not used yet" rather than "not possible". **The check that would have
 caught it is the one this project keeps relearning:** a sentence that says a value is available
 must name the code that reads it.
+
+## Amendment — 2026-09-02: option F is implemented, and half of its gate is met
+
+**The status block above says four things about the tree, and all four are now false.** It
+says `cite_skills::gripper_is_holding` is untouched, that
+`tools/cite_tools/validate/physical.py` is untouched, that no threshold, ceiling or tolerance
+moves, and that no test is added or removed — and concludes *"the defect is still live."*
+**Option F was implemented and merged on `main` on 2026-09-01, about nine hours after that
+block was committed and on the same day.** The sentences are left standing with this pointer
+rather than edited in place, in the shape the 2026-09-01 correction above uses: a record that
+rewrites its own history cannot be argued with.
+
+**This section moves no status and closes nothing.** ADR-0052 was `Accepted` on the owner's
+choice of F before any code existed and is `Accepted` after it; the implementation landing is
+not a promotion. §B.3 below is why the defect may not be written up as closed.
+
+### B.1 What landed
+
+Five commits, all on `main`, each verified an ancestor of `main` at `51195e0` with
+`git merge-base --is-ancestor <sha> main`. Line counts from `git show --numstat`.
+
+| commit | what it does |
+|---|---|
+| `53f1d58` | declares `stall_band_narrow_m` and `stall_band_wide_m` on the L0 end-effector type, adds `cite_tools/model/workpieces.py` as §A.7's one accessor, and rewrites 205 lines of `validate/physical.py` around two new **ERROR** rules |
+| `7a3e4d3` | carries the band and the work-piece interval into the generated bring-up plan; `MODEL_HASH` moves with them |
+| `3f6fe6f` | replaces the predicate — `gripper_is_holding` takes a `WorkpieceWidths` argument and `report.commanded_width_m` leaves the decision — and closes the caller door in `resolve_grasp_width` |
+| `f14d189` | the tests: `tools/tests/test_stall_band.py` (715 lines), `cite_bringup/test/test_grasp_predicate_launch.py` (539) and 113 more in `cite_bringup/test/test_plan.py` |
+| `d3eeac4` | follows the new band rule into the collision-range fixtures |
+
+**Each of the four false clauses, against what is on disk at `51195e0`:**
+
+- **The predicate.** `workspace/src/cite_skills/src/gripper.cpp:142-161` is
+  `stalled ∧ ¬reached_goal ∧ narrowest − stall_band_narrow < w_reached < widest + stall_band_wide`,
+  with a comment on the line where the command used to be read saying it is *"deliberately not
+  read"*. On the shipped model — one declared part at 50.0 mm, both band edges 2.385 mm — the
+  window is **[47.615, 52.385] mm**.
+- **The validator.** Two rules that did not exist:
+  `workpiece-width-unstated-for-a-grasping-facility`
+  (`_the_predicate_has_a_part_to_judge_against`, `physical.py:672-739`) and
+  `stall-band-admits-a-stall-on-nothing` (`_stall_band_still_discriminates`,
+  `physical.py:742-810`), both `error(...)`.
+- **The thresholds.** Two were **declared where none existed**, both `0.002385` — the midpoint
+  of §A.6's (1.891, 2.879] mm interval, with that derivation and the word `PROVISIONAL` written
+  into the L0 comment beside them, which is the form §A.6 asked for.
+- **The tests.** **1,764 added lines across five test files**, against 64 removed.
+
+### B.2 §A.10 item 1 — the re-analysis gate — is MET, and it is met as tests rather than as prose
+
+The gate has two clauses, and both are held by code that runs rather than by a paragraph:
+`tools/tests/test_stall_band.py::TestTheReanalysisGate` evaluates the shipped closed forms on
+the 2026-09-01 campaign's committed raw, and `stall-band-admits-a-stall-on-nothing` holds the
+structural form of clause (b) for states no trial visited. The four cases in that class passed
+in this checkout on 2026-09-02 (`.venv/bin/python -m pytest tools/tests/test_stall_band.py -q`,
+22 passed).
+
+**Clause (a) — every valid FN trial admitted.** Extended here beyond the test's scope to both
+grasp campaigns' committed raw: **72 of 72** contact-witnessed real-grasp trials are admitted by
+F, 32 from `2026-09-01-grasp-discrimination/` and 40 from `2026-09-02-option-f-regions/`
+(arms C and D). The **minimum margin to the window's narrow edge is 0.4938 mm**, at the
+2026-09-01 campaign's narrowest stall of 48.109 mm. The 40 are computed here and are not in any
+test; the 32 are what `test_every_valid_false_negative_trial_is_admitted` asserts.
+
+**Clause (b) — F's admitting set at the shipped default command is a subset of the superseded
+predicate's.** It holds, two ways. Per-trial, over the 34 valid FP trials at the shipped
+**45.0 mm** default (`default_grasp_width_m: 0.045`): F admits **9**, the superseded predicate
+admits **18**, and the 9 are a subset of the 18. Structurally, a 1 µm sweep across the open
+window — 4,768 sample points — finds **no** width that F admits and the superseded predicate
+rejects.
+
+**The scoping to 45.0 mm is the whole of the guarantee and not a formality.** The subset
+property is a property *of the command*, and it breaks at a commanded **45.4962 mm** — computed
+by bisection over the sweep, and identically in closed form as the narrow edge less twice the
+linkage tolerance there, `47.6150 − 2.1188` mm. That is **0.4962 mm** of headroom above the
+shipped default; in width terms the narrow edge stands **0.5150 mm** above the widest FP trial
+the superseded predicate rejects, and 0.4935 mm above the 47.1215 mm flip point §A.6 records.
+**§A.6's own sentence *"so that F cannot introduce a false positive today's predicate would not
+also have produced"* reads unconditional and is true only at the default command.** Read it
+with §A.10 item 1's own scoping clause, which does say *"at the shipped default command"*.
+
+**Arm B's 9-of-9 disagreement does not violate clause (b).** Those trials are commanded to
+**56.0 mm**, far above 45.4962 mm, so the subset property makes no promise there. The same
+disagreement is measured again at a commanded **48.0 mm** through the `Grasp` door — arm D, 8
+of 8, `holding_F` true and `holding_S` false with contact witnessed on every trial — and there
+it recovers real grasps, which is §A.8's predicted recovery rather than a false positive.
+**Above 45.4962 mm the two predicates simply disagree, and which of them is right is decided by
+whether a part is in the jaws, not by the arithmetic.**
+
+### B.3 §A.10 item 2 is NOT met, and the campaign that ran it says so about itself
+
+[`docs/measurements/2026-09-02-option-f-regions/`](../measurements/2026-09-02-option-f-regions/ANALYSIS.md)
+— thresholds registered before the first trial at a stated `criteria.md` hash, machine named,
+measured on the **implemented** predicate at `d3eeac4` — is the campaign item 2 asks for. **Its
+second bullet is not met.** The gate asks for the false-positive flip bracketed to at least
+**0.05 mm**; that arm's stop grid is **2.00 mm** and locates the flip only to (46.00, 48.00] mm
+at the narrow side. The campaign states this of itself in its §2.2 and again in its §9.
+
+**The wide edge is still unexercised.** The campaign reported the distance item 2's third
+bullet asks for, and its pre-registered refusal rule W fired on it: no trial came within its
+minimum interesting size of that edge, so it **has not tested** it and its silence there may not
+be read as a pass. **§A.9.5 is unchanged and `stall_band_wide_m` is no better evidenced than it
+was.** Item 2's figures are that campaign's and are cited rather than copied (P1).
+
+**So "implemented" is not "the gate cleared", and item 5 stands unchanged**: no green CI run and
+no passing `continuous_line` promotes this.
+
+### B.4 The region F opens is measured, and this record does not decide it
+
+F drops the monotonicity term `reached_width > commanded_width` by design (§A.3). The
+2026-09-02 campaign **REPRODUCED** what dropping it costs on its rig: a drive joint jammed
+part-way through an **opening** stroke, inside the window, on jaws opening onto nothing, reports
+`holding = true` on **9 of 9** valid in-window jams, where the superseded predicate reports
+`false` on all nine — and its two controls, outside the window with identical flags, are
+rejected, so the window is what decides.
+
+**Whether that term returns is an open project-owner decision.** The campaign registered before
+its first trial that it does not take it (`criteria.md` §0, its §10), and neither does this
+amendment: nothing here recommends an answer. **It is not evidence about any physical gripper**
+— there is no `GripperActionController` on the hardware path — and it is not evidence about
+where a real jam stops, which is §A.9.2 and is unchanged.
+
+### B.5 What is still owed
+
+- **Item 2's flip bullet**, at 0.05 mm rather than 2.00 mm (§B.3).
+- **The wide edge**, which nothing has exercised (§A.9.5).
+- **The mechanism behind the shortfall** — why the drive joint reads narrower than the part it
+  holds — which §A.9.3 names and F's narrow edge covers without explaining.
+- **The band itself is provisional.** §A.10's campaign is what sets it, and it has not.
+
+### B.6 How this amendment's own claims were verified
+
+Checked on **2026-09-02** against this checkout at `51195e0`. Figures marked *computed here* are
+derived from the two campaigns' committed raw through the shipped closed forms, built from the
+L0 declaration rather than from constants written here; neither campaign published them.
+
+| Claim | How | Result |
+|---|---|---|
+| The five commits are on `main` and do what §B.1 says | `git merge-base --is-ancestor <sha> main` for each; `git show --numstat --format=` over all five | All five ancestors. Line counts as tabulated; test files **+1,764 / −64** |
+| `gripper_is_holding` no longer reads the command | Read `gripper.cpp:142-161` in full | Exact. Flags, then a strict window around the declared interval; the comment names the omission |
+| Two new ERROR rules | `grep -n` for both rule ids in `validate/physical.py`, read each call site | `physical.py:672-739` and `:742-810`, both `error(...)` |
+| Two thresholds declared, with provenance in L0 | Read `model/assets/types/end_effectors/xarm_parallel_gripper.yaml:336-370` | `0.002385` twice, marked `PROVISIONAL`, citing §A.6's interval. `(1.891 + 2.879) / 2 = 2.385` |
+| The band and the interval reach L3 through the plan | `grep -n` on `cite_generated/bringup/cell_a_plan.yaml` | `narrowest_width_m` / `widest_width_m` once per zone; `gripper_stall_band_*` once per arm, three arms |
+| The window is [47.615, 52.385] mm | Evaluated from the loaded L0 model | **Computed here.** One declared part at 50.0 mm, 2.385 mm each side |
+| 72 of 72 contact-witnessed grasps admitted, minimum margin 0.4938 mm | Both campaigns' raw: 2026-09-01 `FN_B*_trials.json` filtered `ok ∧ finger_contact_points_max > 0`; 2026-09-02 `C_B*`, `D_B*` on the same filter with `i3_q_at_stall_rad` present. Widths through the shipped `gripper_width_for` closed form | **Computed here.** 32 + 40 = 72, all admitted. Minimum margin **0.493818 mm**, at 48.1088 mm |
+| Subset at 45.0 mm, per-trial | 34 valid FP trials at the default command, both predicates evaluated on `reached_position_rad` | **Computed here.** F 9, superseded 18, subset holds |
+| Subset at 45.0 mm, structurally | 1 µm sweep across the open window, 4,768 points | **Computed here.** 0 widths admitted by F and rejected by the superseded predicate |
+| The subset property breaks at 45.4962 mm | Bisection on the commanded width over the same sweep, and the closed form `w_narrow − 2·tolerance(q(w_narrow))` | **Computed here.** Both give **45.496215 mm**. At 48.0 mm the sweep already disagrees over half the window |
+| Arm B is at 56.0 mm and is 9 of 9 | Read `raw/B_trials.json`: in-window jams (48/50/52 mm) with a record | 9 of 9 `holding_F` true, 0 `holding_S` true. One attempted trial produced no data and is the campaign's §2.3 |
+| Arm D's 48.0 mm door is 8 of 8 | Read `raw/D_B1_trials.json` and `D_B2_trials.json`, `condition == grasp48` | 8 of 8, `holding_F` true, `holding_S` false, contact witnessed on each |
+| Item 2's flip bullet is unmet | Read the campaign's §2.2 and §9 | Stated there in its own words: grid 2.00 mm, gate 0.05 mm, *"that bullet of the gate is not met here"* |
+| The four host-side gate tests pass | `.venv/bin/python -m pytest tools/tests/test_stall_band.py -q` | 22 passed |
+| That the C++ and launch halves pass | **Not run here.** `workspace/build` and `workspace/install` are empty in this checkout, so `test_gripper.cpp` and `test_grasp_predicate_launch.py` were **read and not executed** | **Unverified.** `./scripts/build && ./scripts/test` is what would settle it |
+| That F is right | **Not verified, and item 2 is what would move it.** No run of the cell has produced this defect and reported it | **Unverified** |
 
 ## Context
 
