@@ -1,0 +1,10 @@
+pick frame at (-0.475, 0.0, 0.6); grasp z in that frame 11.42 mm
+[1/8] yaw=0.0 deg stall_yaw=-0.2717184627839586 w_reached(I1)=0.04870624526926376 holding_F=True d_wide=0.0036787547307362417 (26.4s)
+[2/8] yaw=1.5 deg stall_yaw=-0.003094176503290499 w_reached(I1)=0.049075720622193904 holding_F=True d_wide=0.003309279377806097 (28.1s)
+[3/8] yaw=3.0 deg stall_yaw=-0.030773295979667065 w_reached(I1)=0.04990368059257882 holding_F=True d_wide=0.002481319407421183 (26.5s)
+[4/8] yaw=4.5 deg stall_yaw=4.732149757448682e-07 w_reached(I1)=0.04981683808248451 holding_F=True d_wide=0.0025681619175154935 (25.8s)
+[5/8] yaw=6.0 deg stall_yaw=0.0045881615771491266 w_reached(I1)=0.04970384368973652 holding_F=True d_wide=0.0026811563102634786 (25.5s)
+[6/8] yaw=8.0 deg stall_yaw=-0.3274918840259832 w_reached(I1)=0.04821237181268206 holding_F=True d_wide=0.0041726281873179435 (25.9s)
+[7/8] yaw=10.0 deg stall_yaw=4.370590312804509e-05 w_reached(I1)=0.049527747348465635 holding_F=True d_wide=0.0028572526515343658 (25.6s)
+[8/8] yaw=12.0 deg stall_yaw=0.144839884525642 w_reached(I1)=0.049887040063885946 holding_F=True d_wide=0.0024979599361140553 (25.4s)
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/harness/../raw/C_B2_trials.json: 8 trials

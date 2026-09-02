@@ -1,0 +1,48 @@
+
+Host
+  ✓ operating system                   Darwin 25.5.0 (arm64)
+  ✓ context                            host machine
+
+Toolchain
+  ✓ git                                2.50.1
+  ✓ python3                            3.14.0
+  ✓ docker                             28.5.1 — daemon running
+
+ROS 2 / Gazebo
+  - ros 2                              not available on macOS — expected; build runs in the container
+
+DDS
+  ✓ ROS_DOMAIN_ID                      99 (derived from this checkout; the plant's — a counterpart's is resolved from the plan, base 99)
+  ✓ RMW implementation                 rmw_fastrtps_cpp (default)
+
+Container isolation
+  ✓ compose project                    cite-digital-twin-3748020299 (derived from this checkout)
+  ✓ shared volumes                     none
+
+Host tooling
+  ✓ virtualenv                         /Users/mustafacil/Developer/Digital-Twin/.venv
+  ✓ cite_tools                         /Users/mustafacil/Developer/Digital-Twin/tools/cite_tools
+  ✓ shellcheck                         0.11.0 (pinned in requirements/dev.txt)
+
+Repository
+  ✓ CLAUDE.md                          
+  ✓ charter                            
+  ✓ vcs manifest                       
+  ✓ L0 facility model                  present
+  ✓ workspace/src                      23 package(s)
+
+Documentation
+  ✓ ADR index                          52 records, all indexed
+  ✓ ADR references                     all resolve
+  ✓ status markers                     every design document declares one
+
+Reproducibility
+  ✓ manifest pinning                   all entries pinned to a 40-character SHA
+  ✓ patch 01-xarm_ros2-gripper-mimic-joints.patch present in workspace/src/external/xarm_ros2
+  ✓ patch 02-xarm_ros2-gripper-drive-rate-parameter.patch present in workspace/src/external/xarm_ros2
+  ✓ patch 03-xarm_ros2-collision-mesh-root.patch present in workspace/src/external/xarm_ros2
+  ✓ submodules                         none
+
+Summary
+  25 passed, 0 failed, 1 skipped
+  ok Environment healthy for the current phase
