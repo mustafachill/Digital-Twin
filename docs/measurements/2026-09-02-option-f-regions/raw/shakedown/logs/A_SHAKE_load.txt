@@ -1,0 +1,6 @@
+== A_SHAKE ==
+ 04:46:50 up  9:46,  0 user,  load average: 2.06, 2.94, 2.89
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3261        2124         179        2828        4575
+overlay         453G   31G  399G   8% /

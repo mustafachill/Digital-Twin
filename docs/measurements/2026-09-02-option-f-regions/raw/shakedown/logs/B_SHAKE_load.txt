@@ -1,0 +1,6 @@
+== Arm B, label B_SHAKE ==
+ 04:43:19 up  9:42,  0 user,  load average: 3.22, 3.62, 3.03
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3200        2188         179        2826        4636
+overlay         453G   31G  399G   8% /

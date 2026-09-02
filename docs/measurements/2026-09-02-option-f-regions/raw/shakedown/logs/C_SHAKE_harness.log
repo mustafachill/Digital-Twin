@@ -1,0 +1,4 @@
+pick frame at (-0.475, 0.0, 0.6); grasp z in that frame 11.42 mm
+[1/2] yaw=0.0 deg stall_yaw=-0.007326524512922429 w_reached=0.04986293531709177 holding_F=True d_wide=0.0025220646829082344 (27.2s)
+[2/2] yaw=12.0 deg stall_yaw=-0.13783533267801823 w_reached=0.04881115114910299 holding_F=True d_wide=0.00357384885089701 (28.1s)
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/raw/shakedown/C_SHAKE_trials.json: 2 trials
