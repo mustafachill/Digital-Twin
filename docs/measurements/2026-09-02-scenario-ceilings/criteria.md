@@ -6,6 +6,18 @@ Any interpretation that had to change afterwards is recorded as a numbered devia
 `ANALYSIS.md`, applied to data already collected — never by re-running until the definition
 suited.
 
+> **AMENDED on 2026-09-02, still before the first trial and still before the harness existed.**
+> An adversarial pre-freeze review found eleven gaps in the decision procedure — a rule named
+> and never defined, a validity rule watching the wrong paths, a false statement about an
+> instrument, a reporting rule that does not hold for partial failures, a presence check blind
+> to partial loss, a snapshot taken at one end of a run, an unbranched crossing rule, four
+> rule-letter collisions, an incomplete declaration of pre-campaign runs, a run order that
+> contradicted its own totals, and an unpinned environment variable. **No threshold, band,
+> effect size or sample-size figure was changed by the amendment**; every change closes a gap in
+> how a decision is made, and each is marked in place with what the earlier draft said. **After
+> the first trial these would have been permanent**: rule 1 requires a wrong rule to be applied
+> literally and recorded as wrong, never corrected. The freeze binds from the amending commit.
+
 - **Date opened:** 2026-09-02
 - **Branch under measurement:** `feat/close-phase-debts`
 - **BASE_COMMIT:** **`c38a42c`**. Every figure below is a property of the tree at that commit.
@@ -48,15 +60,27 @@ suited.
 - **Changing a ceiling is a separate decision and is the project owner's.** This document is
   written before any number exists precisely so that no number produced by it can be read as an
   argument for a particular new value.
-- **Nothing in `model/`, `workspace/src/` or `tools/` is edited.** The scenarios are measured
-  exactly as the tree at `c38a42c` ships them. This is not only a discipline: V1 discards any
-  block taken while one of those three paths differs from `c38a42c`, so an edit does not
-  contaminate the data — it destroys it.
+- **Nothing in `model/`, `workspace/src/`, `tools/`, `tests/` or `scripts/` is edited.** The
+  scenarios are measured exactly as the tree at `c38a42c` ships them. **`tests/` and `scripts/`
+  are on that list because everything this campaign measures lives there**: all nine
+  `*_CEILING_S` declarations and every `_emit_timing` definition and call site are under
+  `tests/scenarios/` (`grep -n "CEILING_S = " tests/scenarios/*.py` and
+  `grep -rn _emit_timing tests/ scripts/ workspace/src/ tools/`, this checkout, 2026-09-02, which
+  reaches `tests/scenarios/` and nothing else), `scripts/scenario` holds the four verdict strings
+  I2 reads, and `scripts/_lib.sh` holds the `cite_project_name` §4.4 derives the container name
+  from. An earlier draft watched three paths, under which **editing a ceiling value, a `what`
+  string or a spin quantum mid-campaign would have left `v1_clean` true**. This is not only a
+  discipline: V1 discards any block taken while one of those five paths differs from `c38a42c`,
+  so an edit does not contaminate the data — it destroys it. It costs nothing to watch the two
+  extra paths: `git diff --stat c38a42c..HEAD -- tests/ scripts/` is empty, read on 2026-09-02.
 - **The harness lives entirely under `harness/` in this directory**, and `raw/` beside it.
 - **The frozen harness of 2026-08-29 is copied, never edited in place.** Its CPU-limit scripts
-  are the starting point for the loaded condition (§4.4). Every copied file carries an
-  attribution naming the source file and the commit it was copied at, and the original directory
-  is left untouched ([`../README.md`](../README.md), rule 2).
+  are the starting point for the loaded condition (§4.4). Leaving the original directory
+  untouched is [`../README.md`](../README.md)'s second rule — *"`harness/` is frozen for the same
+  reason, and `raw/` with it"*. **The per-file attribution header naming the source file and the
+  commit it was copied at is this campaign's own practice and the README does not require it**;
+  it is stated here so that a reader of `harness/` can tell a copied file from an original
+  without diffing two directories.
 - **This campaign proposes no replacement value for any ceiling.** Where a ceiling reads TOO
   LOOSE, the campaign says so and stops. Where it reads TOO TIGHT, the campaign says so and
   stops.
@@ -82,7 +106,7 @@ world and hull collision geometry selected. **Is any ceiling, on the configurati
 repository actually ships, outside the APPROPRIATE band?**
 
 **Q-D — does the instrument mean what a parser will assume it means?** Ten structural threats to
-the record are registered in §4.2 and an eleventh in §4.3. **How many records does a run emit,
+the record are registered in §4.2 and two more in §4.3. **How many records does a run emit,
 how many are non-measurements, how many are mangled, and does any record disagree with its own
 ceiling?** This is reported as a first-class result, not as a footnote, because a margin computed
 off the wrong quantity is worse than no margin.
@@ -174,6 +198,14 @@ M = ceiling / the SLOWEST measured instance of the interval it bounds
 | `1.5 <= M <= 10` | **APPROPRIATE.** Catches a hang, tolerates a slow run |
 | `M > 10` | **TOO LOOSE.** A regression an order of magnitude in size would still pass. A ceiling that can no longer fail is not a check |
 
+> **The symbol `M` here is the margin and is NOT a rule letter.** `Rule M` is taken, in
+> [`2026-09-01-grasp-discrimination/`](../2026-09-01-grasp-discrimination/criteria.md) §7.8 and
+> in [`2026-09-02-option-f-regions/`](../2026-09-02-option-f-regions/criteria.md) §7, where in
+> both it is the false-negative null. **This campaign defines no rule M**, and every `M` below is
+> the quantity in the box above. The reuse is declared rather than avoided because `M` is the
+> inherited campaign's own symbol for the margin (§2.2) and renaming it would break the
+> inheritance this section exists to state.
+
 **The slowest, not the median, and not a percentile.** That is the earlier campaign's choice and
 it is kept. The median, IQR and n are reported beside every margin so a reader can see how much
 of the answer rests on one trial, but **the verdict is computed from the slowest valid instance**
@@ -200,7 +232,8 @@ contract asserted by `tests/scenarios/guards/test_timing_records.py`:
 
 > **The interval key is `(scenario, what)`, and the ceiling is read from `ceiling_s` and never
 > inferred from `what`.** This is not a stylistic preference. **`a transform from cite_world to
-> {frame}` is emitted by all three scenarios under three different ceilings** — 30.0 s in
+> {frame}` is emitted by all three scenarios under three different ceiling DECLARATIONS, which by
+> this file's own names-not-declarations rule (§2.1) are two names carrying two values** — 30.0 s in
 > `bringup` (`DELIVERY_CEILING_S`), 300.0 s in `pick_and_place` and 300.0 s in `continuous_line`
 > (`BRING_UP_CEILING_S`, and `continuous_line.root_frame` is `cite_world`, so the strings are
 > identical, not merely similar). A parser keying on `what` alone pools three intervals under one
@@ -219,7 +252,7 @@ contract asserted by `tests/scenarios/guards/test_timing_records.py`:
 
 | condition | what it is | why |
 |---|---|---|
-| **FULL** | the container unconstrained: 16 cores as `nproc` reports inside it | Q-A and Q-C. The margin on the machine as it is |
+| **FULL** | the container unconstrained: `/sys/fs/cgroup/cpu.max` reads `max 100000` inside it, on a 16-core host | Q-A and Q-C. The margin on the machine as it is |
 | **C4** | `docker update --cpus 4` applied to the running container | Q-B, the first step down |
 | **C2** | `--cpus 2` | Q-B |
 | **C1** | `--cpus 1` | Q-B. The allocation the recorded 0.14 real-time factor holds at, per the 2026-08-29 campaign |
@@ -227,8 +260,12 @@ contract asserted by `tests/scenarios/guards/test_timing_records.py`:
 Each condition is run against each of the three scenarios: `bringup`, `pick_and_place`,
 `continuous_line`.
 
-> **Rule T — INHERITED from [`2026-09-02-option-f-regions/`](../2026-09-02-option-f-regions/criteria.md)
-> §3, where it reads "the arms are not each other's evidence".** Here: **a condition is not
+> **Rule T — INHERITED. It is first stated in
+> [`2026-09-01-grasp-discrimination/`](../2026-09-01-grasp-discrimination/criteria.md) §7.8 —
+> *"the arms are not each other's evidence"* — and carried in the same words into
+> [`2026-09-02-option-f-regions/`](../2026-09-02-option-f-regions/criteria.md) §3.** An earlier
+> draft credited the second of those and not the first; the letter and the wording are the
+> grasp-discrimination campaign's. Here: **a condition is not
 > another condition's evidence, and a scenario is not another scenario's.** A margin measured at
 > FULL says nothing about C1; a `bringup` margin says nothing about the identically named
 > `BRING_UP_CEILING_S` in `pick_and_place`, which is a different constant with a different value
@@ -252,11 +289,11 @@ Each condition is run against each of the three scenarios: `bringup`, `pick_and_
 | **I1** | the duration of every waited-for interval | the `CITE_TIMING` record, extracted from a captured console with the regex **`CITE_TIMING (\{.*\})`** and `json.loads` on group 1. **Never a fixed slice after `startswith`** — see threat 6 |
 | **I2** | whether the run's scenario passed | `scripts/scenario`'s own verdict line, `Scenario '<name>' passed` / `passed its cycle assertions` / `failed — …`. **Never the process exit code alone, and never a CI step conclusion** |
 | **I3** | the console itself | the campaign's own redirection. `./scripts/scenario <name> 2>&1 \| tee raw/<label>.log`. **Nothing in the repository persists these records** — threat 7 |
-| **I4** | the CPU allocation that was actually in force | `docker inspect` on the running container, read **after** the limit is applied and again at the end of the run, plus `nproc` from inside it. Recorded per run |
+| **I4** | the CPU allocation that was actually in force | **`/sys/fs/cgroup/cpu.max`, read from inside the running container**, and `docker inspect --format '{{.HostConfig.NanoCpus}}'` from outside it — both read **after** the limit is applied and again at the end of the run. Recorded per run. **Not `nproc` and not `.HostConfig.CpuQuota`: neither moves when the limit does** — §9 |
 | **I5** | the host's load | `/proc/loadavg` and `uptime`, taken before and after every run. **On this host a container's reading is the host's** — §9 |
-| **I6** | the code that ran | `git rev-parse HEAD`, `git status --porcelain`, and `git diff c38a42c..HEAD -- model/ workspace/src/ tools/`, all taken at the start of every run. V1 |
+| **I6** | the code that ran | `git rev-parse HEAD`, `git status --porcelain`, and `git diff c38a42c..HEAD -- model/ workspace/src/ tools/ tests/ scripts/`, **taken at the START of every run and again at its END**, like I5 and I4. A run lasts minutes and an edit landing inside one would be invisible to a single snapshot. V1 |
 | **I7** | the configuration that ran | the collision selection in the running cell's description and `<real_time_factor>` in the world it loaded, read back from the running cell rather than from the tree. V2 |
-| **I8** | that the expected records exist | a **manifest** of `(scenario, what-pattern, ceiling_s)` triples, written into `harness/expected.py` **before the first trial** from the inventory in §2.1. A triple with no record is reported as an **absent expected key**, never as a zero — threat 10, rule E |
+| **I8** | that the expected records exist, **and how many of each** | a **manifest** of `(scenario, what-pattern, ceiling_s, expected_count)` quadruples, written into `harness/expected.py` **before the first trial** from the inventory in §2.1 and from the emitters' own loops. A triple with no record is reported as an **absent expected key**, never as a zero; a triple with **fewer records than its expected count** is reported as `k of n present` — threat 10, threat 12, rule E |
 
 ### 4.2 The ten threats to the instrument, registered as findings of an adversarial review of it
 
@@ -296,10 +333,18 @@ computes a margin off the wrong quantity.
    after the thing arrives, so the overshoot is bounded by one loop iteration: about **0.5 s**
    where the predicate returns immediately (every `DELIVERY_CEILING_S` wait, and the
    `continuous_line` waits), about **1.0 s** where the predicate itself blocks for 0.5 s
-   (`bringup`'s four `wait_for_service`/`wait_for_server` bring-up waits), and about **1.5 s** at
-   the one `pick_and_place` site whose predicate blocks for 1.0 s. **Irrelevant against 240 s;
+   (`bringup`'s four `wait_for_service`/`wait_for_server` bring-up waits), about **1.5 s** at
+   the one `pick_and_place` site whose predicate blocks for 1.0 s, and about **2.0 s** in
+   `pick_and_place._run_cycle`, whose loop spins on that file's `SAMPLE_PERIOD_S = 2.0`.
+   **That list is not exhaustive and the one it omits is the largest**: the `active` predicate in
+   `bringup.test_every_controller_reaches_active` calls
+   `rclpy.spin_until_future_complete(..., timeout_sec=10.0)` (`bringup.py:291`), so the
+   `{arm}'s controllers to be active` wait overshoots by up to about **10.5 s**. Rule A drops
+   that wait for an unrelated reason, so no margin in this campaign carries it — **which is why
+   it is named here rather than left to look like an omission.** **Irrelevant against 240 s;
    material against `DELIVERY_CEILING_S = 30.0`**, where a true interval of a fraction of a second
-   measured half a second late shifts a derived margin by more than 3x. **Rule Q.**
+   measured half a second late shifts a derived margin by more than 3x. **Rule Q, §7.1**, which
+   is where the decision this threat needs is written down.
 6. **`print` writes payload and newline in two calls.** CPython's `print` issues
    `file.write(payload)` then `file.write(end)` — verified on 2026-09-02 against a recording
    text stream, which observed exactly two writes. The emitting test runs on a thread that shares
@@ -325,12 +370,23 @@ computes a margin off the wrong quantity.
     (`grep -rl` over the three trees, 2026-09-02). **A silently missing record must be detected as
     an absent expected key and never read as a zero.** **Rule E**, against I8's manifest.
 
-### 4.3 An eleventh, found while writing this file
+### 4.3 Two more, found while writing this file
 
 11. **The same `what` string is emitted by three scenarios under two different ceilings.** §2.3.
     Registered here because it was not in the review that produced the ten above, and because it
     is the one that silently produces a plausible wrong number rather than an obviously missing
     one.
+12. **One `what` PATTERN stands for many records, so partial loss is invisible to a presence
+    check.** `piece {n}: {milestone}` covers `WORKPIECES x len(milestones(topology))` records —
+    **3 x 10 = 30** at full completion, with `WORKPIECES` defaulting to 3
+    (`continuous_line.py:100`) and the generated `cell_a_flow.yaml` ladder computing to ten
+    milestones, both read on 2026-09-02. **One surviving leg satisfies the pattern**, so a
+    presence-only check reports nothing absent and V4 counts the triple present, while a
+    `LEG_CEILING_S` margin could rest on 2 of 30 legs with no rule saying so. The same shape
+    holds for `a message on {topic}`, `{manager} to appear` and `{arm}'s controllers to be
+    active`, each of which is emitted once per arm or per topic. **The count is computable before
+    any trial** — from `WORKPIECES`, from the generated topology and from the loops themselves —
+    so I8's manifest carries it and rule E reports `k of n`.
 
 ### 4.4 The loaded condition's instrument, and its attribution
 
@@ -367,6 +423,7 @@ Held fixed unless named:
 | Cell | `cell_a`, three arms, headless | the scenarios' own launch |
 | Pairing | **none.** `./scripts/sim --pair` is not used and the model declares `sides: single` | §8 |
 | Concurrency | **one cell at a time.** No second scenario, no build, no other agent's container | V5, V10 |
+| `CITE_LINE_WORKPIECES` | **unset, so `continuous_line` runs the default 3** — and **the value in force is read from the environment and recorded per run**, never assumed from this row | `continuous_line.py:100` reads it from the environment, and `scripts/_lib.sh:1011-1014` forwards **every** `CITE_`-prefixed host variable into the container, so a value set in an unrelated shell would silently change the leg count, the expected record count of threat 12 and the run duration |
 | `CITE_PHYSICS_SEED` | whatever `./scripts/scenario` exports, recorded per run | a condition, not a reproducibility claim |
 | Container image | `cite-digital-twin:dev`, one image for the whole campaign, its ID recorded | §9 |
 
@@ -394,10 +451,23 @@ it reached and **is never topped up** (V8). A condition that cannot be reached a
 cell failing to come up at 1 CPU, say — is reported as **not measured** for that cell, and rule
 D3 governs every ceiling it would have carried.
 
-**Order.** FULL first for all three scenarios, then the loaded conditions interleaved
-FULL / C4 / C2 / C1 / FULL / … so that at least one FULL run is taken late. Rationale: FULL is
-the condition Q-A and Q-C rest on, it is the cheapest, and taking FULL runs at both ends of the
-campaign is what makes a host drift visible.
+**Order, with the FULL allocation split explicitly, because an earlier draft's order could not
+be executed against its own totals.** The table allocates **12** FULL runs; "FULL first for all
+three scenarios, then interleave FULL / C4 / C2 / C1 / FULL / …" spends all twelve before the
+interleaving starts and leaves none for it. The split is therefore fixed here, in advance:
+
+- **Opening block — one FULL run of each scenario, 3 runs.** Enough to show the harness parses a
+  record from each scenario at the condition Q-A and Q-C rest on.
+- **Interleaved body — the remaining 7 FULL runs and all 16 loaded runs**, cycling
+  FULL / C4 / C2 / C1 and taking the scenarios in rotation, so that no condition is taken in one
+  consecutive block.
+- **Closing block — the last 2 FULL runs are taken last**, whichever scenarios they fall to.
+  **3 + 7 + 2 = 12, which is the FULL total in the table above**, and 12 + 16 = 28, the minimum.
+
+**FULL runs therefore appear at both ends and throughout, which is what makes a host drift over
+the campaign's duration visible as scatter within a condition rather than as a difference between
+conditions.** If a run aborts, the schedule is **not** re-planned to restore the shape: V8 governs
+and the campaign reports the n it reached.
 
 **A 60 s quiesce between a teardown and the next bring-up**, and a check for surviving `gz sim`
 processes; a run that finds a survivor from its predecessor is **discarded, not adjusted** (V5,
@@ -448,13 +518,52 @@ Stated as pass/fail *before* the numbers. Applied literally, including where inc
 > count exceeds 5 % of its `CITE_TIMING` lines is discarded and reported**, because at that point
 > the campaign does not know what it is missing.
 
-> **Rule E — an expected record that never appeared is ABSENT, not zero.** Against I8's manifest,
-> every (scenario, what-pattern, ceiling_s) triple that a run should have emitted and did not is
-> reported as absent, per run, with no value imputed. **A ceiling all of whose expected records
-> are absent across every valid run is reported as not assessed under D3.**
+> **Rule E — an expected record that never appeared is ABSENT, not zero, and a PATTERN is
+> reported `k of n`.** Against I8's manifest, every (scenario, what-pattern, ceiling_s) triple
+> that a run should have emitted and did not is reported as absent, per run, with no value
+> imputed. **A presence check is not enough, because one pattern stands for many records**
+> (threat 12): `piece {n}: {milestone}` covers 30 records at full completion and one surviving
+> leg satisfies it. So every triple is reported as **`k of n` present**, `n` being the manifest's
+> expected count, and **every margin computed from a pattern carries the `k of n` of the records
+> it was computed from, in the same table cell as the margin.** A margin resting on a fraction of
+> its expected records is not wrong, but it is a different claim from one resting on all of them,
+> and the reader is not asked to work out which they are looking at. **A ceiling all of whose
+> expected records are absent across every valid run is reported as not assessed under D3.**
 
 > **Rule P — a trial whose console was not captured produced nothing.** Not a short table: no
 > data. It is not reconstructed from the junit report, which carries no stdout.
+
+> **Rule Q — every margin is reported TWICE, and one that changes band between the two readings
+> is INCONCLUSIVE.** Poll quantisation biases `elapsed_s` up by at most one loop iteration
+> (threat 5), and the bound is a property of the emitting site rather than of the run. So each
+> margin is computed from the measured maximum **and** from `max - q`, where `q` is that site's
+> quantum, read from the emitters at `c38a42c`:
+>
+> | emitting site | `q` |
+> |---|---|
+> | any `_spin_until` or `_await_future` wait whose predicate returns immediately | **0.5 s** |
+> | `bringup`'s four `wait_for_service` / `wait_for_server` waits, predicate blocking 0.5 s | **1.0 s** |
+> | `pick_and_place`'s skill-server wait, predicate blocking 1.0 s | **1.5 s** |
+> | `continuous_line`'s leg loop, spinning on that file's `SAMPLE_PERIOD_S = 0.5` | **0.5 s** |
+> | `pick_and_place._run_cycle`, spinning on that file's `SAMPLE_PERIOD_S = 2.0` | **2.0 s** |
+> | `bringup`'s `{arm}'s controllers to be active` wait, predicate blocking 10.0 s | **10.5 s** — dropped by rule A, so it reaches no margin |
+>
+> `ceiling / max` is a **lower bound** on the true margin and `ceiling / (max - q)` is an **upper
+> bound** on it; the true margin lies between them. **Both are printed for every cell, beside
+> each other, and the band is stated for each.** If the two land in different bands, that cell's
+> verdict is **INCONCLUSIVE — the poll quantum spans a band edge**, and both readings and both
+> bands are published rather than one being chosen. If `max - q <= 0`, the cell is INCONCLUSIVE
+> for the same reason and no upper bound is printed.
+> **`q` is subtracted from the maximum only, never from a median or an IQR**, because the margin
+> is defined on the maximum and the corrected reading is an upper bound on the margin rather than
+> a corrected distribution.
+> **This is where it bites.** Against `BRING_UP_CEILING_S = 240.0` a 0.5 s quantum moves nothing.
+> Against **`DELIVERY_CEILING_S = 30.0`** — one of the two ceilings this campaign exists to
+> assess, and the one **PR2** predicts TOO LOOSE — a true interval of a fraction of a second
+> measured half a second late shifts the derived margin by more than 3x, so the headline verdict
+> for that ceiling is exactly the one the quantum can move. **Registering Q as a name without a
+> decision, which an earlier draft did, would have left that verdict with a quantified bias and
+> no rule governing it.**
 
 > **Rule K — a record with `elapsed_s > ceiling_s` is a datum about the two clocks.** It is
 > reported, with its run and its `what`, and is **excluded from the margin** for that
@@ -485,6 +594,27 @@ rules Z, A, X, K, and E, the `elapsed_s` distribution (min / median / IQR / **ma
 > it. **NOISY decorates and does not overturn the band verdict**, because the margin is defined on
 > the maximum by design and a noisy group's maximum is exactly the quantity the definition wants.
 
+**Two ceilings emit exactly ONE record per run, so a band can rest on n = 1.**
+`bringup.SKILL_CEILING_S` has a single call site, on `ARMS[0]` only
+(`bringup.py:616`), and `pick_and_place.CYCLE_CEILING_S` has one, in `_run_cycle`
+(`pick_and_place.py:617`). At the n table's smallest cells that is **one record per condition**,
+and at C1 `pick_and_place` is allocated a single run. **Every margin for those two names is
+printed with its n and with the sentence "this band rests on N record(s)"**, and where N is 1 the
+median, IQR and maximum are the same number and are printed as such rather than as a
+distribution. This is acknowledged rather than fixed: topping the cell up would violate V8, and
+the n table does not move once this file is frozen.
+
+**The cold bring-up record is reported SEPARATELY from the warm ones, for `pick_and_place` and
+`continuous_line`.** In each of those files `BRING_UP_CEILING_S` bounds one genuinely cold wait —
+`the skill server, and therefore the whole stack beneath it` and `the first LineState, and so the
+line coordinator and the stack below it` — and also the warm `a transform from cite_world to
+{frame}` waits, which run against an already-started system. **Pooling them mixes a cold
+bring-up with a warm lookup under one name**, which is the same mixture rule A treats as
+disqualifying in `bringup`. So `ANALYSIS.md` reports, for each of those two ceilings, the cold
+record's margin and the pooled warm distribution's margin **as two lines with two verdicts**, and
+**the ceiling's headline verdict is the cold one**, because the cold wait is the interval the
+ceiling was sized for. The warm line is published beside it and is never used to soften it.
+
 **Reported separately, as its own line rather than folded into a margin:** for
 `pick_and_place.SETTLE_CEILING_S`, the count of records discarded by rule Z. The scenario's own
 comment records the settle as *"observed in about a second"*, and the wait's predicate is the
@@ -496,22 +626,59 @@ entirely on zero-spin records, and if it is, D3 applies and it is not assessed.*
 Report, per (scenario, ceiling): the margin at FULL, C4, C2 and C1 side by side, each with its own
 verdict and its own n.
 
-> **B1 — the crossing.** For each ceiling, report **the lowest allocation at which its verdict is
-> still APPROPRIATE, and the highest at which it is TOO TIGHT**, as a **bracket between two
-> measured allocations**. **No margin is interpolated between allocations and none is
-> extrapolated below C1.** The 2026-08-29 campaign derived its under-load figures by scaling
-> measured intervals by a ratio of real-time factors; this campaign **measures at the allocation**
-> and therefore reports brackets rather than a continuous curve.
-> **B1 — NOT LOCATED** for a ceiling whose verdict is APPROPRIATE at every allocation tried,
-> **and that is reported as "not located between 16 and 1 CPU", never as "safe at any
-> allocation".**
+> **B1 — the crossing, with every case it can land in named in advance.** For each ceiling,
+> report **the lowest allocation at which its verdict is still APPROPRIATE, and the highest at
+> which it is TOO TIGHT**, as a **bracket between two measured allocations**. **No margin is
+> interpolated between allocations and none is extrapolated below C1.** The 2026-08-29 campaign
+> derived its under-load figures by scaling measured intervals by a ratio of real-time factors;
+> this campaign **measures at the allocation** and therefore reports brackets rather than a
+> continuous curve.
+>
+> **An earlier draft defined an output for one case and left five undefined**, including the one
+> **PR2** predicts for two ceilings. An operator meeting an undefined case after seeing the data
+> would invent a reading, which is what the freeze exists to prevent. So the branches are
+> enumerated here, and **in every one of them the four per-condition verdicts and their n are
+> printed in full**, so the reading is checkable against the data rather than taken from the
+> bracket:
+>
+> | verdict sequence over FULL, C4, C2, C1 | B1's output |
+> |---|---|
+> | APPROPRIATE throughout | **NOT LOCATED** — *"not located between 16 and 1 CPU"*, **never "safe at any allocation"** |
+> | APPROPRIATE, then TOO TIGHT at some allocation | the **bracket** between the last APPROPRIATE and the first TOO TIGHT |
+> | **TOO LOOSE throughout** | **NOT LOCATED — TOO LOOSE THROUGHOUT.** *"This ceiling was not APPROPRIATE at any allocation tried; no crossing exists to bracket."* It is **not** reported as a crossing below C1, and its TOO LOOSE verdict stands at every condition |
+> | TOO LOOSE, then APPROPRIATE lower down, **no TOO TIGHT anywhere** | **two statements, both made**: the bracket of the TOO LOOSE -> APPROPRIATE crossing, and **NOT LOCATED** for the APPROPRIATE -> TOO TIGHT one. Neither is used to summarise the other |
+> | TOO LOOSE, then APPROPRIATE, then TOO TIGHT | **both brackets**, reported as a pair |
+> | **TOO TIGHT at FULL** | **TOO TIGHT THROUGHOUT.** No APPROPRIATE allocation was found between 16 and 1 CPU, and PR1 is refuted |
+> | **non-monotone** — any sequence that is not TOO LOOSE -> APPROPRIATE -> TOO TIGHT in that order as the allocation falls | **NOT LOCATED — NON-MONOTONE.** The sequence is printed verbatim with its n per cell and **no bracket is read from it.** At n = 1-2 per cell a non-monotone sequence is within sampling variation, and this campaign does not distinguish that from a real non-monotonicity |
+> | any cell **not assessed** (D3) or **INCONCLUSIVE** (rule Q, X2, V7) | a bracket **may not span it**. The bracket is reported **open** on that side, naming the allocation that was not assessed — *"between C4 and C1, C2 not assessed"* — and rule N governs the prose |
 
 > **A timeout is a reportable outcome and is not a missing data point.** A wait that hits its
 > ceiling emits **no record**, by design — a record for a wait that timed out would measure the
-> ceiling rather than the milestone. So a ceiling that fires at some allocation produces
-> **silence** in this table, and that silence is reported as **"fired at C<n>"** from I2's verdict
-> line and the failure text, alongside a **not assessed** under D3 for the margin. **The two
-> statements are made together, and neither is used to soften the other.**
+> ceiling rather than the milestone. That silence is reported as **"fired at C<n>"** from I2's
+> verdict line and the failure text, alongside a **not assessed** under D3 for the margin. **The
+> two statements are made together, and neither is used to soften the other.**
+
+> **Rule F — a ceiling that fired in ANY contributing run is reported FIRED and receives NO
+> band.** An earlier draft said a fired ceiling produces silence in its table cell. **That is
+> true only when the ceiling fires on its first and only instance, and this campaign will meet
+> two cases where it does not**, both read from the emitters at `c38a42c`:
+>
+> - **`continuous_line._run_one_piece` emits per milestone and `break`s on the one that times
+>   out** (`continuous_line.py:1169-1176`). The earlier legs have already emitted, so their
+>   records survive a leg that fired. It asserts nothing; the verdict is taken once at the end.
+> - **`bringup._spin_until`'s assertion fails one test method and `unittest` continues.** There
+>   are **eight** pre-shutdown test methods in that file, so seven keep running and keep emitting
+>   after one has timed out.
+>
+> So a margin **can** be computed over the survivors, and a ceiling that **demonstrably fired in
+> that run** could be banded APPROPRIATE or even TOO LOOSE off the instances that completed —
+> which would be this campaign's worst possible output. **Therefore: any (scenario, ceiling,
+> condition) in which that ceiling timed out in any contributing run is reported FIRED, with the
+> run named and the failure text quoted, and receives NO band at all** — not APPROPRIATE, not
+> TOO LOOSE, not TOO TIGHT. The surviving records' distribution is still published under the
+> FIRED label, because it says what the completing instances cost, and **no sentence may derive a
+> verdict on the ceiling from it.** FIRED is decided from I2's verdict line and the failure text,
+> never from the absence of a record.
 
 ### 7.4 Q-D — the instrument
 
@@ -523,6 +690,11 @@ these records can be trusted.
 ### 7.5 The refusal rule, and it is mandatory
 
 > **Rule N — silence is not a pass, in the rule-S / rule-W shape this directory already uses.**
+> **The letter is REUSED and the reuse is declared, the way rule NOISY's rename is.** `Rule N` in
+> [`2026-09-01-grasp-discrimination/`](../2026-09-01-grasp-discrimination/criteria.md) §7.8 and
+> in [`2026-09-02-option-f-regions/`](../2026-09-02-option-f-regions/criteria.md) §7 is the
+> **false-positive null**, which is a different rule about a different quantity. Nothing here
+> inherits from it, and a citation of "rule N" must name the campaign it belongs to.
 > **If the campaign produces no valid record for an interval, it has not tested that ceiling.**
 > Its silence there may not be read as a pass, as a validation of the ceiling's value, as evidence
 > that the ceiling is large enough, or as a reason to leave the ceiling alone. The verdict is
@@ -538,15 +710,22 @@ these records can be trusted.
 
 ### 7.6 Pre-registered predictions, so that this campaign can be wrong
 
+**They are numbered `PR<n>`, not `P<n>`, and the reason is a collision inside this document.**
+`P1` and `P2` are CLAUDE.md §3's hard rules — one source of truth, and sim/real
+interchangeability — and **this file uses both in that sense**, at §0 and §11 for `(P1)` and at
+§1 for *"no figure here may be read as a P2 result"*. A prediction table numbered `P1`-`P7`
+would put two meanings of `P2` in one document, one of them a prediction this campaign expects to
+confirm and the other a rule it must not be read as testing.
+
 | # | Prediction | Refuted by |
 |---|---|---|
-| **P1** | At FULL, **no ceiling is TOO TIGHT** — every assessed margin is `>= 1.5` | any assessed margin below 1.5 at FULL |
-| **P2** | At FULL, `bringup.DELIVERY_CEILING_S` and `bringup.TRAJECTORY_CEILING_S` — the two the 2026-08-29 campaign could not assess — are **TOO LOOSE** (`M > 10`), because they bound sub-second and second-scale intervals against 30 s and 60 s | either landing APPROPRIATE or TOO TIGHT |
-| **P3** | `pick_and_place.SETTLE_CEILING_S` is **not assessed** at every condition, because every one of its records is discarded by rule Z | any non-zero-spin settle record |
-| **P4** | At C1, `pick_and_place` **times out on `CYCLE_CEILING_S`** and emits no cycle record, so that cell is not assessed and the timeout is reported instead. The 2026-08-29 campaign's scaled arithmetic predicted timeouts below about 1.2 cores | the cycle completing at C1 |
-| **P5** | `continuous_line.LEG_CEILING_S`, measured on real legs for the first time, is **APPROPRIATE** at FULL | TOO TIGHT or TOO LOOSE at FULL |
-| **P6** | Rule G's mangled count is **zero across the whole campaign**, and rule K's is zero too | any mangled or clock-disagreeing record, either of which is a finding about the instrument |
-| **P7** | `bringup.BRING_UP_CEILING_S` yields exactly **one** contributing record per run after rule A | any other count, which falsifies rule A's premise |
+| **PR1** | At FULL, **no ceiling is TOO TIGHT** — every assessed margin is `>= 1.5` | any assessed margin below 1.5 at FULL |
+| **PR2** | At FULL, `bringup.DELIVERY_CEILING_S` and `bringup.TRAJECTORY_CEILING_S` — the two the 2026-08-29 campaign could not assess — are **TOO LOOSE** (`M > 10`), because they bound sub-second and second-scale intervals against 30 s and 60 s | either landing APPROPRIATE or TOO TIGHT |
+| **PR3** | `pick_and_place.SETTLE_CEILING_S` is **not assessed** at every condition, because every one of its records is discarded by rule Z | any non-zero-spin settle record |
+| **PR4** | At C1, `pick_and_place` **times out on `CYCLE_CEILING_S`** and emits no cycle record, so that cell is reported FIRED under rule F and receives no band. The 2026-08-29 campaign's scaled arithmetic predicted timeouts below about 1.2 cores | the cycle completing at C1 |
+| **PR5** | `continuous_line.LEG_CEILING_S`, measured on real legs for the first time, is **APPROPRIATE** at FULL | TOO TIGHT or TOO LOOSE at FULL |
+| **PR6** | Rule G's mangled count is **zero across the whole campaign**, and rule K's is zero too | any mangled or clock-disagreeing record, either of which is a finding about the instrument |
+| **PR7** | `bringup.BRING_UP_CEILING_S` yields exactly **one** contributing record per run after rule A | any other count, which falsifies rule A's premise |
 
 **A refuted prediction is a result and is reported as one.** None of the seven is a threshold; the
 thresholds are §7.1 to §7.3, and they do not move if a prediction fails.
@@ -562,13 +741,35 @@ thresholds are §7.1 to §7.3, and they do not move if a prediction fails.
   `bringup.DELIVERY_CEILING_S` is assessed over its five instrumented waits and not over this
   one**, and this campaign's margin for that ceiling is a statement about the five. It is not
   rounded up, and the loop is not instrumented by this campaign — that would edit `tests/`, which
-  §0 forbids.
+  **§0 names among the five paths it forbids editing and V1 watches**. An earlier draft made this
+  appeal to a §0 that watched three paths and did not mention `tests/` at all.
 - **The 10 s service-call timeout inside `bringup.test_every_controller_reaches_active`.** It is a
-  call timeout, not one of the file's ceilings, and no margin is computed for it.
+  call timeout, not one of the file's ceilings, and no margin is computed for it. **It is
+  nevertheless the largest poll quantum in the tree** — it bounds the `{arm}'s controllers to be
+  active` wait's overshoot at about 10.5 s (threat 5) — and rule A drops that wait for an
+  unrelated reason, so no margin here carries it.
 - **The upper tail of every interval.** A wait that times out emits no record, so **this campaign
   can only ever see intervals that completed.** Every margin here is computed over the completing
   half of the distribution, and the slowest instance it reports is the slowest **that finished**.
   This is a structural bound on the whole campaign, not a caveat on one number.
+  **The bias has a direction, it is one-sided, and it is stated here rather than left for a
+  reader to derive.** `M = ceiling / max`, so **every censored instance removes a candidate for
+  the maximum and can only make the maximum smaller, never larger** — and a smaller maximum is a
+  larger `M`. **So censoring biases every margin UP, toward TOO LOOSE, and never toward TOO
+  TIGHT.** Two consequences, both binding on `ANALYSIS.md`: a **TOO LOOSE** verdict here is the
+  verdict most exposed to the bias and must be written with it named, and a **TOO TIGHT** verdict
+  is the one censoring cannot have manufactured. Rule F is what keeps a run in which the ceiling
+  demonstrably fired from being banded at all.
+- **A CPU quota is not a smaller machine.** The loaded conditions apply `docker update --cpus`,
+  which sets a CFS quota on the same sixteen cores. The 2026-08-29 campaign recorded the
+  limitation and this campaign inherits it verbatim rather than rediscovering it:
+  [`2026-08-29-real-time-factor-conditions/ANALYSIS.md`](../2026-08-29-real-time-factor-conditions/ANALYSIS.md)
+  — *"A quota throttles a process that would otherwise use more; a machine with fewer physical
+  cores behaves differently in cache and scheduling. The curve is a curve in available CPU time
+  … but it is not a simulation of a smaller machine."* **So C4, C2 and C1 are allocations of CPU
+  time and not core counts**, and no margin here may be described as the margin on a four-, two-
+  or one-core machine. It is the right variable for Q-B — contention takes CPU time away in the
+  same currency — and it is not the machine.
 - **How much of any margin the two levers bought.** #30 says the throttle and the hulls must be
   folded in, and this campaign folds them in by **measuring the shipped configuration**, not by
   comparing it with an unshipped one. **Measuring a vendor-mesh or throttle-lifted control would
@@ -587,7 +788,8 @@ thresholds are §7.1 to §7.3, and they do not move if a prediction fails.
   `sides: single`, and pairing it would edit `model/`.
 - **GUI and rendering cost.** Every run is headless.
 - **Teardown, scenario pass rates, real-time factor and capacity.** §1.
-- **The verification run of `continuous_line` taken on 2026-09-02 at `aca48f7`.** §11.
+- **The three pre-campaign scenario runs, none of which is data.** §11 names all three with
+  their commits.
 
 ---
 
@@ -604,7 +806,7 @@ wall-clock ceiling**, so every margin is a fact about a machine.
 | Docker | **29.7.2** (build a7dcaa6); Docker Compose **v5.5.0** |
 | Container image | **`cite-digital-twin:dev`**, image ID `3a41d4e431b0`, Ubuntu **24.04.4 LTS**, ROS 2 **Jazzy**, Gazebo Sim **8.11.0** — all four read from inside the image on 2026-09-02 |
 | Isolation | compose project **`cite-digital-twin-3319196271`** and **`ROS_DOMAIN_ID` 43**, both derived from this checkout by `scripts/_lib.sh` and read from it on 2026-09-02, not typed in |
-| Allocation | the container is **not** CPU-limited by default: `nproc` inside a plain `docker run` of the image reads **16**. The loaded conditions apply the limit explicitly (§4.4) |
+| Allocation | the container is **not** CPU-limited by default: `/sys/fs/cgroup/cpu.max` inside a plain `docker run` of the image reads **`max 100000`**, and `nproc` reads **16**. The loaded conditions apply the limit explicitly (§4.4), and **only the first of those two readings moves when they do** — see below |
 
 **Host load before the first trial, measured rather than claimed.** Two readings taken while this
 file was being written, on a host up **3 h 46 m**:
@@ -627,8 +829,19 @@ reflects the work that produced this file.
 > is why the distinction is written down**: the 2026-08-31 capacity campaign applied a validity
 > rule that read a Docker Desktop **VM's** load rather than the host's, and applied it literally
 > anyway. Here the two coincide, and **every load figure this campaign publishes names where it
-> was read.** `nproc`, by contrast, **does** respond to the cgroup CPU limit and is therefore
-> recorded per run as part of I4 rather than assumed from this table.
+> was read.**
+
+> **`nproc` does NOT respond to a cgroup CPU limit, and I4 therefore does not use it.** An
+> earlier draft of this file asserted the opposite. `docker --cpus` sets a **CFS quota**;
+> `nproc` reports `sched_getaffinity`, which a quota does not touch. **Measured on this host on
+> 2026-09-02, Docker 29.7.2, on a container of the image named above**: after
+> `docker update --cpus 4`, `nproc` inside it still read **16**, while
+> `/sys/fs/cgroup/cpu.max` moved from `max 100000` to `400000 100000`, and to `100000 100000`
+> under `--cpus 1`. **`docker inspect` moves `.HostConfig.NanoCpus`** — 0, then 4000000000, then
+> 1000000000 — **and leaves `.HostConfig.CpuQuota` at 0 throughout**, so a harness reading
+> `CpuQuota` concludes "no limit" on a limited container. I4 therefore reads `cpu.max` from
+> inside and `NanoCpus` from outside, and the **16** in the table above is a property of the
+> machine at FULL rather than a reading of any limit. §8 carries what a quota is not.
 
 ---
 
@@ -637,19 +850,37 @@ reflects the work that produced this file.
 A rule that only ever confirms is not a rule.
 
 - **V1 — `v1_clean`, and it is the load-bearing rule of this campaign.** A block contributes only
-  if, at the moment the block is taken, `git diff c38a42c..HEAD -- model/ workspace/src/ tools/`
-  is **empty** and `git status --porcelain` shows **no dirt** in those three paths.
+  if **at BOTH ends of the run** — I6 is taken twice — `git diff c38a42c..HEAD -- model/
+  workspace/src/ tools/ tests/ scripts/` is **empty** and `git status --porcelain` shows **no
+  dirt** in those five paths. **`v1_clean` is the CONJUNCTION of the two readings**, and a run
+  whose two readings disagree is discarded and reported as an edit that landed mid-run.
+  **The five paths, and why an earlier draft's three were not enough.** All nine `*_CEILING_S`
+  declarations and every `_emit_timing` definition and call site are in `tests/scenarios/`, and
+  `scripts/` holds I2's verdict strings and §4.4's `cite_project_name`. Watching three paths
+  would have let a ceiling value, a `what` string or a spin quantum change mid-campaign with
+  `v1_clean` still true — the one thing this rule exists to prevent. `git diff --stat
+  c38a42c..HEAD -- tests/ scripts/` is empty, read on 2026-09-02, so the wider watch costs
+  nothing.
+  **A single snapshot at the start of a run was the second half of the same defect.** A run lasts
+  minutes; an edit landing after the snapshot would leave the flag true for the whole run, while
+  V10 below promised mid-block detection. I5 is taken before and after every run and I4 after
+  application and at the end; **I6 now matches them**, and V10's promise is a fact about the
+  mechanism rather than a claim ahead of it.
+  **The flag is computed where the block is taken and travels ON the record; `analyse.py` drops
+  any row without it.** Not a note in a README, not a check at the end: a field.
   **`docs/measurements/` may advance while the campaign runs and nothing else may** — this
   campaign's own `criteria.md`, harness and raw all land on this branch, so `HEAD` necessarily
   advances and pinning it would discard every block including the first.
-  **The flag is computed where the block is taken and travels ON the record; `analyse.py` drops
-  any row without it.** Not a note in a README, not a check at the end: a field.
-  **Why the base is `c38a42c` and not `51195e0`.** Two files in the watched paths changed on this
-  branch after `51195e0` — `tools/tests/test_stall_band.py` and
-  `workspace/src/cite_skills/include/cite_skills/gripper.hpp` — and both changes are
-  **comment- and docstring-only**, verified by diffing them on 2026-09-02. Basing on `51195e0`
-  would make every block dirty for a reason with no bearing on any interval measured here;
-  basing on `c38a42c` makes the flag mean what it says.
+  **Why the base is `c38a42c` and not `51195e0`.** `git diff --stat 51195e0..c38a42c -- model/
+  workspace/src/ tools/ tests/ scripts/` names **six** files, read on 2026-09-02. Four are the
+  instrument this campaign exists to consume — the three scenarios and
+  `tests/scenarios/guards/test_timing_records.py`, added by `eef5468`, `59f818d` and `c38a42c` —
+  and basing on `51195e0` would mark every block dirty for the very change that makes the
+  campaign possible. The other two, `tools/tests/test_stall_band.py` and
+  `workspace/src/cite_skills/include/cite_skills/gripper.hpp`, are **comment- and
+  docstring-only**, verified by diffing them on 2026-09-02, and have no bearing on any interval
+  measured here. **Basing on `c38a42c` makes the flag mean what it says.** An earlier draft named
+  only the last two, because it watched only three paths.
 - **V2 — the configuration that actually ran.** Every run reads back, from the **running cell**,
   the collision selection its description points at and the `<real_time_factor>` in its world
   (I7). A run that does not read `convex_hull` and the throttle is **discarded and reported**: it
@@ -680,8 +911,10 @@ A rule that only ever confirms is not a rule.
   disagreement becomes a numbered deviation in `ANALYSIS.md`, applied to data already collected.
   The 2026-08-31 capacity campaign applied a validity rule it had found to be reading the wrong
   quantity, literally, and reported it; that is the precedent.
-- **V10 — one writer at a time.** **A concurrent agent editing a watched path mid-block flips
-  `v1_clean` and silently discards the block.** So the campaign runs with **one writer in this
+- **V10 — one writer at a time.** **A concurrent agent editing a watched path mid-run flips
+  `v1_clean` and silently discards the block** — which is a fact only because V1 takes I6 at both
+  ends of the run and conjoins the two readings; with a single snapshot at the start, this
+  sentence would have been prose ahead of the mechanism. So the campaign runs with **one writer in this
   checkout**, and the campaign operator states in `ANALYSIS.md` whether that held. A campaign that
   loses blocks this way reports the loss under V1 rather than re-running until it stops happening.
 - **V11 — no rebuild mid-campaign.** `./scripts/build` runs once before the first trial. If a
@@ -702,12 +935,28 @@ this file is not touched.**
 
 - **This campaign changes nothing and proposes nothing.** No ceiling, threshold, tolerance or band
   moves because it ran. **Changing a ceiling is the project owner's decision.** §0.
-- **A verification run of `continuous_line` was taken on 2026-09-02 at `aca48f7`, BEFORE this file
-  existed.** Its only role was to establish that the leg emission fires at all. **It is not
-  campaign data. No figure from it may appear in this file, in `raw/`, or in the write-up**, and
-  it is named here so that nobody later mistakes it for a trial.
-- **A null is not a pass.** Rules D3, N, T, E, Z and Q exist for exactly that, and all six were
-  written before any trial ran. **Rule N is the one that matters most**: a ceiling this campaign
+- **THREE scenario runs were taken before this file existed, one of each scenario, and all three
+  are named.** An earlier draft declared one of them; §11's whole purpose is that nobody later
+  mistakes a pre-campaign run for a trial, and naming one of three defeats it.
+  - **`bringup`, at `eef5468`.** That commit's message records a passing
+    `./scripts/scenario bringup` emitting well-formed lines, every `elapsed_s` below its
+    `ceiling_s` — the run that established the instrument emits at all. **Its line count is
+    deliberately not repeated here**, because a pre-campaign observed count sitting in this file
+    is exactly the kind of figure a later reader would mistake for I8's expected count.
+  - **`pick_and_place`, at or before `59f818d`.** That commit's docstrings carried a zero-spin
+    `elapsed_s` observed in a `pick_and_place` run; **`c38a42c` removed the figure** for having
+    no campaign behind it, which is the same judgement this bullet makes.
+  - **`continuous_line`, on 2026-09-02 at `aca48f7`.** Its only role was to establish that the
+    leg emission fires at all.
+  **None of the three is campaign data.** No figure from any of them may appear in this file, in
+  `raw/`, or in the write-up. **They did not contaminate this file**: it states no measured
+  `elapsed_s`, no observed record count and no margin. Every quantity in it is derived from the
+  emitters' source, from the inherited bands or from the ceilings themselves — including threat
+  12's expected count of 30, which is `WORKPIECES` times the generated ladder's length and would
+  be the same number if no scenario had ever been run. This is a completeness gap in the
+  declaration, closed before the first trial, and not a contamination.
+- **A null is not a pass.** Rules D3, N, T, E, Z, Q and F exist for exactly that, and all seven
+  were written before any trial ran. **Rule N is the one that matters most**: a ceiling this campaign
   fails to reach is a ceiling this campaign has not tested, and its silence may not be read as a
   clearance. The campaign it inherits from had to write *"not assessed"* twice and this one
   expects to write it again.
