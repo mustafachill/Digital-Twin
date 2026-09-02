@@ -1,0 +1,101 @@
+{
+  "arm": "A",
+  "question": "criteria.md Q-A -- free air on the production backend, across w_cmd",
+  "provenance": {
+    "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+    "base_commit": "d3eeac4",
+    "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B2_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B2_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/C_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/C_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/C_B2_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/C_B2_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/D_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/D_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/D_B2_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/D_B2_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+    "watched_diff_against_base": "",
+    "watched_worktree_dirty": "",
+    "v1_clean": true,
+    "model_hash": {
+      "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+      "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+    },
+    "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+  },
+  "host": {
+    "container_load_1m": 3.744140625,
+    "container_load_5m": 4.42919921875,
+    "container_load_15m": 5.54248046875,
+    "load_read_from": "/proc/loadavg inside the container (Docker Desktop's Linux VM), NOT the macOS host criteria.md section 9 names",
+    "container_cpu_count": 12,
+    "platform": "Linux-6.10.14-linuxkit-aarch64-with-glibc2.39",
+    "wall_clock_utc": "2026-09-02T06:52:56Z",
+    "ros_domain_id": "99",
+    "gz_partition": "cite/cell_a/plant"
+  },
+  "geometry": {
+    "hull_collision_refs": 13,
+    "vendor_visual_refs": 6,
+    "description_chars": 33653,
+    "v2_ok": true,
+    "production_hardware_plugin_refs": 3,
+    "mock_hardware_plugin_refs": 0,
+    "v7_ok": true
+  },
+  "travel": {
+    "open_position": 0.0,
+    "closed_position": 0.85,
+    "drive_pivot_y_m": 0.035,
+    "drive_pivot_z_m": 0.059098,
+    "finger_offset_y_m": 0.035465,
+    "finger_offset_z_m": 0.042039,
+    "pad_inset_m": 0.026,
+    "tip_link_z_m": 0.172,
+    "pad_face_centre_z_m": 0.041003,
+    "goal_tolerance": 0.01,
+    "stall_band_narrow_m": 0.002385,
+    "stall_band_wide_m": 0.002385
+  },
+  "parts": {
+    "narrowest_m": 0.05,
+    "widest_m": 0.05
+  },
+  "window_m": {
+    "edge_lo": 0.047615000000000005,
+    "edge_hi": 0.052385
+  },
+  "default_grasp_width_m": 0.045,
+  "predicate_eval": {
+    "travel": "open_position=0 closed_position=0.84999999999999998 drive_pivot_y_m=0.035000000000000003 drive_pivot_z_m=0.059097999999999998 finger_offset_y_m=0.035465000000000003 finger_offset_z_m=0.042039 pad_inset_m=0.025999999999999999 tip_link_z_m=0.17199999999999999 pad_face_centre_z_m=0.041002999999999998 goal_tolerance=0.01 stall_band_narrow_m=0.002385 stall_band_wide_m=0.002385",
+    "parts": "narrowest_m=0.050000000000000003 widest_m=0.050000000000000003"
+  },
+  "superseded": {
+    "built_at": "2026-09-02T06:52:28Z",
+    "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+    "worktree_commit_short": "4ef2d7c",
+    "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+    "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+    "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+    "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+    "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "available": true
+  },
+  "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+  "gz_topics": [
+    "/cite/cell_a/beam_c1_out/detection",
+    "/cite/cell_a/beam_c2_out/detection",
+    "/cite/cell_a/beam_c3_out/detection",
+    "/cite/cell_a/beam_pick/detection",
+    "/cite/cell_a/conveyor_1/command",
+    "/cite/cell_a/conveyor_1/state",
+    "/cite/cell_a/conveyor_2/command",
+    "/cite/cell_a/conveyor_2/state",
+    "/cite/cell_a/conveyor_3/command",
+    "/cite/cell_a/conveyor_3/state",
+    "/clock",
+    "/gazebo/resource_paths",
+    "/stats",
+    "/world/cell_a/clock",
+    "/world/cell_a/dynamic_pose/info",
+    "/world/cell_a/pose/info",
+    "/world/cell_a/scene/deletion",
+    "/world/cell_a/scene/info",
+    "/world/cell_a/state",
+    "/world/cell_a/stats",
+    "/world/cell_a/light_config",
+    "/world/cell_a/material_color"
+  ],
+  "release_width_m": 0.08393000000000002
+}

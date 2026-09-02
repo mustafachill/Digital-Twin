@@ -1,0 +1,6 @@
+== A_REFINE ==
+ 06:52:28 up 11:51,  0 user,  load average: 3.08, 4.37, 5.55
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3232        2067         180        2916        4604
+overlay         453G   31G  399G   8% /

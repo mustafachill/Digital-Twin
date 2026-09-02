@@ -1,0 +1,15 @@
+homed: True; release width 83.93 mm
+[1/13] w_cmd=45.00 mm I6=Goal w_reached(I1)=0.04604939970229347 holding_F=False stalled=False reached_goal=True (1.3s)
+[2/13] w_cmd=45.25 mm I6=Goal w_reached(I1)=0.04625807563056423 holding_F=False stalled=False reached_goal=True (1.7s)
+[3/13] w_cmd=45.50 mm I6=Goal w_reached(I1)=0.046469638647069975 holding_F=False stalled=False reached_goal=True (1.6s)
+[4/13] w_cmd=45.75 mm I6=Goal w_reached(I1)=0.04679032280873128 holding_F=False stalled=False reached_goal=True (1.5s)
+[5/13] w_cmd=46.00 mm I6=Goal w_reached(I1)=0.0469999294727292 holding_F=False stalled=False reached_goal=True (1.5s)
+[6/13] w_cmd=46.25 mm I6=Goal w_reached(I1)=0.04721149515104144 holding_F=False stalled=False reached_goal=True (1.5s)
+[7/13] w_cmd=46.50 mm I6=Goal w_reached(I1)=0.047531234558724905 holding_F=False stalled=False reached_goal=True (1.6s)
+[8/13] w_cmd=46.75 mm I6=Goal w_reached(I1)=0.04774154979976872 holding_F=False stalled=False reached_goal=True (1.6s)
+[9/13] w_cmd=47.00 mm I6=Goal w_reached(I1)=0.04795309110325332 holding_F=False stalled=False reached_goal=True (1.6s)
+[10/13] w_cmd=47.25 mm I6=Goal w_reached(I1)=0.04827184554028222 holding_F=False stalled=False reached_goal=True (1.6s)
+[11/13] w_cmd=47.50 mm I6=Goal w_reached(I1)=0.048482916794941634 holding_F=False stalled=False reached_goal=True (1.5s)
+[12/13] w_cmd=47.75 mm I6=Goal w_reached(I1)=0.0488050742162031 holding_F=False stalled=False reached_goal=True (1.6s)
+[13/13] w_cmd=47.85 mm I6=Goal w_reached(I1)=0.048887931508728395 holding_F=False stalled=False reached_goal=True (1.6s)
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/harness/../raw/A_B2_trials.json: 13 trials

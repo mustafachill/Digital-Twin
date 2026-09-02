@@ -1,0 +1,5632 @@
+[
+  {
+    "trial": 1,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 45.0,
+    "commanded_width_m": 0.045,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.045,
+    "i6_margin_m": 0.0021379718734809983,
+    "i6_headroom_m": 0.002862028126519006,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 84.7,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 46.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04604939970229347,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.44713404220140435,
+    "i3_drive_samples": 161,
+    "closing_window_sim_s": [
+      38.216,
+      38.785000000000004
+    ],
+    "i3_reached_width_m": 0.04560296443447168,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0015656002977065334,
+    "d_wide_m": 0.00633560029770653,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.002012035565528328,
+    "d_wide_i3_m": 0.006782035565528324,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0004464352678217945,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 46.0,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        38.22,
+        0.05230220484210995
+      ],
+      [
+        38.227,
+        0.053608747761234574
+      ],
+      [
+        38.233,
+        0.05547810360388093
+      ],
+      [
+        38.241,
+        0.057851177013063304
+      ],
+      [
+        38.248,
+        0.060675077644288866
+      ],
+      [
+        38.255,
+        0.06390246863923972
+      ],
+      [
+        38.262,
+        0.0674909835097225
+      ],
+      [
+        38.269,
+        0.07140270424880468
+      ],
+      [
+        38.275,
+        0.07560369424028185
+      ],
+      [
+        38.283,
+        0.08006358021265127
+      ],
+      [
+        38.29,
+        0.0847551780879181
+      ],
+      [
+        38.297,
+        0.08965415811627708
+      ],
+      [
+        38.304,
+        0.09473874517165264
+      ],
+      [
+        38.311,
+        0.09998945051620714
+      ],
+      [
+        38.318,
+        0.10538883172957604
+      ],
+      [
+        38.325,
+        0.11092127784553314
+      ],
+      [
+        38.332,
+        0.11657281704930603
+      ],
+      [
+        38.339,
+        0.12233094456667348
+      ],
+      [
+        38.346,
+        0.1281844686247075
+      ],
+      [
+        38.353,
+        0.13412337258663765
+      ],
+      [
+        38.36,
+        0.14013869156255435
+      ],
+      [
+        38.367,
+        0.14622240197598851
+      ],
+      [
+        38.374,
+        0.1523673227260005
+      ],
+      [
+        38.381,
+        0.15856702672724926
+      ],
+      [
+        38.387,
+        0.16481576173835463
+      ],
+      [
+        38.395,
+        0.17110837950328128
+      ],
+      [
+        38.402,
+        0.1774402723328777
+      ],
+      [
+        38.409,
+        0.18380731634535327
+      ],
+      [
+        38.416,
+        0.19020582066650538
+      ],
+      [
+        38.423,
+        0.1966324819639228
+      ],
+      [
+        38.43,
+        0.20308434375509743
+      ],
+      [
+        38.437,
+        0.20955875998818446
+      ],
+      [
+        38.444,
+        0.21605336244678294
+      ],
+      [
+        38.451,
+        0.22256603157721389
+      ],
+      [
+        38.458,
+        0.22909487037893472
+      ],
+      [
+        38.465,
+        0.23563818103645978
+      ],
+      [
+        38.472,
+        0.24219444400492948
+      ],
+      [
+        38.479,
+        0.24876229929169438
+      ],
+      [
+        38.486,
+        0.2553405297033333
+      ],
+      [
+        38.493,
+        0.26192804585173435
+      ],
+      [
+        38.5,
+        0.2685238727345373
+      ],
+      [
+        38.507,
+        0.2751271377246298
+      ],
+      [
+        38.514,
+        0.2817370598207462
+      ],
+      [
+        38.521,
+        0.2883529400267538
+      ],
+      [
+        38.528,
+        0.294974152741114
+      ],
+      [
+        38.535,
+        0.30160013805044955
+      ],
+      [
+        38.542,
+        0.3082303948322878
+      ],
+      [
+        38.549,
+        0.3148644745820159
+      ],
+      [
+        38.556,
+        0.3215019758880053
+      ],
+      [
+        38.563,
+        0.3281425394868483
+      ],
+      [
+        38.57,
+        0.33478584383779514
+      ],
+      [
+        38.577,
+        0.3414316011618747
+      ],
+      [
+        38.584,
+        0.34807955389690803
+      ],
+      [
+        38.591,
+        0.35472947152474477
+      ],
+      [
+        38.598,
+        0.3613811477316404
+      ],
+      [
+        38.604,
+        0.3680343978667936
+      ],
+      [
+        38.612,
+        0.374689056667737
+      ],
+      [
+        38.619,
+        0.3813449762245628
+      ],
+      [
+        38.626,
+        0.3880020241579029
+      ],
+      [
+        38.633,
+        0.39466008198822333
+      ],
+      [
+        38.64,
+        0.40076399201507557
+      ],
+      [
+        38.647,
+        0.4062269914891001
+      ],
+      [
+        38.654,
+        0.41111637601830486
+      ],
+      [
+        38.661,
+        0.41549237517190873
+      ],
+      [
+        38.668,
+        0.4194088944143557
+      ],
+      [
+        38.675,
+        0.42291417913632084
+      ],
+      [
+        38.682,
+        0.42605140896245763
+      ],
+      [
+        38.689,
+        0.4288592296568301
+      ],
+      [
+        38.696,
+        0.43137222917827567
+      ],
+      [
+        38.703,
+        0.43362136374995336
+      ],
+      [
+        38.71,
+        0.4356343391915905
+      ],
+      [
+        38.717,
+        0.43743595221184267
+      ],
+      [
+        38.724,
+        0.43904839586495664
+      ],
+      [
+        38.731,
+        0.4404915329344832
+      ],
+      [
+        38.738,
+        0.4417831406117
+      ],
+      [
+        38.744,
+        0.4429391294828007
+      ],
+      [
+        38.752,
+        0.4439737395224281
+      ],
+      [
+        38.759,
+        0.44489971550788787
+      ],
+      [
+        38.766,
+        0.44572846401486826
+      ],
+      [
+        38.773,
+        0.4464701939286102
+      ],
+      [
+        38.78,
+        0.44713404220140435
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.3,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 2,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 45.25,
+    "commanded_width_m": 0.04525,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04525,
+    "i6_margin_m": 0.002136749723692266,
+    "i6_headroom_m": 0.002613250276307738,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 45.2,
+        "reached_mm": 46.3,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04625807563056423,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.443657717568418,
+    "i3_drive_samples": 210,
+    "closing_window_sim_s": [
+      39.712,
+      40.269000000000005
+    ],
+    "i3_reached_width_m": 0.04597296020688533,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.001356924369435776,
+    "d_wide_m": 0.0061269243694357725,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.001642039793114676,
+    "d_wide_i3_m": 0.0064120397931146725,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.00028511542367889997,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 46.3,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        39.718,
+        0.06213491195265977
+      ],
+      [
+        39.725,
+        0.06240902062513284
+      ],
+      [
+        39.732,
+        0.0633543478170311
+      ],
+      [
+        39.739,
+        0.06490041558379818
+      ],
+      [
+        39.746,
+        0.06698414616506576
+      ],
+      [
+        39.753,
+        0.06954908496530753
+      ],
+      [
+        39.76,
+        0.07254470512152861
+      ],
+      [
+        39.767,
+        0.07592578509134912
+      ],
+      [
+        39.774,
+        0.07965185159433939
+      ],
+      [
+        39.781,
+        0.08368668104451511
+      ],
+      [
+        39.788,
+        0.08799785333242037
+      ],
+      [
+        39.795,
+        0.09255635246009239
+      ],
+      [
+        39.802,
+        0.09733620910935456
+      ],
+      [
+        39.809,
+        0.1023141807404389
+      ],
+      [
+        39.816,
+        0.10746946528025314
+      ],
+      [
+        39.823,
+        0.11278344487337988
+      ],
+      [
+        39.83,
+        0.11823945653922054
+      ],
+      [
+        39.837,
+        0.12382258691013946
+      ],
+      [
+        39.844,
+        0.12951948852210282
+      ],
+      [
+        39.851,
+        0.13531821539480038
+      ],
+      [
+        39.858,
+        0.1412080758758545
+      ],
+      [
+        39.864,
+        0.14717950093638726
+      ],
+      [
+        39.872,
+        0.15322392629555298
+      ],
+      [
+        39.879,
+        0.15933368692199476
+      ],
+      [
+        39.886,
+        0.16550192261264826
+      ],
+      [
+        39.893,
+        0.17172249348577084
+      ],
+      [
+        39.9,
+        0.17798990434720294
+      ],
+      [
+        39.907,
+        0.18429923699817174
+      ],
+      [
+        39.914,
+        0.1906460896507756
+      ],
+      [
+        39.921,
+        0.1970265227048425
+      ],
+      [
+        39.928,
+        0.2034370102182186
+      ],
+      [
+        39.935,
+        0.2098743964726762
+      ],
+      [
+        39.942,
+        0.21633585710040146
+      ],
+      [
+        39.949,
+        0.2228188642922011
+      ],
+      [
+        39.956,
+        0.22932115565884703
+      ],
+      [
+        39.963,
+        0.23584070636198015
+      ],
+      [
+        39.97,
+        0.24237570417126916
+      ],
+      [
+        39.977,
+        0.24892452714056743
+      ],
+      [
+        39.984,
+        0.2554857236280739
+      ],
+      [
+        39.991,
+        0.26205799441437644
+      ],
+      [
+        39.998,
+        0.26864017669810125
+      ],
+      [
+        40.005,
+        0.2752312297720189
+      ],
+      [
+        40.012,
+        0.28183022220315895
+      ],
+      [
+        40.019,
+        0.2884363203590128
+      ],
+      [
+        40.026,
+        0.2950487781384854
+      ],
+      [
+        40.033,
+        0.30166692778109655
+      ],
+      [
+        40.04,
+        0.3082901716412165
+      ],
+      [
+        40.047,
+        0.31491797482600675
+      ],
+      [
+        40.053,
+        0.32154985860637675
+      ],
+      [
+        40.059,
+        0.32818539451979045
+      ],
+      [
+        40.068,
+        0.3348241990922781
+      ],
+      [
+        40.075,
+        0.3414659291146368
+      ],
+      [
+        40.082,
+        0.34811027741462996
+      ],
+      [
+        40.089,
+        0.35475696907310567
+      ],
+      [
+        40.096,
+        0.36140575803742325
+      ],
+      [
+        40.102,
+        0.368056424090469
+      ],
+      [
+        40.11,
+        0.3747087701379265
+      ],
+      [
+        40.117,
+        0.3813626197803823
+      ],
+      [
+        40.124,
+        0.38801781514036127
+      ],
+      [
+        40.131,
+        0.39457292466620136
+      ],
+      [
+        40.138,
+        0.40043974769200025
+      ],
+      [
+        40.145,
+        0.4056905543000276
+      ],
+      [
+        40.152,
+        0.41039002621417137
+      ],
+      [
+        40.158,
+        0.41459605357729845
+      ],
+      [
+        40.166,
+        0.41836044806727035
+      ],
+      [
+        40.173,
+        0.4217295811357715
+      ],
+      [
+        40.179,
+        0.42474495523205896
+      ],
+      [
+        40.187,
+        0.427443715048217
+      ],
+      [
+        40.194,
+        0.4298591050836613
+      ],
+      [
+        40.201,
+        0.43202087916536847
+      ],
+      [
+        40.208,
+        0.4339556669684826
+      ],
+      [
+        40.215,
+        0.43568730205225725
+      ],
+      [
+        40.222,
+        0.4372371154522244
+      ],
+      [
+        40.228,
+        0.4386241984451849
+      ],
+      [
+        40.236,
+        0.4398656377238755
+      ],
+      [
+        40.243,
+        0.44097672587829545
+      ],
+      [
+        40.25,
+        0.441971149776494
+      ],
+      [
+        40.257,
+        0.4428611591653752
+      ],
+      [
+        40.264,
+        0.443657717568418
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.7,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 3,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 45.5,
+    "commanded_width_m": 0.0455,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.0455,
+    "i6_margin_m": 0.0021355150787115626,
+    "i6_headroom_m": 0.0023644849212884414,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 45.5,
+        "reached_mm": 46.5,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.046469638647069975,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.4399431769015581,
+    "i3_drive_samples": 203,
+    "closing_window_sim_s": [
+      41.144000000000005,
+      41.689
+    ],
+    "i3_reached_width_m": 0.046367936332207316,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.00114536135293003,
+    "d_wide_m": 0.005915361352930026,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.0012470636677926888,
+    "d_wide_i3_m": 0.006017063667792685,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0001017023148626589,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 46.5,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        41.145,
+        0.062435811538784046
+      ],
+      [
+        41.153,
+        0.0619783258248776
+      ],
+      [
+        41.159,
+        0.062268876040768494
+      ],
+      [
+        41.167,
+        0.06322891841402564
+      ],
+      [
+        41.174,
+        0.06478815626810884
+      ],
+      [
+        41.181,
+        0.0668836740775243
+      ],
+      [
+        41.188,
+        0.06945916244695836
+      ],
+      [
+        41.195,
+        0.0724642244676065
+      ],
+      [
+        41.202,
+        0.0758537549060892
+      ],
+      [
+        41.209,
+        0.07958738457853208
+      ],
+      [
+        41.216,
+        0.08362898306536783
+      ],
+      [
+        41.223,
+        0.08794621364108382
+      ],
+      [
+        41.23,
+        0.09251013493634637
+      ],
+      [
+        41.237,
+        0.09729484442560206
+      ],
+      [
+        41.244,
+        0.10227715934848057
+      ],
+      [
+        41.25,
+        0.1074363311344506
+      ],
+      [
+        41.258,
+        0.11275378981288674
+      ],
+      [
+        41.264,
+        0.11821291526007931
+      ],
+      [
+        41.272,
+        0.12379883246530819
+      ],
+      [
+        41.279,
+        0.12949822829397892
+      ],
+      [
+        41.286,
+        0.13529918749062958
+      ],
+      [
+        41.293,
+        0.14119104590162174
+      ],
+      [
+        41.299,
+        0.14716425910944902
+      ],
+      [
+        41.307,
+        0.1532102848604433
+      ],
+      [
+        41.314,
+        0.15932147783757164
+      ],
+      [
+        41.321,
+        0.16549099548208962
+      ],
+      [
+        41.328,
+        0.17171271370392094
+      ],
+      [
+        41.335,
+        0.1779811514424473
+      ],
+      [
+        41.342,
+        0.18429140314841547
+      ],
+      [
+        41.349,
+        0.1906390783552437
+      ],
+      [
+        41.356,
+        0.1970202475953415
+      ],
+      [
+        41.363,
+        0.20343139399521523
+      ],
+      [
+        41.37,
+        0.20986936995308822
+      ],
+      [
+        41.377,
+        0.2163313583653702
+      ],
+      [
+        41.384,
+        0.2228148379243481
+      ],
+      [
+        41.391,
+        0.2293175520596186
+      ],
+      [
+        41.397,
+        0.23583748114067074
+      ],
+      [
+        41.405,
+        0.2423728175981973
+      ],
+      [
+        41.412,
+        0.24892194365766812
+      ],
+      [
+        41.418,
+        0.25548341141087905
+      ],
+      [
+        41.426,
+        0.2620559249799871
+      ],
+      [
+        41.433,
+        0.26863832455432285
+      ],
+      [
+        41.44,
+        0.27522957210333726
+      ],
+      [
+        41.446,
+        0.2818287385896889
+      ],
+      [
+        41.454,
+        0.2884349925249571
+      ],
+      [
+        41.461,
+        0.2950475897270055
+      ],
+      [
+        41.468,
+        0.3016658641528221
+      ],
+      [
+        41.475,
+        0.30828921969391093
+      ],
+      [
+        41.482,
+        0.3149171228331683
+      ],
+      [
+        41.488,
+        0.3215490960727863
+      ],
+      [
+        41.496,
+        0.32818471205222705
+      ],
+      [
+        41.502,
+        0.33482358828380887
+      ],
+      [
+        41.51,
+        0.34146538244105684
+      ],
+      [
+        41.517,
+        0.34810978814177584
+      ],
+      [
+        41.524,
+        0.3547565311739013
+      ],
+      [
+        41.531,
+        0.3614053661176353
+      ],
+      [
+        41.538,
+        0.3680560733222588
+      ],
+      [
+        41.545,
+        0.3747084562003784
+      ],
+      [
+        41.552,
+        0.3813623388062766
+      ],
+      [
+        41.559,
+        0.3880175636685366
+      ],
+      [
+        41.566,
+        0.3943263133359813
+      ],
+      [
+        41.572,
+        0.39997264428841844
+      ],
+      [
+        41.58,
+        0.4050261104907956
+      ],
+      [
+        41.587,
+        0.4095489627418862
+      ],
+      [
+        41.594,
+        0.4135969155065824
+      ],
+      [
+        41.601,
+        0.41721983323095985
+      ],
+      [
+        41.608,
+        0.42046234459425486
+      ],
+      [
+        41.615,
+        0.4233643922643835
+      ],
+      [
+        41.622,
+        0.42596172492913026
+      ],
+      [
+        41.628,
+        0.42828633766406216
+      ],
+      [
+        41.635,
+        0.4303668660618114
+      ],
+      [
+        41.642,
+        0.4322289389777836
+      ],
+      [
+        41.65,
+        0.43389549423756674
+      ],
+      [
+        41.657,
+        0.4353870611950619
+      ],
+      [
+        41.663,
+        0.4367220136220103
+      ],
+      [
+        41.671,
+        0.4379167960441205
+      ],
+      [
+        41.678,
+        0.43898612631190126
+      ],
+      [
+        41.685,
+        0.4399431769015581
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 4,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 45.75,
+    "commanded_width_m": 0.04575,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04575,
+    "i6_margin_m": 0.002134267915916997,
+    "i6_headroom_m": 0.0021157320840830066,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 45.8,
+        "reached_mm": 46.8,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04679032280873128,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.439473733596394,
+    "i3_drive_samples": 203,
+    "closing_window_sim_s": [
+      42.572,
+      43.133
+    ],
+    "i3_reached_width_m": 0.046417825631898536,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0008246771912687259,
+    "d_wide_m": 0.005594677191268722,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.0011971743681014682,
+    "d_wide_i3_m": 0.005967174368101465,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0003724971768327423,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 46.8,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        42.573,
+        0.06227206158248089
+      ],
+      [
+        42.581,
+        0.06183176961398698
+      ],
+      [
+        42.588,
+        0.06213770823202205
+      ],
+      [
+        42.595,
+        0.06311152322519814
+      ],
+      [
+        42.602,
+        0.06468308757410875
+      ],
+      [
+        42.609,
+        0.06678963759639468
+      ],
+      [
+        42.616,
+        0.06937499979634774
+      ],
+      [
+        42.623,
+        0.07238889889531036
+      ],
+      [
+        42.63,
+        0.07578633851888447
+      ],
+      [
+        42.637,
+        0.07952704691198414
+      ],
+      [
+        42.644,
+        0.08357498085380768
+      ],
+      [
+        42.65,
+        0.08789788166173772
+      ],
+      [
+        42.658,
+        0.09246687781483184
+      ],
+      [
+        42.665,
+        0.09725612930184675
+      ],
+      [
+        42.672,
+        0.10224250931271975
+      ],
+      [
+        42.679,
+        0.10740531935244482
+      ],
+      [
+        42.686,
+        0.1127260342679917
+      ],
+      [
+        42.693,
+        0.11818807404739835
+      ],
+      [
+        42.7,
+        0.12377659957995885
+      ],
+      [
+        42.707,
+        0.12947832986159138
+      ],
+      [
+        42.714,
+        0.1352813783936428
+      ],
+      [
+        42.721000000000004,
+        0.1411751067598186
+      ],
+      [
+        42.728,
+        0.1471499935775353
+      ],
+      [
+        42.735,
+        0.15319751720938066
+      ],
+      [
+        42.742,
+        0.1593100507898707
+      ],
+      [
+        42.749,
+        0.1654807682743973
+      ],
+      [
+        42.756,
+        0.17170356035303636
+      ],
+      [
+        42.763,
+        0.17797295919340567
+      ],
+      [
+        42.77,
+        0.18428407108552328
+      ],
+      [
+        42.777,
+        0.19063251615895524
+      ],
+      [
+        42.784,
+        0.19701437442966335
+      ],
+      [
+        42.791,
+        0.20342613751193334
+      ],
+      [
+        42.797,
+        0.20986466540055093
+      ],
+      [
+        42.805,
+        0.2163271477908494
+      ],
+      [
+        42.812,
+        0.222811069460152
+      ],
+      [
+        42.819,
+        0.2293141792841631
+      ],
+      [
+        42.826,
+        0.23583446250663812
+      ],
+      [
+        42.833,
+        0.24237011592073807
+      ],
+      [
+        42.84,
+        0.24891952565634218
+      ],
+      [
+        42.847,
+        0.2554812472996923
+      ],
+      [
+        42.854,
+        0.2620539881004749
+      ],
+      [
+        42.86,
+        0.2686365910471594
+      ],
+      [
+        42.868,
+        0.2752280206144259
+      ],
+      [
+        42.875,
+        0.28182735000711323
+      ],
+      [
+        42.882,
+        0.2884337497435519
+      ],
+      [
+        42.889,
+        0.2950464774376479
+      ],
+      [
+        42.896,
+        0.30166486865384695
+      ],
+      [
+        42.903,
+        0.3082883287223282
+      ],
+      [
+        42.91,
+        0.31491632541360176
+      ],
+      [
+        42.917,
+        0.32154838238227434
+      ],
+      [
+        42.924,
+        0.32818407329921884
+      ],
+      [
+        42.931,
+        0.3348230165998665
+      ],
+      [
+        42.938,
+        0.3414648707839284
+      ],
+      [
+        42.945,
+        0.34810933020864593
+      ],
+      [
+        42.952,
+        0.35475612132374995
+      ],
+      [
+        42.959,
+        0.36140499930174985
+      ],
+      [
+        42.966,
+        0.3680557450220413
+      ],
+      [
+        42.973,
+        0.37470816237168364
+      ],
+      [
+        42.98,
+        0.3813620758295948
+      ],
+      [
+        42.987,
+        0.38801732830440644
+      ],
+      [
+        42.994,
+        0.39407956705365954
+      ],
+      [
+        43.001,
+        0.39950527073421743
+      ],
+      [
+        43.008,
+        0.4043612755282713
+      ],
+      [
+        43.015,
+        0.40870739981891585
+      ],
+      [
+        43.022,
+        0.4125971810590149
+      ],
+      [
+        43.029,
+        0.416078535268879
+      ],
+      [
+        43.036,
+        0.41919434728668553
+      ],
+      [
+        43.043,
+        0.42198299904260295
+      ],
+      [
+        43.05,
+        0.4244788423641313
+      ],
+      [
+        43.057,
+        0.42671262213688343
+      ],
+      [
+        43.064,
+        0.4287118550334823
+      ],
+      [
+        43.071,
+        0.43050116847592546
+      ],
+      [
+        43.078,
+        0.43210260400690054
+      ],
+      [
+        43.085,
+        0.4335358888071129
+      ],
+      [
+        43.092,
+        0.4348186787032937
+      ],
+      [
+        43.099,
+        0.43596677566036723
+      ],
+      [
+        43.106,
+        0.43699432243694053
+      ],
+      [
+        43.113,
+        0.4379139768019669
+      ],
+      [
+        43.12,
+        0.43873706745865954
+      ],
+      [
+        43.127,
+        0.439473733596394
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.5,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 5,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 46.0,
+    "commanded_width_m": 0.046,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.046,
+    "i6_margin_m": 0.002133008212410817,
+    "i6_headroom_m": 0.0018669917875891867,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 46.0,
+        "reached_mm": 47.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.0469999294727292,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.4366561875506543,
+    "i3_drive_samples": 199,
+    "closing_window_sim_s": [
+      43.99,
+      44.537000000000006
+    ],
+    "i3_reached_width_m": 0.046717123633748976,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0006150705272708057,
+    "d_wide_m": 0.005385070527270802,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.0008978763662510283,
+    "d_wide_i3_m": 0.005667876366251025,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.00028280583898022266,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 47.0,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        43.995,
+        0.0625809369107785
+      ],
+      [
+        44.002,
+        0.0628082129626471
+      ],
+      [
+        44.008,
+        0.06371162495910457
+      ],
+      [
+        44.016,
+        0.06522017862595235
+      ],
+      [
+        44.023,
+        0.06727033408779237
+      ],
+      [
+        44.03,
+        0.06980522315614657
+      ],
+      [
+        44.037,
+        0.07277394880232842
+      ],
+      [
+        44.044,
+        0.07613095818566396
+      ],
+      [
+        44.051,
+        0.07983548151375028
+      ],
+      [
+        44.058,
+        0.08385102982238701
+      ],
+      [
+        44.065,
+        0.088144945488615
+      ],
+      [
+        44.072,
+        0.09268799993988594
+      ],
+      [
+        44.079,
+        0.09745403360376916
+      ],
+      [
+        44.086,
+        0.10241963366293944
+      ],
+      [
+        44.093,
+        0.10756384564589067
+      ],
+      [
+        44.1,
+        0.11286791530062504
+      ],
+      [
+        44.107,
+        0.11831505757160456
+      ],
+      [
+        44.114,
+        0.1238902498341228
+      ],
+      [
+        44.12,
+        0.12958004683906763
+      ],
+      [
+        44.128,
+        0.13537241508848355
+      ],
+      [
+        44.135,
+        0.14125658460170068
+      ],
+      [
+        44.142,
+        0.14722291624601938
+      ],
+      [
+        44.149,
+        0.15326278299767349
+      ],
+      [
+        44.156,
+        0.15936846367039245
+      ],
+      [
+        44.163,
+        0.16553304780246403
+      ],
+      [
+        44.169,
+        0.1717503505306558
+      ],
+      [
+        44.177,
+        0.17801483640237487
+      ],
+      [
+        44.184,
+        0.1843215511875505
+      ],
+      [
+        44.191,
+        0.19066606085026946
+      ],
+      [
+        44.198,
+        0.1970443969283894
+      ],
+      [
+        44.205,
+        0.203453007648293
+      ],
+      [
+        44.212,
+        0.2098887141725927
+      ],
+      [
+        44.219,
+        0.21634867144182668
+      ],
+      [
+        44.226,
+        0.2228303331277766
+      ],
+      [
+        44.233,
+        0.229331420266687
+      ],
+      [
+        44.24,
+        0.23584989318599692
+      ],
+      [
+        44.247,
+        0.2423839263787641
+      ],
+      [
+        44.253,
+        0.24893188601627542
+      ],
+      [
+        44.26,
+        0.25549230982183246
+      ],
+      [
+        44.268,
+        0.2620638890577903
+      ],
+      [
+        44.275,
+        0.26864545240395665
+      ],
+      [
+        44.282,
+        0.27523595152875946
+      ],
+      [
+        44.289,
+        0.2818344481754417
+      ],
+      [
+        44.295,
+        0.28844010260420583
+      ],
+      [
+        44.303,
+        0.2950521632479331
+      ],
+      [
+        44.31,
+        0.30166995745405223
+      ],
+      [
+        44.317,
+        0.30829288319851184
+      ],
+      [
+        44.324,
+        0.3149204016697861
+      ],
+      [
+        44.331,
+        0.3215520306315593
+      ],
+      [
+        44.338,
+        0.32818733848232884
+      ],
+      [
+        44.345,
+        0.33482593893875
+      ],
+      [
+        44.352,
+        0.34146748627722917
+      ],
+      [
+        44.359,
+        0.34811167107515
+      ],
+      [
+        44.366,
+        0.35475821639927113
+      ],
+      [
+        44.373,
+        0.36140687439434127
+      ],
+      [
+        44.38,
+        0.36805742322991064
+      ],
+      [
+        44.387,
+        0.37470966436772674
+      ],
+      [
+        44.394,
+        0.3813634201160534
+      ],
+      [
+        44.401,
+        0.38787763259135266
+      ],
+      [
+        44.408,
+        0.3937078527569007
+      ],
+      [
+        44.415,
+        0.39892589980500537
+      ],
+      [
+        44.422,
+        0.4035960519130193
+      ],
+      [
+        44.427,
+        0.4077758380496607
+      ],
+      [
+        44.436,
+        0.41151674664192833
+      ],
+      [
+        44.443,
+        0.4148648598319845
+      ],
+      [
+        44.45,
+        0.4178614211370638
+      ],
+      [
+        44.457,
+        0.42054334350509104
+      ],
+      [
+        44.464,
+        0.42294366402445843
+      ],
+      [
+        44.471,
+        0.42509195088927704
+      ],
+      [
+        44.478,
+        0.427014667633276
+      ],
+      [
+        44.485,
+        0.4287354991191428
+      ],
+      [
+        44.492,
+        0.43027564329898255
+      ],
+      [
+        44.499,
+        0.43165407233992914
+      ],
+      [
+        44.506,
+        0.43288776633156745
+      ],
+      [
+        44.513,
+        0.4339919224540757
+      ],
+      [
+        44.52,
+        0.4349801421837134
+      ],
+      [
+        44.527,
+        0.43586459884173273
+      ],
+      [
+        44.534,
+        0.4366561875506543
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.5,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 6,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 46.25,
+    "commanded_width_m": 0.04625,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04625,
+    "i6_margin_m": 0.00213173594501722,
+    "i6_headroom_m": 0.0016182640549827834,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 46.2,
+        "reached_mm": 47.2,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04721149515104144,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.4352425274568771,
+    "i3_drive_samples": 202,
+    "closing_window_sim_s": [
+      45.394000000000005,
+      45.948
+    ],
+    "i3_reached_width_m": 0.04686720603412085,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.00040350484895856215,
+    "d_wide_m": 0.005173504848958559,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.000747793965879158,
+    "d_wide_i3_m": 0.0055177939658791544,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.00034428911692059583,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 47.2,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        45.395,
+        0.062408738107296496
+      ],
+      [
+        45.402,
+        0.06195409510369637
+      ],
+      [
+        45.409,
+        0.0622471895453114
+      ],
+      [
+        45.415,
+        0.06320950900059163
+      ],
+      [
+        45.423,
+        0.0647707848430855
+      ],
+      [
+        45.43,
+        0.06686812665212849
+      ],
+      [
+        45.437,
+        0.06944524750122918
+      ],
+      [
+        45.444,
+        0.07245177059117894
+      ],
+      [
+        45.451,
+        0.07584260868668656
+      ],
+      [
+        45.458,
+        0.07957740871216677
+      ],
+      [
+        45.465,
+        0.08362005466497092
+      ],
+      [
+        45.472,
+        0.08793822272272861
+      ],
+      [
+        45.479,
+        0.09250298306441854
+      ],
+      [
+        45.486,
+        0.09728844350022668
+      ],
+      [
+        45.493,
+        0.10227143052026963
+      ],
+      [
+        45.5,
+        0.10743120383320183
+      ],
+      [
+        45.507,
+        0.11274920087826913
+      ],
+      [
+        45.514,
+        0.11820880816359655
+      ],
+      [
+        45.521,
+        0.12379515661395611
+      ],
+      [
+        45.528,
+        0.1294949384070188
+      ],
+      [
+        45.534,
+        0.1352962430418003
+      ],
+      [
+        45.542,
+        0.14118841061991955
+      ],
+      [
+        45.549,
+        0.14716190053232556
+      ],
+      [
+        45.556,
+        0.15320817393391784
+      ],
+      [
+        45.563,
+        0.1593195885583314
+      ],
+      [
+        45.57,
+        0.16548930457716962
+      ],
+      [
+        45.577,
+        0.17171120034401754
+      ],
+      [
+        45.583,
+        0.17797979698533378
+      ],
+      [
+        45.59,
+        0.18429019090929888
+      ],
+      [
+        45.598,
+        0.19063799340123438
+      ],
+      [
+        45.605,
+        0.19701927656150314
+      ],
+      [
+        45.612,
+        0.20343052491992988
+      ],
+      [
+        45.618,
+        0.2098685921307078
+      ],
+      [
+        45.626,
+        0.21633066221433975
+      ],
+      [
+        45.632,
+        0.22281421486917588
+      ],
+      [
+        45.64,
+        0.22931699442523945
+      ],
+      [
+        45.647,
+        0.2358369820579014
+      ],
+      [
+        45.653,
+        0.24237237091911876
+      ],
+      [
+        45.661,
+        0.24892154387989288
+      ],
+      [
+        45.668,
+        0.2554830536097702
+      ],
+      [
+        45.674,
+        0.2620556047479946
+      ],
+      [
+        45.682,
+        0.26863803794668956
+      ],
+      [
+        45.689,
+        0.27522931558950536
+      ],
+      [
+        45.695,
+        0.28182850900980927
+      ],
+      [
+        45.703,
+        0.2884347870509648
+      ],
+      [
+        45.709,
+        0.2950474058277824
+      ],
+      [
+        45.717,
+        0.30166569956301736
+      ],
+      [
+        45.724,
+        0.30828907238603565
+      ],
+      [
+        45.731,
+        0.31491699099261994
+      ],
+      [
+        45.738,
+        0.32154897807549554
+      ],
+      [
+        45.745,
+        0.32818460644465175
+      ],
+      [
+        45.752,
+        0.33482349376502896
+      ],
+      [
+        45.759,
+        0.3414652978467488
+      ],
+      [
+        45.766,
+        0.3481097124298701
+      ],
+      [
+        45.773,
+        0.3547564634117456
+      ],
+      [
+        45.78,
+        0.3614053054705059
+      ],
+      [
+        45.787,
+        0.36805601904307805
+      ],
+      [
+        45.793,
+        0.37470840762051166
+      ],
+      [
+        45.801,
+        0.3813622953272958
+      ],
+      [
+        45.808,
+        0.387629786627847
+      ],
+      [
+        45.815,
+        0.39323919134189816
+      ],
+      [
+        45.822,
+        0.3982596085609217
+      ],
+      [
+        45.829,
+        0.40275288197191145
+      ],
+      [
+        45.836,
+        0.4067743616747181
+      ],
+      [
+        45.843,
+        0.4103735860087047
+      ],
+      [
+        45.85,
+        0.41359489178760034
+      ],
+      [
+        45.857,
+        0.4164779604596918
+      ],
+      [
+        45.864,
+        0.41905830692119567
+      ],
+      [
+        45.871,
+        0.42136771700422526
+      ],
+      [
+        45.878,
+        0.42343463902852213
+      ],
+      [
+        45.884,
+        0.42528453424025464
+      ],
+      [
+        45.892,
+        0.42694019045474346
+      ],
+      [
+        45.899,
+        0.42842200276670034
+      ],
+      [
+        45.906,
+        0.42974822478589214
+      ],
+      [
+        45.913,
+        0.43093519349306036
+      ],
+      [
+        45.92,
+        0.4319975304859682
+      ],
+      [
+        45.927,
+        0.43294832209461376
+      ],
+      [
+        45.934,
+        0.4337992805843454
+      ],
+      [
+        45.941,
+        0.4345608884326497
+      ],
+      [
+        45.948,
+        0.4352425274568771
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.5,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 7,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 46.5,
+    "commanded_width_m": 0.0465,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.0465,
+    "i6_margin_m": 0.0021304510902801013,
+    "i6_headroom_m": 0.0013695489097199018,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 46.5,
+        "reached_mm": 47.5,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.047531234558724905,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.4342295715447804,
+    "i3_drive_samples": 208,
+    "closing_window_sim_s": [
+      46.846000000000004,
+      47.416000000000004
+    ],
+    "i3_reached_width_m": 0.04697471188039821,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -8.376544127509933e-05,
+    "d_wide_m": 0.004853765441275096,
+    "a1b_inside_window": false,
+    "d_narrow_i3_m": -0.0006402881196017965,
+    "d_wide_i3_m": 0.005410288119601793,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0005565226783266972,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        46.851,
+        0.06106540067621201
+      ],
+      [
+        46.858,
+        0.06145180803271689
+      ],
+      [
+        46.865,
+        0.06249764254682308
+      ],
+      [
+        46.872,
+        0.06413366436696578
+      ],
+      [
+        46.879,
+        0.06629790382600415
+      ],
+      [
+        46.886,
+        0.06893489807185038
+      ],
+      [
+        46.893,
+        0.07199500785188714
+      ],
+      [
+        46.9,
+        0.0754338060350224
+      ],
+      [
+        46.907,
+        0.07921153033892914
+      ],
+      [
+        46.914,
+        0.08329259352092483
+      ],
+      [
+        46.921,
+        0.08764514499880881
+      ],
+      [
+        46.928,
+        0.09224067850151157
+      ],
+      [
+        46.935,
+        0.09705368091642609
+      ],
+      [
+        46.942,
+        0.10206131800776914
+      ],
+      [
+        46.949,
+        0.10724315313451485
+      ],
+      [
+        46.956,
+        0.1125808955029451
+      ],
+      [
+        46.963,
+        0.1180581748526823
+      ],
+      [
+        46.97,
+        0.12366033980068855
+      ],
+      [
+        46.977,
+        0.12937427735914497
+      ],
+      [
+        46.983,
+        0.1351882514039538
+      ],
+      [
+        46.991,
+        0.14109175810404742
+      ],
+      [
+        46.998,
+        0.1470753965306205
+      ],
+      [
+        47.005,
+        0.15313075285239217
+      ],
+      [
+        47.011,
+        0.15925029669036622
+      ],
+      [
+        47.019,
+        0.1654272883553411
+      ],
+      [
+        47.025,
+        0.17165569582548132
+      ],
+      [
+        47.033,
+        0.1779301204412441
+      ],
+      [
+        47.04,
+        0.18424573040233883
+      ],
+      [
+        47.047,
+        0.1905982012475054
+      ],
+      [
+        47.053,
+        0.19698366258391592
+      ],
+      [
+        47.061,
+        0.2033986504099895
+      ],
+      [
+        47.068,
+        0.2098400644443113
+      ],
+      [
+        47.075,
+        0.21630512993501505
+      ],
+      [
+        47.082,
+        0.22279136347918038
+      ],
+      [
+        47.089,
+        0.22929654243119366
+      ],
+      [
+        47.096,
+        0.23581867752323052
+      ],
+      [
+        47.103,
+        0.24235598836058833
+      ],
+      [
+        47.11,
+        0.24890688149000822
+      ],
+      [
+        47.117,
+        0.25546993077082353
+      ],
+      [
+        47.124,
+        0.26204385980713746
+      ],
+      [
+        47.131,
+        0.2686275262246225
+      ],
+      [
+        47.138,
+        0.2752199075982554
+      ],
+      [
+        47.145,
+        0.2818200888576406
+      ],
+      [
+        47.151,
+        0.28842725101477396
+      ],
+      [
+        47.159,
+        0.2950406610753917
+      ],
+      [
+        47.166,
+        0.3016596630096277
+      ],
+      [
+        47.172,
+        0.30828366967075194
+      ],
+      [
+        47.18,
+        0.314912155562441
+      ],
+      [
+        47.186,
+        0.32154465036548546
+      ],
+      [
+        47.194,
+        0.3281807331441928
+      ],
+      [
+        47.201,
+        0.3348200271611183
+      ],
+      [
+        47.208,
+        0.34146219523624877
+      ],
+      [
+        47.215,
+        0.34810693559347267
+      ],
+      [
+        47.222,
+        0.3547539781431699
+      ],
+      [
+        47.229,
+        0.36140308115513065
+      ],
+      [
+        47.236,
+        0.3680540282808171
+      ],
+      [
+        47.243,
+        0.3747066258882879
+      ],
+      [
+        47.25,
+        0.38136070067695566
+      ],
+      [
+        47.257,
+        0.3873813658437608
+      ],
+      [
+        47.264,
+        0.39276986116801205
+      ],
+      [
+        47.271,
+        0.3975925644831733
+      ],
+      [
+        47.278,
+        0.40190888395020985
+      ],
+      [
+        47.285,
+        0.40577198987318014
+      ],
+      [
+        47.292,
+        0.4092294696742144
+      ],
+      [
+        47.298,
+        0.4123239140961186
+      ],
+      [
+        47.305,
+        0.4150934418537036
+      ],
+      [
+        47.313,
+        0.41757216919672485
+      ],
+      [
+        47.32,
+        0.41979063016871315
+      ],
+      [
+        47.327,
+        0.4217761527386287
+      ],
+      [
+        47.334,
+        0.4235531954386904
+      ],
+      [
+        47.34,
+        0.4251436486552344
+      ],
+      [
+        47.348,
+        0.426567104284031
+      ],
+      [
+        47.355,
+        0.4278410970717948
+      ],
+      [
+        47.362,
+        0.42898132061683514
+      ],
+      [
+        47.369,
+        0.43000182068963894
+      ],
+      [
+        47.376,
+        0.4309151682547917
+      ],
+      [
+        47.383,
+        0.43173261432559756
+      ],
+      [
+        47.39,
+        0.4324642285589635
+      ],
+      [
+        47.396,
+        0.4331190232978212
+      ],
+      [
+        47.404,
+        0.4337050645890946
+      ],
+      [
+        47.411,
+        0.4342295715447804
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 8,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 46.75,
+    "commanded_width_m": 0.04675,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04675,
+    "i6_margin_m": 0.0021291536244607834,
+    "i6_headroom_m": 0.0011208463755392195,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 46.8,
+        "reached_mm": 47.7,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04774154979976872,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.43154063143399873,
+    "i3_drive_samples": 207,
+    "closing_window_sim_s": [
+      48.293000000000006,
+      48.859
+    ],
+    "i3_reached_width_m": 0.04725994680707878,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.00012654979976871317,
+    "d_wide_m": 0.004643450200231283,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": -0.00035505319292122167,
+    "d_wide_i3_m": 0.005125053192921218,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.00048160299268993484,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        48.3,
+        0.06208053897007352
+      ],
+      [
+        48.307,
+        0.06236035680571839
+      ],
+      [
+        48.313,
+        0.06331079369865537
+      ],
+      [
+        48.321,
+        0.0648614346478521
+      ],
+      [
+        48.328,
+        0.06694925822739421
+      ],
+      [
+        48.335,
+        0.06951786026109164
+      ],
+      [
+        48.342,
+        0.07251675901125552
+      ],
+      [
+        48.349,
+        0.07590077332265484
+      ],
+      [
+        48.355,
+        0.07962946606135812
+      ],
+      [
+        48.363,
+        0.08366664599249693
+      ],
+      [
+        48.37,
+        0.0879799219608642
+      ],
+      [
+        48.377,
+        0.09254030388254969
+      ],
+      [
+        48.384,
+        0.09732184563245388
+      ],
+      [
+        48.391,
+        0.10230132542861282
+      ],
+      [
+        48.398,
+        0.10745795977616886
+      ],
+      [
+        48.405,
+        0.11277314744722448
+      ],
+      [
+        48.412,
+        0.11823024034281149
+      ],
+      [
+        48.419,
+        0.12381433841435341
+      ],
+      [
+        48.426,
+        0.12951210611837435
+      ],
+      [
+        48.433,
+        0.1353116081434634
+      ],
+      [
+        48.44,
+        0.14120216238590794
+      ],
+      [
+        48.447,
+        0.14717420836288514
+      ],
+      [
+        48.453,
+        0.15321918944226862
+      ],
+      [
+        48.46,
+        0.15932944743830527
+      ],
+      [
+        48.468,
+        0.16549812827474616
+      ],
+      [
+        48.475,
+        0.17171909755334852
+      ],
+      [
+        48.482,
+        0.17798686498768496
+      ],
+      [
+        48.489,
+        0.18429651677140318
+      ],
+      [
+        48.495,
+        0.19064365504781772
+      ],
+      [
+        48.503,
+        0.19702434373519523
+      ],
+      [
+        48.509,
+        0.2034350600403843
+      ],
+      [
+        48.517,
+        0.20987265106351455
+      ],
+      [
+        48.524,
+        0.2163342949592018
+      ],
+      [
+        48.531,
+        0.22281746617582743
+      ],
+      [
+        48.538,
+        0.22931990434469254
+      ],
+      [
+        48.545,
+        0.2358395864358119
+      ],
+      [
+        48.552,
+        0.24237470183734858
+      ],
+      [
+        48.559,
+        0.2489236300517086
+      ],
+      [
+        48.566,
+        0.25548492073354523
+      ],
+      [
+        48.573,
+        0.26205727582377325
+      ],
+      [
+        48.579,
+        0.2686395335595114
+      ],
+      [
+        48.587,
+        0.275230654162981
+      ],
+      [
+        48.594,
+        0.28182970703307003
+      ],
+      [
+        48.601,
+        0.2884358592817832
+      ],
+      [
+        48.608,
+        0.29504836547436486
+      ],
+      [
+        48.615,
+        0.30166655844670875
+      ],
+      [
+        48.621,
+        0.3082898410869395
+      ],
+      [
+        48.629,
+        0.3149176789799289
+      ],
+      [
+        48.635,
+        0.3215495938241371
+      ],
+      [
+        48.643,
+        0.328185157539686
+      ],
+      [
+        48.65,
+        0.33482398699508464
+      ],
+      [
+        48.657,
+        0.3414657392876487
+      ],
+      [
+        48.663,
+        0.3481101075194755
+      ],
+      [
+        48.671,
+        0.35475681701694245
+      ],
+      [
+        48.677,
+        0.36140562194715714
+      ],
+      [
+        48.685,
+        0.36805630228968095
+      ],
+      [
+        48.691,
+        0.37470866112622114
+      ],
+      [
+        48.699,
+        0.38118064092014886
+      ],
+      [
+        48.706,
+        0.38697306283585203
+      ],
+      [
+        48.713,
+        0.3921572804503476
+      ],
+      [
+        48.72,
+        0.3967971552152822
+      ],
+      [
+        48.727,
+        0.4009498431298681
+      ],
+      [
+        48.734,
+        0.40466649881339656
+      ],
+      [
+        48.741,
+        0.4079929056501314
+      ],
+      [
+        48.747,
+        0.41097003976898844
+      ],
+      [
+        48.755,
+        0.413634574805347
+      ],
+      [
+        48.762,
+        0.4160193336628712
+      ],
+      [
+        48.769,
+        0.4181536928403403
+      ],
+      [
+        48.776,
+        0.42006394430416183
+      ],
+      [
+        48.783,
+        0.4217736193642699
+      ],
+      [
+        48.79,
+        0.4233037785430556
+      ],
+      [
+        48.797,
+        0.42467327100805913
+      ],
+      [
+        48.803,
+        0.4258989667642285
+      ],
+      [
+        48.811,
+        0.42699596446599214
+      ],
+      [
+        48.818,
+        0.4279777774090635
+      ],
+      [
+        48.825,
+        0.42885649999310604
+      ],
+      [
+        48.832,
+        0.4296429567058184
+      ],
+      [
+        48.839,
+        0.4303468354636909
+      ],
+      [
+        48.846000000000004,
+        0.43097680695198215
+      ],
+      [
+        48.853,
+        0.43154063143399873
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 9,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 47.0,
+    "commanded_width_m": 0.047,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.047,
+    "i6_margin_m": 0.0021278435235357746,
+    "i6_headroom_m": 0.0008721564764642281,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 47.0,
+        "reached_mm": 48.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04795309110325332,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.42822076121565256,
+    "i3_drive_samples": 204,
+    "closing_window_sim_s": [
+      49.757000000000005,
+      50.303000000000004
+    ],
+    "i3_reached_width_m": 0.04761181689213775,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0003380911032533143,
+    "d_wide_m": 0.004431908896746682,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": -3.1831078622576725e-06,
+    "d_wide_i3_m": 0.004773183107862254,
+    "a1b_inside_window_i3": false,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.000341274211115572,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 48.0,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        49.763,
+        0.061928975277526076
+      ],
+      [
+        49.77,
+        0.0622247073008891
+      ],
+      [
+        49.777,
+        0.06318938739183377
+      ],
+      [
+        49.784,
+        0.06475277600324729
+      ],
+      [
+        49.791,
+        0.06685200874047337
+      ],
+      [
+        49.798,
+        0.0694308219702979
+      ],
+      [
+        49.804,
+        0.0724388597409955
+      ],
+      [
+        49.812,
+        0.07583105347577244
+      ],
+      [
+        49.819,
+        0.0795670667983987
+      ],
+      [
+        49.826,
+        0.08361079865214856
+      ],
+      [
+        49.833,
+        0.08792993859125266
+      ],
+      [
+        49.84,
+        0.0924955687667476
+      ],
+      [
+        49.847,
+        0.09728180770381122
+      ],
+      [
+        49.854,
+        0.10226549148247784
+      ],
+      [
+        49.861,
+        0.10742588839437822
+      ],
+      [
+        49.868,
+        0.112744443560522
+      ],
+      [
+        49.875,
+        0.1182045503642129
+      ],
+      [
+        49.882,
+        0.12379134588350778
+      ],
+      [
+        49.889,
+        0.12949152780326761
+      ],
+      [
+        49.896,
+        0.13529319055144298
+      ],
+      [
+        49.903,
+        0.14118567864104972
+      ],
+      [
+        49.91,
+        0.14715945541123712
+      ],
+      [
+        49.917,
+        0.15320598555054368
+      ],
+      [
+        49.924,
+        0.15931762995521154
+      ],
+      [
+        49.931,
+        0.16548755162737736
+      ],
+      [
+        49.938,
+        0.1717096314539534
+      ],
+      [
+        49.945,
+        0.1779783928287264
+      ],
+      [
+        49.951,
+        0.18428893418913528
+      ],
+      [
+        49.959,
+        0.19063686863668802
+      ],
+      [
+        49.966,
+        0.19701826989723414
+      ],
+      [
+        49.973,
+        0.2034296239554092
+      ],
+      [
+        49.979,
+        0.20986778576746182
+      ],
+      [
+        49.987,
+        0.21632994051923463
+      ],
+      [
+        49.994,
+        0.22281356895205678
+      ],
+      [
+        50.001,
+        0.22931641632941788
+      ],
+      [
+        50.008,
+        0.2358364646621411
+      ],
+      [
+        50.015,
+        0.2423719078499132
+      ],
+      [
+        50.022,
+        0.24892112943295386
+      ],
+      [
+        50.028,
+        0.2554826826797597
+      ],
+      [
+        50.036,
+        0.2620552727656353
+      ],
+      [
+        50.043,
+        0.26863774082247793
+      ],
+      [
+        50.05,
+        0.27522904966333606
+      ],
+      [
+        50.057,
+        0.2818282710058878
+      ],
+      [
+        50.064,
+        0.28843457403745515
+      ],
+      [
+        50.071,
+        0.29504721518069127
+      ],
+      [
+        50.078,
+        0.3016655289338708
+      ],
+      [
+        50.085,
+        0.3082889196729495
+      ],
+      [
+        50.092,
+        0.3149168543144078
+      ],
+      [
+        50.099,
+        0.32154885574849573
+      ],
+      [
+        50.106,
+        0.328184496961987
+      ],
+      [
+        50.113,
+        0.334823395778044
+      ],
+      [
+        50.12,
+        0.3414652101483972
+      ],
+      [
+        50.127,
+        0.34810963393984545
+      ],
+      [
+        50.134,
+        0.35475639316317353
+      ],
+      [
+        50.141,
+        0.3614052425980339
+      ],
+      [
+        50.147,
+        0.3680559627722156
+      ],
+      [
+        50.154,
+        0.3747083572580897
+      ],
+      [
+        50.161,
+        0.3809330618115086
+      ],
+      [
+        50.169,
+        0.38650417238685986
+      ],
+      [
+        50.176,
+        0.3914903163517489
+      ],
+      [
+        50.183,
+        0.3959529152002892
+      ],
+      [
+        50.19,
+        0.399946941169704
+      ],
+      [
+        50.196,
+        0.4035215944123054
+      ],
+      [
+        50.204,
+        0.40672090906441155
+      ],
+      [
+        50.211,
+        0.40958429567802684
+      ],
+      [
+        50.218,
+        0.41214702669719455
+      ],
+      [
+        50.225,
+        0.4144406709593337
+      ],
+      [
+        50.232,
+        0.41649348257393376
+      ],
+      [
+        50.238,
+        0.4183307489689879
+      ],
+      [
+        50.246,
+        0.41997510239254965
+      ],
+      [
+        50.253,
+        0.421446798706627
+      ],
+      [
+        50.26,
+        0.42276396690771684
+      ],
+      [
+        50.267,
+        0.42394283244768377
+      ],
+      [
+        50.274,
+        0.42499791710594664
+      ],
+      [
+        50.281,
+        0.425942217875085
+      ],
+      [
+        50.288,
+        0.4267873670634578
+      ],
+      [
+        50.295,
+        0.42754377558704604
+      ],
+      [
+        50.301,
+        0.42822076121565256
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 10,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 47.25,
+    "commanded_width_m": 0.04725,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04725,
+    "i6_margin_m": 0.0021265207631943547,
+    "i6_headroom_m": 0.0006234792368056477,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 47.2,
+        "reached_mm": 48.3,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.04827184554028222,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.42719569809715574,
+    "i3_drive_samples": 207,
+    "closing_window_sim_s": [
+      51.189,
+      51.752
+    ],
+    "i3_reached_width_m": 0.04772039665580833,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0006568455402822179,
+    "d_wide_m": 0.0041131544597177785,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": 0.00010539665580832497,
+    "d_wide_i3_m": 0.0046646033441916715,
+    "a1b_inside_window_i3": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.000551448884473893,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 48.3,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        51.19,
+        0.06104505165546228
+      ],
+      [
+        51.198,
+        0.06073359572931064
+      ],
+      [
+        51.205,
+        0.06115484260524166
+      ],
+      [
+        51.212,
+        0.062231858489234064
+      ],
+      [
+        51.219,
+        0.06389578763542478
+      ],
+      [
+        51.226,
+        0.066085004151276
+      ],
+      [
+        51.233,
+        0.06874435286296961
+      ],
+      [
+        51.24,
+        0.0718244698899397
+      ],
+      [
+        51.247,
+        0.07528117455908019
+      ],
+      [
+        51.254,
+        0.07907492516796152
+      ],
+      [
+        51.261,
+        0.08317033189290943
+      ],
+      [
+        51.268,
+        0.08753572084173557
+      ],
+      [
+        51.275,
+        0.09214274388093151
+      ],
+      [
+        51.282,
+        0.09696602943100739
+      ],
+      [
+        51.289,
+        0.1019828699283198
+      ],
+      [
+        51.295,
+        0.10717294210340804
+      ],
+      [
+        51.303,
+        0.11251805663010483
+      ],
+      [
+        51.31,
+        0.11800193406149058
+      ],
+      [
+        51.316,
+        0.1236100042925722
+      ],
+      [
+        51.324,
+        0.1293292270793811
+      ],
+      [
+        51.331,
+        0.13514793140356532
+      ],
+      [
+        51.338,
+        0.1410556717036999
+      ],
+      [
+        51.345,
+        0.14704309920230965
+      ],
+      [
+        51.352,
+        0.15310184674355415
+      ],
+      [
+        51.358,
+        0.1592244257229564
+      ],
+      [
+        51.366,
+        0.16540413383950936
+      ],
+      [
+        51.373,
+        0.17163497253381202
+      ],
+      [
+        51.38,
+        0.1779115730952002
+      ],
+      [
+        51.387,
+        0.18422913052762965
+      ],
+      [
+        51.394,
+        0.19058334435964075
+      ],
+      [
+        51.401,
+        0.19697036566927714
+      ],
+      [
+        51.408,
+        0.20338674967138792
+      ],
+      [
+        51.415,
+        0.209829413283263
+      ],
+      [
+        51.422,
+        0.21629559714587687
+      ],
+      [
+        51.429,
+        0.22278283163290172
+      ],
+      [
+        51.435,
+        0.22928890642877425
+      ],
+      [
+        51.443,
+        0.23581184330106517
+      ],
+      [
+        51.45,
+        0.24234987173175038
+      ],
+      [
+        51.457,
+        0.24890140710719827
+      ],
+      [
+        51.464,
+        0.2554650311982086
+      ],
+      [
+        51.471,
+        0.2620394746896471
+      ],
+      [
+        51.477,
+        0.26862360154446857
+      ],
+      [
+        51.485,
+        0.2752163950095177
+      ],
+      [
+        51.491,
+        0.28181694509072036
+      ],
+      [
+        51.498,
+        0.2884244373433803
+      ],
+      [
+        51.506,
+        0.29503814283949437
+      ],
+      [
+        51.512,
+        0.3016574091884996
+      ],
+      [
+        51.52,
+        0.3082816525008423
+      ],
+      [
+        51.527,
+        0.3149103501953719
+      ],
+      [
+        51.534,
+        0.3215430345619586
+      ],
+      [
+        51.541,
+        0.3281792870000362
+      ],
+      [
+        51.548,
+        0.33481873286209807
+      ],
+      [
+        51.555,
+        0.34146103683862566
+      ],
+      [
+        51.562,
+        0.34810589882759996
+      ],
+      [
+        51.569,
+        0.3547530502377138
+      ],
+      [
+        51.576,
+        0.36140225067974746
+      ],
+      [
+        51.583,
+        0.3680532850053493
+      ],
+      [
+        51.59,
+        0.37470596065674433
+      ],
+      [
+        51.597,
+        0.380683450408946
+      ],
+      [
+        51.604,
+        0.3860333037371112
+      ],
+      [
+        51.611,
+        0.39082142246577717
+      ],
+      [
+        51.618,
+        0.3951067887279012
+      ],
+      [
+        51.625,
+        0.3989421915324753
+      ],
+      [
+        51.632,
+        0.4023748770425455
+      ],
+      [
+        51.639,
+        0.40544713057403714
+      ],
+      [
+        51.646,
+        0.4081967974847033
+      ],
+      [
+        51.653,
+        0.41065774936973226
+      ],
+      [
+        51.66,
+        0.41286030130681783
+      ],
+      [
+        51.666,
+        0.4148315852904956
+      ],
+      [
+        51.674,
+        0.41659588445587475
+      ],
+      [
+        51.681,
+        0.41817493220887786
+      ],
+      [
+        51.688,
+        0.4195881799478056
+      ],
+      [
+        51.695,
+        0.42085303667413704
+      ],
+      [
+        51.701,
+        0.4219850834441955
+      ],
+      [
+        51.708,
+        0.4229982653033906
+      ],
+      [
+        51.716,
+        0.4239050630673636
+      ],
+      [
+        51.723,
+        0.4247166470661136
+      ],
+      [
+        51.73,
+        0.4254430147449897
+      ],
+      [
+        51.737,
+        0.4260931138175791
+      ],
+      [
+        51.744,
+        0.4266749524875424
+      ],
+      [
+        51.75,
+        0.42719569809715574
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 11,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 47.5,
+    "commanded_width_m": 0.0475,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.0475,
+    "i6_margin_m": 0.0021251853188362924,
+    "i6_headroom_m": 0.00037481468116370986,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 47.5,
+        "reached_mm": 48.5,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.048482916794941634,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.42585389155173,
+    "i3_drive_samples": 205,
+    "closing_window_sim_s": [
+      52.612,
+      53.191
+    ],
+    "i3_reached_width_m": 0.04786248024042991,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0008679167949416297,
+    "d_wide_m": 0.0039020832050583668,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": 0.00024748024042990646,
+    "d_wide_i3_m": 0.00452251975957009,
+    "a1b_inside_window_i3": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0006204365545117232,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 48.5,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        52.619,
+        0.06126130478736782
+      ],
+      [
+        52.626,
+        0.06162714221220046
+      ],
+      [
+        52.633,
+        0.0626545666374601
+      ],
+      [
+        52.64,
+        0.06427411142808521
+      ],
+      [
+        52.647,
+        0.06642360394570541
+      ],
+      [
+        52.653,
+        0.06904739967898248
+      ],
+      [
+        52.661,
+        0.07209569679026988
+      ],
+      [
+        52.668,
+        0.07552392263487451
+      ],
+      [
+        52.674,
+        0.07929218469579638
+      ],
+      [
+        52.682,
+        0.08336477917032067
+      ],
+      [
+        52.689,
+        0.08770975115501778
+      ],
+      [
+        52.696,
+        0.09229850101131834
+      ],
+      [
+        52.703,
+        0.09710543206270289
+      ],
+      [
+        52.71,
+        0.10210763528368667
+      ],
+      [
+        52.717,
+        0.10728460709646084
+      ],
+      [
+        52.724,
+        0.1126179967988866
+      ],
+      [
+        52.73,
+        0.11809138051254976
+      ],
+      [
+        52.738,
+        0.1236900588662698
+      ],
+      [
+        52.745,
+        0.1294008759228401
+      ],
+      [
+        52.752,
+        0.13521205711846074
+      ],
+      [
+        52.759,
+        0.14111306421853104
+      ],
+      [
+        52.765,
+        0.14709446550308325
+      ],
+      [
+        52.772,
+        0.15314781958274626
+      ],
+      [
+        52.78,
+        0.15926557141403314
+      ],
+      [
+        52.787,
+        0.1654409592330229
+      ],
+      [
+        52.794,
+        0.17166793126100643
+      ],
+      [
+        52.801,
+        0.17794107115603908
+      ],
+      [
+        52.808,
+        0.1842555312920803
+      ],
+      [
+        52.815,
+        0.19060697304382396
+      ],
+      [
+        52.822,
+        0.196991513341621
+      ],
+      [
+        52.828,
+        0.20340567683813549
+      ],
+      [
+        52.836,
+        0.20984635309750196
+      ],
+      [
+        52.843,
+        0.21631075827962065
+      ],
+      [
+        52.85,
+        0.2227964008476024
+      ],
+      [
+        52.857,
+        0.2293010508759313
+      ],
+      [
+        52.864,
+        0.2358227125812707
+      ],
+      [
+        52.871,
+        0.24235959973753426
+      ],
+      [
+        52.878,
+        0.2489101136723748
+      ],
+      [
+        52.885,
+        0.2554728235740416
+      ],
+      [
+        52.892,
+        0.2620464488660176
+      ],
+      [
+        52.899,
+        0.26862984343232016
+      ],
+      [
+        52.906,
+        0.27522198149914484
+      ],
+      [
+        52.913,
+        0.2818219449989367
+      ],
+      [
+        52.92,
+        0.28842891226123396
+      ],
+      [
+        52.927,
+        0.2950421478909733
+      ],
+      [
+        52.934,
+        0.3016609937095733
+      ],
+      [
+        52.941,
+        0.3082848606472033
+      ],
+      [
+        52.948,
+        0.31491322148636497
+      ],
+      [
+        52.955,
+        0.3215456043673974
+      ],
+      [
+        52.962,
+        0.3281815869759039
+      ],
+      [
+        52.969,
+        0.33482079134049963
+      ],
+      [
+        52.976,
+        0.34146287917679513
+      ],
+      [
+        52.983,
+        0.34810754772026165
+      ],
+      [
+        52.99,
+        0.3547545259966461
+      ],
+      [
+        52.997,
+        0.361403571483992
+      ],
+      [
+        53.004,
+        0.3680544671251481
+      ],
+      [
+        53.011,
+        0.3744827362704266
+      ],
+      [
+        53.018,
+        0.3802360371555714
+      ],
+      [
+        53.025,
+        0.3853852414477191
+      ],
+      [
+        53.032,
+        0.38999377928915324
+      ],
+      [
+        53.039,
+        0.3941184206572068
+      ],
+      [
+        53.046,
+        0.39780997468158913
+      ],
+      [
+        53.053,
+        0.4011139155333886
+      ],
+      [
+        53.06,
+        0.40407094259572873
+      ],
+      [
+        53.067,
+        0.40671748181650486
+      ],
+      [
+        53.074,
+        0.4090861344190831
+      ],
+      [
+        53.08,
+        0.41120607849837576
+      ],
+      [
+        53.088,
+        0.4131034284493295
+      ],
+      [
+        53.095,
+        0.41480155665542107
+      ],
+      [
+        53.102,
+        0.41632138139986236
+      ],
+      [
+        53.108,
+        0.41768162454612767
+      ],
+      [
+        53.115,
+        0.41889904216202645
+      ],
+      [
+        53.123,
+        0.41998863092824795
+      ],
+      [
+        53.129,
+        0.42096381287400925
+      ],
+      [
+        53.137,
+        0.42183660071545936
+      ],
+      [
+        53.144,
+        0.4226177458335516
+      ],
+      [
+        53.151,
+        0.42331687071423924
+      ],
+      [
+        53.158,
+        0.4239425874824501
+      ],
+      [
+        53.165,
+        0.42450260398999473
+      ],
+      [
+        53.172,
+        0.4250038187642436
+      ],
+      [
+        53.179,
+        0.4254524059871931
+      ],
+      [
+        53.186,
+        0.42585389155173
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.5,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 12,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 47.75,
+    "commanded_width_m": 0.04775,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.04775,
+    "i6_margin_m": 0.0021238371655693325,
+    "i6_headroom_m": 0.0001261628344306695,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.1,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 47.8,
+        "reached_mm": 48.8,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.0488050742162031,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.42178831831025465,
+    "i3_drive_samples": 202,
+    "closing_window_sim_s": [
+      54.056000000000004,
+      54.601000000000006
+    ],
+    "i3_reached_width_m": 0.04829265354418428,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0011900742162030964,
+    "d_wide_m": 0.0035799257837969,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": 0.0006776535441842743,
+    "d_wide_i3_m": 0.004092346455815722,
+    "a1b_inside_window_i3": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0005124206720188221,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 48.8,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        54.061,
+        0.06150138647174668
+      ],
+      [
+        54.068,
+        0.06184201531971846
+      ],
+      [
+        54.075,
+        0.06284687806868774
+      ],
+      [
+        54.082,
+        0.06444623015903313
+      ],
+      [
+        54.089,
+        0.06657765020990303
+      ],
+      [
+        54.096,
+        0.06918527108543868
+      ],
+      [
+        54.103,
+        0.07221909169904758
+      ],
+      [
+        54.11,
+        0.07563436107823002
+      ],
+      [
+        54.117,
+        0.07939102710259907
+      ],
+      [
+        54.124,
+        0.08345324312440865
+      ],
+      [
+        54.13,
+        0.08778892639392612
+      ],
+      [
+        54.138,
+        0.09236936285014095
+      ],
+      [
+        54.145,
+        0.09716885340844883
+      ],
+      [
+        54.152,
+        0.102164397388129
+      ],
+      [
+        54.159,
+        0.10733540917993648
+      ],
+      [
+        54.166,
+        0.11266346466359704
+      ],
+      [
+        54.173,
+        0.11813207425146542
+      ],
+      [
+        54.18,
+        0.12372647976259911
+      ],
+      [
+        54.187,
+        0.1294334726250546
+      ],
+      [
+        54.194,
+        0.13524123116694262
+      ],
+      [
+        54.201,
+        0.14113917499192213
+      ],
+      [
+        54.207,
+        0.14711783464526815
+      ],
+      [
+        54.215,
+        0.1531687349650017
+      ],
+      [
+        54.222,
+        0.15928429068115163
+      ],
+      [
+        54.229,
+        0.16545771297709388
+      ],
+      [
+        54.236,
+        0.17168292586194986
+      ],
+      [
+        54.243,
+        0.17795449132388336
+      ],
+      [
+        54.25,
+        0.18426754234230092
+      ],
+      [
+        54.257,
+        0.19061772293377136
+      ],
+      [
+        54.264,
+        0.1970011344931239
+      ],
+      [
+        54.271,
+        0.2034142877687306
+      ],
+      [
+        54.277,
+        0.20985405988038452
+      ],
+      [
+        54.285,
+        0.21631765585030052
+      ],
+      [
+        54.292,
+        0.22280257417336083
+      ],
+      [
+        54.298,
+        0.22930657600248508
+      ],
+      [
+        54.306,
+        0.2358276575695363
+      ],
+      [
+        54.313,
+        0.24236402550203198
+      ],
+      [
+        54.319,
+        0.2489140747316002
+      ],
+      [
+        54.326,
+        0.25547636872204826
+      ],
+      [
+        54.334,
+        0.2620496217734835
+      ],
+      [
+        54.34,
+        0.2686326831845021
+      ],
+      [
+        54.348,
+        0.2752245230773477
+      ],
+      [
+        54.355,
+        0.2818242197114282
+      ],
+      [
+        54.362,
+        0.2884309481289138
+      ],
+      [
+        54.369,
+        0.2950439699925468
+      ],
+      [
+        54.375,
+        0.3016626244904815
+      ],
+      [
+        54.383,
+        0.3082863201961161
+      ],
+      [
+        54.39,
+        0.314914527782642
+      ],
+      [
+        54.397,
+        0.3215467735025653
+      ],
+      [
+        54.403,
+        0.32818263335187925
+      ],
+      [
+        54.41,
+        0.3348217278469976
+      ],
+      [
+        54.418,
+        0.3414637173501108
+      ],
+      [
+        54.425,
+        0.3481082978853791
+      ],
+      [
+        54.432,
+        0.3547551973944262
+      ],
+      [
+        54.439,
+        0.36140417238500505
+      ],
+      [
+        54.446,
+        0.3680550049315548
+      ],
+      [
+        54.453,
+        0.37423542750189986
+      ],
+      [
+        54.46,
+        0.3797669057023831
+      ],
+      [
+        54.467,
+        0.38471757869176715
+      ],
+      [
+        54.474,
+        0.38914843101723123
+      ],
+      [
+        54.48,
+        0.3931140438484934
+      ],
+      [
+        54.488,
+        0.39666326733244855
+      ],
+      [
+        54.495,
+        0.3998398223505667
+      ],
+      [
+        54.502,
+        0.4026828390917629
+      ],
+      [
+        54.509,
+        0.40522733907511593
+      ],
+      [
+        54.516,
+        0.4075046665602011
+      ],
+      [
+        54.522,
+        0.4095428746593382
+      ],
+      [
+        54.53,
+        0.411367070908053
+      ],
+      [
+        54.537,
+        0.4129997265506414
+      ],
+      [
+        54.544,
+        0.4144609533507476
+      ],
+      [
+        54.551,
+        0.41576875133683344
+      ],
+      [
+        54.557,
+        0.41693923053437193
+      ],
+      [
+        54.565,
+        0.4179868094161614
+      ],
+      [
+        54.571,
+        0.4189243925153563
+      ],
+      [
+        54.579,
+        0.4197635293891297
+      ],
+      [
+        54.586,
+        0.4205145568911515
+      ],
+      [
+        54.593,
+        0.42118672650545624
+      ],
+      [
+        54.599,
+        0.42178831831025465
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  },
+  {
+    "trial": 13,
+    "cycle": 0,
+    "arm": "A",
+    "condition": "coarse",
+    "commanded_width_mm": 47.85,
+    "commanded_width_m": 0.047850000000000004,
+    "homed_at_block_start": true,
+    "i6_source": "Goal",
+    "i6_resolved_width_m": 0.047850000000000004,
+    "i6_margin_m": 0.0021232943401362017,
+    "i6_headroom_m": 2.6705659863797415e-05,
+    "models_in_world": [
+      "ground_plane",
+      "arm_2",
+      "arm_3",
+      "arm_1",
+      "cell_a_scene"
+    ],
+    "v3_no_workpiece": true,
+    "contact_witness": "criteria.md I4 is a sensor ON THE WORK-PIECE and this arm spawns none, so I4 does not exist here. V3's Arm A clause is discharged by its second half -- no work-piece in the world -- read per trial from the world itself. A vacuous witness is not a witness.",
+    "finger_contact_points_max": null,
+    "release_reports": [
+      {
+        "commanded_mm": 83.9,
+        "reached_mm": 83.0,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_reports": [
+      {
+        "commanded_mm": 47.9,
+        "reached_mm": 48.9,
+        "stalled": false,
+        "reached_goal": true,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "i2_report_missing": false,
+    "i1_answered": true,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i1_reached_width_m": 0.048887931508728395,
+    "i1_measured_effort_n": 60.0,
+    "i1_holding": false,
+    "holding_F": false,
+    "stalled": false,
+    "reached_goal": true,
+    "i3_q_at_stall_rad": 0.42235435980238945,
+    "i3_drive_samples": 209,
+    "closing_window_sim_s": [
+      55.506,
+      56.075
+    ],
+    "i3_reached_width_m": 0.04823279123148113,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0012729315087283907,
+    "d_wide_m": 0.0034970684912716057,
+    "a1b_inside_window": true,
+    "d_narrow_i3_m": 0.0006177912314811254,
+    "d_wide_i3_m": 0.004152208768518871,
+    "a1b_inside_window_i3": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0006551402772472653,
+    "v4_within_tolerance": false,
+    "v4_i2_reached_mm": 48.9,
+    "v4_rounds_to_i2": false,
+    "v4_ok": false,
+    "i3_window_trace": [
+      [
+        55.51,
+        0.0604379405594867
+      ],
+      [
+        55.516,
+        0.06089023122825056
+      ],
+      [
+        55.524,
+        0.061995031306828194
+      ],
+      [
+        55.53,
+        0.06368382730717256
+      ],
+      [
+        55.537,
+        0.06589529965749118
+      ],
+      [
+        55.545,
+        0.06857456734103305
+      ],
+      [
+        55.552,
+        0.07167251184780721
+      ],
+      [
+        55.558,
+        0.0751451721113723
+      ],
+      [
+        55.566,
+        0.07895320297726358
+      ],
+      [
+        55.573,
+        0.08306139053223528
+      ],
+      [
+        55.58,
+        0.08743821832393267
+      ],
+      [
+        55.587,
+        0.09205547912749835
+      ],
+      [
+        55.594,
+        0.09688792747668508
+      ],
+      [
+        55.6,
+        0.10191296867920169
+      ],
+      [
+        55.608,
+        0.10711038048544763
+      ],
+      [
+        55.615,
+        0.11246206398203056
+      ],
+      [
+        55.622,
+        0.11795182064146432
+      ],
+      [
+        55.629,
+        0.12356515278164892
+      ],
+      [
+        55.635,
+        0.12928908497710495
+      ],
+      [
+        55.643,
+        0.1351120042220283
+      ],
+      [
+        55.65,
+        0.14102351687622444
+      ],
+      [
+        55.657,
+        0.1470143206317192
+      ],
+      [
+        55.664,
+        0.15307608992287583
+      ],
+      [
+        55.671,
+        0.15920137336844944
+      ],
+      [
+        55.678,
+        0.16538350198222582
+      ],
+      [
+        55.685,
+        0.17161650702154332
+      ],
+      [
+        55.692,
+        0.17789504646171983
+      ],
+      [
+        55.698,
+        0.18421433919066477
+      ],
+      [
+        55.706,
+        0.19057010611305727
+      ],
+      [
+        55.713,
+        0.196958517438585
+      ],
+      [
+        55.72,
+        0.20337614550491848
+      ],
+      [
+        55.727,
+        0.2098199225542729
+      ],
+      [
+        55.734,
+        0.2162871029434308
+      ],
+      [
+        55.741,
+        0.2227752293217126
+      ],
+      [
+        55.748,
+        0.22928210236026
+      ],
+      [
+        55.755,
+        0.23580575365974502
+      ],
+      [
+        55.762,
+        0.24234442150276891
+      ],
+      [
+        55.769,
+        0.2488965291522599
+      ],
+      [
+        55.776,
+        0.2554606654285388
+      ],
+      [
+        55.783,
+        0.2620355673257926
+      ],
+      [
+        55.789,
+        0.2686201044538188
+      ],
+      [
+        55.797,
+        0.2752132651133862
+      ],
+      [
+        55.804,
+        0.28181414383368275
+      ],
+      [
+        55.81,
+        0.2884219302183316
+      ],
+      [
+        55.818,
+        0.29503589896257576
+      ],
+      [
+        55.825,
+        0.30165540091865745
+      ],
+      [
+        55.832,
+        0.3082798550993336
+      ],
+      [
+        55.839,
+        0.31490874152102166
+      ],
+      [
+        55.846000000000004,
+        0.32154159479841515
+      ],
+      [
+        55.852,
+        0.3281779984116649
+      ],
+      [
+        55.86,
+        0.3348175795755058
+      ],
+      [
+        55.867,
+        0.34146000464712556
+      ],
+      [
+        55.874,
+        0.34810497501620735
+      ],
+      [
+        55.88,
+        0.3547522234265175
+      ],
+      [
+        55.888,
+        0.3614015106837268
+      ],
+      [
+        55.895,
+        0.36805262270891076
+      ],
+      [
+        55.901,
+        0.37413413343943663
+      ],
+      [
+        55.909,
+        0.37957708554324326
+      ],
+      [
+        55.915,
+        0.38444852767610505
+      ],
+      [
+        55.923,
+        0.3888084683849832
+      ],
+      [
+        55.93,
+        0.39271061531940166
+      ],
+      [
+        55.937,
+        0.39620303682568214
+      ],
+      [
+        55.944,
+        0.3993287540737818
+      ],
+      [
+        55.95,
+        0.40212627101081183
+      ],
+      [
+        55.958,
+        0.4046300486694364
+      ],
+      [
+        55.965,
+        0.40687092967388994
+      ],
+      [
+        55.972,
+        0.40887651817286186
+      ],
+      [
+        55.979,
+        0.4106715198794291
+      ],
+      [
+        55.986,
+        0.4122780464067956
+      ],
+      [
+        55.993,
+        0.4137158876487785
+      ],
+      [
+        56.0,
+        0.415002755560344
+      ],
+      [
+        56.007,
+        0.416154502341187
+      ],
+      [
+        56.013,
+        0.41718531571003403
+      ],
+      [
+        56.02,
+        0.4181078936751456
+      ],
+      [
+        56.028,
+        0.4189336009539146
+      ],
+      [
+        56.034,
+        0.41967260896840747
+      ],
+      [
+        56.042,
+        0.4203340211413739
+      ],
+      [
+        56.048,
+        0.42092598503617457
+      ],
+      [
+        56.056,
+        0.42145579272201733
+      ],
+      [
+        56.063,
+        0.4219299706008433
+      ],
+      [
+        56.07,
+        0.42235435980238945
+      ]
+    ],
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:59:27Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "ok": true,
+    "wall_s": 1.6,
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/A_B1_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_header.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/B_trials.json\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "A_B2",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": true,
+    "v7_ok": true
+  }
+]

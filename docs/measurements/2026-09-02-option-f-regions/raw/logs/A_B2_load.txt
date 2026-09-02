@@ -1,0 +1,6 @@
+== A_B2 ==
+ 05:59:27 up 10:58,  0 user,  load average: 3.30, 4.14, 3.79
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3286        2053         180        2875        4550
+overlay         453G   31G  399G   8% /
