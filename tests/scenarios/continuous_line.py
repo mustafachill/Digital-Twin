@@ -553,12 +553,23 @@ class TestContinuousLine(unittest.TestCase):
         free. The `LineState` the coordinator publishes says it in one field, so
         the run ends on the message rather than on the budget.
 
-        On the success path it prints one `CITE_TIMING` line saying how long the
-        wait actually took. `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md`
-        §3 had to report `DELIVERY_CEILING_S` and `TRAJECTORY_CEILING_S` as "not
-        assessed" and reach `SKILL_CEILING_S` and `LEG_CEILING_S` only through
-        proxies, because per-milestone timings were not printed. They are now, so
-        a follow-up campaign can re-derive every ceiling from measurement.
+        On the success path it emits one `CITE_TIMING` record through
+        `_emit_timing`, saying how long the wait actually took.
+        `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md` §3
+        could reach `LEG_CEILING_S` only through a proxy, because per-milestone
+        timings were not printed.
+
+        WHAT THIS FILE COVERS, AND THE TRAP IN IT. `BRING_UP_CEILING_S` is bounded
+        here. `LEG_CEILING_S` is used in three places, and only one of them is a
+        leg: this method bounds the work-piece spawn settling on the pick surface
+        (order a second) and its removal from the simulator (order milliseconds),
+        while the interval the ceiling is actually sized for — ONE MILESTONE OF
+        THE LADDER — is the deadline loop in `_run_one_piece`, which now emits
+        too. A campaign computing a margin as `ceiling / slowest instance` over
+        the spawn and removal records alone would put `LEG_CEILING_S` hundreds of
+        times looser than the proxy it replaced. Separate them by `what`: a leg
+        reads `piece <n>: <milestone>`, and the other two name the work-piece and
+        say `to settle on the pick surface` or `to leave the simulator`.
         """
         # `time.monotonic`, never the node clock: these ceilings are wall clock by
         # deliberate design — this observer does not set `use_sim_time`, for the
@@ -567,30 +578,69 @@ class TestContinuousLine(unittest.TestCase):
         # no time. Do not "fix" this to the node clock.
         started = time.monotonic()
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
+        spins = 0
         result = predicate()
         self._fail_if_the_line_has_stopped(what)
         while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
+            spins += 1
             self._fail_if_the_line_has_stopped(what)
             result = predicate()
         self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
         # Success only. A timing record for a wait that timed out would be a
-        # measurement of the ceiling rather than of the milestone. `flush=True`
-        # because `launch_test` captures this stream and can tear the process
-        # down with a buffered line still sitting in it.
+        # measurement of the ceiling rather than of the milestone.
+        self._emit_timing(what, ceiling_s, time.monotonic() - started, spins)
+        return result
+
+    def _emit_timing(self, what: str, ceiling_s: float, elapsed_s: float, spins: int) -> None:
+        """Print one `CITE_TIMING` record, for a wait that ENDED IN SUCCESS.
+
+        The one writer of the format in this file. Every field exists because a
+        campaign re-deriving a ceiling from these records cannot do its job
+        without it:
+
+          * `spins` — how many times the wait went round its loop before the thing
+            it waited for was there. `_spin_until` tests its predicate once before
+            spinning at all, so `spins: 0` means the predicate answered on its
+            first evaluation and the record is NOT a measurement of a milestone.
+            THIS is the field to filter on, and `elapsed_s` is not: a zero-spin
+            record usually reads near 0.000 s, but not always — `pick_and_place`'s
+            work-piece predicate shells out to `gz model -p` and was observed
+            costing 0.597 s for a single evaluation, which is a measurement of
+            that subprocess and of nothing this project sets a ceiling on.
+            Discard zero-spin records by rule; do not eyeball the elapsed
+            times. The ladder loop in `_run_one_piece` differs, and the difference
+            matters to a parser: it tests the milestone only AFTER a spin, so its
+            floor is `spins: 1` and it can never report zero.
+          * `test` — the test method that produced the record. This file runs one
+            test today, so it disambiguates nothing here; it is emitted because
+            the three scenarios write one format and a campaign parses them as one
+            table, and in `bringup` it is what separates a real bring-up wait from
+            the near-zero ones every test after the first records.
+          * `monotonic_s` — this process's clock at the moment of printing, so
+            records can be ordered and lined up against the launch log. It is also
+            what puts a piece's ten leg records in order without parsing `what`.
+
+        The keys are asserted by `tests/scenarios/guards/test_timing_records.py`,
+        which loads all three scenarios and requires them to agree. `flush=True`
+        because `launch_test` captures this stream and can tear the process down
+        with a buffered line still sitting in it.
+        """
         print(
             "CITE_TIMING "
             + json.dumps(
                 {
                     "scenario": Path(__file__).stem,
+                    "test": self._testMethodName,
                     "what": what,
                     "ceiling_s": float(ceiling_s),
-                    "elapsed_s": round(time.monotonic() - started, 3),
+                    "elapsed_s": round(elapsed_s, 3),
+                    "spins": int(spins),
+                    "monotonic_s": round(time.monotonic(), 3),
                 }
             ),
             flush=True,
         )
-        return result
 
     def _fail_if_the_line_has_stopped(self, what: str) -> None:
         """End the run now if the coordinator has published a stopped line.
@@ -1073,10 +1123,18 @@ class TestContinuousLine(unittest.TestCase):
         breaches: list[str] = []
         breached = 0
         for milestone in ladder:
+            # Timed as well as bounded. This is the interval `LEG_CEILING_S` is
+            # sized for — one milestone of the ladder — and it is the only one:
+            # the ceiling's other two uses bound a spawn settling and a removal,
+            # which are shorter by orders of magnitude and would make the ceiling
+            # look absurdly loose to anyone measuring its margin from them.
+            started = time.monotonic()
+            spins = 0
             deadline = self.node.get_clock().now().nanoseconds + int(LEG_CEILING_S * 1e9)
             hit = False
             while self.node.get_clock().now().nanoseconds < deadline:
                 rclpy.spin_once(self.node, timeout_sec=SAMPLE_PERIOD_S)
+                spins += 1
                 position = self._workpiece_xyz()
                 sample = Sample(self._now(), *position) if position is not None else None
                 if sample is not None:
@@ -1099,6 +1157,12 @@ class TestContinuousLine(unittest.TestCase):
                     break
             if not hit:
                 break
+            self._emit_timing(
+                f"piece {piece}: {milestone.describe()}",
+                LEG_CEILING_S,
+                time.monotonic() - started,
+                spins,
+            )
             reached.append(milestone.describe())
         if breached > len(breaches):
             breaches.append(f"piece {piece}: and {breached - len(breaches)} further sample(s)")

@@ -144,12 +144,24 @@ class TestCellBringUp(unittest.TestCase):
         Predicates that answer with a bool convert it at the call site, where the
         meaning of False is obvious.
 
-        On the success path it prints one `CITE_TIMING` line saying how long the
-        wait actually took. `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md`
-        §3 had to report `DELIVERY_CEILING_S` and `TRAJECTORY_CEILING_S` as "not
-        assessed" and reach `SKILL_CEILING_S` and `LEG_CEILING_S` only through
-        proxies, because per-milestone timings were not printed. They are now, so
-        a follow-up campaign can re-derive every ceiling from measurement.
+        On the success path it emits one `CITE_TIMING` record through
+        `_emit_timing`, saying how long the wait actually took.
+        `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md` §3
+        had to report `DELIVERY_CEILING_S` and `TRAJECTORY_CEILING_S` as "not
+        assessed" and reach `SKILL_CEILING_S` only through a proxy, because
+        per-milestone timings were not printed.
+
+        WHAT THIS FILE COVERS, stated exactly rather than generously.
+        `BRING_UP_CEILING_S` and `DELIVERY_CEILING_S` are bounded here.
+        `TRAJECTORY_CEILING_S` and `SKILL_CEILING_S` are bounded by `_await_future`
+        below, which is where they are used and where they are now measured. What
+        is NOT measured, and must not be counted as if it were: the follower-settle
+        loop in `test_the_gripper_linkage_follows_its_drive_joint`, which carries
+        `DELIVERY_CEILING_S` but ends on a convergence condition it does not assert
+        and runs to the ceiling when the followers never converge — the interval it
+        bounds is not a milestone; and the 10 s service call inside
+        `test_every_controller_reaches_active`, which is a call timeout rather than
+        one of this file's ceilings.
         """
         # `time.monotonic`, never the node clock: these ceilings are wall clock by
         # deliberate design — this observer does not set `use_sim_time`, for the
@@ -158,28 +170,97 @@ class TestCellBringUp(unittest.TestCase):
         # no time. Do not "fix" this to the node clock.
         started = time.monotonic()
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
+        spins = 0
         result = predicate()
         while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
+            spins += 1
             result = predicate()
         self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
         # Success only. A timing record for a wait that timed out would be a
-        # measurement of the ceiling rather than of the milestone. `flush=True`
-        # because `launch_test` captures this stream and can tear the process
-        # down with a buffered line still sitting in it.
+        # measurement of the ceiling rather than of the milestone.
+        self._emit_timing(what, ceiling_s, time.monotonic() - started, spins)
+        return result
+
+    def _emit_timing(self, what: str, ceiling_s: float, elapsed_s: float, spins: int) -> None:
+        """Print one `CITE_TIMING` record, for a wait that ENDED IN SUCCESS.
+
+        The one writer of the format in this file. Every field exists because a
+        campaign re-deriving a ceiling from these records cannot do its job
+        without it:
+
+          * `spins` — how many times the wait went round its loop before the thing
+            it waited for was there. `_spin_until` tests its predicate once before
+            spinning at all, so `spins: 0` means the predicate answered on its
+            first evaluation and the record is NOT a measurement of a milestone.
+            THIS is the field to filter on, and `elapsed_s` is not: a zero-spin
+            record usually reads near 0.000 s, but not always — `pick_and_place`'s
+            work-piece predicate shells out to `gz model -p` and was observed
+            costing 0.597 s for a single evaluation, which is a measurement of
+            that subprocess and of nothing this project sets a ceiling on.
+            Discard zero-spin records by rule; do not eyeball the elapsed times.
+          * `test` — the test method that produced the record. Two waits in this
+            file share the `what` string `a message on <topic>`, and, more
+            importantly, `unittest.TestLoader` sorts methods alphabetically and
+            `launch_testing` does not override it, so
+            `test_a_skill_moves_the_arm_to_its_home_configuration` runs FIRST and
+            absorbs the whole cold bring-up. Every `BRING_UP_CEILING_S` wait in
+            every later test therefore reads near zero — correctly, and it is not
+            a measurement of bring-up.
+          * `monotonic_s` — this process's clock at the moment of printing, so
+            records can be ordered and lined up against the launch log.
+
+        The keys are asserted by `tests/scenarios/guards/test_timing_records.py`,
+        which loads all three scenarios and requires them to agree: the format is
+        stated in three files and a campaign parses the three as one table.
+        `flush=True` because `launch_test` captures this stream and can tear the
+        process down with a buffered line still sitting in it.
+        """
         print(
             "CITE_TIMING "
             + json.dumps(
                 {
                     "scenario": Path(__file__).stem,
+                    "test": self._testMethodName,
                     "what": what,
                     "ceiling_s": float(ceiling_s),
-                    "elapsed_s": round(time.monotonic() - started, 3),
+                    "elapsed_s": round(elapsed_s, 3),
+                    "spins": int(spins),
+                    "monotonic_s": round(time.monotonic(), 3),
                 }
             ),
             flush=True,
         )
-        return result
+
+    def _await_future(self, future, ceiling_s: float, what: str):
+        """Wait for `future` under `ceiling_s`, and time the wait.
+
+        `rclpy.spin_until_future_complete(self.node, future, timeout_sec=ceiling_s)`
+        was written directly at each of these call sites. It bounds the interval
+        correctly and reports nothing, so both of the ceilings used only there —
+        `TRAJECTORY_CEILING_S` and `SKILL_CEILING_S` — produced no measurement at
+        all while the other two produced several. This is that same call, chunked
+        into the 0.5 s spin quantum `_spin_until` uses, under the same total
+        ceiling, so that the wait can be counted as well as timed.
+
+        It asserts nothing, deliberately. The caller still checks the future's
+        result with the message that names what did not arrive, so a future that
+        never completes reaches exactly the assertion it did before — and emits no
+        record, because a record for a wait that hit its ceiling measures the
+        ceiling.
+        """
+        started = time.monotonic()
+        deadline = started + ceiling_s
+        spins = 0
+        while not future.done():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                break
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=min(0.5, remaining))
+            spins += 1
+        if future.done():
+            self._emit_timing(what, ceiling_s, time.monotonic() - started, spins)
+        return future
 
     def test_every_controller_reaches_active(self) -> None:
         """Bring-up completes, on this machine, without any step being timed."""
@@ -326,13 +407,13 @@ class TestCellBringUp(unittest.TestCase):
         goal.command.max_effort = 60.0
 
         send = client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self.node, send, timeout_sec=TRAJECTORY_CEILING_S)
+        self._await_future(send, TRAJECTORY_CEILING_S, "the gripper goal to be accepted")
         handle = send.result()
         self.assertIsNotNone(handle, "the gripper goal was never accepted")
         self.assertTrue(handle.accepted, "the gripper controller rejected the command")
 
         result = handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result, timeout_sec=TRAJECTORY_CEILING_S)
+        self._await_future(result, TRAJECTORY_CEILING_S, "the gripper to report a result")
         self.assertIsNotNone(result.result(), "the gripper never reported a result")
 
         received: list[JointState] = []
@@ -435,13 +516,13 @@ class TestCellBringUp(unittest.TestCase):
         goal.trajectory.points = [point]
 
         send = client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self.node, send, timeout_sec=TRAJECTORY_CEILING_S)
+        self._await_future(send, TRAJECTORY_CEILING_S, "the trajectory goal to be accepted")
         handle = send.result()
         self.assertIsNotNone(handle, "the trajectory goal was never accepted")
         self.assertTrue(handle.accepted, "the controller rejected the trajectory goal")
 
         result = handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result, timeout_sec=TRAJECTORY_CEILING_S)
+        self._await_future(result, TRAJECTORY_CEILING_S, "the trajectory to return a result")
         self.assertIsNotNone(result.result(), "the trajectory never returned a result")
         self.assertEqual(
             result.result().result.error_code,
@@ -513,13 +594,13 @@ class TestCellBringUp(unittest.TestCase):
         goal = MoveTo.Goal()
         goal.named_configuration = "home"
         send = client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self.node, send, timeout_sec=TRAJECTORY_CEILING_S)
+        self._await_future(send, TRAJECTORY_CEILING_S, "the MoveTo goal to be accepted")
         handle = send.result()
         self.assertIsNotNone(handle, "the MoveTo goal was never accepted")
         self.assertTrue(handle.accepted, "the skill server rejected a MoveTo goal")
 
         result = handle.get_result_async()
-        rclpy.spin_until_future_complete(self.node, result, timeout_sec=SKILL_CEILING_S)
+        self._await_future(result, SKILL_CEILING_S, "MoveTo to return a result")
         self.assertIsNotNone(result.result(), "MoveTo never returned a result")
         outcome = result.result().result.result
         self.assertEqual(

@@ -77,6 +77,14 @@ SPAWN_DROP_M = 0.005
 BRING_UP_CEILING_S = 300.0
 CYCLE_CEILING_S = 420.0
 
+#: How long the work-piece may take to appear and come to rest after
+#: `ros_gz_sim create` returns. Observed in about a second; this is a hang
+#: detector, not a schedule, and the wait ends on the first pose the simulator
+#: answers with. Named rather than written at the call site so that a campaign
+#: reading `CITE_TIMING` records can tell it from `bringup.TRAJECTORY_CEILING_S`,
+#: which is also 60.0 and bounds something else entirely.
+SETTLE_CEILING_S = 60.0
+
 #: How far the work-piece must rise above its resting height to count as picked.
 #: Larger than any settling or contact jitter, smaller than the retreat distance,
 #: so it cannot pass by the box merely being nudged.
@@ -236,12 +244,20 @@ class TestPickAndPlace(unittest.TestCase):
         with a bool convert it themselves, at the call site, where the meaning of
         False is obvious.
 
-        On the success path it prints one `CITE_TIMING` line saying how long the
-        wait actually took. `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md`
-        §3 had to report `DELIVERY_CEILING_S` and `TRAJECTORY_CEILING_S` as "not
-        assessed" and reach `SKILL_CEILING_S` and `LEG_CEILING_S` only through
-        proxies, because per-milestone timings were not printed. They are now, so
-        a follow-up campaign can re-derive every ceiling from measurement.
+        On the success path it emits one `CITE_TIMING` record through
+        `_emit_timing`, saying how long the wait actually took.
+        `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md` §3
+        could reach this scenario's ceilings only through proxies, because
+        per-milestone timings were not printed.
+
+        WHAT THIS FILE COVERS, stated exactly rather than generously. All three of
+        its ceilings emit: `BRING_UP_CEILING_S` and `SETTLE_CEILING_S` here, and
+        `CYCLE_CEILING_S` from the deadline loop in `_run_cycle`, which is the one
+        place that ceiling is used and which passes through no wait of this shape.
+        This file defines no `DELIVERY_CEILING_S`, `TRAJECTORY_CEILING_S`,
+        `SKILL_CEILING_S` or `LEG_CEILING_S` — an earlier version of this
+        docstring named them, and a docstring that lists another file's constants
+        is a claim about a file it cannot see.
         """
         # `time.monotonic`, never the node clock: these ceilings are wall clock by
         # deliberate design — this observer does not set `use_sim_time`, for the
@@ -250,28 +266,66 @@ class TestPickAndPlace(unittest.TestCase):
         # no time. Do not "fix" this to the node clock.
         started = time.monotonic()
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
+        spins = 0
         result = predicate()
         while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
+            spins += 1
             result = predicate()
         self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
         # Success only. A timing record for a wait that timed out would be a
-        # measurement of the ceiling rather than of the milestone. `flush=True`
-        # because `launch_test` captures this stream and can tear the process
-        # down with a buffered line still sitting in it.
+        # measurement of the ceiling rather than of the milestone.
+        self._emit_timing(what, ceiling_s, time.monotonic() - started, spins)
+        return result
+
+    def _emit_timing(self, what: str, ceiling_s: float, elapsed_s: float, spins: int) -> None:
+        """Print one `CITE_TIMING` record, for a wait that ENDED IN SUCCESS.
+
+        The one writer of the format in this file. Every field exists because a
+        campaign re-deriving a ceiling from these records cannot do its job
+        without it:
+
+          * `spins` — how many times the wait went round its loop before the thing
+            it waited for was there. `_spin_until` tests its predicate once before
+            spinning at all, so `spins: 0` means the predicate answered on its
+            first evaluation and the record is NOT a measurement of a milestone.
+            THIS is the field to filter on, and `elapsed_s` is not: a zero-spin
+            record usually reads near 0.000 s, but not always — `pick_and_place`'s
+            work-piece predicate shells out to `gz model -p` and was observed
+            costing 0.597 s for a single evaluation, which is a measurement of
+            that subprocess and of nothing this project sets a ceiling on.
+            Discard zero-spin records by rule; do not eyeball the elapsed
+            times. `_run_cycle` tests its condition once per iteration in the same
+            way, and the 0.597 s above was measured by exactly this file's wait
+            for the work-piece to settle.
+          * `test` — the test method that produced the record. This file runs one
+            test today, so it disambiguates nothing here; it is emitted because
+            the three scenarios write one format and a campaign parses them as one
+            table, and in `bringup` it is what separates a real bring-up wait from
+            the near-zero ones every test after the first records.
+          * `monotonic_s` — this process's clock at the moment of printing, so
+            records can be ordered and lined up against the launch log.
+
+        The keys are asserted by `tests/scenarios/guards/test_timing_records.py`,
+        which loads all three scenarios and requires them to agree. `flush=True`
+        because `launch_test` captures this stream and can tear the process down
+        with a buffered line still sitting in it.
+        """
         print(
             "CITE_TIMING "
             + json.dumps(
                 {
                     "scenario": Path(__file__).stem,
+                    "test": self._testMethodName,
                     "what": what,
                     "ceiling_s": float(ceiling_s),
-                    "elapsed_s": round(time.monotonic() - started, 3),
+                    "elapsed_s": round(elapsed_s, 3),
+                    "spins": int(spins),
+                    "monotonic_s": round(time.monotonic(), 3),
                 }
             ),
             flush=True,
         )
-        return result
 
     def _workpiece_xyz(self) -> tuple[float, float, float] | None:
         """Ask the simulator where the work-piece is.
@@ -374,7 +428,7 @@ class TestPickAndPlace(unittest.TestCase):
 
         try:
             resting = self._spin_until(
-                lambda: self._workpiece_xyz(), 60.0, "the work-piece to settle"
+                lambda: self._workpiece_xyz(), SETTLE_CEILING_S, "the work-piece to settle"
             )
         except AssertionError as exc:
             # A missing work-piece is a setup failure, not a result. Say which,
@@ -498,6 +552,12 @@ class TestPickAndPlace(unittest.TestCase):
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
+        # Timed as well as bounded. This loop is the only user of
+        # `CYCLE_CEILING_S`, and it passes through no `_spin_until`, so without
+        # this the one ceiling that dominates this scenario's runtime emitted
+        # nothing at all.
+        started = time.monotonic()
+        spins = 0
         deadline = self.node.get_clock().now().nanoseconds + int(CYCLE_CEILING_S * 1e9)
         try:
             while process.poll() is None:
@@ -522,6 +582,7 @@ class TestPickAndPlace(unittest.TestCase):
                         highest,
                     )
                 rclpy.spin_once(self.node, timeout_sec=SAMPLE_PERIOD_S)
+                spins += 1
                 sample = self._workpiece_xyz()
                 if sample is not None:
                     highest = max(highest, sample[2])
@@ -530,6 +591,16 @@ class TestPickAndPlace(unittest.TestCase):
                 process.kill()
 
         stdout, stderr = process.communicate()
+        # Success only, in the sense the record means: the coordinator exited
+        # under its own ceiling. Its exit STATUS is deliberately not asserted on
+        # here (see the caller), and is not what this measures — the interval is
+        # the one `CYCLE_CEILING_S` bounds, which ends when the process ends.
+        self._emit_timing(
+            "the station cycle to run to completion",
+            CYCLE_CEILING_S,
+            time.monotonic() - started,
+            spins,
+        )
         # One last sample: the cycle may have ended between two polls.
         sample = self._workpiece_xyz()
         if sample is not None:
