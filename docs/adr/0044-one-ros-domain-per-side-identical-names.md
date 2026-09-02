@@ -37,7 +37,11 @@
   declares `twin.sides: single`, so the list has one entry; `cite_bringup.gz.gz_environment`
   takes `plan.sides[0]` and says in its own docstring that "bringing a counterpart up is a
   separate launch and is not built yet" **[Corrected 2026-08-30 — see the Correction section
-  above.]**; and `cite_twin` does not exist.
+  above.]**; and `cite_twin` does not exist. **[Overtaken 2026-08-31 — `cite_twin` exists:
+  it landed at `7ac064d`, and `ls workspace/src/cite_twin/package.xml` is the instrument. The
+  clause was true at `29068d4`, the commit this block reads itself against, and is stale
+  rather than mistaken; the change that overtook it is the branch implementing
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md).]**
   Every "will" and "must" below is a commitment, not a description.
   **Promoted to `Accepted` by the change that first brings two sides up on two domains under
   bring-up's own control, with a test that a side's processes carry the domain the plan
@@ -122,7 +126,7 @@
 | "`CITE_DOMAIN_BASE` appears nowhere" | **false** — it is the base's own channel | `grep -rn CITE_DOMAIN_BASE scripts workspace/src/cite_bringup` |
 | "nothing refuses a side that is not on its own domain" | **false** — `require_domain` does, at the launch boundary | `grep -n 'def require_domain' workspace/src/cite_bringup/cite_bringup/plan.py` |
 | "`gz.py` says a counterpart bring-up is not built yet" | **false** — the sentence is gone and the launch exists | `grep -n 'not built yet' workspace/src/cite_bringup/cite_bringup/gz.py` |
-| "`cite_twin` does not exist" | **still true** | `ls workspace/src` |
+| "`cite_twin` does not exist" | **still true** — **[Overtaken 2026-08-31 — false now: `cite_twin` landed at `7ac064d`. The row was true at the commit this table names and is stale, not mistaken; the change that overtook it is [ADR-0050](0050-what-crosses-the-twin-boundary.md)'s implementation.]** | `ls workspace/src` |
 
 **What holds clause 4 now.** `require_domain(plan, side, environ)` refuses a side whose process
 environment does not carry the domain the plan resolves for it, in the same place and manner as

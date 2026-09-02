@@ -20,7 +20,9 @@ defence is that it is dated and says so.
 
 ## Where the repository stood when this was written
 
-`main` at `3725af5`, clean and pushed. Reproduce each figure rather than quoting it from here.
+`main` at `abdae38`, clean and pushed. This table was first taken at `3725af5`; every one of
+its original seven rows was re-measured at `abdae38` on 2026-09-01 and **none of them moved**.
+The last row is new. Reproduce each figure rather than quoting it from here.
 
 | | | Command |
 |---|---|---|
@@ -31,6 +33,11 @@ defence is that it is dated and says so.
 | Measurement campaigns | 10 | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
+| CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
+
+**The last row is one run and is not a rate.** No thresholds were registered in advance, and it
+says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
+it is kept.
 
 Phase 1 is closed (charter §8, exit criterion MET 2026-08-28). Phase 2 has split into 2.A and
 2.B; 2.A's bring-up mechanism exists and **closes no clause** of the Phase 2 exit criterion.
@@ -382,43 +389,121 @@ guess.
 
 Every item here misled this project at least once, including in the session that wrote this file.
 
-### #52 — CI's scenario verdict answers the cycle only; teardown is unread, not clean
-`scenario_verdict()` in `scripts/_lib.sh` returns 0 — and the caller prints `Scenario 'X' passed`
-— when `cycle_failures` is 0, `teardown_failures` is greater than 0, and the policy is
-`advisory`. **CI passes `--teardown-advisory` to all three scenarios.**
+### #52 — WITHDRAWN 2026-09-01: the verdict line distinguishes three states, and CI's teardown is read and clean
+**This item was wrong in both of its claims, and it is left here rather than deleted because how
+it was wrong is the transferable part.** It said the verdict line *"answers the cycle and says
+nothing about teardown"*, and that teardown for the newer CI rows was *"unread, not clean"*.
 
-So the line everyone reads out of a CI log answers the **cycle** and says nothing about teardown.
-This matters because the split is deliberate and load-bearing: `scripts/scenario` exists to answer
-two questions in one exit code, and the instrument collapses them back into one word — in the
-opposite direction from the one the split was designed for.
+**What is actually true, read off `scripts/scenario` and off all nineteen CI runs.** The script
+prints **three** distinguishable strings, not two:
 
-On record: CLAUDE.md §2's *"Teardown passed in all six"* is scoped to the first six runs, read by
-a different method; teardown for the newer rows is **unread**. And the hull promotion was merged
-on a CI run reporting four scenario runs passed — that is four **cycle** passes.
+| String | Means |
+|---|---|
+| `Scenario 'X' passed` | `launch_test` itself exited 0 — every assertion passed, **including the post-shutdown teardown check**. `scenario_verdict` was never consulted. |
+| `Scenario 'X' passed its cycle assertions` | The advisory branch: the cycle passed, teardown did not, `--teardown-advisory` was given. |
+| `Scenario 'X' failed — …` | A cycle failure, or a failure the JUnit report does not explain. |
 
-**The real fix is a verdict line that reports both phases.** Re-grepping JUnit XML rescues one
-reading; an instrument that prints one word for two questions will be misread again.
+**The middle string appears in none of the nineteen tabled CI runs**
+(`gh run view <id> --log | grep -o "Scenario '[a-z_]*'[^\"]*"`, run over every one of them on
+2026-09-01). So the advisory branch has never fired in CI, every one of the fifteen bare `passed`
+verdicts carries its teardown with it, and only the four whose cycle failed leave teardown masked
+and genuinely unread. The four are `33158091922`, `33208064683`, `33261637940` and `33343317444`
+— the same four CLAUDE.md §2's table names, arrived at independently.
 
-**Do not respond by making teardown blocking in CI.** That was decided deliberately and
-separately; this is about the instrument's honesty, not its policy.
+**`--teardown-advisory` never reaches the scenario Python.** `scripts/scenario` puts it in
+`TEARDOWN_POLICY` and not in `LAUNCH_TEST_ARGS`, so the post-shutdown assertions always run; the
+flag decides only how a failure is reported.
 
-### #53 — Two ADRs assert `cite_twin` does not exist, inside verification tables marked "still true"
+**`scripts/scenario` is not to be changed on the strength of this item.** The instrument is
+correct as written. What was wrong was the reading of it — the item inferred the verdict's
+behaviour from `scenario_verdict()` alone without noticing that the function is called **only
+after `launch_test` has already failed**, which is stated in its own header comment in
+`scripts/_lib.sh`. **Reading one branch of a two-branch caller is how this item was written**, and
+that is the lesson worth keeping in a section about instrument honesty.
+
+**One sub-claim survives and is now recorded where it belongs:** the hull promotion was merged on
+a CI run reporting scenario passes, and a scenario pass is evidence about one run. That is in the
+state table above, with its strength stated.
+
+### #53 — MARKED 2026-09-01: two ADRs asserted `cite_twin` does not exist, inside verification tables marked "still true"
 `docs/adr/0041-*.md` lines 31, 66 and 139 — line 139 inside a **verification table** marked
 *"still true"*. `docs/adr/0044-*.md` line 40, and line 125's verification table, same marker.
 
-Both false: `workspace/src/cite_twin/package.xml` is on disk, `twin_boundary.py` serves
-`SetMode`, and `routing.py` keys on `MODE_VIRTUAL_LEAD`.
+All false as current state: `workspace/src/cite_twin/package.xml` is on disk, `twin_boundary.py`
+serves `SetMode`, and `routing.py` keys on `MODE_VIRTUAL_LEAD`.
 
 **Worse than ordinary prose drift:** a verification-table row saying "still true" is a claim that
 someone re-checked it, and those tables exist so a reader can trust them without re-deriving. Two
-are now lying in exactly the place this project put its trust.
+were lying in exactly the place this project put its trust.
 
-The precedent for the fix is already in the tree — ADR-0050 line 75 carries the correction row
-`` `cite_twin` does not exist | **False.** It exists ``.
+**Resolved with `Overtaken`, not `Corrected`, and the choice is the finding.** `cite_twin` landed
+at `7ac064d` on **2026-08-31**; ADR-0041's rows were written on 2026-08-29 and 2026-08-30 and
+ADR-0044's on 2026-08-30, so **every one of them was true when written**. Per
+[`docs/adr/README.md`](adr/README.md)'s in-place marker table, that is `Overtaken` — *"right when
+written, and events since made it false, with nobody wrong"* — and not `Corrected`, which asserts
+the sentence was wrong when written and requires a Correction section. ADR-0050's precedent row
+(`` `cite_twin` does not exist | **False.** It exists ``) is a **Correction** because there the
+record's own status block was falsified by the branch implementing that record. Different
+situation, different marker. Five markers added; no status value, index row or Correction section
+changed, because nothing was measured false.
 
-**The question worth asking while fixing it:** how many other verification-table rows across the
-52 records say "still true" about something that has since moved? A row verified once and never
-re-read is a count with a date on it.
+**The question this leaves open, and it is not closed by fixing five rows:** how many other
+verification-table rows across the 52 records say "still true" about something that has since
+moved? A row verified once and never re-read is a count with a date on it. **Nothing checks
+this**, and a survey on 2026-09-01 covered only the two records this item names.
+
+### #57 — ADR-0045's gripper-deadline launch rig passes with no controller ever activated
+`workspace/src/cite_bringup/test/test_gripper_deadline_launch.py` starts a real
+`controller_manager` and a `spawner` for the three real generated controllers (`:284-290`). In the
+runs observed, the spawner's `load_controller` call timed out three times about 10 s apart, the
+manager meanwhile **did** load the controller, the retry then failed with *"A controller named
+'arm_1_joint_state_broadcaster' was already loaded"*, the spawner logged
+`[FATAL] Failed loading controller arm_1_joint_state_broadcaster` and **died with exit code 1** —
+and the test reported `Passed`. **Zero** `Configuring controller` or `Activating controller`
+events appear anywhere in the run, so no controller was ever active.
+
+**Why nothing noticed, established by grep and not inferred.**
+`grep -n "assertExitCodes\|proc_info\|post_shutdown\|TestCleanShutdown"` on that file returns
+**nothing**; the same grep on its sibling `test_abort_classification_launch.py` returns `:784`
+`@launch_testing.post_shutdown_test()`, `:785` `class TestCleanShutdown` and `:806`
+`def test_processes_exit_cleanly(self, proc_info)`. Same package, same rig pattern, one asserts
+process exits and the other does not.
+
+**Not one machine and not one branch.** Observed twice locally on 2026-09-01 and in **green** CI
+run `33501707588` at `e51238e` on `main` (`gh run view 33501707588 --log | grep "Failed loading
+controller"`, and the test's own line `Test #10: test_test_gripper_deadline_launch.py … Passed`).
+
+**The rig's own assertions are not invalidated.** They concern the skill server's deadline against
+a *fake* gripper action server outside the arm's namespace (`:131-135`), which does not depend on
+those controllers — which is exactly why it passes. **But it is not the rig its docstring
+describes**: `:83-84` says that above the fake gripper "everything is production: the generated
+description, the generated controller configuration", and in these runs the generated controller
+configuration brought up nothing. The rig's own comment at `:132-133` says the fake sits outside
+the arm's namespace *because* "the real `arm_1_gripper_controller` is still spawned by this rig" —
+so the design intends those controllers to be live, and observed runs are not.
+
+**The cause is NOT established.** A candidate — the manager runs `use_sim_time: true` (the run
+logs *"Using ROS clock for triggering controller manager cycles"*) while `/clock` is published
+only from the test class's setup, after `ReadyToTest`, so the spawner's service waits expire
+before any clock exists — is **inferred and unmeasured**, and must not be written up as the cause.
+The rig sets `--controller-manager-timeout` from `STARTUP_CEILING_S = 240.0`; the ~10 s retry
+interval is a **different** timeout the rig does not set, and which of the two matters here is
+unverified.
+
+**Owed:** its own investigation, and then a decision about whether the rig should assert its
+spawner. Belongs beside #19 and #25 — this is part of ADR-0045's mechanism evidence, and both
+ADR-0045 and ADR-0046 are deliberately `Proposed`.
+
+### #58 — The premise behind ADR-0040's guard widening is checked by nothing
+ADR-0040's 2026-09-01 amendment permits the test-only fixture's name anywhere under
+`docs/measurements/`, on the argument that nothing invokes or installs anything in that tree.
+**The argument is true today** — verified independently by three parties on 2026-09-01 — and
+**no test fails if it stops being true.** A CI step, an install rule or a launch file that later
+reaches into `docs/measurements/` would silently widen the fixture's reachable surface, and the
+guard that was widened on this premise would not notice.
+
+A guard turning the premise into a check is cheap and was deliberately deferred out of the change
+that created the need for it. **This is a small code item, not a documentation one.**
 
 ### #56 — Charter §7 lists four packages that do not exist, and §8 does not know `cite_twin` landed
 Reported by the charter v1.12 agent and **not edited** — the owner's authorization covered two

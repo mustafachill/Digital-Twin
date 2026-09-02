@@ -31,6 +31,14 @@
   hold**: nothing launches a second cell, `cite_twin` does not exist, and L5 is still
   `DESIGNED`. **[Corrected 2026-08-30 — two of the three still hold; a second cell is
   launched. See the Correction section above.]**
+  **[Overtaken 2026-08-31 — the two clauses the 2026-08-30 marker left standing have fallen
+  too, so none of the three holds now. `cite_twin` landed at `7ac064d`
+  (`ls workspace/src/cite_twin/package.xml`) and L5 is `PARTIAL`, not `DESIGNED`
+  (`head -3 docs/architecture/L5-twin-synchronization.md`). Both were true when this block and
+  its 2026-08-30 marker were written; the
+  change that overtook them is the branch implementing
+  [ADR-0050](0050-what-crosses-the-twin-boundary.md), whose own correction of 2026-08-31
+  records the same move.]**
   Every "will" and "must" below is a commitment rather than a description, **except where
   either correction section marks one as met.**
 - **Date:** 2026-08-29
@@ -65,6 +73,10 @@ complete second simulation — is entirely unbuilt"*; and, in the list of clause
 from the original block, *"nothing launches a second cell"*. The other two clauses in that list
 still hold: `cite_twin` does not exist (`ls workspace/src`) and
 [L5](../architecture/L5-twin-synchronization.md) is still `DESIGNED`.
+**[Overtaken 2026-08-31 — neither holds. `cite_twin` landed at `7ac064d` and L5 moved to
+`PARTIAL` on the same branch, the one implementing
+[ADR-0050](0050-what-crosses-the-twin-boundary.md). This correction was right on 2026-08-30
+and is stale, not mistaken; it is left as written per this directory's rules.]**
 
 **What is true, established against the tree rather than taken from a report.** The counterpart
 is not a second thing that had to be built — it is `simulation.launch.py` given
@@ -136,7 +148,7 @@ with the command that shows it:
 | "the L0 schema has no `twin:` block" | **false** — `twin` is a required zone key | `grep -n twin model/schema/zones.schema.json model/facility/zones.yaml` |
 | "`hardware.backend` is a scalar with no side index" | **false** — an optional `counterpart_backend` sits beside it | `grep -rn counterpart_backend model/schema/asset_instances.schema.json` |
 | "nothing in the tree launches a second cell" | **still true** | `grep -rn 'counterpart\|sides' workspace/src/cite_bringup/launch/` returns nothing |
-| "`cite_twin` does not exist" and "L5 is marked `DESIGNED`" | **still true** | `ls workspace/src/`; `head -3 docs/architecture/L5-twin-synchronization.md` |
+| "`cite_twin` does not exist" and "L5 is marked `DESIGNED`" | **still true** — **[Overtaken 2026-08-31 — both false now: `cite_twin` landed at `7ac064d` and L5 is `PARTIAL`. The row was true at the commit this table names and is stale, not mistaken; the change that overtook it is [ADR-0050](0050-what-crosses-the-twin-boundary.md)'s implementation.]** | `ls workspace/src/`; `head -3 docs/architecture/L5-twin-synchronization.md` |
 
 **Decision 2 is met in full, including the two debts this record named for its implementer.**
 The constant is in `cite_interfaces/msg/TwinMode.msg` with the wording this record specified
