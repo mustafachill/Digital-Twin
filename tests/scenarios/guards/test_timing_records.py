@@ -41,6 +41,7 @@ compensation: it fails if the format is printed from anywhere but the one method
 
 from __future__ import annotations
 
+import ast
 import json
 import sys
 import types
@@ -210,17 +211,47 @@ def test_the_payload_survives_a_hostile_description(emitters, capsys) -> None:
         assert record["what"] == hostile, f"{path.name}: `what` did not round-trip"
 
 
+def _prefix_literals(source: str) -> list[int]:
+    """Line numbers of every string literal that OPENS with the `CITE_TIMING` prefix.
+
+    An AST walk rather than a substring count, and the reason is the shape of the
+    second writer someone would actually add. A plain string is an `ast.Constant`;
+    the literal pieces of an f-string are `ast.Constant` children of an
+    `ast.JoinedStr`, so `print(f"CITE_TIMING {json.dumps(record)}")` is found here.
+    It was invisible to the substring count this replaced, which looked for the
+    prefix together with its closing quote and therefore saw `"CITE_TIMING {` as an
+    unrelated string — while that f-string is exactly what a developer re-adding a
+    call-site emission reaches for first.
+
+    Matching is on the prefix with its trailing space stripped, so a writer that
+    formats the separator some other way is caught too. Comments and the record's
+    own JSON keys are not string constants and cannot trip it, and a docstring
+    mentioning the prefix in passing does not START with it, so it cannot either.
+    """
+    token = PREFIX.rstrip()
+    return sorted(
+        node.lineno
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith(token)
+    )
+
+
 def test_every_scenario_has_exactly_one_writer() -> None:
     """The format is stated in three files; it must not be stated four times.
 
     A source scan, because the check is about where the string is written and not
-    about what a call produces. Each scenario names the prefix once, inside
-    `_emit_timing`. A second `print("CITE_TIMING ...` anywhere — the shape this
-    code had before, at every call site — fails here.
+    about what a call produces. Each scenario opens the prefix in exactly one
+    string literal, inside `_emit_timing`. A second one anywhere in the file fails
+    here — `print("CITE_TIMING " + ...)` and `print(f"CITE_TIMING {...}")` alike,
+    which are the two shapes a call-site emission takes and the first of which is
+    the shape this code had, at every call site, before `_emit_timing` existed.
     """
     for path in loader.scenario_paths():
-        occurrences = path.read_text().count(f'"{PREFIX}"')
-        assert occurrences == 1, (
-            f"{path.name} writes the {PREFIX!r} prefix {occurrences} time(s); "
-            "exactly one, in `_emit_timing`, is the rule"
+        lines = _prefix_literals(path.read_text())
+        assert len(lines) == 1, (
+            f"{path.name} opens the {PREFIX!r} prefix in {len(lines)} string "
+            f"literal(s), at line(s) {lines}; exactly one, in `_emit_timing`, "
+            "is the rule"
         )

@@ -156,7 +156,7 @@ class TestCellBringUp(unittest.TestCase):
         `TRAJECTORY_CEILING_S` and `SKILL_CEILING_S` are bounded by `_await_future`
         below, which is where they are used and where they are now measured. What
         is NOT measured, and must not be counted as if it were: the follower-settle
-        loop in `test_the_gripper_linkage_follows_its_drive_joint`, which carries
+        loop in `test_the_gripper_linkage_is_actually_coupled`, which carries
         `DELIVERY_CEILING_S` but ends on a convergence condition it does not assert
         and runs to the ceiling when the followers never converge — the interval it
         bounds is not a milestone; and the 10 s service call inside
@@ -190,15 +190,28 @@ class TestCellBringUp(unittest.TestCase):
         without it:
 
           * `spins` — how many times the wait went round its loop before the thing
-            it waited for was there. `_spin_until` tests its predicate once before
-            spinning at all, so `spins: 0` means the predicate answered on its
-            first evaluation and the record is NOT a measurement of a milestone.
-            THIS is the field to filter on, and `elapsed_s` is not: a zero-spin
-            record usually reads near 0.000 s, but not always — `pick_and_place`'s
-            work-piece predicate shells out to `gz model -p` and was observed
-            costing 0.597 s for a single evaluation, which is a measurement of
-            that subprocess and of nothing this project sets a ceiling on.
-            Discard zero-spin records by rule; do not eyeball the elapsed times.
+            it waited for was there. A LOOP COUNT AND NOT A TIME UNIT: one spin is
+            one `rclpy.spin_once` timeout, every emitting loop sets that quantum
+            for itself, and the loops that emit these records do not all agree on
+            it — `pick_and_place._run_cycle` spins on that file's own
+            `SAMPLE_PERIOD_S`, which is not the quantum the `_spin_until` waits
+            use. So `spins` may never be multiplied into a duration, and may not
+            be read as a sampling density across one table either, because the
+            three scenarios are parsed as one table and their quanta differ.
+            `elapsed_s` is the only time field. `_await_future` shortens its last spin to
+            whatever is left of the ceiling, so even within one file a spin is not
+            a fixed slice of time.
+            `_spin_until` tests its predicate once before spinning at all, so
+            `spins: 0` means the predicate answered on its first evaluation and
+            the record is NOT a measurement of a milestone. THIS is the field to
+            filter on, and `elapsed_s` is not: a zero-spin record usually reads
+            near 0.000 s, but not always — `pick_and_place`'s work-piece predicate
+            shells out to `gz model -p`, and one evaluation of a subprocess can
+            cost an appreciable fraction of a second, which measures that
+            subprocess and nothing this project sets a ceiling on. How much it
+            costs is unpublished — no directory under `docs/measurements/` stands
+            behind any figure for it — which is exactly why the rule is structural:
+            discard zero-spin records by rule; do not eyeball the elapsed times.
           * `test` — the test method that produced the record. Two waits in this
             file share the `what` string `a message on <topic>`, and, more
             importantly, `unittest.TestLoader` sorts methods alphabetically and

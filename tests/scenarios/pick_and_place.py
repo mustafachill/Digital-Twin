@@ -286,18 +286,31 @@ class TestPickAndPlace(unittest.TestCase):
         without it:
 
           * `spins` — how many times the wait went round its loop before the thing
-            it waited for was there. `_spin_until` tests its predicate once before
-            spinning at all, so `spins: 0` means the predicate answered on its
-            first evaluation and the record is NOT a measurement of a milestone.
-            THIS is the field to filter on, and `elapsed_s` is not: a zero-spin
-            record usually reads near 0.000 s, but not always — `pick_and_place`'s
-            work-piece predicate shells out to `gz model -p` and was observed
-            costing 0.597 s for a single evaluation, which is a measurement of
-            that subprocess and of nothing this project sets a ceiling on.
-            Discard zero-spin records by rule; do not eyeball the elapsed
-            times. `_run_cycle` tests its condition once per iteration in the same
-            way, and the 0.597 s above was measured by exactly this file's wait
-            for the work-piece to settle.
+            it waited for was there. A LOOP COUNT AND NOT A TIME UNIT: one spin is
+            one `rclpy.spin_once` timeout, every emitting loop sets that quantum
+            for itself, and the loops that emit these records do not all agree on
+            it — `pick_and_place._run_cycle` spins on that file's own
+            `SAMPLE_PERIOD_S`, which is not the quantum the `_spin_until` waits
+            use. So `spins` may never be multiplied into a duration, and may not
+            be read as a sampling density across one table either, because the
+            three scenarios are parsed as one table and their quanta differ.
+            `elapsed_s` is the only time field.
+            `_spin_until` tests its predicate once before spinning at all, so
+            `spins: 0` means the predicate answered on its first evaluation and
+            the record is NOT a measurement of a milestone. THIS is the field to
+            filter on, and `elapsed_s` is not: a zero-spin record usually reads
+            near 0.000 s, but not always — `pick_and_place`'s work-piece predicate
+            shells out to `gz model -p`, and one evaluation of a subprocess can
+            cost an appreciable fraction of a second, which measures that
+            subprocess and nothing this project sets a ceiling on. How much it
+            costs is unpublished — no directory under `docs/measurements/` stands
+            behind any figure for it — which is exactly why the rule is structural:
+            discard zero-spin records by rule; do not eyeball the elapsed times.
+            `_run_cycle` tests its condition — whether the coordinator process
+            has exited — before it spins at all, in the same way, so it can report
+            `spins: 0` too; and the subprocess named above is this file's own
+            work-piece predicate, so this is the scenario where a zero-spin record
+            is least likely to read near zero.
           * `test` — the test method that produced the record. This file runs one
             test today, so it disambiguates nothing here; it is emitted because
             the three scenarios write one format and a campaign parses them as one
@@ -595,6 +608,12 @@ class TestPickAndPlace(unittest.TestCase):
         # under its own ceiling. Its exit STATUS is deliberately not asserted on
         # here (see the caller), and is not what this measures — the interval is
         # the one `CYCLE_CEILING_S` bounds, which ends when the process ends.
+        # So the consumer's rule, which the other three emitters do not need: a
+        # record exists here whenever the coordinator exited AT ALL, a crash two
+        # seconds in included, and it does not say the cycle succeeded. Use these
+        # records only from runs whose scenario verdict passed; folding a failed
+        # run's short elapsed into a margin makes `CYCLE_CEILING_S` look roomier
+        # than any run has shown it to be.
         self._emit_timing(
             "the station cycle to run to completion",
             CYCLE_CEILING_S,
