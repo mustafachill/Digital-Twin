@@ -303,6 +303,33 @@ public:
     // under one spelling; this one used to change name in transit, which is a
     // place for a delivery to fail silently and read as "no default configured".
     declare_parameter("gripper_default_grasp_width_m", 0.0);
+    // What separates a grasp from a stall on nothing (ADR-0052, option F).
+    //
+    // `gripper_is_holding` used to ask "did the jaws stop wider than we ASKED?"
+    // and now asks "did they stop where a part this facility handles would stop
+    // them?". The command is a policy value; the error the predicate makes is
+    // about where the PART is, and both directions of that error are measured —
+    // a real grasp reported empty, and a stall on nothing reported as a grasp.
+    //
+    // FOUR VALUES FROM TWO DIFFERENT PLACES IN ONE PLAN, and the split is the
+    // decision (ADR-0052 §A.4). The BAND is a property of this end effector and
+    // arrives on the gripper channel with the rest of the grasp specification.
+    // The PART INTERVAL is a fact about the facility and arrives from the plan's
+    // own `plan:` block: it is one statement per zone, and putting a work-piece
+    // width on a tuple named for the gripper is how a name stops meaning
+    // anything.
+    //
+    // ZERO MEANS "NOT SUPPLIED" on all four, and is a sentinel rather than a
+    // value — the same treatment `gripper_default_grasp_width_m` above gets. A
+    // compiled band equal to the L0 value would be the second copy P1 forbids:
+    // it would work, and it would work only for as long as the two copies
+    // agreed. An arm that has a gripper and no delivered band refuses to
+    // configure instead (see `configure`), because a zero-width window admits
+    // nothing and every grasp would report empty.
+    declare_parameter("gripper_stall_band_narrow_m", 0.0);
+    declare_parameter("gripper_stall_band_wide_m", 0.0);
+    declare_parameter("workpiece_narrowest_width_m", 0.0);
+    declare_parameter("workpiece_widest_width_m", 0.0);
     // How many seeds IK is tried from before a pose is called unreachable
     // (ADR-0026). Seed 0 is the arm's current state; the rest are random within
     // the joint limits, which is what recovers the choice of IK branch that a
@@ -397,6 +424,45 @@ public:
         "arm_goal_tolerance_rad must be positive; it is what separates an arm that never "
         "moved, and an arm that arrived, from one stopped part-way along an aborted "
         "trajectory (ADR-0037), and at zero every abort classifies as MOTION_INTERRUPTED");
+      return false;
+    }
+    travel_.stall_band_narrow_m = get_parameter("gripper_stall_band_narrow_m").as_double();
+    travel_.stall_band_wide_m = get_parameter("gripper_stall_band_wide_m").as_double();
+    parts_.narrowest_m = get_parameter("workpiece_narrowest_width_m").as_double();
+    parts_.widest_m = get_parameter("workpiece_widest_width_m").as_double();
+    if (!gripper_action_.empty() &&
+      (travel_.stall_band_narrow_m <= 0.0 || travel_.stall_band_wide_m <= 0.0))
+    {
+      RCLCPP_ERROR(
+        get_logger(),
+        "this arm has a gripper action ('%s') and no stall band reached this node "
+        "(narrow=%.6f, wide=%.6f). Both edges are declared on the L0 end-effector type "
+        "and carried by the generated bring-up plan (ADR-0052); without them the window "
+        "that separates a grasp from a stall on nothing has zero width, so every grasp "
+        "would report empty — and inventing a band here would put the end effector's own "
+        "numbers in a second place.",
+        gripper_action_.c_str(), travel_.stall_band_narrow_m, travel_.stall_band_wide_m);
+      return false;
+    }
+    if (!gripper_action_.empty() && (parts_.narrowest_m <= 0.0 || parts_.widest_m <= 0.0)) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "this arm has a gripper action ('%s') and no work-piece width reached this node "
+        "(narrowest=%.6f, widest=%.6f). The interval is stated once per zone in the "
+        "generated bring-up plan's `plan:` block (ADR-0052); without it there is nothing "
+        "for a stall to be judged against. A facility that declares no part width is "
+        "refused at L0 by workpiece-width-unstated-for-a-grasping-facility, so reaching "
+        "this means the plan is stale or the launch mechanism dropped it.",
+        gripper_action_.c_str(), parts_.narrowest_m, parts_.widest_m);
+      return false;
+    }
+    if (parts_.widest_m < parts_.narrowest_m) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "the delivered work-piece interval is inverted (narrowest=%.6f, widest=%.6f), so "
+        "the window a stall is judged inside is empty and every grasp would report "
+        "holding nothing. It is generated from L0; run ./scripts/validate-model --write.",
+        parts_.narrowest_m, parts_.widest_m);
       return false;
     }
     default_grasp_width_m_ = get_parameter("gripper_default_grasp_width_m").as_double();
@@ -1009,7 +1075,38 @@ private:
     // depends on it: the pad face slides along the tool axis as the jaws close,
     // so where the tip link has to be put is a function of how wide the grasp is.
     const auto width = cite_skills::resolve_grasp_width(
-      goal->grasp_width_m, default_grasp_width_m_);
+      goal->grasp_width_m, default_grasp_width_m_, parts_, travel_);
+    if (width.source == cite_skills::GraspWidthSource::Refused) {
+      // ADR-0052 §A.8. A width this close to the part ends the close on
+      // `GripperActionController`'s goal-tolerance branch, so `reached_goal`
+      // comes back true and the grasp is reported EMPTY with the part in the
+      // jaws — a false negative no window can catch, because the stall the
+      // window judges never happens. Refused before anything moves rather than
+      // executed and then judged.
+      //
+      // THE COST IS REAL AND IS STATED IN THE REFUSAL. On the shipped model this
+      // refuses a goal-supplied 48.0 mm, which the 2026-09-01 campaign shows
+      // this cell handles. It is conservative in the direction that fails safe,
+      // and the measurement that would justify relaxing it is that campaign's
+      // own 47.0 and 48.0 mm columns re-run at an n large enough to resolve
+      // 0.1 mm — never a smaller margin chosen here.
+      std::ostringstream detail;
+      detail.setf(std::ios::fixed);
+      detail.precision(2);
+      detail << "refusing to close to " << width.width_m * 1000.0
+             << " mm on work-piece '" << goal->workpiece_id << "': it leaves "
+             << (parts_.narrowest_m - width.width_m) * 1000.0
+             << " mm against the narrowest part this facility handles ("
+             << parts_.narrowest_m * 1000.0 << " mm), below the "
+             << cite_skills::gripper_discrimination_margin_m(width.width_m, travel_) * 1000.0
+             << " mm a close has to clear to evidence anything. A grasp is evidenced by "
+        "FAILING to reach where the jaws were sent, and this close would arrive "
+        "on the controller's goal-tolerance branch and be reported empty with the "
+        "part between the pads. Ask for a narrower width, or lower "
+        "default_grasp_width_m in the L0 end-effector type";
+      finish(make_result(ResultCode::PRECONDITION_FAILED, detail.str()));
+      return;
+    }
     if (width.source == cite_skills::GraspWidthSource::Unknown) {
       // Not silent. `grasp_width_m == 0` means "use the object type's default",
       // and that default is L0 data this skill has not been given: no
@@ -1905,11 +2002,13 @@ private:
         "FAILING to reach the command, so the width must be narrower than the "
         "object it closes on";
     } else {
-      message << "The gripper stopped short of its command, but not by enough width to "
-        "be a part: a close that ends within the controller's own goal "
-        "tolerance reports a little more width than it actually reached, and "
-        "that phantom margin is what this rejects. Either nothing was between "
-        "the pads, or the gripper jammed or fouled its own fingers";
+      message << "The gripper stopped short of its command, at a width no part this "
+        "facility declares would have stopped it at. The commanded width above is "
+        "printed for the reader and is NOT what this was judged on (ADR-0052): the "
+        "reached width is compared against the interval of declared work-piece "
+        "widths, plus the end effector's declared stall band either side. Either "
+        "nothing was between the pads, or the gripper jammed or fouled its own "
+        "fingers, or what it closed on is not a part this facility declares";
     }
     return message.str();
   }
@@ -2118,7 +2217,13 @@ private:
       // ADR-0022 fixes. `stalled` alone used to stand in for "holding", and it
       // cannot: it says the joint stopped short of its command, not what stopped
       // it. gripper_is_holding adds the question that distinguishes a part from a
-      // jam — did it stop on the OPEN side of the width we asked for.
+      // jam — did it stop where a part THIS FACILITY HANDLES would have stopped
+      // it. It used to ask whether it stopped on the open side of the width we
+      // asked for, and that was the defect: the command is a policy value and
+      // the error is about where the part is (ADR-0052).
+      //
+      // `commanded_width_m` is still carried on the outcome, because a failure
+      // has to be able to quote what it asked for. Nothing decides on it.
       outcome.reached_width_m =
         cite_skills::gripper_width_for(wrapped.result->position, travel_);
       outcome.effort_n = wrapped.result->effort;
@@ -2126,7 +2231,8 @@ private:
       outcome.stalled = wrapped.result->stalled;
       outcome.reached_goal = wrapped.result->reached_goal;
       outcome.holding = cite_skills::gripper_is_holding(
-        {width_m, wrapped.result->position, outcome.stalled, outcome.reached_goal}, travel_);
+        {width_m, wrapped.result->position, outcome.stalled, outcome.reached_goal}, travel_,
+        parts_);
       if (outcome.holding) {
         // Where the jaws actually stopped, kept for `Place`. The pad face sits a
         // stroke-dependent distance back up the tool axis, so releasing an object
@@ -2210,6 +2316,10 @@ private:
   std::atomic<bool> custody_unknown_{false};
 
   cite_skills::GripperTravel travel_;
+  /// How wide the parts this facility handles are, from the generated plan's own
+  /// `plan:` block. An interval and never a part: nothing carries which one is in
+  /// the jaws (ADR-0052 §A.5).
+  cite_skills::WorkpieceWidths parts_;
   double default_grasp_width_m_{0.0};
 
   //: The drive-joint position the gripper last closed to while holding something.

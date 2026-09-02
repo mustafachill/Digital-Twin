@@ -42,6 +42,8 @@ cite_skills::GripperTravel travel()
   t.tip_link_z_m = 0.172;
   t.pad_face_centre_z_m = 0.041003;
   t.goal_tolerance = 0.01;
+  t.stall_band_narrow_m = 0.002385;
+  t.stall_band_wide_m = 0.002385;
   return t;
 }
 
@@ -62,6 +64,31 @@ constexpr double kWorkpieceStall = 0.405605;
 //: that was never there. This constant is the whole reason the predicate needs a
 //: threshold; see `GripperHolding` below.
 constexpr double kFreeAirSettle = 0.444793;
+
+//: The band the L0 end-effector type declares, and the interval of work-piece
+//: widths the generated plan states for this facility. Kept in step with
+//: `model/assets/types/end_effectors/xarm_parallel_gripper.yaml` and
+//: `model/assets/types/workpieces/workpiece.yaml`; `tools/tests/test_stall_band.py`
+//: pins both on the model side, so a change to one that is not made to the other
+//: fails there.
+//:
+//: PROVISIONAL, and neither may be widened to make anything pass. The narrow
+//: edge sits inside an interval whose two bounds are "a real grasp reads empty"
+//: and "a stall on nothing reads as a grasp"; there is no slack in it that is not
+//: one of those failures. The wide edge has no measurement behind it at all.
+constexpr double kBandNarrow = 0.002385;
+constexpr double kBandWide = 0.002385;
+
+//: The facility's declared interval. Degenerate — one part — which is today's
+//: model and is not a special case in anything that reads it.
+cite_skills::WorkpieceWidths parts()
+{
+  return cite_skills::WorkpieceWidths{kWorkpieceWidth, kWorkpieceWidth};
+}
+
+//: The window those two open on this facility's part: [47.615, 52.385] mm.
+constexpr double kWindowLow = kWorkpieceWidth - kBandNarrow;
+constexpr double kWindowHigh = kWorkpieceWidth + kBandWide;
 
 }  // namespace
 
@@ -163,7 +190,7 @@ TEST(GripperWidthTolerance, VariesAcrossTheStrokeBecauseTheMapIsNotLinear)
 
 TEST(GraspWidth, PrefersTheWidthTheGoalAskedFor)
 {
-  const auto resolved = cite_skills::resolve_grasp_width(0.03, 0.04);
+  const auto resolved = cite_skills::resolve_grasp_width(0.03, 0.04, parts(), travel());
   EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Goal);
   EXPECT_NEAR(resolved.width_m, 0.03, kTolerance);
 }
@@ -173,9 +200,9 @@ TEST(GraspWidth, FallsBackToTheConfiguredDefaultWhenTheGoalLeavesItUnset)
   // `Pick.Goal.grasp_width_m` documents "0 means use the object type's default".
   // Zero is a request for a default — never a request to close completely, which
   // is what the code it replaced did to every pick in the system.
-  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.04);
+  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.045, parts(), travel());
   EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Default);
-  EXPECT_NEAR(resolved.width_m, 0.04, kTolerance);
+  EXPECT_NEAR(resolved.width_m, 0.045, kTolerance);
 }
 
 TEST(GraspWidth, SaysSoWhenNothingSuppliedOne)
@@ -183,14 +210,99 @@ TEST(GraspWidth, SaysSoWhenNothingSuppliedOne)
   // Neither the goal nor configuration knows the object type. The skill still
   // has to do something, but it must be able to tell the caller that the width
   // it used was not resolved from anything.
-  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.0);
+  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.0, parts(), travel());
   EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Unknown);
 }
 
 TEST(GraspWidth, TreatsANegativeRequestAsUnset)
 {
-  const auto resolved = cite_skills::resolve_grasp_width(-0.01, 0.0);
+  const auto resolved = cite_skills::resolve_grasp_width(-0.01, 0.0, parts(), travel());
   EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Unknown);
+}
+
+// -----------------------------------------------------------------------------
+// The caller's width is checked (ADR-0052 §A.8)
+// -----------------------------------------------------------------------------
+//
+// F stops the predicate reading the commanded width, which closes one half of a
+// door the 2026-09-01 campaign demonstrated. The other half is a DIFFERENT
+// failure and no window can catch it: a width too close to the part ends the
+// close on the controller's goal-tolerance branch, `reached_goal` comes back
+// true, and the predicate reports empty by its first condition with the part in
+// the jaws. So the width is refused before anything moves.
+// -----------------------------------------------------------------------------
+
+TEST(GraspWidth, RefusesAGoalWidthThatCannotEvidenceAGrasp)
+{
+  // THE COST, ASSERTED RATHER THAN NOTED. 48.0 mm against this facility's 50 mm
+  // part leaves 2.0 mm, below the ~2.1 mm margin, and the campaign shows this
+  // cell handles 48.0 mm — all seven of its trials stalled and none reached
+  // goal. The refusal is conservative in the direction that fails safe, and it
+  // is a refusal rather than a silent execution because the alternative is a
+  // held part reported as air. What would justify relaxing it is measurement,
+  // never a smaller margin chosen here.
+  const auto resolved = cite_skills::resolve_grasp_width(0.048, 0.045, parts(), travel());
+  EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Refused);
+  EXPECT_NEAR(resolved.width_m, 0.048, kTolerance);
+}
+
+TEST(GraspWidth, RefusesAConfiguredDefaultOnTheSameRule)
+{
+  // EITHER SOURCE. A default delivered from a model this validator would have
+  // refused is no safer than a goal that names the same number, and the check is
+  // at the point of use rather than keyed to where the width came from.
+  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.049, parts(), travel());
+  EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Refused);
+}
+
+TEST(GraspWidth, AdmitsTheShippedDefaultWithMarginToSpare)
+{
+  // The other side of the same bound: the model this cell ships must not be
+  // refused by the rule its own validator enforces. 45 mm leaves 5.00 mm against
+  // a ~2.14 mm margin.
+  const auto resolved = cite_skills::resolve_grasp_width(0.0, 0.045, parts(), travel());
+  EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Default);
+  EXPECT_GT(
+    kWorkpieceWidth - 0.045,
+    cite_skills::gripper_discrimination_margin_m(0.045, travel()));
+}
+
+TEST(GraspWidth, AppliesNoBoundWhenTheFacilityDeclaresNoPart)
+{
+  // No declared part is no bound, not a bound of zero. The state is refused at
+  // L0 by `workpiece-width-unstated-for-a-grasping-facility` before a plan
+  // exists; inventing a refusal here would make a facility that grasps nothing
+  // unable to command a width at all.
+  const cite_skills::WorkpieceWidths none{0.0, 0.0};
+  const auto resolved = cite_skills::resolve_grasp_width(0.048, 0.045, none, travel());
+  EXPECT_EQ(resolved.source, cite_skills::GraspWidthSource::Goal);
+}
+
+TEST(GripperDiscrimination, MatchesTheValidatorsOwnDerivation)
+{
+  // ONE POLICY, TWO LANGUAGES, ONE DERIVATION (ADR-0052 §A.7). The validator's
+  // `_grasp_discrimination_margin_m` evaluates the same expression on the same
+  // declared facts and lands on 2.137972 mm at the shipped 45 mm default;
+  // `tools/tests/test_stall_band.py` pins that number on the Python side. If
+  // either drifts, one of the two tests fails rather than a model validating
+  // against one bound while the cell applies another.
+  EXPECT_NEAR(
+    cite_skills::gripper_discrimination_margin_m(0.045, travel()), 0.002137972, 1e-9);
+}
+
+TEST(GripperDiscrimination, IsNotTheLinearisationItReplaced)
+{
+  // Stated so that a "simplification" back to `2 * gripper_width_tolerance_m`
+  // fails loudly. The two differ by 0.005 mm at the shipped command — immaterial
+  // at this gripper's scale, and still two answers to one question, which is
+  // exactly what §A.7 forbids. The exact form is the larger of the two, so
+  // adopting it did not loosen the bound.
+  const double linearised =
+    2.0 * cite_skills::gripper_width_tolerance_m(
+    cite_skills::gripper_position_for(0.045, travel()), travel());
+  const double exact = cite_skills::gripper_discrimination_margin_m(0.045, travel());
+  EXPECT_GT(exact, linearised);
+  EXPECT_NEAR(exact - linearised, 0.000005258, 1e-8);
 }
 
 // -----------------------------------------------------------------------------
@@ -200,116 +312,251 @@ TEST(GraspWidth, TreatsANegativeRequestAsUnset)
 // interpreted. Deciding whether a stall means 'holding the object' or 'closed on
 // nothing' is Grasp's job and needs a real width check." These are that check.
 //
-// Two defects are pinned here, not one.
+// Three defects are pinned here, not two.
 //
 //   1. `holding` was once the controller's `stalled` flag copied straight
 //      through. A run on 2026-08-24 lifted a work-piece 0.633 m and reported
 //      "closed without stalling" in the same breath.
 //   2. The width check that replaced it — `reached_width_m > commanded_width_m`
 //      — had NO DISCRIMINATING POWER. Measured under a working mimic coupling,
-//      free air commanded to 45.0 mm reported 45.80 mm: the bare `>` is true
-//      with nothing between the pads at all. The controller ends its goal the
-//      instant |error| < goal_tolerance, so the reported position is
-//      systematically short of the command and reads back as phantom width.
+//      free air commanded to 45.0 mm reported 45.85 mm: the bare `>` is true
+//      with nothing between the pads at all.
+//   3. The MARGIN that replaced *that* was measured against the wrong thing
+//      (ADR-0052). It compared the reached width to the COMMANDED width, which
+//      is a policy value, while the error it makes is about where the PART is.
+//      Both directions were then observed: a real grasp reported empty,
+//      witnessed by the work-piece's own contact sensor, and a stall on nothing
+//      reported as a grasp.
 //
-// The tests below therefore assert the MARGIN, not the sign.
+// So the tests below assert a WINDOW AROUND THE PART, and the free-air case must
+// stay rejected by a bound that does not move when the command does.
 // -----------------------------------------------------------------------------
 
-TEST(GripperHolding, AStallOnTheOpenSideOfTheCommandIsAGrasp)
+TEST(GripperHolding, AStallAtThePartIsAGrasp)
 {
   // Commanded to squeeze to 45 mm, stopped by a 50 mm box at q = 0.4056. The
-  // gripper could not reach where it was sent, and what stopped it is between
-  // the pads: 5.00 mm of margin against a 2.11 mm threshold.
+  // gripper could not reach where it was sent, and it stopped exactly where a
+  // part this facility declares would have stopped it.
   EXPECT_TRUE(
-    cite_skills::gripper_is_holding({0.045, kWorkpieceStall, true, false}, travel()));
+    cite_skills::gripper_is_holding(
+      {0.045, kWorkpieceStall, true, false}, travel(), parts()));
 }
 
 TEST(GripperHolding, FreeAirIsNotAGraspEvenThoughItReportsExtraWidth)
 {
-  // THE REGRESSION. This is the measured free-air case: commanded 45.0 mm, no
-  // part, the controller stops 0.008 rad short and reports 45.85 mm. A predicate
-  // testing only `reached > commanded` calls this a grasp. This one must not.
+  // THE REGRESSION. The measured free-air case: commanded 45.0 mm, no part, the
+  // controller stops 0.008 rad short and reports 45.85 mm. A predicate testing
+  // only `reached > commanded` calls this a grasp. This one must not — and now
+  // rejects it because 45.85 mm is BELOW the window's narrow edge at 47.615 mm,
+  // which is a fact about the part rather than about what was asked for.
   EXPECT_GT(cite_skills::gripper_width_for(kFreeAirSettle, travel()), 0.045);
+  EXPECT_LT(cite_skills::gripper_width_for(kFreeAirSettle, travel()), kWindowLow);
   EXPECT_FALSE(
-    cite_skills::gripper_is_holding({0.045, kFreeAirSettle, true, false}, travel()));
+    cite_skills::gripper_is_holding(
+      {0.045, kFreeAirSettle, true, false}, travel(), parts()));
 }
 
-TEST(GripperHolding, ReachingTheCommandedWidthIsNotAGrasp)
+TEST(GripperHolding, RejectsTheFreeAirSettleAtEveryCommandedWidth)
 {
-  // Nothing in the way: the gripper arrived exactly where it was told. Whatever
-  // else is true, this run learned nothing about an object.
-  const double at_command = cite_skills::gripper_position_for(0.045, travel());
-  EXPECT_FALSE(cite_skills::gripper_is_holding({0.045, at_command, false, true}, travel()));
+  // THE PROPERTY THE OLD FORM DID NOT HAVE, and the reason the reference moved.
+  // The free-air settle is rejected whatever the goal asked for, because nothing
+  // in the decision reads the command. Under the commanded-width margin a caller
+  // could move the band by moving the command; here there is no band to move.
+  for (const double commanded : {0.030, 0.042, 0.045, 0.047, 0.048, 0.060}) {
+    EXPECT_FALSE(
+      cite_skills::gripper_is_holding(
+        {commanded, kFreeAirSettle, true, false}, travel(), parts()))
+      << "at a commanded " << commanded;
+  }
+}
+
+TEST(GripperHolding, AdmitsARealStallAtEveryCommandedWidth)
+{
+  // The same property in the other direction, and the false negative ADR-0052
+  // records: the campaign's 48.0 mm command produced seven genuine grasps that
+  // the commanded-width margin reported empty. The window admits them because it
+  // never looks at the command.
+  for (const double commanded : {0.030, 0.042, 0.045, 0.047, 0.048}) {
+    EXPECT_TRUE(
+      cite_skills::gripper_is_holding(
+        {commanded, kWorkpieceStall, true, false}, travel(), parts()))
+      << "at a commanded " << commanded;
+  }
 }
 
 TEST(GripperHolding, ReachedGoalAloneDisqualifiesIt)
 {
-  // The second signal, standing on its own. A gripper that arrived where it was
+  // The first signal, standing on its own. A gripper that arrived where it was
   // sent is not holding anything, however wide it claims to have stopped — and
   // this needs no threshold, so it cannot be miscalibrated.
   EXPECT_FALSE(
-    cite_skills::gripper_is_holding({0.045, kWorkpieceStall, true, true}, travel()));
+    cite_skills::gripper_is_holding(
+      {0.045, kWorkpieceStall, true, true}, travel(), parts()));
+}
+
+TEST(GripperHolding, NotStallingDisqualifiesIt)
+{
+  // The other half of the flag pair, which ADR-0052 leaves untouched: a joint
+  // that never stopped short reports nothing about what is between the pads,
+  // even standing at the part's own width.
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding(
+      {0.045, kWorkpieceStall, false, false}, travel(), parts()));
 }
 
 TEST(GripperHolding, ClosingFullyOnNothingIsNotAGrasp)
 {
   // Commanded shut, closed shut, controller reports the goal reached. `stalled`
   // is false and so is this.
-  EXPECT_FALSE(cite_skills::gripper_is_holding({0.0, 0.85, false, true}, travel()));
+  EXPECT_FALSE(cite_skills::gripper_is_holding({0.0, 0.85, false, true}, travel(), parts()));
 }
 
 TEST(GripperHolding, AStallShutOnNothingIsNotAGrasp)
 {
   // The case `stalled` alone gets wrong, and the reason a width check is needed
-  // at all: the gripper jammed, or fouled its own fingers, and stopped at or
-  // past the width it was commanded to. Nothing is between the pads holding it
-  // open, so nothing is being held.
-  EXPECT_FALSE(cite_skills::gripper_is_holding({0.045, 0.85, true, false}, travel()));
+  // at all: the gripper jammed, or fouled its own fingers, and stopped far
+  // narrower than any part this facility declares.
+  EXPECT_FALSE(cite_skills::gripper_is_holding({0.045, 0.85, true, false}, travel(), parts()));
   const double at_command = cite_skills::gripper_position_for(0.045, travel());
-  EXPECT_FALSE(cite_skills::gripper_is_holding({0.045, at_command, true, false}, travel()));
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding({0.045, at_command, true, false}, travel(), parts()));
 }
 
-TEST(GripperHolding, RequiresAMarginWiderThanTheControllerBias)
+TEST(GripperHolding, TheNarrowEdgeIsWhereItSays)
 {
-  // The threshold itself, from both sides. `goal_tolerance` is worth ~1.05 mm of
-  // width at this part of the stroke, so the predicate demands ~2.11 mm.
-  const double reached = cite_skills::gripper_width_for(kWorkpieceStall, travel());
-  const double threshold =
-    2.0 * cite_skills::gripper_width_tolerance_m(kWorkpieceStall, travel());
-  EXPECT_NEAR(threshold, 0.002105, 5e-6);
-
-  // Just inside the threshold: not a grasp.
-  EXPECT_FALSE(cite_skills::gripper_is_holding(
-      {reached - 0.9 * threshold, kWorkpieceStall, true, false}, travel()));
-  // Just outside it: a grasp.
-  EXPECT_TRUE(cite_skills::gripper_is_holding(
-      {reached - 1.1 * threshold, kWorkpieceStall, true, false}, travel()));
+  // The edge itself, from both sides. Just inside the window is a grasp; just
+  // outside it is not. The two positions are derived from the window rather than
+  // written as angles, so a change to the band or to the part moves this test
+  // with it instead of leaving it asserting an old boundary.
+  const double inside = cite_skills::gripper_position_for(kWindowLow + 1e-5, travel());
+  const double outside = cite_skills::gripper_position_for(kWindowLow - 1e-5, travel());
+  EXPECT_TRUE(
+    cite_skills::gripper_is_holding({0.045, inside, true, false}, travel(), parts()));
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding({0.045, outside, true, false}, travel(), parts()));
 }
 
-TEST(GripperHolding, WidensItsMarginWhenTheControllerToleranceIsLooser)
+TEST(GripperHolding, TheWideEdgeIsWhereItSays)
 {
-  // The threshold is derived from the declared tolerance, so a looser controller
-  // demands more evidence rather than silently accepting more phantom width.
+  // THE EDGE NOTHING HAS EVER EXERCISED (ADR-0052 §A.9.5). No observed grasp
+  // stalled above the part's nominal width — the widest came within 0.023 mm of
+  // it — so this is a mechanism test and not evidence about any run. A stall
+  // wider than the window reports empty, which is a new false-negative mode, and
+  // it is asserted here so that it is at least visible.
+  const double inside = cite_skills::gripper_position_for(kWindowHigh - 1e-5, travel());
+  const double outside = cite_skills::gripper_position_for(kWindowHigh + 1e-5, travel());
+  EXPECT_TRUE(
+    cite_skills::gripper_is_holding({0.045, inside, true, false}, travel(), parts()));
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding({0.045, outside, true, false}, travel(), parts()));
+}
+
+TEST(GripperHolding, DoesNotWidenItsWindowWhenTheControllerToleranceIsLooser)
+{
+  // THE PROPERTY THAT REPLACES `WidensItsMarginWhenTheControllerToleranceIsLooser`,
+  // AND IT IS ITS INVERSE ON PURPOSE (ADR-0052 §A.6).
+  //
+  // The old predicate derived its margin from `goal_tolerance`, so a looser
+  // controller demanded more evidence. That reads as a safety property and is
+  // one only while the derived quantity is a FLOOR. Under F the same derivation
+  // would be a WINDOW, and a window derived from the tolerance widens as the
+  // tolerance loosens — at 0.02 rad it spans [45.79, 54.21] mm on this part and
+  // ADMITS the free-air settle the block above exists to reject. The direction
+  // of safety would flip with an unrelated setting.
+  //
+  // So the band is declared and the window does not move. Asserted at a
+  // tolerance five times the shipped one, on the case that would have flipped.
   auto loose = travel();
   loose.goal_tolerance = 0.05;
 
-  const cite_skills::GripperReport marginal{0.0455, kWorkpieceStall, true, false};
-  EXPECT_TRUE(cite_skills::gripper_is_holding(marginal, travel()));
-  EXPECT_FALSE(cite_skills::gripper_is_holding(marginal, loose));
+  const cite_skills::GripperReport free_air{0.045, kFreeAirSettle, true, false};
+  EXPECT_FALSE(cite_skills::gripper_is_holding(free_air, travel(), parts()));
+  EXPECT_FALSE(cite_skills::gripper_is_holding(free_air, loose, parts()));
+
+  const cite_skills::GripperReport at_part{0.045, kWorkpieceStall, true, false};
+  EXPECT_TRUE(cite_skills::gripper_is_holding(at_part, travel(), parts()));
+  EXPECT_TRUE(cite_skills::gripper_is_holding(at_part, loose, parts()));
+}
+
+TEST(GripperHolding, WidensItsWindowWithTheDeclaredBandAndNothingElse)
+{
+  // The one thing that DOES move the window, so that "declared, not derived" is
+  // asserted rather than described. A larger band admits a stall the shipped one
+  // rejects; nothing else in `GripperTravel` has that effect.
+  auto wider = travel();
+  wider.stall_band_narrow_m = 0.006;
+
+  const double outside = cite_skills::gripper_position_for(kWindowLow - 0.001, travel());
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding({0.045, outside, true, false}, travel(), parts()));
+  EXPECT_TRUE(
+    cite_skills::gripper_is_holding({0.045, outside, true, false}, wider, parts()));
+}
+
+TEST(GripperHolding, MovesWithTheDeclaredPartRatherThanBeingBakedIn)
+{
+  // P5 and P9: which parts a facility handles is data. A cell declaring a 40 mm
+  // part judges the same stall differently, and nothing in the predicate is
+  // rewritten to do it.
+  const cite_skills::WorkpieceWidths narrower{0.040, 0.040};
+  const cite_skills::GripperReport at_fifty{0.035, kWorkpieceStall, true, false};
+  EXPECT_TRUE(cite_skills::gripper_is_holding(at_fifty, travel(), parts()));
+  EXPECT_FALSE(cite_skills::gripper_is_holding(at_fifty, travel(), narrower));
+}
+
+TEST(GripperHolding, WidensItsWindowWithTheDeclaredSpreadOfParts)
+{
+  // WHAT THE INTERVAL COSTS, asserted rather than left in a comment (§A.5). F is
+  // given the range of declared part widths and never which part is in the jaws,
+  // so its discrimination IS the width of that window: a facility declaring a
+  // 20 mm part beside an 80 mm one admits every stall between them. That is not
+  // a defect in this function — it is the price of not carrying the type — and
+  // `stall-band-admits-a-stall-on-nothing` is the rule that refuses such a model
+  // at L0. Pinned here so that nobody discovers it from a running cell.
+  const cite_skills::WorkpieceWidths spread{0.020, 0.080};
+  const cite_skills::GripperReport mid{0.045, kFreeAirSettle, true, false};
+  EXPECT_FALSE(cite_skills::gripper_is_holding(mid, travel(), parts()));
+  EXPECT_TRUE(cite_skills::gripper_is_holding(mid, travel(), spread));
+}
+
+TEST(GripperHolding, ReportsNothingWhenTheFacilityDeclaresNoPart)
+{
+  // No reference is not a window around zero, which would admit a fully closed
+  // gripper. The state is refused at L0 and the skill server refuses to
+  // configure on it; this is what the function itself does if it is ever reached.
+  const cite_skills::WorkpieceWidths none{0.0, 0.0};
+  EXPECT_FALSE(
+    cite_skills::gripper_is_holding(
+      {0.045, kWorkpieceStall, true, false}, travel(), none));
 }
 
 TEST(GripperHolding, IsDecidedFromFieldsBothPathsCarry)
 {
   // P2: the judgement reads only what `control_msgs/GripperCommand.Result`
   // carries — position, stalled, reached_goal — which is identical in simulation
-  // and on hardware. Nothing here consults the simulator, and there is no branch
-  // that could. Asserted by behaviour rather than by restating the expression,
-  // which is what the previous version of this test did: it recomputed the
-  // implementation and so would have passed against any implementation at all.
+  // and on hardware. It now reads FEWER of them than it used to, because the
+  // commanded width has left the decision, so the P2 surface shrank. Asserted by
+  // behaviour rather than by restating the expression, which is what an earlier
+  // version of this test did: it recomputed the implementation and so would have
+  // passed against any implementation at all.
   const cite_skills::GripperReport holding{0.045, kWorkpieceStall, true, false};
   const cite_skills::GripperReport empty{0.045, kFreeAirSettle, true, false};
-  EXPECT_TRUE(cite_skills::gripper_is_holding(holding, travel()));
-  EXPECT_FALSE(cite_skills::gripper_is_holding(empty, travel()));
+  EXPECT_TRUE(cite_skills::gripper_is_holding(holding, travel(), parts()));
+  EXPECT_FALSE(cite_skills::gripper_is_holding(empty, travel(), parts()));
+}
+
+TEST(GripperHolding, IgnoresTheCommandedWidthEntirely)
+{
+  // THE DECISION, ASSERTED DIRECTLY. `commanded_width_m` stays on the report so
+  // that `describe_empty_grasp` can print what was asked for, and nothing
+  // decides on it. Every value of it gives the same verdict on the same stall —
+  // including values that would have inverted the old predicate's answer.
+  for (const double commanded : {0.0, 0.030, 0.045, 0.0499, 0.060, 0.088}) {
+    EXPECT_TRUE(
+      cite_skills::gripper_is_holding(
+        {commanded, kWorkpieceStall, true, false}, travel(), parts()))
+      << "at a commanded " << commanded;
+  }
 }
 
 // ---------------------------------------------------------------------------

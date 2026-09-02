@@ -109,6 +109,28 @@ def _plan() -> dict:
     raise AssertionError(f"the generated plan has no entry for {ASSET}")
 
 
+def _workpieces() -> dict:
+    """Return the zone's work-piece width interval, from the plan's facility block.
+
+    One statement per ZONE and not one per arm, which is why it is not in
+    `_plan()` above (ADR-0052 A.4): every key on a controller manager's gripper
+    block describes an end effector, and a part width is not a property of one.
+
+    Read rather than restated, for the reason everything else here is. A literal
+    50 mm would be a second copy of an L0 fact, and it would go stale silently
+    the first time the cube changed — which is exactly the failure the one
+    accessor behind this value exists to prevent.
+    """
+    plan = _read(GENERATED / "bringup" / f"{ZONE}_plan.yaml")
+    workpieces = plan["plan"].get("workpieces")
+    assert workpieces is not None, (
+        "the generated plan states no `workpieces:` block, so this rig cannot tell the "
+        "skill server what a stall is judged against (ADR-0052). Run "
+        "./scripts/validate-model --write, then ./scripts/build."
+    )
+    return workpieces
+
+
 def _joints(manager: dict) -> list:
     """Return the arm's joints, plus the gripper's drive joint, as ros2_control has them.
 
@@ -135,6 +157,7 @@ def _yaml_parameters(document: dict, prefix: str) -> dict:
 @launch_testing.markers.keep_alive
 def generate_test_description() -> LaunchDescription:
     manager = _plan()
+    workpieces = _workpieces()
     moveit = manager["moveit"]
     description = ParameterValue(
         Command(["xacro ", str(_resolve(manager["description"]))]), value_type=str
@@ -216,6 +239,24 @@ def generate_test_description() -> LaunchDescription:
                         # delivered timeout refuses to configure, which is what
                         # makes an undelivered parameter loud instead of silent.
                         "gripper_result_timeout_s": manager["gripper_result_timeout_s"],
+                        # What separates a grasp from a stall on nothing
+                        # (ADR-0052, option F). Four values from two places in
+                        # one plan, and the split is the decision: the BAND is a
+                        # property of this end effector and rides the gripper
+                        # block; the PART INTERVAL is a fact about the facility
+                        # and is stated once in the plan's own `plan:` block.
+                        #
+                        # Not optional, for the same reason the timeout above is
+                        # not: a server with a gripper action and no delivered
+                        # band refuses to configure, which is what makes an
+                        # undelivered parameter loud instead of a predicate that
+                        # reports every grasp empty.
+                        "gripper_stall_band_narrow_m": manager[
+                            "gripper_stall_band_narrow_m"
+                        ],
+                        "gripper_stall_band_wide_m": manager["gripper_stall_band_wide_m"],
+                        "workpiece_narrowest_width_m": workpieces["narrowest_width_m"],
+                        "workpiece_widest_width_m": workpieces["widest_width_m"],
                         "home_rad": list(moveit["home_rad"]),
                         # The planner the server asks for, from the plan rather
                         # than restated here (ADR-0027). Without these the

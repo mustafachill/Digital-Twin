@@ -92,28 +92,72 @@ double gripper_width_tolerance_m(double position, const GripperTravel & travel)
   return std::abs(slope * travel.goal_tolerance);
 }
 
-GraspWidth resolve_grasp_width(double requested_m, double configured_default_m)
+double gripper_discrimination_margin_m(double width_m, const GripperTravel & travel)
 {
-  if (requested_m > 0.0) {
-    return GraspWidth{requested_m, GraspWidthSource::Goal};
-  }
-  if (configured_default_m > 0.0) {
-    return GraspWidth{configured_default_m, GraspWidthSource::Default};
-  }
-  return GraspWidth{0.0, GraspWidthSource::Unknown};
+  // The SAME expression `_grasp_discrimination_margin_m` evaluates in
+  // `tools/cite_tools/validate/physical.py`, on the same declared facts, and not
+  // a linearisation of it. See the header for why the two are one derivation
+  // rather than two answers, and for what pins them together.
+  const double towards_closed = travel.closed_position >= travel.open_position ? 1.0 : -1.0;
+  const double position = gripper_position_for(width_m, travel);
+  const double biased = position + towards_closed * 2.0 * travel.goal_tolerance;
+  return std::abs(gripper_width_for(position, travel) - gripper_width_for(biased, travel));
 }
 
-bool gripper_is_holding(const GripperReport & report, const GripperTravel & travel)
+GraspWidth resolve_grasp_width(
+  double requested_m, double configured_default_m, const WorkpieceWidths & parts,
+  const GripperTravel & travel)
+{
+  const auto resolved = [&]() -> GraspWidth {
+      if (requested_m > 0.0) {
+        return GraspWidth{requested_m, GraspWidthSource::Goal};
+      }
+      if (configured_default_m > 0.0) {
+        return GraspWidth{configured_default_m, GraspWidthSource::Default};
+      }
+      return GraspWidth{0.0, GraspWidthSource::Unknown};
+    }();
+
+  if (resolved.source == GraspWidthSource::Unknown) {
+    return resolved;
+  }
+  // No declared part means no bound to apply, not a bound of zero. The state is
+  // refused at L0 rather than invented here.
+  if (parts.narrowest_m <= 0.0) {
+    return resolved;
+  }
+  // A grasp is evidenced by FAILING to reach where the jaws were sent, and a
+  // command this close to the part terminates on the controller's own
+  // goal-tolerance branch instead — which the predicate below reports as empty
+  // by its first condition, with the part in the jaws. Refused rather than
+  // executed and then judged. See the header for what this costs.
+  if (parts.narrowest_m - resolved.width_m <
+    gripper_discrimination_margin_m(resolved.width_m, travel))
+  {
+    return GraspWidth{resolved.width_m, GraspWidthSource::Refused};
+  }
+  return resolved;
+}
+
+bool gripper_is_holding(
+  const GripperReport & report, const GripperTravel & travel,
+  const WorkpieceWidths & parts)
 {
   if (!report.stalled || report.reached_goal) {
     return false;
   }
-  // Read where the joint actually stopped, then ask whether that is further open
-  // than commanded by more than the controller's own end-of-goal bias can
-  // account for. See the header: a bare `>` here is true in free air.
+  // No declared part is no reference at all, and a window around zero would
+  // admit a fully closed gripper. Refused at L0; answered honestly here.
+  if (parts.narrowest_m <= 0.0 || parts.widest_m <= 0.0) {
+    return false;
+  }
+  // Where the joint actually stopped, against where a part THIS FACILITY
+  // HANDLES would have stopped it. `report.commanded_width_m` is deliberately
+  // not read: it is a policy value, and the error is about where the part is.
+  // See the header — judging against the command is the defect ADR-0052 records.
   const double reached_width_m = gripper_width_for(report.reached_position, travel);
-  const double margin_m = reached_width_m - report.commanded_width_m;
-  return margin_m > 2.0 * gripper_width_tolerance_m(report.reached_position, travel);
+  return reached_width_m > parts.narrowest_m - travel.stall_band_narrow_m &&
+         reached_width_m < parts.widest_m + travel.stall_band_wide_m;
 }
 
 }  // namespace cite_skills

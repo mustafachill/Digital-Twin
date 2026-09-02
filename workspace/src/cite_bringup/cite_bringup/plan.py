@@ -400,6 +400,28 @@ class Detection:
 
 
 @dataclass(frozen=True)
+class Workpieces:
+    """How wide the parts this zone handles are, as one interval.
+
+    ONE PER ZONE, not one per controller manager, which is why it is not on
+    `ControllerManager` and does not travel through `_named_numbers`. A
+    work-piece width is a fact about the facility; the gripper block beside it
+    carries facts about an end effector, and every key there is sourced from the
+    end-effector type (ADR-0052 A.4).
+
+    THE INTERVAL AND NEVER WHICH PART. `cite_skills::gripper_is_holding` judges a
+    stall against this range rather than against the width it commanded, and it
+    is never told which part is in the jaws: `Pick.Goal.workpiece_id` is an
+    instance id minted by L4's registry, and no map from one to an L0 work-piece
+    type exists anywhere in this repository. On a facility declaring one part the
+    two numbers are equal, which is today's model and is not a special case here.
+    """
+
+    narrowest_width_m: float
+    widest_width_m: float
+
+
+@dataclass(frozen=True)
 class Plan:
     zone: str
     world: Path
@@ -418,6 +440,14 @@ class Plan:
     #: fault: a cell with no beams has nothing for a detection server to watch,
     #: and starting one would advertise `detect` over an empty sensor table.
     detection: Detection | None
+    #: `None` when the zone declares no work-piece whose width L0 can state — no
+    #: part at all, or a mesh part whose extents live in a file L1 owns. A real
+    #: state and not a fault HERE, because a facility that grasps nothing has no
+    #: predicate to configure; where it is a fault, it is a fault at L0, and
+    #: `workpiece-width-unstated-for-a-grasping-facility` refuses the model
+    #: before a plan is generated at all (ADR-0052 A.7). Defaulting a width here
+    #: would put a number the model never stated inside the predicate.
+    workpieces: Workpieces | None
 
     def side_named(self, name: str) -> Side:
         """Return the side called ``name``, or refuse.
@@ -566,6 +596,7 @@ def load(path: Path) -> Plan:
         conveyors=conveyors,
         sensors=sensors,
         detection=detection,
+        workpieces=_workpieces(_optional(plan, "workpieces")),
     )
 
 
@@ -860,6 +891,43 @@ def _detection(entry: object | None) -> Detection | None:
         namespace=_require(entry, "namespace", "detection"),
         detect_action=_require(entry, "detect_action", "detection"),
     )
+
+
+def _workpieces(entry: object | None) -> Workpieces | None:
+    """Read the zone's work-piece width interval, or None where it states none.
+
+    Both edges required once the block exists, and neither defaulted from the
+    other. A window with one edge is not a window: L3 would admit every stall
+    above the narrow edge, which is option C — the one ADR-0052 rejects — reached
+    by omission rather than by decision.
+
+    The order is checked here rather than left to L3, because a reversed pair
+    produces an EMPTY window and therefore a predicate that reports every grasp
+    empty, which is silence rather than an error at the point of use.
+    """
+    if entry is None:
+        return None
+    narrowest = _number(
+        _require(entry, "narrowest_width_m", "workpieces"), "narrowest_width_m", "workpieces"
+    )
+    widest = _number(
+        _require(entry, "widest_width_m", "workpieces"), "widest_width_m", "workpieces"
+    )
+    if narrowest <= 0.0 or widest <= 0.0:
+        raise PlanError(
+            f"workpieces states a non-positive width ({narrowest}, {widest}). A part has "
+            "a width or the plan does not state one; zero is neither, and it would open "
+            "the grasp predicate's window onto a fully closed gripper."
+        )
+    if widest < narrowest:
+        raise PlanError(
+            f"workpieces states a widest width of {widest} below its narrowest "
+            f"({narrowest}), so the window cite_skills::gripper_is_holding judges a "
+            "stall inside is empty and every grasp would report as holding nothing. "
+            "The pair is generated from L0 - run ./scripts/validate-model --write, "
+            "then ./scripts/build."
+        )
+    return Workpieces(narrowest_width_m=narrowest, widest_width_m=widest)
 
 
 def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:

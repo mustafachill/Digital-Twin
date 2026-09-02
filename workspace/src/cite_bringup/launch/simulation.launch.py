@@ -1059,6 +1059,35 @@ def _skill_parameters(plan: Plan, manager) -> dict:
         "use_sim_time": True,
         **manager.gripper,
         **manager.arm,
+        # How wide the parts this facility handles are (ADR-0052 option F). It
+        # arrives from the plan's own `plan:` block rather than from the
+        # manager's, because it is one statement per ZONE and not one per arm —
+        # every key in `manager.gripper` describes an end effector, and a part
+        # width is not a property of one.
+        #
+        # Absent rather than zero where the plan states none, for the reason
+        # `_named_numbers` omits an absent gripper key: a zero manufactured here
+        # would be passed as a parameter and would override the skill server's
+        # own declared sentinel with a number the model never stated — silently,
+        # and in the direction of a window opening onto a closed gripper. The
+        # server refuses to configure on the sentinel instead.
+        **_workpiece_parameters(plan),
+    }
+
+
+def _workpiece_parameters(plan: Plan) -> dict:
+    """The work-piece width interval, under the names the skill server declares.
+
+    Empty where the zone declares no part width. That is a real state and not a
+    fault here — a facility that grasps nothing has no predicate to configure —
+    and where it IS a fault it is caught at L0 by
+    `workpiece-width-unstated-for-a-grasping-facility` before a plan exists.
+    """
+    if plan.workpieces is None:
+        return {}
+    return {
+        "workpiece_narrowest_width_m": plan.workpieces.narrowest_width_m,
+        "workpiece_widest_width_m": plan.workpieces.widest_width_m,
     }
 
 
