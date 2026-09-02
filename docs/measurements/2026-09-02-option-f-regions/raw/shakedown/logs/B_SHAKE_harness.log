@@ -1,3 +1,3 @@
 [1/1] jam 50.00 mm -> q 0.40560459414971795 rad
-    holding_F=True holding_S=False w_reached=0.05 v5=True
-wrote /workspace/docs/measurements/2026-09-02-option-f-regions/raw/shakedown/B_SHAKE_trials.json: 1 trials
+    holding_F=True holding_S=False w_reached(I1)=0.05 v5=True
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/raw/shakedown2/B_SHAKE_trials.json: 1 trials

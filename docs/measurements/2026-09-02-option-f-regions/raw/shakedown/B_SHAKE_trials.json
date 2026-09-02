@@ -45,12 +45,15 @@
     "i1_result_code": 0,
     "i1_detail": "",
     "i3_q_at_stall_rad": 0.40560459414971795,
-    "i3_joint_state_samples": 160,
+    "i3_joint_state_samples": 156,
     "i3_reached_width_m": 0.05,
-    "d_narrow_m": 0.0023849999999999982,
-    "d_wide_m": 0.0023849999999999982,
+    "d_narrow_i3_m": 0.0023849999999999982,
+    "d_wide_i3_m": 0.0023849999999999982,
     "rests_at_stop": true,
     "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0023849999999999982,
+    "d_wide_m": 0.0023849999999999982,
     "gc_position_rad": 0.40560459414971795,
     "gc_stalled": true,
     "gc_reached_goal": false,
@@ -74,6 +77,7 @@
     "i8_start_position_rad": null,
     "fixture_named_itself": true,
     "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
     "v4_delta_m": 0.0,
     "v4_within_tolerance": true,
     "v4_i2_reached_mm": 50.0,
@@ -82,7 +86,7 @@
     "v5_valid": true,
     "holding_S": false,
     "holding_S_provenance": {
-      "built_at": "2026-09-02T04:43:19Z",
+      "built_at": "2026-09-02T05:30:34Z",
       "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
       "worktree_commit_short": "4ef2d7c",
       "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
@@ -93,9 +97,9 @@
       "available": true
     },
     "provenance": {
-      "head": "79ae6d974c7eafbeefb21653c8e2452ba228b2b0",
+      "head": "62051df58e0b7eccd943822ba8c3cc40c72c4a86",
       "base_commit": "d3eeac4",
-      "git_status_porcelain": "?? docs/measurements/2026-09-02-option-f-regions/harness/\n?? docs/measurements/2026-09-02-option-f-regions/raw/",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/shakedown2/",
       "watched_diff_against_base": "",
       "watched_worktree_dirty": "",
       "v1_clean": true,
@@ -113,6 +117,8 @@
     "parts": {
       "narrowest_m": 0.05,
       "widest_m": 0.05
-    }
+    },
+    "v2_ok": null,
+    "v7_ok": null
   }
 ]

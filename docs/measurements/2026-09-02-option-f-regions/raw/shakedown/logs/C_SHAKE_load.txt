@@ -1,6 +1,6 @@
 == C_SHAKE ==
- 04:52:50 up  9:52,  0 user,  load average: 3.82, 4.70, 3.81
+ 05:39:55 up 10:39,  0 user,  load average: 4.69, 4.57, 3.33
 12
                total        used        free      shared  buff/cache   available
-Mem:            7837        3179        2204         179        2831        4657
+Mem:            7837        3262        2102         179        2849        4574
 overlay         453G   31G  399G   8% /

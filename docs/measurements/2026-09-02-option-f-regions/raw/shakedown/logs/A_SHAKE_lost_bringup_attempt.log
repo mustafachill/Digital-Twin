@@ -1,0 +1,23 @@
+==> Running in container service 'dev': bash -lc CITE_OFR_OUT=/workspace/docs/measurements/2026-09-02-option-f-regions/raw/shakedown2 bash /workspace/docs/measurements/2026-09-02-option-f-regions/harness/run_cell_block.sh a A_SHAKE --shakedown
+== checking the domain is clear ==
+built /workspace/docs/measurements/2026-09-02-option-f-regions/harness/predicate_eval
+built_at=2026-09-02T05:31:50Z
+where=container
+commit=62051df58e0b7eccd943822ba8c3cc40c72c4a86
+gripper_cpp_sha256=697afee2f49f9a3ccfa37c4da65afeb2e2f9f11f7f025517e620b57d8ff57c86
+gripper_hpp_sha256=c90e4c7c8aa0dc3da33144e824a6790f3deda0424d0473e14cd03003c372ff70
+compiler=g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+predicate_eval_sha256=292d1b2a4dc9fb14ae04def338fa63c84b9521eb9cdee5c7b5ce42a300ee235c
+Preparing worktree (detached HEAD 4ef2d7c)
+built /workspace/docs/measurements/2026-09-02-option-f-regions/harness/predicate_eval_superseded
+== A_SHAKE ==
+ 05:31:52 up 10:31,  0 user,  load average: 2.46, 2.30, 2.26
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3183        2183         179        2847        4653
+overlay         453G   31G  399G   8% /
+== launching cell_a headless (domain 99) ==
+== waiting for CITE_SIDE_READY (ceiling 420s) ==
+== tearing down ==
+ABORT: the cell exited before announcing readiness
+

@@ -367,6 +367,19 @@ def arm_a(raw: Path) -> None:
         if stats.get("iqr", 0.0) > MIS_WIDTH_M:
             print(f"        rule R-A: IQR at {width:.2f} mm exceeds the 0.100 mm MIS -- a "
                   f"non-detection here is INCONCLUSIVE, never 'no difference'")
+        # RULE R-A CANNOT FIRE ON AN EMPTY DISTRIBUTION, and an empty one is exactly what
+        # V4 leaves in Arm A (deviation 1). The rule is applied literally above, to the
+        # V4-kept trials it is registered over; the spread over ALL trials at this command
+        # is printed here as an OBSERVATION so that "R-A did not fire" is never read as
+        # "the spread is within the bracket". It is not the rule and no verdict uses it.
+        if not stats.get("n"):
+            everything = summarise([row["i1_reached_width_m"] for row in at
+                                    if row.get("i1_reached_width_m") is not None])
+            if everything.get("n"):
+                print(f"        observation only, NOT rule R-A: over all {everything['n']} "
+                      f"trial(s) at this command, including those V4 excluded, the I1 "
+                      f"spread is IQR {everything['iqr'] * MM:.4f} mm, "
+                      f"min {everything['min'] * MM:.4f}, max {everything['max'] * MM:.4f}")
 
     # A1 -- reproduced if any valid trial at a PERMITTED width reports holding with
     # nothing between the pads and no work-piece in the world.
