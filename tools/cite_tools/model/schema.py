@@ -778,6 +778,48 @@ class GraspSpec(Strict):
     #: the node clock is the wall clock and the server being waited on is the
     #: vendor's rather than a `GripperActionController` (P2).
     result_timeout_s: Annotated[float, Field(gt=0.0)]
+    #: How far NARROWER than a declared part a genuine stall on that part may
+    #: land and still be a grasp, in metres between the pads (ADR-0052 §A.6).
+    #:
+    #: One half of the window `cite_skills::gripper_is_holding` judges a stall
+    #: inside. The predicate used to compare the reached width against the
+    #: COMMANDED width, which is a policy value; the error it makes is about
+    #: where the *part* is, and both directions of it are measured — a real
+    #: grasp reported empty, and a stall on nothing reported as a grasp
+    #: (ADR-0052, and the campaign it cites).
+    #:
+    #: WHY IT IS DECLARED AND NOT DERIVED FROM `goal_tolerance`. Reusing twice
+    #: the controller's own tolerance as the window needs no new field and is
+    #: already delivered, and it is rejected: that window *widens* as the
+    #: declared tolerance loosens, which inverts the safety direction. At a
+    #: `goal_tolerance` of 0.02 rad it admits the measured free-air settle as a
+    #: grasp — the exact case the predicate exists to reject. A threshold whose
+    #: direction flips with an unrelated setting is a coincidence, not a
+    #: derivation.
+    #:
+    #: WHY IT IS ON THE END EFFECTOR AND NOT ON THE WORK-PIECE. The quantity is
+    #: "how far from a part's declared width a genuine stall on that part
+    #: lands", and the only mechanism anyone has named for it is a property of
+    #: the drive and its linkage rather than of the part. The cause is
+    #: unexplained (ADR-0052 §A.9.3), so this placement is a judgement and is
+    #: recorded as one.
+    #:
+    #: Required with no default, like `max_drive_rate_rad_s` beside it: an end
+    #: effector that does not say what separates a grasp from a stall on nothing
+    #: is one nobody can reason about, and the omission would be invisible.
+    #: Its floor is derived and enforced by `cite_tools.validate.physical`
+    #: (`stall-band-admits-a-stall-on-nothing`).
+    stall_band_narrow_m: Annotated[float, Field(gt=0.0)]
+    #: The other edge: how far WIDER than a declared part a stall may land and
+    #: still be a grasp, in metres between the pads (ADR-0052 §A.6).
+    #:
+    #: NOTHING HAS EVER EXERCISED THIS EDGE. No observed grasp stalled above the
+    #: part's nominal width at all, so the data says the edge is not needed to
+    #: admit any observed grasp and says nothing about how large it must be to
+    #: admit an unobserved one. It is a new false-negative mode: a stall wider
+    #: than `widest part + this` reports empty. Any positive value is
+    #: unevidenced, and ADR-0052 §A.10's campaign is what sets it.
+    stall_band_wide_m: Annotated[float, Field(gt=0.0)]
 
     @property
     def max_width_m(self) -> float:

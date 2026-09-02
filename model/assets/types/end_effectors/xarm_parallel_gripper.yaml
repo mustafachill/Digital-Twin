@@ -333,6 +333,42 @@ asset_type:
     # value.
     result_timeout_s: 20.0
 
+    # WHAT SEPARATES A GRASP FROM A STALL ON NOTHING, as a window around the
+    # width of the parts this facility declares (ADR-0052, option F).
+    #
+    # `cite_skills::gripper_is_holding` used to ask "did the jaws stop wider than
+    # we ASKED?" and now asks "did the jaws stop where a part this facility
+    # handles would stop them?". The commanded width is a policy value; the error
+    # is about where the part is, and both directions of that error are measured
+    # — a real grasp reported empty, and a stall on nothing reported as a grasp.
+    #
+    # PROVISIONAL. narrow is the midpoint of the interval ADR-0052 §A.6
+    # derives from the 2026-09-01 grasp-discrimination campaign:
+    #   must exceed 1.891 mm (largest observed shortfall, or a real grasp
+    #     reads empty)
+    #   must not exceed 2.879 mm (the false-positive flip)
+    # wide has NO measurement behind it. It is set equal to narrow because
+    # nothing establishes the shortfall is one-sided. Simulation-measured;
+    # the mechanism is unexplained (ADR-0052 §A.9.3). ADR-0052 §A.10's
+    # campaign is what sets these.
+    #
+    # ONE DECLARATION FOR BOTH SIDES (P2, ADR-0041). The interval above was
+    # measured under `gz_ros2_control`, and the campaign establishes nothing
+    # about the physical gripper — there is no `GripperActionController` on that
+    # path at all. That is a reason to distrust the number, never a reason to
+    # split it: a per-backend band would be two predicates wearing one name. If
+    # Phase 2.B shows the two sides need different values, that is a P2 finding
+    # and an ESCALATE.
+    #
+    # THE FLOOR IS DERIVED AND ENFORCED, not written here.
+    # `stall-band-admits-a-stall-on-nothing` in `cite_tools.validate.physical`
+    # refuses a band whose narrow edge reaches below the width the
+    # command-referenced rule would already have rejected — which is the point at
+    # which this stops discriminating anything. It is also what makes a facility
+    # declaring a second, much wider part fail rather than degrade quietly.
+    stall_band_narrow_m: 0.002385
+    stall_band_wide_m: 0.002385
+
   controllers:
     - suffix: gripper_controller
       # GripperActionController, not a trajectory controller: a grasp is "close

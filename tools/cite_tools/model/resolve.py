@@ -23,6 +23,7 @@ from cite_tools.model.schema import (
     ControllerSpec,
     TrajectoryConstraints,
 )
+from cite_tools.model.workpieces import WorkpieceWidths, workpiece_types, workpiece_widths
 
 
 class ResolveError(Exception):
@@ -163,23 +164,26 @@ class ResolvedCell:
     def workpiece_types(self) -> tuple[AssetType, ...]:
         """The types named by ``workpiece_models``, resolved to their geometry.
 
-        ``workpiece_models`` carries names because a name is what the simulator
-        matches on. A rule that needs to know how wide a part is needs the type
-        behind the name, and resolving it here rather than at each call site
-        keeps the two rules that do from each writing their own lookup.
-
-        A name with no type behind it is dropped rather than raised on:
-        ``referential`` reports it as ``unknown-type`` and runs first, so by the
-        time a generator or a geometric rule sees this the model has been
-        checked. Dropping it means a rule sized from work-piece geometry reports
-        nothing rather than a wrong bound.
+        Delegated to `cite_tools.model.workpieces` rather than walked here, and
+        the delegation is the point (ADR-0052 §A.7). This used to be one of two
+        routes through ``workpiece_models`` — the other inside
+        ``cite_tools.validate.physical`` — and under option F the generator and
+        the validator answer one physical question from this list, so a
+        disagreement between the routes is a model that validates against one
+        part and a cell that judges against another.
         """
-        by_id = {t.id: t for t in self.unplaced_types}
-        return tuple(
-            asset_type
-            for name in self.workpiece_models
-            if (asset_type := by_id.get(name)) is not None and asset_type.category == "workpiece"
-        )
+        return workpiece_types(self.workpiece_models, self.unplaced_types)
+
+    @property
+    def workpiece_widths(self) -> WorkpieceWidths:
+        """How wide the parts this facility handles are, as one interval.
+
+        What the generated bring-up plan states at facility level and L3 judges a
+        stall against (ADR-0052 §A.4). Read through the same accessor the
+        validator reads, so the window the cell applies and the window the model
+        was checked against cannot drift apart.
+        """
+        return workpiece_widths(self.workpiece_models, self.unplaced_types)
 
     def asset(self, asset_id: str) -> ResolvedAsset | None:
         return next((a for a in self.assets if a.id == asset_id), None)

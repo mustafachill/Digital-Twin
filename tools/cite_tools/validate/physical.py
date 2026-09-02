@@ -17,6 +17,7 @@ import numpy as np
 
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.schema import AssetType, Body, GraspSpec, Inertial
+from cite_tools.model.workpieces import WorkpieceWidths, workpiece_widths
 from cite_tools.validate import Finding, error, warning
 
 #: Plausible bulk densities in kg/m^3. Below balsa or above lead means either the
@@ -73,11 +74,14 @@ NARROWEST_MEASURED_WORKPIECE_M = 0.050
 def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
     seen_tensors: dict[tuple[float, ...], list[str]] = {}
-    narrowest_workpiece = _narrowest_workpiece_width_m(model)
-    unstated_workpieces = _workpieces_without_a_stated_width(model)
+    widths = _workpiece_widths(model)
+    narrowest_workpiece = widths.narrowest_m
+    unstated_workpieces = widths.unstated
 
     for asset_type in model.types:
         findings += _default_grasp_width_can_close(asset_type, narrowest_workpiece)
+        findings += _the_predicate_has_a_part_to_judge_against(asset_type, widths)
+        findings += _stall_band_still_discriminates(asset_type, widths)
         findings += _derived_collision_is_within_its_measured_range(
             asset_type, narrowest_workpiece, unstated_workpieces
         )
@@ -467,66 +471,25 @@ def _collision_is_not_a_visual_mesh(asset_type: AssetType, where: str) -> list[F
     return []
 
 
-def _narrowest_workpiece_width_m(model: FacilityModel) -> float | None:
-    """The narrowest thing a gripper in this facility has to close on.
+def _workpiece_widths(model: FacilityModel) -> WorkpieceWidths:
+    """How wide the parts this facility handles are — through the ONE accessor.
 
-    Narrowest rather than widest, because a default grasp width has to stall on
-    *every* part the line handles and the narrowest is the one it comes closest
-    to missing. Measured across the horizontal footprint: a part rests on a
-    surface in a known attitude and a parallel gripper closes across it.
+    ADR-0052 §A.7 absorbs option E rather than deferring it: under option F the
+    L3 predicate judges a stall against the part and this validator's ceiling
+    reasons from the same part, so a second walk of ``workpiece_models`` here
+    would be a model that validates against one part and a cell that judges
+    against another. This module used to hold that second walk. It now adapts to
+    `cite_tools.model.workpieces`, which is the only place the interval is
+    computed and which `ResolvedCell` reads on the generator's side.
 
-    ``None`` when no work-piece has known extents — none declared, or a mesh part
-    whose geometry L1 owns — so that the rule below falls back to the bound it
-    can still derive instead of inventing one.
-
-    **``None`` is two different states and this function cannot tell them apart**,
-    which is why ``_workpieces_without_a_stated_width`` exists beside it. "This
-    facility handles no parts" and "this facility handles a part nobody has stated
-    the width of" deserve different answers, and collapsing them here is what let a
-    one-line edit — a mesh work-piece — switch off both this rule's consumers at
-    once with no finding at all.
+    ``narrowest_m`` is what the grasp ceiling reasons from, because a default
+    grasp width has to stall on *every* part the line handles and the narrowest
+    is the one it comes closest to missing. ``widest_m`` is the far edge of the
+    predicate's window, which is new under F. ``unstated`` is the silence that is
+    a finding rather than a fall-back: a mesh work-piece carries its extents in a
+    file L1 owns, so nothing at L0 can measure across it.
     """
-    by_id = {t.id: t for t in model.types}
-    widths = [
-        extents[0]
-        for name in model.facility.workpiece_models
-        if (asset_type := by_id.get(name)) is not None
-        and asset_type.category == "workpiece"
-        and (body := asset_type.description.body) is not None
-        and (extents := body.horizontal_extents_m) is not None
-    ]
-    return min(widths) if widths else None
-
-
-def _workpieces_without_a_stated_width(model: FacilityModel) -> tuple[str, ...]:
-    """Declared work-piece types whose horizontal footprint is not a stated number.
-
-    The complement of ``_narrowest_workpiece_width_m``'s input, and it is a
-    finding rather than a silence. A mesh work-piece — or one with no
-    ``description.body`` at all — carries its extents in a file L1 owns, so
-    nothing at L0 can measure across it. That is a legitimate way to describe a
-    part; it is not a legitimate way to acquire a *bound*, and the rules that want
-    one have to be told rather than left to read ``None``.
-
-    Both consumers used to fall silent on it together
-    (``default-grasp-width-never-closes`` and
-    ``derived-collision-outside-measured-range``), so one line in L0 removed two
-    bounds and reported nothing. This closes the half where the silence is
-    load-bearing: a derived collision set bound against a width nobody has stated
-    is exactly the act ADR-0051 decision 3 refuses. **The grasp-width half is
-    deliberately still a silence** — its weak bound survives, and widening that
-    rule was not this review's finding.
-    """
-    by_id = {t.id: t for t in model.types}
-    return tuple(
-        sorted(
-            name
-            for name in model.facility.workpiece_models
-            if (asset_type := by_id.get(name)) is not None
-            and asset_type.category == "workpiece"
-            and ((body := asset_type.description.body) is None or body.horizontal_extents_m is None)
-        )
-    )
+    return workpiece_widths(model.facility.workpiece_models, model.types)
 
 
 def _gripper_goal_tolerance(asset_type: AssetType) -> float | None:
@@ -598,13 +561,31 @@ def _default_grasp_width_can_close(
     be uncheckable. `GripperActionController` ends a goal the instant
     ``|error| < goal_tolerance``, so the position it reports is systematically
     short of the command — which reads back through the linkage as *phantom
-    width* that was never between the pads. `cite_skills::gripper_is_holding`
-    therefore demands a width margin of twice that tolerance before it will call
-    anything a grasp. A default whose margin against the narrowest part falls
-    below the same threshold produces real grasps that L3 cannot tell from free
-    air, so the threshold is computed from the two declared facts that set it —
-    the linkage and the controller's own tolerance — rather than written as a
-    millimetre count.
+    width* that was never between the pads. A default that does not clear the
+    part by more than that bias produces closes that end on the controller's
+    goal-tolerance branch, and a close that reaches its goal is a close that
+    evidenced nothing. The threshold is computed from the two declared facts that
+    set it — the linkage and the controller's own tolerance — rather than written
+    as a millimetre count.
+
+    THIS CEILING KEPT ITS NUMBER AND CHANGED ITS JOB, on 2026-09-01 (ADR-0052
+    §A.7). Until then it was ALSO a second derivation of the runtime's own
+    margin: `cite_skills::gripper_is_holding` demanded twice the tolerance of
+    width against the COMMANDED width, and this rule computed the same quantity
+    to make sure a real grasp would clear it. Under option F the runtime no
+    longer reads the command at all — it judges the reached width against the
+    part — so that half of the job is gone, and what remains is the sentence this
+    docstring opens with: a grasp is evidenced by failing to reach where it was
+    sent.
+
+    THAT REMAINING JOB NEEDS ONE TOLERANCE OF WIDTH, AND THE RULE KEEPS TWO.
+    Halving it would loosen a ceiling by about 1.07 mm on a question nothing has
+    measured, and the 2026-09-01 grasp-discrimination campaign's 47.0 mm column —
+    whose worst trial cleared the present band by a tenth of a millimetre — is
+    the evidence that this gripper works close to that edge. **The ceiling does
+    not move; its reason does.** The same doubled quantity is still the floor
+    ``stall-band-admits-a-stall-on-nothing`` compares the band's narrow edge
+    against, which is one policy in one place rather than two that agree.
 
     THIS CEILING WAS DELIBERATELY LOOSENED ONCE, from 60.92 mm to 88.93 mm, and
     the loosening is now paid back rather than merely recorded. 60.92 mm was
@@ -616,9 +597,14 @@ def _default_grasp_width_can_close(
     is strictly tighter than either predecessor: 47.86 mm on this gripper against
     this facility's 50 mm cube.
 
-    WHAT IS STILL NOT COVERED, said rather than left to be discovered: a facility
-    that declares no work-piece, or one whose parts are meshes, falls back to the
-    weak bound alone.
+    WHAT IS STILL NOT COVERED HERE, said rather than left to be discovered: a
+    facility that declares no work-piece, or one whose parts are meshes, falls
+    back to the weak bound alone in THIS rule. That silence is no longer the whole
+    story — ``workpiece-width-unstated-for-a-grasping-facility`` below refuses the
+    same state outright wherever a `grasp` block exists, because under ADR-0052
+    option F the runtime predicate has no reference at all without a part width.
+    This rule keeps its fall-back so that the two findings do not both fire on one
+    model and say different things about the same silence.
     """
     grasp = asset_type.grasp
     if grasp is None or grasp.default_grasp_width_m is None:
@@ -670,12 +656,156 @@ def _default_grasp_width_can_close(
             f"below the {discrimination * 1000.0:.2f} mm a stall has to exceed to be "
             "distinguishable from closing on air",
             f"Lower default_grasp_width_m to at most "
-            f"{(narrowest_workpiece_m - discrimination) * 1000.0:.2f} mm. The controller "
-            "ends a goal as soon as |error| < goal_tolerance, so the width it reports is "
-            "systematically wider than commanded even with nothing between the pads, and "
-            "cite_skills::gripper_is_holding demands twice that bias before it calls "
-            "anything a grasp. Below this margin a real grasp reads as free air and the "
-            "skill reports a part it is not holding.",
+            f"{(narrowest_workpiece_m - discrimination) * 1000.0:.2f} mm. A grasp is "
+            "evidenced by FAILING to reach where the jaws were sent (ADR-0022), and the "
+            "controller ends a goal as soon as |error| < goal_tolerance — so a default "
+            "this close to the part lets the close terminate on the goal-tolerance "
+            "branch, where `reached_goal` is true and cite_skills::gripper_is_holding "
+            "reports empty by its first condition whatever the jaws hold. The ceiling "
+            "keeps two tolerances of width rather than the one that argument needs "
+            "(ADR-0052 §A.7): halving it would loosen a bound by about a millimetre on a "
+            "question nothing has measured.",
+        )
+    ]
+
+
+def _the_predicate_has_a_part_to_judge_against(
+    asset_type: AssetType, widths: WorkpieceWidths
+) -> list[Finding]:
+    """A grasping facility that states no part width leaves L3 with no reference.
+
+    ADR-0052 §A.7, rule 1. Under option F `cite_skills::gripper_is_holding` judges
+    a stall against the interval of declared work-piece widths. Where that
+    interval does not exist, the predicate has nothing to compare against at all —
+    not a looser bound, no bound — and the skill server would be started with a
+    window it cannot form.
+
+    THE SILENCE THIS REFUSES USED TO BE TWO SILENCES WEARING ONE ``None``, and
+    that is why it is now a finding rather than a fall-back. "This facility
+    handles no parts" and "this facility handles a part nobody has stated the
+    width of" are different states with different answers, and collapsing them is
+    what let one line in L0 — changing the cube to a mesh — switch two rules off
+    at once with no finding. `WorkpieceWidths` keeps them apart and this rule
+    names whichever one it found.
+
+    ONLY WHERE A `grasp` BLOCK EXISTS. A facility with no gripper has no predicate
+    to leave unanswerable, and a vacuum end effector declares no grasp block at
+    all (P9). The rule follows the mechanism rather than the category.
+
+    AN ERROR AND NOT A WARNING, for the reason ADR-0052 gives about every rule it
+    adds: what the missing width produces at runtime is not an error but a
+    judgement made against nothing, and this project has already paid twice for a
+    constant that silently stopped applying.
+    """
+    grasp = asset_type.grasp
+    if grasp is None:
+        return []
+
+    where = f"types.{asset_type.id}.grasp"
+    remedy = (
+        "ADR-0052 option F judges a stall against the parts the facility declares, so "
+        "the width has to be a stated number before the predicate means anything. "
+        "Either declare a work-piece type with box or cylinder collision geometry — "
+        "`Body.horizontal_extents_m` derives the width from `collision.size_m`, and its "
+        "narrowest horizontal extent is what a parallel gripper closes across — or, if "
+        "this facility genuinely grasps nothing, remove the `grasp` block from this end "
+        "effector so that no predicate is configured at all."
+    )
+    if widths.unstated:
+        return [
+            error(
+                "workpiece-width-unstated-for-a-grasping-facility",
+                where,
+                f"this end effector declares a grasp block while the work-piece type(s) "
+                f"{list(widths.unstated)} state no horizontal extents, so the width "
+                f"cite_skills::gripper_is_holding judges a stall against cannot be "
+                f"computed at all",
+                "A mesh work-piece carries its extents in a file L1 owns, so nothing at "
+                "L0 can measure across it, and a reference nobody can compute is not a "
+                "reference. " + remedy,
+            )
+        ]
+    if widths.is_stated:
+        return []
+    return [
+        error(
+            "workpiece-width-unstated-for-a-grasping-facility",
+            where,
+            "this end effector declares a grasp block and the facility declares no "
+            "work-piece type at all, so there is no part width for "
+            "cite_skills::gripper_is_holding to judge a stall against",
+            remedy,
+        )
+    ]
+
+
+def _stall_band_still_discriminates(
+    asset_type: AssetType, widths: WorkpieceWidths
+) -> list[Finding]:
+    """A band whose narrow edge reaches below the command bound discriminates nothing.
+
+    ADR-0052 §A.7, rule 2, and it is the rule that makes §A.5's multi-part
+    degradation FIRE rather than warn.
+
+    THE FLOOR, and why it is this one. ``default_grasp_width_m`` plus the
+    discrimination margin above it is the width below which the *previous*,
+    command-referenced predicate already declined to call a stall a grasp — the
+    band edge ``default-grasp-width-never-closes`` computes from the same two
+    declared facts, the linkage and the controller's own goal tolerance. Option F
+    moved the reference point from the command to the part; it did not buy
+    permission to admit stalls the old reference already rejected. A window whose
+    narrow edge falls below that floor is a window that calls free air a grasp,
+    and F would then be no better than judging on the controller's flags alone.
+
+    WHY THIS IS THE MULTI-PART ALARM. F is given the INTERVAL of declared part
+    widths and never which part is in the jaws (§A.5), so its discrimination is
+    the width of its admitting window and that window widens with the declared
+    spread. A facility declaring a 20 mm part beside an 80 mm one gets a 60 mm
+    window plus both bands, at which point every stall in that range is a grasp.
+    Nothing downstream can tell that has happened. This rule is where it is
+    noticed, and its message says so: the answer is not a smaller band, it is to
+    reopen §A.5 and decide whether the work-piece type has to be carried to L3
+    after all.
+
+    IT NEEDS A STATED PART WIDTH, which the rule above refuses separately. Silent
+    here rather than duplicating that finding.
+    """
+    grasp = asset_type.grasp
+    if grasp is None or grasp.default_grasp_width_m is None:
+        return []
+    if widths.narrowest_m is None:
+        return []
+
+    default = grasp.default_grasp_width_m
+    discrimination = _grasp_discrimination_margin_m(asset_type, grasp, default)
+    if discrimination is None:
+        return []
+
+    floor = default + discrimination
+    edge = widths.narrowest_m - grasp.stall_band_narrow_m
+    if edge >= floor:
+        return []
+
+    return [
+        error(
+            "stall-band-admits-a-stall-on-nothing",
+            f"types.{asset_type.id}.grasp.stall_band_narrow_m",
+            f"the window this band opens reaches down to {edge * 1000.0:.3f} mm — "
+            f"{widths.narrowest_m * 1000.0:.1f} mm of narrowest declared part less "
+            f"{grasp.stall_band_narrow_m * 1000.0:.3f} mm of band — which is below the "
+            f"{floor * 1000.0:.3f} mm the command-referenced bound already refused to "
+            f"call a grasp ({default * 1000.0:.1f} mm default plus "
+            f"{discrimination * 1000.0:.3f} mm of discrimination margin)",
+            "Below that floor the predicate reports a grasp with nothing between the "
+            "pads, which is the defect ADR-0052 exists to close rather than to move. "
+            "IF THIS FIRED BECAUSE A SECOND WORK-PIECE WIDENED THE INTERVAL, the answer "
+            "is not a smaller band: ADR-0052 §A.5 is what to reopen. F is given the "
+            "interval of declared part widths and never which part it is holding, so "
+            "its discrimination IS the width of that window, and a facility whose parts "
+            "span this far needs the work-piece type carried to L3 — which §A.5 "
+            "deliberately did not build, and named this rule as the signal to revisit. "
+            "Otherwise lower stall_band_narrow_m, or lower default_grasp_width_m so the "
+            "floor moves with it.",
         )
     ]
 
