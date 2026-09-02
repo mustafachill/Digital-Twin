@@ -663,7 +663,10 @@ class TestTheReanalysisGate:
     def test_f_admits_no_false_positive_the_old_predicate_would_not_have(
         self, real_model: Path, campaign_trials
     ) -> None:
-        """§A.10 item 1, second half — the SUBSET property, which is the real gate.
+        """§A.10 item 1, second half — the SUBSET property, over committed stops.
+
+        This line called itself "the real gate" and it is not one: read what its
+        resolution is, below, before treating a pass here as the property holding.
 
         The false-positive arm is a synthetic stop at a declared position with
         nothing between the pads, so every trial it admits is a stall on nothing
@@ -676,6 +679,28 @@ class TestTheReanalysisGate:
 
         A subset and not a smaller count. Nine of eighteen that were a different
         nine would be a new failure mode wearing an improved number.
+
+        WHAT THIS GATE'S RESOLUTION IS. It answers per trial, over the campaign's
+        committed stops, and those are spaced 0.5 mm apart with one refined region
+        at 0.05 mm. So it sees a subset violation only when a stop lands inside
+        it. At `stall_band_narrow_m = 2.90 mm` the property is violated
+        STRUCTURALLY — F's lower edge falls below the commanded-width predicate's
+        threshold, and every stall on nothing between the two is a false positive
+        F introduces — and this assertion still holds, because that interval is
+        about a fiftieth of a millimetre wide, the nearest stop sits exactly on
+        F's edge, and the comparison is strict. The assertion after it does fail
+        at that band, on "nothing improved" rather than on the subset, which is a
+        coincidence of counts and not this gate detecting anything.
+
+        WHAT HOLDS THE PROPERTY FOR ALL STATES IS THE VALIDATOR, NOT THIS TEST.
+        `stall-band-admits-a-stall-on-nothing`, in
+        `tools/cite_tools/validate/physical.py`, computes F's lower edge and the
+        command-referenced floor from the model and ERRORS whenever the first
+        falls below the second — no trial, no grid, no part in the jaws, and no
+        band it cannot see. The shipped value sits well clear of where it fires.
+        This test is the per-trial evidence that the landed value behaves on real
+        stops; the rule is what makes the property total. Do not read either as
+        the other.
         """
         effector = load(real_model).asset_type("xarm_parallel_gripper")
         grasp = effector.grasp

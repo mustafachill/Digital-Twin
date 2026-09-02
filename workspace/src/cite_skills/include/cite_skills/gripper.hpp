@@ -338,8 +338,27 @@ struct GripperReport
 /// SO THE REFERENCE MOVED TO THE PART, AND THE FREE-AIR CASE IS STILL REJECTED
 /// — by a bound that does not move when the command does. On this facility's
 /// 50 mm part with the shipped band the window is [47.615, 52.385] mm, and the
-/// measured free-air settle at 45.852 mm falls BELOW it. It falls below it at
-/// every command, which is the property the old form did not have.
+/// measured free-air settle at 45.852 mm falls BELOW it.
+///
+/// IT DOES NOT FALL BELOW IT AT EVERY COMMAND, AND THIS BLOCK SAID IT DID.
+/// `docs/measurements/2026-09-02-option-f-regions/` measured that sentence and
+/// states it false in as many words: the free-air settle rises with the
+/// commanded width, and above a bracketed crossing point — inside the range
+/// `resolve_grasp_width` permits — it lands INSIDE the window, in a substantial
+/// minority of that campaign's free-air trials. The figures stay in the campaign
+/// directory (P1); read it rather than taking a number from here.
+///
+/// WHAT REJECTS FREE AIR IS CONDITION 1, NOT THE WINDOW. The two conditions are
+/// a conjunction, and free air fails the FIRST one: a gripper closing on nothing
+/// arrives where it was sent, so it reports `reached_goal` and does not stall,
+/// `stalled and not reached_goal` is already false, and the window is never
+/// consulted. That is measured too — no free-air close in that campaign stalled,
+/// at any permitted command. Two consequences, and neither is a reason to move
+/// anything. The predicate is as safe as it was, by the condition that needs no
+/// threshold and cannot be miscalibrated. And the window is the half of it that
+/// free-air evidence does NOT exercise on this backend, so "the settle falls
+/// below the window" may never again be cited as the thing that rejects free
+/// air — it is not, and on this backend it could not be observed doing so.
 ///
 /// WHY THE BAND IS DECLARED AND NOT DERIVED FROM `goal_tolerance`. Reusing
 /// `2 * gripper_width_tolerance_m` as the window is the tempting form: it needs
