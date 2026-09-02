@@ -87,6 +87,15 @@ class _ManagerView:
     #: the goal tolerance is: a value that describes a piece of equipment belongs
     #: to the model (P5).
     gripper_result_timeout_s: float | None
+    #: The two edges of the window L3 judges a stall inside, relative to the
+    #: width of the parts this facility declares (ADR-0052 option F). An
+    #: end-effector property, so it rides the gripper channel with the rest of
+    #: the grasp specification; the work-piece interval it is applied to is a
+    #: FACILITY fact and is emitted once in the plan's own `plan:` block instead
+    #: (ADR-0052 A.4) - a part width on a tuple named for the gripper is how a
+    #: name stops meaning anything.
+    gripper_stall_band_narrow_m: float | None
+    gripper_stall_band_wide_m: float | None
     gripper_drive_pivot_y_m: float | None
     gripper_drive_pivot_z_m: float | None
     gripper_finger_offset_y_m: float | None
@@ -412,6 +421,8 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             ),
             gripper_max_drive_rate_rad_s=_grasp(cell, asset, "max_drive_rate_rad_s"),
             gripper_result_timeout_s=_grasp(cell, asset, "result_timeout_s"),
+            gripper_stall_band_narrow_m=_grasp(cell, asset, "stall_band_narrow_m"),
+            gripper_stall_band_wide_m=_grasp(cell, asset, "stall_band_wide_m"),
             gripper_drive_pivot_y_m=_linkage(cell, asset, "drive_pivot_y_m"),
             gripper_drive_pivot_z_m=_linkage(cell, asset, "drive_pivot_z_m"),
             gripper_finger_offset_y_m=_linkage(cell, asset, "finger_offset_y_m"),

@@ -15,6 +15,40 @@ plan:
   static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
   topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml
 
+  # How wide the parts this facility handles are, as one interval.
+  #
+  # A FACILITY FACT, stated once per zone beside the other one-per-zone
+  # statements above, and deliberately NOT on any controller manager's gripper
+  # block (ADR-0052 A.4). Every key there is sourced from the END-EFFECTOR type;
+  # a work-piece width is not a property of an end effector, and putting it on a
+  # tuple named for the gripper is how a name stops meaning anything.
+  #
+  # WHAT READS IT. `cite_skills::gripper_is_holding` judges a stall against this
+  # interval rather than against the width that was commanded (ADR-0052, option
+  # F). The command is a policy value; the error the predicate makes is about
+  # where the PART is, and both directions of that error are measured. The
+  # bring-up mechanism passes the pair to every skill server, the way it passes
+  # the gripper keys.
+  #
+  # THE INTERVAL AND NEVER WHICH PART. `Pick.Goal.workpiece_id` is an instance id
+  # minted by L4's registry and there is no map from one to an L0 work-piece type
+  # anywhere in this repository, so nothing can tell L3 which part is in the
+  # jaws. The interval keeps L3 knowing only the RANGE of widths this facility
+  # handles, which is a fact about the facility and not about the goal - so
+  # adding a second part changes data and not code (P5, P9). Its cost is that the
+  # window widens with the declared spread; `stall-band-admits-a-stall-on-nothing`
+  # in cite_tools.validate.physical is what fires when that stops discriminating,
+  # and ADR-0052 A.5 is what to reopen when it does.
+  #
+  # On a facility declaring one part the interval is degenerate and both numbers
+  # are the same. That is today's model, and it is not a special case in anything
+  # that reads this.
+{% if cell.workpiece_widths.is_stated %}
+  workpieces:
+    narrowest_width_m: {{ cell.workpiece_widths.narrowest_m | f }}
+    widest_width_m: {{ cell.workpiece_widths.widest_m | f }}
+{% endif %}
+
   # The sides this zone runs, and the Gazebo transport partition each one runs
   # in. One side on an untwinned zone; two where the zone declares
   # `twin.sides: pair` (ADR-0041).
@@ -185,6 +219,22 @@ plan:
       # nothing (ADR-0022). Its ceiling is derived and enforced in
       # cite_tools.validate.physical.
       gripper_default_grasp_width_m: {{ manager.gripper_default_grasp_width_m | f }}
+{% endif %}
+{% if manager.gripper_stall_band_narrow_m is not none %}
+      # How far either side of a declared part's width a genuine stall on that
+      # part may land and still be a grasp (ADR-0052 option F). The predicate
+      # used to ask "did the jaws stop wider than we ASKED?"; it now asks "did
+      # they stop where a part this facility handles would stop them?".
+      #
+      # PROVISIONAL, and the L0 comment carries the provenance rather than this
+      # one: the narrow edge is the midpoint of a measured interval and the wide
+      # edge has no measurement behind it at all. One declaration serves both
+      # sides of a twin (P2, ADR-0041) - a per-backend band would be two
+      # predicates wearing one name.
+      gripper_stall_band_narrow_m: {{ manager.gripper_stall_band_narrow_m | f }}
+{% endif %}
+{% if manager.gripper_stall_band_wide_m is not none %}
+      gripper_stall_band_wide_m: {{ manager.gripper_stall_band_wide_m | f }}
 {% endif %}
 {% endif %}
 {% if manager.skills %}

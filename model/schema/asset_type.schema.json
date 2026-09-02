@@ -636,6 +636,16 @@
           "exclusiveMinimum": 0.0,
           "title": "Result Timeout S",
           "type": "number"
+        },
+        "stall_band_narrow_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Stall Band Narrow M",
+          "type": "number"
+        },
+        "stall_band_wide_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Stall Band Wide M",
+          "type": "number"
         }
       },
       "required": [
@@ -643,7 +653,9 @@
         "max_drive_rate_rad_s",
         "follower_max_rate_rad_s",
         "linkage",
-        "result_timeout_s"
+        "result_timeout_s",
+        "stall_band_narrow_m",
+        "stall_band_wide_m"
       ],
       "title": "GraspSpec",
       "type": "object"
