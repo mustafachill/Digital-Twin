@@ -63,8 +63,7 @@ directly:
 ## The Arm A refinement grid
 
 §5.1 registers the **step** (0.05 mm, three trials per point) and leaves the **interval**
-to be bracketed by the coarse data — the last coarse width with `holding_F = false` and
-the first with `holding_F = true`. That is bracketing, not a threshold chosen by the data,
+to be bracketed by the coarse data. That is bracketing, not a threshold chosen by the data,
 and the bracket is passed on the command line so that it is visible rather than buried:
 
 ```sh
@@ -72,7 +71,27 @@ CITE_OFR_REFINE_LOW_MM=46.50 CITE_OFR_REFINE_HIGH_MM=47.00 \
   docs/measurements/2026-09-02-option-f-regions/harness/run_campaign.sh A_REFINE
 ```
 
-If the coarse grid produces no flip, **no refinement runs** and rule N-A applies.
+**Which crossing is bracketed, because the obvious answer is the wrong one here.**
+§5.1 words the interval as the last coarse width with `holding_F = false` and the first with
+`holding_F = true`, and adds that if the coarse grid produces no flip, no refinement runs and
+rule N-A applies. **The shakedown shows there will be no such flip**: a free-air close on the
+production backend ends `reached_goal = true` and `stalled = false`, so option F's *first*
+gate rejects and `holding_F` is false at every command. Read only that far, the refinement
+would never be attempted at all.
+
+§7.1 registers the alternative in the same breath, and it is what applies:
+
+> the lowest commanded width at which `holding_F` flips to true — **or, if A1a is false
+> throughout, at which A1b goes INSIDE** — bracketed to 0.05 mm or finer
+
+So when A1a is false throughout, `A_REFINE` **is** run, and it brackets the **A1b** crossing:
+the last coarse width whose `a1b_inside_window` is false and the first whose is true, both
+computed from **I1** (`Grasp.Result.reached_width_m`), which §2.1 defines as `w_reached`.
+`analyse.py` prints both bounds and records this as **deviation 2**. The step, the three
+trials per point and the requirement to bracket to 0.05 mm are all unchanged — only which
+crossing is bracketed, and §7.1 is where that choice is registered.
+
+Rule N-A still applies to **A1**, which is a separate verdict and is not refined by this grid.
 
 ## The shakedown, and it is not data
 
@@ -161,10 +180,13 @@ No `model/`, no `workspace/src/`, no `tools/`, no threshold anywhere. Three arms
 cell exactly as it ships and their levers are fields on goal messages and a spawn pose.
 Arm B substitutes a hardware plugin **inside its own expanded copy** of the description and
 asserts, before substituting, that what it is replacing is the production backend (V7).
+Arms A, C and D read the same two plugin names off the description the **running** cell
+publishes and record `v7_ok` on every trial; **Arm A aborts the block** on a mock backend,
+which is V7's own clause for it (§5.1) and which nothing asserted until 2026-09-02.
 `build_superseded.sh` creates a git worktree **outside** this repository's working tree and
 removes it again.
 
-## Three things the rig cannot do, recorded here rather than discovered later
+## Four things the rig cannot do, recorded here rather than discovered later
 
 1. **I4 does not exist in Arm A.** §4.1 defines I4 as a contact sensor *on the work-piece*,
    and Arm A spawns none (§5.1: "Between the pads: **nothing.** No work-piece is spawned in
@@ -181,3 +203,14 @@ removes it again.
    commanded width asks for, read through `predicate_eval` and never recomputed. The target
    pose and the pose actually reached are on every record, and Arm D's `Pick` trials record
    `Pick.Result.grasp_pose`, so the two routes can be compared rather than assumed equal.
+4. **The `Pick` door has no I1, and no rig change can give it one.** §4.1 defines I1 as
+   `Grasp.Result`, and `Pick` returns none — its close is reported only through
+   `Pick.Result.holding`, which **is** the shipped predicate's verdict on it
+   (`skill_server.cpp:1215-1219`), and through I2's `%.1f` log line, which §4.1 reserves as
+   the coarse instrument for V4. So for Arm D's `pick45` condition the **verdict** is
+   `Pick.Result.holding` and the **width** is I3, sampled at a boundary each record names;
+   V4 is **unevaluable** there rather than failed, and those trials stay in the
+   distribution. Reading the verdict off a *second* close instead — which this harness did
+   until 2026-09-02 — puts the event D1 exists to catch beyond the reach of its own
+   threshold, because a first close reporting a real grasp empty is followed by a second
+   that reports holding. `analyse.py` records this as **deviations 3 and 4**.

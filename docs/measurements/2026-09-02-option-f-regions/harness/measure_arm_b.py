@@ -456,11 +456,25 @@ def main() -> int:
             row["i3_joint_state_samples"] = len(driver.samples)
             if q_reached is not None:
                 row["i3_reached_width_m"] = predicate.width(q_reached)
-                row["d_narrow_m"] = row["i3_reached_width_m"] - edge_lo
-                row["d_wide_m"] = edge_hi - row["i3_reached_width_m"]
+                row["d_narrow_i3_m"] = row["i3_reached_width_m"] - edge_lo
+                row["d_wide_i3_m"] = edge_hi - row["i3_reached_width_m"]
                 # I7's second half: the joint must be RESTING at the declared stop.
                 row["rests_at_stop"] = abs(q_reached - jam_q) <= STOP_REST_TOLERANCE_RAD
                 row["rest_error_rad"] = q_reached - jam_q
+
+            # THE DECISION QUANTITIES COME FROM I1. `criteria.md` section 2.1 defines
+            # `w_reached` as the width the predicate CONSUMES and section 4.1 names it
+            # `Grasp.Result.reached_width_m`; I3 is the independent cross-check V4 is the
+            # rule over. This arm rests on a hard stop, so the two agree exactly and no
+            # figure here moves -- which is precisely why it was worth correcting rather
+            # than leaving: `d_narrow` and `d_wide` are what section 7.2 reports, and a
+            # decision quantity read off the cross-check instrument is wrong whether or
+            # not it happens to agree.
+            i1_reached = row.get("i1_reached_width_m")
+            row["w_reached_source"] = "I1 (Grasp.Result.reached_width_m)"
+            if i1_reached is not None:
+                row["d_narrow_m"] = i1_reached - edge_lo
+                row["d_wide_m"] = edge_hi - i1_reached
 
             # A SECOND EVENT, and recorded as one: the controller's own typed answer,
             # which is the only full-precision source of `stalled` and `reached_goal`.
@@ -539,7 +553,7 @@ def main() -> int:
         writer.add(row)
         print(
             f"    holding_F={row.get('holding_F')} holding_S={row.get('holding_S')} "
-            f"w_reached={row.get('i3_reached_width_m')} v5={row.get('v5_valid')}"
+            f"w_reached(I1)={row.get('i1_reached_width_m')} v5={row.get('v5_valid')}"
         )
 
     rclpy.shutdown()

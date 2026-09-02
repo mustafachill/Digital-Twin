@@ -142,6 +142,19 @@ def main() -> int:
         print("ABORT: the running description does not carry the shipped hull geometry "
               f"({geometry}). criteria.md V2 discards this block.")
         return 3
+    # V7's Arm A clause: "Arm A may not be run on any mock backend (section 5.1); a block
+    # that finds one is discarded, not reinterpreted." Until 2026-09-02 nothing here
+    # asserted it -- the block checked the hull count and nothing else, so a mock backend
+    # would have been measured and reported as the production one. That is not a
+    # hypothetical failure for THIS arm: the 2026-09-01 campaign established that
+    # `mock_components/GenericSystem` FABRICATES a stall on a ramping joint after exactly
+    # `stall_timeout`, and a fabricated stall in free air is precisely the observation A1
+    # would report as REPRODUCED.
+    if not geometry["v7_ok"]:
+        print("ABORT: criteria.md V7 -- the running description does not declare the "
+              f"production backend, or declares a mock ({geometry}). Arm A may not be run "
+              "on any mock backend; this block is DISCARDED, not reinterpreted.")
+        return 3
     if not header["provenance"]["v1_clean"]:
         print("WARNING: V1 is NOT clean for this block; criteria.md V1 discards it.")
 
@@ -214,13 +227,20 @@ def main() -> int:
             opened_at = driver.sim_now()
             result = driver.do_grasp(width_m, expect_object=False)
             closed_at = driver.sim_now()
-            row["i2_reports"] = cursor.collect()
+            # I2, WAITED FOR. The line is written by the skill server's process after it
+            # sends the result, so sampling once here can miss a flush -- and an absent
+            # line used to be indistinguishable from a measured `stalled=false`, which is
+            # the exact boolean A1a counts. See `LogCursor.await_report`.
+            row["i2_reports"] = cursor.await_report()
+            row["i2_report_missing"] = not row["i2_reports"]
             row.update(cell.grasp_result_fields(result, "i1"))
             if result is None:
                 raise RuntimeError("the skill server rejected or never answered the Grasp")
 
             row["holding_F"] = bool(result.holding)
-            # I2's two booleans, which no result message carries. Exact.
+            # I2's two booleans, which no result message carries. Exact WHEN PRESENT --
+            # `None` here means the instrument produced no reading on this trial and the
+            # trial is excluded from A1a, never counted as `false`.
             reports = row["i2_reports"]
             row["stalled"] = reports[-1]["stalled"] if reports else None
             row["reached_goal"] = reports[-1]["reached_goal"] if reports else None
@@ -232,20 +252,52 @@ def main() -> int:
             row["closing_window_sim_s"] = [opened_at, closed_at]
             if q is not None:
                 row["i3_reached_width_m"] = predicate.width(q)
-                row["d_narrow_m"] = row["i3_reached_width_m"] - edge_lo
-                row["d_wide_m"] = edge_hi - row["i3_reached_width_m"]
+
+            # ---------------------------------------------------------------------
+            # THE DECISION QUANTITIES, AND WHICH INSTRUMENT THEY COME FROM.
+            #
+            # `criteria.md` section 2.1 defines `w_reached` as "gripper_width_for(
+            # reached_position), THE WIDTH THE PREDICATE CONSUMES", and section 4.1 makes
+            # that I1 -- `Grasp.Result.reached_width_m`. I3 is the SAME quantity read
+            # independently of the skill server, which section 4.1 provides as a
+            # cross-check and which V4 is the rule over.
+            #
+            # This harness computed `d_narrow`, `d_wide` and A1b from I3 until 2026-09-02,
+            # which inverted the two. In arms B, C and D the joint is stalled and they
+            # agree to about 0.03 mm, so it changed nothing there. IN ARM A IT CHANGES THE
+            # ANSWER: the joint is still ramping at the I3 instant, the two readings sit
+            # ~0.57-0.61 mm apart in the shakedown, and the commanded width at which
+            # `w_reached` crosses `edge_lo` moves from ~46.57 mm (I1, INSIDE the 46.554-
+            # 46.766 mm bracket section 2.2 registered) to ~47.19 mm (I3, outside it) --
+            # so the choice of instrument alone decides whether predictions P1 and P2 are
+            # confirmed or refuted.
+            #
+            # `skill_server.cpp:2229-2236` is what settles it rather than this argument:
+            # `outcome.reached_width_m` and `outcome.holding` are computed from the SAME
+            # `wrapped.result->position`, so I1 is definitionally the value the predicate
+            # consumed. The I3-derived pair is published beside it under its own keys --
+            # V4 needs it, and the deviation has to be showable rather than asserted.
+            # ---------------------------------------------------------------------
+            i1_reached = row.get("i1_reached_width_m")
+            row["w_reached_source"] = "I1 (Grasp.Result.reached_width_m)"
+            if i1_reached is not None:
+                row["d_narrow_m"] = i1_reached - edge_lo
+                row["d_wide_m"] = edge_hi - i1_reached
+                # A1b, on the width alone and independently of A1a's flags. This is the
+                # clause that tests `gripper.hpp`'s sentence "It falls below it at every
+                # command", and it is answered whatever the flags say.
+                row["a1b_inside_window"] = edge_lo < i1_reached < edge_hi
+            if row.get("i3_reached_width_m") is not None:
+                row["d_narrow_i3_m"] = row["i3_reached_width_m"] - edge_lo
+                row["d_wide_i3_m"] = edge_hi - row["i3_reached_width_m"]
+                row["a1b_inside_window_i3"] = (
+                    edge_lo < row["i3_reached_width_m"] < edge_hi)
+
             # V4, both halves, and the trace that explains an exclusion.
             row.update(common.v4(
                 row.get("i1_reached_width_m"), row.get("i3_reached_width_m"),
                 row.get("i2_reports")))
             row["i3_window_trace"] = cell.window_trace(driver, opened_at, closed_at)
-
-            # A1b, evaluated on the WIDTH alone and independently of A1a's flags. This is
-            # the clause that tests `gripper.hpp`'s sentence "It falls below it at every
-            # command", and it is answered whatever the flags say.
-            if row.get("i3_reached_width_m") is not None:
-                row["a1b_inside_window"] = (
-                    edge_lo < row["i3_reached_width_m"] < edge_hi)
 
             if superseded is not None and q is not None and row["stalled"] is not None:
                 row["holding_S"] = superseded.holding(
@@ -263,7 +315,8 @@ def main() -> int:
         writer.add(row)
         print(
             f"[{index}/{len(schedule)}] w_cmd={width_mm:.2f} mm I6={row.get('i6_source')} "
-            f"w_reached={row.get('i3_reached_width_m')} holding_F={row.get('holding_F')} "
+            f"w_reached(I1)={row.get('i1_reached_width_m')} "
+            f"holding_F={row.get('holding_F')} "
             f"stalled={row.get('stalled')} reached_goal={row.get('reached_goal')} "
             f"({row['wall_s']}s)"
         )

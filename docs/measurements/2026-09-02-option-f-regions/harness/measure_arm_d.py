@@ -231,7 +231,12 @@ def main() -> int:  # noqa: C901 - one trial loop with three branches, kept in o
             if condition == "pick45":
                 cursor.mark()
                 result = driver.do_pick(name, width_m)
-                row["i2_reports"] = cursor.collect()
+                # The instant the `Pick` answered, taken HERE and not inferred later.
+                # Everything below that needs a boundary uses this or the feedback
+                # phase, and nothing uses "now".
+                pick_returned_at = driver.sim_now()
+                row["i2_reports"] = cursor.await_report()
+                row["i2_report_missing"] = not row["i2_reports"]
                 row.update(
                     {
                         "pick_answered": result is not None,
@@ -242,19 +247,80 @@ def main() -> int:  # noqa: C901 - one trial loop with three branches, kept in o
                         "reached_retreating_phase": driver.grasp_time is not None,
                     }
                 )
-                stall_boundary = driver.grasp_time
-                # I1 -- a typed, full-precision read of the predicate's own inputs and
-                # output. A DIFFERENT EVENT from the close above: it re-closes on the
-                # jaws as they stand, which is the only way `Grasp.Result` can be read
-                # for a trial whose door is `Pick`.
+                # `Pick.Result.grasp_pose` -- promised by this module's own docstring and
+                # by the README, and written nowhere until 2026-09-02. It is the stated
+                # means of checking the assumption that the `MoveTo` route arms C and D
+                # use reaches the same place `Pick` plans to, and the skill server sets it
+                # BEFORE the close (`skill_server.cpp:1187`), so it is present even on the
+                # empty-grasp path -- which is the path D1 exists to catch.
+                if result is not None:
+                    row["pick_grasp_pose"] = {
+                        "frame": result.grasp_pose.header.frame_id,
+                        "x": result.grasp_pose.pose.position.x,
+                        "y": result.grasp_pose.pose.position.y,
+                        "z": result.grasp_pose.pose.position.z,
+                        "qx": result.grasp_pose.pose.orientation.x,
+                        "qy": result.grasp_pose.pose.orientation.y,
+                        "qz": result.grasp_pose.pose.orientation.z,
+                        "qw": result.grasp_pose.pose.orientation.w,
+                    }
+
+                # -----------------------------------------------------------------
+                # THE VERDICT FOR THIS DOOR IS THE `Pick`'S OWN CLOSE, AND UNTIL
+                # 2026-09-02 IT WAS NOT.
+                #
+                # `Pick.Result.holding` IS the shipped predicate's verdict on the close
+                # the `Pick` performed: `skill_server.cpp:1215-1219` sets it true only
+                # when `gripper.holding` is true, and finishes `EXECUTION_FAILED` with it
+                # left false otherwise. `holding_F` used to be taken from the SECOND close
+                # below instead -- a re-close on a part the jaws were already holding --
+                # so the event D1 exists to catch, THE `Pick`'S CLOSE REPORTING A REAL
+                # GRASP EMPTY, could not reach the verdict at all: a first close that
+                # reported empty would be overwritten by a second close that reported
+                # holding, and `analyse.py` decides D1 on `holding_F`.
+                # -----------------------------------------------------------------
+                row["holding_F"] = row["pick_reported_holding"]
+                row["holding_F_source"] = (
+                    "Pick.Result.holding -- the shipped predicate's verdict on the "
+                    "Pick's own close (skill_server.cpp:1215-1219)")
+
+                # WHERE THE STALL IS SAMPLED, STATED ON THE RECORD RATHER THAN ASSUMED.
+                # `PHASE_RETREATING` is the boundary when the grasp held. It NEVER FIRES
+                # when the grasp is reported empty -- the skill server finishes at that
+                # point and does not retreat -- and the code here used to hand `None` to
+                # `cell.q_at`, which silently substituted `sim_now()`. That was evaluated
+                # AFTER the second close, so `d_narrow`, the decision quantity, was
+                # sampled at the wrong instant on precisely the trial of interest. The
+                # arm performs no motion between the empty-grasp report and the result
+                # arriving, so the result's arrival is a correct boundary for that case --
+                # but it is a DIFFERENT boundary and every record now says which one it
+                # got.
+                if driver.grasp_time is not None:
+                    stall_boundary = driver.grasp_time
+                    row["stall_boundary_source"] = "PHASE_RETREATING feedback"
+                else:
+                    stall_boundary = pick_returned_at
+                    row["stall_boundary_source"] = (
+                        "the Pick result's arrival -- PHASE_RETREATING never fired, so "
+                        "the close was reported empty and the arm did not retreat")
+                row["stall_boundary_sim_s"] = stall_boundary
+                row["retreat_boundary_missing"] = driver.grasp_time is None
+
+                # I3 IS READ BEFORE THE SECOND CLOSE, because the second close moves the
+                # joint this quantity is a reading of.
+                q_pick = cell.q_at(driver, stall_boundary)
+
+                # The second close, kept -- it is real evidence about a re-close on a
+                # held part -- but under its OWN keys. It is not I1 for this trial and it
+                # is not the verdict; `criteria.md` I1 is `Grasp.Result`, and a `Pick`
+                # produces none.
                 cursor.mark()
                 confirm = driver.do_grasp(width_m, expect_object=True)
-                row["i1_event"] = ("a second close, on the jaws as they stand after the "
-                                   "Pick -- not the close the Pick reported")
-                row["i1_reports"] = cursor.collect()
-                row.update(cell.grasp_result_fields(confirm, "i1"))
-                if confirm is not None:
-                    row["holding_F"] = bool(confirm.holding)
+                row["confirm_event"] = (
+                    "a second close, on the jaws as they stand after the Pick -- NOT the "
+                    "close the Pick reported, and not this trial's verdict")
+                row["confirm_reports"] = cursor.await_report()
+                row.update(cell.grasp_result_fields(confirm, "confirm"))
             else:
                 # The `Grasp` door. Reach the part with the shipped `MoveTo`, at the pose
                 # `Pick` would have planned for this width.
@@ -284,26 +350,78 @@ def main() -> int:  # noqa: C901 - one trial loop with three branches, kept in o
                 driver.closing_time = driver.sim_now()
                 result = driver.do_grasp(width_m, expect_object=True)
                 stall_boundary = driver.sim_now()
-                row["i2_reports"] = cursor.collect()
+                row["stall_boundary_source"] = "the Grasp result's arrival"
+                row["stall_boundary_sim_s"] = stall_boundary
+                row["i2_reports"] = cursor.await_report()
+                row["i2_report_missing"] = not row["i2_reports"]
                 row.update(cell.grasp_result_fields(result, "i1"))
                 if result is not None:
                     row["holding_F"] = bool(result.holding)
+                    row["holding_F_source"] = "Grasp.Result.holding"
+                q_pick = None
 
             reports = row.get("i2_reports") or []
             row["stalled"] = reports[-1]["stalled"] if reports else None
             row["reached_goal"] = reports[-1]["reached_goal"] if reports else None
 
-            # I3 -- the drive joint at the stall, at full precision.
-            q = cell.q_at(driver, stall_boundary)
+            # I3 -- the drive joint at the stall, at full precision. For the `Pick` door
+            # it was read above, BEFORE the second close moved the joint.
+            q = q_pick if condition == "pick45" else cell.q_at(driver, stall_boundary)
             row["i3_q_at_stall_rad"] = q
             row["i3_drive_samples"] = len(driver.drive_q)
             if q is not None:
                 row["i3_reached_width_m"] = predicate.width(q)
-                row["d_narrow_m"] = row["i3_reached_width_m"] - edge_lo
-                row["d_wide_m"] = edge_hi - row["i3_reached_width_m"]
+
+            # ---------------------------------------------------------------------
+            # THE DECISION QUANTITIES, AND THE ONE PLACE THIS CAMPAIGN CANNOT USE I1.
+            #
+            # `criteria.md` section 2.1 defines `w_reached` as the width the predicate
+            # CONSUMES, and section 4.1 makes that I1 -- `Grasp.Result.reached_width_m`.
+            # `skill_server.cpp:2229-2236` computes it and `holding` from the same
+            # `wrapped.result->position`, so for the `Grasp` door I1 is definitionally
+            # the consumed value and `d_narrow` and `d_wide` are taken from it.
+            #
+            # THE `Pick` DOOR HAS NO I1. `Pick` returns no `Grasp.Result` at all, so the
+            # width its close consumed is never published: the only readings of it are
+            # I3, and I2's `%.1f` log line -- which section 4.1 marks the COARSE
+            # instrument, "used only for V4", and which therefore may not be a decision
+            # quantity. So for `pick45` the decision quantity is I3, sampled at the
+            # boundary recorded above, and every record says which instrument it came
+            # from rather than leaving the reader to assume they are the same field.
+            # This is a deviation and `analyse.py` prints it as a numbered one.
+            # ---------------------------------------------------------------------
+            i1_reached = row.get("i1_reached_width_m")
+            if condition == "pick45":
+                w_reached = row.get("i3_reached_width_m")
+                row["w_reached_source"] = (
+                    "I3 (the drive joint at the stall) -- the Pick door produces no "
+                    "Grasp.Result, so this trial has no I1")
+            else:
+                w_reached = i1_reached
+                row["w_reached_source"] = "I1 (Grasp.Result.reached_width_m)"
+            row["w_reached_m"] = w_reached
+            if w_reached is not None:
+                row["d_narrow_m"] = w_reached - edge_lo
+                row["d_wide_m"] = edge_hi - w_reached
+            if row.get("i3_reached_width_m") is not None:
+                row["d_narrow_i3_m"] = row["i3_reached_width_m"] - edge_lo
+                row["d_wide_i3_m"] = edge_hi - row["i3_reached_width_m"]
+
+            # V4. For the `Grasp` door both instruments exist and the rule is evaluated
+            # and applied literally. For the `Pick` door I1 DOES NOT EXIST, so the rule
+            # is UNEVALUABLE rather than failed -- a trial missing an instrument has not
+            # "exceeded" a tolerance, and dropping it would empty the distribution for
+            # the shipped production path, which is the whole of section A.10 item 2's
+            # first ask. The second close's I2 line and I3 are still both on the record,
+            # 0.08 mm apart in the shakedown, for whoever wants the comparison.
             row.update(common.v4(
-                row.get("i1_reached_width_m"), row.get("i3_reached_width_m"),
-                row.get("i2_reports")))
+                None if condition == "pick45" else row.get("i1_reached_width_m"),
+                row.get("i3_reached_width_m"),
+                row.get("i2_reports"),
+                unevaluable_reason=(
+                    "the Pick door produces no Grasp.Result, so this trial has no I1 to "
+                    "compare I3 against" if condition == "pick45" else None),
+            ))
             row["i3_window_trace"] = cell.window_trace(
                 driver, driver.closing_time, stall_boundary)
 
@@ -340,7 +458,7 @@ def main() -> int:  # noqa: C901 - one trial loop with three branches, kept in o
         writer.add(row)
         print(
             f"[{index}/{len(schedule)}] {condition} w_cmd={row['commanded_width_m'] * 1000:.1f} "
-            f"w_reached={row.get('i3_reached_width_m')} holding_F={row.get('holding_F')} "
+            f"w_reached={row.get('w_reached_m')} holding_F={row.get('holding_F')} "
             f"contact={row.get('finger_contact_points_max')} ({row['wall_s']}s)"
         )
 

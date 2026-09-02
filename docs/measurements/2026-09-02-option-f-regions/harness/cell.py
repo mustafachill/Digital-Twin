@@ -510,9 +510,18 @@ def q_at(driver: Driver, boundary: float | None) -> float | None:
     `criteria.md` I3, taken literally: "the last `arm_1_drive_joint` sample on
     `/joint_states` at or before the result arrives". `boundary` is that arrival, in
     simulation time, read as soon as the result future completes.
+
+    A MISSING BOUNDARY RETURNS NOTHING, and until 2026-09-02 it silently substituted
+    `driver.sim_now()` -- "now", wherever in the trial this happened to be called. Arm D
+    reached that path on exactly the trials D1 exists to catch: when a grasp is reported
+    empty the `Pick` never publishes `PHASE_RETREATING`, so its boundary was `None`, and
+    "now" was evaluated after a second close had already moved the joint. The decision
+    quantity was then a reading of the wrong instant, and nothing on the record said so.
+    A caller that has no boundary has no reading; it may record that, and it may not be
+    handed a number that looks like one.
     """
     if boundary is None:
-        boundary = driver.sim_now()
+        return None
     before = [q for t, q in driver.drive_q if t <= boundary]
     if before:
         return before[-1]

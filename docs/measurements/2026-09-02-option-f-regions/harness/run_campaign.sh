@@ -22,7 +22,14 @@
 # average at the start of every block. That is section 6, and it is a quiesce for an
 # instrument rather than a step of any bring-up sequence -- nothing here waits for a cell
 # to be ready by sleeping (P4); `run_cell_block.sh` gates on the cell's own token.
-set -u
+#
+# A BLOCK THAT ABORTS STOPS THE CAMPAIGN. `enter`'s return code used to be discarded and
+# the loop ran on, so a block that aborted -- on V1, V2, V7, a bring-up that never
+# announced readiness -- was followed by the next one with nothing said. Combined with
+# `collected()` skipping a block whose trials file already exists, a resumed campaign
+# could then walk straight past a PARTIALLY collected arm and treat it as done. Both
+# halves are fixed here: the code is captured and a non-zero one stops everything, loudly.
+set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../../.." && pwd)"
 RAW="$HERE/../raw"
@@ -44,9 +51,67 @@ quiesce() {
     uptime | tee -a "$RAW/logs/campaign.log"
 }
 
+# `criteria.md` section 9 requires `COMPOSE_PROJECT_NAME`, `ROS_DOMAIN_ID` and the
+# `doctor` / `build` / `test` summary lines in `raw/provenance.txt`. Appended ONCE at the
+# start of a campaign run, from the host, because the isolation values are the host
+# script's and the three gates are what section 9 says run clean before the first trial.
+# It appends and never truncates: `build_superseded.sh` writes V10's provenance into the
+# same file, and this must not remove it.
+record_environment() {
+    local out="$RAW/provenance.txt"
+    {
+        echo "# ---- campaign environment, recorded by run_campaign.sh ----"
+        echo "recorded_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "arms_requested=${ARMS[*]}"
+        echo "host_uname=$(uname -a)"
+        echo "host_uptime=$(uptime)"
+        # Both are derived per checkout by `scripts/_lib.sh`, so they are read through it
+        # rather than restated here (P1).
+        echo "compose_project_name=$( (cd "$ROOT" && . scripts/_lib.sh >/dev/null 2>&1; \
+            echo "${COMPOSE_PROJECT_NAME:-<unset>}") )"
+        echo "ros_domain_id=$( (cd "$ROOT" && . scripts/_lib.sh >/dev/null 2>&1; \
+            echo "${ROS_DOMAIN_ID:-<unset>}") )"
+        echo "git_head=$(git -C "$ROOT" rev-parse HEAD)"
+        echo "criteria_sha256=$(shasum -a 256 "$RAW/../criteria.md" | cut -d' ' -f1)"
+    } >> "$out"
+    local gate
+    for gate in doctor build test; do
+        echo "== recording ./scripts/${gate} for section 9 =="
+        {
+            echo "# ---- ./scripts/${gate} ----"
+            # The SUMMARY lines, not the whole log: section 9 asks for the summary and
+            # the full logs are large. The exit code is recorded beside them, because a
+            # summary line without one says nothing about whether the gate passed.
+            "$ROOT/scripts/${gate}" 2>&1 | tee "$RAW/logs/${gate}.log" \
+                | grep -Ei "summary|passed|failed|error|no non-English" | tail -20
+            echo "${gate}_exit=${PIPESTATUS[0]}"
+        } >> "$out"
+    done
+}
+
+# Runs one block inside the container and RETURNS ITS CODE. Nothing here swallows it.
 enter() {
     "$ROOT/scripts/enter" dev bash -lc "$1"
 }
+
+# One block, with the abort banner. `$1` is the label for the message; `$2` the command.
+run_block() {
+    local label="$1" command="$2" code=0
+    enter "$command" || code=$?
+    if [ "$code" -ne 0 ]; then
+        echo "" >&2
+        echo "########################################################################" >&2
+        echo "## BLOCK ${label} ABORTED, exit ${code}. THE CAMPAIGN STOPS HERE." >&2
+        echo "## criteria.md V8: n is what it was. A block that aborted is reported" >&2
+        echo "## with the n it actually reached and is NEVER topped up -- and the" >&2
+        echo "## next block is not run over the top of it. Read" >&2
+        echo "## ${RAW}/logs/${label}_harness.log before doing anything else." >&2
+        echo "########################################################################" >&2
+        exit "$code"
+    fi
+}
+
+record_environment
 
 for arm in "${ARMS[@]}"; do
     case "$arm" in
@@ -54,7 +119,7 @@ for arm in "${ARMS[@]}"; do
             if collected B; then echo "== skip B (collected)"; continue; fi
             echo "===== Arm B: 5 jam positions x 3, relaunch-interleaved ====="
             quiesce
-            enter "bash ${IN_CONTAINER}/run_arm_b.sh 3 B"
+            run_block B "bash ${IN_CONTAINER}/run_arm_b.sh 3 B"
             ;;
         A)
             for block in 1 2; do
@@ -63,7 +128,8 @@ for arm in "${ARMS[@]}"; do
                 if collected "$LABEL"; then echo "== skip $LABEL (collected)"; continue; fi
                 echo "===== Arm A block ${block}: ${CYCLES} cycle(s) over 13 widths ====="
                 quiesce
-                enter "bash ${IN_CONTAINER}/run_cell_block.sh a ${LABEL} --cycles ${CYCLES}"
+                run_block "$LABEL" \
+                    "bash ${IN_CONTAINER}/run_cell_block.sh a ${LABEL} --cycles ${CYCLES}"
             done
             ;;
         A_REFINE)
@@ -77,8 +143,9 @@ for arm in "${ARMS[@]}"; do
             if collected "$LABEL"; then echo "== skip $LABEL (collected)"; continue; fi
             echo "===== Arm A refinement: [${LOW}, ${HIGH}] mm at 0.05 mm x 3 ====="
             quiesce
-            enter "bash ${IN_CONTAINER}/run_cell_block.sh a ${LABEL} \
-                     --refine-low-mm ${LOW} --refine-high-mm ${HIGH}"
+            run_block "$LABEL" \
+                "bash ${IN_CONTAINER}/run_cell_block.sh a ${LABEL} \
+                   --refine-low-mm ${LOW} --refine-high-mm ${HIGH}"
             ;;
         D)
             for block in 1 2; do
@@ -89,8 +156,9 @@ for arm in "${ARMS[@]}"; do
                 if collected "$LABEL"; then echo "== skip $LABEL (collected)"; continue; fi
                 echo "===== Arm D block ${block}: 4 pairs, ${REFUSALS} refusal trial(s) ====="
                 quiesce
-                enter "bash ${IN_CONTAINER}/run_cell_block.sh d ${LABEL} \
-                         --pairs 4 --refusals ${REFUSALS}"
+                run_block "$LABEL" \
+                    "bash ${IN_CONTAINER}/run_cell_block.sh d ${LABEL} \
+                       --pairs 4 --refusals ${REFUSALS}"
             done
             ;;
         C)
@@ -100,7 +168,8 @@ for arm in "${ARMS[@]}"; do
                 if collected "$LABEL"; then echo "== skip $LABEL (collected)"; continue; fi
                 echo "===== Arm C block ${block}: ${CYCLES} cycle(s) over 8 yaws ====="
                 quiesce
-                enter "bash ${IN_CONTAINER}/run_cell_block.sh c ${LABEL} --cycles ${CYCLES}"
+                run_block "$LABEL" \
+                    "bash ${IN_CONTAINER}/run_cell_block.sh c ${LABEL} --cycles ${CYCLES}"
             done
             ;;
         *)

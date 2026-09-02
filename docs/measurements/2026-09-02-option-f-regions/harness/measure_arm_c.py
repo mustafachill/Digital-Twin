@@ -222,7 +222,8 @@ def main() -> int:  # noqa: C901 - one trial loop, kept in one place
             driver.closing_time = driver.sim_now()
             result = driver.do_grasp(WIDTH_M, expect_object=True)
             stall_boundary = driver.sim_now()
-            row["i2_reports"] = cursor.collect()
+            row["i2_reports"] = cursor.await_report()
+            row["i2_report_missing"] = not row["i2_reports"]
             row.update(cell.grasp_result_fields(result, "i1"))
             if result is not None:
                 row["holding_F"] = bool(result.holding)
@@ -236,8 +237,24 @@ def main() -> int:  # noqa: C901 - one trial loop, kept in one place
             row["i3_drive_samples"] = len(driver.drive_q)
             if q is not None:
                 row["i3_reached_width_m"] = predicate.width(q)
-                row["d_narrow_m"] = row["i3_reached_width_m"] - edge_lo
-                row["d_wide_m"] = edge_hi - row["i3_reached_width_m"]
+
+            # THE DECISION QUANTITIES COME FROM I1, which `criteria.md` section 2.1
+            # defines as `w_reached` -- "the width the predicate consumes" -- and section
+            # 4.1 names as `Grasp.Result.reached_width_m`. I3 is the same quantity read
+            # INDEPENDENTLY of the skill server, which is a cross-check (V4) and not the
+            # decision quantity; this harness had the two the wrong way round until
+            # 2026-09-02. In this arm the joint is stalled on the part and the two agree
+            # to about 0.03 mm, so it moves no number here -- but `d_wide` is what C1 is
+            # decided on and rule W measures, and a decision quantity read off the
+            # cross-check instrument is wrong whether or not it happens to agree.
+            i1_reached = row.get("i1_reached_width_m")
+            row["w_reached_source"] = "I1 (Grasp.Result.reached_width_m)"
+            if i1_reached is not None:
+                row["d_narrow_m"] = i1_reached - edge_lo
+                row["d_wide_m"] = edge_hi - i1_reached
+            if row.get("i3_reached_width_m") is not None:
+                row["d_narrow_i3_m"] = row["i3_reached_width_m"] - edge_lo
+                row["d_wide_i3_m"] = edge_hi - row["i3_reached_width_m"]
             row.update(common.v4(
                 row.get("i1_reached_width_m"), row.get("i3_reached_width_m"),
                 row.get("i2_reports")))
@@ -296,7 +313,7 @@ def main() -> int:  # noqa: C901 - one trial loop, kept in one place
         print(
             f"[{index}/{len(schedule)}] yaw={yaw_deg:.1f} deg "
             f"stall_yaw={row.get('yaw_at_stall_deg')} "
-            f"w_reached={row.get('i3_reached_width_m')} "
+            f"w_reached(I1)={row.get('i1_reached_width_m')} "
             f"holding_F={row.get('holding_F')} d_wide={row.get('d_wide_m')} "
             f"({row['wall_s']}s)"
         )

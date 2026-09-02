@@ -46,6 +46,15 @@ V1_WATCHED_PATHS = ("model/", "workspace/src/", "tools/")
 HULL_COLLISION_REFERENCE = "cite_description/meshes/collision/xarm5/convex_hull"
 HULL_COLLISION_REFERENCES_EXPECTED = 13
 
+#: `criteria.md` V7. Arm B substitutes a fixture INTO the description and asserts the
+#: production plugin before it does. Arm A may not be run on any mock backend at all
+#: (section 5.1), and until 2026-09-02 nothing asserted that: the block checked only the
+#: hull count. The same two strings are named here so that both halves of V7 count the
+#: same thing (P1), and `running_geometry` reads them off the description the RUNNING cell
+#: publishes -- which is the only place a mock could appear without anyone editing L0.
+PRODUCTION_HARDWARE_PLUGIN = "gz_ros2_control/GazeboSimSystem"
+MOCK_HARDWARE_PLUGIN = "mock_components/GenericSystem"
+
 #: I2. The skill server's own report line, matched verbatim so that a change to the format
 #: breaks this harness loudly instead of returning silence. `skill_server.cpp:2248-2255`.
 REPORT = re.compile(
@@ -155,16 +164,27 @@ def host_facts() -> dict:
     The load averages are recorded because host load moves how long a trial takes, and
     V6 is what spends them. They are NOT recorded because any width quantity depends on
     them: every width here is a function of simulation state sampled in simulation time.
+
+    THESE ARE THE CONTAINER'S LOAD AVERAGES AND NOT THE HOST'S, and the keys say so.
+    `os.getloadavg()` inside a Linux container on macOS reads `/proc/loadavg` in Docker
+    Desktop's Linux VM, whose run queue is the VM's and whose core count is the VM's
+    allocation -- not the twelve cores of the `Mac16,8` section 9 names. The 2026-08-31
+    capacity campaign applied a validity rule that read exactly this wrong quantity, and
+    the keys were named `load_*` there too. Naming them for what they measure is the fix;
+    a figure that needs the HOST's load has to be taken on the host, and `run_campaign.sh`
+    is the half of this harness that runs there.
     """
     try:
         one, five, fifteen = os.getloadavg()
     except OSError:  # pragma: no cover - not every platform has it
         one = five = fifteen = float("nan")
     return {
-        "load_1m": one,
-        "load_5m": five,
-        "load_15m": fifteen,
-        "cpu_count": os.cpu_count(),
+        "container_load_1m": one,
+        "container_load_5m": five,
+        "container_load_15m": fifteen,
+        "load_read_from": "/proc/loadavg inside the container (Docker Desktop's Linux "
+                          "VM), NOT the macOS host criteria.md section 9 names",
+        "container_cpu_count": os.cpu_count(),
         "platform": platform.platform(),
         "wall_clock_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "ros_domain_id": os.environ.get("ROS_DOMAIN_ID"),
@@ -183,11 +203,23 @@ def running_geometry(namespace: str, timeout_s: float = 300.0) -> dict:
         capture_output=True, text=True, timeout=timeout_s,
     ).stdout
     hulls = running.count(HULL_COLLISION_REFERENCE)
+    # V7, off the SAME fetch. The description is already here, so counting the hardware
+    # plugin costs nothing and closes the hole Arm A had: a mock backend fabricates a
+    # stall on a ramping joint after exactly `stall_timeout`, which is the one failure
+    # mode Arm A's whole question turns on, and the hull count would not have noticed it.
+    production = running.count(PRODUCTION_HARDWARE_PLUGIN)
+    mock = running.count(MOCK_HARDWARE_PLUGIN)
     return {
         "hull_collision_refs": hulls,
         "vendor_visual_refs": running.count("xarm_description/meshes/xarm5/visual"),
         "description_chars": len(running),
         "v2_ok": hulls == HULL_COLLISION_REFERENCES_EXPECTED,
+        "production_hardware_plugin_refs": production,
+        "mock_hardware_plugin_refs": mock,
+        # Both clauses, because either one alone can be satisfied by an empty answer: a
+        # `ros2 param get` that returned nothing counts zero mocks as readily as zero
+        # production plugins, and "no mock found" must not be reachable by not looking.
+        "v7_ok": production > 0 and mock == 0,
     }
 
 
@@ -392,12 +424,21 @@ class TrialWriter:
         # and one more: they are the reference every width in the record is judged
         # against, and an analyser that had to supply them would be supplying a fifth
         # copy of four L0 statements (P1).
+        # V2 and V7 are BLOCK properties and were only ever in the header, so an
+        # analyser reading `raw/*_trials.json` could not apply them and said it did.
+        # They ride here for the same reason the provenance does: a rule that discards
+        # a block must not be separable from the numbers it discards. `None` means the
+        # rig does not have the quantity -- Arm B brings no cell up and reads no running
+        # description -- and is NOT the same answer as `False`.
+        geometry = self.header.get("geometry") or {}
         row = {
             **row,
             "provenance": self.header["provenance"],
             "label": self.label,
             "window_m": self.header.get("window_m"),
             "parts": self.header.get("parts"),
+            "v2_ok": geometry.get("v2_ok"),
+            "v7_ok": geometry.get("v7_ok"),
         }
         self.rows.append(row)
         self.flush()
@@ -410,9 +451,15 @@ class TrialWriter:
 #: `criteria.md` V4's tolerance: the two width instruments must agree to 0.100 mm.
 V4_TOLERANCE_M = 0.0001
 
+#: How long I2's report line is waited for before it is recorded as MISSING. It is a
+#: ceiling on an instrument's read, not a settling time: the line is already written by
+#: the time the action result arrives in every observed case, and this only covers the
+#: flush. A trial that exhausts it is excluded and reported, never counted as `false`.
+I2_REPORT_CEILING_S = 5.0
+
 
 def v4(i1_reached_m: float | None, i3_reached_m: float | None,
-       reports: list[dict] | None) -> dict:
+       reports: list[dict] | None, unevaluable_reason: str | None = None) -> dict:
     """`criteria.md` V4, BOTH halves, evaluated per trial where the data was taken.
 
     The rule has two clauses and this evaluates both: the two instruments agree to
@@ -435,9 +482,25 @@ def v4(i1_reached_m: float | None, i3_reached_m: float | None,
     than by assertion.
     """
     result: dict = {"v4_tolerance_m": V4_TOLERANCE_M}
+    if unevaluable_reason is not None:
+        # UNEVALUABLE IS NOT FAILED, and the difference decides whether a trial is in
+        # the distribution. V4 excludes a trial "exceeding" its tolerance; a trial for
+        # which one of the two instruments DOES NOT EXIST has not exceeded anything, and
+        # dropping it would answer a missing instrument by discarding the data the
+        # instrument was never needed for. `analyse.py` reports these separately and
+        # keeps them in the distribution; a trial that HAS both instruments and fails the
+        # comparison is still dropped, literally, as V9 requires.
+        result["v4_ok"] = None
+        result["v4_evaluable"] = False
+        result["v4_unevaluable_reason"] = unevaluable_reason
+        return result
     if i1_reached_m is None or i3_reached_m is None:
         result["v4_ok"] = None
+        result["v4_evaluable"] = False
+        result["v4_unevaluable_reason"] = (
+            "one of the two width instruments produced no reading on this trial")
         return result
+    result["v4_evaluable"] = True
     delta = i1_reached_m - i3_reached_m
     result["v4_delta_m"] = delta
     result["v4_within_tolerance"] = abs(delta) <= V4_TOLERANCE_M
@@ -491,4 +554,29 @@ class LogCursor:
                     "verdict": match.group(6),
                 }
             )
+        return found
+
+    def await_report(self, ceiling_s: float = I2_REPORT_CEILING_S) -> list[dict]:
+        """I2, waited for rather than sampled once -- and reported missing if it never came.
+
+        WHY THIS IS NOT A TIMING WORKAROUND. The report line is written by ANOTHER
+        process, to a file, after it sends the action result; the harness reads the result
+        first, so at that instant the line legitimately may not have been flushed yet.
+        Sampling once and moving on turned that race into a DATUM: `collect()` returned
+        an empty list, the runner wrote `stalled = None`, and `analyse.py` counted it with
+        `sum(1 for r in at if r.get("stalled"))`, which cannot tell an absent reading from
+        a measured `false`. A1a -- the clause that decides WHICH of option F's two gates
+        rejected free air -- is a count of exactly that boolean, so a dropped line would
+        have read as evidence for the flags rejecting, which is the answer the arm exists
+        to test.
+
+        This waits a BOUNDED interval for the instrument to produce its reading and, if it
+        does not, says so on the record (`i2_report_missing`) so the trial is excluded
+        rather than counted. It sequences nothing and no cell waits on it (P4).
+        """
+        end = time.monotonic() + ceiling_s
+        found = self.collect()
+        while not found and time.monotonic() < end:
+            time.sleep(0.05)
+            found = self.collect()
         return found
