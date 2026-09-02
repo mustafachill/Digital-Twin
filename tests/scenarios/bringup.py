@@ -17,6 +17,8 @@ Assertions are on outcomes and constraints, never on exact trajectories.
 
 from __future__ import annotations
 
+import json
+import time
 import unittest
 from pathlib import Path
 
@@ -141,13 +143,42 @@ class TestCellBringUp(unittest.TestCase):
         ready yet" produces a timeout whose message points at the wrong thing.
         Predicates that answer with a bool convert it at the call site, where the
         meaning of False is obvious.
+
+        On the success path it prints one `CITE_TIMING` line saying how long the
+        wait actually took. `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md`
+        §3 had to report `DELIVERY_CEILING_S` and `TRAJECTORY_CEILING_S` as "not
+        assessed" and reach `SKILL_CEILING_S` and `LEG_CEILING_S` only through
+        proxies, because per-milestone timings were not printed. They are now, so
+        a follow-up campaign can re-derive every ceiling from measurement.
         """
+        # `time.monotonic`, never the node clock: these ceilings are wall clock by
+        # deliberate design — this observer does not set `use_sim_time`, for the
+        # reason `continuous_line.Sample` gives — and a monotonic clock cannot jump
+        # backwards under a wall-clock step and report a wait that took less than
+        # no time. Do not "fix" this to the node clock.
+        started = time.monotonic()
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
         result = predicate()
         while result is None and self.node.get_clock().now().nanoseconds < end:
             rclpy.spin_once(self.node, timeout_sec=0.5)
             result = predicate()
         self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
+        # Success only. A timing record for a wait that timed out would be a
+        # measurement of the ceiling rather than of the milestone. `flush=True`
+        # because `launch_test` captures this stream and can tear the process
+        # down with a buffered line still sitting in it.
+        print(
+            "CITE_TIMING "
+            + json.dumps(
+                {
+                    "scenario": Path(__file__).stem,
+                    "what": what,
+                    "ceiling_s": float(ceiling_s),
+                    "elapsed_s": round(time.monotonic() - started, 3),
+                }
+            ),
+            flush=True,
+        )
         return result
 
     def test_every_controller_reaches_active(self) -> None:
