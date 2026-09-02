@@ -1,0 +1,1793 @@
+[
+  {
+    "trial": 1,
+    "cycle": 0,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 46.0,
+    "jam_position_rad": 0.44340353895028084,
+    "jam_position_from_criteria_rad": 0.443404,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.44340353895028084,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_001_46.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.44340353895028084,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.046000000000000006,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.44340353895028084,
+    "i3_joint_state_samples": 141,
+    "i3_reached_width_m": 0.046000000000000006,
+    "d_narrow_i3_m": -0.0016149999999999984,
+    "d_wide_i3_m": 0.006384999999999995,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0016149999999999984,
+    "d_wide_m": 0.006384999999999995,
+    "gc_position_rad": 0.44340353895028084,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.046000000000000006,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 46.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.443404,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 46.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 2,
+    "cycle": 0,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 48.0,
+    "jam_position_rad": 0.4245547009856012,
+    "jam_position_from_criteria_rad": 0.424555,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.4245547009856012,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_002_48.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.4245547009856012,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.048,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.4245547009856012,
+    "i3_joint_state_samples": 240,
+    "i3_reached_width_m": 0.048,
+    "d_narrow_i3_m": 0.00038499999999999646,
+    "d_wide_i3_m": 0.004385,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.00038499999999999646,
+    "d_wide_m": 0.004385,
+    "gc_position_rad": 0.4245547009856012,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.048,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 48.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.424555,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 48.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 3,
+    "cycle": 0,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 50.0,
+    "jam_position_rad": 0.40560459414971795,
+    "jam_position_from_criteria_rad": 0.405605,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.40560459414971795,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_003_50.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.40560459414971795,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.05,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.40560459414971795,
+    "i3_joint_state_samples": 128,
+    "i3_reached_width_m": 0.05,
+    "d_narrow_i3_m": 0.0023849999999999982,
+    "d_wide_i3_m": 0.0023849999999999982,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0023849999999999982,
+    "d_wide_m": 0.0023849999999999982,
+    "gc_position_rad": 0.40560459414971795,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.05,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.405605,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 50.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 4,
+    "cycle": 0,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 52.0,
+    "jam_position_rad": 0.38654464718280845,
+    "jam_position_from_criteria_rad": 0.386545,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.38654464718280845,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_004_52.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.38654464718280845,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.051999999999999984,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.38654464718280845,
+    "i3_joint_state_samples": 179,
+    "i3_reached_width_m": 0.051999999999999984,
+    "d_narrow_i3_m": 0.004384999999999979,
+    "d_wide_i3_m": 0.00038500000000001727,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004384999999999979,
+    "d_wide_m": 0.00038500000000001727,
+    "gc_position_rad": 0.38654464718280845,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.051999999999999984,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 52.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.386545,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 5,
+    "cycle": 0,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 54.0,
+    "jam_position_rad": 0.3673658761510177,
+    "jam_position_from_criteria_rad": 0.367366,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.3673658761510177,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_005_54.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.3673658761510177,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053999999999999986,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.3673658761510177,
+    "i3_joint_state_samples": 391,
+    "i3_reached_width_m": 0.053999999999999986,
+    "d_narrow_i3_m": 0.006384999999999981,
+    "d_wide_i3_m": -0.0016149999999999845,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006384999999999981,
+    "d_wide_m": -0.0016149999999999845,
+    "gc_position_rad": 0.3673658761510177,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.053999999999999986,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 54.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.367366,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 54.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 6,
+    "cycle": 1,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 46.0,
+    "jam_position_rad": 0.44340353895028084,
+    "jam_position_from_criteria_rad": 0.443404,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.44340353895028084,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_006_46.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.44340353895028084,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.046000000000000006,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.44340353895028084,
+    "i3_joint_state_samples": 125,
+    "i3_reached_width_m": 0.046000000000000006,
+    "d_narrow_i3_m": -0.0016149999999999984,
+    "d_wide_i3_m": 0.006384999999999995,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0016149999999999984,
+    "d_wide_m": 0.006384999999999995,
+    "gc_position_rad": 0.44340353895028084,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.046000000000000006,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 46.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.443404,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 46.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 7,
+    "cycle": 1,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 48.0,
+    "jam_position_rad": 0.4245547009856012,
+    "jam_position_from_criteria_rad": 0.424555,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.4245547009856012,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_007_48.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.4245547009856012,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.048,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.4245547009856012,
+    "i3_joint_state_samples": 153,
+    "i3_reached_width_m": 0.048,
+    "d_narrow_i3_m": 0.00038499999999999646,
+    "d_wide_i3_m": 0.004385,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.00038499999999999646,
+    "d_wide_m": 0.004385,
+    "gc_position_rad": 0.4245547009856012,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.048,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 48.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.424555,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 48.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 8,
+    "cycle": 1,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 50.0,
+    "jam_position_rad": 0.40560459414971795,
+    "jam_position_from_criteria_rad": 0.405605,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.40560459414971795,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_008_50.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.40560459414971795,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.05,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.40560459414971795,
+    "i3_joint_state_samples": 132,
+    "i3_reached_width_m": 0.05,
+    "d_narrow_i3_m": 0.0023849999999999982,
+    "d_wide_i3_m": 0.0023849999999999982,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0023849999999999982,
+    "d_wide_m": 0.0023849999999999982,
+    "gc_position_rad": 0.40560459414971795,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.05,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.405605,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 50.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 9,
+    "cycle": 1,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 52.0,
+    "jam_position_rad": 0.38654464718280845,
+    "jam_position_from_criteria_rad": 0.386545,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.38654464718280845,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_009_52.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.38654464718280845,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.051999999999999984,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.38654464718280845,
+    "i3_joint_state_samples": 134,
+    "i3_reached_width_m": 0.051999999999999984,
+    "d_narrow_i3_m": 0.004384999999999979,
+    "d_wide_i3_m": 0.00038500000000001727,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004384999999999979,
+    "d_wide_m": 0.00038500000000001727,
+    "gc_position_rad": 0.38654464718280845,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.051999999999999984,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 52.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.386545,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 10,
+    "cycle": 1,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 54.0,
+    "jam_position_rad": 0.3673658761510177,
+    "jam_position_from_criteria_rad": 0.367366,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.3673658761510177,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_010_54.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.3673658761510177,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": false,
+    "error": "RuntimeError: the skill server never answered the Grasp goal",
+    "i2_reports": [],
+    "stalled": null,
+    "reached_goal": null,
+    "i7_stop_announced": false,
+    "i7_stop_announced_at_rad": null,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_ok": null,
+    "v4_evaluable": false,
+    "v4_unevaluable_reason": "one of the two width instruments produced no reading on this trial",
+    "v5_valid": false,
+    "holding_S": null,
+    "holding_S_provenance": {
+      "available": false
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 11,
+    "cycle": 2,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 46.0,
+    "jam_position_rad": 0.44340353895028084,
+    "jam_position_from_criteria_rad": 0.443404,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.44340353895028084,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_011_46.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.44340353895028084,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.046000000000000006,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.44340353895028084,
+    "i3_joint_state_samples": 120,
+    "i3_reached_width_m": 0.046000000000000006,
+    "d_narrow_i3_m": -0.0016149999999999984,
+    "d_wide_i3_m": 0.006384999999999995,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.0016149999999999984,
+    "d_wide_m": 0.006384999999999995,
+    "gc_position_rad": 0.44340353895028084,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.046000000000000006,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 46.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.443404,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 46.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 12,
+    "cycle": 2,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 48.0,
+    "jam_position_rad": 0.4245547009856012,
+    "jam_position_from_criteria_rad": 0.424555,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.4245547009856012,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_012_48.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.4245547009856012,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.048,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.4245547009856012,
+    "i3_joint_state_samples": 405,
+    "i3_reached_width_m": 0.048,
+    "d_narrow_i3_m": 0.00038499999999999646,
+    "d_wide_i3_m": 0.004385,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.00038499999999999646,
+    "d_wide_m": 0.004385,
+    "gc_position_rad": 0.4245547009856012,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.048,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 48.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.424555,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 48.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 13,
+    "cycle": 2,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 50.0,
+    "jam_position_rad": 0.40560459414971795,
+    "jam_position_from_criteria_rad": 0.405605,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.40560459414971795,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_013_50.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.40560459414971795,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.05,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.40560459414971795,
+    "i3_joint_state_samples": 136,
+    "i3_reached_width_m": 0.05,
+    "d_narrow_i3_m": 0.0023849999999999982,
+    "d_wide_i3_m": 0.0023849999999999982,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0023849999999999982,
+    "d_wide_m": 0.0023849999999999982,
+    "gc_position_rad": 0.40560459414971795,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.05,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 50.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.405605,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 50.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 14,
+    "cycle": 2,
+    "arm": "B",
+    "condition": "window",
+    "jam_width_mm": 52.0,
+    "jam_position_rad": 0.38654464718280845,
+    "jam_position_from_criteria_rad": 0.386545,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.38654464718280845,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_014_52.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.38654464718280845,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.051999999999999984,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.38654464718280845,
+    "i3_joint_state_samples": 245,
+    "i3_reached_width_m": 0.051999999999999984,
+    "d_narrow_i3_m": 0.004384999999999979,
+    "d_wide_i3_m": 0.00038500000000001727,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004384999999999979,
+    "d_wide_m": 0.00038500000000001727,
+    "gc_position_rad": 0.38654464718280845,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.051999999999999984,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 52.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.386545,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  },
+  {
+    "trial": 15,
+    "cycle": 2,
+    "arm": "B",
+    "condition": "control",
+    "jam_width_mm": 54.0,
+    "jam_position_rad": 0.3673658761510177,
+    "jam_position_from_criteria_rad": 0.367366,
+    "jam_position_agrees_with_criteria": true,
+    "commanded_width_m": 0.056,
+    "q_cmd_rad": 0.34805883667896587,
+    "stroke": "opening",
+    "initial_position_rad": 0.85,
+    "stop_lower_rad": 0.3673658761510177,
+    "stop_upper_rad": 1.0,
+    "contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'no contact at all' is discharged by construction rather than by a sensor",
+    "finger_contact_points_max": 0,
+    "log": "B_015_54.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem"
+        }
+      ],
+      "stop_lower_rad": 0.3673658761510177,
+      "stop_upper_rad": 1.0,
+      "initial_value_rad": 0.85,
+      "initial_value_injected": true,
+      "hull_collision_refs": 13,
+      "v2_ok": true
+    },
+    "joint_state_first_rad": 0.85,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053999999999999986,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i3_q_at_stall_rad": 0.3673658761510177,
+    "i3_joint_state_samples": 136,
+    "i3_reached_width_m": 0.053999999999999986,
+    "d_narrow_i3_m": 0.006384999999999981,
+    "d_wide_i3_m": -0.0016149999999999845,
+    "rests_at_stop": true,
+    "rest_error_rad": 0.0,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006384999999999981,
+    "d_wide_m": -0.0016149999999999845,
+    "gc_position_rad": 0.3673658761510177,
+    "gc_stalled": true,
+    "gc_reached_goal": false,
+    "gc_effort_n": 60.0,
+    "gc_width_m": 0.053999999999999986,
+    "i2_reports": [
+      {
+        "commanded_mm": 56.0,
+        "reached_mm": 54.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i7_stop_announced": true,
+    "i7_stop_announced_at_rad": 0.367366,
+    "i8_start_refused": false,
+    "i8_start_position_rad": null,
+    "fixture_named_itself": true,
+    "v4_tolerance_m": 0.0001,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 54.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v5_valid": true,
+    "holding_S": false,
+    "holding_S_provenance": {
+      "built_at": "2026-09-02T05:52:12Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b",
+      "binary_sha256": "0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "provenance": {
+      "head": "e559264120d652be9491c6b8ac9b913d99969df5",
+      "base_commit": "d3eeac4",
+      "git_status_porcelain": " M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-02-option-f-regions/raw/provenance.txt\n?? docs/measurements/2026-09-02-option-f-regions/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "v1_clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73"
+    },
+    "label": "B",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "v2_ok": null,
+    "v7_ok": null
+  }
+]

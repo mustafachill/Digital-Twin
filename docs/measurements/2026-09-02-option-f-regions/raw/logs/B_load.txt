@@ -1,0 +1,6 @@
+== Arm B, label B ==
+ 05:52:12 up 10:51,  0 user,  load average: 3.09, 3.22, 3.39
+12
+               total        used        free      shared  buff/cache   available
+Mem:            7837        3285        2056         179        2872        4551
+overlay         453G   31G  399G   8% /

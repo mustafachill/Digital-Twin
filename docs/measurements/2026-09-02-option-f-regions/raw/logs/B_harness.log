@@ -1,0 +1,44 @@
+[WARN] [1788328336.276266134] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328342.944672929] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328345.375004472] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328353.902823836] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328356.664158713] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328361.298416173] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328363.815891300] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328366.061447884] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328493.017161179] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328497.092140083] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328499.433578918] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788328502.802775211] [rcl.logging_rosout]: Publisher already registered for node name: 'option_f_arm_b_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'option_f_arm_b_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[1/15] jam 46.00 mm -> q 0.44340353895028084 rad
+    holding_F=False holding_S=False w_reached(I1)=0.046000000000000006 v5=True
+[2/15] jam 48.00 mm -> q 0.4245547009856012 rad
+    holding_F=True holding_S=False w_reached(I1)=0.048 v5=True
+[3/15] jam 50.00 mm -> q 0.40560459414971795 rad
+    holding_F=True holding_S=False w_reached(I1)=0.05 v5=True
+[4/15] jam 52.00 mm -> q 0.38654464718280845 rad
+    holding_F=True holding_S=False w_reached(I1)=0.051999999999999984 v5=True
+[5/15] jam 54.00 mm -> q 0.3673658761510177 rad
+    holding_F=False holding_S=False w_reached(I1)=0.053999999999999986 v5=True
+[6/15] jam 46.00 mm -> q 0.44340353895028084 rad
+    holding_F=False holding_S=False w_reached(I1)=0.046000000000000006 v5=True
+[7/15] jam 48.00 mm -> q 0.4245547009856012 rad
+    holding_F=True holding_S=False w_reached(I1)=0.048 v5=True
+[8/15] jam 50.00 mm -> q 0.40560459414971795 rad
+    holding_F=True holding_S=False w_reached(I1)=0.05 v5=True
+[9/15] jam 52.00 mm -> q 0.38654464718280845 rad
+    holding_F=True holding_S=False w_reached(I1)=0.051999999999999984 v5=True
+[10/15] jam 54.00 mm -> q 0.3673658761510177 rad
+    trial 10 failed: the skill server never answered the Grasp goal
+    holding_F=None holding_S=None w_reached(I1)=None v5=False
+[11/15] jam 46.00 mm -> q 0.44340353895028084 rad
+    holding_F=False holding_S=False w_reached(I1)=0.046000000000000006 v5=True
+[12/15] jam 48.00 mm -> q 0.4245547009856012 rad
+    holding_F=True holding_S=False w_reached(I1)=0.048 v5=True
+[13/15] jam 50.00 mm -> q 0.40560459414971795 rad
+    holding_F=True holding_S=False w_reached(I1)=0.05 v5=True
+[14/15] jam 52.00 mm -> q 0.38654464718280845 rad
+    holding_F=True holding_S=False w_reached(I1)=0.051999999999999984 v5=True
+[15/15] jam 54.00 mm -> q 0.3673658761510177 rad
+    holding_F=False holding_S=False w_reached(I1)=0.053999999999999986 v5=True
+wrote /workspace/docs/measurements/2026-09-02-option-f-regions/harness/../raw/B_trials.json: 15 trials

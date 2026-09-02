@@ -78,3 +78,195 @@ gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649a
 front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
 binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
 compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-02T05:48:15Z
+arms_requested=B A D C
+host_uname=Darwin Mustafas-MacBook-Pro-2.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:34 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6041 arm64
+host_uptime= 0:48  up 9 days,  6:25, 1 user, load averages: 17.90 58.33 49.03
+compose_project_name=cite-digital-twin-3748020299
+ros_domain_id=99
+compose_project_source=derived from this checkout
+domain_note=the plant's domain as scripts/_lib.sh derives it on the HOST; each block also records the ROS_DOMAIN_ID seen inside the container
+git_head=e559264120d652be9491c6b8ac9b913d99969df5
+criteria_sha256=17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73
+# ---- ./scripts/doctor ----
+Summary
+  25 passed, 0 failed, 1 skipped
+doctor_exit=0
+# ---- ./scripts/build ----
+Summary: 23 packages finished [4.45s]
+build_exit=0
+# ---- ./scripts/test ----
+9: [fake_counterpart-2]     raise RuntimeError("the far side's execute callback raised")
+9: [fake_counterpart-2] RuntimeError: the far side's execute callback raised
+ 9/12 Test  #9: test_test_twin_boundary_paired_launch.py ...   Passed    3.07 sec
+10/12 Test #10: copyright ..................................   Passed    0.22 sec
+11/12 Test #11: lint_cmake .................................   Passed    0.07 sec
+12/12 Test #12: xmllint ....................................   Passed    0.07 sec
+100% tests passed, 0 tests failed out of 12
+Label Time Summary:
+Summary: 11 packages finished [2min 12s]
+Summary: 225 tests, 0 errors, 0 failures, 0 skipped
+Summary: 27 tests, 0 errors, 0 failures, 0 skipped
+Summary: 70 tests, 0 errors, 0 failures, 0 skipped
+Summary: 5 tests, 0 errors, 0 failures, 0 skipped
+Summary: 36 tests, 0 errors, 0 failures, 1 skipped
+Summary: 261 tests, 0 errors, 0 failures, 22 skipped
+Summary: 30 tests, 0 errors, 0 failures, 0 skipped
+Summary: 47 tests, 0 errors, 0 failures, 5 skipped
+Summary: 262 tests, 0 errors, 0 failures, 21 skipped
+Summary: 45 tests, 0 errors, 0 failures, 3 skipped
+Summary: 242 tests, 0 errors, 0 failures, 4 skipped
+test_exit=0
+built_at=2026-09-02T05:52:12Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T05:56:12Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T05:59:27Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T06:02:23Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-02T06:15:19Z
+arms_requested=D C
+host_uname=Darwin Mustafas-MacBook-Pro-2.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:34 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6041 arm64
+host_uptime= 1:15  up 9 days,  6:52, 1 user, load averages: 4.49 7.98 22.68
+compose_project_name=cite-digital-twin-3748020299
+ros_domain_id=99
+compose_project_source=derived from this checkout
+domain_note=the plant's domain as scripts/_lib.sh derives it on the HOST; each block also records the ROS_DOMAIN_ID seen inside the container
+git_head=e559264120d652be9491c6b8ac9b913d99969df5
+criteria_sha256=17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73
+# ---- ./scripts/doctor ----
+Summary
+  25 passed, 0 failed, 1 skipped
+doctor_exit=0
+# ---- ./scripts/build ----
+Summary: 23 packages finished [4.36s]
+build_exit=0
+# ---- ./scripts/test ----
+9: [fake_counterpart-2]     raise RuntimeError("the far side's execute callback raised")
+9: [fake_counterpart-2] RuntimeError: the far side's execute callback raised
+ 9/12 Test  #9: test_test_twin_boundary_paired_launch.py ...   Passed    3.37 sec
+10/12 Test #10: copyright ..................................   Passed    0.22 sec
+11/12 Test #11: lint_cmake .................................   Passed    0.07 sec
+12/12 Test #12: xmllint ....................................   Passed    0.07 sec
+100% tests passed, 0 tests failed out of 12
+Label Time Summary:
+Summary: 11 packages finished [2min 17s]
+Summary: 225 tests, 0 errors, 0 failures, 0 skipped
+Summary: 27 tests, 0 errors, 0 failures, 0 skipped
+Summary: 70 tests, 0 errors, 0 failures, 0 skipped
+Summary: 5 tests, 0 errors, 0 failures, 0 skipped
+Summary: 36 tests, 0 errors, 0 failures, 1 skipped
+Summary: 261 tests, 0 errors, 0 failures, 22 skipped
+Summary: 30 tests, 0 errors, 0 failures, 0 skipped
+Summary: 47 tests, 0 errors, 0 failures, 5 skipped
+Summary: 262 tests, 0 errors, 0 failures, 21 skipped
+Summary: 45 tests, 0 errors, 0 failures, 3 skipped
+Summary: 242 tests, 0 errors, 0 failures, 4 skipped
+test_exit=0
+built_at=2026-09-02T06:19:21Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T06:25:57Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T06:32:09Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+built_at=2026-09-02T06:41:45Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-02T06:48:34Z
+arms_requested=A_REFINE
+host_uname=Darwin Mustafas-MacBook-Pro-2.local 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:28:34 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6041 arm64
+host_uptime= 1:48  up 9 days,  7:25, 1 user, load averages: 4.55 7.08 9.34
+compose_project_name=cite-digital-twin-3748020299
+ros_domain_id=99
+compose_project_source=derived from this checkout
+domain_note=the plant's domain as scripts/_lib.sh derives it on the HOST; each block also records the ROS_DOMAIN_ID seen inside the container
+git_head=e559264120d652be9491c6b8ac9b913d99969df5
+criteria_sha256=17ee48480fd2c8b9a145c05ab2f556815c106f9e355d22b528ec3ed52ae4db73
+# ---- ./scripts/doctor ----
+Summary
+  25 passed, 0 failed, 1 skipped
+doctor_exit=0
+# ---- ./scripts/build ----
+Summary: 23 packages finished [4.06s]
+build_exit=0
+# ---- ./scripts/test ----
+9: [fake_counterpart-2]     raise RuntimeError("the far side's execute callback raised")
+9: [fake_counterpart-2] RuntimeError: the far side's execute callback raised
+ 9/12 Test  #9: test_test_twin_boundary_paired_launch.py ...   Passed    2.96 sec
+10/12 Test #10: copyright ..................................   Passed    0.22 sec
+11/12 Test #11: lint_cmake .................................   Passed    0.07 sec
+12/12 Test #12: xmllint ....................................   Passed    0.07 sec
+100% tests passed, 0 tests failed out of 12
+Label Time Summary:
+Summary: 11 packages finished [2min 12s]
+Summary: 225 tests, 0 errors, 0 failures, 0 skipped
+Summary: 27 tests, 0 errors, 0 failures, 0 skipped
+Summary: 70 tests, 0 errors, 0 failures, 0 skipped
+Summary: 5 tests, 0 errors, 0 failures, 0 skipped
+Summary: 36 tests, 0 errors, 0 failures, 1 skipped
+Summary: 261 tests, 0 errors, 0 failures, 22 skipped
+Summary: 30 tests, 0 errors, 0 failures, 0 skipped
+Summary: 47 tests, 0 errors, 0 failures, 5 skipped
+Summary: 262 tests, 0 errors, 0 failures, 21 skipped
+Summary: 45 tests, 0 errors, 0 failures, 3 skipped
+Summary: 242 tests, 0 errors, 0 failures, 4 skipped
+test_exit=0
+built_at=2026-09-02T06:52:28Z
+worktree_commit=4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1
+worktree_commit_short=4ef2d7c
+gripper_cpp_sha256=b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749
+gripper_hpp_sha256=c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14
+front_end_sha256=32ef1fbe08c0f4cc64b42b310d7b4b2adac7484a9b741ed08b2bcbb051e9760b
+binary_sha256=0f21e8efdab6ca4e614cb982146bee59bf69152a587e131c65575412261c4367
+compiler=c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
