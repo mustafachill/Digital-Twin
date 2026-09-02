@@ -66,11 +66,24 @@ record_environment() {
         echo "host_uname=$(uname -a)"
         echo "host_uptime=$(uptime)"
         # Both are derived per checkout by `scripts/_lib.sh`, so they are read through it
-        # rather than restated here (P1).
-        echo "compose_project_name=$( (cd "$ROOT" && . scripts/_lib.sh >/dev/null 2>&1; \
-            echo "${COMPOSE_PROJECT_NAME:-<unset>}") )"
-        echo "ros_domain_id=$( (cd "$ROOT" && . scripts/_lib.sh >/dev/null 2>&1; \
-            echo "${ROS_DOMAIN_ID:-<unset>}") )"
+        # rather than restated here (P1) -- and read UNDER BASH, by absolute path.
+        # `_lib.sh` computes `REPO_ROOT` from `${BASH_SOURCE[0]}`, which no other shell
+        # sets; sourcing it from the campaign shell derived a project name and a domain
+        # that were BOTH WRONG and looked exactly as plausible as the right ones. Recording
+        # an isolation value read from the wrong place is the failure this campaign spends
+        # a validity rule on, so it is not going in its own provenance file.
+        eval "$(bash -c '. "$1/scripts/_lib.sh" >/dev/null 2>&1
+            # %q, not %s: `CITE_PROJECT_SOURCE` is a SENTENCE ("derived from this
+            # checkout"), and an unquoted assignment of it through `eval` sets the first
+            # word and then tries to RUN the second.
+            printf "CITE_CPN=%q\nCITE_RDI=%q\nCITE_SRC=%q\n" \
+                "${COMPOSE_PROJECT_NAME:-<unset>}" "${ROS_DOMAIN_ID:-<unset>}" \
+                "${CITE_PROJECT_SOURCE:-<unset>}"' _ "$ROOT")"
+        echo "compose_project_name=${CITE_CPN}"
+        echo "ros_domain_id=${CITE_RDI}"
+        echo "compose_project_source=${CITE_SRC}"
+        echo "domain_note=the plant's domain as scripts/_lib.sh derives it on the HOST; \
+each block also records the ROS_DOMAIN_ID seen inside the container"
         echo "git_head=$(git -C "$ROOT" rev-parse HEAD)"
         echo "criteria_sha256=$(shasum -a 256 "$RAW/../criteria.md" | cut -d' ' -f1)"
     } >> "$out"
