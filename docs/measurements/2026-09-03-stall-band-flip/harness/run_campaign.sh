@@ -186,6 +186,60 @@ refine() {
         "bash ${IN_CONTAINER}/run_block.sh ${label} --low-mm ${low} --high-mm ${high}"
 }
 
+# `criteria.md` section 6's REGISTERED ORDER, enforced rather than emergent. The order is
+# not a convenience: LO-C and HI-C must complete before any refinement, because a
+# refinement's interval is LOCATED by them; INV depends on knowing which stops straddle;
+# CTL runs last so that a failure in it cannot consume the campaign's time budget.
+#
+# It used to be enforced only INDIRECTLY -- `refine` refuses a coarse pair that is not
+# adjacent on the arm's own grid, and INV refuses a wrong stop count, so an operator who
+# had not read the coarse table could not supply the arguments. That is a real constraint
+# and it is why nothing was ever mis-ordered, but it is emergent: it holds because of what
+# the refinements happen to require, not because this script checks. A requested list is
+# now required to be a SUBSEQUENCE of the registered order.
+#
+# THE ORDER IS READ FROM `common.BLOCK_ORDER` AND NOT RESTATED HERE (P1). `common.py`
+# imports nothing but the standard library at module level, so this works on the host,
+# where this script runs.
+ORDER="$(PYTHONPATH="$HERE" python3 -c \
+    'import common; print(" ".join(common.BLOCK_ORDER))' 2>/dev/null)"
+if [ -z "$ORDER" ]; then
+    echo "ABORT: could not read criteria.md section 6's block order from common.py." >&2
+    echo "       The order is registered there and is not restated in this script." >&2
+    exit 2
+fi
+
+enforce_order() {
+    local remaining=" ${ORDER} " block
+    for block in "${BLOCKS[@]}"; do
+        case " ${ORDER} " in
+            *" ${block} "*) ;;
+            *)
+                echo "ABORT: unknown block '${block}'. criteria.md section 6 registers" >&2
+                echo "       ${ORDER}" >&2
+                exit 2 ;;
+        esac
+    done
+    for block in "${BLOCKS[@]}"; do
+        case "$remaining" in
+            *" ${block} "*) remaining=" ${remaining#*" ${block} "}" ;;
+            *)
+                echo "" >&2
+                echo "ABORT: '${BLOCKS[*]}' is not in criteria.md section 6's" >&2
+                echo "       registered order, which is:" >&2
+                echo "           ${ORDER}" >&2
+                echo "       '${block}' appears after a block that follows it there," >&2
+                echo "       or twice. The order is REGISTERED and is not a" >&2
+                echo "       convenience: a refinement's interval is LOCATED by the" >&2
+                echo "       coarse stage, INV depends on knowing which stops straddle," >&2
+                echo "       and CTL runs last so a failure in it cannot consume the" >&2
+                echo "       campaign's time budget. Re-run with the blocks in order." >&2
+                exit 2 ;;
+        esac
+    done
+}
+
+enforce_order
 build_once
 record_environment
 

@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import common
@@ -211,6 +212,22 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "guard is inherited verbatim from a frozen ancestor and is PROTECTIVE rather than "
         "a datum -- nothing in section 7 reads it -- so it is recorded here and not "
         "changed."
+    ),
+    (
+        "14",
+        "**`common.wilson` exists and nothing calls it.** V8 registers that every count is "
+        "reported over the trials that actually ran, `with a Wilson 95 % interval WHERE IT "
+        "IS A PROPORTION` -- and no figure this campaign decides on is a proportion. LO1, "
+        "HI1 and flip_S_lo are set memberships (a stop's verdict, a bracket's two "
+        "endpoints), INV1 is an identity over eight points, FLOOR1 is a distance, and CTL "
+        "carries no verdict at all. The counts that DO appear -- trials excluded by V4, V5 "
+        "and V14 -- are reported as counts with their denominators beside them, and "
+        "dressing a procedural exclusion as a proportion with a confidence interval would "
+        "give it the appearance of a measured rate. Section 8 lists `A RATE OF ANYTHING` "
+        "as not measured here. The instrument is therefore KEPT AND LEFT UNCALLED rather "
+        "than deleted, so that a write-up which does report a proportion uses this one "
+        "instead of reinventing it, and V8's print states on every run that the verdicts "
+        "above carry none."
     ),
 )
 
@@ -640,18 +657,31 @@ def rule_v7(kept: dict[str, list[dict]]) -> set[int]:
     print("\n=== V7 -- the load (criteria.md section 9 and V7) ===")
     flagged = {id(row) for rows in kept.values() for row in rows if row.get("v7_flagged")}
     readings = [
-        (label, row["trial"], (row.get("i9") or {}).get("start", {}).get("load_1m"),
-         (row.get("i9") or {}).get("end", {}).get("load_1m"))
+        (label, row["trial"], (row.get("i9") or {}).get("start") or {},
+         (row.get("i9") or {}).get("end") or {})
         for label, rows in kept.items() for row in rows
     ]
-    highest = max(
-        (value for _, _, start, end in readings for value in (start, end)
-         if isinstance(value, (int, float))),
-        default=None)
+    # THE REPORTED NUMBER AND THE FLAG MUST BE ABOUT THE SAME QUANTITY. `common.v7` flags
+    # on ANY of the three load averages exceeding the threshold; this print scanned
+    # `load_1m` ALONE, so a block flagged on its five- or fifteen-minute average was
+    # reported beside a "highest reading seen" that was below the threshold -- a flag and a
+    # number that contradict each other on the same line. The scan is now over the same
+    # three keys, at both ends, and it names WHICH average and WHICH end it came from.
+    candidates = [
+        (value, f"{key} at the {end_name} of {label} trial {trial}")
+        for label, trial, start, end in readings
+        for end_name, reading in (("start", start), ("end", end))
+        for key in ("load_1m", "load_5m", "load_15m")
+        for value in [reading.get(key)]
+        if isinstance(value, (int, float)) and not math.isnan(value)
+    ]
+    highest = max(candidates, default=None)
     say("V7 -- any load reading above "
         f"{common.V7_LOAD_THRESHOLD}", bool(flagged),
-        f"{len(flagged)} of {len(readings)} kept trial(s) flagged; highest one-minute "
-        f"reading seen {highest}. NO BLOCK IS DISCARDED FOR LOAD -- a load threshold "
+        f"{len(flagged)} of {len(readings)} kept trial(s) flagged; highest reading seen "
+        f"across ALL THREE load averages at both ends "
+        + ("none" if highest is None else f"{highest[0]} ({highest[1]})")
+        + ". NO BLOCK IS DISCARDED FOR LOAD -- a load threshold "
         f"chosen after seeing the data is a threshold chosen by the data. Every bracket a "
         f"flagged trial contributes to is reported with and without it below.")
     return flagged

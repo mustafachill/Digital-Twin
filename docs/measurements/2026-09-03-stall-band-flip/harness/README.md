@@ -167,6 +167,26 @@ evaluated anywhere. It is now computed over `w_reached`, per block, against that
 grid step, and printed either way — see deviation 6 for which of §10's two readings of *"the
 difference between adjacent stops"* was taken.
 
+**Three instrument inconsistencies were closed rather than recorded**, because each was
+two things naming one quantity differently — the shape that stops being harmless the moment
+either side moves:
+
+- **V4 read I2's `reports[-1]` while V14 and `measure.py` read `reports[0]`.** The same line
+  today, because `execute_grasp` issues exactly one `command_gripper` and `LogCursor`
+  brackets one action's segment — so nothing changes. All four sites now name the first
+  line, which is the one the decision quantities `stalled` and `reached_goal` come from.
+- **V7's reported "highest reading" scanned `load_1m` alone while `common.v7` flags on all
+  three load averages.** A block flagged on its five- or fifteen-minute average was printed
+  beside a highest-reading figure below the threshold — a flag and a number contradicting
+  each other on one line. The scan now covers the same three keys at both ends and names
+  which average and which end it came from.
+- **`run_campaign.sh` iterated `"$@"` as given and did not enforce §6's registered order.**
+  It held in practice — `refine` refuses a coarse pair that is not adjacent on the arm's own
+  grid, and INV refuses a wrong stop count, so an operator who had not read the coarse table
+  could not supply the arguments — but it held *emergently*. A requested list must now be a
+  subsequence of `common.BLOCK_ORDER`, which is read from `common.py` rather than restated
+  in the script (P1).
+
 **Five rules were printed and not applied, and printing is not applying.** Rule R's verdict
 was computed, printed and then discarded at the call site, so an endpoint it had just
 declared INDETERMINATE still yielded BRACKETED; V12 gated nothing it names; V6 did not exist;
@@ -309,6 +329,12 @@ before the data exists and the *criteria* never after. Every one is a numbered d
   own copy. It is left as it is on purpose: the script's copy is what **produces** the
   provenance and `common.py`'s is what **checks** it, so the two agreeing is the check, and
   collapsing them would remove the comparison.
+- **`common.wilson` exists and nothing calls it** (deviation 14). No figure this campaign
+  decides on is a proportion — the verdicts are set memberships, an identity and a distance
+  — and the exclusion counts are reported with their denominators rather than as rates,
+  because §8 lists *"a rate of anything"* as not measured here. The instrument is kept
+  uncalled so that a write-up which does report a proportion uses it rather than
+  reinventing one.
 - **The quiesce is per cycle and per block, not per trial** (deviation 5). §6 reads
   *"quiesce 30 s between a teardown and the next launch"* and *"each is one launch"*, which
   is 104 quiesces; the rig performs **19**. No decision quantity moves — there is no

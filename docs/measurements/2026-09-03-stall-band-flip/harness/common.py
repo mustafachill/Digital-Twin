@@ -892,7 +892,15 @@ def v4(i1_reached_m: float | None, i3_reached_m: float | None,
     delta = i1_reached_m - i3_reached_m
     result["v4_delta_m"] = delta
     result["v4_within_tolerance"] = abs(delta) <= V4_TOLERANCE_M
-    coarse = reports[-1]["reached_mm"] if reports else None
+    # `reports[0]`, NOT `reports[-1]`. V14 reads `reports[0]`, and so does `measure.py`
+    # when it lifts `stalled` and `reached_goal` onto the record -- so the DECISION
+    # quantities all name I2's first line for this grasp. V4 named the last one. The two
+    # are the same line today, because `execute_grasp` issues exactly one
+    # `command_gripper` (`skill_server.cpp`) and `LogCursor` brackets one action's segment,
+    # so nothing changes here. Two rules indexing the same event differently is how they
+    # stop naming the same event: if a second line ever appeared, V4 would have validated
+    # the width against a line the verdict did not come from.
+    coarse = reports[0]["reached_mm"] if reports else None
     result["v4_i2_reached_mm"] = coarse
     if coarse is None:
         result["v4_rounds_to_i2"] = None
