@@ -1,0 +1,6 @@
+== block INV (log tag INV) ==
+ 22:28:02 up 1 day,  5:21,  0 user,  load average: 0.29, 0.54, 0.46
+16
+               total        used        free      shared  buff/cache   available
+Mem:           31831        4691       14830         301       13061       27140
+overlay         457G   35G  399G   8% /
