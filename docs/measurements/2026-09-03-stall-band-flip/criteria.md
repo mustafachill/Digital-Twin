@@ -15,6 +15,44 @@ suited.
 > **No threshold, instrument, arm, sample size or validity rule was touched**, and §9 itself
 > records why no figure this campaign will produce depends on the version either way.
 
+> **Amended a second time on 2026-09-03, before the first trial ran, before the harness exists,
+> and again recorded rather than smoothed over.** A pre-freeze review re-derived every number in
+> §2.2 and §7.0 independently and found them reproducing; what it found holed was the **rules
+> layer**, in four places that would each have cost this campaign a question it exists to
+> answer, and in the smaller ones listed after them. **Rule B** was defined on `holding_F` and
+> spent on `holding_S`, over a grid where `holding_F` is false at every stop, so `flip_S_lo`
+> could never have been BRACKETED under V9; rule B, rule U and rule R are now generic in the
+> predicate under refinement.
+> **P6** registered a prediction the 2026-09-01 campaign has already refuted with a mechanism,
+> and now registers the outcome that campaign established instead. **CTL's stated role** was a
+> comparison it cannot make, because it changes the stop and the plugin at once, and is restated
+> as the controlled comparison it is. **Rule W** was re-imported onto a rig with no part and no
+> contact witness, where the population it quantifies over is empty, and is recorded **NOT
+> APPLICABLE** rather than registered as expected to stay silent.
+> **The smaller ones, in the order they appear in this file:** the byte-identity set omitted
+> `gripper.hpp`; **I4** was defined and then spent by nothing, and now carries the new **V14**,
+> which is what separates an unread log line from a measured `false`; arm LO's lowest coarse stop
+> terminates on the controller's goal-tolerance branch and is now registered as a fact rather
+> than left to be explained afterwards as a deviation; nothing forbade **extending the stop grid**
+> once rule N had fired, and one sentence now does; §5.2's accounts of **`PickAt`** and of what
+> **INV** measures were both inaccurate against source; **I7** did not say what it measures
+> against, nor that its tolerance depends on the harness serialising a stop position unrounded;
+> and **FLOOR1** differenced against a cited figure that rule H does not admit, and now
+> differences against the one §2.2 computes.
+> **Two line citations were re-checked in the tree rather than taken on either side's word**,
+> and they went opposite ways:
+> the I2 log line is at `skill_server.cpp:2247-2253`, not `:2245-2253` as this file had it —
+> 2245 and 2246 are the end of the preceding `if` and a blank line — and is corrected;
+> `gripper.cpp:142-161` is **right** as written, the signature at 142 and the closing brace at
+> 161, and is left alone. **No threshold, tolerance, bracket step, arm, sample size or minimum
+> interesting size was touched:** the 0.100 mm MIS, the 0.05 mm bracket, the two 0.005 mm
+> tolerances and V7's 4.0 all stand exactly as first registered. Permitted for the same reason
+> as the amendment above — [`../README.md`](../README.md) rule 1 freezes `criteria.md` **once
+> the first trial has run**, and at the time of this amendment no trial had run, no harness
+> existed and `raw/` did not exist. **After the first trial each of these would have become
+> a permanent, deliberately honoured mistake**, because the README requires a wrong rule to be
+> applied literally and recorded as wrong rather than corrected.
+
 - **Date opened:** 2026-09-03
 - **Branch under measurement:** `feat/close-phase-debts`
 - **BASE_COMMIT:** **`c38a42c`**. Every figure below is a property of the tree at that commit.
@@ -29,6 +67,17 @@ suited.
   **empty**, read on 2026-09-03, and `git merge-base --is-ancestor d3eeac4 HEAD` succeeds.
   **This campaign therefore measures merged code, not a branch**, which is the one condition
   the earlier campaign had to carry and this one does not.
+  **`gripper.hpp` is the one file of the predicate's own translation unit that is NOT in that
+  set, and it is named here rather than left out of it.** `git diff --numstat d3eeac4..HEAD --
+  workspace/src/cite_skills/include/cite_skills/gripper.hpp` reads **21 insertions and 2
+  deletions**, read on 2026-09-03, and **all 23 lines are `///` documentation comments**: the
+  same diff filtered to lines that are neither `///` nor blank is **empty**. So the three
+  function declarations, and the `GripperTravel`, `GripperReport` and `WorkpieceWidths` fields
+  the predicate reads, are unchanged. What changed is the free-air paragraph the 2026-09-02
+  campaign's own measurement corrected; the block §0 quotes is **not** in the hunk and only
+  moved, from `gripper.hpp:356` at `d3eeac4` to `:375` at `HEAD`, which is exactly the +19 lines
+  the diff adds above it. **The compiled predicate is unchanged and its prose is not**, and this
+  campaign measures the former.
 - **The record that asks for it:**
   [ADR-0052](../../adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md) **§A.10 item 2,
   second bullet** — *"the false-positive side — the stop sweep re-run, which stops F admits,
@@ -201,7 +250,7 @@ it is.**
 | `w_cmd` | `Grasp.Goal.width_m`, the width commanded | mm |
 | `w_reached` | `gripper_width_for(reached_position)`, the width the predicate consumes, read as `Grasp.Result.reached_width_m` | mm |
 | `holding_F` | the **shipped** predicate's verdict, read from the running node | — |
-| `holding_S` | the **superseded** command-referenced predicate's verdict on the same inputs, from a build of `4ef2d7c` (§4.3) | — |
+| `holding_S` | the **superseded** command-referenced predicate's verdict on the same inputs, from a build of `4ef2d7c` (§4.3). **Its inputs are named here rather than left to the harness:** the reached position is **I1**'s `reached_width_m` carried back through the shipped `gripper_position_for`, which is `gripper_width_for`'s exact inverse on this branch and is the conversion §3 already restricts the harness to; `stalled` and `reached_goal` are **I2**'s; the command is this trial's `w_cmd`. **I4** is what checks all three (V14). So `holding_F` and `holding_S` are evaluated on **one event**, never on two | — |
 | `flip_F_lo` / `flip_F_hi` | the half-open interval of `w_stop` containing F's verdict change at each edge | mm |
 | `flip_S_lo` | the same for `holding_S` at the narrow side — this campaign's own re-derivation of §A.6's floor | mm |
 
@@ -245,7 +294,7 @@ this file names a **rule** and nothing else.
 |---|---|---|---|
 | **LO** | where F's verdict flips at the **narrow** edge, and where the superseded predicate's flips | 46.00 → 48.00 mm | closing |
 | **HI** | where F's verdict flips at the **wide** edge | 52.00 → 54.00 mm | closing |
-| **CTL** | does the **stop** produce the stall, or does the plugin? | none — no stop at all | closing |
+| **CTL** | the controlled comparison — same command, same controller, **only the hardware plugin differing** — whose quantity is **where the joint comes to rest** | none — no stop at all | closing |
 
 > **Rule T — inherited verbatim from the 2026-09-02 campaign's §3.** The arms are not each
 > other's evidence. A clean result in one says nothing about any other, **every verdict is
@@ -270,9 +319,9 @@ compiled front end.
 | # | Quantity | Instrument |
 |---|---|---|
 | **I1** | the verdict and the width the predicate consumed | `Grasp.Result` — `holding`, `reached_width_m`, `measured_effort_n`, `result`. Driven with `expect_object=false`, so the fields are reported rather than converted into an `EXECUTION_FAILED` (`skill_server.cpp:994-1001`). **I1 is the decision quantity.** |
-| **I2** | `stalled` and `reached_goal`, which no result message carries | the skill server's own line, `gripper: commanded %.1f mm, reached %.1f mm, stalled=%s, reached_goal=%s, effort=%.1f -> holding\|empty` (`skill_server.cpp:2245-2253`), scraped from the block log. **The two booleans are exact; the two widths there are `%.1f` and are two grid steps coarse**, so they are used for nothing but V4's second clause. |
+| **I2** | `stalled` and `reached_goal`, which no result message carries | the skill server's own line, `gripper: commanded %.1f mm, reached %.1f mm, stalled=%s, reached_goal=%s, effort=%.1f -> holding\|empty` (`skill_server.cpp:2247-2253`), scraped from the block log. **The two booleans are exact; the two widths there are `%.1f` and are two grid steps coarse**, so they are used for nothing but V4's second clause. |
 | **I3** | `w_reached` independently of the skill server | the last `arm_1_drive_joint` sample on `/joint_states` at or before the result arrives, mapped through the shipped closed form. The cross-check V4 is the rule over, never a reported decision quantity. |
-| **I4** | the controller's own typed answer at full precision | a second `GripperCommand` goal against a joint already resting on the stop, recorded as **a second event** and not as a repeat: it is the only full-precision source of `stalled`, `reached_goal` and `position`. |
+| **I4** | the controller's own typed answer at full precision | a second `GripperCommand` goal against a joint already resting on the stop, recorded as **a second event** and not as a repeat: it is the only full-precision source of `stalled`, `reached_goal` and `position`. **Spent by V14**, which is the rule that makes an unread I2 line distinguishable from a measured `false`; an earlier draft of this file defined I4 and then spent it on nothing. |
 
 ### 4.2 The rig
 
@@ -369,6 +418,37 @@ stops per refinement. Three refinements are registered:
 the window's comparisons never has to be exercised at a measured point. Registered because a
 grid point exactly on a strict edge would produce a verdict that is correct and unreportable.
 
+**The two coarse spans and the 0.05 mm refinement are the whole of the sweep. No stop outside
+them is run, whatever the coarse grid shows.** Not to chase a second verdict change that rule U
+refuses to refine, not to reach a flip rule N reports as unfound, and not to extend a span whose
+endpoint carried the verdict its other endpoint was expected to carry. **Nothing else in this
+file forbids it**, and that gap is closed here rather than discovered afterwards: rule D forbids
+extending a grid only to dissolve a **disagreement**, and V8 forbids topping up n at a stop that
+already exists, not adding a stop that does not. **A sweep whose extent is decided by its own
+early readings is a sweep whose extent was chosen by the data** — the objection this section
+already makes to a step chosen after the fact, applied to the interval instead.
+
+**Arm LO's lowest coarse stop terminates on a different controller branch, and it is registered
+as a fact before any trial rather than left to `ANALYSIS.md` to explain as a deviation.** At
+`w_stop = 46.00 mm` the drive joint rests **0.009389 rad** from the position a 45.000 mm command
+asks for, against `GripperActionController`'s `goal_tolerance` of **0.01 rad**
+(`model/assets/types/end_effectors/xarm_parallel_gripper.yaml:459`), so the controller
+terminates on its **goal-tolerance** branch: `reached_goal = true`, `stalled = false`, and **no
+stall at all**. Computed here on 2026-09-03 from the shipped linkage; the boundary is
+**46.064989 mm**, and **46.00 mm is the only stop in either grid inside it** — 46.25 mm is
+already 0.011740 rad out. Three consequences, all registered now:
+
+- **The verdict is unaffected and rule U is safe.** `holding_F` is false there twice over, by
+  the first condition and by the window alike, and `holding_S` is false too; arm LO's coarse
+  grid still shows exactly one change of each predicate.
+- **The trial is valid data, not a fixture failure.** The stop still engages and the joint still
+  rests on it, so I5, I6 and I7 are satisfied and V5 passes. What differs is the branch the
+  controller ends on, not the rig.
+- **It is the controller branch ADR-0052 §A.8 names**, reached here because the **stop** is close
+  to the **command** rather than because the command is close to the part — so it is not the
+  state `resolve_grasp_width` refuses, and the `Grasp` door applies no such refusal in any case
+  (§2).
+
 Held fixed unless named:
 
 | Quantity | Value | Where it comes from |
@@ -388,8 +468,17 @@ Held fixed unless named:
 `gripper_default_grasp_width_m` in the generated plan, and the width `cite_skills::
 resolve_grasp_width` returns when a caller supplies none. Four reasons, registered:
 
-1. **It is the production command.** It is what `Pick` uses when `Pick.Goal.grasp_width_m` is
-   unset, which is L4's `PickAt` port default.
+1. **It is the production command — though not by the route this file first gave, and the
+   correction is to the justification and not to the value.** L4's `PickAt` **always sends the
+   width explicitly**: the port is declared with a default and read with
+   `getInput<double>("grasp_width_m").value_or(0.045)`
+   (`cite_orchestration/include/cite_orchestration/skill_nodes.hpp:591` and `:656`), so
+   `Pick.Goal.grasp_width_m` is never zero on the shipped tree and `resolve_grasp_width` takes
+   its **`Goal`** branch and never its `Default` branch (`gripper.cpp:107-116`). **The commanded
+   value is 45.000 mm either way**, because the port's default and L0's `default_grasp_width_m`
+   are the same number — a duplication the port's own comment names as one. So the number this
+   campaign commands is the production number; what was wrong was the sentence saying `Pick`
+   reaches it by leaving the goal unset.
 2. **It is the command the floor was measured at.** §A.6's 47.1215 mm is the 2026-09-01
    campaign's flip at this command, and §2.2's closed form reproduces it at this command.
    Comparing F's flip against it at any other command would be comparing two different
@@ -414,13 +503,43 @@ claim a campaign should not take on trust**, so it is measured:
 > refusal in any case (§2). **The verdicts must agree point for point.** Rule C in §7.5 is what
 > spends this.
 
-### 5.3 CTL — the control that says the stop is what stalls the joint
+> **What INV can and cannot separate, stated literally before it runs, because §5.2 said it
+> "is measured" and it is not.** INV evaluates **four fixed stops at two commands** and nothing
+> else. It is a test of **those eight points**, not of the predicate's functional form, and in
+> particular **it cannot separate F from a command-referenced predicate here.** Computed on
+> 2026-09-03 from the shipped linkage: the superseded predicate returns **true at all eight** —
+> its margin `w_reached − w_cmd` runs from **2.600 mm** at the narrowest of the four stops to
+> **12.400 mm** at the widest, against a `2 * gripper_width_tolerance_m` of **2.09 to
+> 2.12 mm** — so a predicate reading the command exactly as `holding_S` does would pass INV
+> unchanged. **INV HELD is therefore evidence that these four verdicts do not move under this
+> command change, and is not evidence that the predicate ignores the command.** That claim is
+> read from source (§2) and stays read from source; INV bounds how wrong the reading could be at
+> four points, which is worth more than nothing and less than a demonstration.
+
+### 5.3 CTL — the controlled comparison, and what it cannot separate
 
 The same rig with the gripper's `<ros2_control>` block on plain
 `mock_components/GenericSystem` and **no stop at all**, commanded to the same 45.000 mm on empty
-jaws. This is the 2026-09-01 campaign's FP-C control in shape, and its role is the same: to
-establish that the **stop** is what produces the stall this campaign sweeps, and not the
-hardware plugin underneath it.
+jaws. This is the 2026-09-01 campaign's FP-C control in shape.
+
+**Its role is restated here, because the role an earlier draft of this file gave it is one it
+cannot fill, and the answer to that question is already published and is the opposite.** CTL
+changes **two** things at once — it removes the stop **and** swaps `JointStopSystem` for
+`mock_components/GenericSystem` — so it cannot separate *"the stop produces the stall"* from
+*"the plugin does"*. And it does not need to: the 2026-09-01 campaign established, with the
+mechanism in its own log, that **plain `GenericSystem` does fabricate a stall**, so *"does the
+plugin stall?"* has a published answer and the answer is **yes**.
+
+**What CTL is, and all it is:** the controlled comparison — the same command, the same
+controller, the same timeline, **only the hardware plugin differing** — whose quantity is
+**where the joint comes to rest**. That is what actually distinguishes the two rigs. Under
+`JointStopSystem` the joint rests on the stop this campaign declared, because that plugin clamps
+the commanded position and differentiates the clamped result; under `GenericSystem` it rests
+wherever the rate-limited ramp had reached when the stall detector fired, which is a property of
+the plugin's dead velocity channel and not of anything this campaign sweeps. **CTL is what shows
+the rest position is the fixture's and not the controller's** — the one property every stop in
+arms LO and HI depends on. **No second control arm is added to separate the two changes**; that
+would be a design change, and this campaign is already 105 trials.
 
 > **CTL is reported and carries no verdict of its own, and this is registered rather than
 > decided later.** [`docs/open-work.md`](../../open-work.md) **#25** records that a gripper
@@ -504,6 +623,19 @@ never from campaign data.
 > inherited threshold rather than reusing it is registered before any trial and is the only
 > change this campaign makes to a rule it inherits.
 
+> **What I7 measures against, and the serialisation that has to hold for the tolerance above to
+> be achievable at all.** I7's reference is **`gripper_width_for(stop_upper_rad)` on the drive
+> position the fixture actually declared**, and not on the nominal `w_stop`: the check is on
+> where the joint came to rest, not on the conversion that placed the stop. The two agree
+> exactly only if that position survives the launch substitution unrounded. **The inherited
+> fixture writes it with `repr()`** (`cite_bringup/test/test_grasp_predicate_launch.py:277-278`),
+> which round-trips a Python float exactly, so a 0.005 mm tolerance is reachable. **A harness
+> that wrote `%.3f` radians instead would quantise every stop by up to 0.0005 rad — 0.053 mm of
+> width at `edge_lo`, ten times the tolerance — and V5 would then reject every trial in the
+> campaign for a defect in the harness's own output format, not in the rig.** Registered here so
+> that a total V5 rejection is diagnosed rather than absorbed, and so that §10's shakedown run
+> has a stated thing to check.
+
 ### 7.1 LO1 and HI1 — where F's verdict flips
 
 Report, per stop: `n`, `w_stop`, `w_cmd`, `w_reached` (I1, all repeats at full precision),
@@ -511,16 +643,44 @@ Report, per stop: `n`, `w_stop`, `w_cmd`, `w_reached` (I1, all repeats at full p
 block index. **The gate's own phrasing — "which stops F admits" — is answered by that table in
 full**, at both grids, and not only by the bracket.
 
-> **Rule B — what "bracketed" means, and it is the campaign's decision rule.** An edge is
-> **BRACKETED** when **two adjacent fine-grid stops, 0.05 mm apart, carry opposite `holding_F`
-> verdicts**, and:
+> **Rule B — what "bracketed" means, and it is the campaign's decision rule. It is generic in
+> the predicate under refinement**, which is **`holding_F` for blocks LO-F and HI-F** and
+> **`holding_S` for block LO-S**. An edge is **BRACKETED** when **two adjacent fine-grid stops,
+> 0.05 mm apart, carry opposite verdicts of that predicate**, and:
 > - every repeat at each of those two stops agrees with its stop's verdict, and
-> - both stops pass V3, V4, V5 and V7, and
-> - the coarse grid showed exactly one verdict change in that arm (rule U).
+> - both stops pass V3, V4, V5, V7 and V14, and
+> - the coarse grid showed exactly one change **of that same predicate** in that arm (rule U).
 >
 > The result is reported as a **half-open interval** of `w_stop` whose width is **0.05 mm**,
 > together with every repeat behind both endpoints. **A bracket narrower than 0.05 mm is not
 > claimed**, because the grid cannot produce one.
+
+> **Rule B was drafted on `holding_F` alone and spent on `holding_S` in four places, and the
+> correction is recorded rather than smoothed over.** Block LO-S refines the coarse interval
+> containing the **superseded** predicate's change, which on §2.2's closed form is
+> **(47.00, 47.25] mm**, and **`holding_F` is false at all six stops of it** because the whole
+> interval lies below `edge_lo = 47.6150 mm`. **The defect does not depend on that prediction
+> being right:** `holding_F` changes exactly once across arm LO's whole coarse span, between
+> 47.50 and 47.75 mm, so **every one of arm LO's eight coarse intervals except that one gives a
+> fine grid on which `holding_F` is constant** — and the one that does not is LO-F's own. A rule
+> keyed on opposite `holding_F` verdicts could therefore bracket `flip_S_lo` only in the single
+> case where both flips share a coarse interval, which §2.2 predicts they do not. **Applied
+> literally as V9 requires, the rule as drafted could never have bracketed `flip_S_lo`**: P3
+> would have been refuted for a reason that is not about the data, and the campaign would have
+> lost the rig-internal floor that keeps FLOOR1 clear of rule H.
+
+> **What rule B's conjuncts are actually worth, checked rather than assumed, and three of them
+> carried as limitations.** **V3 cannot bind**: on a rig with no simulator it records a
+> structural fact per trial and discards nothing, so every stop passes it. It is kept in the
+> conjunction as a statement of what a stop must have on its record, not as a filter. **"Pass
+> V7" was not a defined predicate**, because V7 discards nothing either; it is defined here as
+> **either no reading of that stop's block exceeded 4.0, or the bracket it contributes to is
+> identical with and without the flagged trials** — which is the condition V7 already states,
+> named so that this clause has a truth value. **V6 is deliberately not in the conjunction**:
+> it fires on a between-block difference exceeding the 0.05 mm between adjacent stops, while
+> rule R below fires on a within-stop spread above 0.005 mm, so **rule R binds ten times
+> tighter** and V6 cannot be the rule that decides a stop. **V14 is in the conjunction** because
+> a stop whose booleans were never read is not a stop with a verdict.
 
 > **LO1 — BRACKETED / NOT BRACKETED**, by rule B, over arm LO's fine grid.
 > **HI1 — BRACKETED / NOT BRACKETED**, by rule B, over arm HI's fine grid.
@@ -535,13 +695,17 @@ full**, at both grids, and not only by the bracket.
 > declaration says. §A.10 item 2's second bullet is then **still unmet**, and the write-up must
 > say so in those words.
 
-> **Rule U — one flip, or none claimed.** If an arm's coarse grid shows **more than one**
-> verdict change, every change is reported, **no refinement is run on any of them**, and that
-> edge is **NOT BRACKETED** under rule N. A window with two flips on one side is a finding about
-> the predicate or the rig, not a choice of which flip to refine.
+> **Rule U — one flip, or none claimed, and it is generic in the same predicate rule B is.** If
+> an arm's coarse grid shows **more than one** change in the predicate under refinement —
+> `holding_F` for LO-F and HI-F, `holding_S` for LO-S — every change is reported, **no
+> refinement is run on any of them**, and that edge is **NOT BRACKETED** under rule N. A window
+> with two flips on one side is a finding about the predicate or the rig, not a choice of which
+> flip to refine.
 
 > **Rule R — resolution, inherited from the 2026-09-01 campaign's rule R via the 2026-09-02
-> campaign's rule R-A.** If the repeats at any stop disagree in `holding_F`, or if
+> campaign's rule R-A, and generic in the predicate under refinement for the same reason rule B
+> is.** If the repeats at any stop disagree in that predicate — `holding_F` in LO-F and HI-F,
+> `holding_S` in LO-S — or if
 > `w_reached` varies within a stop by more than the 0.005 mm rest tolerance, that stop is
 > **INDETERMINATE**; a bracket with an indeterminate endpoint is **UNRESOLVED at 0.05 mm** and
 > rule N applies to that edge. And for any metric whose within-stop spread exceeds that metric's
@@ -549,9 +713,14 @@ full**, at both grids, and not only by the bracket.
 
 ### 7.2 FLOOR1 — the distance from the narrow flip to the floor
 
-**Report, as the gate's own quantity:** the distance from `flip_F_lo` to the floor ADR-0052 §A.6
-derives, **as an interval** — because `flip_F_lo` is an interval — with the floor stated as the
-cited **47.1215 mm** and the arithmetic of §2.2 named beside it.
+**Report, as the gate's own quantity:** the distance from `flip_F_lo` to the floor, **as an
+interval** — because `flip_F_lo` is an interval — with the floor stated as **the value computed
+in §2.2, 47.121519 mm, which agrees with ADR-0052 §A.6's cited 47.1215 mm to the digits that
+record states**. **The differenced quantity is the computed one and never the cited one**,
+which is what keeps FLOOR1 inside rule H: §A.6's figure is a *measurement* taken by another
+campaign on another rig, and rule H admits no measured figure of another campaign into a
+difference here. It is named beside the computed value as an agreement and enters no
+arithmetic.
 
 **Report separately, and as this campaign's own datum:** `flip_S_lo`, the superseded predicate's
 narrow flip **measured on this rig at this command**, bracketed by rule B, and the distance from
@@ -591,11 +760,16 @@ Report, per straddling stop: `holding_F`, `w_reached` and `stalled`/`reached_goa
 
 ### 7.4 CTL — reported, no verdict
 
-Report: `n`, `w_cmd`, `w_reached`, `stalled`, `reached_goal`, `holding_F`, `holding_S`, and
-whether any stop warning appeared (it must not). §5.3 states what this may and may not be read
-as.
+Report: `n`, `w_cmd`, `w_reached`, `stalled`, `reached_goal`, `holding_F`, `holding_S`, the
+**rest position in radians beside P6's computed 0.300 rad**, and whether any stop warning
+appeared (it must not). §5.3 states what this may and may not be read as.
 
-### 7.5 The three refusals that carry the campaign's honesty, and the predictions
+**Because P6 now registers an outcome another campaign established, CTL confirming it is a rig
+check and not a result** — it says the fixture behaves as the published mechanism says, and
+nothing more. **CTL refuting it is a datum about the plugin** and is reported as one, without
+attribution and without any reading about open-work #25 in either direction (§5.3).
+
+### 7.5 The refusals that carry the campaign's honesty, and the predictions
 
 > **Rule G — what these two numbers are properties of, and it is the rule this campaign most
 > needs.** `flip_F_lo` and `flip_F_hi` are properties of **the shipped predicate as delivered**
@@ -616,12 +790,25 @@ as.
 > **`ANALYSIS.md` must state rule G beside every wide-edge figure it publishes**, and may not
 > use the word "validated" about either band value.
 
-> **Rule W — inherited verbatim from the 2026-09-02 campaign's §7.3, and expected not to fire.**
-> If the campaign produces no trial within 0.100 mm of the wide edge, it has not tested that
-> edge. **This rig places stops within 0.05 mm of it deliberately, so W is expected to stay
-> silent — and its silence means only what it says**, which is that a stop was placed there.
-> **It does not retire the firing of rule W in the campaign that measured a part**, and rule G
-> is what keeps the two apart.
+> **Rule W — NOT APPLICABLE on this rig, and recorded as not applicable rather than registered
+> as expected to stay silent.** The 2026-09-02 campaign's rule W quantifies over **part-produced
+> grasps**. Its companion C1 admits only trials **with witnessed finger contact**, and the
+> quantity the rule is stated against is *"the distance from the largest observed stall in the
+> whole campaign to the wide edge, over every arm that produced a genuine grasp"* — which is how
+> it fired there, at a closest approach of **2.4223 mm**. **This rig has no part, no physics and
+> no contact witness, so that population is empty here**, and a rule evaluated over an empty
+> population has no truth value.
+> **An earlier draft of this file re-imported rule W as the bare sentence "no trial within
+> 0.100 mm of the wide edge" and registered it as expected not to fire.** Against stops this
+> campaign deliberately places **0.015 mm** from `edge_hi`, that rule could not have fired under
+> any outcome, and registering it would have manufactured the sentence *"rule W did not fire in
+> this campaign"* — **exactly the over-reading of the wide edge that ADR-0052 §A.9.5 and rule G
+> above exist to prevent.** §10's opening is that a rule that only ever confirms is not a rule;
+> a rule that can only ever be silent is worse, because a silence is read as a clearance.
+> **`ANALYSIS.md` must state this in these words** — *"rule W is not applicable here: this rig
+> produces no grasp, so the population it quantifies over is empty"* — **and may not report a
+> silence.** The 2026-09-02 campaign's rule W **stands unchanged and stands fired**, and nothing
+> this campaign produces touches it (rule G).
 
 > **Rule D — the arithmetic and the measurement are allowed to disagree, and the disagreement is
 > the finding.** §2.2 predicts every bracket in this campaign before any trial. **If a measured
@@ -649,7 +836,25 @@ as.
 | **P3** | `flip_S_lo` is BRACKETED at **(47.10, 47.15] mm**, containing §2.2's closed-form 47.121519 mm, and **`flip_F_lo` lies above it**. | either bracket landing elsewhere, or `flip_F_lo` below `flip_S_lo` |
 | **P4** | `holding_S` is **true at every stop in arm HI**, because the superseded predicate has no upper edge at all. | any wide-arm trial with `holding_S` false |
 | **P5** | INV1 is HELD at all four straddling stops. | any verdict differing between the two commands |
-| **P6** | CTL reports `reached_goal = true`, `stalled = false`, `holding_F = false`, and no stop warning. | any other combination — which is a datum about the plugin and, per §5.3, not a result about open-work #25 |
+| **P6** | CTL reports **`stalled = true`, `reached_goal = false`**, a rest position of about **0.300 rad — 60.915 mm of opening** — and therefore **`holding_F = false`**, the rest lying above `edge_hi`, with **`holding_S = true`**; and no stop warning. **This is not a new prediction**: it is the 2026-09-01 campaign's established fixture property being reproduced, and §7.4 says so. | any other combination — which is a datum about the plugin and, per §5.3, not a result about open-work #25 |
+
+**P6 was registered as the exact opposite of this, and is corrected before any trial ran.** It
+predicted `reached_goal = true, stalled = false, holding_F = false` and no stall — **verbatim
+the 2026-09-01 campaign's P4**, which that campaign **refuted, with a mechanism rather than
+merely an observation**: the controller manager rate-limits the position command to
+`max_drive_rate_rad_s`, `mock_components/GenericSystem` mirrors commands into states and writes
+velocity `0.000000` because nothing claims the velocity command interface, so the stall detector
+sees a sub-threshold velocity from the first control cycle and declares a stall after
+`stall_timeout`. **A prediction whose answer is already published is not a prediction**, and
+registering one manufactures a confirmation.
+
+**The replacement's numbers are computed here from L0, not imported.** `stall_timeout` **0.3 s**
+times `max_drive_rate_rad_s` **1.0 rad/s** is **0.300 rad**, and the shipped `gripper_width_for`
+on the linkage of §2.2 puts that at **60.915 mm** — above `edge_hi = 52.3850 mm`, so outside F's
+window, and **15.9 mm above the 45.000 mm command against a `2 * gripper_width_tolerance_m` of
+2.03 mm there**, so inside the superseded predicate's half-line. **That the cited campaign
+observed the same triple is agreement and is not this campaign's data**; nothing of its is
+differenced against anything here (rule H).
 
 ---
 
@@ -851,6 +1056,25 @@ A rule that only ever confirms is not a rule.
   finds anything else is **discarded**: the L0 backend has changed and the rig is no longer
   substituting what it thinks it is.
 
+- **V14 — the log line is an instrument, and a missing one is a loss and not a `false`.**
+  `stalled` and `reached_goal` reach **every** verdict in §7 through **I2**, a scrape of a single
+  `RCLCPP_INFO` line. A line that was never emitted, never flushed, or emitted in a form the
+  scrape does not match leaves those two booleans **absent** — and absent is not `false`, though
+  in a record that stores only booleans the two are indistinguishable. **A trial with no I2 line
+  for its grasp is excluded from every bracket and reported as an instrument loss**, counted
+  separately from V4's and V5's exclusions and **never recorded as a measured `false`**. Without
+  this rule the only rule that would notice such a trial is V4, which would attribute it to a
+  **width** disagreement between two instruments that in fact agreed.
+  **I4 is what makes the loss visible, and this is the only thing this campaign spends I4 on.**
+  The controller's own typed `stalled`, `reached_goal` and `position` are recorded per trial
+  beside I2's scrape, and a trial is **likewise excluded and reported** if I4's two booleans
+  disagree with I2's, or if `gripper_width_for(I4.position)` differs from I1's `reached_width_m`
+  by more than the **0.005 mm** §7.0 already registers. At that point the campaign does not know
+  what the predicate consumed, which is V4's own reason for excluding rather than choosing.
+  **The residual is recorded rather than closed:** I4 is a **second** `GripperCommand` against a
+  joint already resting on the stop (§4.1), so it is a second event, and its agreement with the
+  first is what this rule **checks** rather than what it assumes.
+
 **One shakedown run per harness is permitted and is not data.** Before the first campaign trial,
 each harness may be run **once** to prove it starts, connects and writes a record. Its output is
 published under **`raw/shakedown/`**, is **excluded from every figure in §7**, and **may not be
@@ -869,8 +1093,11 @@ touched.**
 - **It closes one bullet of one item of one gate, at most.** §A.10 item 2's second bullet.
   Everything else in §A.10 is either already met, already another campaign's, or not a
   measurement. §8.
-- **A null is not a pass.** Rules N, U, R, W, G, D, C and T exist for exactly that, and all
-  eight were written before any trial ran. **Rule G is the one that matters most here**: this
+- **A null is not a pass.** Rules N, U, R, G, D, C and T exist for exactly that, and all seven
+  were written before any trial ran. **This campaign registers no rule W of its own** — the
+  population that rule quantifies over is empty on a rig that grasps nothing, so it is recorded
+  NOT APPLICABLE in §7.5 rather than registered as a silence that could be read as a clearance.
+  **Rule G is the one that matters most here**: this
   rig can place a stop at the wide edge precisely because it grasps nothing, and a bracket
   produced that way is a property of the predicate and **not** of any cell, part or jam. It does
   not retire the 2026-09-02 campaign's rule W and may never be written as if it had.
