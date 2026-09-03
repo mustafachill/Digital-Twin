@@ -1,0 +1,315 @@
+[INFO] [launch]: All log files can be found below /home/cite/.ros/log/2026-09-03-22-12-17-655763-66296e9b70ee-1475
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [robot_state_publisher-1]: process started with pid [1479]
+[INFO] [ros2_control_node-2]: process started with pid [1480]
+[INFO] [spawner-3]: process started with pid [1481]
+[INFO] [move_group-4]: process started with pid [1482]
+[INFO] [skill_server-5]: process started with pid [1483]
+[robot_state_publisher-1] [INFO] [1788473538.013619821] [cite.cell_a.arm_1.description_publisher]: Robot initialized
+[ros2_control_node-2] [INFO] [1788473538.019502318] [cite.cell_a.arm_1.controller_manager]: Using Steady (Monotonic) clock for triggering controller manager cycles.
+[ros2_control_node-2] [INFO] [1788473538.022620107] [cite.cell_a.arm_1.controller_manager]: Subscribing to '/cite/cell_a/arm_1/robot_description' topic for robot description.
+[ros2_control_node-2] [INFO] [1788473538.024286137] [cite.cell_a.arm_1.controller_manager]: update rate is 150 Hz
+[ros2_control_node-2] [INFO] [1788473538.024302491] [cite.cell_a.arm_1.controller_manager]: Overruns handling is : enabled
+[ros2_control_node-2] [INFO] [1788473538.024305964] [cite.cell_a.arm_1.controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[ros2_control_node-2] [WARN] [1788473538.024349684] [cite.cell_a.arm_1.controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[move_group-4] [WARN] [1788473538.033641298] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-4] [WARN] [1788473538.037408778] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[skill_server-5] [WARN] [1788473538.038333642] [rcl.logging_rosout]: Publisher already registered for node name: 'skill_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.skill_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-4] [INFO] [1788473538.042630153] [cite.cell_a.arm_1.move_group.moveit.ros.rdf_loader]: Loaded robot model in 0.00311039 seconds
+[move_group-4] [INFO] [1788473538.042691023] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[move_group-4] [INFO] [1788473538.042700816] [cite.cell_a.arm_1.move_group.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[skill_server-5] [INFO] [1788473538.043216504] [cite.cell_a.arm_1.skill_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00229605 seconds
+[skill_server-5] [INFO] [1788473538.043271906] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: Loading robot model 'arm_1'...
+[skill_server-5] [INFO] [1788473538.043281374] [cite.cell_a.arm_1.skill_server.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[move_group-4] [INFO] [1788473538.051836013] [cite.cell_a.arm_1.move_group.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[skill_server-5] [INFO] [1788473538.052410027] [cite.cell_a.arm_1.skill_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm_1_xarm5': 1 1 1 1 1
+[move_group-4] [INFO] [1788473538.090149339] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-4] [INFO] [1788473538.090273543] [cite.cell_a.arm_1.move_group.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-4] [INFO] [1788473538.090843876] [cite.cell_a.arm_1.move_group.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-4] [INFO] [1788473538.091148428] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/attached_collision_object' for attached collision objects
+[move_group-4] [INFO] [1788473538.091159621] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[move_group-4] [INFO] [1788473538.091247486] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_group-4] [INFO] [1788473538.091440967] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-4] [INFO] [1788473538.091485950] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[move_group-4] [INFO] [1788473538.091982261] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_a/arm_1/planning_scene'
+[move_group-4] [INFO] [1788473538.091997992] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-4] [INFO] [1788473538.092230098] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-4] [INFO] [1788473538.092459451] [cite.cell_a.arm_1.move_group.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-4] [WARN] [1788473538.092696580] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[move_group-4] [ERROR] [1788473538.092708072] [cite.cell_a.arm_1.move_group.moveit.ros.occupancy_map_monitor]: No 3D sensor plugin(s) defined for octomap updates
+[move_group-4] [INFO] [1788473538.100943754] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-4] [INFO] [1788473538.102526995] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-4] [INFO] [1788473538.102542310] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-4] [INFO] [1788473538.103442843] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[move_group-4] [INFO] [1788473538.103458259] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-4] [INFO] [1788473538.104121243] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[move_group-4] [INFO] [1788473538.104134485] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-4] [INFO] [1788473538.104766203] [cite.cell_a.arm_1.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[move_group-4] [INFO] [1788473538.104781416] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[move_group-4] [INFO] [1788473538.105884878] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-4] [INFO] [1788473538.106484804] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-4] [INFO] [1788473538.106495111] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-4] [INFO] [1788473538.106581418] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-4] [INFO] [1788473538.106586313] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-4] [INFO] [1788473538.106597814] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-4] [INFO] [1788473538.106601418] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-4] [INFO] [1788473538.106611354] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-4] [INFO] [1788473538.107666171] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-4] [INFO] [1788473538.110395311] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-4] [INFO] [1788473538.110407434] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-4] [INFO] [1788473538.110736527] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-4] [INFO] [1788473538.122909122] [cite.cell_a.arm_1.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[move_group-4] [INFO] [1788473538.124019478] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-4] [INFO] [1788473538.124148702] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-4] [INFO] [1788473538.124157941] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-4] [INFO] [1788473538.124303223] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-4] [INFO] [1788473538.124310593] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-4] [INFO] [1788473538.124330404] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-4] [INFO] [1788473538.124352586] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-4] [INFO] [1788473538.124366646] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-4] [INFO] [1788473538.126154873] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-4] [INFO] [1788473538.126528623] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-4] [INFO] [1788473538.126539216] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-4] [INFO] [1788473538.126769552] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-4] [INFO] [1788473538.126778834] [cite.cell_a.arm_1.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-4] [INFO] [1788473538.126974439] [cite.cell_a.arm_1.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-4] [WARN] [1788473538.128134802] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_a.arm_1.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-4] [INFO] [1788473538.139730366] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for arm_1_joint_trajectory_controller
+[move_group-4] [INFO] [1788473538.139761474] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: arm_1_gripper_controller will command a max effort of: 0
+[move_group-4] [INFO] [1788473538.141183721] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Added GripperCommand controller for arm_1_gripper_controller
+[move_group-4] [INFO] [1788473538.141286282] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-4] [INFO] [1788473538.141304718] [cite.cell_a.arm_1.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-4] [INFO] [1788473538.141536885] [cite.cell_a.arm_1.move_group.moveit.ros.trajectory_execution_manager]: Trajectory execution is not managing controllers
+[move_group-4] [INFO] [1788473538.141549797] [cite.cell_a.arm_1.move_group]: MoveGroup debug mode is ON
+[move_group-4] [INFO] [1788473538.152462849] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.executable]: 
+[move_group-4] 
+[move_group-4] ********************************************************
+[move_group-4] * MoveGroup using: 
+[move_group-4] *     - apply_planning_scene_service
+[move_group-4] *     - clear_octomap_service
+[move_group-4] *     - get_group_urdf
+[move_group-4] *     - load_geometry_from_file
+[move_group-4] *     - CartesianPathService
+[move_group-4] *     - execute_trajectory_action
+[move_group-4] *     - get_planning_scene_service
+[move_group-4] *     - kinematics_service
+[move_group-4] *     - move_action
+[move_group-4] *     - motion_plan_service
+[move_group-4] *     - query_planners_service
+[move_group-4] *     - state_validation_service
+[move_group-4] *     - save_geometry_to_file
+[move_group-4] ********************************************************
+[move_group-4] 
+[move_group-4] [INFO] [1788473538.152495973] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context using pipeline pilz_industrial_motion_planner
+[move_group-4] [INFO] [1788473538.152503866] [cite.cell_a.arm_1.move_group.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[move_group-4] [96mLoading 'move_group/ApplyPlanningSceneService'...[0m
+[move_group-4] [96mLoading 'move_group/ClearOctomapService'...[0m
+[move_group-4] [96mLoading 'move_group/GetUrdfService'...[0m
+[move_group-4] [96mLoading 'move_group/LoadGeometryFromFileService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupCartesianPathService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupGetPlanningSceneService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupKinematicsService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupMoveAction'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupPlanService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupQueryPlannersService'...[0m
+[move_group-4] [96mLoading 'move_group/MoveGroupStateValidationService'...[0m
+[move_group-4] [96mLoading 'move_group/SaveGeometryToFileService'...[0m
+[move_group-4] 
+[move_group-4] [92mYou can start planning now![0m
+[move_group-4] 
+[ros2_control_node-2] [INFO] [1788473538.195570950] [cite.cell_a.arm_1.controller_manager]: Received robot description from topic.
+[ros2_control_node-2] [INFO] [1788473538.199509260] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint5' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+[ros2_control_node-2]   has velocity limits: true [3.14]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [20]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199538410] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint5' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.199554000] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint4' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-1.69297, 3.14159]
+[ros2_control_node-2]   has velocity limits: true [3.14]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [20]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199561363] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint4' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.199571172] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint2' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-2.059, 2.0944]
+[ros2_control_node-2]   has velocity limits: true [3.14]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199578071] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint2' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.199588026] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint3' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-3.927, 0.19198]
+[ros2_control_node-2]   has velocity limits: true [3.14]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [30]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199594622] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint3' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.199604038] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_joint1' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+[ros2_control_node-2]   has velocity limits: true [3.14]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199610595] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_joint1' in hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.199621546] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [2]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199653410] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199666496] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_finger_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [2]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199673386] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_finger_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199684000] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_right_outer_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [2]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199690817] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_right_outer_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199700316] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_left_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [2]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199706524] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_left_inner_knuckle_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199719636] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_left_finger_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [2]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199726421] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_left_finger_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199736496] [cite.cell_a.arm_1.controller_manager]: Using JointLimiter for joint 'arm_1_drive_joint' in hardware 'arm_1_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[ros2_control_node-2]   has velocity limits: true [1]
+[ros2_control_node-2]   has acceleration limits: false [nan]
+[ros2_control_node-2]   has deceleration limits: false [nan]
+[ros2_control_node-2]   has jerk limits: false [nan]
+[ros2_control_node-2]   has effort limits: true [50]
+[ros2_control_node-2]   angle wraparound: false'
+[ros2_control_node-2] [INFO] [1788473538.199743201] [cite.cell_a.arm_1.controller_manager]: Creating JointSaturationLimiter for joint 'arm_1_drive_joint' in hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.199755280] [cite.cell_a.arm_1.controller_manager]: Enforcing command limits is enabled...
+[ros2_control_node-2] [INFO] [1788473538.201914286] [cite.cell_a.arm_1.controller_manager]: Loading hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473538.202464686] [cite.cell_a.arm_1.controller_manager]: Loaded hardware 'arm_1_gz_ros2_control/GazeboSimSystem' from plugin 'mock_components/GenericSystem'
+[ros2_control_node-2] [INFO] [1788473538.202537678] [cite.cell_a.arm_1.controller_manager]: Initialize hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473538.208715550] [cite.cell_a.arm_1.controller_manager]: Successful initialization of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.208929876] [cite.cell_a.arm_1.controller_manager]: Loading hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [INFO] [1788473538.209490757] [cite.cell_a.arm_1.controller_manager]: Loaded hardware 'arm_1_XArmGripperSystem' from plugin 'cite_test_hardware/JointStopSystem'
+[ros2_control_node-2] [INFO] [1788473538.209544032] [cite.cell_a.arm_1.controller_manager]: Initialize hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [WARN] [1788473538.215490656] [cite.cell_a.arm_1.controller_manager.hardware_component.system.arm_1_XArmGripperSystem]: 'arm_1_XArmGripperSystem' is the ADR-0040 TEST FIXTURE. 'arm_1_drive_joint' has hard stops at [-1.000000, 0.424555] and 6 joint(s) report a differentiated velocity. Nothing about this component describes real hardware.
+[ros2_control_node-2] [INFO] [1788473538.215519986] [cite.cell_a.arm_1.controller_manager]: Successful initialization of hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.215610133] [cite.cell_a.arm_1.controller_manager]: Activating component 'arm_1_XArmGripperSystem'.
+[ros2_control_node-2] [INFO] [1788473538.215622597] [resource_manager]: 'configure' hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [INFO] [1788473538.215634665] [resource_manager]: Successful 'configure' of hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.215641217] [resource_manager]: 'activate' hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [INFO] [1788473538.215649591] [resource_manager]: Successful 'activate' of hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473538.215708848] [cite.cell_a.arm_1.controller_manager]: Activating component 'arm_1_gz_ros2_control/GazeboSimSystem'.
+[ros2_control_node-2] [INFO] [1788473538.215716221] [resource_manager]: 'configure' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473538.215722843] [resource_manager]: Successful 'configure' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.215727717] [resource_manager]: 'activate' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473538.215731779] [resource_manager]: Successful 'activate' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473538.215750571] [cite.cell_a.arm_1.controller_manager]: Registering statistics for : arm_1_XArmGripperSystem
+[ros2_control_node-2] [INFO] [1788473538.215818021] [cite.cell_a.arm_1.controller_manager]: Registering statistics for : arm_1_gz_ros2_control/GazeboSimSystem
+[ros2_control_node-2] [INFO] [1788473538.215870231] [cite.cell_a.arm_1.controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[skill_server-5] [INFO] [1788473538.242367952] [cite.cell_a.arm_1.skill_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm_1_xarm5.
+[skill_server-5] [INFO] [1788473538.242404963] [cite.cell_a.arm_1.skill_server]: planning for group 'arm_1_xarm5' with end effector 'arm_1_link_tcp' (planning frame 'arm_1_mount')
+[skill_server-5] [INFO] [1788473538.242410364] [cite.cell_a.arm_1.skill_server]: planner: pilz_industrial_motion_planner/PTP, falling back to ompl (its own default planner) (ADR-0027)
+[skill_server-5] [INFO] [1788473538.253895256] [cite.cell_a.arm_1.skill_server]: skills for arm_1 are accepting goals
+[spawner-3] [INFO] [1788473538.322173036] [spawn_controllers]: waiting for service /cite/cell_a/arm_1/controller_manager/list_controllers to become available...
+[ros2_control_node-2] [INFO] [1788473538.824447570] [cite.cell_a.arm_1.controller_manager]: Loading controller : 'arm_1_joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[ros2_control_node-2] [INFO] [1788473538.824484022] [cite.cell_a.arm_1.controller_manager]: Loading controller 'arm_1_joint_state_broadcaster'
+[ros2_control_node-2] [INFO] [1788473538.826908950] [cite.cell_a.arm_1.controller_manager]: Controller 'arm_1_joint_state_broadcaster' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml --params-file /tmp/launch_params_97clvyy4 --params-file /tmp/launch_params_5t72kevq 
+[spawner-3] [INFO] [1788473538.838819629] [spawn_controllers]: Loaded arm_1_joint_state_broadcaster
+[ros2_control_node-2] [INFO] [1788473538.839442746] [cite.cell_a.arm_1.controller_manager]: Configuring controller: 'arm_1_joint_state_broadcaster'
+[ros2_control_node-2] [INFO] [1788473538.839512914] [cite.cell_a.arm_1.arm_1_joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[ros2_control_node-2] [INFO] [1788473538.852130345] [cite.cell_a.arm_1.controller_manager]: Activating controllers: [ arm_1_joint_state_broadcaster ]
+[ros2_control_node-2] [INFO] [1788473538.857995323] [cite.cell_a.arm_1.controller_manager]: Successfully switched controllers!
+[spawner-3] [INFO] [1788473538.865572662] [spawn_controllers]: Configured and activated arm_1_joint_state_broadcaster
+[ros2_control_node-2] [INFO] [1788473538.866122703] [cite.cell_a.arm_1.controller_manager]: Loading controller : 'arm_1_gripper_controller' of type 'position_controllers/GripperActionController'
+[ros2_control_node-2] [INFO] [1788473538.866144393] [cite.cell_a.arm_1.controller_manager]: Loading controller 'arm_1_gripper_controller'
+[ros2_control_node-2] [INFO] [1788473538.867253937] [cite.cell_a.arm_1.controller_manager]: Controller 'arm_1_gripper_controller' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml --params-file /tmp/launch_params_97clvyy4 --params-file /tmp/launch_params_5t72kevq 
+[ros2_control_node-2] [WARN] [1788473538.873191386] [cite.cell_a.arm_1.arm_1_gripper_controller]: [Deprecated]: the `position_controllers/GripperActionController` and `effort_controllers::GripperActionController` controllers are replaced by 'parallel_gripper_controllers/GripperActionController' controller
+[spawner-3] [INFO] [1788473538.878873783] [spawn_controllers]: Loaded arm_1_gripper_controller
+[ros2_control_node-2] [INFO] [1788473538.879079397] [cite.cell_a.arm_1.controller_manager]: Configuring controller: 'arm_1_gripper_controller'
+[ros2_control_node-2] [INFO] [1788473538.879127237] [cite.cell_a.arm_1.arm_1_gripper_controller]: Action status changes will be monitored at 20.000000 Hz.
+[ros2_control_node-2] [INFO] [1788473538.885044780] [cite.cell_a.arm_1.controller_manager]: Activating controllers: [ arm_1_gripper_controller ]
+[ros2_control_node-2] [INFO] [1788473538.894843194] [cite.cell_a.arm_1.controller_manager]: Successfully switched controllers!
+[spawner-3] [INFO] [1788473538.898983022] [spawn_controllers]: Configured and activated arm_1_gripper_controller
+[ros2_control_node-2] [INFO] [1788473538.899563455] [cite.cell_a.arm_1.controller_manager]: Loading controller : 'arm_1_joint_trajectory_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[ros2_control_node-2] [INFO] [1788473538.899582136] [cite.cell_a.arm_1.controller_manager]: Loading controller 'arm_1_joint_trajectory_controller'
+[ros2_control_node-2] [INFO] [1788473538.901045699] [cite.cell_a.arm_1.controller_manager]: Controller 'arm_1_joint_trajectory_controller' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml --params-file /tmp/launch_params_97clvyy4 --params-file /tmp/launch_params_5t72kevq 
+[spawner-3] [INFO] [1788473538.912134877] [spawn_controllers]: Loaded arm_1_joint_trajectory_controller
+[ros2_control_node-2] [INFO] [1788473538.912349991] [cite.cell_a.arm_1.controller_manager]: Configuring controller: 'arm_1_joint_trajectory_controller'
+[ros2_control_node-2] [INFO] [1788473538.912471655] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-2] [INFO] [1788473538.912488707] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-2] [INFO] [1788473538.912503686] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: Using 'splines' interpolation method.
+[ros2_control_node-2] [INFO] [1788473538.914018506] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-2] [INFO] [1788473538.916585383] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-2] [INFO] [1788473538.916599694] [cite.cell_a.arm_1.arm_1_joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-2] [INFO] [1788473538.918297634] [cite.cell_a.arm_1.controller_manager]: Activating controllers: [ arm_1_joint_trajectory_controller ]
+[ros2_control_node-2] [INFO] [1788473538.924736374] [cite.cell_a.arm_1.controller_manager]: Successfully switched controllers!
+[spawner-3] [INFO] [1788473538.932045761] [spawn_controllers]: Configured and activated arm_1_joint_trajectory_controller
+[INFO] [spawner-3]: process has finished cleanly [pid 1481]
+[ros2_control_node-2] [INFO] [1788473539.925179185] [cite.cell_a.arm_1.arm_1_gripper_controller]: Received & accepted new action goal
+[ros2_control_node-2] [ERROR] [1788473539.931261750] [cite.cell_a.arm_1.controller_manager]: Command of at least one joint is out of limits (throttled log). Joint: 'arm_1_drive_joint', (actual: [Joint: 'arm_1_drive_joint', position: 0.000000, velocity: 0.000000], command: [Joint: 'arm_1_drive_joint', position: 0.452793], limited: [Joint: 'arm_1_drive_joint', position: 0.006667]) with desired period : 0.006667 sec.
+[ros2_control_node-2] [WARN] [1788473540.357885123] [cite.cell_a.arm_1.controller_manager.hardware_component.system.arm_1_XArmGripperSystem]: 'arm_1_drive_joint/position' has reached a declared stop at 0.424555 and is being held there while the trajectory advances without it.
+[skill_server-5] [INFO] [1788473540.675907555] [cite.cell_a.arm_1.skill_server]: gripper: commanded 45.0 mm, reached 48.0 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[ros2_control_node-2] [INFO] [1788473540.676766595] [cite.cell_a.arm_1.arm_1_gripper_controller]: Received & accepted new action goal
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [skill_server-5]: sending signal 'SIGINT' to process[skill_server-5]
+[INFO] [move_group-4]: sending signal 'SIGINT' to process[move_group-4]
+[INFO] [ros2_control_node-2]: sending signal 'SIGINT' to process[ros2_control_node-2]
+[INFO] [robot_state_publisher-1]: sending signal 'SIGINT' to process[robot_state_publisher-1]
+[move_group-4] [INFO] [1788473541.027456317] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-2] [INFO] [1788473541.027457241] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-2] [INFO] [1788473541.027527811] [cite.cell_a.arm_1.controller_manager]: Shutdown request received....
+[ros2_control_node-2] [INFO] [1788473541.027549777] [cite.cell_a.arm_1.controller_manager]: Shutting down all controllers in the controller manager.
+[ros2_control_node-2] [INFO] [1788473541.027566042] [cite.cell_a.arm_1.controller_manager]: Deactivating controller 'arm_1_joint_trajectory_controller'
+[ros2_control_node-2] [INFO] [1788473541.027628703] [cite.cell_a.arm_1.controller_manager]: Shutting down controller 'arm_1_joint_trajectory_controller'
+[ros2_control_node-2] [INFO] [1788473541.027748516] [cite.cell_a.arm_1.controller_manager]: Deactivating controller 'arm_1_gripper_controller'
+[ros2_control_node-2] [INFO] [1788473541.027765278] [cite.cell_a.arm_1.controller_manager]: Shutting down controller 'arm_1_gripper_controller'
+[ros2_control_node-2] [INFO] [1788473541.027799278] [cite.cell_a.arm_1.controller_manager]: Deactivating controller 'arm_1_joint_state_broadcaster'
+[ros2_control_node-2] [INFO] [1788473541.027812135] [cite.cell_a.arm_1.controller_manager]: Shutting down controller 'arm_1_joint_state_broadcaster'
+[ros2_control_node-2] [INFO] [1788473541.027838619] [resource_manager]: 'deactivate' hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [INFO] [1788473541.027850095] [resource_manager]: Successful 'deactivate' of hardware 'arm_1_XArmGripperSystem'
+[ros2_control_node-2] [INFO] [1788473541.027852515] [resource_manager]: 'shutdown' hardware 'arm_1_XArmGripperSystem' 
+[ros2_control_node-2] [INFO] [1788473541.027854633] [resource_manager]: Successful 'shutdown' of hardware 'arm_1_XArmGripperSystem'
+[robot_state_publisher-1] [INFO] [1788473541.027512302] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[skill_server-5] [INFO] [1788473541.027536037] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-2] [INFO] [1788473541.027879539] [resource_manager]: 'deactivate' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473541.027881985] [resource_manager]: Successful 'deactivate' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473541.027883562] [resource_manager]: 'shutdown' hardware 'arm_1_gz_ros2_control/GazeboSimSystem' 
+[ros2_control_node-2] [INFO] [1788473541.027885282] [resource_manager]: Successful 'shutdown' of hardware 'arm_1_gz_ros2_control/GazeboSimSystem'
+[ros2_control_node-2] [INFO] [1788473541.027895837] [cite.cell_a.arm_1.controller_manager]: Shutting down the controller manager.
+[ros2_control_node-2] [ERROR] [1788473541.027952758] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ros2_control_node-2] [ERROR] [1788473541.027952755] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[skill_server-5] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[skill_server-5]          at line 127 in ./src/class_loader.cpp
+[ros2_control_node-2] [INFO] [1788473541.030597398] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-2] [INFO] [1788473541.031362400] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Async messages lost 0
+[ros2_control_node-2] [INFO] [1788473541.031370246] [cite.cell_a.arm_1.controller_manager.pal_statistics]: publish_async_failures_ 0
+[ros2_control_node-2] [INFO] [1788473541.032343212] [cite.cell_a.arm_1.controller_manager.pal_statistics]: Async messages lost 0
+[ros2_control_node-2] [INFO] [1788473541.032348057] [cite.cell_a.arm_1.controller_manager.pal_statistics]: publish_async_failures_ 0
+[ERROR] [robot_state_publisher-1]: process has died [pid 1479, exit code -2, cmd '/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher --ros-args -r __node:=description_publisher -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_wv5f967p -r /tf:=/tf -r /tf_static:=/tf_static'].
+[ERROR] [skill_server-5]: process has died [pid 1483, exit code -2, cmd '/workspace/workspace/install/cite_skills/lib/cite_skills/skill_server --ros-args -r __node:=skill_server -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params_oarsqjpp --params-file /tmp/launch_params_6k4jeahh --params-file /tmp/launch_params_fl0ch2oa --params-file /tmp/launch_params_uz73a8hb --params-file /tmp/launch_params_vbrrkxcp -r /tf:=/tf -r /tf_static:=/tf_static'].
+[ERROR] [move_group-4]: process has died [pid 1482, exit code -2, cmd '/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_a/arm_1 --params-file /tmp/launch_params__2mjtlwu --params-file /tmp/launch_params_61vjxs5w --params-file /tmp/launch_params_pbqepka6 --params-file /tmp/launch_params_djjj_wwk --params-file /tmp/launch_params_3fe9ej3j --params-file /tmp/launch_params_9udn53k3 -r /tf:=/tf -r /tf_static:=/tf_static'].
+[INFO] [ros2_control_node-2]: process has finished cleanly [pid 1480]

@@ -1,0 +1,6 @@
+== block LO-C (log tag LO-C) ==
+ 22:11:40 up 1 day,  5:05,  0 user,  load average: 0.37, 0.31, 0.23
+16
+               total        used        free      shared  buff/cache   available
+Mem:           31831        4685       14846         301       13050       27145
+overlay         457G   35G  399G   8% /
