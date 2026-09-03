@@ -25,6 +25,12 @@ directory runs inside the cell.
 part of the record rather than part of the operator's memory. A rebuild during the
 campaign is a numbered deviation and splits the runs before it from the runs after it.
 
+**`build_once` enforces both halves of V11 rather than describing them.** It refuses to
+build a second time once any run record exists in `raw/` or once `provenance.txt` already
+carries a build block — so a *resumed* campaign, which this script advertises, does not
+rebuild the workspace under itself — and it **aborts the campaign when the build fails**
+instead of recording `build_exit` and carrying on against a stale install.
+
 ## The whole campaign, in order
 
 ```sh
@@ -92,7 +98,7 @@ docs/measurements/2026-09-02-scenario-ceilings/harness/run_trial.py \
 | `expected.py` | I8's manifest — the (scenario, what-pattern, `ceiling_s`, expected-count) quadruples rule E reports `k of n` against, derived from the emitters' own loops, from `ARMS`, from `WORKPIECES` and from the generated topology |
 | `run_trial.py` | one run: the survivor check, both `git` snapshots, the console capture, the `docker update --cpus` that holds the allocation **for the whole run including bring-up**, I4 and I7 read off the running cell, and the record every validity flag travels on |
 | `run_campaign.sh` | §6's twenty-eight runs in the registered order, with the quiesce, the survivor reading, `./scripts/build` recorded once for V11, and the isolation values derived through `scripts/_lib.sh` |
-| `analyse.py` | §7's decision rules — Z, A, X, X2, G, E, P, Q, K, D3, NOISY, N, F, B1 — plus the Q-D instrument table and PR1–PR7, each printed either way |
+| `analyse.py` | §7's decision rules — Z, A, X, X2, G, E, P, Q, K, D3, NOISY, N, F, B1 — plus §10's run-admission rules, the Q-D instrument table and PR1–PR7, each printed either way. Rules Z, A, X, K and §2.3's leg filter are *applied* in `classify`, and every margin carries its own discard counts, rule E's `k of n` and V7's with-and-without partition beside it |
 
 ## Where each file came from
 
@@ -134,7 +140,7 @@ destroys it**, because V1 discards every block taken while a watched path differ
 `c38a42c`. The flag is computed at both ends of every run and travels on every record, so
 a concurrent writer flips it rather than going unnoticed (V10).
 
-## Eight things this rig cannot do, recorded here rather than discovered later
+## Eleven things this rig cannot do, recorded here rather than discovered later
 
 1. **It cannot see the upper tail of any interval.** A wait that times out emits no
    record, by design — a record for a wait that timed out would measure the ceiling rather
@@ -183,6 +189,37 @@ a concurrent writer flips it rather than going unnoticed (V10).
    reconstruct from. `analyse.py` refuses a run whose `.log` is missing from `raw/` even
    when the run document beside it looks complete.
 
+9. **It reports `continuous_line`'s `L4 to command every belt to a non-zero setpoint
+   (ADR-0032)` wait in the WARM half of `BRING_UP_CEILING_S`.** `_cell_key` splits that
+   ceiling into exactly two halves — the cold `what` §7.2 names, and everything else —
+   and §7.2 names only the *transform* waits as the warm ones. This wait is neither: it
+   runs after the coordinator is up but it is not a cached transform lookup. It is put in
+   the warm bucket because the split is binary, and **it cannot affect the cold headline
+   verdict**, which is the one §7.2 makes the ceiling's verdict. The warm line for that
+   scenario is therefore a pool of two different kinds of wait, and `ANALYSIS.md` must say
+   so rather than describing it as the transform distribution.
+
+10. **Rule Q's `q` for a cell is the MAXIMUM quantum over the records in it, not the
+    quantum of the site that produced the maximum.** `margins()` cannot key `q` to the
+    producing record without letting a single site's quantum stand for a pooled cell, so
+    it takes the largest. No cell in this design mixes quantum classes — §7.1's table
+    assigns 1.0 s to four `bringup` waits that are all dropped by rule A or sit alone in
+    their cell, and every other contributing site is at the 0.5 s default except
+    `pick_and_place`'s two — so today the maximum *is* the site's. Where it would not be,
+    the direction is conservative: a larger `q` widens the gap between the two readings and
+    produces **more** INCONCLUSIVE cells, never fewer. The `_QUANTUM_RULES` table in
+    `common.py` matches §7.1's table row for row.
+
+11. **It loses two `CITE_TIMING` records as one mangle when they land on the same line.**
+    I1's regex is `CITE_TIMING (\{.*\})` and `.*` is greedy, so two records interleaved
+    onto one line match once, from the first `{` to the last `}`, and fail `json.loads` as
+    a single mangled entry. **The regex is exactly what I1 registers and is not changed
+    here** — it is anchored on the payload rather than on a fixed slice for the reason
+    threat 6 gives, and changing a registered instrument after the fact is what §9's freeze
+    exists to prevent. The consequence to carry: rule G's 5 % denominator is `marker_lines`,
+    which is **line-based**, so an interleaving of this shape undercounts by two — one
+    record lost silently, and the pair counted as one mangled line rather than two.
+
 Two more that are properties of the *criteria* rather than of the rig, and are listed
 because a reader of this directory will meet them here first:
 
@@ -193,3 +230,21 @@ because a reader of this directory will meet them here first:
 - **Rule F is applied literally**, so `LEG_CEILING_S` is reported FIRED when it timed out
   on one of the two waits §2.3 excludes from its margin. That is **deviation 2**. The
   print names which wait fired; the label is not withheld on the strength of that reading.
+- **I4's second reading is the last live sample, not a reading taken "at the end of the
+  run"** as I4 registers it. `scripts/_lib.sh` starts a scenario with `compose run --rm`,
+  so the container is destroyed the instant `./scripts/scenario` exits and the registered
+  form is structurally unobtainable. That is **deviation 3**, printed on every run. V6's
+  end-of-run clause is evaluated against the substitute, the failed post-exit attempt is
+  kept beside it, and a run for which no live reading survives is NOT ESTABLISHED and is
+  discarded rather than passed.
+
+**Two things the analyser reads that are worth knowing before reading its output.** The
+workpiece count in force comes from `run["container"]["cite_environment_in_force"]` — the
+environment of the process that actually ran — and falls back to the host shell's copy
+only when that reading failed; the two agree in every configuration this campaign reaches,
+because `_lib.sh` forwards every `CITE_`-prefixed host variable into the container. And
+rule F has **two** instruments, not one: `_spin_until`'s own timeout assertion, and the six
+caller assertions that are the only surface an expired `_await_future` has, because that
+helper asserts nothing deliberately. Without the second, `bringup.TRAJECTORY_CEILING_S` and
+`bringup.SKILL_CEILING_S` — the two ceilings bounded *only* by `_await_future` — could be
+banded off the waits that completed in a run where one of them demonstrably expired.

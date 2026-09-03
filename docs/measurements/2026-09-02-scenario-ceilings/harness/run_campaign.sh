@@ -125,13 +125,56 @@ record_environment() {
         echo "base_commit=c38a42c"
         echo "criteria_sha256=$(sha256sum "$RAW/../criteria.md" | cut -d' ' -f1)"
         echo "image_id=$(docker image inspect --format '{{.Id}}' cite-digital-twin:dev)"
-        # V11: the build runs ONCE, before the first trial, and its summary is recorded.
-        # A rebuild during the campaign is a numbered deviation and splits the runs.
-        echo "# ---- ./scripts/build, recorded once for V11 ----"
-        "$ROOT/scripts/build" 2>&1 | tee "$RAW/logs/build.log" \
-            | grep -Ei "summary|failed|error" | tail -10
-        echo "build_exit=${PIPESTATUS[0]}"
     } >> "$out"
+}
+
+# V11 -- THE BUILD RUNS ONCE, BEFORE THE FIRST TRIAL, AND THE SCRIPT ENFORCES THAT.
+#
+# This block used to sit inside `record_environment`, which is called unconditionally on
+# every invocation, while the header above advertises resumption. So resuming a campaign
+# rebuilt the workspace mid-campaign -- which V11 makes a NUMBERED DEVIATION requiring
+# every run before it to be reported separately from every run after it -- and nothing
+# detected it. Two guards, either of which is sufficient: a run record already exists, or
+# provenance already carries a build block.
+#
+# AND THE BUILD IS GATED. `build_exit` was recorded and never read, so a FAILED build let
+# the campaign proceed against a stale install and produce twenty-eight runs of intervals
+# measured on code that is not the code the record names. `set -e` is deliberately NOT
+# turned on for the whole script -- `pgrep`, `grep`, `wanted` and `run_trial.py` all
+# return non-zero on purpose here, and the abort logic below depends on reading those
+# codes rather than dying on them -- so the one status that must stop the campaign is
+# checked explicitly.
+build_once() {
+    local out="$RAW/provenance.txt" status
+    if [ -n "$(ls -1 "$RAW"/*.json 2>/dev/null)" ]; then
+        echo "== V11: run records already exist; ./scripts/build is NOT re-run." \
+            | tee -a "$out"
+        echo "build_skipped=run records already present at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >> "$out"
+        return 0
+    fi
+    if grep -q '^# ---- \./scripts/build, recorded once for V11' "$out" 2>/dev/null; then
+        echo "== V11: provenance.txt already carries a build block; not building again." \
+            | tee -a "$out"
+        echo "build_skipped=provenance already carries a build block at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >> "$out"
+        return 0
+    fi
+    echo "# ---- ./scripts/build, recorded once for V11 ----" >> "$out"
+    "$ROOT/scripts/build" > "$RAW/logs/build.log" 2>&1
+    status=$?
+    grep -Ei "summary|failed|error" "$RAW/logs/build.log" | tail -10 >> "$out"
+    echo "build_exit=${status}" >> "$out"
+    if [ "$status" -ne 0 ]; then
+        echo "" >&2
+        echo "######################################################################" >&2
+        echo "## ./scripts/build FAILED, exit ${status}. THE CAMPAIGN STOPS HERE." >&2
+        echo "## Every interval below would be measured against a STALE install," >&2
+        echo "## and the record would name a build that did not produce it." >&2
+        echo "## See $RAW/logs/build.log." >&2
+        echo "######################################################################" >&2
+        exit "$status"
+    fi
 }
 
 wanted() {
@@ -144,6 +187,7 @@ wanted() {
 }
 
 record_environment
+build_once
 
 for entry in "${SCHEDULE[@]}"; do
     read -r LABEL CONDITION SCENARIO <<<"$entry"

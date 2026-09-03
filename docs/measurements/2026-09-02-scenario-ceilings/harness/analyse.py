@@ -86,6 +86,32 @@ FIRED_LEG = re.compile(
     r"piece (\d+): STOPPED after \d+/\d+ milestones, waiting on (.+) for (\d+)s"
 )
 
+#: Rule F's SECOND instrument, and the reason it has to exist. `FIRED_SPIN` above keys on
+#: `_spin_until`'s own assertion, which bounds `BRING_UP_CEILING_S` and
+#: `DELIVERY_CEILING_S` only. `bringup.TRAJECTORY_CEILING_S` (five call sites) and
+#: `bringup.SKILL_CEILING_S` (one) are bounded ONLY by `_await_future`, whose docstring at
+#: `c38a42c` says it "asserts nothing, deliberately": its expiry surfaces as the CALLER's
+#: own `assertIsNotNone` message, which `FIRED_SPIN`'s regex does not match. `unittest`
+#: continues after a failed method, so without these six a run in which one of those two
+#: ceilings demonstrably expired would still be banded off the waits that completed --
+#: the output section 7.3 calls this campaign's worst possible one, and on a ceiling PR2
+#: makes a headline verdict.
+#:
+#: THE SIX STRINGS ARE READ FROM THE CALLERS AT `c38a42c`, `tests/scenarios/bringup.py`
+#: lines 425, 430, 534, 539, 612 and 617. Each is the message of the `assertIsNotNone`
+#: that immediately follows an `_await_future` under the named ceiling, and each can fail
+#: only when that future had no result -- which is what the wait expiring means. The
+#: direction of any error is toward WITHHOLDING a band, which is the safe direction: rule
+#: F's whole purpose is to refuse one.
+FIRED_AWAIT: tuple[tuple[str, str, str], ...] = (
+    ("bringup", "TRAJECTORY_CEILING_S", "the gripper goal was never accepted"),
+    ("bringup", "TRAJECTORY_CEILING_S", "the gripper never reported a result"),
+    ("bringup", "TRAJECTORY_CEILING_S", "the trajectory goal was never accepted"),
+    ("bringup", "TRAJECTORY_CEILING_S", "the trajectory never returned a result"),
+    ("bringup", "TRAJECTORY_CEILING_S", "the MoveTo goal was never accepted"),
+    ("bringup", "SKILL_CEILING_S", "MoveTo never returned a result"),
+)
+
 #: `criteria.md` V9 -- the deviations known before the first campaign trial ran. A
 #: deviation is where an interpretation had to CHANGE, applied literally to data already
 #: collected. They are printed at the top of every run so that the write-up carries them
@@ -113,6 +139,24 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "below names which wait fired, so a reader can see which of the two cases it is, "
         "but the FIRED label is not withheld on the strength of that reading."
     ),
+    (
+        "3",
+        "I4's SECOND reading, and with it V6's end-of-run confirmation, is taken from "
+        "the LAST LIVE SAMPLE rather than `at the end of the run` as criteria.md I4 "
+        "registers it. `scripts/_lib.sh` starts a scenario with `compose run --rm`, so "
+        "the container is REMOVED the instant `./scripts/scenario` exits and every "
+        "`docker` call after that reads `No such container`: the registered form is "
+        "structurally unobtainable, not merely inconvenient. `run_trial.py` therefore "
+        "samples I4 throughout the run and keeps the last reading that reached a LIVE "
+        "container, recording how long before the exit it was taken "
+        "(`i4_last_live_before_exit_s`) and keeping the failed post-exit attempt beside "
+        "it (`i4_post_exit_attempt`) so that the substitute cannot be mistaken for a "
+        "reading taken after the process ended. V6's end-of-run clause is evaluated "
+        "against that substitute, and a run for which NO live reading survives is NOT "
+        "ESTABLISHED and is discarded rather than passed. No threshold moved; what "
+        "changed is which instant `at the end` names, and a reader of ANALYSIS.md must "
+        "not see V6 satisfied without seeing that."
+    ),
 )
 
 
@@ -137,13 +181,61 @@ def load_runs(raw: Path) -> list[dict]:
     return runs
 
 
+def _workpieces_in_force(run: dict) -> dict:
+    """`CITE_LINE_WORKPIECES` as it was IN FORCE, from the authoritative field.
+
+    `criteria.md` section 5 asks for the value in force, and the run document carries TWO
+    candidates. `run["environment"]["CITE_LINE_WORKPIECES"]` is what the HOST SHELL
+    exported and says so in its own `host_shell_note`; the authority is
+    `run["container"]["cite_environment_in_force"]`, read out of the process that actually
+    ran. `scripts/_lib.sh` forwards every `CITE_`-prefixed host variable into the
+    container, so a variable set on the host is present in the container reading too --
+    which is why the two agree in every configuration this campaign reaches. The
+    authoritative one is read FIRST so that they need not agree for this to be right, and
+    the source is returned so that the print says which was used.
+
+    A container reading that succeeded and does not carry the variable is the answer
+    `unset`, not a reason to consult the host shell: had the host set it, `_lib.sh` would
+    have forwarded it.
+    """
+    container = (run.get("container") or {}).get("cite_environment_in_force")
+    if isinstance(container, dict) and container.get("read_ok"):
+        raw_value = container.get("CITE_LINE_WORKPIECES")
+        source = "container env, the value in force"
+    else:
+        raw_value = (run.get("environment") or {}).get("CITE_LINE_WORKPIECES")
+        source = "host shell -- THE CONTAINER ENV COULD NOT BE READ"
+    if raw_value in (None, ""):
+        return {
+            "value": manifest_module.DEFAULT_WORKPIECES,
+            "source": f"{source}: unset, so the scenario's own default applies",
+        }
+    try:
+        return {"value": int(raw_value), "source": source}
+    except (TypeError, ValueError):
+        return {
+            "value": manifest_module.DEFAULT_WORKPIECES,
+            "source": f"{source}: {raw_value!r} is not an integer, so the default applies",
+        }
+
+
 def admit(runs: list[dict], raw: Path, root: Path) -> tuple[list[dict], list[dict]]:
-    """Section 10's per-run rules, each printed whether or not it fires.
+    """Section 10's per-run rules, EVERY ONE PRINTED FOR EVERY RUN, fired or not.
 
     Returns the admitted runs and the discarded ones. A discarded run is REPORTED with the
     rule that discarded it; V8 forbids topping the condition up to replace it.
+
+    AN ADMITTED RUN USED TO PRINT ONE LINE AND NOTHING ABOUT THE RULES IT PASSED, which
+    broke this module's own contract -- a rule that only speaks when it triggers is a rule
+    nobody can audit, and a reader cannot tell it from a rule that was never implemented.
+    `v6_note` was the sharpest case: it is the evidence V6 rests on for every loaded run,
+    and it printed ONLY on discard, so whether the allocation actually held was invisible
+    for exactly the runs that contribute.
     """
-    print("\n=== Run admission (criteria.md section 10), every rule printed ===")
+    print("\n=== Run admission (criteria.md section 10), every rule printed for every run ===")
+    print("  rule P, V1, V2, V4, V5, V6 and rule G can DISCARD. V3 and V7 never discard: "
+          "V3 records the verdict rules X and X2 spend, and V7 FLAGS a loud host, whose "
+          "effect on a band is reported per cell in section 7.2 rather than by exclusion.")
     admitted: list[dict] = []
     discarded: list[dict] = []
     if not runs:
@@ -151,7 +243,7 @@ def admit(runs: list[dict], raw: Path, root: Path) -> tuple[list[dict], list[dic
     for run in runs:
         label = run.get("label", "<unlabelled>")
         validity = run.get("validity", {})
-        reasons: list[str] = []
+        checks: list[tuple[str, bool | None, str]] = []
 
         # Rule P -- a trial whose console was not captured produced nothing. Not a short
         # table: no data. It is not reconstructed from the junit report, which carries no
@@ -159,62 +251,125 @@ def admit(runs: list[dict], raw: Path, root: Path) -> tuple[list[dict], list[dic
         # console, AND the console has to still be on disk beside it, because a run
         # document without its log is a table nobody can go back to.
         if run.get("instrument", {}).get("marker_lines") is None:
-            reasons.append("rule P: this run document records no captured console")
+            checks.append(("rule P", False, "this run document records no captured console"))
         elif not (raw / f"{label}.log").exists():
-            reasons.append(f"rule P: {label}.log is not in raw/, so the console is gone")
+            checks.append(("rule P", False, f"{label}.log is not in raw/, so the console is gone"))
+        else:
+            checks.append((
+                "rule P",
+                True,
+                f"{label}.log is on disk beside the record and the document parsed "
+                f"{run['instrument']['marker_lines']} marker line(s)",
+            ))
 
-        if not validity.get("v1_clean"):
-            reasons.append(
-                "V1: a watched path differed from the base commit or was dirty"
+        checks.append((
+            "V1",
+            bool(validity.get("v1_clean")),
+            (
+                "both I6 readings clean over "
+                f"{len(run.get('i6', {}).get('watched_paths', [])) or 5} watched path(s) "
+                f"against {run.get('i6', {}).get('base_commit', '<base?>')}"
+                if validity.get("v1_clean")
+                else "a watched path differed from the base commit or was dirty"
                 + (
                     " -- AND THE TWO READINGS DISAGREED, so the edit landed MID-RUN"
                     if validity.get("v1_disagreed_mid_run")
                     else ""
                 )
-            )
-        if validity.get("v2_ok") is not True:
-            reasons.append(
-                f"V2: the running cell did not read back hulls and the throttle "
-                f"(v2_ok={validity.get('v2_ok')!r})"
-            )
-        if validity.get("v5_ok") is not True:
-            reasons.append("V5: a gz sim survivor from the previous run was present at start")
-        if validity.get("v6_ok") is not True:
-            reasons.append(f"V6: {validity.get('v6_note')}")
-        if validity.get("g_ok") is not True:
-            reasons.append(
-                f"rule G: mangled fraction "
-                f"{run.get('instrument', {}).get('mangled_fraction', 0.0):.3f} exceeds "
-                f"{RULE_G_MAX_MANGLED_FRACTION}"
-            )
+            ),
+        ))
+
+        configuration = run.get("i7") or {}
+        checks.append((
+            "V2",
+            validity.get("v2_ok") is True,
+            f"v2_ok={validity.get('v2_ok')!r}: the running cell read "
+            f"{configuration.get('hull_collision_refs')} hull collision reference(s) and "
+            f"world_throttle_declared={configuration.get('world_throttle_declared')!r}",
+        ))
+
+        # V3 never discards. It is printed because rule X and rule X2 both spend it, and a
+        # reader has to be able to see the value they spent.
+        checks.append((
+            "V3",
+            None,
+            f"verdict={run.get('verdict', {}).get('verdict')!r}, attached to "
+            f"{len(run.get('records', []))} record(s). Rule X and rule X2 consume it",
+        ))
 
         # V4 -- record completeness, against I8's manifest.
-        workpieces = run.get("environment", {}).get("CITE_LINE_WORKPIECES")
-        pieces = int(workpieces) if workpieces else manifest_module.DEFAULT_WORKPIECES
-        run_entries, _ = manifest_module.manifest(root, pieces)
+        pieces = _workpieces_in_force(run)
+        run_entries, _ = manifest_module.manifest(root, pieces["value"])
         present = _presence(run, run_entries)
         absent = [key for key, (seen, want) in present.items() if seen == 0 and want > 0]
         relevant = [key for key, (_, want) in present.items() if want > 0]
         fraction = (len(absent) / len(relevant)) if relevant else 0.0
-        if fraction > V4_MAX_ABSENT_FRACTION:
-            reasons.append(
-                f"V4: {len(absent)} of {len(relevant)} expected triples absent "
-                f"({fraction:.2f} > {V4_MAX_ABSENT_FRACTION})"
-            )
+        checks.append((
+            "V4",
+            fraction <= V4_MAX_ABSENT_FRACTION,
+            f"{len(absent)} of {len(relevant)} expected triples absent "
+            f"({fraction:.2f} against {V4_MAX_ABSENT_FRACTION}); workpieces in force "
+            f"{pieces['value']} from {pieces['source']}",
+        ))
 
+        checks.append((
+            "V5",
+            validity.get("v5_ok") is True,
+            (
+                f"{run.get('survivors_before', {}).get('gz_sim_count')} gz sim survivor(s) "
+                f"at start, looked_ok="
+                f"{run.get('survivors_before', {}).get('looked_ok')!r}"
+            ),
+        ))
+
+        # V6's note is the evidence, and it prints on every run rather than only on a
+        # discard. `v6_limit_held_at_end` is printed beside it because None there is NOT
+        # ESTABLISHED and is a different answer from False.
+        checks.append((
+            "V6",
+            validity.get("v6_ok") is True,
+            f"{validity.get('v6_note')}; limit_held_at_end="
+            f"{validity.get('v6_limit_held_at_end')!r}",
+        ))
+
+        # V7 never discards. The flag travels to section 7.2, where every cell it touches
+        # is banded with and without it.
+        checks.append((
+            "V7",
+            None,
+            f"pre-run load_1m={validity.get('v7_load_1m')} against a flag at "
+            f"{common.V7_LOAD_FLAG} -> "
+            + ("FLAGGED, and every cell it contributes to is banded twice"
+               if validity.get("v7_load_flag") else "not flagged"),
+        ))
+
+        instrument = run.get("instrument", {})
+        checks.append((
+            "rule G",
+            validity.get("g_ok") is True,
+            f"mangled fraction {instrument.get('mangled_fraction', 0.0):.3f} against "
+            f"{RULE_G_MAX_MANGLED_FRACTION} "
+            f"({instrument.get('mangled_count')} of {instrument.get('marker_lines')} "
+            "marker line(s))",
+        ))
+
+        reasons = [f"{name}: {note}" for name, ok, note in checks if ok is False]
         flag = " [V7 LOUD HOST]" if validity.get("v7_load_flag") else ""
         if reasons:
             discarded.append(run)
-            print(f"  DISCARDED {label}{flag}")
-            for reason in reasons:
-                print(f"      {reason}")
+            head = f"  DISCARDED {label}{flag}"
         else:
             admitted.append(run)
-            print(
+            head = (
                 f"  admitted  {label}{flag}  condition={run.get('condition')} "
-                f"scenario={run.get('scenario')} verdict={run.get('verdict', {}).get('verdict')} "
+                f"scenario={run.get('scenario')} "
+                f"verdict={run.get('verdict', {}).get('verdict')} "
                 f"records={len(run.get('records', []))}"
             )
+        print(head)
+        for name, ok, note in checks:
+            mark = "ok      " if ok is True else ("DISCARD " if ok is False else "recorded")
+            print(f"      {mark} {name:7s} {note}")
     print(f"  -- {len(admitted)} admitted, {len(discarded)} discarded. V8: n is what it "
           "was, and no condition is topped up to replace a discard.")
     return admitted, discarded
@@ -251,11 +406,11 @@ def rule_e(runs: list[dict], root: Path) -> None:
         print("  no admitted runs: rule E has nothing to check, and that is not a pass.")
         return
     for run in runs:
-        workpieces = run.get("environment", {}).get("CITE_LINE_WORKPIECES")
-        pieces = int(workpieces) if workpieces else manifest_module.DEFAULT_WORKPIECES
-        entries, derivation = manifest_module.manifest(root, pieces)
+        pieces = _workpieces_in_force(run)
+        entries, derivation = manifest_module.manifest(root, pieces["value"])
         present = _presence(run, entries)
-        print(f"  {run['label']} (workpieces in force: {pieces}, "
+        print(f"  {run['label']} (workpieces in force: {pieces['value']} "
+              f"[{pieces['source']}], "
               f"ladder from {derivation['ladder']['source']}, "
               f"length {derivation['ladder']['ladder_length']})")
         for entry in entries:
@@ -304,19 +459,44 @@ def rule_a_premise(runs: list[dict]) -> dict:
 # The record-level rules
 # ---------------------------------------------------------------------------
 def classify(runs: list[dict], rule_a_holds: dict) -> dict:
-    """Rules Z, K, A and section 2.3's leg filter, applied before any margin.
+    """Rules Z, K, A, X and section 2.3's leg filter, applied before any margin.
 
     Every drop is counted and reported per (scenario, what), because a `what` that emits
     only dropped records has produced no measurement of its interval at all, and rule D3
-    then governs it.
+    then governs it. Every drop is ALSO counted against the section 7.2 cell it would
+    have landed in, because that section requires each margin to be reported with `n
+    discarded by each of rules Z, A, X, K and E` beside it.
+
+    RULE X IS APPLIED HERE AND NOT ONLY PRINTED. Section 7.1 registers it among the rules
+    "applied before any margin is computed", and it used to be printed as a verdict on
+    each run while the records themselves went straight into the margin. That is the
+    defect the emitter itself warns about at `c38a42c`: `pick_and_place._run_cycle` emits
+    "whenever the coordinator exited AT ALL, a crash two seconds in included", so a failed
+    run contributes a SHORT `elapsed_s` and inflates `M = 420/max` toward TOO LOOSE. Rule
+    F does not catch it -- a crash is not a timeout -- and rule X2's safety net is silent
+    in exactly this case, because with no passing record in the cell there is no second
+    band to disagree with the first.
     """
-    print("\n=== Rules Z, K and section 2.3's leg filter, applied before any margin ===")
+    print("\n=== Rules Z, K, A, X and section 2.3's leg filter, applied before any margin ===")
     kept: list[dict] = []
     zero_spin: dict[tuple[str, str], int] = {}
     clock: list[dict] = []
     dropped_a = 0
     dropped_leg = 0
+    dropped_x = 0
+    x_runs: list[str] = []
+    # Per-cell discard counts, keyed exactly as the margin cells are, so that section
+    # 7.2's "n discarded by rule ..." lands in the same table cell as the margin.
+    per_cell: dict[tuple[str, str, str, str], dict[str, int]] = {}
+
+    def drop(record: dict, rule: str) -> None:
+        cell = per_cell.setdefault(_cell_key(record), {})
+        cell[rule] = cell.get(rule, 0) + 1
+
     for run in runs:
+        # Rule X reads the RUN's verdict (I2), which is what the rule names. The same
+        # value is copied onto every record by the runner, and rule X2 reads it there.
+        run_verdict = run.get("verdict", {}).get("verdict")
         for record in run.get("records", []):
             key = (record["scenario"], record["what"])
             # Rule Z -- the filter is on `spins`, NEVER on `elapsed_s`. A zero-spin record
@@ -324,25 +504,38 @@ def classify(runs: list[dict], rule_a_holds: dict) -> dict:
             # a subprocess, so it is not always near zero.
             if int(record["spins"]) == 0:
                 zero_spin[key] = zero_spin.get(key, 0) + 1
+                drop(record, "Z")
                 continue
             # Rule K -- two clocks. `elapsed_s` is monotonic; the timeout is enforced on
             # the node clock, which is the steppable system clock. A record above its own
             # ceiling is a datum about the two clocks and is excluded from the margin.
             if float(record["elapsed_s"]) > float(record["ceiling_s"]):
                 clock.append(record)
+                drop(record, "K")
                 continue
+            # Rule X -- CYCLE_CEILING_S contributes only from runs whose verdict passed.
+            if record["scenario"] == "pick_and_place" and float(record["ceiling_s"]) == 420.0:
+                if run_verdict != "passed":
+                    dropped_x += 1
+                    if run["label"] not in x_runs:
+                        x_runs.append(run["label"])
+                    drop(record, "X")
+                    continue
             # Rule A -- drop by `what`, and only in `bringup`'s BRING_UP_CEILING_S.
             if record["scenario"] == "bringup" and float(record["ceiling_s"]) == 240.0:
                 if record["what"] != manifest_module.RULE_A_WHAT:
                     dropped_a += 1
+                    drop(record, "A")
                     continue
                 if not rule_a_holds.get(run["label"], False):
                     dropped_a += 1
+                    drop(record, "A")
                     continue
             # Section 2.3 -- `LEG_CEILING_S` is used in three places and only one is a leg.
             if record["scenario"] == "continuous_line" and float(record["ceiling_s"]) == 420.0:
                 if not record["what"].startswith(manifest_module.LEG_WHAT_PREFIX):
                     dropped_leg += 1
+                    drop(record, "leg")
                     continue
             kept.append(record)
     print(f"  rule Z: {sum(zero_spin.values())} zero-spin record(s) discarded"
@@ -358,6 +551,11 @@ def classify(runs: list[dict], rule_a_holds: dict) -> dict:
     if len(clock) > 1:
         print("      FINDING: more than one clock-disagreeing record. The clock "
               "disagreement is reported as a finding in its own right (rule K).")
+    print(f"  rule X: {dropped_x} pick_and_place CYCLE_CEILING_S record(s) dropped from "
+          f"run(s) whose verdict was not 'passed'"
+          + ("" if dropped_x else " -- NONE FIRED"))
+    for label in x_runs:
+        print(f"      {label}")
     print(f"  rule A: {dropped_a} bringup BRING_UP_CEILING_S record(s) dropped")
     print(f"  section 2.3: {dropped_leg} non-leg LEG_CEILING_S record(s) dropped")
     print(f"  -- {len(kept)} record(s) survive to the margins")
@@ -367,6 +565,9 @@ def classify(runs: list[dict], rule_a_holds: dict) -> dict:
         "clock": clock,
         "dropped_a": dropped_a,
         "dropped_leg": dropped_leg,
+        "dropped_x": dropped_x,
+        "dropped_x_runs": x_runs,
+        "per_cell": per_cell,
     }
 
 
@@ -444,6 +645,20 @@ def fired_ceilings(runs: list[dict], raw: Path) -> dict:
             found.setdefault((scenario, "LEG_CEILING_S", condition), []).append(
                 f"{run['label']}: {match.group(0)}"
             )
+        # The `_await_future` half. `_spin_until`'s assertion above covers
+        # BRING_UP_CEILING_S and DELIVERY_CEILING_S only; TRAJECTORY_CEILING_S and
+        # SKILL_CEILING_S are bounded by a helper that asserts nothing, so their expiry
+        # is visible only as the caller's own message.
+        for site_scenario, name, message in FIRED_AWAIT:
+            if site_scenario != scenario or message not in console:
+                continue
+            found.setdefault((scenario, name, condition), []).append(
+                f"{run['label']}: {message!r} -- the caller's own assertion after an "
+                "_await_future under this ceiling, so that wait did not complete"
+            )
+    print(f"  Two instruments: _spin_until's own timeout assertion, and the "
+          f"{len(FIRED_AWAIT)} caller assertion(s) that are the ONLY surface an "
+          "_await_future expiry has.")
     if not found:
         print("  NONE FIRED. No ceiling timed out in any admitted run.")
     for key, texts in sorted(found.items()):
@@ -455,18 +670,36 @@ def fired_ceilings(runs: list[dict], raw: Path) -> dict:
     return found
 
 
-def margins(kept: list[dict], fired: dict) -> dict:
-    """Section 7.2 and rule Q -- every margin printed TWICE, with both bands.
+def _band_of_max(ceiling: float, values: list[float]) -> tuple[float | None, str | None]:
+    """`M = ceiling / max` and its band, or `(None, None)` when there is nothing to band."""
+    if not values:
+        return None, None
+    highest = max(values)
+    if highest <= 0:
+        return float("inf"), band(float("inf"))
+    margin = ceiling / highest
+    return margin, band(margin)
+
+
+def margins(kept: list[dict], fired: dict, per_cell: dict, expected: dict) -> dict:
+    """Section 7.2, rule Q, rule E's `k of n`, rule NOISY and V7 -- all printed per cell.
 
     `ceiling / max` is a LOWER bound on the true margin; `ceiling / (max - q)` is an UPPER
     bound. Both are printed beside each other. If they land in different bands the cell is
     INCONCLUSIVE -- the poll quantum spans a band edge -- and both readings and both bands
     are published rather than one being chosen.
+
+    V7 IS A DECISION AND NOT A LABEL. Section 10 V7: no run is discarded for load, but a
+    flagged run's margins are "reported with and without it, and if the band verdict
+    differs, that cell is INCONCLUSIVE". The flag used to reach the admission line and stop
+    there. It is partitioned here.
     """
     print("\n=== Section 7.2 -- the per-ceiling verdict, with rule Q's two readings ===")
     print("  Bands INHERITED from 2026-08-29 section 5: M < 1.5 TOO TIGHT, "
           "1.5 <= M <= 10 APPROPRIATE, M > 10 TOO LOOSE.")
     print("  q is subtracted from the MAXIMUM only, never from a median or an IQR.")
+    print("  Each cell carries its rule Z / A / X / K / leg discards and rule E's k of n, "
+          "because section 7.2 requires them in the same cell as the margin.")
     cells: dict[tuple[str, str, str, str], dict] = {}
     grouped: dict[tuple[str, str, str, str], list[dict]] = {}
     for record in kept:
@@ -506,6 +739,38 @@ def margins(kept: list[dict], fired: dict) -> dict:
                 f"rule X2: all-records band {verdict} differs from passing-only "
                 f"band {passing_band}"
             )
+
+        # V7 -- the partition, which is a decision. A cell touched by a flagged run is
+        # banded again over the unflagged records only; a differing band makes the cell
+        # INCONCLUSIVE.
+        flagged = [record for record in records if record.get("v7_load_flag")]
+        unflagged = [record for record in records if not record.get("v7_load_flag")]
+        v7_line = "V7: no flagged run contributes to this cell"
+        if flagged:
+            _, without_band = _band_of_max(
+                ceiling, [float(record["elapsed_s"]) for record in unflagged]
+            )
+            if without_band is None:
+                v7_line = (
+                    f"V7: ALL {len(flagged)} record(s) in this cell come from V7-flagged "
+                    "run(s). There is no unflagged reading to compare, so the two bands "
+                    "cannot differ and the cell is NOT made inconclusive by V7 -- but "
+                    "this band rests entirely on a loud host and rule N governs the prose"
+                )
+            else:
+                without_max = max(float(record["elapsed_s"]) for record in unflagged)
+                v7_line = (
+                    f"V7: {len(flagged)} of {len(records)} record(s) are from a flagged "
+                    f"run. Without them: max={without_max:.3f} "
+                    f"M={ceiling / without_max:.2f} -> {without_band}; with them: "
+                    f"{verdict}"
+                )
+                if without_band != verdict:
+                    inconclusive.append(
+                        f"V7: the band differs with ({verdict}) and without "
+                        f"({without_band}) the loud-host run(s)"
+                    )
+
         is_fired = (scenario, name, condition) in fired
         label = f"{scenario}.{name}" + (f" [{phase}]" if phase != "-" else "")
         head = "FIRED -- NO BAND" if is_fired else (
@@ -515,6 +780,20 @@ def margins(kept: list[dict], fired: dict) -> dict:
         print(f"      n={stats['n']}  min={stats['min']:.3f}  "
               f"median={stats['median']:.3f}  IQR={stats['iqr']:.3f}  "
               f"max={stats['max']:.3f}  (ceiling {ceiling:.1f} s)")
+        drops_here = per_cell.get(key, {})
+        print("      discarded before this margin: "
+              + "  ".join(
+                  f"{rule}={drops_here.get(rule, 0)}"
+                  for rule in ("Z", "A", "X", "K", "leg")
+              ))
+        want = expected.get(key)
+        if want is None:
+            print("      rule E: this cell has NO manifest entry, so no k of n exists "
+                  "for it -- a FINDING about the manifest, not about the ceiling")
+        else:
+            mark = "" if want["k"] == want["n"] else "   <- PARTIAL"
+            print(f"      rule E: {want['k']} of {want['n']} expected record(s) present "
+                  f"over {len(want['labels'])} contributing run(s){mark}")
         print(f"      M = ceiling/max      = {lower:.2f}  -> {band(lower)}   (lower bound)")
         if upper is None:
             print(f"      M = ceiling/(max-q)  = n/a, q={quantum:.1f} s exceeds the maximum")
@@ -526,12 +805,16 @@ def margins(kept: list[dict], fired: dict) -> dict:
         else:
             print("      rule X2: no passing-run record in this cell, so the two readings "
                   "cannot be compared here")
+        print(f"      {v7_line}")
         for note in inconclusive:
             print(f"      {note}")
         if noisy:
             print(f"      NOISY: range {stats['range']:.3f} exceeds "
                   f"{NOISY_RANGE_FRACTION:.0%} of the median. It decorates and does not "
                   "overturn the band.")
+        else:
+            print(f"      rule NOISY: not noisy -- range {stats['range']:.3f} is within "
+                  f"{NOISY_RANGE_FRACTION:.0%} of the median {stats['median']:.3f}")
         if (scenario, name) in manifest_module.SINGLE_SITE_CEILINGS:
             print(f"      this band rests on {stats['n']} record(s)"
                   + (" -- median, IQR and maximum are the same number"
@@ -550,8 +833,18 @@ def margins(kept: list[dict], fired: dict) -> dict:
     return cells
 
 
-def rule_x(runs: list[dict]) -> None:
+def rule_x(runs: list[dict], drops: dict) -> None:
+    """Rule X's per-run table. THE FILTER ITSELF IS IN `classify`, above.
+
+    This block exists so that the rule is auditable run by run -- which run was admitted,
+    which refused and on what verdict. It reports the count `classify` actually dropped
+    beside it, so that a reader can see the two agree; a table that says REFUSED while the
+    records reach the margin anyway is worse than no table at all, and that is what this
+    function used to be.
+    """
     print("\n=== Rule X -- CYCLE_CEILING_S contributes only from runs whose verdict passed ===")
+    print(f"  APPLIED IN classify(): {drops['dropped_x']} record(s) dropped from "
+          f"{len(drops['dropped_x_runs'])} run(s). The per-run table follows.")
     cycle_runs = [
         run
         for run in runs
@@ -572,18 +865,78 @@ def rule_x(runs: list[dict]) -> None:
         print(f"  {run['label']}: verdict={state} -> {outcome}")
 
 
+def _entry_phase(entry) -> str:
+    """The cold/warm half a manifest entry's records land in, per section 7.2.
+
+    The same derivation `_cell_key` applies to a record, applied to the PATTERN instead:
+    an entry whose pattern matches its scenario's cold `what` is the cold half and every
+    other `BRING_UP_CEILING_S` entry in that scenario is the warm one.
+    """
+    cold = manifest_module.COLD_BRING_UP_WHAT.get(entry.scenario)
+    if cold is not None and entry.ceiling_name == "BRING_UP_CEILING_S":
+        return "cold" if entry.pattern.match(cold) else "warm"
+    return "-"
+
+
+def _entry_contributes(entry) -> bool:
+    """Do this entry's records survive rule A and section 2.3's leg filter?
+
+    Rule E's `k of n` has to be the `k of n` OF THE RECORDS THE MARGIN WAS COMPUTED FROM
+    (section 7.1), so an entry whose records `classify` drops wholesale must not be
+    counted into the cell's denominator. Both exclusions name a concrete `what`, so the
+    entry's own pattern is tested against it rather than against a hand-written list:
+    rule A keeps only `RULE_A_WHAT`, and section 2.3 keeps only the `piece ` prefix.
+    """
+    if entry.scenario == "bringup" and entry.ceiling_s == 240.0:
+        return bool(entry.pattern.match(manifest_module.RULE_A_WHAT))
+    if entry.scenario == "continuous_line" and entry.ceiling_s == 420.0:
+        return bool(entry.pattern.match(f"{manifest_module.LEG_WHAT_PREFIX}1: probe"))
+    return True
+
+
+def expectations(runs: list[dict], root: Path) -> dict:
+    """Rule E's `k of n`, keyed by the SAME cell key section 7.2's margin uses.
+
+    Section 7.1: "every margin computed from a pattern carries the `k of n` of the records
+    it was computed from, in the same table cell as the margin. A margin resting on a
+    fraction of its expected records is not wrong, but it is a different claim from one
+    resting on all of them, and the reader is not asked to work out which they are looking
+    at." `rule_e` above prints the per-run table; this is the same count folded onto the
+    cells, which is where the requirement actually bites -- threat 12's case is a
+    `LEG_CEILING_S` margin resting on 2 of 30 legs printing `n=2` with nothing saying 30
+    were expected.
+
+    `n` is summed over EVERY admitted run of that (scenario, condition), including a run
+    that emitted none of them: an absent expected key is absent, not zero, and a
+    denominator that only counted the runs that answered would hide exactly that.
+    """
+    table: dict[tuple[str, str, str, str], dict] = {}
+    for run in runs:
+        pieces = _workpieces_in_force(run)
+        entries, _ = manifest_module.manifest(root, pieces["value"])
+        records = run.get("records", [])
+        for entry in entries:
+            if entry.scenario != run.get("scenario") or not _entry_contributes(entry):
+                continue
+            key = (entry.scenario, entry.ceiling_name, _entry_phase(entry), run["condition"])
+            cell = table.setdefault(key, {"k": 0, "n": 0, "labels": [], "patterns": []})
+            cell["k"] += sum(1 for record in records if entry.matches(record))
+            cell["n"] += entry.count
+            if run["label"] not in cell["labels"]:
+                cell["labels"].append(run["label"])
+            if entry.pattern.pattern not in cell["patterns"]:
+                cell["patterns"].append(entry.pattern.pattern)
+    return table
+
+
 def rule_d3_and_n(cells: dict, root: Path) -> None:
     """Rule D3 decides the verdict column; rule N constrains the prose around it."""
     print("\n=== Rule D3 and rule N -- what was NOT assessed, and what may not be said ===")
     entries, _ = manifest_module.manifest(root)
     wanted = set()
     for entry in entries:
-        cold = manifest_module.COLD_BRING_UP_WHAT.get(entry.scenario)
-        phase = "-"
-        if cold is not None and entry.ceiling_name == "BRING_UP_CEILING_S":
-            phase = "cold" if entry.pattern.match(cold) else "warm"
         for condition in CONDITION_ORDER:
-            wanted.add((entry.scenario, entry.ceiling_name, phase, condition))
+            wanted.add((entry.scenario, entry.ceiling_name, _entry_phase(entry), condition))
     missing = sorted(wanted - set(cells))
     print(f"  {len(cells)} cell(s) assessed, {len(missing)} NOT ASSESSED.")
     for key in missing:
@@ -684,9 +1037,14 @@ def instrument_table(runs: list[dict], discarded: list[dict], drops: dict, root:
     total_mangled = 0
     for run in runs + discarded:
         instrument = run.get("instrument", {})
-        total_lines += instrument.get("marker_lines", 0)
-        total_records += instrument.get("records", 0)
-        total_mangled += instrument.get("mangled_count", 0)
+        # `or 0`, not a default: rule P discards a run whose `marker_lines` is null, and
+        # this table pools the discarded runs deliberately. `.get(k, 0)` returns the None
+        # that is actually stored and the sum then raises, so the whole instrument table
+        # -- the one section 7.4 publishes WHATEVER the margins say -- would be lost to
+        # the run that most needed reporting.
+        total_lines += instrument.get("marker_lines") or 0
+        total_records += instrument.get("records") or 0
+        total_mangled += instrument.get("mangled_count") or 0
         print(f"  {run['label']:28s} CITE_TIMING lines={instrument.get('marker_lines')} "
               f"parsed={instrument.get('records')} "
               f"mangled={instrument.get('mangled_count')} "
@@ -696,6 +1054,7 @@ def instrument_table(runs: list[dict], discarded: list[dict], drops: dict, root:
     print(f"  POOLED: lines={total_lines} parsed={total_records} mangled={total_mangled} "
           f"zero-spin={sum(drops['zero_spin'].values())} "
           f"clock-disagreeing={len(drops['clock'])} rule-A dropped={drops['dropped_a']} "
+          f"rule-X dropped={drops['dropped_x']} "
           f"non-leg dropped={drops['dropped_leg']}")
     _cross_check_ladder(runs, root)
 
@@ -748,11 +1107,20 @@ def _prediction(cell: dict | None, wanted: str) -> str:
     return "HELD" if cell["verdict"] == wanted else f"REFUTED -- {cell['verdict']}"
 
 
-def predictions(cells: dict, drops: dict, runs: list[dict], fired: dict) -> None:
+def predictions(
+    cells: dict, drops: dict, runs: list[dict], fired: dict, collected: list[dict]
+) -> None:
     """Section 7.6. A refuted prediction is a RESULT and is reported as one.
 
     None of the seven is a threshold; the thresholds are sections 7.1 to 7.3, and they do
     not move if a prediction fails.
+
+    `runs` is the ADMITTED set and `collected` is every run in `raw/`, admitted or not.
+    The distinction is PR6's: a mangled record is a finding about the instrument, and a
+    run discarded FOR mangling is the loudest evidence there is that the instrument
+    mangled something. Summing PR6 over the admitted runs alone let it print HELD over a
+    campaign that had produced mangled records -- the one outcome the prediction exists to
+    detect. `instrument_table` above already pools both sets for the same reason.
     """
     print("\n=== PR1-PR7 -- pre-registered predictions, each printed either way ===")
     # FIRED cells are excluded because rule F gives them NO BAND at all. INCONCLUSIVE
@@ -821,14 +1189,18 @@ def predictions(cells: dict, drops: dict, runs: list[dict], fired: dict) -> None
     print("  PR5  continuous_line.LEG_CEILING_S is APPROPRIATE at FULL: "
           f"{_prediction(leg_full, 'APPROPRIATE')}")
 
-    mangled = sum(run.get("instrument", {}).get("mangled_count", 0) for run in runs)
+    mangled = sum(
+        (run.get("instrument", {}).get("mangled_count") or 0) for run in collected
+    )
     pr6 = (
         "HELD"
         if mangled == 0 and not drops["clock"]
         else "REFUTED -- a finding about the instrument in its own right"
     )
     print("  PR6  rule G's mangled count and rule K's are both zero across the campaign: "
-          f"mangled={mangled}, clock-disagreeing={len(drops['clock'])} -> {pr6}")
+          f"mangled={mangled} over all {len(collected)} collected run(s) "
+          f"(admitted AND discarded), clock-disagreeing={len(drops['clock'])} over the "
+          f"{len(runs)} admitted -> {pr6}")
 
     counts = []
     for run in runs:
@@ -893,13 +1265,15 @@ def main() -> int:
     rule_e(admitted, root)
     holds = rule_a_premise(admitted)
     drops = classify(admitted, holds)
-    rule_x(admitted)
+    rule_x(admitted, drops)
     fired = fired_ceilings(admitted, raw)
-    cells = margins(drops["kept"], fired)
+    cells = margins(
+        drops["kept"], fired, drops["per_cell"], expectations(admitted, root)
+    )
     rule_d3_and_n(cells, root)
     rule_b1(cells)
     instrument_table(admitted, discarded, drops, root)
-    predictions(cells, drops, admitted, fired)
+    predictions(cells, drops, admitted, fired, admitted + discarded)
 
     print("\n=== V8, V9, V10, V11 ===")
     print(f"  V8  n is what it was: {len(admitted)} admitted run(s) over "

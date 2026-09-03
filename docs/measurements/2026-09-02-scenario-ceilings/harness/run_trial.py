@@ -56,8 +56,32 @@ CONTAINER_SEARCH_CEILING_S = 300.0
 #: that never arrived is recorded as never arrived and V2 then discards the run.
 CONFIGURATION_READ_CEILING_S = 900.0
 
-#: Between two polls of either loop above. A poll interval, not a settling time.
+#: Between two polls of the CONTAINER SEARCH. A poll interval, not a settling time. It is
+#: cheap: one `docker ps` on the host, touching nothing inside the cgroup.
 POLL_S = 2.0
+
+#: Between two attempts at I7, and DELIBERATELY MUCH LARGER THAN `POLL_S`.
+#:
+#: THE READING PERTURBS THE INTERVAL IT MEASURES. Each attempt runs
+#: `docker exec ... bash -lc '. setup.bash; . install/setup.bash; ros2 param get ...'`
+#: INSIDE THE CGROUP UNDER MEASUREMENT: two `setup.bash` chains over a 23-package
+#: workspace and a full `rclpy` node, every two seconds. At FULL that is noise. At C1 it
+#: is a substantial fraction of the entire one-CPU budget, spent DURING COLD BRING-UP --
+#: which is the headline interval for two `BRING_UP_CEILING_S` cells and for rule A's
+#: single `bringup` record, and Q-B is the half of #30 this campaign exists to answer.
+#: The reading only has to succeed ONCE and `CONFIGURATION_READ_CEILING_S` is 900 s, so
+#: there is no reason for it to be frequent.
+CONFIGURATION_POLL_S = 30.0
+
+#: How long the watcher waits for the scenario's OWN first milestone before reading I7
+#: anyway. NOT a settling time and not a sequencing sleep (P4): the wait ends on an EVENT
+#: -- the first `CITE_TIMING` line the scenario prints, which means a wait completed and
+#: therefore that the stack the reading needs is up -- and this is only the bound on how
+#: long that event is waited for. It is bounded rather than unbounded so that V2 still
+#: FAILS CLOSED: a run whose cell never comes up emits no milestone, and the reading has
+#: to be attempted and recorded as failed rather than skipped, because a missing reading
+#: and a failed one must not be the same record.
+CONFIGURATION_GATE_CEILING_S = 300.0
 
 #: How often I4 is re-read WHILE the run is live. It has to be re-read at all because
 #: `scripts/_lib.sh` starts the scenario with `compose run --rm`, so the container is
@@ -97,11 +121,21 @@ class Watcher(threading.Thread):
             "cpu_samples": 0,
             "container_env": None,
             "configuration": None,
+            "configuration_gate": None,
         }
         self._stop = threading.Event()
+        # Set by the console reader on the scenario's first `CITE_TIMING` line. The I7
+        # readback waits on it rather than starting from container start, so that the
+        # `ros2 param get` does not compete with cold bring-up for the one CPU C1 gives
+        # the whole cell.
+        self._first_record = threading.Event()
 
     def stop(self) -> None:
         self._stop.set()
+
+    def note_first_record(self) -> None:
+        """One `CITE_TIMING` line has been seen on the scenario's console."""
+        self._first_record.set()
 
     def run(self) -> None:  # pragma: no cover - exercised by the shakedown, not by pytest
         deadline = time.time() + CONTAINER_SEARCH_CEILING_S
@@ -149,6 +183,32 @@ class Watcher(threading.Thread):
         # on either. The shakedown recorded a null seed for exactly that reason.
         self.found["container_env"] = _container_cite_env(cid)
 
+        # THE GATE. Wait for the scenario's own first milestone before asking the cell
+        # anything: by then a wait has completed, so the node I7 reads from is up and the
+        # first attempt normally succeeds outright. I4 keeps sampling throughout -- a
+        # `docker exec cat` of one cgroup file, which is not what costs anything here.
+        gate_started = time.time()
+        gate_deadline = gate_started + CONFIGURATION_GATE_CEILING_S
+        while (
+            not self._first_record.is_set()
+            and not self._stop.is_set()
+            and time.time() < gate_deadline
+        ):
+            self._sample_cpu(cid)
+            self._first_record.wait(I4_SAMPLE_PERIOD_S)
+        self.found["configuration_gate"] = {
+            "first_record_seen": self._first_record.is_set(),
+            "waited_s": round(time.time() - gate_started, 3),
+            "gate_ceiling_s": CONFIGURATION_GATE_CEILING_S,
+            "poll_period_s": CONFIGURATION_POLL_S,
+            "note": (
+                "I7 is read after the scenario's first CITE_TIMING line, not from "
+                "container start, because the reading runs inside the cgroup under "
+                "measurement. If first_record_seen is false the gate expired and the "
+                "reading was attempted anyway, so V2 still fails closed."
+            ),
+        }
+
         deadline = time.time() + CONFIGURATION_READ_CEILING_S
         while time.time() < deadline and not self._stop.is_set():
             configuration = common.running_configuration(cid)
@@ -156,7 +216,9 @@ class Watcher(threading.Thread):
             if configuration["description_read_ok"] and configuration["world_read_ok"]:
                 break
             self._sample_cpu(cid)
-            time.sleep(POLL_S)
+            # `self._stop.wait`, not `time.sleep`: at a 30 s period a sleeping watcher
+            # would outlive the run it is watching by up to half a minute.
+            self._stop.wait(CONFIGURATION_POLL_S)
 
         # Keep sampling I4 until the run ends. The last successful sample is what I4's
         # "again at the end of the run" and V6's end-of-run confirmation can mean here,
@@ -263,6 +325,11 @@ def run(label: str, condition: str, scenario: str, out: Path) -> int:
             sink.write(line)
             sink.flush()
             sys.stdout.write(line)
+            # The event the I7 gate waits on. A `CITE_TIMING` line means one of the
+            # scenario's own waits completed, so the stack the reading needs is up. The
+            # marker constant is `common`'s, so the reader and the parser cannot drift.
+            if common.TIMING_MARKER in line:
+                watcher.note_first_record()
     returncode = process.wait()
     ended_wall = time.time()
     watcher.stop()
@@ -345,6 +412,7 @@ def run(label: str, condition: str, scenario: str, out: Path) -> int:
         "i4_release_attempt": release,
         "i6": common.v1(start_snapshot, end_snapshot),
         "i7": watcher.found["configuration"],
+        "i7_gate": watcher.found["configuration_gate"],
         "container": {
             "id": cid,
             "cite_environment_in_force": watcher.found["container_env"],
