@@ -16,23 +16,37 @@ that reproduces it; check that, never this file. If an item here disagrees with
 where open work is written down is a P1 violation waiting to happen, and this file's only
 defence is that it is dated and says so.
 
+**Updated 2026-09-03**, on the branch `feat/close-phase-debts`: #30's open half has a published
+campaign and is rewritten against it, #55 gains a related but textually distinct sibling event
+from that campaign's raw, and the table below was re-derived by running the commands its rows
+name. **The heading date is the date this file was first written and is deliberately not
+moved**; every later reading carries its own date.
+
 ---
 
 ## Where the repository stood when this was written
 
-`main` at `51195e0`, clean and pushed — `git rev-parse main origin/main` agrees on 2026-09-02.
-This table was first taken at `3725af5`; every one of its original seven rows was re-measured at
-`abdae38` on 2026-09-01 and **none of them moved**, and the head line read `abdae38` until
-2026-09-02. The last row is new. Reproduce each figure rather than quoting it from here.
-**Seven of the eight rows were re-measured on 2026-09-02 at `51195e0`, and one moved.**
-Measurement campaigns went **10 → 11**: `2026-09-02-option-f-regions/` is the eleventh, its
-first file committed at `79ae6d9` on 2026-09-01 and its analysis at `51195e0`.
+`main` at `51195e0`, clean — `git rev-parse main` and `git rev-parse origin/main` both read it
+on 2026-09-03. This table was first taken at `3725af5`; every one of its original seven rows was
+re-measured at `abdae38` on 2026-09-01 and **none of them moved**, and the head line read
+`abdae38` until 2026-09-02. Reproduce each figure rather than quoting it from here.
+
+**Re-measured again on 2026-09-03, and this time the checkout is not `main`.** The reading is
+taken on the branch `feat/close-phase-debts`, which is **ahead of `main`** and carries the
+twelfth measurement campaign; `main` itself **has not moved since 2026-09-02** and
+is still `51195e0`, which was re-derived rather than assumed. **Seven of the eight rows were
+re-read and one moved.** Measurement campaigns went **11 → 12**:
+`2026-09-02-scenario-ceilings/` is the twelfth, and it is on this branch and **not yet on
+`main`** — the same command run against `main` still returns 11.
 The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
 15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
 indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
-`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:143`. **The row not re-measured
-is the last one**, which needs `gh` against a CI run, and the environment row's own history is
-the note below.
+`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:143`. The environment row was
+re-read **in the container** at `29 passed, 0 failed, 1 skipped`, unchanged. **The row not
+re-measured is the last one**, which needs `gh` against a CI run: **`gh` is installed neither
+on this host nor in the container image**, so that row has now gone two days unchecked and a
+claim about what CI has done expires the moment CI runs again. The environment row's own
+history is the note below.
 
 | | | Command |
 |---|---|---|
@@ -40,7 +54,7 @@ the note below.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 11 | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 12 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
 | CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
@@ -142,12 +156,59 @@ exists and does exactly that, and the 2026-09-01 grasp campaign drove it. Re-rea
 before assuming it still holds.
 
 ### #30 — Re-derive the six scenario wall-clock ceilings
-**Partly answered.** The 2026-08-29 campaign measured all six appropriate at a full allocation,
-margins 3.8–9.9, none too tight and none too loose. **Still open:** the under-load figure.
+**Answered on the under-load half, 2026-09-03, and still open on the attribution half.** The
+measurement this item asked for is
+[`docs/measurements/2026-09-02-scenario-ceilings/`](measurements/2026-09-02-scenario-ceilings/ANALYSIS.md)
+— thresholds registered before the first trial, machine named, measured on the configuration
+this repository ships. **Cite the directory; no figure from it is copied here (P1).**
 
-Two things have moved since this was written and both need folding in: the world now carries
-ADR-0043's throttle, and the shipped collision geometry is hulls, which the 2026-09-01 capacity
-campaign measures as materially cheaper. Ceilings derived on vendor meshes may now be loose.
+**What is now known.**
+
+- **All four allocations were measured**, including the loaded ones this item asked for, and
+  they were measured *at* the allocation rather than derived by scaling an unloaded interval.
+- **This heading says "six" and the tree declares nine.** `grep -n "_CEILING_S = "
+  tests/scenarios/*.py` returns **9** declarations across the three scenarios, and the campaign
+  bands all nine, split into eleven (scenario, ceiling, condition) families. The heading is left
+  as the item's identifier; the nine are what was measured.
+- **Two `bringup` ceilings read TOO LOOSE at a full allocation and stay TOO LOOSE at four
+  CPUs**: `TRAJECTORY_CEILING_S` and `SKILL_CEILING_S`. **Both intervals the 2026-08-29 campaign
+  had to report *"not assessed"* under its rule D3 — `DELIVERY_CEILING_S` and
+  `TRAJECTORY_CEILING_S` — are instrumented and recorded here, so the instrumentation debt this
+  item names is discharged.** `TRAJECTORY_CEILING_S` is in both lists; `DELIVERY_CEILING_S`
+  lands INCONCLUSIVE at every allocation, for the reason below. **`SKILL_CEILING_S` was assessed
+  by the 2026-08-29 campaign, on a named proxy, and rule H forbids reading the two verdicts
+  against each other** — the TOO LOOSE here is an absolute verdict on this host and this
+  configuration, never a change.
+- **One crossing is located and bracketed between two measured allocations.** Three ceilings
+  were APPROPRIATE at every allocation tried and are reported **NOT LOCATED** for that reason,
+  which the campaign's registered vocabulary says is **never** "safe at any allocation" — it is
+  a statement about four allocations on one host. Four brackets are **OPEN**, and an open
+  bracket is not a narrower one.
+- **A family of cells is INCONCLUSIVE because the measured intervals are smaller than the poll
+  quantum**, so no upper bound on the margin exists and no band can be stated. **That is a
+  property of the instrument, not a pass**, and the campaign predicted it in the same breath as
+  it registered the rule.
+- **Eight cells are NOT ASSESSED.** Rule N governs every sentence about them: not tested is not
+  fine, not loose, not unchanged, and never carried over from another condition or another
+  scenario. **Silence is not a clearance.**
+- **This item's *"ceilings derived on vendor meshes may now be loose"* is answered as an
+  absolute verdict on the shipped configuration and not as a delta.** The campaign's **rule H**
+  forbids differencing any margin against 2026-08-29's — different machine, different CPU
+  architecture, different collision geometry — so nothing here is subtracted from, divided by,
+  or described as an improvement on anything there.
+- **Six of 28 runs were lost to the harness's own configuration read-back**, not to a wrongly
+  configured cell, and none was topped up. Every `bringup` cell at the two largest allocations
+  therefore rests on a single run. Read the campaign's own §2.1 before leaning on one.
+
+**Still open: the two levers this item asked to have folded in are folded in by measurement and
+not by attribution.** ADR-0043's throttle and the hull geometry are both present in what was
+measured — the campaign measured the shipped configuration — and **nothing is attributed to
+either**, because a control arm would require editing `model/`, which the campaign's §0 forbids
+and its rule V1 would discard. Separating the two levers still needs a campaign that may change
+the model, and that is a different campaign from this one.
+
+**No ceiling was changed and none is proposed.** The campaign's §0 reserves every ceiling
+change to the project owner and it proposes no replacement value for anything.
 
 **Change no ceiling without the measurement, and never widen one to absorb a failure.**
 
@@ -337,6 +398,35 @@ today's shape. A regression here fails nothing.
 
 P4 is the lens: if the scene load depends on a frame becoming resolvable, that is a sequencing
 question and the answer is an event, never a retry or a sleep.
+
+**A related but textually distinct failure of the same node, 2026-09-03, and it is deliberately
+not counted as another observation of this item.** During
+[`docs/measurements/2026-09-02-scenario-ceilings/`](measurements/2026-09-02-scenario-ceilings/ANALYSIS.md),
+the run `C4_continuous_line_1` failed at bring-up with `planning_scene_loader.py` exiting 1 —
+this item's process — but with a **different error text**, from **`arm_2`** and not `arm_1`:
+`'apply_planning_scene' never returned a result`. `arm_1` had already loaded its collision
+objects; the node is `required`, so the launch shut down and the run's tests never started.
+The campaign discarded the run and it contributes to none of its figures.
+
+**Why it is not folded in here.** A line-break-insensitive grep for this item's own three
+strings — `Unknown frame: cite_world`, `Tf has two or more unconnected trees` and
+`refused the planning scene diff` — across **all 28** captured campaign consoles returns
+**none of them**, re-checked on 2026-09-03. The two messages are **two branches of one
+function**, adjacent in
+`workspace/src/cite_facility/cite_facility/planning_scene_loader.py`: this item's is
+`response.success == False`, a refusal that **returned**; the new one is `future.result() is
+None` after `spin_until_future_complete(..., timeout_sec=SERVICE_DEADLINE_S)`, a call that
+**never returned at all**, and the campaign reports an elapsed time consistent with that
+deadline. They also differ in the configuration — this item is a **paired** bring-up and the
+new event is a **solo plant** run, so this item's *"the counterpart brought the identical
+configuration up cleanly at the same moment"* has no counterpart to lean on there.
+**The attribution is left open**, and whether the two are one defect is not established.
+
+**The console is captured**, at
+`docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_1.log`, with the run
+document beside it — which is what #37's standing instruction asks for. **This item's own
+occurrence carries a console too**, named above. **It is #37 whose single event was restarted
+rather than analysed with no log kept**, and the two must not be confused.
 
 ---
 

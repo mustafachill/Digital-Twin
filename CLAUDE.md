@@ -537,6 +537,18 @@ date it is that value's history and not a current reading.
   four**, printing a number close to 0.14 while the cell runs at a twenty-fifth of real time.
   Measure `Δ sim_time / Δ real_time` from the world's stats topic over a stated window; never
   quote that field.
+  **The ceilings themselves have since been measured, at four allocations on one host, and two
+  of them read too loose.**
+  [`docs/measurements/2026-09-02-scenario-ceilings/`](docs/measurements/2026-09-02-scenario-ceilings/ANALYSIS.md)
+  — thresholds registered before the first trial, machine named, taken on the shipped
+  configuration — bands every scenario ceiling per allocation. **Read it before touching a
+  ceiling**, and read what it refuses to say: it attributes nothing to either the throttle or
+  the hulls, a family of its cells has **no upper bound at all** because the intervals are
+  smaller than its poll quantum, eight are **NOT ASSESSED** where silence is not a clearance,
+  and its own rule forbids differencing any margin against the 2026-08-29 campaign's. **It
+  changes no ceiling and proposes no value; changing one is the project owner's.** The figures
+  stay in that directory (P1) — cite it, and the standing instruction above is untouched: **no
+  ceiling may be widened to absorb a slow host.**
 - **Phase 2 has split into 2.A and 2.B, and 2.A's bring-up mechanism is built: a pair has come
   up.** Charter v1.9 (2026-08-29) records the split: 2.A
   pairs the plant with a **virtual counterpart** — a second full simulation of the same cell,
@@ -737,8 +749,10 @@ date it is that value's history and not a current reading.
     `AwaitTrigger` on a beam the part is **already breaking**, and waits out the leg ceiling —
     while `LineState` reports `RUNNING`, so nothing escalates and the scenario's fail-fast —
     which keys on `BLOCKED`, `FAULTED` **and `STALLED`** in the tree today
-    (`STOPPED_STATES`, `tests/scenarios/continuous_line.py:465`; it was line 458 until
-    2026-09-01, and the set is unchanged), and this file said only the first two —
+    (`STOPPED_STATES`, `tests/scenarios/continuous_line.py:467`; it was 458 until 2026-09-01
+    and 465 until `eef5468` on 2026-09-02, this file carried 465 until 2026-09-03, and **the
+    set itself is unchanged** through all three — re-read the line rather than trusting it,
+    because it has moved twice in a week), and this file said only the first two —
     correctly stays quiet, because the line publishes none of the three. Seen twice,
     reported by the project owner on 2026-08-27. ADR-0038 records why this is deliberately **not** fixed: the
     cheap fix restarts the belt, the retry begins with `MoveToHome` carrying whatever the arm
@@ -830,8 +844,11 @@ date it is that value's history and not a current reading.
     expiry date.
     **This bullet said until 2026-09-02 that "`Accepted` here means a decision and a
     specification and nothing else: no line of code, no threshold and no test moved, and the
-    defect is exactly as live as it was." That is false, and it was false the day after it was
-    written.** Option F is implemented and on `main`, in five commits ending `d3eeac4` on
+    defect is exactly as live as it was." That is false, and it was already false about nine
+    hours later, on the same day.** This file said "the day after it was written" until
+    2026-09-03: the status sentence landed at `5a929c4`, 12:19, and the first implementing
+    commit is `53f1d58` at 21:08, both on 2026-09-01 (`git log --date=iso`).
+    Option F is implemented and on `main`, in five commits ending `d3eeac4` on
     2026-09-01: `53f1d58` declares the band and the work-piece interval in L0, `7a3e4d3` carries
     both into the generated bring-up plan, `3f6fe6f` replaces the predicate, and `f14d189` and
     `d3eeac4` are the tests — `git merge-base --is-ancestor <sha> main` succeeds for each.
