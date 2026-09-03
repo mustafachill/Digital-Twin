@@ -256,6 +256,43 @@ so that no counterpart can ever land on another checkout's plant — so every ch
 changed on the day that landed. A cell launched before it and a shell entered after it are on
 different domains, and the shell finds an empty graph.
 
+### `gz sim --versions` disagrees with `./scripts/doctor`
+
+Not a fault, and nothing has been observed misbehaving as a result. **The container carries two
+Gazebo Sim installations, and which one answers depends on whether the ROS environment has been
+sourced.** Both readings below were taken from image `3a41d4e431b0` on 2026-09-03:
+
+| environment | `command -v gz` | `gz sim --versions` |
+|---|---|---|
+| **sourced** — `./scripts/enter dev bash -c ...` | `/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz` | **8.11.0** |
+| **unsourced** — `docker run --rm --entrypoint bash cite-digital-twin:dev -lc ...` | `/usr/bin/gz` | **8.15.0** |
+
+The 8.15.0 is the `gz-harmonic` metapackage the Dockerfile installs from
+`packages.osrfoundation.org`; `dpkg -l` inside the image reads `gz-sim8-cli` and `libgz-sim8` at
+`8.15.0-1~noble`. The 8.11.0 is ROS Jazzy's vendored `gz_tools_vendor`. **The split is not only
+the command:** on the sourced `LD_LIBRARY_PATH`, `libgz-sim8.so.8` resolves to
+`/opt/ros/jazzy/opt/gz_sim_vendor/lib/libgz-sim8.so.8.11.0`, ahead of the system
+`/usr/lib/x86_64-linux-gnu/libgz-sim8.so.8.15.0`, so a sourced process loads the 8.11.0 server
+and not merely an 8.11.0 client.
+
+**The cell is consistent, and it is the vendored 8.11.0 throughout.** The image entrypoint
+sources `/opt/ros/${ROS_DISTRO}/setup.bash` before handing off to the command
+(`infra/docker/entrypoint.sh`), and `./scripts/enter`, `./scripts/sim` and `./scripts/scenario`
+all reach the container through it without overriding it. `./scripts/doctor` run inside the
+container reports **8.11.0**, and that is the simulator every process in a bring-up uses.
+`docker run --entrypoint bash` is what bypasses the sourcing and produces the other reading.
+
+**The hazard is the ad-hoc probe, not the cell.** A `gz` invocation that does not carry the ROS
+environment talks to a different Gazebo than the cell does — four releases apart — so a version,
+a behaviour or an oddity reproduced that way is not by itself a statement about this system.
+Probe through `./scripts/enter`, as the rest of this document does. Note that the partition entry
+above constrains the same command for an unrelated reason: an unsourced probe can be wrong about
+*which Gazebo*, and an unpartitioned one wrong about *which world*, and the two are independent.
+
+Both installations are legitimate and neither is known to be wrong, so **this entry records a
+fact and a hazard, not a bug.** Whether the image should carry one Gazebo or two is a decision
+and has not been taken.
+
 ### `line_orchestrator` exits with "no LineTopology arrived"
 
 **Seen once, on a run that was restarted rather than analysed, so there is no log.** That is
