@@ -1,0 +1,31 @@
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-03T16:22:13Z
+labels_requested=__PREFLIGHT_BUILD_ONLY__
+host_uname=Linux cite 7.0.0-30-generic #30~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug  7 13:27:52 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+host_uptime= 11:22:13 up 23:16,  1 user,  load average: 0.03, 0.15, 0.16
+host_loadavg=0.03 0.15 0.16 3/1483 241887
+compose_project_name=cite-digital-twin-3319196271
+ros_domain_id=43
+compose_project_source=derived from this checkout
+git_head=98fbbfc24a064d00464073f643edeccf79a80105
+base_commit=c38a42c
+criteria_sha256=da918ad644c6b828347162e85670a2fcbb13701b474d40085ffa7a100c1fd133
+image_id=sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d
+# ---- ./scripts/build, recorded once for V11 ----
+Summary: 23 packages finished [2.93s]
+build_exit=0
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-03T16:26:04Z
+labels_requested=<all>
+host_uname=Linux cite 7.0.0-30-generic #30~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug  7 13:27:52 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+host_uptime= 11:26:04 up 23:19,  1 user,  load average: 0.30, 0.33, 0.24
+host_loadavg=0.30 0.33 0.24 1/1503 251024
+compose_project_name=cite-digital-twin-3319196271
+ros_domain_id=43
+compose_project_source=derived from this checkout
+git_head=98fbbfc24a064d00464073f643edeccf79a80105
+base_commit=c38a42c
+criteria_sha256=da918ad644c6b828347162e85670a2fcbb13701b474d40085ffa7a100c1fd133
+image_id=sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d
+== V11: provenance.txt already carries a build block; not building again.
+build_skipped=provenance already carries a build block at 2026-09-03T16:26:04Z
