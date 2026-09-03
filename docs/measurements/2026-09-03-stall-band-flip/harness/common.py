@@ -49,6 +49,29 @@ DRIVE_JOINT = f"{ARM}_drive_joint"
 #: `criteria.md` V1 and its BASE_COMMIT. Every figure is a property of the tree here.
 BASE_COMMIT = "c38a42c"
 
+#: `criteria.md` V12's commit. The superseded predicate is a BUILD of this tree, never a
+#: rewrite. Named ONCE here because `superseded_provenance` below and `analyse.py`'s V12
+#: both have to compare against it, and a literal typed in two places is the defect P1
+#: names. `build_superseded.sh` carries it a third time, in shell, which is recorded as a
+#: limitation in `README.md` rather than fixed: the script's copy is what PRODUCES the
+#: provenance and this one is what CHECKS it, so the two agreeing is the check.
+SUPERSEDED_COMMIT = "4ef2d7c"
+
+#: The fields of `raw/predicate_eval_superseded_provenance.txt` that identify WHICH BUILD
+#: produced `holding_S`, and therefore the only fields V12 may be computed from. They are
+#: exactly the ones a rebuild of the same commit reproduces: `built_at` is refreshed by
+#: `build_superseded.sh` on EVERY build, so a campaign whose blocks were taken across two
+#: builds of the identical commit carries two different `built_at` values and one identity.
+#: Comparing the whole dictionary would report a complete provenance as a V12 failure.
+V12_IDENTITY_KEYS = (
+    "worktree_commit",
+    "worktree_commit_short",
+    "gripper_cpp_sha256",
+    "gripper_hpp_sha256",
+    "front_end_sha256",
+    "binary_sha256",
+)
+
 #: `criteria.md` section 0 and V1. FIVE paths, inherited from the 2026-09-02
 #: scenario-ceilings campaign for the reason it gives: everything this campaign consumes
 #: lives in them. `docs/measurements/` is deliberately NOT watched -- this campaign's own
@@ -325,6 +348,14 @@ def snapshot(root: Path | None = None) -> dict:
         "watched_worktree_dirty": dirty,
         "clean": diff == "" and dirty == "",
         "model_hash": model_hash(root),
+        # V1 deliberately does not watch `docs/`, so the FROZEN `criteria.md` this campaign
+        # is a property of lies OUTSIDE every path V1 reads -- and V9 says nothing in it
+        # changes once the first trial has run. This hash is the only instrument that could
+        # notice one that did. It is taken HERE, in the snapshot, so that it travels at BOTH
+        # ENDS of every cycle and an edit landing mid-block is visible the way a watched-path
+        # edit is. It gates nothing: `analyse.py` prints it as a rule and V9 is what the
+        # finding would belong to.
+        "criteria_sha256": sha256(HERE.parent / "criteria.md"),
     }
 
 
@@ -576,9 +607,23 @@ def superseded_provenance() -> dict:
         if "=" in line:
             key, value = line.split("=", 1)
             fields[key.strip()] = value.strip()
-    fields["available"] = fields.get("worktree_commit_short") == "4ef2d7c" and \
+    fields["available"] = fields.get("worktree_commit_short") == SUPERSEDED_COMMIT and \
         bool(fields.get("binary_sha256"))
     return fields
+
+
+def v12_identity(superseded: dict | None) -> tuple:
+    """The invariant half of V12's provenance, as a comparable tuple.
+
+    V12 asks for the `4ef2d7c` worktree commit and the sha256 of the binary that produced
+    `holding_S`. It does NOT ask when the binary was built, and `built_at` is refreshed by
+    `build_superseded.sh` on every build -- so comparing the whole provenance dictionary
+    across blocks reports a campaign with COMPLETE provenance as a V12 failure the moment a
+    second build of the identical commit happens. This is the subset that identifies the
+    build, and it is what V12 is computed from.
+    """
+    superseded = superseded or {}
+    return tuple(superseded.get(key) for key in V12_IDENTITY_KEYS)
 
 
 # ---------------------------------------------------------------------------
@@ -727,6 +772,10 @@ class TrialWriter:
             "floor_m": self.header.get("floor_m"),
             "superseded": self.header.get("superseded"),
             "p6": self.header.get("p6"),
+            # `criteria.md` section 10: the shakedown IS NOT DATA. It travels on the record
+            # so that the exclusion is a FIELD the analyser drops on, and not a property of
+            # which directory the operator happened to redirect the run into.
+            "is_shakedown": bool(self.header.get("is_shakedown")),
         }
         self.rows.append(row)
         self.flush()
@@ -734,6 +783,24 @@ class TrialWriter:
 
     def flush(self) -> None:
         self.path.write_text(json.dumps(self.rows, indent=2, default=str))
+
+    def complete(self, scheduled: int) -> None:
+        """Mark the block as having run to the end of its schedule.
+
+        A block that ABORTS part-way leaves `<label>_trials.json` behind exactly as a
+        finished one does, and `run_campaign.sh` skips a block whose trials file exists so
+        that a resumed campaign never tops a condition up (V8). Without a marker those two
+        states are indistinguishable, so an aborted block would be silently treated as
+        DONE. This file is written only after the last trial of the schedule, so its
+        ABSENCE beside a trials file means `partial`, which `run_campaign.sh` reports
+        rather than skips silently. V8: n is what it was.
+        """
+        (self.out / f"{self.label}_complete.json").write_text(json.dumps({
+            "label": self.label,
+            "trials_scheduled": scheduled,
+            "trials_written": len(self.rows),
+            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }, indent=2))
 
 
 class LogCursor:

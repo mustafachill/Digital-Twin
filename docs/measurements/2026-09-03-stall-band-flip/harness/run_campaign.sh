@@ -23,8 +23,12 @@
 # person reading the coarse table, not by this file. The banner at the end says what to read
 # and what to pass.
 #
-# A BLOCK WHOSE TRIALS FILE ALREADY EXISTS IS SKIPPED rather than re-run, so a resumed
-# campaign never silently tops a condition up (V8).
+# A BLOCK THAT HAS ALREADY BEEN TAKEN IS SKIPPED rather than re-run, so a resumed campaign
+# never silently tops a condition up (V8) -- and a block that ABORTED PART-WAY is skipped
+# with a LOUD banner rather than with the same one-line "collected" a finished block gets.
+# `measure.py` writes `<label>_complete.json` only after the last trial of the schedule, so
+# the two states are distinguishable; before that marker existed they were not, and an
+# aborted block was reported as done.
 #
 # A BLOCK THAT ABORTS STOPS THE CAMPAIGN, loudly, with the exit code captured rather than
 # discarded.
@@ -40,8 +44,34 @@ if [ "${#BLOCKS[@]}" -eq 0 ]; then
     BLOCKS=(LO-C HI-C)
 fi
 
-collected() {
-    [ -f "$RAW/${1}_trials.json" ]
+# A block must not be re-run once it has been taken, whether it FINISHED or ABORTED --
+# re-running either tops a condition up, which V8 forbids. But the two states are different
+# findings and they are reported differently. `measure.py` writes `<label>_complete.json`
+# only after the last trial of the schedule, so a trials file WITHOUT it is a block that
+# died part-way. Skipping that silently, as a bare `-f <label>_trials.json` test does, is
+# how an aborted block stops being visible as one.
+#
+# Returns 0 when the block must not be run.
+already_taken() {
+    local label="$1"
+    if [ -f "$RAW/${label}_complete.json" ]; then
+        echo "== skip ${label} (collected, ran to the end of its schedule)"
+        return 0
+    fi
+    if [ -f "$RAW/${label}_trials.json" ]; then
+        echo "" >&2
+        echo "########################################################################" >&2
+        echo "## ${label} is PARTIAL. ${label}_trials.json exists with no" >&2
+        echo "## ${label}_complete.json beside it, so that block ABORTED part-way." >&2
+        echo "## criteria.md V8: n is what it was. It is NOT re-run and NOT topped" >&2
+        echo "## up. analyse.py reports it with the n it reached -- every cycle that" >&2
+        echo "## CLOSED carries its V1 flag and survives; the cycle that was open" >&2
+        echo "## when it died carries none and its rows are dropped." >&2
+        echo "## Read ${RAW}/logs/${label}_harness.log." >&2
+        echo "########################################################################" >&2
+        return 0
+    fi
+    return 1
 }
 
 quiesce() {
@@ -149,7 +179,7 @@ refine() {
         echo "       located by the data. Read the coarse table first." >&2
         exit 2
     fi
-    if collected "$label"; then echo "== skip ${label} (collected)"; return 0; fi
+    if already_taken "$label"; then return 0; fi
     echo "===== ${label}: 6 stops at 0.05 mm across [${low}, ${high}] mm x 3 ====="
     quiesce
     run_one "$label" \
@@ -162,7 +192,7 @@ record_environment
 for block in "${BLOCKS[@]}"; do
     case "$block" in
         LO-C|HI-C)
-            if collected "$block"; then echo "== skip ${block} (collected)"; continue; fi
+            if already_taken "$block"; then continue; fi
             echo "===== ${block}: 9 coarse stops at 0.25 mm x 2, relaunch-interleaved ====="
             quiesce
             run_one "$block" "bash ${IN_CONTAINER}/run_block.sh ${block}"
@@ -177,13 +207,13 @@ for block in "${BLOCKS[@]}"; do
                 echo "       straddling F's two verdict changes (criteria.md 5.2)." >&2
                 exit 2
             fi
-            if collected INV; then echo "== skip INV (collected)"; continue; fi
+            if already_taken INV; then continue; fi
             echo "===== INV: 4 straddling stops at the second command x 3 ====="
             quiesce
             run_one INV "bash ${IN_CONTAINER}/run_block.sh INV --stops-mm ${STOPS}"
             ;;
         CTL)
-            if collected CTL; then echo "== skip CTL (collected)"; continue; fi
+            if already_taken CTL; then continue; fi
             echo "===== CTL: no stop, plain mock, x 3 ====="
             quiesce
             run_one CTL "bash ${IN_CONTAINER}/run_block.sh CTL"

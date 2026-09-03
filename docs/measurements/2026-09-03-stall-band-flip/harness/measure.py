@@ -334,11 +334,19 @@ class Driver(Node):
 # The section 2 cross-check, before any trial of the block
 # ---------------------------------------------------------------------------
 def section_2_cross_check(predicate: common.Predicate, floor_m: float,
-                          edges: tuple[float, float], margin_m: float) -> dict:
+                          edges: tuple[float, float], margin_m: float,
+                          narrowest_m: float) -> dict:
     """The section 2 cross-check, as a dictionary the block header carries.
 
     Every left-hand value is the SHIPPED program's answer; every right-hand value is quoted
     from the frozen `criteria.md`. A disagreement is recorded and the block still runs.
+
+    `narrowest_m` is L0's declared narrowest part width, read from the generated plan by
+    `common.parts_from_plan` and passed in rather than typed here. The validator ceiling is
+    `narrowest - margin`, and writing the 0.050 in would have made this cross-check compare
+    the shipped code against a literal that agrees with L0 today BY COINCIDENCE and would
+    go on agreeing with `criteria.md` after L0 moved -- which is the one thing a
+    cross-check exists to catch (P1).
     """
     edge_lo, edge_hi = edges
     rows = (
@@ -356,7 +364,7 @@ def section_2_cross_check(predicate: common.Predicate, floor_m: float,
          CRITERIA_SECTION_2["edge_hi_position_rad"], CROSS_CHECK_POSITION_TOLERANCE_RAD),
         ("margin_at_45mm_mm", margin_m * 1000.0,
          CRITERIA_SECTION_2["margin_at_45mm_mm"], 1e-5),
-        ("validator_ceiling_mm", (0.050 - margin_m) * 1000.0,
+        ("validator_ceiling_mm", (narrowest_m - margin_m) * 1000.0,
          CRITERIA_SECTION_2["validator_ceiling_mm"], 0.001),
         ("floor_mm", floor_m * 1000.0, CRITERIA_SECTION_2["floor_mm"], 1e-4),
     )
@@ -522,6 +530,16 @@ def run_trial(manager, predicate, superseded, row: dict, log: Path,
     if i1_reached is not None:
         row["d_narrow_m"] = i1_reached - edge_lo
         row["d_wide_m"] = edge_hi - i1_reached
+        # WHERE THE CONTROLLER TERMINATED, in the drive joint's own coordinate: I1's
+        # reached width carried back through the SHIPPED `gripper_position_for`. This is
+        # the quantity section 7.4 and P6 register -- `the rest position in radians beside
+        # P6's computed 0.300 rad` -- and it is NOT `i3_q_at_rest_rad`, which is a
+        # /joint_states sample taken at or before the result and which, on a rig with no
+        # stop, keeps moving after the controller has finished. Recorded UNCONDITIONALLY
+        # rather than only where a superseded build exists, so that P6 has its registered
+        # quantity whatever V12 says, and so that `analyse.py` reads it off the record
+        # instead of computing one line of gripper arithmetic.
+        row["i1_position_rad"] = predicate.position(i1_reached)
 
     # `holding_S` -- the comparison quantity, from a BUILD of `4ef2d7c` (V12). Its inputs
     # are section 2.1's, named there rather than left to this harness: the reached position
@@ -713,7 +731,7 @@ def main() -> int:
                       "A.6's cited figure is named beside it and enters no arithmetic.",
         "section_2_cross_check": section_2_cross_check(
             predicate, floor_m if floor_m is not None else float("nan"), edges,
-            predicate.margin(common.W_CMD_SHIPPED_M)),
+            predicate.margin(common.W_CMD_SHIPPED_M), parts["narrowest_m"]),
         "predicate_eval": predicate.describe(),
         "superseded": common.superseded_provenance(),
         "controller_settings": settings,
@@ -749,11 +767,41 @@ def main() -> int:
     rclpy.init()
     cycle_bounds: dict[int, dict] = {}
     current_cycle = None
+
+    def close_cycle(cycle: int) -> None:
+        """Take the cycle's SECOND reading and write V1, V7 and I9 onto its rows, now.
+
+        `criteria.md` V1: the flag is computed where the block is taken and TRAVELS ON THE
+        RECORD, and the analyser drops any row without it. The conjunction has no value
+        until the cycle's second reading exists, so the earliest instant at which a row can
+        carry it is the close of ITS OWN cycle -- which is here, and not after the last
+        trial of the block.
+
+        WRITING THEM ONLY AFTER THE LOOP LOSES A BLOCK THAT ABORTS PART-WAY. Every row
+        would carry `v1: None` and no `v1_clean` key at all, the analyser would drop every
+        one of them, and V8 -- `a block that aborts early is reported with the n it
+        reached` -- would report n = 0 for a block that had completed whole cycles. The
+        rows of the cycle that was OPEN when the abort landed still carry no flag, and that
+        is correct rather than a residual: their cycle has no second reading, so V1's
+        conjunction genuinely has no value for them.
+        """
+        bounds = cycle_bounds[cycle]
+        bounds["end"] = common.snapshot()
+        bounds["load_end"] = common.host_load()
+        for row in writer.rows:
+            if row["cycle"] != cycle:
+                continue
+            row["v1"] = common.v1(bounds["start"], bounds["end"])
+            row["v1_clean"] = row["v1"]["v1_clean"]
+            row["i9"] = {"start": bounds["load_start"], "end": bounds["load_end"]}
+            row["v7_flagged"] = bool(
+                common.v7(bounds["load_start"]) or common.v7(bounds["load_end"]))
+        writer.flush()
+
     for index, (cycle, stop_mm) in enumerate(schedule, start=1):
         if cycle != current_cycle:
             if current_cycle is not None:
-                cycle_bounds[current_cycle]["end"] = common.snapshot()
-                cycle_bounds[current_cycle]["load_end"] = common.host_load()
+                close_cycle(current_cycle)
                 print(f"== cycle {current_cycle} closed ==")
                 # Section 6's quiesce, between a teardown and the next launch. It is a
                 # quiesce for an instrument and sequences no bring-up (P4).
@@ -792,27 +840,24 @@ def main() -> int:
         }
         run_trial(manager, predicate, superseded, row, log, command_m, stop_q, q_cmd,
                   edges, namespace)
-        row["v1"] = None  # filled in below, once the cycle's second reading exists
+        # `None` until THIS ROW'S CYCLE closes, which is where `close_cycle` fills it in.
+        # A row still carrying `None` when the block ends is a row whose cycle never
+        # closed, and the analyser drops it rather than the block (V1, V8).
+        row["v1"] = None
         writer.add(row)
         print(f"    holding_F={row.get('holding_F')} holding_S={row.get('holding_S')} "
               f"w_reached(I1)={row.get('i1_reached_width_m')} "
               f"v5={row.get('v5_valid')} v14={row.get('v14_ok')}")
 
+    # The last cycle, closed the same way every other one was. V1 and V7 travel ON the
+    # record and are computed here, where the block was taken.
     if current_cycle is not None:
-        cycle_bounds[current_cycle]["end"] = common.snapshot()
-        cycle_bounds[current_cycle]["load_end"] = common.host_load()
+        close_cycle(current_cycle)
 
-    # V1 and V7 travel ON the record and are computed here, where the block was taken. They
-    # are written back over the rows once the cycle's second reading exists, which is the
-    # earliest instant at which the CONJUNCTION has a value at all.
-    for row in writer.rows:
-        bounds = cycle_bounds[row["cycle"]]
-        row["v1"] = common.v1(bounds["start"], bounds["end"])
-        row["v1_clean"] = row["v1"]["v1_clean"]
-        row["i9"] = {"start": bounds["load_start"], "end": bounds["load_end"]}
-        row["v7_flagged"] = bool(
-            common.v7(bounds["load_start"]) or common.v7(bounds["load_end"]))
-    writer.flush()
+    # The block ran to the end of its schedule. `run_campaign.sh` reads this marker to tell
+    # a FINISHED block from one that aborted part-way, because both leave a trials file
+    # behind and skipping the second silently is how an aborted block's n disappears (V8).
+    writer.complete(len(schedule))
 
     rclpy.shutdown()
     predicate.close()

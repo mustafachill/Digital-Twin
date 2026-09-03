@@ -64,9 +64,19 @@ CITE_SBF_INV_STOPS_MM=<w,x,y,z> \
 docs/measurements/2026-09-03-stall-band-flip/harness/run_campaign.sh CTL
 ```
 
-A block whose trials file already exists is **skipped rather than re-run**, so a resumed
-campaign never silently tops a condition up (V8). A block that aborts **stops the
-campaign**, loudly, with its exit code captured rather than discarded.
+A block that has already been taken is **skipped rather than re-run**, so a resumed campaign
+never silently tops a condition up (V8). A block that aborts **stops the campaign**, loudly,
+with its exit code captured rather than discarded.
+
+**A block that finished and a block that died part-way are now different things**, and they
+were not. `measure.py` writes `<label>_complete.json` only after the last trial of the
+schedule; a trials file **without** that marker is a block that aborted, and `run_campaign.sh`
+skips it with a loud banner instead of the one-line `collected` a finished block gets — it is
+still not re-run, because re-running it would top the condition up. The V1 flag is written at
+the close of **each cycle** rather than after the whole block, so an aborted block keeps every
+cycle that closed and V8's *"a block that aborts early is reported with the n it reached"* is
+a number rather than a promise. Before both changes, such a block reported **n = 0
+permanently** and the runner called it done.
 
 ## One block at a time
 
@@ -98,19 +108,40 @@ verdict into any decision record, sets no band, proposes no value and chooses no
 
 §10 permits **one** shakedown run per harness. It has been run, and the output is published
 with what it found in [`../raw/shakedown/NOTES.md`](../raw/shakedown/NOTES.md). **Read that
-before the first campaign trial.** It is excluded from every figure in §7 — `analyse.py`
-lists `raw/*_trials.json` at the top level only, so the exclusion is in code rather than in
-a sentence — and it **may not be used to set or adjust any threshold**. It revealed four
-defects, all fixed here; `criteria.md` was not touched.
+before the first campaign trial.** It is excluded from every figure in §7 and **may not be
+used to set or adjust any threshold**. It revealed four defects, all fixed here;
+`criteria.md` was not touched.
+
+**The exclusion is now three independent refusals in code, and this file claimed it was one
+when it was none.** It used to read *"`analyse.py` lists `raw/*_trials.json` at the top level
+only, so the exclusion is in code rather than in a sentence"* — and that top-level glob is
+not an exclusion at all. It rests entirely on the operator having set `CITE_SBF_OUT` to a
+subdirectory: **a shakedown run without that variable writes `LO-C_trials.json` straight
+into `raw/`, at the top level, under the campaign grid's own label, and the old glob admitted
+it as data.** What refuses it now:
+
+1. the top-level glob, which stops a recursive sweep of `raw/shakedown/`;
+2. the `SHAKEDOWN` label, skipped wherever it is found;
+3. an `is_shakedown` flag carried **on every row** by `TrialWriter`, dropped on whatever the
+   file is called.
+
+`analyse.py` **names what it refused** rather than dropping it silently, because a shakedown
+excluded without a word is indistinguishable from a shakedown that was never there.
+
+The command that produced it, recorded for reproduction and **not to be run again** — §10
+permits one and it is used:
 
 ```sh
 ./scripts/enter dev bash -lc \
     'CITE_SBF_OUT=/workspace/docs/measurements/2026-09-03-stall-band-flip/raw/shakedown \
      bash /workspace/docs/measurements/2026-09-03-stall-band-flip/harness/run_block.sh \
         LO-C --shakedown'
-python3 docs/measurements/2026-09-03-stall-band-flip/harness/analyse.py \
-    --raw docs/measurements/2026-09-03-stall-band-flip/raw/shakedown
 ```
+
+**`analyse.py --raw .../raw/shakedown` now reports `Blocks collected (0)`** and names the
+refusal, where it used to print a full §7 report over shakedown trials. That is the point:
+what the shakedown found is in `NOTES.md`, which is a record written by a person, and not in
+a rules report that looks exactly like a campaign's.
 
 ## The files
 
@@ -125,8 +156,23 @@ python3 docs/measurements/2026-09-03-stall-band-flip/harness/analyse.py \
 | `rig.launch.py` | the node set — `robot_state_publisher`, a real `ros2_control_node` over the generated controller configuration, the spawner in the plan's own stage order, a real `move_group` and the real skill server, all with the parameters the **production** launch file builds |
 | `measure.py` | one block: the stop grid, the description surgery and its `repr()` round-trip check, the launch, `Grasp` (I1), the I2 scrape, `/joint_states` (I3), the second `GripperCommand` (I4), I5/I6/I7, and every validity flag computed where the block is taken and written onto the record |
 | `run_block.sh` | the container-side door: the domain guard, the fixture-presence check, the build, and the per-block load capture |
-| `run_campaign.sh` | §6's registered order on the host, with `build_once` for V11, the 30 s quiesce, the isolation values derived through `scripts/_lib.sh`, the resumed-campaign skip and the abort banner |
+| `run_campaign.sh` | §6's registered order on the host, with `build_once` for V11, the 30 s quiesce, the isolation values derived through `scripts/_lib.sh`, the resumed-campaign skip — which now tells a **complete** block from a **partial** one — and the abort banner |
 | `analyse.py` | §7's rules — B, N, U, R, D, C, G, T, H, W — plus LO1, HI1, `flip_S_lo`, FLOOR1, INV1, CTL, P1–P6 and V1–V14, each printed either way, with the `DEVIATIONS` tuple at module top printed on every run |
+
+**V6 exists.** This table claimed V1–V14 while `grep -c '\bV6\b'` returned **0** across
+`analyse.py`, `common.py` and `measure.py` — every other rule was non-zero. V6 is a
+registered rule with a decision consequence (a metric's finding downgraded to INCONCLUSIVE),
+and §7.1's note about it reads as though it were being evaluated elsewhere. It was not
+evaluated anywhere. It is now computed over `w_reached`, per block, against that block's own
+grid step, and printed either way — see deviation 6 for which of §10's two readings of *"the
+difference between adjacent stops"* was taken.
+
+**Five rules were printed and not applied, and printing is not applying.** Rule R's verdict
+was computed, printed and then discarded at the call site, so an endpoint it had just
+declared INDETERMINATE still yielded BRACKETED; V12 gated nothing it names; V6 did not exist;
+INV1 reported HELD from zero comparisons; and rule B waived a conjunct it could not evaluate.
+All five now reach the decision they were registered to make. **A registered rule that prints
+and does not bind is worse than an absent one, because the print is what a reader audits.**
 
 ## Where each file came from
 
@@ -234,3 +280,37 @@ inside the tree would be exactly the thing this campaign claims not to have done
     covers that case on the coarse grid and rule N covers the case of none. `analyse.py`
     reports every such pair and declines to claim a bracket; it is deviation 3, registered
     before any trial rather than judged afterwards.
+
+## Recorded limitations, carried rather than fixed
+
+Found by an adversarial pre-freeze review, before the first campaign trial. Each is
+**carried deliberately**: changing it would change a mechanism after the rules were
+registered, and `criteria.md` §10's shakedown clause and V9 both say the harness is fixed
+before the data exists and the *criteria* never after. Every one is a numbered deviation in
+`analyse.py`'s `DEVIATIONS`, printed at the top of every run, so a write-up cannot drop one.
+
+- **Rule B's conjuncts are evaluated over the surviving repeats** (deviation 7). V4, V5 and
+  V14 exclude a *trial* from every bracket, so by the time rule B runs the excluded repeats
+  are gone — and a `satisfied` unanimity clause can rest on **n = 1** after two of three
+  repeats were excluded. The criteria does not disambiguate; the surviving-repeats reading
+  is registered as the one taken, and every BRACKETED line now prints **collected vs
+  surviving n at both endpoints**, with a marker when an endpoint rests on a single repeat.
+- **V13's discard path is unreachable** (deviation 12). `measure.py`'s `rig_description`
+  raises *before* `run_trial`'s `try`, so a launch that finds a non-production backend takes
+  the **whole block** down rather than landing a `v13_ok: False` record. That is stricter
+  than the rule and admits nothing wrong — but it **compounds an aborted block**, whose n is
+  then whatever its closed cycles hold.
+- **`run_block.sh`'s domain guard reads a failed `ros2 node list` as "domain clear"**
+  (deviation 13). `ros2 node list 2>/dev/null | grep -c …` returns 0 both when the domain is
+  empty and when the command failed outright. It is inherited verbatim from a frozen
+  ancestor and is **protective rather than a datum** — nothing in §7 reads it.
+- **`build_superseded.sh` carries V12's commit a third time, in shell.** `common.py` names
+  it once for the harness and `analyse.py` reads it from there, but the build script has its
+  own copy. It is left as it is on purpose: the script's copy is what **produces** the
+  provenance and `common.py`'s is what **checks** it, so the two agreeing is the check, and
+  collapsing them would remove the comparison.
+- **The quiesce is per cycle and per block, not per trial** (deviation 5). §6 reads
+  *"quiesce 30 s between a teardown and the next launch"* and *"each is one launch"*, which
+  is 104 quiesces; the rig performs **19**. No decision quantity moves — there is no
+  simulator, no physics and no state shared between launches — and the campaign is **not
+  lengthened** to close it.
