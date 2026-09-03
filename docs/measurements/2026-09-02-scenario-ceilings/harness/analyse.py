@@ -737,8 +737,12 @@ def _prediction(cell: dict | None, wanted: str) -> str:
     if cell["fired"]:
         return "NOT TESTED -- FIRED, so rule F gives this cell no band to test against"
     if cell["verdict"] == "INCONCLUSIVE":
+        # `band_upper` is absent when rule Q's `max - q <= 0`, and it is spelled out
+        # rather than printed as a Python `None`: this line is read by a person writing
+        # ANALYSIS.md, and a repr in it is a value waiting to be copied into prose.
+        upper = cell["band_upper"] or "no upper bound (rule Q: max - q <= 0)"
         return (
-            f"INCONCLUSIVE -- readings {cell['band_lower']} / {cell['band_upper']}, "
+            f"INCONCLUSIVE -- readings {cell['band_lower']} / {upper}, "
             "so the prediction is neither held nor refuted here"
         )
     return "HELD" if cell["verdict"] == wanted else f"REFUTED -- {cell['verdict']}"
