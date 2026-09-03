@@ -1,0 +1,7 @@
+[WARN] [1788469822.863288539] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+== cycle 0 opened, load 0.13671875 ==
+[1/2] block SHAKEDOWN cycle 0 stop 50.00 mm -> q 0.40560459414971795 rad
+    holding_F=True holding_S=True w_reached(I1)=0.05 v5=True v14=True
+[2/2] block SHAKEDOWN cycle 0 stop no_stop mm
+    holding_F=False holding_S=True w_reached(I1)=0.060915272276528036 v5=None v14=False
+wrote /workspace/docs/measurements/2026-09-03-stall-band-flip/raw/shakedown/SHAKEDOWN_trials.json: 2 trials, 2 with v1_clean

@@ -1,0 +1,8 @@
+built_at=2026-09-03T21:10:16Z
+where=container
+commit=554a8a953cef0e33305a3bc78af748e8ac0b16e6
+gripper_cpp_sha256=697afee2f49f9a3ccfa37c4da65afeb2e2f9f11f7f025517e620b57d8ff57c86
+gripper_hpp_sha256=fa6fbf436e67526b7c1c53ff8936ba4cee5b2505c7d3998e452089546ae2ca1e
+front_end_sha256=d40f9e958fb280a98d212289ab239e644fbc665c0ea91702783e4283b7a4648d
+compiler=g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+predicate_eval_sha256=6293558936998c7b12817ae192c3bba17717f6cadb40f434e2f9c84b1bfea568

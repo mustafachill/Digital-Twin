@@ -1,0 +1,6 @@
+== block LO-C ==
+ 21:10:18 up 1 day,  4:04,  0 user,  load average: 0.14, 0.06, 0.05
+16
+               total        used        free      shared  buff/cache   available
+Mem:           31831        4849       14909         321       12843       26981
+overlay         457G   35G  399G   8% /
