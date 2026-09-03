@@ -6,6 +6,15 @@ Any interpretation that had to change afterwards is recorded as a numbered devia
 `ANALYSIS.md`, applied to data already collected — never by re-running until the definition
 suited.
 
+> **Amended 2026-09-03, before the first trial ran, and recorded here rather than smoothed over.**
+> §9's Gazebo Sim version and the paragraph beside it were corrected: the earlier draft recorded
+> **8.15.0** and left its disagreement with the 2026-09-02 scenario-ceilings campaign unchased,
+> and the row now records **8.11.0** with the disagreement settled. This is permitted because
+> [`../README.md`](../README.md) rule 1 freezes `criteria.md` **once the first trial has run**,
+> and at the time of the amendment no trial had run, no harness existed and `raw/` did not exist.
+> **No threshold, instrument, arm, sample size or validity rule was touched**, and §9 itself
+> records why no figure this campaign will produce depends on the version either way.
+
 - **Date opened:** 2026-09-03
 - **Branch under measurement:** `feat/close-phase-debts`
 - **BASE_COMMIT:** **`c38a42c`**. Every figure below is a property of the tree at that commit.
@@ -692,20 +701,51 @@ recorded in full anyway, because §9's own argument below is what establishes th
 | Host | Linux **7.0.0-30-generic**, **x86_64**, **16** cores, **31 GiB** RAM |
 | Free disk | **399 GiB** available on `/`, read on 2026-09-03 |
 | Docker | **29.7.2** (build a7dcaa6); Docker Compose **v5.5.0** |
-| Container image | **`cite-digital-twin:dev`**, image ID `3a41d4e431b0`, Ubuntu **24.04.4 LTS**, ROS 2 **Jazzy**, Gazebo Sim **8.15.0** (`gz-sim8-cli 8.15.0-1~noble`, `gz-harmonic 1.0.0-1~noble`) — all read from inside the image on 2026-09-03 |
+| Container image | **`cite-digital-twin:dev`**, image ID `3a41d4e431b0`, Ubuntu **24.04.4 LTS**, ROS 2 **Jazzy**, Gazebo Sim **8.11.0** — the version the **sourced** environment resolves, which is the one every process in this project runs against. The image also carries a second, unsourced Gazebo Sim **8.15.0**; the paragraph below is what settles which is which. All read from inside the image on 2026-09-03 |
 | Isolation | compose project **`cite-digital-twin-3319196271`** and **`ROS_DOMAIN_ID` 43**, both derived from this checkout by sourcing `scripts/_lib.sh` on 2026-09-03, not typed in |
 | Allocation | the container is **not** CPU-limited: `/sys/fs/cgroup/cpu.max` inside a plain `docker run` of the image reads **`max 100000`**, and `nproc` reads **16**, both read on 2026-09-03. No condition here applies a limit |
 
-> **The Gazebo version disagrees with the 2026-09-02 scenario-ceilings campaign, which named the
-> same image ID, and this file states what it measured rather than what that one says.** That
-> campaign's §9 records Gazebo Sim **8.11.0** against image ID `3a41d4e431b0`; the reading above
-> is **8.15.0**, taken on 2026-09-03 from an image whose full digest —
-> `sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d` — is byte-identical
-> to the one recorded in that campaign's `raw/provenance.txt`. **Which reading is wrong is not
-> established here and was not chased**; that directory is frozen and is not edited. **No figure
-> in this campaign depends on the Gazebo version**, because this rig runs no simulator at all.
-> It is recorded because a version number that disagrees with itself across two campaigns on one
-> image is exactly the kind of claim this repository has been damaged by before.
+> **This file's earlier draft recorded Gazebo Sim 8.15.0 in the row above, and stated that its
+> disagreement with the 2026-09-02 scenario-ceilings campaign was "not established here and was
+> not chased". It has since been chased and is settled, before any trial ran: the container
+> carries two Gazebo Sim installations, and which one answers depends on whether the ROS
+> environment has been sourced.** Both readings were reproduced on 2026-09-03 against the image
+> whose full digest — `sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d`
+> — is byte-identical to the one recorded in that campaign's `raw/provenance.txt`:
+>
+> | environment | `command -v gz` | `gz sim --versions` |
+> |---|---|---|
+> | **unsourced** — `docker run --rm --entrypoint bash cite-digital-twin:dev -lc` | `/usr/bin/gz` | **8.15.0** |
+> | **sourced** — `./scripts/enter dev bash -c` | `/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz` | **8.11.0** |
+>
+> The unsourced **8.15.0** is the `gz-harmonic` metapackage the Dockerfile installs from
+> `packages.osrfoundation.org` (`infra/docker/Dockerfile:45`); `dpkg -l` inside the image reads
+> `gz-sim8-cli` and `libgz-sim8` at `8.15.0-1~noble`, under `gz-harmonic 1.0.0-1~noble`. The
+> sourced **8.11.0** is ROS Jazzy's vendored `gz_tools_vendor`. **The split is not only the
+> CLI:** on the sourced `LD_LIBRARY_PATH`, `libgz-sim8.so.8` resolves to
+> `/opt/ros/jazzy/opt/gz_sim_vendor/lib/libgz-sim8.so.8.11.0`, ahead of the system
+> `/usr/lib/x86_64-linux-gnu/libgz-sim8.so.8.15.0`, so a sourced process loads the 8.11.0 server
+> and not merely an 8.11.0 command.
+>
+> **The cell runs sourced, so 8.11.0 is the simulator this project actually uses, and that is why
+> the row above now records it.** The container entrypoint sources
+> `/opt/ros/${ROS_DISTRO}/setup.bash` before `exec "$@"` (`infra/docker/entrypoint.sh`), and every
+> `./scripts/enter`, `./scripts/sim` and `./scripts/scenario` invocation goes through it;
+> `docker run --entrypoint bash` is precisely what bypasses it. `./scripts/doctor` run inside the
+> container reports **8.11.0**, and the 2026-09-02 scenario-ceilings campaign recorded **8.11.0**.
+> **Neither of those was wrong** — the earlier draft here had read the Gazebo the cell never uses.
+> That campaign's directory is frozen and is **not** edited; nothing in it needs correcting.
+>
+> **No figure in this campaign depends on the Gazebo version either way, and nothing moved when
+> this was corrected.** This rig brings no Gazebo up at all: `JointStopSystem` is a
+> `ros2_control` hardware plugin, and the stop sweep drives a controller manager over it with no
+> simulator in the process — the same fact §1 and §4 state. A reader should not look for a
+> result that shifted, because there is none. The correction is recorded in full because a
+> version number that disagreed with itself across two campaigns on one image is exactly the kind
+> of claim this repository has been damaged by before, and because the general hazard behind it —
+> an ad-hoc probe that shells `gz` without the ROS environment talks to a different Gazebo than
+> the cell does — outlives this campaign. It is filed in
+> [`docs/operations/troubleshooting.md`](../../operations/troubleshooting.md).
 
 **Host load before the first trial, measured rather than claimed.** Read on 2026-09-03 on a host
 up 1 day 2 h 43 m:
