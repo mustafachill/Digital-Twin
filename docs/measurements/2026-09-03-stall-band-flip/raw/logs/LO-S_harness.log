@@ -1,0 +1,55 @@
+[WARN] [1788474236.321746282] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474240.740306534] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474245.478239825] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474249.350007786] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474253.660828123] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474296.606090124] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474300.298294328] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474304.721356743] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474342.745575644] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474346.863333605] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474350.484050120] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474357.463928581] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474361.719290764] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+== cycle 0 opened, load 0.77197265625 ==
+[1/18] block LO-S cycle 0 stop 47.00 mm -> q 0.4339912577876306 rad
+    holding_F=False holding_S=False w_reached(I1)=0.04699999999999999 v5=True v14=True
+[2/18] block LO-S cycle 0 stop 47.05 mm -> q 0.4335200150136653 rad
+    holding_F=False holding_S=False w_reached(I1)=0.047049999999999995 v5=True v14=True
+[3/18] block LO-S cycle 0 stop 47.10 mm -> q 0.43304871142699364 rad
+    holding_F=False holding_S=False w_reached(I1)=0.0471 v5=True v14=True
+[4/18] block LO-S cycle 0 stop 47.15 mm -> q 0.4325773468993368 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04715000000000001 v5=True v14=True
+[5/18] block LO-S cycle 0 stop 47.20 mm -> q 0.4321059213022782 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04720000000000002 v5=True v14=True
+[6/18] block LO-S cycle 0 stop 47.25 mm -> q 0.43163443450726446 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04725 v5=True v14=True
+== cycle 0 closed ==
+== cycle 1 opened, load 0.95361328125 ==
+[7/18] block LO-S cycle 1 stop 47.00 mm -> q 0.4339912577876306 rad
+    holding_F=False holding_S=False w_reached(I1)=0.04699999999999999 v5=True v14=True
+[8/18] block LO-S cycle 1 stop 47.05 mm -> q 0.4335200150136653 rad
+    holding_F=False holding_S=False w_reached(I1)=0.047049999999999995 v5=True v14=True
+[9/18] block LO-S cycle 1 stop 47.10 mm -> q 0.43304871142699364 rad
+    holding_F=False holding_S=False w_reached(I1)=0.0471 v5=True v14=True
+[10/18] block LO-S cycle 1 stop 47.15 mm -> q 0.4325773468993368 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04715000000000001 v5=True v14=True
+[11/18] block LO-S cycle 1 stop 47.20 mm -> q 0.4321059213022782 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04720000000000002 v5=True v14=True
+[12/18] block LO-S cycle 1 stop 47.25 mm -> q 0.43163443450726446 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04725 v5=True v14=True
+== cycle 1 closed ==
+== cycle 2 opened, load 0.55615234375 ==
+[13/18] block LO-S cycle 2 stop 47.00 mm -> q 0.4339912577876306 rad
+    holding_F=False holding_S=False w_reached(I1)=0.04699999999999999 v5=True v14=True
+[14/18] block LO-S cycle 2 stop 47.05 mm -> q 0.4335200150136653 rad
+    holding_F=False holding_S=False w_reached(I1)=0.047049999999999995 v5=True v14=True
+[15/18] block LO-S cycle 2 stop 47.10 mm -> q 0.43304871142699364 rad
+    holding_F=False holding_S=False w_reached(I1)=0.0471 v5=True v14=True
+[16/18] block LO-S cycle 2 stop 47.15 mm -> q 0.4325773468993368 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04715000000000001 v5=True v14=True
+[17/18] block LO-S cycle 2 stop 47.20 mm -> q 0.4321059213022782 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04720000000000002 v5=True v14=True
+[18/18] block LO-S cycle 2 stop 47.25 mm -> q 0.43163443450726446 rad
+    holding_F=False holding_S=True w_reached(I1)=0.04725 v5=True v14=True
+wrote /workspace/docs/measurements/2026-09-03-stall-band-flip/harness/../raw/LO-S_trials.json: 18 trials, 18 with v1_clean
