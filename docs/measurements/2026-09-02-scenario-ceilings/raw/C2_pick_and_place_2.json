@@ -1,0 +1,300 @@
+{
+  "label": "C2_pick_and_place_2",
+  "condition": "C2",
+  "scenario": "pick_and_place",
+  "started_wall_utc": "2026-09-03T19:01:48Z",
+  "ended_wall_utc": "2026-09-03T19:04:44Z",
+  "duration_s": 176.625,
+  "scenario_returncode": 0,
+  "verdict": {
+    "verdict": "passed",
+    "verdict_line": "ok Scenario 'pick_and_place' passed"
+  },
+  "isolation": {
+    "compose_project_name": "cite-digital-twin-3319196271",
+    "ros_domain_id": "43",
+    "compose_project_source": "derived from this checkout",
+    "derived_from": "scripts/_lib.sh cite_project_name, sourced under bash"
+  },
+  "host_facts": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "host_cpu_count": 16,
+    "docker_version": "Docker version 29.7.2, build a7dcaa6",
+    "image_id": "sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d"
+  },
+  "load_before": {
+    "load_1m": 1.431640625,
+    "load_5m": 4.474609375,
+    "load_15m": 4.2548828125,
+    "load_read_from": "/proc/loadavg on the host",
+    "uptime": "14:01:48 up 1 day,  1:55,  1 user,  load average: 1.43, 4.47, 4.25",
+    "wall_clock_utc": "2026-09-03T19:01:48Z"
+  },
+  "load_after": {
+    "load_1m": 0.66943359375,
+    "load_5m": 2.82177734375,
+    "load_15m": 3.6533203125,
+    "load_read_from": "/proc/loadavg on the host",
+    "uptime": "14:04:44 up 1 day,  1:58,  1 user,  load average: 0.67, 2.82, 3.65",
+    "wall_clock_utc": "2026-09-03T19:04:44Z"
+  },
+  "i4_after_apply": {
+    "cgroup_cpu_max_inside": "200000 100000",
+    "host_config_nano_cpus": "2000000000",
+    "read_at": 1788462112.2049196
+  },
+  "i4_last_live": {
+    "cgroup_cpu_max_inside": "200000 100000",
+    "host_config_nano_cpus": "2000000000",
+    "read_at": 1788462279.8378804
+  },
+  "i4_last_live_before_exit_s": 4.883,
+  "i4_samples": 16,
+  "i4_post_exit_attempt": {
+    "cgroup_cpu_max_inside": "<rc=1> Error response from daemon: No such container: b0491f9dbb5b",
+    "host_config_nano_cpus": "<rc=1> error: no such object: b0491f9dbb5b",
+    "read_at": 1788462284.744033
+  },
+  "i4_release_attempt": {
+    "returncode": 1,
+    "stderr": "Error response from daemon: No such container: b0491f9dbb5b",
+    "read_back": {
+      "cgroup_cpu_max_inside": "<rc=1> Error response from daemon: No such container: b0491f9dbb5b",
+      "host_config_nano_cpus": "<rc=1> error: no such object: b0491f9dbb5b",
+      "read_at": 1788462284.8102808
+    },
+    "container_still_exists": false,
+    "released": false
+  },
+  "i6": {
+    "start": {
+      "at": 1788462108.087989,
+      "head": "082911932563226a98de987f20d4cd439eb090bd",
+      "git_status_porcelain": "?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "clean": true
+    },
+    "end": {
+      "at": 1788462284.7488277,
+      "head": "225c025f7353e42d61374f1e9bb05962414d7981",
+      "git_status_porcelain": "?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_3.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_3.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/logs/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "clean": true
+    },
+    "v1_clean": true,
+    "disagreed_mid_run": false,
+    "head_moved_mid_run": true,
+    "base_commit": "c38a42c",
+    "watched_paths": [
+      "model/",
+      "workspace/src/",
+      "tools/",
+      "tests/",
+      "scripts/"
+    ]
+  },
+  "i7": {
+    "hull_collision_refs": 13,
+    "description_chars": 33653,
+    "description_read_ok": true,
+    "world_throttle_declared": true,
+    "world_read_ok": true,
+    "read_at": 1788462189.0261009,
+    "v2_ok": true
+  },
+  "i7_gate": {
+    "first_record_seen": true,
+    "waited_s": 38.223,
+    "gate_ceiling_s": 300.0,
+    "poll_period_s": 30.0,
+    "note": "I7 is read after the scenario's first CITE_TIMING line, not from container start, because the reading runs inside the cgroup under measurement. If first_record_seen is false the gate expired and the reading was attempted anyway, so V2 still fails closed."
+  },
+  "container": {
+    "id": "b0491f9dbb5b",
+    "cite_environment_in_force": {
+      "read_ok": true,
+      "ROS_DOMAIN_ID": "43",
+      "CITE_DOMAIN_BASE": "43",
+      "CITE_DOMAIN_SOURCE": "derived from this checkout",
+      "CITE_PHYSICS_SEED": "20260824",
+      "CITE_PROJECT_SOURCE": "derived from this checkout",
+      "CITE_VENV": "/opt/cite-venv"
+    },
+    "started_at": "2026-09-03T19:01:48.378842935Z",
+    "seen_at": 1788462112.1285014,
+    "limit_applied_at": 1788462112.1602662,
+    "limit_delay_s": 3.781424045562744,
+    "limit_command": {
+      "argv": "docker update --cpus 2.0 b0491f9dbb5b",
+      "returncode": 0,
+      "stderr": ""
+    }
+  },
+  "survivors_before": {
+    "gz_sim_processes": [],
+    "gz_sim_count": 0,
+    "looked_ok": true,
+    "cite_containers": [],
+    "cite_container_count": 0
+  },
+  "survivors_after": {
+    "gz_sim_processes": [],
+    "gz_sim_count": 0,
+    "looked_ok": true,
+    "cite_containers": [],
+    "cite_container_count": 0
+  },
+  "environment": {
+    "CITE_LINE_WORKPIECES": null,
+    "CITE_ENV": null,
+    "host_shell_note": "what this shell exported; NOT the value in force",
+    "CITE_PHYSICS_SEED_in_force": "20260824"
+  },
+  "criteria_sha256": "da918ad644c6b828347162e85670a2fcbb13701b474d40085ffa7a100c1fd133",
+  "instrument": {
+    "timing_regex": "CITE_TIMING (\\{.*\\})",
+    "marker_lines": 5,
+    "records": 5,
+    "mangled_count": 0,
+    "mangled_fraction": 0.0,
+    "mangled_sample": []
+  },
+  "validity": {
+    "v1_clean": true,
+    "v1_disagreed_mid_run": false,
+    "v2_ok": true,
+    "v3_verdict": "passed",
+    "v5_ok": true,
+    "v6_ok": true,
+    "v6_note": "limit applied 3.8 s into the container's life",
+    "v6_limit_held_at_end": true,
+    "v7_load_flag": false,
+    "v7_load_1m": 1.431640625,
+    "g_ok": true
+  },
+  "records": [
+    {
+      "scenario": "pick_and_place",
+      "test": "test_the_behaviour_tree_picks_and_places_the_workpiece",
+      "what": "the skill server, and therefore the whole stack beneath it",
+      "ceiling_s": 300.0,
+      "elapsed_s": 36.595,
+      "spins": 24,
+      "monotonic_s": 30170.813,
+      "label": "C2_pick_and_place_2",
+      "condition": "C2",
+      "v1_clean": true,
+      "v1_disagreed_mid_run": false,
+      "v2_ok": true,
+      "v3_verdict": "passed",
+      "v5_ok": true,
+      "v6_ok": true,
+      "v6_note": "limit applied 3.8 s into the container's life",
+      "v6_limit_held_at_end": true,
+      "v7_load_flag": false,
+      "v7_load_1m": 1.431640625,
+      "g_ok": true,
+      "verdict": "passed",
+      "verdict_line": "ok Scenario 'pick_and_place' passed"
+    },
+    {
+      "scenario": "pick_and_place",
+      "test": "test_the_behaviour_tree_picks_and_places_the_workpiece",
+      "what": "a transform from cite_world to cell_a__table_pick__surface",
+      "ceiling_s": 300.0,
+      "elapsed_s": 0.014,
+      "spins": 5,
+      "monotonic_s": 30170.832,
+      "label": "C2_pick_and_place_2",
+      "condition": "C2",
+      "v1_clean": true,
+      "v1_disagreed_mid_run": false,
+      "v2_ok": true,
+      "v3_verdict": "passed",
+      "v5_ok": true,
+      "v6_ok": true,
+      "v6_note": "limit applied 3.8 s into the container's life",
+      "v6_limit_held_at_end": true,
+      "v7_load_flag": false,
+      "v7_load_1m": 1.431640625,
+      "g_ok": true,
+      "verdict": "passed",
+      "verdict_line": "ok Scenario 'pick_and_place' passed"
+    },
+    {
+      "scenario": "pick_and_place",
+      "test": "test_the_behaviour_tree_picks_and_places_the_workpiece",
+      "what": "a transform from cite_world to cell_a__conveyor_1__infeed",
+      "ceiling_s": 300.0,
+      "elapsed_s": 0.0,
+      "spins": 0,
+      "monotonic_s": 30170.832,
+      "label": "C2_pick_and_place_2",
+      "condition": "C2",
+      "v1_clean": true,
+      "v1_disagreed_mid_run": false,
+      "v2_ok": true,
+      "v3_verdict": "passed",
+      "v5_ok": true,
+      "v6_ok": true,
+      "v6_note": "limit applied 3.8 s into the container's life",
+      "v6_limit_held_at_end": true,
+      "v7_load_flag": false,
+      "v7_load_1m": 1.431640625,
+      "g_ok": true,
+      "verdict": "passed",
+      "verdict_line": "ok Scenario 'pick_and_place' passed"
+    },
+    {
+      "scenario": "pick_and_place",
+      "test": "test_the_behaviour_tree_picks_and_places_the_workpiece",
+      "what": "the work-piece to settle",
+      "ceiling_s": 60.0,
+      "elapsed_s": 2.115,
+      "spins": 0,
+      "monotonic_s": 30174.329,
+      "label": "C2_pick_and_place_2",
+      "condition": "C2",
+      "v1_clean": true,
+      "v1_disagreed_mid_run": false,
+      "v2_ok": true,
+      "v3_verdict": "passed",
+      "v5_ok": true,
+      "v6_ok": true,
+      "v6_note": "limit applied 3.8 s into the container's life",
+      "v6_limit_held_at_end": true,
+      "v7_load_flag": false,
+      "v7_load_1m": 1.431640625,
+      "g_ok": true,
+      "verdict": "passed",
+      "verdict_line": "ok Scenario 'pick_and_place' passed"
+    },
+    {
+      "scenario": "pick_and_place",
+      "test": "test_the_behaviour_tree_picks_and_places_the_workpiece",
+      "what": "the station cycle to run to completion",
+      "ceiling_s": 420.0,
+      "elapsed_s": 126.813,
+      "spins": 133,
+      "monotonic_s": 30301.142,
+      "label": "C2_pick_and_place_2",
+      "condition": "C2",
+      "v1_clean": true,
+      "v1_disagreed_mid_run": false,
+      "v2_ok": true,
+      "v3_verdict": "passed",
+      "v5_ok": true,
+      "v6_ok": true,
+      "v6_note": "limit applied 3.8 s into the container's life",
+      "v6_limit_held_at_end": true,
+      "v7_load_flag": false,
+      "v7_load_1m": 1.431640625,
+      "g_ok": true,
+      "verdict": "passed",
+      "verdict_line": "ok Scenario 'pick_and_place' passed"
+    }
+  ]
+}
