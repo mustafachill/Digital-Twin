@@ -1202,18 +1202,29 @@ def predictions(
           f"(admitted AND discarded), clock-disagreeing={len(drops['clock'])} over the "
           f"{len(runs)} admitted -> {pr6}")
 
-    counts = []
-    for run in runs:
-        if run.get("scenario") != "bringup":
-            continue
-        contributing = sum(
-            1
-            for record in run.get("records", [])
-            if float(record["ceiling_s"]) == 240.0
+    # COUNTED FROM THE RECORDS THAT ACTUALLY SURVIVED `classify`, not re-derived here.
+    # PR7 asks how many records CONTRIBUTE after rule A, and this used to filter on the
+    # ceiling, the `what` and `spins > 0` while ignoring two things `classify` applies:
+    # rule A's own PREMISE -- a run whose first emitting test is not the one rule A
+    # assumes has its whole cell dropped -- and rule K's clock exclusion. So a run whose
+    # premise had failed still reported one contributing record, and PR7 read HELD over
+    # the exact case its own text calls a falsification. Reading `drops["kept"]` also
+    # removes a second derivation of one quantity (P1): there is now one filter, in
+    # `classify`, and this counts its output.
+    contributing_by_run: dict[str, int] = {}
+    for record in drops["kept"]:
+        if (
+            record["scenario"] == "bringup"
+            and float(record["ceiling_s"]) == 240.0
             and record["what"] == manifest_module.RULE_A_WHAT
-            and int(record["spins"]) > 0
-        )
-        counts.append((run["label"], contributing))
+        ):
+            label = record["label"]
+            contributing_by_run[label] = contributing_by_run.get(label, 0) + 1
+    counts = [
+        (run["label"], contributing_by_run.get(run["label"], 0))
+        for run in runs
+        if run.get("scenario") == "bringup"
+    ]
     bad = [entry for entry in counts if entry[1] != 1]
     if not counts:
         pr7 = "NOT TESTED -- no admitted bringup run"

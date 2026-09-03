@@ -140,7 +140,7 @@ destroys it**, because V1 discards every block taken while a watched path differ
 `c38a42c`. The flag is computed at both ends of every run and travels on every record, so
 a concurrent writer flips it rather than going unnoticed (V10).
 
-## Eleven things this rig cannot do, recorded here rather than discovered later
+## Twelve things this rig cannot do, recorded here rather than discovered later
 
 1. **It cannot see the upper tail of any interval.** A wait that times out emits no
    record, by design — a record for a wait that timed out would measure the ceiling rather
@@ -219,6 +219,17 @@ a concurrent writer flips it rather than going unnoticed (V10).
     exists to prevent. The consequence to carry: rule G's 5 % denominator is `marker_lines`,
     which is **line-based**, so an interleaving of this shape undercounts by two — one
     record lost silently, and the pair counted as one mangled line rather than two.
+
+12. **The 60 s quiesce runs before the FIRST trial too, where there is nothing to
+    quiesce from.** §6 and this file describe it as a quiesce *between a teardown and the
+    next bring-up*, and before the opening run there has been no teardown — so on that
+    wording the first one is 60 s spent on nothing. **It is kept deliberately.**
+    `build_once` runs `./scripts/build` immediately before the loop, and the run that
+    follows it is `FULL_bringup_1` — one of the twelve FULL runs whose scatter the design
+    reads as host drift. Removing the first quiesce would buy 60 s of machine time and
+    pay for it by measuring the opening FULL run on a host still finishing a build, which
+    is a worse trade than the one it looks like. The survivor reading and the load line
+    inside `quiesce` are wanted before the first trial in any case, and V5 spends them.
 
 Two more that are properties of the *criteria* rather than of the rig, and are listed
 because a reader of this directory will meet them here first:

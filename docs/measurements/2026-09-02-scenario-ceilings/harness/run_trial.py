@@ -123,7 +123,14 @@ class Watcher(threading.Thread):
             "configuration": None,
             "configuration_gate": None,
         }
-        self._stop = threading.Event()
+        # `_halt` and NOT `_stop`. `threading.Thread._stop` is an INTERNAL METHOD that
+        # `join()` and `is_alive()` call through `_wait_for_tstate_lock`, so an attribute
+        # of that name shadows it and `watcher.join()` raises
+        # `TypeError: 'Event' object is not callable`. Nothing here joins today and the
+        # thread is a daemon, so it is inert -- which is exactly why it is renamed now,
+        # before this rig is frozen, rather than left as a trap for whoever next adds a
+        # join to it.
+        self._halt = threading.Event()
         # Set by the console reader on the scenario's first `CITE_TIMING` line. The I7
         # readback waits on it rather than starting from container start, so that the
         # `ros2 param get` does not compete with cold bring-up for the one CPU C1 gives
@@ -131,7 +138,7 @@ class Watcher(threading.Thread):
         self._first_record = threading.Event()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
 
     def note_first_record(self) -> None:
         """One `CITE_TIMING` line has been seen on the scenario's console."""
@@ -140,7 +147,7 @@ class Watcher(threading.Thread):
     def run(self) -> None:  # pragma: no cover - exercised by the shakedown, not by pytest
         deadline = time.time() + CONTAINER_SEARCH_CEILING_S
         cid = ""
-        while time.time() < deadline and not self._stop.is_set():
+        while time.time() < deadline and not self._halt.is_set():
             cid = common.find_container(self.project)
             if cid:
                 break
@@ -191,7 +198,7 @@ class Watcher(threading.Thread):
         gate_deadline = gate_started + CONFIGURATION_GATE_CEILING_S
         while (
             not self._first_record.is_set()
-            and not self._stop.is_set()
+            and not self._halt.is_set()
             and time.time() < gate_deadline
         ):
             self._sample_cpu(cid)
@@ -210,23 +217,23 @@ class Watcher(threading.Thread):
         }
 
         deadline = time.time() + CONFIGURATION_READ_CEILING_S
-        while time.time() < deadline and not self._stop.is_set():
+        while time.time() < deadline and not self._halt.is_set():
             configuration = common.running_configuration(cid)
             self.found["configuration"] = configuration
             if configuration["description_read_ok"] and configuration["world_read_ok"]:
                 break
             self._sample_cpu(cid)
-            # `self._stop.wait`, not `time.sleep`: at a 30 s period a sleeping watcher
+            # `self._halt.wait`, not `time.sleep`: at a 30 s period a sleeping watcher
             # would outlive the run it is watching by up to half a minute.
-            self._stop.wait(CONFIGURATION_POLL_S)
+            self._halt.wait(CONFIGURATION_POLL_S)
 
         # Keep sampling I4 until the run ends. The last successful sample is what I4's
         # "again at the end of the run" and V6's end-of-run confirmation can mean here,
         # and the record says how long before the exit it was taken so that a reader can
         # judge it rather than take it on trust.
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             self._sample_cpu(cid)
-            self._stop.wait(I4_SAMPLE_PERIOD_S)
+            self._halt.wait(I4_SAMPLE_PERIOD_S)
 
     def _sample_cpu(self, cid: str) -> None:
         """One I4 reading, kept only if it actually read something.
@@ -498,7 +505,9 @@ def _validity(
 
     `v6_ok` is True at FULL by construction and the key says so: FULL applies no limit, so
     there is no delay to bound. That is not the same statement as "the limit was in force"
-    and it is not written as if it were.
+    and it is not written as if it were -- and at FULL it is still REFUSED when no I4
+    reading ever came back from a live container, because "no quota was in force" and "we
+    never managed to look" are different answers.
     """
     configuration = watcher.get("configuration") or {}
     delay = watcher.get("limit_delay_s")
@@ -542,6 +551,29 @@ def _validity(
         v6_note = (
             "the limit was never confirmed on a live container, so V6's end-of-run "
             "clause is NOT ESTABLISHED and is not read as satisfied"
+        )
+    if condition == "FULL" and cpu_last_live is None:
+        # THE SAME RULE AT FULL, AND IT IS NOT SYMMETRY FOR ITS OWN SAKE. The residual-
+        # quota check above is guarded by `cpu_last_live is not None`, so without this
+        # branch a FULL run that NEVER SUCCEEDED IN LOOKING concluded "the container was
+        # unconstrained" from having never looked -- silence read as a pass, which is the
+        # same family of defect as the `v6_ok` the shakedown caught.
+        #
+        # IT IS NOT COVERED TRANSITIVELY, AND THERE IS A RECORDED COUNTEREXAMPLE.
+        # The argument for leaving it was that no live I4 reading implies the container
+        # was unreachable, which would leave I7 unread and V2 discard the run first. The
+        # shakedown record disproves it: `raw/shakedown/SHAKEDOWN_bringup.json` carries
+        # `v2_ok: true` -- 13 hull references off the running description publisher and
+        # the throttle in the installed world -- beside `i4_last_live: null`, at FULL,
+        # with `v6_ok: true`. The two readings go through the same `docker exec` but they
+        # are not the same call: I7 reads a running node, I4 reads
+        # `/sys/fs/cgroup/cpu.max`, and a container that does not expose that path fails
+        # I4 deterministically while answering I7 perfectly. V2 does not cover V6.
+        v6_ok = False
+        v6_note = (
+            "FULL, and no I4 reading ever came back from a live container: whether a "
+            "quota was in force is NOT ESTABLISHED, and an unconstrained container may "
+            "not be concluded from having never looked"
         )
     return {
         "v1_clean": v1["v1_clean"],
