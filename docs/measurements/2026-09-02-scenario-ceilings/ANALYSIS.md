@@ -605,6 +605,19 @@ None` after `rclpy.spin_until_future_complete(..., timeout_sec=SERVICE_DEADLINE_
 `SERVICE_DEADLINE_S = 120.0`, a call that **never returned at all**. The elapsed time between
 `arm_1`'s success and `arm_2`'s error is **124.7 s**, consistent with that deadline expiring.
 
+**Correction, 2026-09-03, by a reader who is not the campaign operator: the two branches are
+five lines apart, not twelve.** In the file this campaign measured — byte-identical at
+`c38a42c`, at the campaign's `HEAD = 98fbbfc`, at `bbd40cf` and on `main`, checked by
+`md5sum` — the two `self.get_logger().error(...)` calls are at **lines 110 and 115**, and the
+`if` statements that reach them at 108 and 113: `if response is None:` immediately precedes
+`if not response.success:`, with nothing between them but the first branch's message and its
+`return 1`. **The claim that the two are branches of one function is unaffected and is what
+the paragraph rests on**; only the distance was wrong, and the branches are nearer each other
+than it said, not further. Everything else in this section was re-checked at the same time and
+holds: the console quotation is `raw/C4_continuous_line_1.log:1098-1100`, `SERVICE_DEADLINE_S`
+is `120.0` at line 62, and a line-break-insensitive grep for #55's three strings across all
+**28** captured consoles returns **0** for each.
+
 **A grep for #55's own strings across all 28 campaign consoles returns nothing** —
 `Unknown frame: cite_world`, `Tf has two or more unconnected trees`, and #55's
 `refused the planning scene diff` are absent from every log in `raw/`.
@@ -689,6 +702,23 @@ Deviation 5 records the asymmetry rather than smoothing it.
   56 readings over 28 runs, lists **only untracked files under this campaign's own directory**
   and nothing else in the tree. That is consistent with one writer; it is evidence and not a
   declaration.
+
+  **The declaration, made by the campaign operator on 2026-09-03, after this write-up was
+  published and added to it here rather than folded into the paragraph above.** It is theirs,
+  and it is quoted rather than paraphrased:
+
+  > Only the campaign runner wrote to this checkout for the whole campaign. No watched path
+  > moved — `git diff --stat c38a42c..HEAD -- model/ workspace/src/ tools/ tests/ scripts/`
+  > was empty at the end and the working tree was clean; four commits were made, all
+  > `raw/`-only; and no containers or `gz sim` processes survived.
+
+  **V10 is therefore satisfied**, and the paragraph above stays as it was written: it is the
+  mechanism's evidence, the declaration is the operator's, and the two are different things.
+  The declaration's checkable clauses were re-derived on 2026-09-03 by a reader who is not the
+  operator and hold: the watched-path diff against `c38a42c` is empty at `bbd40cf`, the working
+  tree is clean, and the four campaign commits — `0829119`, `225c025`, `cab1e56`, `807dd2e` —
+  touch **only** files under this campaign's `raw/`. The surviving-process clause is the
+  operator's own observation and is not reproducible after the fact.
 - **V11** — one build. Deviation 6.
 
 ---
