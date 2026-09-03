@@ -1,0 +1,165 @@
+{
+  "label": "C4_continuous_line_1",
+  "condition": "C4",
+  "scenario": "continuous_line",
+  "started_wall_utc": "2026-09-03T17:09:14Z",
+  "ended_wall_utc": "2026-09-03T17:11:52Z",
+  "duration_s": 158.105,
+  "scenario_returncode": 1,
+  "verdict": {
+    "verdict": "failed",
+    "verdict_line": "error Scenario 'continuous_line' failed \u2014 1 cycle assertion(s) failed"
+  },
+  "isolation": {
+    "compose_project_name": "cite-digital-twin-3319196271",
+    "ros_domain_id": "43",
+    "compose_project_source": "derived from this checkout",
+    "derived_from": "scripts/_lib.sh cite_project_name, sourced under bash"
+  },
+  "host_facts": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "host_cpu_count": 16,
+    "docker_version": "Docker version 29.7.2, build a7dcaa6",
+    "image_id": "sha256:3a41d4e431b0a200c0b7a00d89bbcb44669f03d3aa754f56b89496a240fede7d"
+  },
+  "load_before": {
+    "load_1m": 1.2041015625,
+    "load_5m": 1.708984375,
+    "load_15m": 1.984375,
+    "load_read_from": "/proc/loadavg on the host",
+    "uptime": "12:09:14 up 1 day, 3 min,  1 user,  load average: 1.20, 1.71, 1.98",
+    "wall_clock_utc": "2026-09-03T17:09:14Z"
+  },
+  "load_after": {
+    "load_1m": 2.1884765625,
+    "load_5m": 1.9365234375,
+    "load_15m": 2.029296875,
+    "load_read_from": "/proc/loadavg on the host",
+    "uptime": "12:11:52 up 1 day, 5 min,  1 user,  load average: 2.19, 1.94, 2.03",
+    "wall_clock_utc": "2026-09-03T17:11:52Z"
+  },
+  "i4_after_apply": {
+    "cgroup_cpu_max_inside": "400000 100000",
+    "host_config_nano_cpus": "4000000000",
+    "read_at": 1788455358.942432
+  },
+  "i4_last_live": {
+    "cgroup_cpu_max_inside": "400000 100000",
+    "host_config_nano_cpus": "4000000000",
+    "read_at": 1788455509.9035172
+  },
+  "i4_last_live_before_exit_s": 3.036,
+  "i4_samples": 17,
+  "i4_post_exit_attempt": {
+    "cgroup_cpu_max_inside": "<rc=1> Error response from daemon: No such container: 5345bdf1ae9f",
+    "host_config_nano_cpus": "<rc=1> error: no such object: 5345bdf1ae9f",
+    "read_at": 1788455512.9626274
+  },
+  "i4_release_attempt": {
+    "returncode": 1,
+    "stderr": "Error response from daemon: No such container: 5345bdf1ae9f",
+    "read_back": {
+      "cgroup_cpu_max_inside": "<rc=1> Error response from daemon: No such container: 5345bdf1ae9f",
+      "host_config_nano_cpus": "<rc=1> error: no such object: 5345bdf1ae9f",
+      "read_at": 1788455513.0294695
+    },
+    "container_still_exists": false,
+    "released": false
+  },
+  "i6": {
+    "start": {
+      "at": 1788455354.8265114,
+      "head": "98fbbfc24a064d00464073f643edeccf79a80105",
+      "git_status_porcelain": "?? docs/measurements/2026-09-02-scenario-ceilings/raw/C1_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C1_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/logs/\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/provenance.txt",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "clean": true
+    },
+    "end": {
+      "at": 1788455512.96895,
+      "head": "98fbbfc24a064d00464073f643edeccf79a80105",
+      "git_status_porcelain": "?? docs/measurements/2026-09-02-scenario-ceilings/raw/C1_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C1_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C2_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/C4_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_bringup_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_continuous_line_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_1.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.json\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/FULL_pick_and_place_2.log\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/logs/\n?? docs/measurements/2026-09-02-scenario-ceilings/raw/provenance.txt",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "clean": true
+    },
+    "v1_clean": true,
+    "disagreed_mid_run": false,
+    "head_moved_mid_run": false,
+    "base_commit": "c38a42c",
+    "watched_paths": [
+      "model/",
+      "workspace/src/",
+      "tools/",
+      "tests/",
+      "scripts/"
+    ]
+  },
+  "i7": null,
+  "i7_gate": null,
+  "container": {
+    "id": "5345bdf1ae9f",
+    "cite_environment_in_force": {
+      "read_ok": true,
+      "CITE_DOMAIN_SOURCE": "derived from this checkout",
+      "CITE_PHYSICS_SEED": "20260824",
+      "CITE_PROJECT_SOURCE": "derived from this checkout",
+      "ROS_DOMAIN_ID": "43",
+      "CITE_DOMAIN_BASE": "43",
+      "CITE_VENV": "/opt/cite-venv"
+    },
+    "started_at": "2026-09-03T17:09:15.119858514Z",
+    "seen_at": 1788455358.8667283,
+    "limit_applied_at": 1788455358.899291,
+    "limit_delay_s": 3.779433012008667,
+    "limit_command": {
+      "argv": "docker update --cpus 4.0 5345bdf1ae9f",
+      "returncode": 0,
+      "stderr": ""
+    }
+  },
+  "survivors_before": {
+    "gz_sim_processes": [],
+    "gz_sim_count": 0,
+    "looked_ok": true,
+    "cite_containers": [],
+    "cite_container_count": 0
+  },
+  "survivors_after": {
+    "gz_sim_processes": [],
+    "gz_sim_count": 0,
+    "looked_ok": true,
+    "cite_containers": [],
+    "cite_container_count": 0
+  },
+  "environment": {
+    "CITE_LINE_WORKPIECES": null,
+    "CITE_ENV": null,
+    "host_shell_note": "what this shell exported; NOT the value in force",
+    "CITE_PHYSICS_SEED_in_force": "20260824"
+  },
+  "criteria_sha256": "da918ad644c6b828347162e85670a2fcbb13701b474d40085ffa7a100c1fd133",
+  "instrument": {
+    "timing_regex": "CITE_TIMING (\\{.*\\})",
+    "marker_lines": 0,
+    "records": 0,
+    "mangled_count": 0,
+    "mangled_fraction": 0.0,
+    "mangled_sample": []
+  },
+  "validity": {
+    "v1_clean": true,
+    "v1_disagreed_mid_run": false,
+    "v2_ok": null,
+    "v3_verdict": "failed",
+    "v5_ok": true,
+    "v6_ok": true,
+    "v6_note": "limit applied 3.8 s into the container's life",
+    "v6_limit_held_at_end": true,
+    "v7_load_flag": false,
+    "v7_load_1m": 1.2041015625,
+    "g_ok": true
+  },
+  "records": []
+}
