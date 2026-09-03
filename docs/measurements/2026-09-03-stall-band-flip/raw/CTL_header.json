@@ -1,0 +1,154 @@
+{
+  "campaign": "2026-09-03-stall-band-flip",
+  "block": "CTL",
+  "question": "criteria.md section 1 -- where the shipped predicate's verdict flips, at each edge of its window, bracketed to 0.05 mm or finer",
+  "arm": "CTL",
+  "stops": {
+    "how": "criteria.md section 5.3: no stop at all, the gripper's block on plain mock_components/GenericSystem"
+  },
+  "repeats": 3,
+  "trials_scheduled": 3,
+  "commanded_width_m": 0.045,
+  "q_cmd_rad": 0.4527925584553407,
+  "travel": {
+    "open_position": 0.0,
+    "closed_position": 0.85,
+    "drive_pivot_y_m": 0.035,
+    "drive_pivot_z_m": 0.059098,
+    "finger_offset_y_m": 0.035465,
+    "finger_offset_z_m": 0.042039,
+    "pad_inset_m": 0.026,
+    "tip_link_z_m": 0.172,
+    "pad_face_centre_z_m": 0.041003,
+    "goal_tolerance": 0.01,
+    "stall_band_narrow_m": 0.002385,
+    "stall_band_wide_m": 0.002385
+  },
+  "parts": {
+    "narrowest_m": 0.05,
+    "widest_m": 0.05
+  },
+  "window_m": {
+    "edge_lo": 0.047615000000000005,
+    "edge_hi": 0.052385
+  },
+  "floor_m": 0.04712151946379192,
+  "floor_note": "criteria.md section 2.2's closed-form floor, solved by bisection on the SUPERSEDED BUILD's own answer at the shipped command. Rule H admits it into FLOOR1 because it is COMPUTED here; ADR-0052 section A.6's cited figure is named beside it and enters no arithmetic.",
+  "section_2_cross_check": {
+    "open_width_mm": {
+      "shipped": 88.93,
+      "criteria": 88.93,
+      "tolerance": 0.001,
+      "agrees": true
+    },
+    "closed_width_mm": {
+      "shipped": 1.646450634236258,
+      "criteria": 1.646,
+      "tolerance": 0.001,
+      "agrees": true
+    },
+    "edge_lo_mm": {
+      "shipped": 47.615,
+      "criteria": 47.615,
+      "tolerance": 0.001,
+      "agrees": true
+    },
+    "edge_hi_mm": {
+      "shipped": 52.385,
+      "criteria": 52.385,
+      "tolerance": 0.001,
+      "agrees": true
+    },
+    "edge_lo_position_rad": {
+      "shipped": 0.42819071480507853,
+      "criteria": 0.428191,
+      "tolerance": 1e-05,
+      "agrees": true
+    },
+    "edge_hi_position_rad": {
+      "shipped": 0.38286225402975016,
+      "criteria": 0.382862,
+      "tolerance": 1e-05,
+      "agrees": true
+    },
+    "margin_at_45mm_mm": {
+      "shipped": 2.137971873481005,
+      "criteria": 2.137972,
+      "tolerance": 1e-05,
+      "agrees": true
+    },
+    "validator_ceiling_mm": {
+      "shipped": 47.862028126519,
+      "criteria": 47.862,
+      "tolerance": 0.001,
+      "agrees": true
+    },
+    "floor_mm": {
+      "shipped": 47.12151946379192,
+      "criteria": 47.121519,
+      "tolerance": 0.0001,
+      "agrees": true
+    },
+    "all_agree": true
+  },
+  "predicate_eval": {
+    "travel": "open_position=0 closed_position=0.84999999999999998 drive_pivot_y_m=0.035000000000000003 drive_pivot_z_m=0.059097999999999998 finger_offset_y_m=0.035465000000000003 finger_offset_z_m=0.042039 pad_inset_m=0.025999999999999999 tip_link_z_m=0.17199999999999999 pad_face_centre_z_m=0.041002999999999998 goal_tolerance=0.01 stall_band_narrow_m=0.002385 stall_band_wide_m=0.002385",
+    "parts": "narrowest_m=0.050000000000000003 widest_m=0.050000000000000003"
+  },
+  "superseded": {
+    "built_at": "2026-09-03T22:30:46Z",
+    "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+    "worktree_commit_short": "4ef2d7c",
+    "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+    "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+    "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+    "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+    "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "available": true
+  },
+  "controller_settings": {
+    "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml",
+    "stall_timeout_s": 0.3,
+    "stall_velocity_threshold": 0.05,
+    "controller_goal_tolerance_rad": 0.01,
+    "declared_on": "/cite/cell_a/arm_1/arm_1_gripper_controller",
+    "max_drive_rate_rad_s": 1.0
+  },
+  "p6": {
+    "rest_position_rad": 0.3,
+    "rest_width_m": 0.06091526923800714,
+    "two_width_tolerances_m": 0.0020256805918238306,
+    "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+  },
+  "host": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 16,
+    "ros_domain_id": "43",
+    "gz_partition": null,
+    "note": "there is no Gazebo-transport process in this rig, so GZ_PARTITION is recorded as an environment fact and binds nothing (criteria.md 4.2)"
+  },
+  "thresholds": {
+    "mis_width_m": 0.0001,
+    "bracket_step_mm": 0.05,
+    "rest_tolerance_m": 5e-06,
+    "v4_tolerance_m": 5e-06,
+    "v14_tolerance_m": 5e-06,
+    "v7_load_threshold": 4.0
+  },
+  "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+  "v1_start": {
+    "at": 1788474646.8454208,
+    "head": "ac449c8040cbcfb8a49c3bf58571f095d8b8d712",
+    "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/CTL_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/CTL_load.txt",
+    "watched_diff_against_base": "",
+    "watched_worktree_dirty": "",
+    "clean": true,
+    "model_hash": {
+      "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+      "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+    },
+    "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+  },
+  "is_shakedown": false
+}

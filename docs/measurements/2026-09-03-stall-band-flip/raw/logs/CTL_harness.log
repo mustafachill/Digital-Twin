@@ -1,0 +1,14 @@
+[WARN] [1788474681.082499484] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[WARN] [1788474714.724101655] [rcl.logging_rosout]: Publisher already registered for node name: 'stall_band_flip_harness'. If this is due to multiple nodes with the same name then all logs for the logger named 'stall_band_flip_harness' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+== cycle 0 opened, load 0.28515625 ==
+[1/3] block CTL cycle 0 stop no_stop mm
+    holding_F=False holding_S=True w_reached(I1)=0.060915272276528036 v5=None v14=False
+== cycle 0 closed ==
+== cycle 1 opened, load 0.22021484375 ==
+[2/3] block CTL cycle 1 stop no_stop mm
+    holding_F=False holding_S=True w_reached(I1)=0.060915272276528036 v5=None v14=False
+== cycle 1 closed ==
+== cycle 2 opened, load 0.18994140625 ==
+[3/3] block CTL cycle 2 stop no_stop mm
+    holding_F=False holding_S=True w_reached(I1)=0.060915272276528036 v5=None v14=False
+wrote /workspace/docs/measurements/2026-09-03-stall-band-flip/harness/../raw/CTL_trials.json: 3 trials, 3 with v1_clean
