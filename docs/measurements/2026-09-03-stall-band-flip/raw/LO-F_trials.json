@@ -1,0 +1,3818 @@
+[
+  {
+    "trial": 1,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.5,
+    "stop_position_rad": 0.4292760780538085,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_001_47.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4292760780538085,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4292760780538085",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.0475,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4292760780538085,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.0475,
+    "i4_position_rad": 0.4292760780538085,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.0475,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.429276,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.0475,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.0475,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.00011500000000000399,
+    "d_wide_m": 0.0048850000000000005,
+    "i1_position_rad": 0.4292760780538085,
+    "holding_S_input_position_rad": 0.4292760780538085,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 2,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.55,
+    "stop_position_rad": 0.42880422136368446,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_002_47.55.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42880422136368446,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42880422136368446",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.047549999999999995,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42880422136368446,
+    "i3_joint_state_samples": 273,
+    "i3_reached_width_m": 0.047549999999999995,
+    "i4_position_rad": 0.42880422136368446,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047549999999999995,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428804,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047549999999999995,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047549999999999995,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -6.50000000000095e-05,
+    "d_wide_m": 0.004835000000000006,
+    "i1_position_rad": 0.42880422136368446,
+    "holding_S_input_position_rad": 0.42880422136368446,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 3,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.6,
+    "stop_position_rad": 0.42833230257184596,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_003_47.60.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42833230257184596,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42833230257184596",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.04760000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42833230257184596,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04760000000000001,
+    "i4_position_rad": 0.42833230257184596,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04760000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428332,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04760000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04760000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -1.4999999999994185e-05,
+    "d_wide_m": 0.004784999999999991,
+    "i1_position_rad": 0.42833230257184596,
+    "holding_S_input_position_rad": 0.42833230257184596,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 4,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.65,
+    "stop_position_rad": 0.42786032154862585,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_004_47.65.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42786032154862585,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42786032154862585",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04765,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42786032154862585,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04765,
+    "i4_position_rad": 0.42786032154862585,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04765,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.42786,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04765,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04765,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 3.499999999999337e-05,
+    "d_wide_m": 0.004735000000000003,
+    "i1_position_rad": 0.42786032154862585,
+    "holding_S_input_position_rad": 0.42786032154862585,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 5,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.7,
+    "stop_position_rad": 0.4273882781642149,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_005_47.70.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4273882781642149,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4273882781642149",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04770000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4273882781642149,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04770000000000001,
+    "i4_position_rad": 0.4273882781642149,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04770000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.427388,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04770000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04770000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 8.500000000000868e-05,
+    "d_wide_m": 0.004684999999999988,
+    "i1_position_rad": 0.4273882781642149,
+    "holding_S_input_position_rad": 0.4273882781642149,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 6,
+    "cycle": 0,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.75,
+    "stop_position_rad": 0.42691617228866363,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_006_47.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42691617228866363,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42691617228866363",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.047749999999999994,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42691617228866363,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.047749999999999994,
+    "i4_position_rad": 0.42691617228866363,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047749999999999994,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.426916,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047749999999999994,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047749999999999994,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0001349999999999893,
+    "d_wide_m": 0.004635000000000007,
+    "i1_position_rad": 0.42691617228866363,
+    "holding_S_input_position_rad": 0.42691617228866363,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473886.1374748,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473911.7226913,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.18994140625,
+        "load_5m": 0.40234375,
+        "load_15m": 0.322265625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:06Z"
+      },
+      "end": {
+        "load_1m": 0.42138671875,
+        "load_5m": 0.43603515625,
+        "load_15m": 0.33544921875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:18:31Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 7,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.5,
+    "stop_position_rad": 0.4292760780538085,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_007_47.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4292760780538085,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4292760780538085",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.0475,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4292760780538085,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.0475,
+    "i4_position_rad": 0.4292760780538085,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.0475,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.429276,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.0475,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.0475,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.00011500000000000399,
+    "d_wide_m": 0.0048850000000000005,
+    "i1_position_rad": 0.4292760780538085,
+    "holding_S_input_position_rad": 0.4292760780538085,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 8,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.55,
+    "stop_position_rad": 0.42880422136368446,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_008_47.55.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42880422136368446,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42880422136368446",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.047549999999999995,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42880422136368446,
+    "i3_joint_state_samples": 163,
+    "i3_reached_width_m": 0.047549999999999995,
+    "i4_position_rad": 0.42880422136368446,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047549999999999995,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428804,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047549999999999995,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047549999999999995,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -6.50000000000095e-05,
+    "d_wide_m": 0.004835000000000006,
+    "i1_position_rad": 0.42880422136368446,
+    "holding_S_input_position_rad": 0.42880422136368446,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 9,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.6,
+    "stop_position_rad": 0.42833230257184596,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_009_47.60.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42833230257184596,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42833230257184596",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22801,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.04760000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42833230257184596,
+    "i3_joint_state_samples": 301,
+    "i3_reached_width_m": 0.04760000000000001,
+    "i4_position_rad": 0.42833230257184596,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04760000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428332,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04760000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04760000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -1.4999999999994185e-05,
+    "d_wide_m": 0.004784999999999991,
+    "i1_position_rad": 0.42833230257184596,
+    "holding_S_input_position_rad": 0.42833230257184596,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 10,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.65,
+    "stop_position_rad": 0.42786032154862585,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_010_47.65.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42786032154862585,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42786032154862585",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04765,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42786032154862585,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04765,
+    "i4_position_rad": 0.42786032154862585,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04765,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.42786,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04765,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04765,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 3.499999999999337e-05,
+    "d_wide_m": 0.004735000000000003,
+    "i1_position_rad": 0.42786032154862585,
+    "holding_S_input_position_rad": 0.42786032154862585,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 11,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.7,
+    "stop_position_rad": 0.4273882781642149,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_011_47.70.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4273882781642149,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4273882781642149",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04770000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4273882781642149,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04770000000000001,
+    "i4_position_rad": 0.4273882781642149,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04770000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.427388,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04770000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04770000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 8.500000000000868e-05,
+    "d_wide_m": 0.004684999999999988,
+    "i1_position_rad": 0.4273882781642149,
+    "holding_S_input_position_rad": 0.4273882781642149,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 12,
+    "cycle": 1,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.75,
+    "stop_position_rad": 0.42691617228866363,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_012_47.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42691617228866363,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42691617228866363",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.047749999999999994,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42691617228866363,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.047749999999999994,
+    "i4_position_rad": 0.42691617228866363,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047749999999999994,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.426916,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047749999999999994,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047749999999999994,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0001349999999999893,
+    "d_wide_m": 0.004635000000000007,
+    "i1_position_rad": 0.42691617228866363,
+    "holding_S_input_position_rad": 0.42691617228866363,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473941.736195,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473966.3139865,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.25390625,
+        "load_5m": 0.39306640625,
+        "load_15m": 0.32373046875,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:01Z"
+      },
+      "end": {
+        "load_1m": 0.705078125,
+        "load_5m": 0.47607421875,
+        "load_15m": 0.3525390625,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:26Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 13,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.5,
+    "stop_position_rad": 0.4292760780538085,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_013_47.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4292760780538085,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4292760780538085",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.0475,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4292760780538085,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.0475,
+    "i4_position_rad": 0.4292760780538085,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.0475,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.429276,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.0475,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.0475,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -0.00011500000000000399,
+    "d_wide_m": 0.0048850000000000005,
+    "i1_position_rad": 0.4292760780538085,
+    "holding_S_input_position_rad": 0.4292760780538085,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 14,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.55,
+    "stop_position_rad": 0.42880422136368446,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_014_47.55.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42880422136368446,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42880422136368446",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.047549999999999995,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42880422136368446,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.047549999999999995,
+    "i4_position_rad": 0.42880422136368446,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047549999999999995,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428804,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047549999999999995,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047549999999999995,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -6.50000000000095e-05,
+    "d_wide_m": 0.004835000000000006,
+    "i1_position_rad": 0.42880422136368446,
+    "holding_S_input_position_rad": 0.42880422136368446,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 15,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.6,
+    "stop_position_rad": 0.42833230257184596,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_015_47.60.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42833230257184596,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42833230257184596",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.04760000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42833230257184596,
+    "i3_joint_state_samples": 164,
+    "i3_reached_width_m": 0.04760000000000001,
+    "i4_position_rad": 0.42833230257184596,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04760000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.428332,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04760000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04760000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": -1.4999999999994185e-05,
+    "d_wide_m": 0.004784999999999991,
+    "i1_position_rad": 0.42833230257184596,
+    "holding_S_input_position_rad": 0.42833230257184596,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 16,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.65,
+    "stop_position_rad": 0.42786032154862585,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_016_47.65.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42786032154862585,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42786032154862585",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04765,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42786032154862585,
+    "i3_joint_state_samples": 291,
+    "i3_reached_width_m": 0.04765,
+    "i4_position_rad": 0.42786032154862585,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04765,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.6,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.42786,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04765,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04765,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.6,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 3.499999999999337e-05,
+    "d_wide_m": 0.004735000000000003,
+    "i1_position_rad": 0.42786032154862585,
+    "holding_S_input_position_rad": 0.42786032154862585,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 17,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.7,
+    "stop_position_rad": 0.4273882781642149,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_017_47.70.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.4273882781642149,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.4273882781642149",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.04770000000000001,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.4273882781642149,
+    "i3_joint_state_samples": 163,
+    "i3_reached_width_m": 0.04770000000000001,
+    "i4_position_rad": 0.4273882781642149,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.04770000000000001,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.427388,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.04770000000000001,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.04770000000000001,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 8.500000000000868e-05,
+    "d_wide_m": 0.004684999999999988,
+    "i1_position_rad": 0.4273882781642149,
+    "holding_S_input_position_rad": 0.4273882781642149,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 18,
+    "cycle": 2,
+    "arm": "LO",
+    "block_label": "LO-F",
+    "w_stop_mm": 47.75,
+    "stop_position_rad": 0.42691617228866363,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "LO-F_018_47.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.42691617228866363,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.42691617228866363",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.047749999999999994,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.42691617228866363,
+    "i3_joint_state_samples": 163,
+    "i3_reached_width_m": 0.047749999999999994,
+    "i4_position_rad": 0.42691617228866363,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.047749999999999994,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 47.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.426916,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.047749999999999994,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.047749999999999994,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 47.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0001349999999999893,
+    "d_wide_m": 0.004635000000000007,
+    "i1_position_rad": 0.42691617228866363,
+    "holding_S_input_position_rad": 0.42691617228866363,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473996.3275182,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788474020.2738287,
+        "head": "f70da8bd20bf2e8f232dc8f2cff7db80e2ac5181",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/LO-F_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_001_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_002_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_003_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_004_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_005_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_006_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_007_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_008_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_009_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_010_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_011_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_012_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_013_47.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_014_47.55.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_015_47.60.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_016_47.65.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_017_47.70.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_018_47.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/LO-F_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "LO-F",
+    "block": "LO-F",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:18:05Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.42626953125,
+        "load_5m": 0.42919921875,
+        "load_15m": 0.3408203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:19:56Z"
+      },
+      "end": {
+        "load_1m": 0.84521484375,
+        "load_5m": 0.52490234375,
+        "load_15m": 0.37548828125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:20:20Z"
+      }
+    },
+    "v7_flagged": false
+  }
+]
