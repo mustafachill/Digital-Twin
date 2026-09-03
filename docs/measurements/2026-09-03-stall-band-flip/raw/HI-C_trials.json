@@ -1,0 +1,3818 @@
+[
+  {
+    "trial": 1,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.0,
+    "stop_position_rad": 0.38654464718280845,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_001_52.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.38654464718280845,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.38654464718280845",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.051999999999999984,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.38654464718280845,
+    "i3_joint_state_samples": 157,
+    "i3_reached_width_m": 0.051999999999999984,
+    "i4_position_rad": 0.38654464718280845,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.051999999999999984,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.386545,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.051999999999999984,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.051999999999999984,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004384999999999979,
+    "d_wide_m": 0.00038500000000001727,
+    "i1_position_rad": 0.38654464718280845,
+    "holding_S_input_position_rad": 0.38654464718280845,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 2,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.25,
+    "stop_position_rad": 0.3841539880459284,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_002_52.25.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3841539880459284,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3841539880459284",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.05225,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3841539880459284,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.05225,
+    "i4_position_rad": 0.3841539880459284,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05225,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.2,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.384154,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05225,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05225,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.2,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004634999999999993,
+    "d_wide_m": 0.00013500000000000317,
+    "i1_position_rad": 0.3841539880459284,
+    "holding_S_input_position_rad": 0.3841539880459284,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 3,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.5,
+    "stop_position_rad": 0.38176145484396606,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_003_52.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.38176145484396606,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.38176145484396606",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.0525,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.38176145484396606,
+    "i3_joint_state_samples": 157,
+    "i3_reached_width_m": 0.0525,
+    "i4_position_rad": 0.38176145484396606,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.0525,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.381761,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.0525,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.0525,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0048849999999999935,
+    "d_wide_m": -0.00011499999999999705,
+    "i1_position_rad": 0.38176145484396606,
+    "holding_S_input_position_rad": 0.38176145484396606,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 4,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.75,
+    "stop_position_rad": 0.3793670294348892,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_004_52.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3793670294348892,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3793670294348892",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.05275,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3793670294348892,
+    "i3_joint_state_samples": 246,
+    "i3_reached_width_m": 0.05275,
+    "i4_position_rad": 0.3793670294348892,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05275,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.379367,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05275,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05275,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.8,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005134999999999994,
+    "d_wide_m": -0.00036499999999999727,
+    "i1_position_rad": 0.3793670294348892,
+    "holding_S_input_position_rad": 0.3793670294348892,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 5,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.0,
+    "stop_position_rad": 0.3769706935613639,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_005_53.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3769706935613639,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3769706935613639",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3769706935613639,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053,
+    "i4_position_rad": 0.3769706935613639,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.376971,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005384999999999994,
+    "d_wide_m": -0.0006149999999999975,
+    "i1_position_rad": 0.3769706935613639,
+    "holding_S_input_position_rad": 0.3769706935613639,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 6,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.25,
+    "stop_position_rad": 0.37457242884916697,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_006_53.25.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.37457242884916697,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.37457242884916697",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053250000000000006,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.37457242884916697,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053250000000000006,
+    "i4_position_rad": 0.37457242884916697,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053250000000000006,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.3,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.374572,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053250000000000006,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053250000000000006,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.3,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005635000000000001,
+    "d_wide_m": -0.0008650000000000047,
+    "i1_position_rad": 0.37457242884916697,
+    "holding_S_input_position_rad": 0.37457242884916697,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 7,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.5,
+    "stop_position_rad": 0.37217221680557677,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_007_53.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.37217221680557677,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.37217221680557677",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.05349999999999999,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.37217221680557677,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.05349999999999999,
+    "i4_position_rad": 0.37217221680557677,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05349999999999999,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.372172,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05349999999999999,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05349999999999999,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0058849999999999875,
+    "d_wide_m": -0.001114999999999991,
+    "i1_position_rad": 0.37217221680557677,
+    "holding_S_input_position_rad": 0.37217221680557677,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 8,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.75,
+    "stop_position_rad": 0.36977003881774007,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_008_53.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.36977003881774007,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.36977003881774007",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053749999999999985,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.36977003881774007,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053749999999999985,
+    "i4_position_rad": 0.36977003881774007,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053749999999999985,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.36977,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053749999999999985,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053749999999999985,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006134999999999981,
+    "d_wide_m": -0.0013649999999999843,
+    "i1_position_rad": 0.36977003881774007,
+    "holding_S_input_position_rad": 0.36977003881774007,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 9,
+    "cycle": 0,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 54.0,
+    "stop_position_rad": 0.3673658761510177,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_009_54.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3673658761510177,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3673658761510177",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053999999999999986,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3673658761510177,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053999999999999986,
+    "i4_position_rad": 0.3673658761510177,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053999999999999986,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 54.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.367366,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053999999999999986,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053999999999999986,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 54.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006384999999999981,
+    "d_wide_m": -0.0016149999999999845,
+    "i1_position_rad": 0.3673658761510177,
+    "holding_S_input_position_rad": 0.3673658761510177,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473648.4473355,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473686.240579,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.5283203125,
+        "load_5m": 0.46630859375,
+        "load_15m": 0.30078125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:08Z"
+      },
+      "end": {
+        "load_1m": 0.794921875,
+        "load_5m": 0.54150390625,
+        "load_15m": 0.33203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:14:46Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 10,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.0,
+    "stop_position_rad": 0.38654464718280845,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_010_52.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.38654464718280845,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.38654464718280845",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.051999999999999984,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.38654464718280845,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.051999999999999984,
+    "i4_position_rad": 0.38654464718280845,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.051999999999999984,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.386545,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.051999999999999984,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.051999999999999984,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004384999999999979,
+    "d_wide_m": 0.00038500000000001727,
+    "i1_position_rad": 0.38654464718280845,
+    "holding_S_input_position_rad": 0.38654464718280845,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 11,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.25,
+    "stop_position_rad": 0.3841539880459284,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_011_52.25.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3841539880459284,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3841539880459284",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": true,
+    "i1_reached_width_m": 0.05225,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3841539880459284,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.05225,
+    "i4_position_rad": 0.3841539880459284,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05225,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.2,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "holding"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.384154,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05225,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05225,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.2,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.004634999999999993,
+    "d_wide_m": 0.00013500000000000317,
+    "i1_position_rad": 0.3841539880459284,
+    "holding_S_input_position_rad": 0.3841539880459284,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 12,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.5,
+    "stop_position_rad": 0.38176145484396606,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_012_52.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.38176145484396606,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.38176145484396606",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.0525,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.38176145484396606,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.0525,
+    "i4_position_rad": 0.38176145484396606,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.0525,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.381761,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.0525,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.0525,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0048849999999999935,
+    "d_wide_m": -0.00011499999999999705,
+    "i1_position_rad": 0.38176145484396606,
+    "holding_S_input_position_rad": 0.38176145484396606,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 13,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 52.75,
+    "stop_position_rad": 0.3793670294348892,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_013_52.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3793670294348892,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3793670294348892",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.05275,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3793670294348892,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.05275,
+    "i4_position_rad": 0.3793670294348892,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05275,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 52.8,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.379367,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05275,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05275,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 52.8,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005134999999999994,
+    "d_wide_m": -0.00036499999999999727,
+    "i1_position_rad": 0.3793670294348892,
+    "holding_S_input_position_rad": 0.3793670294348892,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 14,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.0,
+    "stop_position_rad": 0.3769706935613639,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_014_53.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3769706935613639,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3769706935613639",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3769706935613639,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053,
+    "i4_position_rad": 0.3769706935613639,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.376971,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005384999999999994,
+    "d_wide_m": -0.0006149999999999975,
+    "i1_position_rad": 0.3769706935613639,
+    "holding_S_input_position_rad": 0.3769706935613639,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 15,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.25,
+    "stop_position_rad": 0.37457242884916697,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_015_53.25.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.37457242884916697,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.37457242884916697",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053250000000000006,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.37457242884916697,
+    "i3_joint_state_samples": 300,
+    "i3_reached_width_m": 0.053250000000000006,
+    "i4_position_rad": 0.37457242884916697,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053250000000000006,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.3,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.374572,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053250000000000006,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053250000000000006,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.3,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.005635000000000001,
+    "d_wide_m": -0.0008650000000000047,
+    "i1_position_rad": 0.37457242884916697,
+    "holding_S_input_position_rad": 0.37457242884916697,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 16,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.5,
+    "stop_position_rad": 0.37217221680557677,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_016_53.50.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.37217221680557677,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.37217221680557677",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.05349999999999999,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.37217221680557677,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.05349999999999999,
+    "i4_position_rad": 0.37217221680557677,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.05349999999999999,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.5,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.372172,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.05349999999999999,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.05349999999999999,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.5,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.0058849999999999875,
+    "d_wide_m": -0.001114999999999991,
+    "i1_position_rad": 0.37217221680557677,
+    "holding_S_input_position_rad": 0.37217221680557677,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 17,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 53.75,
+    "stop_position_rad": 0.36977003881774007,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_017_53.75.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.36977003881774007,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.36977003881774007",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22609,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053749999999999985,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.36977003881774007,
+    "i3_joint_state_samples": 156,
+    "i3_reached_width_m": 0.053749999999999985,
+    "i4_position_rad": 0.36977003881774007,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053749999999999985,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 53.7,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.36977,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053749999999999985,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053749999999999985,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 53.7,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006134999999999981,
+    "d_wide_m": -0.0013649999999999843,
+    "i1_position_rad": 0.36977003881774007,
+    "holding_S_input_position_rad": 0.36977003881774007,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  },
+  {
+    "trial": 18,
+    "cycle": 1,
+    "arm": "HI",
+    "block_label": "HI-C",
+    "w_stop_mm": 54.0,
+    "stop_position_rad": 0.3673658761510177,
+    "stop_lower_rad": -1.0,
+    "w_cmd_m": 0.045,
+    "q_cmd_rad": 0.4527925584553407,
+    "stroke": "closing",
+    "v3_contact_witness": "structurally absent -- this rig has no simulator, so nothing can touch anything and V3's 'nothing was between the pads' is discharged by construction rather than by a sensor",
+    "v3_ok": true,
+    "log": "HI-C_018_54.00.log",
+    "rig": {
+      "blocks": [
+        {
+          "name": "arm_1_gz_ros2_control/GazeboSimSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "mock_components/GenericSystem"
+        },
+        {
+          "name": "arm_1_XArmGripperSystem",
+          "was": "gz_ros2_control/GazeboSimSystem",
+          "now": "cite_test_hardware/JointStopSystem",
+          "role": "the gripper, with a declared stop"
+        }
+      ],
+      "stop_applied": true,
+      "stop_upper_rad": 0.3673658761510177,
+      "stop_lower_rad": -1.0,
+      "v13_ok": true,
+      "stop_repr_round_trip_exact": true,
+      "stop_upper_rad_as_written": "0.3673658761510177",
+      "hull_collision_refs_in_text": 13
+    },
+    "v13_ok": true,
+    "joint_state_first_rad": 0.0,
+    "geometry": {
+      "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+      "hull_collision_refs": 13,
+      "vendor_visual_refs": 6,
+      "description_chars": 22608,
+      "v2_ok": true,
+      "production_plugin_refs": 1,
+      "fixture_plugin_refs": 1,
+      "mock_plugin_refs": 1
+    },
+    "v2_ok": true,
+    "ok": true,
+    "holding_F": false,
+    "i1_reached_width_m": 0.053999999999999986,
+    "i1_measured_effort_n": 60.0,
+    "i1_result_code": 0,
+    "i1_detail": "",
+    "i2_read_before_teardown": true,
+    "i3_q_at_rest_rad": 0.3673658761510177,
+    "i3_joint_state_samples": 275,
+    "i3_reached_width_m": 0.053999999999999986,
+    "i4_position_rad": 0.3673658761510177,
+    "i4_stalled": true,
+    "i4_reached_goal": false,
+    "i4_effort_n": 60.0,
+    "i4_width_m": 0.053999999999999986,
+    "i2_reports": [
+      {
+        "commanded_mm": 45.0,
+        "reached_mm": 54.0,
+        "stalled": true,
+        "reached_goal": false,
+        "effort_n": 60.0,
+        "verdict": "empty"
+      }
+    ],
+    "stalled": true,
+    "reached_goal": false,
+    "i5_stop_announced": true,
+    "i5_stop_announced_at_rad": 0.367366,
+    "i6_start_refused": false,
+    "i6_start_position_rad": null,
+    "fixture_named_itself": true,
+    "i7_reference_width_m": 0.053999999999999986,
+    "i7_tolerance_m": 5e-06,
+    "i7_rest_width_m": 0.053999999999999986,
+    "i7_rest_error_m": 0.0,
+    "i7_rest_error_rad": 0.0,
+    "i7_rests_at_stop": true,
+    "i7_rest_error_from_i4_m": 0.0,
+    "v4_tolerance_m": 5e-06,
+    "v4_evaluable": true,
+    "v4_delta_m": 0.0,
+    "v4_within_tolerance": true,
+    "v4_i2_reached_mm": 54.0,
+    "v4_rounds_to_i2": true,
+    "v4_ok": true,
+    "v14_tolerance_m": 5e-06,
+    "v14_instrument_loss": false,
+    "v14_booleans_agree": true,
+    "v14_width_delta_m": 0.0,
+    "v14_widths_agree": true,
+    "v14_ok": true,
+    "v5_valid": true,
+    "w_reached_source": "I1 (Grasp.Result.reached_width_m)",
+    "d_narrow_m": 0.006384999999999981,
+    "d_wide_m": -0.0016149999999999845,
+    "i1_position_rad": 0.3673658761510177,
+    "holding_S_input_position_rad": 0.3673658761510177,
+    "holding_S": true,
+    "v1": {
+      "start": {
+        "at": 1788473716.2539957,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "end": {
+        "at": 1788473756.906504,
+        "head": "e03c24e8af041207feab8d500790f5651e74dad4",
+        "git_status_porcelain": " M docs/measurements/2026-09-03-stall-band-flip/raw/logs/campaign.log\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/predicate_eval_superseded_provenance.txt\n M docs/measurements/2026-09-03-stall-band-flip/raw/provenance.txt\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_header.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/HI-C_trials.json\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_001_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_002_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_003_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_004_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_005_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_006_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_007_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_008_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_009_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_010_52.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_011_52.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_012_52.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_013_52.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_014_53.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_015_53.25.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_016_53.50.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_017_53.75.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_018_54.00.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_harness.log\n?? docs/measurements/2026-09-03-stall-band-flip/raw/logs/HI-C_load.txt",
+        "watched_diff_against_base": "",
+        "watched_worktree_dirty": "",
+        "clean": true,
+        "model_hash": {
+          "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+          "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+        },
+        "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+      },
+      "v1_clean": true,
+      "disagreed_mid_block": false,
+      "head_moved_mid_block": false,
+      "base_commit": "c38a42c",
+      "watched_paths": [
+        "model/",
+        "workspace/src/",
+        "tools/",
+        "tests/",
+        "scripts/"
+      ],
+      "criteria_sha256": "5e9c3f0a474c7cb05f4d8d719993be69d588885291740fbf0f1fc9e50cec9f23"
+    },
+    "label": "HI-C",
+    "block": "HI-C",
+    "window_m": {
+      "edge_lo": 0.047615000000000005,
+      "edge_hi": 0.052385
+    },
+    "parts": {
+      "narrowest_m": 0.05,
+      "widest_m": 0.05
+    },
+    "travel": {
+      "open_position": 0.0,
+      "closed_position": 0.85,
+      "drive_pivot_y_m": 0.035,
+      "drive_pivot_z_m": 0.059098,
+      "finger_offset_y_m": 0.035465,
+      "finger_offset_z_m": 0.042039,
+      "pad_inset_m": 0.026,
+      "tip_link_z_m": 0.172,
+      "pad_face_centre_z_m": 0.041003,
+      "goal_tolerance": 0.01,
+      "stall_band_narrow_m": 0.002385,
+      "stall_band_wide_m": 0.002385
+    },
+    "floor_m": 0.04712151946379192,
+    "superseded": {
+      "built_at": "2026-09-03T22:14:08Z",
+      "worktree_commit": "4ef2d7c9d3b6c4ee4f1410e962323b43b62f58f1",
+      "worktree_commit_short": "4ef2d7c",
+      "gripper_cpp_sha256": "b76883902b01fbc24bef7fef8ccc8e86bfa3bc77fecf387eefe943a205d3a749",
+      "gripper_hpp_sha256": "c4f1f5ba198df5eed71ab9acb4fae4fb8fd24e58ed72b8d4855a2adcc649ad14",
+      "front_end_sha256": "747b099737dd2fcb1ea1a6a7a5c53fcbe77d8ac2462fa0b2e0332627094c1f33",
+      "binary_sha256": "1550ef5079aa863efeafc040f456336de26d51c9ee8331eb01c1400520b1c57e",
+      "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "available": true
+    },
+    "p6": {
+      "rest_position_rad": 0.3,
+      "rest_width_m": 0.06091526923800714,
+      "two_width_tolerances_m": 0.0020256805918238306,
+      "derivation": "stall_timeout x max_drive_rate_rad_s, both read from the generated configuration and the generated plan"
+    },
+    "is_shakedown": false,
+    "v1_clean": true,
+    "i9": {
+      "start": {
+        "load_1m": 0.48046875,
+        "load_5m": 0.48828125,
+        "load_15m": 0.3203125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:16Z"
+      },
+      "end": {
+        "load_1m": 0.8779296875,
+        "load_5m": 0.58544921875,
+        "load_15m": 0.361328125,
+        "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 demonstrates that on this host that is the host's own reading",
+        "cpu_count": 16,
+        "wall_clock_utc": "2026-09-03T22:15:56Z"
+      }
+    },
+    "v7_flagged": false
+  }
+]
