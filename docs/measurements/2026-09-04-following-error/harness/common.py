@@ -258,8 +258,13 @@ def scrape_i3(text: str, arm: str) -> dict:
     **WHY ATTRIBUTION IS THE WHOLE OF THIS FUNCTION, and it is a shakedown finding.** Under
     CONC three arms are commanded at once and every one of them logs into the same launch log.
     The 2026-09-04 shakedown caught `arm_3` violating its own path tolerance -- a real event,
-    `Position Error: -1.071717, Position Tolerance: 1.000000` -- while `arm_1` was mid-goal,
-    and an unattributed scrape recorded it against `arm_1`'s trial. That is QUIET1 = FIRED, the
+    logged as `Position Error: <value>, Position Tolerance: <value>` on the shared
+    `tolerances` logger, which names no arm -- while `arm_1` was mid-goal, and an
+    unattributed scrape recorded it against `arm_1`'s trial. **The SHAPE of the line is what
+    this function is written against; the figures are deliberately not quoted here.** They
+    are a following error belonging to a load arm, rule T states no verdict about that arm,
+    and a shakedown reading does not live in the frozen rig even where it sets nothing --
+    it is in `raw/shakedown/` with the run that produced it. That is QUIET1 = FIRED, the
     campaign's headline verdict, manufactured out of a load arm about which rule T says no
     verdict is stated at all.
 

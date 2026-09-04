@@ -283,6 +283,24 @@ can report anything; it is pinned by SHA instead, and every block records the SH
   sufficient, because a wall clock is monotonic too. No magnitude bound is applied, because a
   bound chosen now would be a new exclusion rule added to a frozen criteria after the fact.
   What stands in its place is an argument from source, not a measurement: see Deviation 15.
+- **A tolerance event during the non-trial repositioning move is scraped by nothing.**
+  `cursor.mark()` is inside `run_trial`, and the repositioning move that precedes each arm's
+  registered goal set (Deviation 7) returns before it, so a path- or goal-tolerance event on
+  arm_1 during that move falls inside no goal's log segment and is recorded by no reading of
+  I3. The move is **not a trial** (`../criteria.md` section 5.3), it enters no distribution,
+  and it runs at default scaling to a pose the registered sets already visit, so the exposure
+  is the smallest in the schedule. **It is stated rather than closed, because the alternative
+  is worse**: extending a segment to cover it would attribute an event from a non-trial move
+  to the trial that follows, which is the manufactured-headline failure Deviation 8 exists to
+  prevent — an unscraped event is a gap in coverage, a mis-attributed one is a false finding.
+- **V12 had never fired before this commit, and its silence in the shakedown is not
+  evidence.** `analyse.py`'s V12 clause reads `v12_gz_topic_count` off a trial row, and
+  `TrialWriter.add` did not put it there — so the field was `None` on every row, the `== 0`
+  test was `False` on every row, and **a registered validity rule was structurally inert
+  rather than merely fail-open**. The count now travels on every row and the clause fails
+  closed. **Records written before this commit lack the field and are correctly discarded**;
+  the only such record is the shakedown, which is not data. Nobody may read the shakedown's
+  clean V12 as evidence that its Gazebo probe reached a world: **V12 was never asked.**
 - **`DEVIATIONS` is not in numeric order.** The tuple reads 1, 2, 3, 4, 5, 7, 8, 9, 6, then 10
   to 15 — deviation 6 was written last of the original nine and appended rather than inserted.
   It is **recorded rather than reordered**: the numbers are referenced from this file and from

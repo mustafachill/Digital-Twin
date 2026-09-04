@@ -163,5 +163,13 @@ already visit, it is not a trial (section 5.3), it enters no distribution, and i
   and *"the arm stopped part-way along the commanded trajectory and is holding position"*. Rule
   T governs: it is reported, and it is not a finding about arm_1. **It is also not investigated
   here** — this campaign takes no position on it and proposes nothing.
+- **This run's V12 did not pass — it was never asked, and that was true of every reading V12
+  has ever taken.** `analyse.py` reads `v12_gz_topic_count` off a trial row and the writer did
+  not put it there, so the field was `None` on every row of this file and the rule's `== 0`
+  test could not fire: a registered validity rule that was **structurally inert**, not
+  fail-open. It was found on 2026-09-04, after this shakedown and before the first campaign
+  trial, and fixed — the count now travels on every row and the clause fails closed. **The
+  rows in this directory lack the field and are correctly discarded by the fixed analyser.**
+  Nothing here is evidence that this run's Gazebo probe reached a world.
 - **No campaign figure is set, adjusted or implied by anything in this directory.** Every number
   above describes the instrument, not the cell's following error.

@@ -143,9 +143,13 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "**I3(b) AND I3(c) ARE ATTRIBUTED TO arm_1 AND TO NOTHING ELSE, and this too is a "
         "shakedown finding.** Under CONC three arms are commanded at once and all three log "
         "into the one launch log. The 2026-09-04 shakedown caught `arm_3` genuinely violating "
-        "its own path tolerance -- `Position Error: -1.071717, Position Tolerance: 1.000000` "
-        "-- while arm_1 was mid-goal, and an unattributed scrape recorded it against arm_1's "
-        "trial. That is QUIET1 = FIRED, **the campaign's headline verdict, manufactured out "
+        "its own path tolerance -- a `Position Error: <value>, Position Tolerance: <value>` "
+        "line on the shared `tolerances` logger, naming no arm -- while arm_1 was mid-goal, "
+        "and an unattributed scrape recorded it against arm_1's trial. **The line's SHAPE is "
+        "what this deviation is about and the figure is not reprinted here**: it is a "
+        "following-error reading, it belongs to a load arm about which rule T states no "
+        "verdict, and a number from the shakedown does not travel in the frozen rig even "
+        "where it sets nothing. It is in `raw/shakedown/` with the run that produced it. That is QUIET1 = FIRED, **the campaign's headline verdict, manufactured out "
         "of a load arm** about which rule T says no verdict is stated at all. I3(c)'s three "
         "lines all name the arm and are filtered on it. **I3(b) names no arm**: every "
         "controller manager in this cell lives in the `gz` process and shares one "
@@ -904,7 +908,16 @@ def band1(live: dict[str, dict]) -> dict[str, str]:
             f"{top_row['summary']['v_peak_reference_rad_s']} rad/s. Per-joint pooled "
             f"distribution over the moving window: {json.dumps(distribution)}",
         )
-        print("    peaks with their block and cycle: " + json.dumps(
+        # SECTION 7.2 ASKS FOR "the block and cycle index of EVERY peak", AND THIS PRINTS
+        # EVERY ONE. It used to print the ten largest. No evidence was lost -- every
+        # per-trial peak is in `raw/` -- but this print is declared to be the campaign's
+        # product, and a product that silently truncates a report the criteria states
+        # exhaustively is the shape that cost a previous campaign 143 lines of a 1034-line
+        # print. The count is stated in the label so that the reader can check the list
+        # against `n` rather than take the word "every" on trust.
+        ordered = sorted(peaks, key=lambda pair: -pair[0])
+        print(f"    peaks with their block and cycle -- ALL {len(ordered)} of them, "
+              f"section 7.2 asks for every one: " + json.dumps(
             [
                 {
                     "trial": row["trial"],
@@ -914,7 +927,7 @@ def band1(live: dict[str, dict]) -> dict[str, str]:
                     "peak_rad": peak,
                     "joint": row["summary"]["peak"]["joint"],
                 }
-                for peak, row in sorted(peaks, key=lambda pair: -pair[0])[:10]
+                for peak, row in ordered
             ]
         ))
         verdict(
