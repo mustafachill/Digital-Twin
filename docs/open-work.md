@@ -22,6 +22,12 @@ from that campaign's raw, and the table below was re-derived by running the comm
 name. **The heading date is the date this file was first written and is deliberately not
 moved**; every later reading carries its own date.
 
+**Updated 2026-09-04**, on the same branch at `f6f8827`: a thirteenth campaign is published and
+#36 is rewritten against it — §A.10 item 1 is recorded as met, and item 2's bracketing bullet as
+**half** met. The two table rows below that could have moved were re-derived with the commands
+they name: `main` is still `51195e0` (`git rev-parse main`, with `origin/main` agreeing), and the
+campaign count is **13 on this branch, 11 on `main`**. No other row was re-read on this date.
+
 ---
 
 ## Where the repository stood when this was written
@@ -38,6 +44,9 @@ is still `51195e0`, which was re-derived rather than assumed. **Seven of the eig
 re-read and one moved.** Measurement campaigns went **11 → 12**:
 `2026-09-02-scenario-ceilings/` is the twelfth, and it is on this branch and **not yet on
 `main`** — the same command run against `main` still returns 11.
+**Re-read on 2026-09-04 at `f6f8827`: the count is 13 on this branch** —
+`2026-09-03-stall-band-flip/` is the thirteenth — **and still 11 on `main`**, which has not
+moved from `51195e0`.
 The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
 15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
 indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
@@ -54,7 +63,7 @@ history is the note below.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 12 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 13 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
 | CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
@@ -256,6 +265,10 @@ after the commit this snapshot was taken at — `abdae38` is 19:10 and the five 
 21:08 to 21:44, same day, `git log -1 --format=%ad --date=iso` on each — and nothing re-read
 this item.
 
+**Updated again 2026-09-04 at `f6f8827`**, against a campaign that did not exist on either
+earlier date. Everything above the "What moved on 2026-09-04" block below is the 2026-09-02
+reading and is unchanged; the two blocks below it are this date's.
+
 The owner chose **option F** on 2026-09-01 —
 judge the grasp against the part rather than against the commanded width — and
 [ADR-0052](adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md) is `Accepted` with the
@@ -295,22 +308,50 @@ change is judged against, not because it is outstanding:
 - **P2 is a constraint, not a caveat.** The campaign establishes nothing about the physical
   gripper — there is no `GripperActionController` on that path at all.
 
-**What is open now.** Two things, and neither is closed by the implementation landing.
+**What moved on 2026-09-04**, and neither half is the implementation landing.
 
-- **§A.10's gate is not fully met.** Item 2's second bullet asks for the false-positive flip
-  bracketed to at least **0.05 mm**; the campaign that ran the gate on the implemented
-  predicate,
-  [`2026-09-02-option-f-regions`](measurements/2026-09-02-option-f-regions/ANALYSIS.md), has a
-  **2.00 mm** stop grid and locates the flip only to (46.00, 48.00] mm at the narrow side. It
-  says so about itself, in its §2.2 and again in its §9. What would close it is the flip located
-  to the width the gate names; this file does not prescribe how.
+- **§A.10 item 1 — the re-analysis — is MET, and it is met as tests rather than as prose.**
+  ADR-0052 §B.2 records both of its clauses held by code that runs:
+  `tools/tests/test_stall_band.py::TestTheReanalysisGate` evaluates the shipped closed forms on
+  the 2026-09-01 campaign's committed raw, and the validator rule
+  `stall-band-admits-a-stall-on-nothing` (`tools/cite_tools/validate/physical.py`) holds the
+  structural half for states no trial visited.
+  `.venv/bin/python -m pytest tools/tests/test_stall_band.py -q` reads **22 passed** in this
+  checkout on 2026-09-04. **This file did not carry that until now.**
+- **Item 2's bracketing bullet is HALF met.**
+  [`2026-09-03-stall-band-flip`](measurements/2026-09-03-stall-band-flip/ANALYSIS.md) —
+  thresholds and harness frozen before the first trial, machine named, measured on the
+  **implemented** predicate — brackets the **narrow** edge to the 0.05 mm the bullet names, on a
+  refinement whose every registered conjunct is satisfied. It does **not** bracket the wide edge.
+  That supersedes the 2.00 mm stop grid of
+  [`2026-09-02-option-f-regions`](measurements/2026-09-02-option-f-regions/ANALYSIS.md) at the
+  narrow side only. ADR-0052's 2026-09-04 amendment, §C.1 to §C.3, is where this is recorded;
+  the campaign's figures are cited and not copied here (P1).
+
+**What is still open.** Item 2 as a whole is not met, so the gate is not closed and the defect
+is not recorded as closed.
+
+- **The wide edge — and what stopped it is an instrument failure, not a missing measurement.**
+  The wide arm's refinement block was collected in full, eighteen trials, and then discarded
+  **whole** by a validity rule whose instrument is per trial and whose discard granularity is
+  the block, after **one** of those trials read the robot description back off the running node
+  as zero characters. That trial's own record shows the rig launched the shipped description
+  with its hull references intact, and the other seventeen read them back. The campaign carries
+  this in its §2 and in numbered deviations 15 to 18, applied literally rather than corrected.
+  **Its silence at that edge is not a clearance:** its rule N refuses to read it as agreement
+  with the arithmetic, as validation of either band value, or as evidence that the edge is where
+  the declaration says. **ADR-0052 §A.9.5 is unchanged and `stall_band_wide_m` is no better
+  evidenced than it was.**
+- **Whether a second campaign runs is the project owner's decision and has not been taken.** The
+  campaign says so of itself in its §12, and this file does not prescribe one — neither that one
+  runs, nor what its rules would be.
 - **Whether the removed monotonicity term `reached > commanded` returns is an open project-owner
-  decision.** The same campaign **REPRODUCED** the region dropping it opens: a drive joint
+  decision.** The 2026-09-02 campaign **REPRODUCED** the region dropping it opens: a drive joint
   jammed part-way through an opening stroke, inside the window, on jaws opening onto nothing,
   reports `holding = true` on **9 of 9** valid in-window jams, where the superseded predicate
   reports `false` on all nine, and the two controls outside the window are rejected. That is a
-  direction ADR-0052 §A.3 **permits** by design. The campaign registered before its first trial
-  that it does not take the decision, and neither does this file.
+  direction ADR-0052 §A.3 **permits** by design. **Both** campaigns registered before their
+  first trial that they do not take the decision, and neither does this file.
 
 ### #25 — A gripper controller over plain mock hardware reports a grasp on empty air
 `mock_components::GenericSystem::read()` never writes the velocity state when the command
