@@ -654,6 +654,126 @@ L0 declaration rather than from constants written here; neither campaign publish
 | That the C++ and launch halves pass | **Not run here.** `workspace/build` and `workspace/install` are empty in this checkout, so `test_gripper.cpp` and `test_grasp_predicate_launch.py` were **read and not executed** | **Unverified.** `./scripts/build && ./scripts/test` is what would settle it |
 | That F is right | **Not verified, and item 2 is what would move it.** No run of the cell has produced this defect and reported it | **Unverified** |
 
+## Amendment — 2026-09-04: §A.10 item 2's flip bullet is HALF met — the narrow edge is bracketed, the wide edge is lost to an instrument
+
+**§B.3 above records item 2's second bullet as not met at all, on a 2.00 mm stop grid. A
+campaign has since run the grid the bullet asks for.**
+[`docs/measurements/2026-09-03-stall-band-flip/`](../measurements/2026-09-03-stall-band-flip/ANALYSIS.md)
+— thresholds registered before the first trial at a stated `criteria.md` hash, harness frozen
+before the first trial ran, machine named, measured on the **implemented** predicate — refines
+the flip at 0.05 mm on both edges of the window. **It delivers half of the bullet**, and this
+section says which half and what the other half costs.
+
+**This section moves no status and closes nothing.** The record stays `Accepted` on the owner's
+choice of F. **§A.10 item 2 as a whole is still unmet**, so the status block's sentence
+*"§A.10 item 1 is met and item 2 is not"* is unchanged by this amendment. **The defect is not
+recorded as closed**, no band value is set or proposed here, and §A.6's admissible interval
+stays open with the shipped `0.002385` still `PROVISIONAL`.
+
+**Read the campaign, not this section, for its figures.** Its §13 asks that they stay in its
+directory and be cited rather than copied (P1). **One is quoted below — the bracket itself —
+because the bullet is *about* the bracket**, and a gate whose result cannot be read against its
+own wording cannot be argued with. Everything else is characterised in words and cited.
+
+### C.1 The narrow edge IS bracketed to 0.05 mm
+
+Arm LO's refinement brackets the implemented predicate's narrow flip at **(47.60, 47.65] mm** —
+the registered 0.05 mm width — with **n = 3 collected / 3 surviving at both endpoints**,
+unanimous at each, and **every conjunct of the campaign's bracketing rule satisfied**: exactly
+one candidate adjacent pair with opposite verdicts, repeats unanimous, its resolution rule
+determinate, its per-trial validity rules clean at both endpoints, and its coarse grid showing
+exactly one change of verdict across the arm.
+
+**The campaign's rule D — the arithmetic against the measurement — agrees here.** The measured
+bracket **contains** the narrow edge of the window §B.1 records this record's own declaration
+producing. There is no disagreement at this edge for this record or its owner to act on.
+
+**What that is a property of.** The campaign's rule G scopes it, and this record repeats the
+scope rather than the number: the flip is a property of the shipped predicate **as delivered** —
+the L0 declaration, the generator, the plan, the launch parameters and `gripper_is_holding` —
+measured on a synthetic stopped joint with **no part, no physics and no simulator in the rig at
+all**. It is not evidence about a physical gripper, and it does not narrow §A.9.2 by a
+millimetre.
+
+### C.2 The wide edge is NOT bracketed, and the reason is an instrument rather than the data
+
+The wide arm's refinement block was collected in full and then **discarded whole** by a validity
+rule whose instrument is per trial and whose discard granularity is the block: on **one trial of
+eighteen**, reading the robot description back off the running node returned **zero characters**,
+so the rule's hull-reference count read zero against the expected number and failed closed.
+
+**The description was right; the read-back of it failed.** That same trial's own record shows
+the description text the rig substituted and launched carried the required hull references, the
+other seventeen trials read them back, and every other instrument on that trial is clean. The
+campaign records the rule as wrong-shaped rather than corrected — it was applied literally, as
+its own freeze discipline requires — in its §2 and in **numbered deviations 15 to 18** of its
+§9, which also record that nothing in its raw can attribute the empty read-back and that its
+analyser's printed state for one prediction contradicts that prediction's registered refutation
+clause. **Those four are the campaign's to carry and are not re-litigated here.**
+
+**Rule N's own words apply, and this record states them rather than softening them:** the wide
+edge is not bracketed at 0.05 mm, over those stops, at **n = 0 surviving of 18 collected**, on
+that rig; and **the campaign's silence there may not be read as agreement with §2.2's
+arithmetic, as validation of either band value, or as evidence that the edge is where the
+declaration says.** A null is never a clearance. **§A.9.5 is unchanged and `stall_band_wide_m`
+is no better evidenced than it was**, exactly as §B.3 left it.
+
+The command-invariance check the campaign carried alongside is **NOT EVALUABLE** for the same
+reason: two of its four stops lost the counterpart they would have been compared against when
+that block went. **No disagreement was found among the two stops it could compare**, which is
+not the sentence "it held".
+
+### C.3 So the bullet is HALF met, and the gate is NOT closed
+
+**§A.10 item 2's second bullet is half met.** The flip is bracketed to the 0.05 mm the bullet
+names at the **narrow** edge, and is not bracketed at all at the **wide** edge. The bullet names
+the flip in the **singular** and the campaign reports two edges; whether that singular means the
+narrow edge alone is a reading for this record and its owner, which the campaign explicitly
+declines to take, and **this amendment does not take it either**. Item 2 also still owes its
+first bullet and its third, so **item 2 is not met and the gate is not closed.**
+
+§B.5's list of what is owed stands, with its first line qualified: **item 2's flip bullet is met
+at the narrow edge and open at the wide one.**
+
+### C.4 FLOOR1 bears on §A.6's subset argument, in the direction §A.6 needs
+
+The campaign computed the floor on its own rig, by bisection on a build of the superseded
+predicate, and reports the distance from the narrow flip to it as an interval. **The narrow flip
+lies above the floor** — the direction §A.6's subset argument depends on. **§A.6 sets no minimum
+distance**, the campaign registered before its first trial that it may not invent one, and **no
+margin is claimed, proposed or implied here.** The campaign separately brackets the superseded
+predicate's own narrow flip to the same 0.05 mm, and its rule D reports that bracket containing
+the closed-form floor as well; that is a secondary quantity and this gate does not ask for it.
+
+### C.5 The monotonicity term is untouched
+
+**Whether the removed term `reached_width > commanded_width` returns is still an open
+project-owner decision** (§B.4). **Both** campaigns that have measured the implemented predicate
+registered before their first trial that they do not take it, and neither does this amendment:
+nothing here recommends an answer.
+
+### C.6 How this amendment's own claims were verified
+
+Checked on **2026-09-04** against the branch `feat/close-phase-debts` at `f6f8827`. Every claim
+is read from the campaign's committed `ANALYSIS.md`, `criteria.md` and `raw/`, or from `git`.
+**No figure was recomputed here**, and none of the campaign's is copied except the bracket named
+in §C.1.
+
+| Claim | How | Result |
+|---|---|---|
+| The contract and the harness were frozen before the data | `git log --diff-filter=A` on `criteria.md`; `git log 8a35a03..HEAD -- harness/ criteria.md`; `git log -1 --format=%ad --date=iso` on each named commit | `criteria.md` added at `5789ba8`, 15:02, with both amendments by 15:47; harness frozen at `8a35a03`, 17:08; first data commit `e03c24e`, 17:14. **Nothing touched `harness/` or `criteria.md` after `8a35a03`** |
+| `criteria.md`'s hash is the one the write-up names | `sha256sum docs/measurements/2026-09-03-stall-band-flip/criteria.md` | `5e9c3f0a47…`, identical to the single value the write-up reports every record carrying |
+| The campaign holds the trial count it reports | Counted the records in each `raw/*_trials.json` | **105**, matching the write-up's collected count; its 84 surviving is the write-up's own, not recomputed here |
+| The narrow edge is BRACKETED at (47.60, 47.65] mm, n = 3/3 at both endpoints, every conjunct satisfied | Read the campaign's §3 in full, including its per-stop table and its conjunct list | Exact, and the bracket is the registered 0.05 mm width |
+| Rule D agrees at the narrow edge and is NOT EVALUABLE at the wide one | Read §3 and §4.1 | The narrow bracket **contains** the computed edge; at the wide edge there is no bracket to compare, so the computed edge is neither confirmed nor contradicted |
+| The wide-edge block was discarded on one trial of eighteen, and the failure is in the read-back | Read §2, its per-trial table and deviations 15–18 in §9 | The read-back returned zero characters on that one trial; the rig's own substituted description text carried the required hull references on it, as on all eighteen; 17 of 18 read-backs returned them |
+| Rule N's refusal is the campaign's wording, not a paraphrase strengthened here | Read §4.1's block quotation | The three things its silence may not be read as are its own words |
+| Command invariance is NOT EVALUABLE, 2 of 4 stops compared | Read §6 | Stated there, with *"no disagreement was found among the 2 compared stops"* explicitly distinguished from "it held" |
+| FLOOR1's direction, and that no minimum distance exists to pass | Read §5.1 and §A.6 above | The narrow flip lies **above** the floor; §A.6 sets no minimum distance and the campaign refuses to invent one |
+| The campaign decides nothing and touches no threshold | Read its §12 | It sets no band, does not amend this record or move its status, changes no threshold, ceiling, tolerance or band anywhere, and edits nothing in `model/`, `workspace/src/`, `tools/`, `tests/` or `scripts/` |
+| That the wide edge is where the declaration says | **Not verified, and rule N forbids reading this campaign as evidence either way** | **Unverified.** A campaign that brackets that edge is what would settle it, and whether one runs is the owner's decision |
+| That F is right | **Still not verified.** No run of the cell has produced this defect and reported it | **Unverified**, unchanged from §B.6 |
+
 ## Context
 
 ### 1. The predicate, and the two signals it is built from
