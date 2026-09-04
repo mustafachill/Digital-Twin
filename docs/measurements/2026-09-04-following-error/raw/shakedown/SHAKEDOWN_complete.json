@@ -1,0 +1,33 @@
+{
+  "label": "SHAKEDOWN",
+  "trials_scheduled": 14,
+  "trials_written": 14,
+  "sealed": true,
+  "completed_at": "2026-09-04T16:28:13Z",
+  "i9": {
+    "start": {
+      "at": "block start",
+      "sim_stamp": 33.586,
+      "wall_monotonic": 107201.94637961,
+      "messages_received": 852
+    },
+    "end": {
+      "at": "block end",
+      "sim_stamp": 133.259,
+      "wall_monotonic": 107313.653271964,
+      "messages_received": 15088
+    },
+    "sim_span_s": 99.67299999999999,
+    "wall_span_s": 111.70689235399186,
+    "ratio": 0.8922726064578249,
+    "note": "context only; criteria.md I9 -- this enters no verdict in section 7, and Gazebo's own real_time_factor field is never quoted"
+  },
+  "load_end": {
+    "load_1m": 3.3994140625,
+    "load_5m": 1.62890625,
+    "load_15m": 0.701171875,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T16:28:13Z"
+  }
+}

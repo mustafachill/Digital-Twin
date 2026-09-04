@@ -1,0 +1,212 @@
+{
+  "label": "SHAKEDOWN",
+  "block": "SHAKEDOWN",
+  "is_shakedown": true,
+  "cycles": 1,
+  "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6",
+  "base_commit": "c38a42c",
+  "v1_start": {
+    "at": 1788539174.34497,
+    "head": "e6b0b2ca99cd738a4ccc2336bfc3c81a240985f9",
+    "git_status_porcelain": "?? docs/measurements/2026-09-04-following-error/harness/\n?? docs/measurements/2026-09-04-following-error/raw/",
+    "watched_diff_against_base": "",
+    "watched_worktree_dirty": "",
+    "vendor_pin": {
+      "manifest": "external/cite.repos",
+      "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+      "matches": true
+    },
+    "clean": true,
+    "model_hash": {
+      "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+      "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+    },
+    "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+  },
+  "load_start": {
+    "load_1m": 1.125,
+    "load_5m": 0.49072265625,
+    "load_15m": 0.24658203125,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T16:26:14Z"
+  },
+  "v7_start": false,
+  "v13": {
+    "server_wait_s": {
+      "move_to": 1.270844691011007,
+      "pick": 5.095200322102755e-05,
+      "place": 4.648699541576207e-05,
+      "arm_2/move_to": 4.73789987154305e-05,
+      "arm_3/move_to": 4.624298890121281e-05
+    },
+    "ceiling_s": 420.0,
+    "within_ceiling": true
+  },
+  "v2": {
+    "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+    "read_returncode": 0,
+    "read_ok": true,
+    "description_chars": 33653,
+    "hull_collision_refs": 13,
+    "vendor_visual_refs": 6,
+    "v2_ok": true
+  },
+  "v3": {
+    "production_plugin_refs": 3,
+    "fixture_plugin_refs": 0,
+    "mock_plugin_refs": 0,
+    "v3_ok": true
+  },
+  "v4": {
+    "topic": "/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state",
+    "waited_s": 0.0004493079904932529,
+    "ceiling_s": 300.0,
+    "matched_publishers": [
+      {
+        "node": "arm_1_joint_trajectory_controller",
+        "namespace": "/cite/cell_a/arm_1",
+        "type": "control_msgs/msg/JointTrajectoryControllerState",
+        "history": "3",
+        "depth": 0,
+        "reliability": "1",
+        "durability": "1",
+        "liveliness": "1"
+      }
+    ],
+    "matched_publisher_count": 1,
+    "messages_received_before_first_goal": 551,
+    "joint_states_received_before_first_goal": 551,
+    "subscription": {
+      "history": "KEEP_LAST",
+      "depth": 10,
+      "reliability": "RELIABLE",
+      "durability": "VOLATILE",
+      "declared_because": "criteria.md section 4.1 -- the publisher leaves every policy to the RMW, so the subscriber states one rather than adding a second unknown"
+    },
+    "v4_ok": true
+  },
+  "v12_gz_topics": [
+    "/cite/cell_a/beam_c1_out/detection",
+    "/cite/cell_a/beam_c2_out/detection",
+    "/cite/cell_a/beam_c3_out/detection",
+    "/cite/cell_a/beam_pick/detection",
+    "/cite/cell_a/conveyor_1/command",
+    "/cite/cell_a/conveyor_1/state",
+    "/cite/cell_a/conveyor_2/command",
+    "/cite/cell_a/conveyor_2/state",
+    "/cite/cell_a/conveyor_3/command",
+    "/cite/cell_a/conveyor_3/state",
+    "/clock",
+    "/gazebo/resource_paths",
+    "/stats",
+    "/world/cell_a/clock",
+    "/world/cell_a/dynamic_pose/info",
+    "/world/cell_a/pose/info",
+    "/world/cell_a/scene/deletion",
+    "/world/cell_a/scene/info",
+    "/world/cell_a/state",
+    "/world/cell_a/stats",
+    "/world/cell_a/light_config",
+    "/world/cell_a/material_color"
+  ],
+  "v12_gz_topic_count": 22,
+  "controller_settings": {
+    "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml",
+    "joints": [
+      "arm_1_joint1",
+      "arm_1_joint2",
+      "arm_1_joint3",
+      "arm_1_joint4",
+      "arm_1_joint5"
+    ],
+    "update_rate_hz": 150,
+    "command_interfaces": [
+      "position"
+    ],
+    "state_interfaces": [
+      "position",
+      "velocity"
+    ],
+    "goal_time_s": 0.5,
+    "stopped_velocity_tolerance": 0.0,
+    "trajectory_tolerance_rad": {
+      "arm_1_joint1": 1.0,
+      "arm_1_joint2": 1.0,
+      "arm_1_joint3": 1.0,
+      "arm_1_joint4": 1.0,
+      "arm_1_joint5": 1.0
+    },
+    "goal_tolerance_rad": {
+      "arm_1_joint1": 0.01,
+      "arm_1_joint2": 0.01,
+      "arm_1_joint3": 0.01,
+      "arm_1_joint4": 0.01,
+      "arm_1_joint5": 0.01
+    },
+    "agrees_with_registration": true
+  },
+  "registered_settings": {
+    "trajectory_tolerance_rad": 1.0,
+    "goal_tolerance_rad": 0.01,
+    "goal_time_s": 0.5,
+    "update_rate_hz": 150.0,
+    "k_per_s": 15.0,
+    "error_per_speed_s": 0.06
+  },
+  "station_frames": {
+    "arm_1": {
+      "station": "station_transfer_1",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__table_pick__surface",
+      "place_frame": "cell_a__conveyor_1__infeed",
+      "actor": "arm_1"
+    },
+    "arm_2": {
+      "station": "station_transfer_2",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__conveyor_1__outfeed",
+      "place_frame": "cell_a__conveyor_2__infeed",
+      "actor": "arm_2"
+    },
+    "arm_3": {
+      "station": "station_transfer_3",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__conveyor_2__outfeed",
+      "place_frame": "cell_a__conveyor_3__infeed",
+      "actor": "arm_3"
+    }
+  },
+  "model_hash": {
+    "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+    "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+  },
+  "host": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 16,
+    "ros_domain_id": "43",
+    "gz_partition": "cite/cell_a/plant"
+  },
+  "state_recorder": {
+    "topic": "/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state",
+    "subscription_qos": {
+      "history": "KEEP_LAST",
+      "depth": 10,
+      "reliability": "RELIABLE",
+      "durability": "VOLATILE",
+      "declared_because": "criteria.md section 4.1 -- the publisher leaves every policy to the RMW, so the subscriber states one rather than adding a second unknown"
+    },
+    "messages_received": 851,
+    "first_sim_stamp": 27.629,
+    "last_sim_stamp": 33.579,
+    "first_received_monotonic": 107195.975019517,
+    "last_received_monotonic": 107201.939437152
+  },
+  "joint_state_recorder": {
+    "topic": "/cite/cell_a/arm_1/joint_states",
+    "messages_received": 851
+  }
+}
