@@ -1,0 +1,497 @@
+{
+  "arm": "arm_1",
+  "launch_log": "/tmp/cite_wc_fk_arm_1.log",
+  "rows": [
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 2.1073424255447017e-08,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.5265566588595902e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 8
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 2.220446049250313e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 58
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 3.3306690738754696e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 54
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 1.1102230246251565e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 28
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.3877787807814457e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 12
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 1.1102230246251565e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 50
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 2.1073424255447017e-08,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 2.220446049250313e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 29
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.1102230246251565e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 32
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_left_inner_knuckle",
+        "worst_position_residual_m": 1.1102230246251565e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 52
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 2.1073424255447017e-08,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 1.8041124150158794e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 19
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.3877787807814457e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 9
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.3877787807814457e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 0
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 2.9802322387695312e-08,
+        "worst_link": "arm_1_left_finger",
+        "worst_position_residual_m": 1.6653345369377348e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 36
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 1.1102230246251565e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 45
+    },
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "compute_stage_all_pairs_positive": false,
+      "compute_stage_nonpositive_pairs": [
+        {
+          "distance_m": 0.0,
+          "link": "arm_1_link_base",
+          "object": "pedestal_1",
+          "standing_pair": true
+        }
+      ],
+      "fk": {
+        "agrees": true,
+        "answered": true,
+        "error_code": 1,
+        "worst_angle_residual_rad": 0.0,
+        "worst_link": "arm_1_right_finger",
+        "worst_position_residual_m": 1.942890293094024e-16
+      },
+      "fk_frame_requested": "arm_1_mount",
+      "trajectory": 0,
+      "validity": {
+        "answered": true,
+        "contact_pairs": [],
+        "touched_scene_objects": [],
+        "valid": true
+      },
+      "waypoint": 13
+    }
+  ],
+  "samples": 15,
+  "scene": {
+    "apply_reported_success": true,
+    "missing_after_apply": [],
+    "objects_expected": [
+      "beam_c1_out",
+      "beam_c2_out",
+      "beam_c3_out",
+      "beam_pick",
+      "conveyor_1",
+      "conveyor_2",
+      "conveyor_3",
+      "pedestal_1",
+      "pedestal_2",
+      "pedestal_3",
+      "table_accumulation",
+      "table_pick"
+    ],
+    "objects_present_after_apply": [
+      "beam_c1_out",
+      "beam_c2_out",
+      "beam_c3_out",
+      "beam_pick",
+      "conveyor_1",
+      "conveyor_2",
+      "conveyor_3",
+      "pedestal_1",
+      "pedestal_2",
+      "pedestal_3",
+      "table_accumulation",
+      "table_pick"
+    ],
+    "scene_ok": true
+  },
+  "scene_frame_resolved": 1,
+  "services_advertised": {
+    "apply_planning_scene": true,
+    "check_state_validity": true,
+    "compute_fk": true,
+    "get_planning_scene": true
+  }
+}
