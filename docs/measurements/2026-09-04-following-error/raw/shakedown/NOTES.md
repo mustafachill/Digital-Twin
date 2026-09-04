@@ -133,13 +133,32 @@ already visit, it is not a trial (section 5.3), it enters no distribution, and i
 
 ## What the shakedown did NOT fix, and what it leaves open
 
-- **The gaps between a load arm's consecutive goals are real and remain.** Coverage of arm_1's
-  moving window ran 0.0, 0.78, 0.86, 0.96, 0.99, 1.00 across the load arms and trials, so
-  `load_active` will not be true on every CONC trial even with the starting-order fix.
-  `criteria.md` section 3 provides for exactly that — a CONC trial without the flag is not an
-  instrument loss, and CONC1 reports the count of trials that lack it — but **whether enough
-  CONC trials will carry it for CONC1 to be evaluable is not established by one cycle**, and no
-  threshold was moved to make it more likely.
+- **Coverage of arm_1's moving window ran 0.0, 0.78, 0.86, 0.96, 0.99, 1.00 across the load
+  arms and trials.** `criteria.md` section 3 provides for a CONC trial without the flag — it is
+  not an instrument loss, and CONC1 reports the count of trials that lack it — but **whether
+  enough CONC trials will carry it for CONC1 to be evaluable is not established by one cycle**,
+  and no threshold was moved to make it more likely.
+  **CORRECTED 2026-09-04, AFTER REVIEW AND BEFORE ANY CAMPAIGN TRIAL. This entry said the cause
+  was "the gaps between a load arm's consecutive goals", and there are no such gaps.** Read
+  straight out of this directory's own `SHAKEDOWN_trials.json`, trial 14: every inter-goal gap
+  is exactly `0.0` s on both load arms — arm_2's intervals run
+  `99.616 → 105.686 → 111.223 → 119.474 → 124.390 → 124.572` and arm_3's
+  `99.616 → 104.330 → 104.452 → 109.475 → 114.403 → 114.586 → 120.120`, each interval opening
+  where the previous one closed — because a goal's planning happens *inside* the interval that
+  goal already covers.
+  **The real cause is that a load arm published only the goals that had FINISHED.** In that
+  same trial arm_3 reads `goals_sent 7, goals_accepted 6`: a seventh goal was accepted and
+  still in flight, arm_1's moving window `[120.799, 125.643]` lay **entirely inside it**, and
+  the recorded `covered_fraction` was `0.0`. `load_active` was systematically false at every
+  window's tail, and CONC1's population is `load_active is True`. **The defect is in the
+  harness and it is fixed** — `LoadArm.snapshot()` now closes the currently open goal at the
+  reading's own simulated instant, and `open_goal` travels on the record — so the coverage
+  figures above describe the instrument as it was **at the shakedown** and not as it will be.
+  **The figures in this file are unchanged and remain the shakedown's own record; nothing here
+  is a campaign figure, and no threshold is set, adjusted or implied by this correction.**
+  **The wrong mechanism was written in three places at once** — here, in `../../harness/
+  README.md`'s limitation 15, and in `analyse.py`'s Deviation 9 — **and it is the prose that
+  would have stopped anyone finding the defect.**
 - **`arm_3`'s goals failed repeatedly**, four times in one cycle, each with `MOTION_INTERRUPTED`
   and *"the arm stopped part-way along the commanded trajectory and is holding position"*. Rule
   T governs: it is reported, and it is not a finding about arm_1. **It is also not investigated

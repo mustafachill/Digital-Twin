@@ -212,12 +212,25 @@ can report anything; it is pinned by SHA instead, and every block records the SH
 14. **It measures one arm as a decision quantity, one zone, one collision geometry, one
     `max_step_size`, one controller-manager rate and one gain.** Each of those changes the
     plant and reopens every number in `../criteria.md` section 2.
-15. **It cannot keep a load arm continuously commanded.** The runner waits for both load arms
-    to have had a goal accepted before arm_1's first CONC goal, but the gaps between a load
-    arm's consecutive goals — planning time, and a replan after an abort — are real. They are
-    published as `covered_fraction` beside `load_active` on every CONC row. Whether enough CONC
-    trials will carry `load_active` for CONC1 to be evaluable is **not established**, and no
-    threshold was moved to make it more likely.
+15. **Whether enough CONC trials will carry `load_active` for CONC1 to be evaluable is not
+    established.** The runner waits for both load arms to have had a goal accepted before
+    arm_1's first CONC goal, and the coverage each arm achieved is published as
+    `covered_fraction` beside `load_active` on every CONC row. No threshold was moved to make
+    the flag more likely.
+    **Corrected 2026-09-04, after review and before any campaign trial.** This entry used to
+    attribute the shortfall to *"the gaps between a load arm's consecutive goals — planning
+    time, and a replan after an abort"*. **There are no such gaps**: a load arm's recorded
+    intervals are contiguous to the microsecond — every inter-goal gap in the shakedown's
+    trial 14 is exactly 0.0 s on both arms — because planning happens *inside* the goal whose
+    interval already covers it. The real cause was that a load arm published only the goals
+    that had **finished**, so the goal still in flight at the end of arm_1's moving window —
+    which is the goal that spans almost every window's tail — contributed nothing, and
+    `load_active` was systematically false there. That is fixed (Deviation 1), not carried:
+    `snapshot()` closes the open goal at the reading's own simulated instant, and `open_goal`
+    travels on the record so the synthesised tail stays separable from the closed goals.
+    **The wrong mechanism was stated in three places at once — here, in `raw/shakedown/
+    NOTES.md`, and in Deviation 9 — and it is what would have stopped anyone finding the
+    defect.**
 
 ## Recorded limitations, carried rather than fixed
 
@@ -239,3 +252,40 @@ can report anything; it is pinned by SHA instead, and every block records the SH
 - **`LogCursor.settle` waits a bounded interval for another process to flush its lines.** It
   sequences nothing and no cell waits on it (P4), but a firing whose line arrived after the
   bound is a firing this rig records as absent. The bound is stated in `common.py`.
+- **Rule R is applied over an arm's whole trial set, pooling its four goal kinds**, where
+  `../criteria.md` section 7's rule R says *"within one arm at one goal"*. `goal_kind` is on
+  every row, so the registered per-goal form is computable; it is not computed. The direction
+  is **conservative** — pooling four goal kinds can only enlarge the spread, so rule R binds at
+  least as often as the registered form — and narrowing it would make this campaign less
+  conservative than its own frozen text *after* the text was frozen. Declared as Deviation 14
+  rather than changed.
+- **`I3B_ATTRIBUTION_WINDOW_LINES = 8` was sized from a single-joint violation.**
+  `check_state_tolerance_per_joint` emits a header and one detail line **per violating joint**,
+  and under CONC three controller managers interleave into one log, so a multi-joint violation
+  can put the attributing controller warning further than eight lines after the first detail
+  line. Such an event is recorded **UNATTRIBUTED** and, by the rig's own conservative rule,
+  treated as possibly arm_1's — it can make a QUIET claim harder and never easier.
+  **The bound is stated rather than widened, and widening is not the obviously safe move**: a
+  wider window can reach *past* the emitting caller to the next arm's warning, which would
+  record a genuine arm_1 event as another arm's and **hide** it. That is the opposite direction
+  and is worse than an unattributed event that is reported. The constant, its derivation and
+  this bound are in `common.py`.
+- **Nothing measures how long a load arm keeps running after `stop()` beyond the join.**
+  `Thread.join(timeout=)` returns `None` whether or not the thread ended, so a stop that timed
+  out and a stop that worked were indistinguishable — and CONC's control is the **next** cycle's
+  CRUISE, which a still-running load arm would turn into a load condition. `stop()` now reads
+  `is_alive()` after the join, prints a loud line when it is true, and carries one entry per
+  stop to the block's completion record under `load_arm_stops`. **It reports; it excludes
+  nothing and moves no threshold** — what it buys is that a CONC1 verdict taken over a
+  contaminated control is visible as one.
+- **V14 checks monotonicity only.** Section 10's V14 is about one clock — that no wall-clock
+  reading enters a simulated-time quantity — and monotonicity is necessary for that and not
+  sufficient, because a wall clock is monotonic too. No magnitude bound is applied, because a
+  bound chosen now would be a new exclusion rule added to a frozen criteria after the fact.
+  What stands in its place is an argument from source, not a measurement: see Deviation 15.
+- **`DEVIATIONS` is not in numeric order.** The tuple reads 1, 2, 3, 4, 5, 7, 8, 9, 6, then 10
+  to 15 — deviation 6 was written last of the original nine and appended rather than inserted.
+  It is **recorded rather than reordered**: the numbers are referenced from this file and from
+  `raw/shakedown/NOTES.md`, and every deviation prints on every run whatever the order. New
+  deviations were appended after 6 so that the existing anomaly is preserved exactly and not
+  enlarged.

@@ -228,6 +228,19 @@ class StateSample:
         }
 
 
+def _policy_name(policy) -> str | None:
+    """A QoS policy's NAME beside its ordinal, because the ordinal alone is a trap.
+
+    `str()` on an `IntEnum` returns the bare ordinal from Python 3.11, so this campaign's own
+    2026-09-04 shakedown recorded the controller's resolved durability as `"1"`. Nothing about
+    `"1"` says which policy it is, and a write-up half-remembering the ordering will call it
+    VOLATILE -- which is the exact sentence `criteria.md` section 4.1 retracted on 2026-09-04.
+    The ordinal is kept as well as the name: they are two independent readings of one field,
+    and the name is the one a reader can check.
+    """
+    return getattr(policy, "name", None)
+
+
 class ControllerStateRecorder:
     """I1 and I2 -- the controller's own `state_error_`, as it publishes it.
 
@@ -319,10 +332,14 @@ class ControllerStateRecorder:
                     "namespace": endpoint.node_namespace,
                     "type": endpoint.topic_type,
                     "history": str(qos.history),
+                    "history_name": _policy_name(qos.history),
                     "depth": qos.depth,
                     "reliability": str(qos.reliability),
+                    "reliability_name": _policy_name(qos.reliability),
                     "durability": str(qos.durability),
+                    "durability_name": _policy_name(qos.durability),
                     "liveliness": str(qos.liveliness),
+                    "liveliness_name": _policy_name(qos.liveliness),
                 }
             )
         return out
@@ -504,7 +521,12 @@ class Driver(Node):
 
     # -- one goal, with its samples ------------------------------------------
     def run_goal(
-        self, client, goal, ceiling_s: float = STEP_CEILING_S, record_samples: bool = True
+        self,
+        client,
+        goal,
+        ceiling_s: float = STEP_CEILING_S,
+        record_samples: bool = True,
+        on_accepted=None,
     ) -> dict:
         """Send one L3 goal and return everything section 5.3 needs to judge it.
 
@@ -564,6 +586,13 @@ class Driver(Node):
 
         first_index = self.states.mark() if record_samples else None
         record["accept_sim_t"] = self.sim_now()
+        # `on_accepted` FIRES AT THE INSTANT THE GOAL BECOMES ACCEPTED-AND-UNFINISHED, which
+        # is the exact state `criteria.md` section 3 defines `load_active` over. It is called
+        # here, and not on return, because a caller that only learns of a goal when the goal
+        # ENDS can never see the one goal that is still running -- which is precisely the goal
+        # that spans the end of arm_1's moving window. See `LoadArm._opened`.
+        if on_accepted is not None:
+            on_accepted(record["accept_sim_t"])
         future = handle.get_result_async()
         try:
             wrapped = self.spin_until(
@@ -658,6 +687,17 @@ class LoadArm:
     What it publishes for arm_1's record is the set of intervals, in the CONTROLLER'S OWN
     SIMULATED CLOCK, over which it held an accepted and unfinished `MoveTo` goal. `measure.py`
     intersects those with arm_1's moving window to decide `load_active`.
+
+    **THE CURRENTLY OPEN GOAL IS ONE OF THOSE INTERVALS, and it is the one that matters.**
+    A closed interval is only appended when `run_goal` RETURNS, so an arm that publishes
+    closed intervals alone is silent about the goal it is running right now -- and arm_1's
+    moving window ends while a load arm is mid-goal on almost every trial, because a load
+    arm's goal is comparable in length to arm_1's. `snapshot()` therefore closes the open
+    goal at the instant the snapshot is taken. The 2026-09-04 shakedown's trial 14 is the
+    demonstration: arm_3 had `goals_sent 7, goals_accepted 6`, its closed intervals ended at
+    120.12, arm_1's window was [120.799, 125.643] -- entirely inside the seventh goal -- and
+    `covered_fraction` recorded 0.0. `load_active` was systematically false at every window's
+    tail, and CONC1's population is `load_active is True`.
     """
 
     def __init__(self, driver: Driver, arm: str, frames: dict) -> None:
@@ -668,6 +708,11 @@ class LoadArm:
         self.place_frame = frames["place_frame"]
         self._lock = threading.Lock()
         self.intervals: list[tuple[float, float]] = []
+        #: The accepted-but-unfinished goal's start, in the controller's own simulated clock,
+        #: or `None` when no goal of this arm is currently accepted and running. Written by
+        #: `_opened` from the driver's thread and read by `snapshot()` from the runner's, both
+        #: under `_lock`.
+        self._open_started: float | None = None
         self.goals_sent = 0
         self.goals_accepted = 0
         #: Whether this arm has ever had a goal ACCEPTED. `measure.py` waits on it before
@@ -679,6 +724,9 @@ class LoadArm:
         self.failures: list[dict] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        #: One entry per `stop()`, each saying whether the thread was still alive when the
+        #: join returned. Carried to the block's completion record.
+        self.stop_reports: list[dict] = []
 
     def _sequence(self):
         return [
@@ -688,28 +736,49 @@ class LoadArm:
             self.driver.home_goal(0.0, 0.0),
         ]
 
+    def _opened(self, started: float) -> None:
+        """`run_goal`'s hook: this arm now holds an accepted, unfinished goal since `started`.
+
+        `started` IS THE ACCEPTANCE INSTANT AND NOT THE TOP OF THE LOOP. The interval used to
+        open where the loop body began, which put `wait_for_server`, the send and the
+        acceptance round trip inside a window that `criteria.md` section 3 defines as
+        `accepted, unfinished` -- inflating coverage rather than measuring it, and no more the
+        registered quantity than the tail that was missing.
+        """
+        with self._lock:
+            self._open_started = started
+
     def _run(self) -> None:
         while not self._stop.is_set():
             for goal in self._sequence():
                 if self._stop.is_set():
                     return
-                started = self.driver.sim_now()
                 with self._lock:
                     self.goals_sent += 1
                 try:
                     outcome = self.driver.run_goal(
-                        self.client, goal, STEP_CEILING_S, record_samples=False
+                        self.client, goal, STEP_CEILING_S, record_samples=False,
+                        on_accepted=self._opened,
                     )
                 except Exception as error:  # a load arm never fails arm_1's trial
                     with self._lock:
+                        self._open_started = None
                         self.failures.append({"arm": self.arm, "error": repr(error)})
                     continue
                 record = outcome["goal"]
                 ended = self.driver.sim_now()
                 with self._lock:
+                    started = self._open_started
+                    self._open_started = None
                     if record.get("accepted"):
                         self.goals_accepted += 1
-                        self.intervals.append((started, ended))
+                        # `started` is None only if a goal reported accepted without the hook
+                        # having fired, which this module's own control flow makes impossible.
+                        # Falling back to `ended` records a zero-length interval rather than a
+                        # reversed one, so a bug here can only UNDERSTATE coverage.
+                        self.intervals.append(
+                            (ended if started is None else started, ended)
+                        )
                     if record.get("result_code") == 0:
                         self.goals_succeeded += 1
                     else:
@@ -729,13 +798,51 @@ class LoadArm:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self, join_s: float = 60.0) -> None:
+    def stop(self, join_s: float = 60.0) -> dict:
+        """Stop this arm, and REPORT whether the thread was actually gone when we returned.
+
+        `Thread.join(timeout=...)` RETURNS None WHETHER OR NOT THE THREAD ENDED, so a stop
+        that timed out and a stop that worked are indistinguishable at the call site. That
+        matters because CONC's control is CRUISE, which runs in the NEXT cycle: a load arm
+        still driving goals during CRUISE would make the control condition a load condition,
+        and CONC1 compares the two. `is_alive()` after the join is the only reading that says
+        which happened, so it is taken and put on the record rather than assumed.
+
+        Reporting only -- nothing here excludes a trial or moves a threshold. What it buys is
+        that a CONC1 verdict taken over a contaminated control is visible as one.
+        """
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=join_s)
+        alive = bool(self._thread is not None and self._thread.is_alive())
+        report = {
+            "arm": self.arm,
+            "join_ceiling_s": join_s,
+            "still_alive_after_join": alive,
+            "goals_sent": self.goals_sent,
+            "goals_accepted": self.goals_accepted,
+        }
+        self.stop_reports.append(report)
+        return report
 
     def snapshot(self) -> dict:
+        """The intervals, WITH THE CURRENTLY OPEN GOAL CLOSED AT THIS INSTANT.
+
+        `criteria.md` section 3's quantity is `an accepted, unfinished MoveTo goal`, and an
+        unfinished goal is unfinished precisely because it has no end yet. The snapshot is
+        taken the instant arm_1's trial result arrives, so closing the open goal at the
+        reading's own `sim_now()` states what was true at the reading and asserts nothing
+        about the future. `open_goal` travels on the record beside the intervals, so a reader
+        can always separate the goals that finished from the tail this synthesised.
+        """
         with self._lock:
+            now = self.driver.sim_now()
+            intervals = list(self.intervals)
+            open_goal = None
+            if self._open_started is not None:
+                open_goal = [self._open_started, now]
+                if now >= self._open_started:
+                    intervals.append((self._open_started, now))
             return {
                 "arm": self.arm,
                 "pick_frame": self.pick_frame,
@@ -744,7 +851,9 @@ class LoadArm:
                 "goals_accepted": self.goals_accepted,
                 "goals_succeeded": self.goals_succeeded,
                 "failures": list(self.failures),
-                "intervals": list(self.intervals),
+                "intervals": intervals,
+                "open_goal": open_goal,
+                "snapshot_sim_t": now,
             }
 
 

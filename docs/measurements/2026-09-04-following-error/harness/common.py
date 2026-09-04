@@ -910,11 +910,20 @@ def goal_settle(samples: list[dict], window: tuple[int, int] | None) -> dict:
     registers as UNINFORMATIVE: the reference has decelerated to zero by the last trajectory
     point, so the error is already inside the goal tolerance before the window opens. It is
     reported in the rule-N shape and is not evidence that anything was exercised.
+
+    **`settle_s is None` HAS THREE CAUSES AND ONLY ONE OF THEM IS ADVERSE, so `unresolved`
+    separates them and no caller has to parse `reason`.** Two are benign absences of a
+    measurement -- there was no moving window, or the goal window is empty. The third is a
+    measurement: the goal window ran to its end with the error STILL OUTSIDE the goal
+    tolerance. That is the strongest evidence for TIGHT this campaign can produce, and it
+    would refute section 2.2's law as well as PRED4; a caller that keeps only the non-`None`
+    settles reads it as no evidence at all, which is silence read as a pass.
     """
     if window is None:
         return {
             "goal_window_samples": 0,
             "settle_s": None,
+            "unresolved": False,
             "already_inside": None,
             "reason": "no moving window, so no goal window",
         }
@@ -923,6 +932,7 @@ def goal_settle(samples: list[dict], window: tuple[int, int] | None) -> dict:
         return {
             "goal_window_samples": 0,
             "settle_s": None,
+            "unresolved": False,
             "already_inside": None,
             "reason": "the trial's last sample is the moving window's last, so the goal "
                       "window is empty and no settle can be measured",
@@ -941,6 +951,7 @@ def goal_settle(samples: list[dict], window: tuple[int, int] | None) -> dict:
                 "goal_window_samples": len(after),
                 "goal_window_span_s": _round(after[-1]["t"] - opened),
                 "settle_s": _round(sample["t"] - opened),
+                "unresolved": False,
                 "already_inside": inside_at_open,
                 "reason": None,
             }
@@ -948,6 +959,10 @@ def goal_settle(samples: list[dict], window: tuple[int, int] | None) -> dict:
         "goal_window_samples": len(after),
         "goal_window_span_s": _round(after[-1]["t"] - opened),
         "settle_s": None,
+        "unresolved": True,
+        "max_abs_error_at_goal_window_end_rad": _round(
+            max((abs(v) for v in after[-1]["error_positions"]), default=0.0)
+        ),
         "already_inside": inside_at_open,
         "reason": "the goal window ended with the error still outside the goal tolerance",
     }
@@ -1036,6 +1051,12 @@ class TrialWriter:
             "v3": self.header.get("v3"),
             "v4": self.header.get("v4"),
             "v7_start": self.header.get("v7_start"),
+            # V12 IS A BLOCK RULE AND ITS READING HAD BEEN LEFT BEHIND IN THE HEADER, so
+            # `analyse.py`'s V12 clause read `None` on every row and could never fire -- a
+            # registered validity rule that was structurally inert. The count travels here
+            # for the same reason V2, V3, V4 and V13 do: a record lifted out of this file has
+            # left its header behind, and the analyser reads rows.
+            "v12_gz_topic_count": self.header.get("v12_gz_topic_count"),
             "v13": self.header.get("v13"),
             "controller_settings": self.header.get("controller_settings"),
             "model_hash": self.header.get("model_hash"),

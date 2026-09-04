@@ -66,6 +66,14 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "goal intervals, in the controller's own simulated clock, and requires it to cover "
         "the window. Both readings are recoverable from the record: every interval is "
         "published, and `covered_fraction` is reported beside the flag. No threshold moved."
+        " **THE UNION INCLUDES THE GOAL THAT WAS STILL RUNNING WHEN THE SNAPSHOT WAS TAKEN, "
+        "closed at the reading's own simulated instant.** A closed interval only exists once "
+        "a goal has RETURNED, and arm_1's moving window ends while a load arm is mid-goal on "
+        "almost every trial, so an arm publishing closed intervals alone is silent about "
+        "exactly the goal that spans the window's tail -- `load_active` was systematically "
+        "false there, and CONC1's population is `load_active is True`. `open_goal` and "
+        "`snapshot_sim_t` travel on every load-arm snapshot, so the closed goals and the "
+        "synthesised tail are separable by any reader."
     ),
     (
         "2",
@@ -150,16 +158,23 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
     (
         "9",
         "**The harness waits for both load arms to have had a goal ACCEPTED before arm_1's "
-        "first CONC goal, and it does not close the gaps between a load arm's goals.** The "
-        "2026-09-04 shakedown sent arm_1's first CONC goal while arm_2 was still planning its "
-        "first -- `goals_sent 1, goals_accepted 0`, coverage 0.0 -- so that trial's "
-        "`load_active` recorded the harness's starting order rather than the load condition. "
-        "The wait is an EVENT with a ceiling and never a sleep (P4). **The remaining gaps are "
-        "real and are published**: `covered_fraction` travels on every CONC row beside "
-        "`load_active`, so a reader can see whether a false flag was a gap of milliseconds or "
-        "of the whole window. NO THRESHOLD MOVED, and no CONC trial is excluded for it -- "
-        "section 3 is explicit that a CONC trial without `load_active` is not an instrument "
-        "loss."
+        "first CONC goal, and any residual coverage shortfall is published rather than "
+        "closed.** The 2026-09-04 shakedown sent arm_1's first CONC goal while arm_2 was "
+        "still planning its first -- `goals_sent 1, goals_accepted 0`, coverage 0.0 -- so "
+        "that trial's `load_active` recorded the harness's starting order rather than the "
+        "load condition. The wait is an EVENT with a ceiling and never a sleep (P4). "
+        "**CORRECTED 2026-09-04, AFTER REVIEW AND BEFORE ANY CAMPAIGN TRIAL: this deviation "
+        "attributed the residual to `the gaps between a load arm's consecutive goals -- "
+        "planning time, and a replan after an abort`, AND THERE ARE NO SUCH GAPS.** A load "
+        "arm's recorded intervals are contiguous to the microsecond -- in the shakedown's "
+        "trial 14 every inter-goal gap is exactly 0.0 s on both arms -- because planning "
+        "happens INSIDE the goal the interval already covers. The real cause was that the "
+        "goal still in flight was published by nothing, and it is fixed rather than carried; "
+        "see Deviation 1. **The prose asserted a mechanism the code did not have, and it is "
+        "what would have hidden the defect.** What remains true is this deviation's own "
+        "content: `covered_fraction` travels on every CONC row beside `load_active`, NO "
+        "THRESHOLD MOVED, and no CONC trial is excluded for a false flag -- section 3 is "
+        "explicit that a CONC trial without `load_active` is not an instrument loss."
     ),
     (
         "6",
@@ -171,6 +186,97 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "harness could not choose one after seeing data. The two coincide up to one sample "
         "interval, which section 7.3 already registers as the resolution below which a CLEAR "
         "carries no information. No threshold moved."
+    ),
+    (
+        "10",
+        "**A TOLERANCE EVENT OUTRANKS RULE L'S REFUSAL in QUIET1 and GOAL1, and the frozen "
+        "criteria can be read both ways, so BOTH READINGS ARE STATED HERE.** Reading A, "
+        "applied: section 5.3 says in capitals that a trial with a path- or goal-tolerance "
+        "violation is NEVER excluded and that `the arm's QUIET1 or GOAL1 verdict becomes "
+        "FIRED`, and section 7.2's clause order matches -- QUIET carries the admissibility "
+        "precondition explicitly, FIRED carries none, NOT ADMISSIBLE is `otherwise`. Reading "
+        "B, not applied: section 7.1's rule L says that above the 20 % loss ceiling `that "
+        "arm's QUIET1 and BAND1 are NOT ADMISSIBLE`, full stop, which would suppress the "
+        "event. The analyser used to implement B by clause order and nothing said so. A is "
+        "applied because rule L bounds what the instrument MISSED and can never unsay what it "
+        "SAW, and because B lets an arm's instrument losses delete the campaign's headline. "
+        "**NEITHER READING IS LOST FROM THE OUTPUT**: a FIRED verdict on a rule-L-refused arm "
+        "prints `LIVE1 admissible = False` and says in capitals that the arm's quantitative "
+        "distributions stay NOT ADMISSIBLE, so a reader applying B can recover B's verdict "
+        "from this file's own text. NO THRESHOLD MOVED -- rule L's 20 % is untouched and "
+        "still governs every distribution."
+    ),
+    (
+        "11",
+        "**A GOAL WINDOW THAT ENDED WITH THE ERROR STILL OUTSIDE THE GOAL TOLERANCE IS A "
+        "MEASUREMENT, NOT A MISSING ONE, and where it cannot be resolved GOAL1 reports NOT "
+        "EVALUABLE -- a value section 7.3 does not register.** `goal_settle` returns "
+        "`settle_s = None` for three causes and only one is adverse; the analyser kept the "
+        "non-`None` settles and fell through to CLEAR, so the strongest evidence for TIGHT "
+        "this campaign can produce -- a trial that never settled, which would refute section "
+        "2.2's law as well as PRED4 -- was read as a pass. `unresolved` now separates the "
+        "adverse cause from the two benign ones. An unresolved settle over a goal window "
+        "LONGER than the 0.25 s line proves the settle exceeded it: TIGHT, which is section "
+        "7.3's own value. Over a window NO LONGER than the line the settle is unknown and "
+        "unbounded, and neither CLEAR nor TIGHT is provable: the analyser states NOT "
+        "EVALUABLE rather than pick one, because reading a threshold off a window that never "
+        "reached it would be inventing the measurement. Section 7.3's CLEAR clause -- `every "
+        "healthy trial's settle interval is <= 0.25 s` -- is what this restores. NO THRESHOLD "
+        "MOVED."
+    ),
+    (
+        "12",
+        "**V6's `None` IS TREATED AS BINDING AND NOT AS `did not bind`.** `rule_v6` returns "
+        "None when the block effect could not be evaluated for an arm -- one block, or no "
+        "admissible trial in a second -- and its own docstring calls that a third state. "
+        "CONC1 combined it with `bool()`, which collapses None onto False, so an UNCHECKED "
+        "conjunct read as a SATISFIED one and CONC1 could be stated INDISTINGUISHABLE as "
+        "though the block effect had been ruled out. This campaign treats an unevaluable "
+        "guard as a failed guard: CONC1 is INCONCLUSIVE and its reason names the arms V6 "
+        "could not be evaluated for. This is STRICTER than the frozen text, which does not "
+        "say what an unevaluable V6 means. NO THRESHOLD MOVED."
+    ),
+    (
+        "13",
+        "**V3 AND V4 REFUSE A BLOCK BEFORE ITS FIRST GOAL, not only at analysis.** Both are "
+        "computed where the block is taken and both used to travel on the header and be "
+        "enforced only here, so a block that ran on mock hardware, or whose controller_state "
+        "subscription never matched, executed all 42 of its trials and the operator learned "
+        "after the whole campaign. Section 10's V4 registers that `a block that sends a goal "
+        "without it is discarded`; the runner now raises before the first goal and exits "
+        "non-zero, which stops the campaign and discards 0 trials instead of 42, and writes "
+        "no record at all for the refused block. **THE ANALYSER STILL APPLIES V2, V3, V4, V12 "
+        "AND V13 TO WHATEVER REACHES IT** and is still the authority on admission -- the "
+        "refusal duplicates two of those predicates where they can still act, and replaces "
+        "neither. NO THRESHOLD MOVED, and the two predicates are read from the same two "
+        "readings the analyser reads."
+    ),
+    (
+        "14",
+        "**RULE R IS APPLIED OVER AN ARM'S WHOLE TRIAL SET, POOLING ITS FOUR GOAL KINDS, "
+        "where section 7's rule R says `within one arm AT ONE GOAL`.** `goal_kind` is on "
+        "every row, so the registered per-goal spread is computable; it is not computed. "
+        "**The direction is conservative and that is why it stands**: pooling four goal kinds "
+        "can only make the spread larger, so rule R binds at least as often as the registered "
+        "form and CONC1 is stated INCONCLUSIVE at least as often. Narrowing it would make "
+        "this campaign LESS conservative than its own frozen text after the text was frozen, "
+        "which is not a change a harness makes to itself. The deviation was undeclared until "
+        "2026-09-04 and is declared here rather than removed. NO THRESHOLD MOVED -- the "
+        "0.005 rad minimum interesting size is untouched."
+    ),
+    (
+        "15",
+        "**V14 CHECKS THAT EVERY RECORDED STAMP IS MONOTONIC; IT DOES NOT CHECK THAT THE "
+        "STAMP IS A SIMULATED ONE.** Section 10's V14 is about one clock -- that no wall-clock "
+        "reading enters a simulated-time quantity -- and monotonicity is necessary for that "
+        "and not sufficient: a wall clock is monotonic too. A magnitude bound would close it, "
+        "and none is applied, because a bound chosen now would be a new exclusion rule added "
+        "to a frozen criteria after the fact. **What stands in its place is structural**: "
+        "every stamp published to a trial comes from the controller's own message and every "
+        "load-arm interval from `Driver.sim_now()`, which reads the node clock under "
+        "`use_sim_time`, and `criteria.md` section 7.1 defines each domain on a field of the "
+        "message. That is an argument from source, not a measurement, and it is recorded as "
+        "such. NO THRESHOLD MOVED."
     ),
 )
 
@@ -354,13 +460,24 @@ def admit(blocks: dict[str, list[dict]]) -> tuple[dict[str, list[dict]], dict]:
                 f"{v4.get('messages_received_before_first_goal')} message(s) before the "
                 f"block's first goal"
             )
-        if not v13.get("within_ceiling", True):
-            reasons.append(f"V13: an L3 server was waited on past the rig's ceiling: {v13}")
-        if head.get("v12_gz_topic_count") == 0:
+        # V13 AND V12 FAIL CLOSED, THE WAY V2, V3 AND V4 ABOVE ALREADY DO. A default of True
+        # and an `== 0` test both PASS a block whose reading is missing, which is the one
+        # thing a campaign built against silence must not do: a record written by a harness
+        # that never took the reading would be admitted as one that took it and was clean.
+        v13_within = v13.get("within_ceiling")
+        if v13_within is not True:
             reasons.append(
-                "V12: the harness's Gazebo probe reached no world -- an unpartitioned "
-                "`gz topic -l` returns an empty list and exits 0, so this is the partition "
-                "finding and not a fact about the world"
+                f"V13: an L3 server was waited on past the rig's ceiling, or the reading is "
+                f"missing (within_ceiling={v13_within!r}; a reading that is absent is refused "
+                f"and never assumed clean): {v13}"
+            )
+        v12_count = head.get("v12_gz_topic_count")
+        if not isinstance(v12_count, int) or v12_count == 0:
+            reasons.append(
+                f"V12: the harness's Gazebo probe reached no world, or the count is missing "
+                f"(v12_gz_topic_count={v12_count!r}) -- an unpartitioned `gz topic -l` "
+                f"returns an empty list and exits 0, so this is the partition finding and "
+                f"not a fact about the world"
             )
 
         if reasons:
@@ -637,16 +754,25 @@ def quiet1(live: dict[str, dict]) -> dict[str, str]:
                 for item in (row.get("i3c_moveit_aborts") or [])
             )
         ]
-        if entry["state"] is None:
-            value = "NOT ADMISSIBLE"
-        elif entry["state"] is False:
-            value = "NOT ADMISSIBLE"
-        elif not events:
-            value = "QUIET"
-        elif path_attributed:
+        # ORDER: A TOLERANCE EVENT OUTRANKS RULE L'S REFUSAL. Section 5.3 registers in
+        # capitals that a trial with a path- or goal-tolerance violation is NEVER excluded --
+        # "an exclusion rule that filtered out the event the campaign exists to detect would
+        # manufacture the silence it is trying to measure" -- and that the arm's verdict
+        # BECOMES FIRED. Section 7.2's clauses read the same way: QUIET carries the
+        # admissibility precondition explicitly, FIRED carries none, and NOT ADMISSIBLE is
+        # "otherwise". Rule L's own sentence in section 7.1 pulls the other way, so the frozen
+        # text is genuinely ambiguous; see Deviation 10, which states both readings. The
+        # reading applied here keeps the positive detection, because rule L bounds what the
+        # instrument MISSED and can never unsay what it SAW -- and rule L's state is reported
+        # in this verdict's own reason, so the other reading is recoverable from this output.
+        if path_attributed:
             value = "FIRED"
-        else:
+        elif events:
             value = "FIRED (unassigned)"
+        elif entry["state"] is not True:
+            value = "NOT ADMISSIBLE"
+        else:
+            value = "QUIET"
         out[arm] = value
         say(
             f"QUIET1 [{arm}] -- I3's three readings",
@@ -658,23 +784,40 @@ def quiet1(live: dict[str, dict]) -> dict[str, str]:
         verdict(
             f"QUIET1 [{arm}]",
             value,
-            "no trial of this arm produced a tolerance violation on any of I3's three "
-            "readings"
-            if value == "QUIET"
-            else (
-                "a violation was seen and I3(c) attributes it to the path check -- this is "
-                "the campaign's headline and is reported in full with its whole error trace"
-                if value == "FIRED"
-                else (
-                    "a violation was seen on I3(a) or I3(b) and I3(c) was silent; section 2.0 "
-                    "shows those two readings cannot separate the path check from the "
-                    "goal-time abort, so the event is reported WITHOUT being attributed and "
-                    "is NEVER attributed by assumption"
-                    if value == "FIRED (unassigned)"
-                    else "rule L refuses this arm's trials, so no quietness claim is "
-                         "admissible for it"
-                )
-            ),
+            {
+                "QUIET": "LIVE1 is ADMISSIBLE for this arm and no trial of it produced a "
+                         "tolerance violation on any of I3's three readings",
+                "FIRED": (
+                    f"a violation was seen and I3(c) attributes it to the path check -- this "
+                    f"is the campaign's headline and is reported in full with its whole error "
+                    f"trace. Section 5.3: such a trial is NEVER excluded. Rule L's state for "
+                    f"this arm is reported beside it and does not suppress the event: LIVE1 "
+                    f"admissible = {entry['state']}"
+                    + (
+                        ". RULE L REFUSES THIS ARM'S TRIALS, so the quantitative "
+                        "distributions in section 7.2 stay NOT ADMISSIBLE for it and only "
+                        "the positive detection is stated here"
+                        if entry["state"] is not True
+                        else ""
+                    )
+                ),
+                "FIRED (unassigned)": (
+                    f"a violation was seen on I3(a) or I3(b) and I3(c) was silent; section "
+                    f"2.0 shows those two readings cannot separate the path check from the "
+                    f"goal-time abort, so the event is reported WITHOUT being attributed and "
+                    f"is NEVER attributed by assumption. LIVE1 admissible = {entry['state']}"
+                    + (
+                        ". RULE L REFUSES THIS ARM'S TRIALS, so the quantitative "
+                        "distributions in section 7.2 stay NOT ADMISSIBLE for it and only "
+                        "the unattributed detection is stated here"
+                        if entry["state"] is not True
+                        else ""
+                    )
+                ),
+                "NOT ADMISSIBLE": "rule L refuses this arm's trials, and no trial of it "
+                                  "produced a tolerance violation on any of I3's three "
+                                  "readings, so no quietness claim is admissible for it",
+            }[value],
         )
         print(wrap(RULE_G))
     return out
@@ -881,7 +1024,19 @@ def conc1(live: dict[str, dict], v6_fired: dict[str, bool | None]) -> str:
         (conc_spread is not None and conc_spread > common.MIS_RAD)
         or (cruise_spread is not None and cruise_spread > common.MIS_RAD)
     )
-    v6_binds = bool(v6_fired.get("CONC")) or bool(v6_fired.get("CRUISE"))
+    # V6 HAS THREE STATES AND `bool(None)` COLLAPSES TWO OF THEM. `rule_v6` returns None when
+    # the block effect COULD NOT BE EVALUATED -- one block, or an arm with no admissible trial
+    # in a second block -- and its own docstring calls that "a THIRD state and not False".
+    # Reading it as False makes an UNCHECKED conjunct read as a SATISFIED one, and CONC1 could
+    # be stated INDISTINGUISHABLE as though the block effect had been ruled out. That is the
+    # unevaluable-conjunct class, and it is treated as BINDING: an unevaluable guard is not a
+    # passed guard.
+    v6_conc = v6_fired.get("CONC")
+    v6_cruise = v6_fired.get("CRUISE")
+    v6_unevaluable = [
+        arm for arm, value in (("CONC", v6_conc), ("CRUISE", v6_cruise)) if value is None
+    ]
+    v6_binds = bool(v6_conc) or bool(v6_cruise) or bool(v6_unevaluable)
 
     say(
         "Rule R -- resolution, over CONC1's own statistic",
@@ -893,7 +1048,9 @@ def conc1(live: dict[str, dict], v6_fired: dict[str, bool | None]) -> str:
     say(
         "V6 -- the block effect over CONC1's two arms",
         v6_binds,
-        f"CONC={v6_fired.get('CONC')}, CRUISE={v6_fired.get('CRUISE')}",
+        f"CONC={v6_conc}, CRUISE={v6_cruise}. `None` means the block effect COULD NOT BE "
+        f"EVALUATED for that arm and is treated as BINDING, not as `did not bind`: "
+        f"unevaluable for {v6_unevaluable or 'neither arm'}.",
     )
     say(
         "CONC1's statistic",
@@ -907,9 +1064,17 @@ def conc1(live: dict[str, dict], v6_fired: dict[str, bool | None]) -> str:
 
     if resolution_binds or v6_binds:
         value = "INCONCLUSIVE"
-        why = ("rule R binds on the within-arm spread" if resolution_binds else "") + (
-            " and " if resolution_binds and v6_binds else ""
-        ) + ("V6's block effect binds" if v6_binds else "")
+        parts = []
+        if resolution_binds:
+            parts.append("rule R binds on the within-arm spread")
+        if v6_unevaluable:
+            parts.append(
+                f"V6's block effect could NOT BE EVALUATED for {v6_unevaluable}, and an "
+                f"unevaluable conjunct is not a satisfied one"
+            )
+        elif v6_binds:
+            parts.append("V6's block effect binds")
+        why = " and ".join(parts)
     elif difference < common.MIS_RAD:
         value = "INDISTINGUISHABLE"
         why = f"the two medians differ by {difference} rad, below {common.MIS_RAD} rad"
@@ -989,12 +1154,46 @@ def goal1(live: dict[str, dict]) -> dict[str, str]:
         ]
         long_ones = [pair for pair in settles if pair[0] > common.GOAL_SETTLE_LINE_S]
 
-        if entry["state"] is not True:
-            value = "NOT ADMISSIBLE"
-        elif aborts:
+        # A GOAL WINDOW THAT ENDED WITH THE ERROR STILL OUTSIDE THE GOAL TOLERANCE IS A
+        # MEASUREMENT AND NOT A MISSING ONE. `settles` keeps only the trials that produced a
+        # number, so an unresolved settle used to leave no trace in this verdict at all and
+        # fell through to CLEAR -- the strongest evidence for TIGHT this campaign can produce,
+        # and the case PRED4 is registered against, read as a pass. Section 7.3's CLEAR is
+        # "no goal-tolerance abort occurred AND EVERY healthy trial's settle interval is
+        # <= 0.25 s", and a settle that does not exist is not <= 0.25 s.
+        unresolved = [
+            row for row in healthy_rows if row["goal_settle"].get("unresolved")
+        ]
+        # Whether an unresolved settle PROVES the line was exceeded depends on how long the
+        # goal window was. A window longer than the line ended with the error still outside
+        # after more than 0.25 s, so the settle -- whatever it eventually was -- exceeded the
+        # line: that is TIGHT, proven. A window at or below the line ran out before the line
+        # was reached, so the settle is unknown and unbounded: that is not CLEAR either, and
+        # claiming TIGHT from it would be reading a threshold off a window that never reached
+        # it. NO THRESHOLD MOVES in either branch.
+        unresolved_over_line = [
+            row for row in unresolved
+            if (row["goal_settle"].get("goal_window_span_s") or 0.0)
+            > common.GOAL_SETTLE_LINE_S
+        ]
+        unresolved_undecidable = [
+            row for row in unresolved if row not in unresolved_over_line
+        ]
+
+        # ORDER: a tolerance abort outranks rule L's refusal. Section 5.3 registers IN
+        # CAPITALS that a trial with a path- or goal-tolerance violation is NEVER excluded and
+        # that "the arm's QUIET1 or GOAL1 verdict becomes FIRED", and section 7.3's own clause
+        # order puts the abort clause above the "NOT ADMISSIBLE otherwise". See Deviation 10:
+        # rule L's state is carried in the verdict's reason either way, so both readings of
+        # the frozen text are recoverable from this output.
+        if aborts:
             value = "FIRED"
-        elif long_ones:
+        elif entry["state"] is not True:
+            value = "NOT ADMISSIBLE"
+        elif long_ones or unresolved_over_line:
             value = "TIGHT"
+        elif unresolved_undecidable:
+            value = "NOT EVALUABLE"
         elif settles or healthy_rows:
             value = "CLEAR"
         else:
@@ -1008,10 +1207,15 @@ def goal1(live: dict[str, dict]) -> dict[str, str]:
         say(
             f"GOAL1 [{arm}] -- settle against {common.GOAL_SETTLE_LINE_S} s "
             f"(half the declared goal_time of {common.DECLARED_GOAL_TIME_S} s)",
-            bool(long_ones or aborts),
+            bool(long_ones or aborts or unresolved),
             f"n={len(healthy_rows)} healthy admissible trials; {len(settles)} carry a "
             f"measured settle, {len(unsettled)} do not "
             f"({json.dumps([row['goal_settle'].get('reason') for row in unsettled])}); "
+            f"of those, {len(unresolved)} ended the goal window with the error STILL OUTSIDE "
+            f"the goal tolerance -- {len(unresolved_over_line)} over a goal window longer "
+            f"than the line, which proves the settle exceeded it, and "
+            f"{len(unresolved_undecidable)} over a shorter one, where the settle is unknown "
+            f"and unbounded and no CLEAR may be stated; "
             f"settle min/median/max = "
             f"{min(measured) if measured else None}/"
             f"{common.percentile(measured, 50.0) if measured else None}/"
@@ -1027,11 +1231,29 @@ def goal1(live: dict[str, dict]) -> dict[str, str]:
             {
                 "CLEAR": "no goal-tolerance abort occurred and every healthy trial's settle "
                          "is at or below the line",
-                "TIGHT": "no abort occurred but some trial's settle exceeded the line -- the "
-                         "goal window is being used up rather than sat comfortably inside",
-                "FIRED": "a trial aborted on the goal check",
-                "NOT ADMISSIBLE": "rule L refuses this arm's trials",
-                "NOT EVALUABLE": "no healthy admissible trial to measure a settle over",
+                "TIGHT": (
+                    f"no abort occurred but some trial's settle exceeded the line -- the "
+                    f"goal window is being used up rather than sat comfortably inside "
+                    f"({len(long_ones)} measured above the line, "
+                    f"{len(unresolved_over_line)} that never came inside the goal tolerance "
+                    f"at all over a goal window longer than the line)"
+                ),
+                "FIRED": (
+                    f"a trial aborted on the goal check. Section 5.3: such a trial is NEVER "
+                    f"excluded and this verdict becomes FIRED. Rule L's state for this arm "
+                    f"is reported beside it and does not suppress the event: "
+                    f"LIVE1 admissible = {entry['state']}"
+                ),
+                "NOT ADMISSIBLE": "rule L refuses this arm's trials, and no trial of it "
+                                  "aborted on the goal check",
+                "NOT EVALUABLE": (
+                    f"{len(unresolved_undecidable)} healthy trial(s) ended the goal window "
+                    f"with the error still outside the goal tolerance, over a goal window no "
+                    f"longer than the line, so the settle is unknown and unbounded and "
+                    f"neither CLEAR nor TIGHT can be stated"
+                    if unresolved_undecidable
+                    else "no healthy admissible trial to measure a settle over"
+                ),
             }[value],
         )
         if value == "CLEAR" and len(at_or_below_one_interval) == len(settles):

@@ -207,6 +207,27 @@ def reposition(driver: cell.Driver, writer: common.TrialWriter, cycle: int, arm:
     return written
 
 
+#: `main`'s exit code when V3 or V4 refuses the block BEFORE its first goal. Distinct from
+#: every code `run_cell_block.sh` raises itself (2, 4, 5), so the campaign log says which
+#: layer refused. `run_campaign.sh` stops the campaign on any non-zero code.
+BLOCK_REFUSED_EXIT = 6
+
+
+class BlockRefused(RuntimeError):
+    """A block-level validity rule failed BEFORE the block's first goal was sent.
+
+    `criteria.md` section 10's V4 registers that *"a block that sends a goal without it is
+    discarded"*, and V3 registers the backend the block must have run on. Both are computed
+    where the block is taken, before its first goal -- so the block can be refused there,
+    where the refusal costs ZERO trials, instead of only at analysis, where the operator has
+    already paid 42 trials and half an hour for a block that was never going to be data.
+
+    THIS MOVES NO THRESHOLD. `analyse.py` still applies V2, V3, V4, V12 and V13 to whatever
+    reaches it, and is still the authority on what is admitted; this refusal only stops a
+    block that the analyser would discard from being run at all.
+    """
+
+
 #: V4's sibling for CONC. How long the harness waits for BOTH load arms to have had a goal
 #: accepted before arm_1's first CONC goal. An EVENT with a ceiling, never a sleep (P4): the
 #: wait ends the instant both have one.
@@ -342,7 +363,11 @@ def main() -> int:
     writer = None
     load_arms: list[cell.LoadArm] = []
     workpiece = None
-    exit_code = 0
+    # THREE EXITS AND NO FOURTH: 0 when the block ran its whole schedule,
+    # BLOCK_REFUSED_EXIT when V3 or V4 refused it before its first goal, and a RAISED
+    # exception -- never a return code -- for anything else. This used to set `exit_code = 3`
+    # on the abort path and then re-raise, so the 3 was never returned by anything and the
+    # constant described an exit the harness cannot produce.
     try:
         v13 = driver.await_stack()
         print(f"== V13: every L3 server answered; waits {v13['server_wait_s']} ==")
@@ -380,6 +405,35 @@ def main() -> int:
 
         topics = cell.gz_topics()
         print(f"== V12: {len(topics)} Gazebo topics reached through cite_bringup.gz ==")
+
+        # V3 AND V4 ARE ENFORCED HERE, WHERE THEY CAN STILL ACT. Both were computed above,
+        # before the block's first goal, and both used to travel on the header and be
+        # enforced only by `analyse.py` -- so a block that ran on mock hardware, or whose
+        # controller_state subscription never matched, executed all 42 of its trials and the
+        # operator learned after the whole campaign. Refusing here discards 0 trials instead
+        # of 42. No threshold moves: these are the same two predicates the analyser applies,
+        # read from the same two readings.
+        refusals = []
+        if not geometry.get("v3_ok"):
+            refusals.append(
+                f"V3: the backend that ran was not {common.PRODUCTION_PLUGIN} alone -- "
+                f"production={geometry.get('production_plugin_refs')} "
+                f"fixture={geometry.get('fixture_plugin_refs')} "
+                f"mock={geometry.get('mock_plugin_refs')}"
+            )
+        if not v4.get("v4_ok"):
+            refusals.append(
+                f"V4: the controller_state subscription had "
+                f"{v4.get('matched_publisher_count')} matched publisher(s) and had received "
+                f"{v4.get('messages_received_before_first_goal')} message(s) before the "
+                f"block's first goal. criteria.md section 10: a block that sends a goal "
+                f"without it is discarded"
+            )
+        if refusals:
+            raise BlockRefused(
+                f"{label} is refused before its first goal, so it contributes no trials and "
+                f"writes no record: " + "; ".join(refusals)
+            )
 
         header = {
             "label": label,
@@ -424,6 +478,7 @@ def main() -> int:
         load_arms = [
             cell.LoadArm(driver, arm, load_frames[arm]) for arm in common.LOAD_ARMS
         ]
+        load_stops: list[dict] = []
 
         scheduled = arguments.cycles * 14
         trial = 0
@@ -551,8 +606,16 @@ def main() -> int:
                     stamp_load(row, writer, load_arms)
                     report(row)
             finally:
+                # R-10: `join(timeout=)` cannot say whether it worked. CONC's control is the
+                # NEXT cycle's CRUISE, so a load arm that outlived its stop would make that
+                # control a load condition -- read it, print it, and carry it to the record.
                 for arm in load_arms:
-                    arm.stop()
+                    stop_report = arm.stop()
+                    load_stops.append({"cycle": cycle, **stop_report})
+                    if stop_report["still_alive_after_join"]:
+                        print(f"  !! load arm {stop_report['arm']} WAS STILL RUNNING after "
+                              f"its {stop_report['join_ceiling_s']}s join: the next cycle's "
+                              f"CRUISE -- CONC's control -- may not be unloaded", flush=True)
 
         i9_end = i9_reading(driver, "block end")
         ratio = i9_ratio(i9_start, i9_end)
@@ -561,13 +624,24 @@ def main() -> int:
         end_snapshot = common.snapshot()
         end_load = common.host_load()
         flags = writer.seal(end_snapshot, end_load, "the block ran to the end of its schedule")
-        writer.complete(scheduled, {"i9": ratio, "load_end": end_load})
+        writer.complete(
+            scheduled,
+            {"i9": ratio, "load_end": end_load, "load_arm_stops": load_stops},
+        )
         print(f"== V1 closing reading: v1_clean={flags['v1_clean']} "
               f"disagreed_mid_block={flags['disagreed_mid_block']} ==")
         print(f"== {label}: {len(writer.rows)} of {scheduled} trials written ==")
 
+    except BlockRefused as refusal:
+        # NOT the abort path: nothing was written, no trial ran, and there is no partial
+        # record to seal. The `finally` below still stops the load arms and tears the node
+        # down. `run_campaign.sh` stops the campaign on this non-zero code.
+        print(f"\n## {label} REFUSED BEFORE ITS FIRST GOAL: {refusal}", file=sys.stderr)
+        print(f"## 0 of {arguments.cycles * 14} trials run. Fix the cell and re-run this "
+              f"block; nothing was recorded.", file=sys.stderr)
+        return BLOCK_REFUSED_EXIT
+
     except BaseException as error:  # noqa: BLE001 -- the abort path must run for anything
-        exit_code = 3
         print(f"\n## {label} ABORTED: {error!r}", file=sys.stderr)
         if writer is not None:
             # V1's own sentence: the closing reading is taken AT THE ABORT, as the FIRST act
@@ -602,7 +676,7 @@ def main() -> int:
         except BaseException:  # noqa: BLE001, S110
             pass
 
-    return exit_code
+    return 0
 
 
 def stamp_load(row: dict, writer: common.TrialWriter, load_arms: list) -> None:
