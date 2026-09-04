@@ -1,0 +1,16 @@
+{
+  "label": "B2",
+  "captures_scheduled": 3,
+  "captures_run": 3,
+  "trajectories_written": 72,
+  "sealed": true,
+  "completed_at": "2026-09-04T23:16:52Z",
+  "load_end": {
+    "load_1m": 2.8525390625,
+    "load_5m": 4.44677734375,
+    "load_15m": 3.439453125,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T23:16:52Z"
+  }
+}
