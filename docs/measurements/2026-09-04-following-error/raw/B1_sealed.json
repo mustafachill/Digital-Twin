@@ -1,0 +1,73 @@
+{
+  "label": "B1",
+  "sealed_because": "the block ran to the end of its schedule",
+  "v1": {
+    "start": {
+      "at": 1788545834.9868379,
+      "head": "601a06285492b3a7672e1bc47233e153a57c9b05",
+      "git_status_porcelain": "?? docs/measurements/2026-09-04-following-error/raw/logs/\n?? docs/measurements/2026-09-04-following-error/raw/provenance.txt",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+    },
+    "end": {
+      "at": 1788546252.1086102,
+      "head": "601a06285492b3a7672e1bc47233e153a57c9b05",
+      "git_status_porcelain": "?? docs/measurements/2026-09-04-following-error/raw/B1_header.json\n?? docs/measurements/2026-09-04-following-error/raw/B1_setup.json\n?? docs/measurements/2026-09-04-following-error/raw/B1_trials.json\n?? docs/measurements/2026-09-04-following-error/raw/logs/\n?? docs/measurements/2026-09-04-following-error/raw/provenance.txt",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+    },
+    "v1_clean": true,
+    "disagreed_mid_block": false,
+    "head_moved_mid_block": false,
+    "vendor_pin_held": true,
+    "base_commit": "c38a42c",
+    "watched_paths": [
+      "model/",
+      "workspace/src/",
+      "tools/",
+      "tests/",
+      "scripts/",
+      "assets/",
+      "external/"
+    ],
+    "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+  },
+  "load_end": {
+    "load_1m": 6.43896484375,
+    "load_5m": 5.1220703125,
+    "load_15m": 2.7080078125,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T18:24:12Z"
+  },
+  "v7_start": false,
+  "v7_end": true,
+  "rows": 42,
+  "sealed_at": "2026-09-04T18:24:12Z"
+}

@@ -1,0 +1,83 @@
+{
+  "label": "B1",
+  "trials_scheduled": 42,
+  "trials_written": 42,
+  "sealed": true,
+  "completed_at": "2026-09-04T18:24:12Z",
+  "i9": {
+    "start": {
+      "at": "block start",
+      "sim_stamp": 27.076,
+      "wall_monotonic": 113863.185912311,
+      "messages_received": 608
+    },
+    "end": {
+      "at": "block end",
+      "sim_stamp": 398.342,
+      "wall_monotonic": 114272.403040318,
+      "messages_received": 53399
+    },
+    "sim_span_s": 371.26599999999996,
+    "wall_span_s": 409.2171280069888,
+    "ratio": 0.9072591897806861,
+    "note": "context only; criteria.md I9 -- this enters no verdict in section 7, and Gazebo's own real_time_factor field is never quoted"
+  },
+  "load_end": {
+    "load_1m": 6.43896484375,
+    "load_5m": 5.1220703125,
+    "load_15m": 2.7080078125,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T18:24:12Z"
+  },
+  "load_arm_stops": [
+    {
+      "cycle": 1,
+      "arm": "arm_2",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 7,
+      "goals_accepted": 7
+    },
+    {
+      "cycle": 1,
+      "arm": "arm_3",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 7,
+      "goals_accepted": 7
+    },
+    {
+      "cycle": 2,
+      "arm": "arm_2",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 13,
+      "goals_accepted": 13
+    },
+    {
+      "cycle": 2,
+      "arm": "arm_3",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 14,
+      "goals_accepted": 14
+    },
+    {
+      "cycle": 3,
+      "arm": "arm_2",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 20,
+      "goals_accepted": 20
+    },
+    {
+      "cycle": 3,
+      "arm": "arm_3",
+      "join_ceiling_s": 60.0,
+      "still_alive_after_join": false,
+      "goals_sent": 21,
+      "goals_accepted": 21
+    }
+  ]
+}
