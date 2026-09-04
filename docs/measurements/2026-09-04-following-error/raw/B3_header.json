@@ -1,0 +1,216 @@
+{
+  "label": "B3",
+  "block": "B3",
+  "is_shakedown": false,
+  "cycles": 3,
+  "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6",
+  "base_commit": "c38a42c",
+  "v1_start": {
+    "at": 1788547049.3031616,
+    "head": "62231a1077743364ac5da7143be15ec753e2dcec",
+    "git_status_porcelain": " M docs/measurements/2026-09-04-following-error/raw/logs/campaign.log\n M docs/measurements/2026-09-04-following-error/raw/provenance.txt\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_harness.log\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_load.txt\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_sim.log",
+    "watched_diff_against_base": "",
+    "watched_worktree_dirty": "",
+    "vendor_pin": {
+      "manifest": "external/cite.repos",
+      "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+      "matches": true
+    },
+    "clean": true,
+    "model_hash": {
+      "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+      "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+    },
+    "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+  },
+  "load_start": {
+    "load_1m": 2.58154296875,
+    "load_5m": 4.5693359375,
+    "load_15m": 3.982421875,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T18:37:29Z"
+  },
+  "v7_start": true,
+  "v13": {
+    "server_wait_s": {
+      "move_to": 3.313943396002287,
+      "pick": 9.023801248986274e-05,
+      "place": 8.599500870332122e-05,
+      "arm_2/move_to": 8.66210029926151e-05,
+      "arm_3/move_to": 7.94910010881722e-05
+    },
+    "ceiling_s": 420.0,
+    "within_ceiling": true
+  },
+  "v2": {
+    "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+    "read_returncode": 0,
+    "read_ok": true,
+    "description_chars": 33653,
+    "hull_collision_refs": 13,
+    "vendor_visual_refs": 6,
+    "v2_ok": true
+  },
+  "v3": {
+    "production_plugin_refs": 3,
+    "fixture_plugin_refs": 0,
+    "mock_plugin_refs": 0,
+    "v3_ok": true
+  },
+  "v4": {
+    "topic": "/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state",
+    "waited_s": 0.0004677580000134185,
+    "ceiling_s": 300.0,
+    "matched_publishers": [
+      {
+        "node": "arm_1_joint_trajectory_controller",
+        "namespace": "/cite/cell_a/arm_1",
+        "type": "control_msgs/msg/JointTrajectoryControllerState",
+        "history": "3",
+        "history_name": "UNKNOWN",
+        "depth": 0,
+        "reliability": "1",
+        "reliability_name": "RELIABLE",
+        "durability": "1",
+        "durability_name": "TRANSIENT_LOCAL",
+        "liveliness": "1",
+        "liveliness_name": "AUTOMATIC"
+      }
+    ],
+    "matched_publisher_count": 1,
+    "messages_received_before_first_goal": 665,
+    "joint_states_received_before_first_goal": 665,
+    "subscription": {
+      "history": "KEEP_LAST",
+      "depth": 10,
+      "reliability": "RELIABLE",
+      "durability": "VOLATILE",
+      "declared_because": "criteria.md section 4.1 -- the publisher leaves every policy to the RMW, so the subscriber states one rather than adding a second unknown"
+    },
+    "v4_ok": true
+  },
+  "v12_gz_topics": [
+    "/cite/cell_a/beam_c1_out/detection",
+    "/cite/cell_a/beam_c2_out/detection",
+    "/cite/cell_a/beam_c3_out/detection",
+    "/cite/cell_a/beam_pick/detection",
+    "/cite/cell_a/conveyor_1/command",
+    "/cite/cell_a/conveyor_1/state",
+    "/cite/cell_a/conveyor_2/command",
+    "/cite/cell_a/conveyor_2/state",
+    "/cite/cell_a/conveyor_3/command",
+    "/cite/cell_a/conveyor_3/state",
+    "/clock",
+    "/gazebo/resource_paths",
+    "/stats",
+    "/world/cell_a/clock",
+    "/world/cell_a/dynamic_pose/info",
+    "/world/cell_a/pose/info",
+    "/world/cell_a/scene/deletion",
+    "/world/cell_a/scene/info",
+    "/world/cell_a/state",
+    "/world/cell_a/stats",
+    "/world/cell_a/light_config",
+    "/world/cell_a/material_color"
+  ],
+  "v12_gz_topic_count": 22,
+  "controller_settings": {
+    "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/control/cell_a_arm_1_controllers.yaml",
+    "joints": [
+      "arm_1_joint1",
+      "arm_1_joint2",
+      "arm_1_joint3",
+      "arm_1_joint4",
+      "arm_1_joint5"
+    ],
+    "update_rate_hz": 150,
+    "command_interfaces": [
+      "position"
+    ],
+    "state_interfaces": [
+      "position",
+      "velocity"
+    ],
+    "goal_time_s": 0.5,
+    "stopped_velocity_tolerance": 0.0,
+    "trajectory_tolerance_rad": {
+      "arm_1_joint1": 1.0,
+      "arm_1_joint2": 1.0,
+      "arm_1_joint3": 1.0,
+      "arm_1_joint4": 1.0,
+      "arm_1_joint5": 1.0
+    },
+    "goal_tolerance_rad": {
+      "arm_1_joint1": 0.01,
+      "arm_1_joint2": 0.01,
+      "arm_1_joint3": 0.01,
+      "arm_1_joint4": 0.01,
+      "arm_1_joint5": 0.01
+    },
+    "agrees_with_registration": true
+  },
+  "registered_settings": {
+    "trajectory_tolerance_rad": 1.0,
+    "goal_tolerance_rad": 0.01,
+    "goal_time_s": 0.5,
+    "update_rate_hz": 150.0,
+    "k_per_s": 15.0,
+    "error_per_speed_s": 0.06
+  },
+  "station_frames": {
+    "arm_1": {
+      "station": "station_transfer_1",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__table_pick__surface",
+      "place_frame": "cell_a__conveyor_1__infeed",
+      "actor": "arm_1"
+    },
+    "arm_2": {
+      "station": "station_transfer_2",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__conveyor_1__outfeed",
+      "place_frame": "cell_a__conveyor_2__infeed",
+      "actor": "arm_2"
+    },
+    "arm_3": {
+      "station": "station_transfer_3",
+      "read_from": "/workspace/workspace/install/cite_generated/share/cite_generated/topology/cell_a_flow.yaml",
+      "pick_frame": "cell_a__conveyor_2__outfeed",
+      "place_frame": "cell_a__conveyor_3__infeed",
+      "actor": "arm_3"
+    }
+  },
+  "model_hash": {
+    "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+    "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+  },
+  "host": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 16,
+    "ros_domain_id": "43",
+    "gz_partition": "cite/cell_a/plant"
+  },
+  "state_recorder": {
+    "topic": "/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state",
+    "subscription_qos": {
+      "history": "KEEP_LAST",
+      "depth": 10,
+      "reliability": "RELIABLE",
+      "durability": "VOLATILE",
+      "declared_because": "criteria.md section 4.1 -- the publisher leaves every policy to the RMW, so the subscriber states one rather than adding a second unknown"
+    },
+    "messages_received": 966,
+    "first_sim_stamp": 29.386,
+    "last_sim_stamp": 36.141,
+    "first_received_monotonic": 115071.854953122,
+    "last_received_monotonic": 115078.648840485
+  },
+  "joint_state_recorder": {
+    "topic": "/cite/cell_a/arm_1/joint_states",
+    "messages_received": 966
+  }
+}

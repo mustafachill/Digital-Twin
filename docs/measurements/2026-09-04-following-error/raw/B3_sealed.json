@@ -1,0 +1,73 @@
+{
+  "label": "B3",
+  "sealed_because": "the block ran to the end of its schedule",
+  "v1": {
+    "start": {
+      "at": 1788547049.3031616,
+      "head": "62231a1077743364ac5da7143be15ec753e2dcec",
+      "git_status_porcelain": " M docs/measurements/2026-09-04-following-error/raw/logs/campaign.log\n M docs/measurements/2026-09-04-following-error/raw/provenance.txt\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_harness.log\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_load.txt\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_sim.log",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+    },
+    "end": {
+      "at": 1788547473.2695854,
+      "head": "62231a1077743364ac5da7143be15ec753e2dcec",
+      "git_status_porcelain": " M docs/measurements/2026-09-04-following-error/raw/logs/campaign.log\n M docs/measurements/2026-09-04-following-error/raw/provenance.txt\n?? docs/measurements/2026-09-04-following-error/raw/B3_header.json\n?? docs/measurements/2026-09-04-following-error/raw/B3_setup.json\n?? docs/measurements/2026-09-04-following-error/raw/B3_trials.json\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_harness.log\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_load.txt\n?? docs/measurements/2026-09-04-following-error/raw/logs/B3_sim.log",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+    },
+    "v1_clean": true,
+    "disagreed_mid_block": false,
+    "head_moved_mid_block": false,
+    "vendor_pin_held": true,
+    "base_commit": "c38a42c",
+    "watched_paths": [
+      "model/",
+      "workspace/src/",
+      "tools/",
+      "tests/",
+      "scripts/",
+      "assets/",
+      "external/"
+    ],
+    "criteria_sha256": "923a4d1e1c9fd578b5294f8f99d18c700fc3626f63ae6c46439c5e50db5193c6"
+  },
+  "load_end": {
+    "load_1m": 6.21875,
+    "load_5m": 6.48828125,
+    "load_15m": 5.1015625,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T18:44:33Z"
+  },
+  "v7_start": true,
+  "v7_end": true,
+  "rows": 42,
+  "sealed_at": "2026-09-04T18:44:33Z"
+}

@@ -1,0 +1,75 @@
+== B3: V1 opening reading, clean=True ==
+   vendor pin: {"manifest": "external/cite.repos", "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_from": "/workspace/workspace/src/external/xarm_ros2", "matches": true}
+   load: 2.58 4.57 3.98
+== V13: every L3 server answered; waits {'move_to': 3.313943396002287, 'pick': 9.023801248986274e-05, 'place': 8.599500870332122e-05, 'arm_2/move_to': 8.66210029926151e-05, 'arm_3/move_to': 7.94910010881722e-05} ==
+== V2/V3: {"read_from": "/cite/cell_a/arm_1/description_publisher robot_description", "read_returncode": 0, "read_ok": true, "description_chars": 33653, "hull_collision_refs": 13, "vendor_visual_refs": 6, "v2_ok": true, "production_plugin_refs": 3, "fixture_plugin_refs": 0, "mock_plugin_refs": 0, "v3_ok": true} ==
+== V4: matched=1 received=665 after 0.0s ==
+   publisher QoS: [{"node": "arm_1_joint_trajectory_controller", "namespace": "/cite/cell_a/arm_1", "type": "control_msgs/msg/JointTrajectoryControllerState", "history": "3", "history_name": "UNKNOWN", "depth": 0, "reliability": "1", "reliability_name": "RELIABLE", "durability": "1", "durability_name": "TRANSIENT_LOCAL", "liveliness": "1", "liveliness_name": "AUTOMATIC"}]
+== V12: 22 Gazebo topics reached through cite_bringup.gz ==
+
+===== B3 cycle 1/3 =====
+  [ setup  c1 before CRUISE] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [CRUISE c1 t  1        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848901 v_peak=0.314148329 L=True i3=False
+  [CRUISE c1 t  2  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.018878554 v_peak=0.314578309 L=True i3=False
+  [CRUISE c1 t  3 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.018844203 v_peak=0.314069893 L=True i3=False
+  [CRUISE c1 t  4        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+  [ setup  c1 before FAST] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [  FAST c1 t  5        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.08089026 v_peak=1.348154394 L=True i3=False
+  [  FAST c1 t  6  above_pick] healthy=True status=4 code=0 n=219 rate=143.512450852 peak=0.086776021 v_peak=1.446265428 L=True i3=False
+  [  FAST c1 t  7 above_place] healthy=True status=4 code=0 n=288 rate=143.354902937 peak=0.115972442 v_peak=1.932841238 L=True i3=False
+  [  FAST c1 t  8        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.080892408 v_peak=1.34818989 L=True i3=False
+  [ setup  c1 before CARRY] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ CARRY c1 t  9        pick] healthy=True status=4 code=0 n=1923 rate=142.931470195 peak=0.018844203 v_peak=0.314069891 L=True i3=False
+  [ CARRY c1 t 10       place] healthy=True status=4 code=0 n=1890 rate=142.932768661 peak=0.018844173 v_peak=0.314172165 L=True i3=False
+  [ setup  c1 before CONC] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ setup  c1 before CONC] load arms live=True after 6.2s accepted={'arm_2': 1, 'arm_3': 1}
+  [  CONC c1 t 11        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+  [  CONC c1 t 12  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.018845595 v_peak=0.314093198 L=True i3=False
+  [  CONC c1 t 13 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.018844203 v_peak=0.314069893 L=True i3=False
+  [  CONC c1 t 14        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+
+===== B3 cycle 2/3 =====
+  [ setup  c2 before CRUISE] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [CRUISE c2 t 15        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848951 v_peak=0.314149173 L=True i3=False
+  [CRUISE c2 t 16  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.018845595 v_peak=0.314093198 L=True i3=False
+  [CRUISE c2 t 17 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.01887297 v_peak=0.31449455 L=True i3=False
+  [CRUISE c2 t 18        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018872969 v_peak=0.314494537 L=True i3=False
+  [ setup  c2 before FAST] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [  FAST c2 t 19        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.080890484 v_peak=1.348158106 L=True i3=False
+  [  FAST c2 t 20  above_pick] healthy=True status=4 code=0 n=219 rate=143.512450852 peak=0.086776021 v_peak=1.446265428 L=True i3=False
+  [  FAST c2 t 21 above_place] healthy=True status=4 code=0 n=288 rate=143.354902937 peak=0.115972442 v_peak=1.932841238 L=True i3=False
+  [  FAST c2 t 22        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.080892408 v_peak=1.34818989 L=True i3=False
+  [ setup  c2 before CARRY] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ CARRY c2 t 23        pick] healthy=True status=4 code=0 n=1966 rate=142.929843693 peak=0.018844203 v_peak=0.314069891 L=True i3=False
+  [ CARRY c2 t 24       place] healthy=True status=4 code=0 n=1892 rate=142.932688676 peak=0.018844179 v_peak=0.31413553 L=True i3=False
+  [ setup  c2 before CONC] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ setup  c2 before CONC] load arms live=True after 0.0s accepted={'arm_2': 7, 'arm_3': 7}
+  [  CONC c2 t 25        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+  [  CONC c2 t 26  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.018845595 v_peak=0.314093198 L=True i3=False
+  [  CONC c2 t 27 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.0188717 v_peak=0.314475496 L=True i3=False
+  [  CONC c2 t 28        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+
+===== B3 cycle 3/3 =====
+  [ setup  c3 before CRUISE] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [CRUISE c3 t 29        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848936 v_peak=0.314148917 L=True i3=False
+  [CRUISE c3 t 30  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.01887297 v_peak=0.31449455 L=True i3=False
+  [CRUISE c3 t 31 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.018844203 v_peak=0.314069893 L=True i3=False
+  [CRUISE c3 t 32        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+  [ setup  c3 before FAST] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [  FAST c3 t 33        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.080890009 v_peak=1.348150246 L=True i3=False
+  [  FAST c3 t 34  above_pick] healthy=True status=4 code=0 n=219 rate=143.512450852 peak=0.086776021 v_peak=1.446265427 L=True i3=False
+  [  FAST c3 t 35 above_place] healthy=True status=4 code=0 n=288 rate=143.354902937 peak=0.115972442 v_peak=1.932841238 L=True i3=False
+  [  FAST c3 t 36        home] healthy=True status=4 code=0 n=205 rate=143.557422969 peak=0.080892408 v_peak=1.34818989 L=True i3=False
+  [ setup  c3 before CARRY] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ CARRY c3 t 37        pick] healthy=True status=4 code=0 n=2368 rate=142.91749653 peak=0.018844203 v_peak=0.314069891 L=True i3=False
+  [ CARRY c3 t 38       place] healthy=True status=4 code=0 n=1890 rate=142.932768661 peak=0.018844199 v_peak=0.314145716 L=True i3=False
+  [ setup  c3 before CONC] reposition -> cell_a__conveyor_1__infeed+0.1m status=4 code=0
+  [ setup  c3 before CONC] load arms live=True after 0.0s accepted={'arm_2': 13, 'arm_3': 14}
+  [  CONC c3 t 39        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+  [  CONC c3 t 40  above_pick] healthy=True status=4 code=0 n=760 rate=143.045360437 peak=0.018845595 v_peak=0.314093198 L=True i3=False
+  [  CONC c3 t 41 above_place] healthy=True status=4 code=0 n=1151 rate=142.98136646 peak=0.018874448 v_peak=0.314516712 L=True i3=False
+  [  CONC c3 t 42        home] healthy=True status=4 code=0 n=693 rate=143.063583815 peak=0.018848806 v_peak=0.314146699 L=True i3=False
+
+== I9 (context only): {"start": {"at": "block start", "sim_stamp": 36.141, "wall_monotonic": 115078.653597549, "messages_received": 966}, "end": {"at": "block end", "sim_stamp": 410.942, "wall_monotonic": 115493.564792025, "messages_received": 54242}, "sim_span_s": 374.801, "wall_span_s": 414.91119447600795, "ratio": 0.9033282422599775, "note": "context only; criteria.md I9 -- this enters no verdict in section 7, and Gazebo's own real_time_factor field is never quoted"} ==
+== V1 closing reading: v1_clean=True disagreed_mid_block=False ==
+== B3: 42 of 42 trials written ==
