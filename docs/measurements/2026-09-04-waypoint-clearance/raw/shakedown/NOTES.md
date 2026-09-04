@@ -113,3 +113,56 @@ read that file. It exists so that the distance computation does not ship unexerc
    data**, may not be compared against `STEP_MID`, and may not be read as evidence for or
    against PRED4. It is recorded here only because a reader of this directory will see it in
    the JSON and should know it has been noticed and refused.
+
+---
+
+## Correction, 2026-09-04 — two claims above were about a harness that did not do what they say
+
+A pre-freeze review of the harness read the code rather than this file and found that **two of
+the sentences above describe an intent the committed harness did not carry out**. Both are
+corrected here rather than in the body, because the body is the record of what the shakedown
+found and that record stands. **No threshold moved, `criteria.md` was not touched, and no
+capture was re-run** — section 10 grants no second capture shakedown and none was taken.
+
+**Defect 4's fix landed on neither end, and this file said it landed on both.** The paragraph
+above states that a settled publisher reading "is taken at the end of every capture" and that
+"V4 is stated over the settled count with the first-match count beside it". Neither held:
+
+- The reading was taken **immediately after the capture loop exited — and the loop exits
+  *because* the scenario process exited**, so it sampled a graph being torn down. That is not
+  the settled graph V4 is a statement about, and it is not the graph the trajectories were
+  published on.
+- `settled_publisher_count` was **read nowhere at all**: `analyse.py` stated V4 over the
+  **first-match** count, which is the one state section 2.1's expectation of two per arm is
+  explicitly *not* about.
+
+*Corrected in the harness:* the reading is re-taken inside the capture loop on its own timer,
+so the reading that travels is the **last one taken while the scenario was still running**, and
+it carries the instant it was taken and a flag saying it was taken while the cell was up. V4 is
+now stated over it, with the first-match count printed beside it and a separate line that fires
+when an arm-capture carries no reading taken while the scenario ran. **Defect 4's own finding
+is untouched**: whether the settled count is two, three, or time-dependent is still not
+established, and this shakedown still does not establish it.
+
+**Residual 1's list of unexercised fixes was three items short, and is now longer still.** It
+named four; the settled reading was one of them and, as above, was not implemented as
+described. Four further capture-side changes landed on 2026-09-04 and are **also unexercised**:
+the per-capture receipt index that I2 reading (c) joins on, the log-order attribution walk that
+replaces a positional join, the settled reading above, and a `finally` that kills
+`./scripts/scenario` on **every** exit from the capture block — without which a
+`subprocess.TimeoutExpired` out of `running_geometry` aborted the block and left the cell
+running unsupervised on the checkout's domain, where it would have bitten the next block's
+domain guard. **Residual 1 therefore grows rather than shrinks, and it is still the largest
+risk this rig carries into its first block.**
+
+**Residual 3's wall clock is superseded and both figures stand.** The 76 s / 1.2 s-per-waypoint
+figure is what the shakedown measured. The compute stage has since been changed to serve
+TUNNEL1's bracketing distance maps from the maps it has already computed at each waypoint,
+which is bit-identical by construction and was verified byte for byte on this very capture; the
+same trajectory on the same host now computes in **38.4 s**, about 0.62 s per waypoint.
+`../../harness/README.md` carries both, and also records what residual 3 did not: **REPRO1 needs
+three full compute passes**, so the campaign's compute is about three times one pass.
+
+**One thing this correction does not do.** It publishes no figure from this directory as data,
+and the numbers above are wall clocks and code readings rather than measurements of the cell.
+Section 10's exclusion is unchanged and all three of its refusals still stand.

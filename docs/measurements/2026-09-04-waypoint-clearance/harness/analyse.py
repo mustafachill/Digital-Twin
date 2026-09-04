@@ -112,9 +112,19 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "it does not say every pair of every interval is evaluated at every sub-sample, and the "
         "literal reading would multiply the compute by the sub-sample count for pairs that "
         "provably cannot reach contact. The bound is `sum |delta_j| * reach_j`, where `reach_j` "
-        "bounds the distance from joint j's axis to any point of the link; a linear joint-space "
-        "interpolation cannot displace a point further than that. **It can only skip a pair "
-        "TUNNEL1 could not have fired on**, and TUNNEL1's condition is unchanged. No threshold "
+        "is **the link's own maximum vertex radius about its origin, plus the joint-origin "
+        "offsets over the joints STRICTLY BETWEEN j and the link** -- which bounds the distance "
+        "from joint j's axis to any point of the link, so a linear joint-space interpolation "
+        "cannot displace a point further than the sum. **It can only skip a pair TUNNEL1 could "
+        "not have fired on**, and TUNNEL1's condition is unchanged. **BOTH TERMS ARE "
+        "LOAD-BEARING AND BOTH WERE WRONG UNTIL 2026-09-04**, before this campaign's first "
+        "trial: the radius was omitted entirely and the offsets were shifted by one joint, "
+        "which left `reach[link2][joint2] = 0.0` against a mesh radius of 0.3385 m and made "
+        "the skip UNSOUND -- brute-forced against the shakedown's own 62-waypoint capture, the "
+        "actual displacement exceeded the bound on `link3` (0.011686 m against 0.009040 m) and "
+        "on `link2` (0.002609 m against 0.000000 m). The sentence above is a claim about the "
+        "code and it is checkable: `geometry.joint_reach` requires the radii rather than "
+        "defaulting them, because a default of zero is exactly that defect. No threshold "
         "moved, and the skipped and taken counts are both published."
     ),
     (
@@ -126,6 +136,97 @@ DEVIATIONS: tuple[tuple[str, str], ...] = (
         "numbers. Those two fields, and the self-test's own reference string, are excluded from "
         "the comparison and are printed beside it; **every measured quantity is compared "
         "byte-for-byte**. No threshold moved."
+    ),
+    (
+        "7",
+        "**Rule M's censoring is applied to section 4.3's BOUND, and rule M's sentence is "
+        "about the DISTANCE; the distributions therefore extend beyond CENSOR and the "
+        "near-field figure is reported beside every one of them.** The broad phase is a sound "
+        "sphere-sphere LOWER bound, so a pair that survives it is evaluated exactly and its "
+        "true distance may be far larger -- and it then enters every distribution, every "
+        "minimum and every difference. Section 4.3 supports exactly this; rule M's own words "
+        "-- 'any pair beyond CENSOR (0.500 m) is reported as > 0.500 m and enters no "
+        "distribution' -- do not, and are false of the data rather than of the code. **The "
+        "rule is APPLIED LITERALLY AS IMPLEMENTED and criteria.md is not touched** (V9): the "
+        "headline verdicts stay computed over every evaluated pair, and the compute stage "
+        "additionally publishes the subset inside CENSOR under BOTH geometries, which this "
+        "analyser prints beside DELTA1 and MARGIN1 as REPORTED AND DECIDING NOTHING. The "
+        "write-up can then state rule M's number as well as the implemented one. **No "
+        "threshold moved and no verdict is computed from the restriction.**"
+    ),
+    (
+        "8",
+        "**A publication is joined to a RECEIPT by position, and only the planner call is "
+        "joined to the publication by log order.** I2 reading (c) registers that a `Calling "
+        "Planner` line is 'matched to the publication that follows it in the same pipeline "
+        "run', and that half is implemented as an ordering over the log: a refusal writes a "
+        "planner line and no publication, a Pilz -> OMPL fallback writes two lines for one "
+        "publication, and the walk in `common.scrape_capture_log` resolves both. **The "
+        "remaining half is not an ordering and cannot be**: the k-th publication ON AN ARM IN "
+        "A CAPTURE is joined to the k-th receipt on that arm in that capture, because nothing "
+        "the pipeline emits and nothing the message carries identifies a publication to its "
+        "subscriber. A rule C-ii shortfall -- a publication that was logged and not received "
+        "-- therefore shifts every later attribution in that capture on that arm. **The "
+        "direction it errs in is stated: it MIS-ATTRIBUTES rather than drops**, so a capture "
+        "with a non-zero C-ii shortfall has an attribution this campaign cannot vouch for, "
+        "and C-ii's count is printed beside STEP1 for exactly that reason. No threshold moved."
+    ),
+    (
+        "9",
+        "**Four rules are implemented at a stated distance from their registered wording, "
+        "each erring conservatively, each carried rather than fixed before the first trial.** "
+        "(a) **V6** compares the between-BLOCK spread of a metric's per-block extreme against "
+        "rule R's MINIMUM INTERESTING SIZE for that metric, rather than against the "
+        "registered between-capture difference -- a different quantity, and one that fires "
+        "MORE readily, so a firing over-reports rather than under-reports. (b) **Neither V6's "
+        "INCONCLUSIVE downgrade nor V7's with-and-without comparison is applied to any printed "
+        "verdict**: both rules print their finding and the downgrade is left for the write-up, "
+        "which is where `ANALYSIS.md` must apply it -- V7's own line asserts the practice and "
+        "this analyser does not perform it. (c) **REPRO1's cross-interpreter comparison "
+        "`zip`s lists and scores an absent key as 0.0**, so a run producing FEWER "
+        "trajectories reads as agreeing; the same-interpreter clause is a full byte "
+        "comparison and is unaffected, and it is the clause that would catch a truncated run. "
+        "(d) **The I4 re-read timer is shared across all three arms**, so each arm's effective "
+        "re-read period is about three times the documented one, and the loop stops re-reading "
+        "an arm on its FIRST non-empty read while `NOTES.md` says the last non-empty read is "
+        "what travels. **No threshold moved in any of the four.**"
+    ),
+    (
+        "10",
+        "**Three third-state slips and one unregistered constant, stated rather than "
+        "corrected.** (a) **V4's `other` set excludes a count of zero**, so an arm-capture "
+        "whose settled publisher count is 0 is not reported by V4 -- it is caught by rule "
+        "C-i's door clause instead, which is where a never-matched arm belongs, but V4's own "
+        "line is silent about it. (b) **V15's test can effectively never fire**: it asks for a "
+        "recorded header stamp below zero, and a `builtin_interfaces/Time` is unsigned, so the "
+        "rule prints 'did not fire' over a condition the message shape forbids. (c) "
+        "**`instrument()`'s kernel line reads a MISSING self-test as clean**: `residual is not "
+        "None and residual > DIFF_FLOOR` is False both when the residual is small and when "
+        "there is no self-test at all. (d) **`capture.py`'s `--startup-ceiling` defaults to "
+        "180.0 s and is registered in `criteria.md` nowhere.** It bounds the harness's own "
+        "wait and decides no measured quantity, and like `SCENARIO_WALL_CEILING_S` it is "
+        "deliberately far above every ceiling the scenario itself carries. **No scenario "
+        "ceiling is widened anywhere here.**"
+    ),
+    (
+        "11",
+        "**Four exactness slips in the reporting, each naming the direction it errs in.** (a) "
+        "`reversed_pairs` in DELTA1 and the `censored` totals in DELTA1 and MARGIN1 aggregate "
+        "over EVERY pair including section 2.2.1's standing pair, which section 2.2.1 excludes "
+        "BY NAME from every aggregate; the delta, minimum and TIGHT/CLEAR populations beside "
+        "them correctly exclude it, so the slip inflates two counts and moves no verdict -- "
+        "except that a REVERSED flip on the standing pair alone would read as a rule-E "
+        "DISAGREEMENT, which errs toward reporting an instrument failure rather than away "
+        "from one. (b) `_root_of` in `fk_check.py` hardcodes `f'{arm}_mount'` while its "
+        "docstring says it reads the root from the description. (c) TUNNEL1's sub-sampling "
+        "summary takes the LAST block's counters rather than summing over the blocks, so with "
+        "more than one block it under-reports the sub-intervals taken and the ceiling hits; "
+        "the per-event records it stands beside are complete. (d) `capture.py`'s "
+        "`running_geometry` still raises `subprocess.TimeoutExpired` out of the capture loop "
+        "rather than recording a failed read, so an unresponsive `description_publisher` "
+        "ABORTS the block instead of failing V2 on that arm-capture. The block still seals "
+        "(V1) and, since 2026-09-04, no longer orphans its `./scripts/scenario` process. **No "
+        "threshold moved in any of the four.**"
     ),
 )
 
@@ -279,21 +380,66 @@ def load_blocks(raw: Path, allow_shakedown: bool) -> dict[str, dict]:
         rows = json.loads(path.read_text())
         if not allow_shakedown:
             rows = [row for row in rows if not row.get("is_shakedown")]
+        computed, computed_refusals = _campaign_computed(
+            _read(raw / f"{label}_computed.json", {}),
+            f"{label}_computed.json", allow_shakedown,
+        )
+        repro: dict[str, dict] = {}
+        for path2 in sorted(raw.glob(f"{label}_computed_*.json")):
+            document, refusals = _campaign_computed(_read(path2, {}), path2.name,
+                                                    allow_shakedown)
+            computed_refusals.extend(refusals)
+            repro[path2.name] = document
         blocks[label] = {
             "label": label,
             "rows": rows,
             "captures": _read(raw / f"{label}_captures.json", []),
             "header": _read(raw / f"{label}_header.json", {}),
-            "computed": _read(raw / f"{label}_computed.json", {}),
+            "computed": computed,
+            "computed_refusals": computed_refusals,
             "fkcheck": _read(raw / f"{label}_fkcheck.json", {}),
             "sealed": _read(raw / f"{label}_sealed.json", {}),
             "complete": _read(raw / f"{label}_complete.json", None),
-            "repro": {
-                path2.name: _read(path2, {})
-                for path2 in sorted(raw.glob(f"{label}_computed_*.json"))
-            },
+            "repro": repro,
         }
     return blocks
+
+
+def _campaign_computed(document: dict, name: str, allow_shakedown: bool
+                       ) -> tuple[dict, list[str]]:
+    """A computed document, or NOTHING and a stated refusal. **THE PROVENANCE IS IN THE
+    DOCUMENT AND NOT IN ITS FILE NAME.**
+
+    `compute.py --diagnostic-scene-from-generated-file` takes the scene from the GENERATED
+    FILE instead of I4's read-back, which `criteria.md` I4 forbids for a measurement. It
+    writes `<label>_diagnostic.json` and prints a NOT-DATA banner -- and until 2026-09-04 that
+    was the ONLY thing keeping it out, because this file refused it by FILE NAME. Copying
+    `SHAKEDOWN_diagnostic.json` over `SHAKEDOWN_computed.json` published `DELTA1 = SMALLER`,
+    `MARGIN1 = TIGHT` and `K-i exercised = True` off generated-file geometry with no warning
+    anywhere in 385 lines of output. The stamp the stage writes into the document itself is
+    read here instead, exactly as `is_shakedown` is read off a row rather than off its file
+    name (deviation 3).
+
+    A refused document is dropped rather than annotated, so every verdict derived from it
+    reaches its own NOT EVALUABLE state through its own registered wording. The refusal is
+    returned and printed; it is never silent.
+    """
+    if not document:
+        return {}, []
+    refusals: list[str] = []
+    if document.get("diagnostic_scene_from_generated_file"):
+        refusals.append(
+            f"{name} carries diagnostic_scene_from_generated_file = true: its scene comes "
+            f"from the GENERATED FILE and not from I4's read-back. criteria.md I4 requires "
+            f"the read-back, so this is NOT DATA under any file name and is DROPPED"
+        )
+    if document.get("is_shakedown") and not allow_shakedown:
+        refusals.append(
+            f"{name} carries is_shakedown = true: criteria.md section 10 says the shakedown "
+            f"is NOT DATA, and the flag travels on the document rather than on its file name "
+            f"(deviation 3). DROPPED"
+        )
+    return ({}, refusals) if refusals else (document, [])
 
 
 def _read(path: Path, default):
@@ -361,10 +507,50 @@ def admit(blocks: dict[str, dict]) -> tuple[dict[str, dict], dict]:
 # ---------------------------------------------------------------------------
 # Per-capture assembly
 # ---------------------------------------------------------------------------
-def captures_of(kept: dict[str, dict]) -> dict[str, dict]:
-    """Everything, grouped by capture. Rule T: every verdict is stated per capture."""
+def captures_of(kept: dict[str, dict]) -> tuple[dict[str, dict], dict]:
+    """Everything, grouped by capture. Rule T: every verdict is stated per capture.
+
+    **THIS IS WHERE `admit` IS APPLIED TO THE DISTANCES, AND BEFORE 2026-09-04 IT WAS NOT
+    APPLIED TO THEM ANYWHERE.** Every distance verdict is computed from `<label>_computed.json`
+    -- a document written by a stage that filters no row -- while `admit` filtered
+    `<label>_trajectories.json` and handed its result to a cosmetic string inside LIVE1. V1,
+    V2, V3 and V14 therefore discarded nothing: flipping `v1_clean` to `False` on every row
+    moved one line of this analyser's output. V1 is the rule the whole two-ended
+    `snapshot`/`seal` machinery exists to serve.
+
+    The join is at the (block, capture, arm) TRIPLE, because that is the granularity the
+    compute stage aggregates to: `pairs` is a distribution over every trajectory that arm
+    produced in that capture and a single trajectory cannot be subtracted from it. A triple is
+    admitted only if EVERY row it contributed survived `admit`; one dirty row discards the
+    triple. That is the conservative direction and it is the one V1's own sentence takes --
+    "silently discards that block" -- and in practice the flags are uniform across a triple
+    anyway, since deviation 1 records that V2, V3 and V14 are read once per capture per arm
+    and travel on every row that cell produced.
+
+    The exclusion is REPORTED, not silent: the returned report names every discarded triple
+    with the rows it cost, and `main` prints it beside `admit`'s own.
+    """
     out: dict[str, dict] = {}
+    report: dict[str, dict] = {"discarded_triples": {}, "admitted_triples": {}}
     for label, block in sorted(kept.items()):
+        surviving = {id(row) for row in block.get("rows") or []}
+        groups: dict[tuple, dict] = {}
+        for row in block.get("all_rows") or block.get("rows") or []:
+            key = (row.get("capture"), row.get("arm"))
+            state = groups.setdefault(key, {"total": 0, "kept": 0})
+            state["total"] += 1
+            state["kept"] += 1 if id(row) in surviving else 0
+        admitted = {key for key, state in groups.items()
+                    if state["total"] and state["kept"] == state["total"]}
+        for key, state in sorted(groups.items(), key=lambda item: str(item[0])):
+            name = f"{label}/{key[0]}/{key[1]}"
+            if key in admitted:
+                report["admitted_triples"][name] = state["kept"]
+            else:
+                report["discarded_triples"][name] = {
+                    "rows_recorded": state["total"], "rows_surviving_admit": state["kept"]
+                }
+
         computed = block.get("computed") or {}
         by_capture_pairs = computed.get("pairs") or {}
         by_capture_trajectories: dict[str, list] = {}
@@ -384,14 +570,21 @@ def captures_of(kept: dict[str, dict]) -> dict[str, dict]:
             entry["capture_records"].append({**record, "block": label})
             for arm, rows in (by_capture_pairs.get(name) or {}).items():
                 for pair in rows:
-                    entry["pairs"].append({**pair, "block": label, "arm": pair.get("arm", arm)})
+                    arm_of = pair.get("arm", arm)
+                    if (name, arm_of) not in admitted:
+                        continue
+                    entry["pairs"].append({**pair, "block": label, "arm": arm_of})
             for record2 in by_capture_trajectories.get(name, []):
+                if (name, record2.get("arm")) not in admitted:
+                    continue
                 entry["trajectories"].append({**record2, "block": label})
             for event in tunnel.get(name, []):
+                if (name, event.get("arm")) not in admitted:
+                    continue
                 entry["tunnel"].append({**event, "block": label})
         # A row whose capture is None arrived outside every capture window and belongs to no
         # capture's figures. It is counted where the instrument is reported, not here.
-    return out
+    return out, report
 
 
 def rows_of(kept: dict[str, dict], capture: str) -> list[dict]:
@@ -488,8 +681,29 @@ def live1(captures: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
             f"{total_losses} instrument loss(es) of any kind against I5's published "
             f"{published} = {number(share, 4)}; ceiling {common.LOSS_CEILING_SHARE}")
 
-        admissible = [record for record in trajectories
+        # V5's registered discard, applied where it is registered. `criteria.md` V5: "A block
+        # whose read-back is empty is DISCARDED: a plan validated against an empty world is
+        # not the gate this campaign is about." The compute stage sets `computed = False` for
+        # such a trajectory and leaves rule C alone -- correctly, because an empty scene is
+        # not one of rule C's clauses -- and until 2026-09-04 nothing here read that flag. The
+        # capture then reported ADMISSIBLE with its full waypoint count over a record in which
+        # every distance was a distance to NOTHING, and TUNNEL1's own guard was defeated with
+        # it. The two exclusions stay on SEPARATE lines: a rule-C loss and a V5 discard are
+        # different findings and neither is folded into the other's count.
+        computable = [record for record in trajectories
                       if not record["rule_c"]["instrument_loss"]]
+        discarded = [record for record in computable if not record.get("computed")]
+        by_reason: dict[str, int] = {}
+        for record in discarded:
+            reason = record.get("why") or "the compute stage did not compute it"
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        say(f"{name} V5 empty-scene discard", bool(discarded),
+            f"{len(discarded)} of {len(computable)} rule-C-clean trajectory(ies) were "
+            f"DISCARDED because the compute stage could not compute against them, by reason: "
+            f"{json.dumps(by_reason) if by_reason else '{}'}. A plan validated against an "
+            f"EMPTY WORLD is not the gate this campaign is about, and such a record enters NO "
+            f"distribution, NO minimum and NO verdict")
+        admissible = [record for record in computable if record.get("computed")]
         waypoints = sum(record["waypoints"] for record in admissible)
         state: bool | None
         if published == 0 and received == 0:
@@ -500,7 +714,9 @@ def live1(captures: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
         verdict(
             f"LIVE1[{name}]",
             {True: "ADMISSIBLE", False: "NOT ADMISSIBLE", None: "NOT EVALUABLE"}[state],
-            f"{len(admissible)} admissible trajectory(ies) over {waypoints} waypoint(s); "
+            f"{len(admissible)} admissible trajectory(ies) over {waypoints} waypoint(s) "
+            f"({len(discarded)} further rule-C-clean trajectory(ies) DISCARDED under V5, on "
+            f"their own line); "
             f"received {received}, logged-published {published}, losses {total_losses} "
             f"(C-ii shortfall {shortfall} on its own line); Wilson 95% on "
             f"admissible/published = "
@@ -519,6 +735,7 @@ def live1(captures: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
             "published": published,
             "received": received,
             "waypoints": waypoints,
+            "discarded_v5": discarded,
             "pairs": entry["pairs"],
             "tunnel": entry["tunnel"],
             "rows": rows,
@@ -584,17 +801,38 @@ def rule_k(live: dict[str, dict]) -> dict[str, dict]:
             pair["hull"]["min"] is not None and pair["hull"]["min"] <= common.CLOSE_BAND_M
             for pair in pairs
         )
-        # K-ii needs BOTH AT ONCE. Whether the same interval carried both is answerable only
-        # from a tunnel candidacy record, so the conjunction is stated over the capture and
-        # the two halves are printed separately -- a capture failing either half fails K-ii.
-        k_ii = bool(fast) and near
-        say(f"{name} K-ii (#17's region)", not k_ii,
-            f"exercised={k_ii}; {fast} interval(s) with a step >= {common.STEP_MID_M} m, and "
-            f"a non-standing pair within {common.CLOSE_BAND_M} m: {near}. Moving fast far "
-            f"from everything tests nothing, and creeping close to something tests nothing "
-            f"either")
-        out[name] = {"k_i": k_i, "k_ii": k_ii, "closest_vendor_m": closest_vendor,
-                     "closest_pair": closest_pair, "fast_intervals": fast, "near": near}
+        # K-ii NEEDS BOTH ON ONE INTERVAL, and until 2026-09-04 this conjoined "any fast
+        # interval anywhere" with "any near pair anywhere" -- which a fast interval far from
+        # everything plus a slow creep near a table satisfies. That says #17's region was
+        # tested when it was not, which is the exact over-claim rule K exists to refuse, and
+        # it would have wrongly refuted PRED5. The compute stage now counts the conjunction
+        # per consecutive-waypoint pair and this spends that count.
+        both = sum(
+            record.get("k_ii_intervals_both_at_once", 0)
+            for record in entry.get("admissible", [])
+        )
+        measured = any(
+            record.get("k_ii_intervals_both_at_once") is not None
+            for record in entry.get("admissible", [])
+        )
+        witnesses = [record.get("k_ii_witness") for record in entry.get("admissible", [])
+                     if record.get("k_ii_witness")]
+        k_ii = bool(both) if measured else None
+        say(f"{name} K-ii (#17's region)", None if k_ii is None else not k_ii,
+            f"exercised={k_ii}; {both} consecutive-waypoint pair(s) carried BOTH a step >= "
+            f"{common.STEP_MID_M} m AND a non-standing bracketing distance <= "
+            f"{common.CLOSE_BAND_M} m ON THAT SAME INTERVAL"
+            + (f", first at {json.dumps(witnesses[0], default=str)}" if witnesses else "")
+            + f". The two halves separately, which DO NOT make the rule: {fast} interval(s) "
+              f"at or above the step anywhere, and a non-standing pair within the band "
+              f"anywhere: {near}. Moving fast far from everything tests nothing, and creeping "
+              f"close to something tests nothing either"
+            + ("" if measured else ". NOT EVALUABLE: no admissible record carries the "
+                                  "per-interval count, so the conjunction was not measured"))
+        out[name] = {"k_i": k_i, "k_ii": bool(k_ii), "k_ii_state": k_ii,
+                     "closest_vendor_m": closest_vendor,
+                     "closest_pair": closest_pair, "fast_intervals": fast, "near": near,
+                     "both_at_once_intervals": both}
     if not any(entry["k_i"] for entry in out.values()):
         say("K-i over the whole campaign", True,
             "NO capture exercised #49's region, so THE CAMPAIGN HAS NOT TESTED THAT QUESTION "
@@ -694,6 +932,34 @@ def delta1(live: dict[str, dict], regions: dict[str, dict], fk: dict[str, bool |
               f"precedence over IDENTICAL: a capture whose closest approach outside the "
               f"standing pair never reached CLOSE_BAND has measured nothing"
         )
+        # DEVIATION 7, reported beside every DELTA1 and DECIDING NOTHING. Censoring is applied
+        # to section 4.3's sphere-sphere LOWER BOUND, so a pair that survives it is evaluated
+        # exactly and may sit far beyond CENSOR -- and then enters this distribution. Rule M's
+        # own sentence, "any pair beyond CENSOR enters no distribution", is therefore false of
+        # the data, and this is the figure that honours it arithmetically.
+        near_largest = max(
+            (pair["delta_vendor_minus_hull_near_field"]["max"] for pair in aggregate
+             if (pair.get("delta_vendor_minus_hull_near_field") or {}).get("max") is not None),
+            default=None,
+        )
+        beyond = sum(pair.get("evaluations_beyond_censor") or 0 for pair in aggregate)
+        near_best = max(
+            (pair for pair in aggregate if pair.get("largest_delta_near_field")),
+            key=lambda pair: pair["largest_delta_near_field"]["delta_m"],
+            default=None,
+        )
+        say(f"{name} rule M near-field restriction (deviation 7)",
+            None,
+            f"the headline above is over EVERY evaluated pair, including pairs whose true "
+            f"distance exceeds CENSOR {common.CENSOR_M} m -- {beyond} such evaluation(s) here. "
+            f"Restricted to evaluations inside CENSOR under BOTH geometries, "
+            f"max(d_vendor - d_hull) = {number(near_largest)} m"
+            + (f", produced by ({near_best['link']}, {near_best['object']}) on "
+               f"{near_best['arm']} where hull = "
+               f"{number(near_best['largest_delta_near_field']['hull_m'])} m and vendor = "
+               f"{number(near_best['largest_delta_near_field']['vendor_m'])} m"
+               if near_best else "")
+            + ". REPORTED AND DECIDING NOTHING: no verdict above or below is computed from it")
 
         if value == "SMALLER":
             for pair in sorted(aggregate,
@@ -784,6 +1050,14 @@ def margin1(live: dict[str, dict], fk: dict[str, bool | None]) -> dict[str, str]
               f"within the thinnest object's thickness of anything BUT the arm's own "
               f"pedestal, and it does NOT say the cell cannot"
         )
+        beyond = sum(pair.get("evaluations_beyond_censor") or 0 for pair in pairs)
+        say(f"{name} rule M near-field restriction (deviation 7)", None,
+            f"{beyond} of {evaluations} evaluation(s) above sit beyond CENSOR "
+            f"{common.CENSOR_M} m under one geometry or both, because censoring is applied to "
+            f"section 4.3's BOUND and not to the distance. MARGIN1's own band "
+            f"({common.CLOSE_BAND_M} m) is far inside CENSOR, so the TIGHT/CLEAR verdict is "
+            f"unaffected either way; what the restriction changes is the denominator of the "
+            f"share printed above. REPORTED AND DECIDING NOTHING")
         for pair in sorted(tight, key=lambda pair: pair["hull"]["min"])[:20]:
             closest = pair["closest_hull"] or {}
             print(f"      TIGHT on ({pair['link']}, {pair['object']}) / {pair['arm']}: "
@@ -800,7 +1074,8 @@ def margin1(live: dict[str, dict], fk: dict[str, bool | None]) -> dict[str, str]
 # ---------------------------------------------------------------------------
 # 7.4 -- STEP1, TUNNEL1, GRIP1
 # ---------------------------------------------------------------------------
-def step1(live: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
+def step1(live: dict[str, dict], kept: dict[str, dict],
+          fk: dict[str, bool | None]) -> dict[str, dict]:
     print("\n=== 7.4 STEP1 -- the per-waypoint tool-point Cartesian step, per pipeline ===")
     print(wrap(
         "The quantity is the step of arm_N_link_tcp, the tip_link the generated bring-up "
@@ -817,7 +1092,12 @@ def step1(live: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
         entry = live.get(name) or {}
         print(f"\n  -- {name} --")
         admissible = entry.get("admissible", [])
-        attribution = _pipeline_attribution(entry, kept)
+        attribution, without_walk = _pipeline_attribution(entry, kept)
+        say(f"{name} I2(c) attribution walk", bool(without_walk),
+            f"{without_walk} capture record(s) carry no `i2c_publications` walk, so every "
+            f"trajectory of theirs is UNATTRIBUTED. A record written before the walk existed "
+            f"is not re-scraped here: the attribution travels on the record and this file "
+            f"re-derives no reading (criteria.md V1's own sentence)")
         populations: dict[str, list[float]] = {"pilz": [], "ompl": []}
         unattributed = 0
         spacing_disagreements = 0
@@ -852,6 +1132,13 @@ def step1(live: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
                 value = "NOT EVALUABLE"
             elif entry.get("state") is False:
                 value = "NOT ADMISSIBLE"
+            elif fk.get(name) is False:
+                # FK1's own sentence: NO DISTANCE VERDICT IN 7.2-7.4 IS STATED FOR A CAPTURE
+                # WHOSE FK1 DISAGREES. Section 7.4 is STEP1, TUNNEL1 and GRIP1, and STEP1's
+                # quantity is the I11-computed position of `arm_N_link_tcp` -- exactly what
+                # FK1 guards. This clause and TUNNEL1's were missing until 2026-09-04, so
+                # FK1's gate reached two of its four targets.
+                value = "NOT ADMISSIBLE"
             elif not steps:
                 value = "NOT EXERCISED"
             elif spread["max"] >= common.STEP_HIGH_M:
@@ -872,27 +1159,45 @@ def step1(live: dict[str, dict], kept: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
-def _pipeline_attribution(entry: dict, kept: dict) -> dict:
-    """I2 reading (c): the k-th `Calling Planner` line on an arm names the k-th publication.
+def _pipeline_attribution(entry: dict, kept: dict) -> tuple[dict, int]:
+    """I2 reading (c) AS REGISTERED: each `Calling Planner` line is matched to **the
+    publication that follows it in the same pipeline run**, in LOG ORDER.
 
-    Where a line's arm cannot be resolved from the launch process prefix, that arm's calls are
-    incomplete and the trajectories are left UNATTRIBUTED rather than guessed at -- STEP1's
-    own rule, which counts them on their own line and puts them in neither population.
+    That is not a positional index, and until 2026-09-04 this joined the k-th planner call on
+    an arm to the k-th publication on it. Two events break that join and both are ordinary
+    here: a `ValidateSolution` refusal writes a planner line and no publication -- REFUSE1's
+    whole subject -- and a Pilz -> OMPL fallback writes two planner lines for one publication.
+    Either shifts every later attribution on that arm, silently, into the wrong population.
+    The walk that resolves it is in `common.scrape_capture_log` and it travels ON THE RECORD;
+    this function spends it and re-derives nothing.
+
+    A publication the walk could not match to a call is attributed to no pipeline rather than
+    guessed at, and so is every trajectory of a capture recorded before the walk existed --
+    STEP1's own rule counts those on their own line and puts them in neither population.
+
+    Returns the attribution and the number of capture records that carry no walk at all.
     """
     del kept
     out: dict = {}
+    without = 0
     for record in entry.get("capture_records", []):
         block = record["block"]
-        for arm in common.ARMS:
-            calls = [call for call in record.get("i2c_planner_calls") or []
-                     if call.get("arm") == arm]
-            for index, call in enumerate(calls, start=1):
-                out[(block, record["capture"], arm, index)] = call.get("pipeline")
-    return out
+        publications = record.get("i2c_publications")
+        if publications is None:
+            without += 1
+            continue
+        for publication in publications:
+            arm = publication.get("arm")
+            if arm is None:
+                continue
+            out[(block, record["capture"], arm, publication.get("index_in_arm"))] = (
+                publication.get("pipeline")
+            )
+    return out, without
 
 
-def tunnel1(live: dict[str, dict], regions: dict[str, dict], kept: dict[str, dict]
-            ) -> dict[str, dict]:
+def tunnel1(live: dict[str, dict], regions: dict[str, dict], kept: dict[str, dict],
+            fk: dict[str, bool | None]) -> dict[str, dict]:
     print("\n=== 7.4 TUNNEL1 -- does a body pass strictly between two checked waypoints ===")
     print(wrap(
         "Between each consecutive waypoint pair the configuration is interpolated LINEARLY IN "
@@ -914,17 +1219,28 @@ def tunnel1(live: dict[str, dict], regions: dict[str, dict], kept: dict[str, dic
     for name in common.CAPTURE_NAMES:
         entry = live.get(name) or {}
         events = entry.get("tunnel", [])
+        # KEYED ON RECORDS THAT WERE ACTUALLY COMPUTED, and this is the guard R-03 defeated.
+        # A trajectory whose scene read-back held no object is `computed = False` with rule C
+        # untouched, so before 2026-09-04 it counted as admissible here and TUNNEL1 printed
+        # NOT OBSERVED over a capture in which every distance was a distance to nothing --
+        # the reassuring answer, from the loudest possible instrument failure.
+        computed_records = [record for record in entry.get("admissible", [])
+                            if record.get("computed")]
         for geometry in common.GEOMETRIES:
             mine = [event for event in events if event["geometry"] == geometry]
             if entry.get("state") is None:
                 value = "NOT EVALUABLE"
             elif entry.get("state") is False:
                 value = "NOT ADMISSIBLE"
+            elif fk.get(name) is False:
+                # FK1's own sentence: NO DISTANCE VERDICT IN 7.2-7.4 IS STATED FOR A CAPTURE
+                # WHOSE FK1 DISAGREES, and TUNNEL1's quantity is an I11-computed distance.
+                value = "NOT ADMISSIBLE"
             elif mine:
                 value = "OBSERVED"
-            elif not entry.get("admissible"):
+            elif not computed_records:
                 # NOT OBSERVED is a statement about intervals that were sub-sampled. With no
-                # admissible trajectory there is no interval and no such statement.
+                # COMPUTED trajectory there is no interval and no such statement.
                 value = "NOT EVALUABLE"
             else:
                 value = "NOT OBSERVED"
@@ -1100,9 +1416,25 @@ def valid1(kept: dict[str, dict]) -> dict[str, str]:
                     forward_instances += 1
                     if validity.get("valid") is not True:
                         forward_violations.append(row)
-                reported = set(validity.get("touched_scene_objects") or [])
+                # PER (LINK, OBJECT), which is what the amendment registers: "for each
+                # (link, object) pair the compute stage puts at d <= 0, MoveIt is expected to
+                # report THAT PAIR". Testing object membership alone counted a different
+                # link's genuine disagreement as satisfied -- and the standing pair puts its
+                # own object in `touched_scene_objects` at every configuration, so on
+                # `pedestal_N` that test was satisfied for every link of that arm. The
+                # `link|object` set has been written by `fk_check.py` all along and was read
+                # nowhere until 2026-09-04.
+                reported = set(validity.get("contact_pairs") or [])
+                objects_reported = set(validity.get("touched_scene_objects") or [])
+                pairs_available = validity.get("contact_pairs") is not None
                 for pair in row.get("compute_stage_nonpositive_pairs") or []:
-                    if pair["object"] in reported:
+                    if pairs_available:
+                        if f"{pair['link']}|{pair['object']}" in reported:
+                            continue
+                    elif pair["object"] in objects_reported:
+                        # A record written before `contact_pairs` existed can only be asked
+                        # the coarser question; it is answered at the granularity the record
+                        # carries rather than silently at the finer one.
                         continue
                     if pair["standing_pair"]:
                         known_divergent += 1
@@ -1261,6 +1593,17 @@ def _worst_numeric_difference(left, right) -> float:
 # ---------------------------------------------------------------------------
 # The validity rules
 # ---------------------------------------------------------------------------
+def _all_rows(block: dict) -> list[dict]:
+    """Every row the harness RECORDED for this block, admitted or not.
+
+    The rules below V6 are statements about the instrument and not distributions over
+    measurements, so each must speak about what was recorded rather than about what survived
+    `admit`. Reading the admitted subset made a fully-discarded block -- exactly the block
+    these rules exist to describe -- print "did not fire" on every one of them.
+    """
+    return block.get("all_rows") or block.get("rows") or []
+
+
 def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
                    live: dict[str, dict]) -> dict:
     print("\n=== Section 10 -- the validity rules, each printed whether or not it fires ===")
@@ -1314,14 +1657,37 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
         for record in block.get("captures") or []
         for arm, door in (record.get("door_by_arm") or {}).items()
     ]
-    two_publishers = [row for row in doors if row[3].get("matched_publisher_count") == 2]
-    other = [row for row in doors
-             if row[3].get("matched_publisher_count") not in (2, 0)]
-    say("V4 matched publishers", bool(other),
+    # V4 IS STATED OVER THE SETTLED COUNT, with the first-match count beside it, which is
+    # what `capture.py` says it records the two readings for. Until 2026-09-04 it was stated
+    # over the FIRST-MATCH count and `settled_publisher_count` was read nowhere at all -- so
+    # the rule spoke about a graph mid-discovery, which is the one state section 2.1's
+    # expectation of two per arm is NOT about.
+    def _settled(row) -> int | None:
+        return row[3].get("settled_publisher_count")
+
+    unsettled = [row for row in doors if not row[3].get("settled_taken_while_the_scenario_ran")]
+    two_publishers = [row for row in doors if _settled(row) == 2]
+    other = [row for row in doors if _settled(row) not in (2, 0, None)]
+    # A THIRD STATE, because a rule that evaluated nothing must not print "did not fire":
+    # a record carrying no settled reading at all -- one written before that reading existed,
+    # or a capture whose scenario exited before the first sample -- makes `other` empty for
+    # the same reason a clean graph does, and those are different sentences.
+    readings = [row for row in doors if _settled(row) is not None]
+    say("V4 matched publishers", bool(other) if readings else None,
         f"section 2.1 registers TWO publishers per arm -- one per pipeline, each loading its "
-        f"own DisplayMotionPath instance. {len(two_publishers)} of {len(doors)} arm-capture(s) "
-        f"saw exactly two; {len(other)} saw another non-zero count: "
-        f"{[(row[0], row[1], row[2], row[3].get('matched_publisher_count')) for row in other][:10]}")
+        f"own DisplayMotionPath instance. STATED OVER THE SETTLED READING: "
+        f"{len(two_publishers)} of {len(doors)} arm-capture(s) saw exactly two; {len(other)} "
+        f"saw another non-zero count: "
+        f"{[(row[0], row[1], row[2], _settled(row)) for row in other][:10]}; "
+        f"{len(doors) - len(readings)} arm-capture(s) carry NO settled reading, which is why "
+        f"this rule is NOT EVALUABLE where it says so rather than silent. The first-match "
+        f"counts beside them, which are a graph MID-DISCOVERY and decide nothing here: "
+        f"{[(row[0], row[1], row[2], row[3].get('matched_publisher_count')) for row in doors][:10]}")
+    say("V4 settled reading taken while the scenario ran", bool(unsettled),
+        f"{len(unsettled)} of {len(doors)} arm-capture(s) carry no settled reading taken "
+        f"before the scenario process exited: "
+        f"{[(row[0], row[1], row[2]) for row in unsettled][:10]}. A reading taken after it "
+        f"exited samples a graph being torn down and is not what V4 is about")
 
     v5 = [
         (label, key, value)
@@ -1388,7 +1754,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
     out["v6"] = v6
 
     flagged = sorted({
-        row["block"] for block in kept.values() for row in block["rows"]
+        row["block"] for block in kept.values() for row in _all_rows(block)
         if row.get("v7_any")
     })
     say("V7 load", bool(flagged),
@@ -1405,7 +1771,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
 
     hashes = sorted({
         str(row.get("v1", {}).get("criteria_sha256"))
-        for block in kept.values() for row in block["rows"] if row.get("v1")
+        for block in kept.values() for row in _all_rows(block) if row.get("v1")
     })
     on_disk = common.sha256(raw.parent / "criteria.md")
     moved = len(hashes) > 1 or (hashes and on_disk and hashes[0] != on_disk)
@@ -1415,7 +1781,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
 
     heads = sorted({
         str(row.get("v1", {}).get("head_moved_mid_block"))
-        for block in kept.values() for row in block["rows"] if row.get("v1")
+        for block in kept.values() for row in _all_rows(block) if row.get("v1")
     })
     say("V10 one writer", any(value == "True" for value in heads),
         f"HEAD moved mid-block on: {heads}. docs/measurements/ may advance while the campaign "
@@ -1430,7 +1796,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
         f"and every block before it is reported separately from every block after it")
 
     gz = sorted({
-        str(row.get("v12_gz_calls")) for block in kept.values() for row in block["rows"]
+        str(row.get("v12_gz_calls")) for block in kept.values() for row in _all_rows(block)
     })
     say("V12 Gazebo partition", any(value not in ("0", "None") for value in gz),
         f"the harness's own Gazebo-transport call count, carried on every row: {gz}. It "
@@ -1440,7 +1806,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
 
     sleeps = sorted({
         str((row.get("v13") or {}).get("sleeps_to_sequence_bringup"))
-        for block in kept.values() for row in block["rows"]
+        for block in kept.values() for row in _all_rows(block)
     })
     say("V13 readiness is an event", any(value == "True" for value in sleeps),
         f"carried on every row: {sleeps}. The scenarios' own bring-up gates are the event and "
@@ -1450,7 +1816,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
         (str((row.get("v14") or {}).get("ros_domain_id_env")),
          str((row.get("v14") or {}).get("resolved_from_plan")),
          str((row.get("v14") or {}).get("v14_ok")))
-        for block in kept.values() for row in block["rows"]
+        for block in kept.values() for row in _all_rows(block)
     })
     say("V14 recorder on the cell's graph", bool(report["dropped_v14"]),
         f"(env, plan-resolved, ok) seen on the records: {domains}; "
@@ -1458,7 +1824,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
         f"COMPLETE, EMPTY, PLAUSIBLE capture, which is the failure this rule exists for")
 
     nonmonotonic = [
-        row for block in kept.values() for row in block["rows"]
+        row for block in kept.values() for row in _all_rows(block)
         if row.get("header_stamp_s") is not None and row.get("received_at_wall") is not None
         and row["header_stamp_s"] < 0
     ]
@@ -1468,7 +1834,7 @@ def validity_rules(kept: dict[str, dict], report: dict, raw: Path,
         f"decision quantity is a distance, a step or a count computed offline")
 
     stragglers = [
-        row for block in kept.values() for row in block["rows"] if row.get("straggler")
+        row for block in kept.values() for row in _all_rows(block) if row.get("straggler")
     ]
     say("Trajectories outside any capture window", bool(stragglers),
         f"{len(stragglers)} trajectory(ies) arrived between or after the captures and carry "
@@ -1542,9 +1908,15 @@ def predictions(delta: dict[str, str], flips: dict[str, dict], margin: dict[str,
     observed = {key: entry["verdict"] for key, entry in tunnels.items()
                 if entry["verdict"] == "OBSERVED"}
     k_ii_fired = [name for name, entry in regions.items() if not entry["k_ii"]]
+    k_ii_unevaluable = [name for name, entry in regions.items()
+                        if entry.get("k_ii_state") is None]
     say("PRED5 (TUNNEL1 = NOT OBSERVED everywhere AND rule K-ii fires)",
         bool(observed) or not k_ii_fired,
-        f"OBSERVED on {observed or 'nothing'}; K-ii fired on {k_ii_fired}. The prediction is "
+        f"OBSERVED on {observed or 'nothing'}; K-ii fired on {k_ii_fired}, of which "
+        f"{k_ii_unevaluable or 'none'} are NOT EVALUABLE rather than measured-and-not-"
+        f"exercised -- a third state, folded into 'fired' here because rule N says a null is "
+        f"not a clearance, and named separately so that the write-up cannot lose it. The "
+        f"prediction is "
         f"that the campaign will NOT HAVE TESTED the question, and a NOT OBSERVED that rule K "
         f"refuses is the honest expected outcome -- it must not be reported as a clearance of "
         f"ADR-0027's residual")
@@ -1618,20 +1990,39 @@ def main() -> int:
     if not blocks:
         say("Blocks found", None, f"no *_trajectories.json at the top level of {raw}")
 
+    refused = [line for block in blocks.values()
+               for line in block.get("computed_refusals") or []]
+    if refused:
+        print("\n" + "#" * 100)
+        print("## COMPUTED DOCUMENT(S) REFUSED -- read the reason; a verdict below that says")
+        print("## NOT EVALUABLE may be saying so because its geometry was dropped here.")
+        for line in refused:
+            print(wrap(f"REFUSED: {line}", indent="##   "))
+        print("#" * 100)
+    say("Computed documents refused on their own provenance stamp", bool(refused),
+        f"{len(refused)} document(s) refused. The stamp is read out of the DOCUMENT and never "
+        f"off its file name: renaming a diagnostic run to `<label>_computed.json` published "
+        f"DELTA1, MARGIN1 and K-i off generated-file geometry with no warning until "
+        f"2026-09-04")
+
     kept, report = admit(blocks)
     print(f"\n  admitted: "
           f"{json.dumps({label: len(block['rows']) for label, block in sorted(kept.items())})}")
     print(f"  exclusions: {json.dumps(report, default=str)}")
 
     instrument(kept)
-    captures = captures_of(kept)
+    captures, join_report = captures_of(kept)
+    print(f"  discarded at the join (V1/V2/V3/V14, per block/capture/arm triple): "
+          f"{json.dumps(join_report['discarded_triples'], default=str)}")
+    print(f"  admitted at the join: "
+          f"{json.dumps(join_report['admitted_triples'], default=str)}")
     live = live1(captures, kept)
     regions = rule_k(live)
     fk = fk1(kept)
     delta, flips = delta1(live, regions, fk)
     margin = margin1(live, fk)
-    steps = step1(live, kept)
-    tunnels = tunnel1(live, regions, kept)
+    steps = step1(live, kept, fk)
+    tunnels = tunnel1(live, regions, kept, fk)
     grip = grip1(live)
     refusals = refuse1(live)
     validity = valid1(kept)

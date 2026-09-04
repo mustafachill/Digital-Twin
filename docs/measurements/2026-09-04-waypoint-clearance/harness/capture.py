@@ -107,7 +107,15 @@ class Recorder(Node):
         self.lock = threading.Lock()
         self.capture: str | None = None
         self.received: list[dict] = []
+        #: Receipts per arm since the recorder started -- BLOCK-CUMULATIVE, because one
+        #: recorder outlives all three scenarios (section 2.1's QoS is not latched, so it has
+        #: to). It is the instrument's own total and it is what `gained` differences.
         self.counts = {arm: 0 for arm in common.ARMS}
+        #: Receipts per arm SINCE THE CURRENT CAPTURE OPENED, and the join key for I2 reading
+        #: (c). The attribution enumerates each capture's `Calling Planner` lines from 1, and
+        #: joining that to a block-cumulative index mis-attributed every capture after the
+        #: first in a block to the wrong pipeline and dropped the tail as unattributed.
+        self.capture_counts = {arm: 0 for arm in common.ARMS}
         self.topics = {arm: common.display_topic(arm) for arm in common.ARMS}
         self.subscriptions_by_arm = {
             arm: self.create_subscription(
@@ -135,9 +143,11 @@ class Recorder(Node):
             with self.lock:
                 capture = self.capture
                 self.counts[arm] += 1
-                index = self.counts[arm]
-                self.received.append(_trajectory_record(arm, capture, index, received_at,
-                                                        message))
+                self.capture_counts[arm] += 1
+                self.received.append(
+                    _trajectory_record(arm, capture, self.capture_counts[arm],
+                                       self.counts[arm], received_at, message)
+                )
         return handle
 
     # -- V4 and rule C-i ---------------------------------------------------
@@ -272,8 +282,8 @@ class Recorder(Node):
         }
 
 
-def _trajectory_record(arm: str, capture: str | None, index: int, received_at: float,
-                       message: DisplayTrajectory) -> dict:
+def _trajectory_record(arm: str, capture: str | None, index: int, block_index: int,
+                       received_at: float, message: DisplayTrajectory) -> dict:
     """One captured trajectory, recorded WHOLE (I1).
 
     `trajectory_start.joint_state` is recorded in full because section 5.4's completion
@@ -306,7 +316,11 @@ def _trajectory_record(arm: str, capture: str | None, index: int, received_at: f
     return {
         "arm": arm,
         "capture": capture,
+        # PER CAPTURE, counted from 1, and the key I2 reading (c)'s attribution joins on.
         "receive_index_in_arm": index,
+        # The block-cumulative one, kept beside it so that the reset is visible on the record
+        # rather than inferred from two numbers agreeing in the first capture of a block.
+        "receive_index_in_arm_in_block": block_index,
         "received_at_wall": received_at,
         "received_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(received_at)),
         "model_id": message.model_id,
@@ -338,6 +352,11 @@ def run_capture(recorder: Recorder, name: str, scenario: str, logs: Path,
     with recorder.lock:
         recorder.capture = name
         first_index = {arm: recorder.counts[arm] for arm in common.ARMS}
+        # The per-capture receipt index restarts with the capture window, so that the k-th
+        # receipt on an arm in THIS capture joins the k-th planner call scraped from THIS
+        # capture's log. Anything received between captures carries `capture = None`, joins
+        # nothing and is reported as a straggler.
+        recorder.capture_counts = {arm: 0 for arm in common.ARMS}
 
     print(f"== {name}: ./scripts/scenario {scenario} -> {log_path.name} ==", flush=True)
     with log_path.open("w") as handle:
@@ -347,84 +366,110 @@ def run_capture(recorder: Recorder, name: str, scenario: str, logs: Path,
             stderr=subprocess.STDOUT,
             cwd=str(common.repo_root()),
         )
+        # THE SCENARIO IS KILLED ON EVERY EXIT FROM THIS BLOCK, not only on the ceiling.
+        # `running_geometry` calls `subprocess.run(timeout=...)`, which raises
+        # `TimeoutExpired`; that unwound straight past `process.kill()` and left
+        # `./scripts/scenario` -- and the whole cell under it -- running unsupervised. The
+        # teardown sweep in `run_cell_block.sh` does not name this process, so the orphan sat
+        # on the checkout's domain and bit the NEXT block's domain guard. The abort itself is
+        # unchanged: the block still aborts and still seals (V1), it just no longer leaves a
+        # cell behind it.
+        try:
+            door: dict[str, dict] = {}
+            geometry: dict[str, dict] = {}
+            scene: dict[str, dict] = {}
+            scene_attempts: dict[str, int] = {arm: 0 for arm in common.ARMS}
+            next_scene_read = started
+            # V4's SETTLED reading, re-taken INSIDE the loop, so what travels is the last
+            # reading taken while the scenario was still running. Taken after the loop --
+            # and the loop exits BECAUSE the scenario process exited -- it sampled a graph
+            # being torn down, which is not the settled graph V4 is a statement about and
+            # is not the graph the trajectories were published on. The cadence reuses
+            # `SCENE_REREAD_S` rather than adding a constant, on its OWN timer so that it
+            # cannot interact with I4's. It sequences nothing and gates nothing (P4); it
+            # only says how often an observation is sampled.
+            settled: dict[str, list[dict]] = {arm: [] for arm in common.ARMS}
+            settled_reads = 0
+            settled_at_s: float | None = None
+            next_settled_read = started
+            deadline = started + timeout_s
+            while process.poll() is None and time.monotonic() < deadline:
+                if time.monotonic() >= next_settled_read:
+                    next_settled_read = time.monotonic() + SCENE_REREAD_S
+                    settled = {arm: recorder.publishers_on(arm) for arm in common.ARMS}
+                    settled_reads += 1
+                    settled_at_s = time.monotonic() - started
+                for arm in common.ARMS:
+                    if arm not in door:
+                        publishers = recorder.publishers_on(arm)
+                        if publishers:
+                            waited = time.monotonic() - started
+                            door[arm] = {
+                                "matched_publisher_count": len(publishers),
+                                "matched_publishers": publishers,
+                                "waited_s": waited,
+                                "matched_at_wall": time.time(),
+                                "ceiling_s": common.DOOR_CEILING_S,
+                                "within_ceiling": waited <= common.DOOR_CEILING_S,
+                                "subscription_qos": {
+                                    "history": "KEEP_ALL",
+                                    "reliability": "RELIABLE",
+                                    "durability": "VOLATILE",
+                                },
+                                "topic": recorder.topics[arm],
+                            }
+                            print(f"   door open on {arm} after {waited:.1f}s, "
+                                  f"{len(publishers)} matched publisher(s)", flush=True)
+                    elif arm not in geometry:
+                        # I3, V2 and V3, read off the cell THIS capture is running. Taken once the
+                        # door is open, because that is the first instant the arm's own nodes are
+                        # provably on the graph.
+                        geometry[arm] = common.running_geometry(common.arm_namespace(arm),
+                                                                timeout_s=60.0)
+                        print(f"   V2/V3 on {arm}: chars={geometry[arm]['description_chars']} "
+                              f"hulls={geometry[arm]['hull_collision_refs']} "
+                              f"v2={geometry[arm]['v2_ok']} v3={geometry[arm]['v3_ok']}",
+                              flush=True)
+                    elif not scene.get(arm, {}).get("object_count"):
+                        # I4 IS RE-READ UNTIL THE SCENE IS NON-EMPTY, and the shakedown is why.
+                        # Read once at the instant the door opened, the scene came back with ZERO
+                        # objects on all three arms: bring-up applies the generated planning scene
+                        # after `move_group` starts answering, so a single early read records an
+                        # empty world -- and the compute stage's every distance would then be a
+                        # distance to nothing. V5 discards a block whose read-back is empty, so a
+                        # harness that reads too early would discard every block for a defect of
+                        # its own. The LAST non-empty read is what travels; the attempt count and
+                        # the first non-empty instant travel with it.
+                        if time.monotonic() >= next_scene_read:
+                            next_scene_read = time.monotonic() + SCENE_REREAD_S
+                            scene_attempts[arm] += 1
+                            reading = recorder.planning_scene(arm, timeout_s=30.0)
+                            reading["attempts"] = scene_attempts[arm]
+                            reading["read_at_s_into_capture"] = time.monotonic() - started
+                            previous = scene.get(arm)
+                            if reading.get("object_count") or previous is None:
+                                scene[arm] = reading
+                            if reading.get("object_count"):
+                                print(f"   I4 on {arm}: read_ok={reading.get('read_ok')} "
+                                      f"objects={reading.get('object_count')} after "
+                                      f"{scene_attempts[arm]} attempt(s), "
+                                      f"{reading['read_at_s_into_capture']:.0f}s into the capture",
+                                      flush=True)
+                time.sleep(POLL_S)
 
-        door: dict[str, dict] = {}
-        geometry: dict[str, dict] = {}
-        scene: dict[str, dict] = {}
-        scene_attempts: dict[str, int] = {arm: 0 for arm in common.ARMS}
-        next_scene_read = started
-        deadline = started + timeout_s
-        while process.poll() is None and time.monotonic() < deadline:
-            for arm in common.ARMS:
-                if arm not in door:
-                    publishers = recorder.publishers_on(arm)
-                    if publishers:
-                        waited = time.monotonic() - started
-                        door[arm] = {
-                            "matched_publisher_count": len(publishers),
-                            "matched_publishers": publishers,
-                            "waited_s": waited,
-                            "matched_at_wall": time.time(),
-                            "ceiling_s": common.DOOR_CEILING_S,
-                            "within_ceiling": waited <= common.DOOR_CEILING_S,
-                            "subscription_qos": {
-                                "history": "KEEP_ALL",
-                                "reliability": "RELIABLE",
-                                "durability": "VOLATILE",
-                            },
-                            "topic": recorder.topics[arm],
-                        }
-                        print(f"   door open on {arm} after {waited:.1f}s, "
-                              f"{len(publishers)} matched publisher(s)", flush=True)
-                elif arm not in geometry:
-                    # I3, V2 and V3, read off the cell THIS capture is running. Taken once the
-                    # door is open, because that is the first instant the arm's own nodes are
-                    # provably on the graph.
-                    geometry[arm] = common.running_geometry(common.arm_namespace(arm),
-                                                            timeout_s=60.0)
-                    print(f"   V2/V3 on {arm}: chars={geometry[arm]['description_chars']} "
-                          f"hulls={geometry[arm]['hull_collision_refs']} "
-                          f"v2={geometry[arm]['v2_ok']} v3={geometry[arm]['v3_ok']}",
-                          flush=True)
-                elif not scene.get(arm, {}).get("object_count"):
-                    # I4 IS RE-READ UNTIL THE SCENE IS NON-EMPTY, and the shakedown is why.
-                    # Read once at the instant the door opened, the scene came back with ZERO
-                    # objects on all three arms: bring-up applies the generated planning scene
-                    # after `move_group` starts answering, so a single early read records an
-                    # empty world -- and the compute stage's every distance would then be a
-                    # distance to nothing. V5 discards a block whose read-back is empty, so a
-                    # harness that reads too early would discard every block for a defect of
-                    # its own. The LAST non-empty read is what travels; the attempt count and
-                    # the first non-empty instant travel with it.
-                    if time.monotonic() >= next_scene_read:
-                        next_scene_read = time.monotonic() + SCENE_REREAD_S
-                        scene_attempts[arm] += 1
-                        reading = recorder.planning_scene(arm, timeout_s=30.0)
-                        reading["attempts"] = scene_attempts[arm]
-                        reading["read_at_s_into_capture"] = time.monotonic() - started
-                        previous = scene.get(arm)
-                        if reading.get("object_count") or previous is None:
-                            scene[arm] = reading
-                        if reading.get("object_count"):
-                            print(f"   I4 on {arm}: read_ok={reading.get('read_ok')} "
-                                  f"objects={reading.get('object_count')} after "
-                                  f"{scene_attempts[arm]} attempt(s), "
-                                  f"{reading['read_at_s_into_capture']:.0f}s into the capture",
-                                  flush=True)
-            time.sleep(POLL_S)
-
-        # A SETTLED publisher reading, taken while the cell is still up. The first-match
-        # reading is a snapshot of a graph mid-discovery -- the shakedown caught arm_1 with
-        # ONE publisher at 2.4 s and arm_2 and arm_3 with THREE at 5.8 s -- and V4's
-        # expectation of two per arm is a statement about a settled graph, not about the
-        # instant a subscription first matched. BOTH readings travel; neither replaces the
-        # other, and V4 is stated over the settled one with the first-match count beside it.
-        settled = {arm: recorder.publishers_on(arm) for arm in common.ARMS}
-
-        timed_out = process.poll() is None
-        if timed_out:
-            process.kill()
-        exit_code = process.wait()
+            # The first-match reading is a snapshot of a graph mid-discovery -- the shakedown
+            # caught arm_1 with ONE publisher at 2.4 s and arm_2 and arm_3 with THREE at 5.8 s --
+            # and V4's expectation of two per arm is a statement about a settled graph, not about
+            # the instant a subscription first matched. BOTH readings travel; neither replaces the
+            # other, and V4 is stated over the settled one with the first-match count beside it.
+            timed_out = process.poll() is None
+            if timed_out:
+                process.kill()
+            exit_code = process.wait()
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
 
     text = log_path.read_text(errors="replace")
     scrape = common.scrape_capture_log(text)
@@ -454,6 +499,9 @@ def run_capture(recorder: Recorder, name: str, scenario: str, logs: Path,
                                  "waited_s": None, "matched_publishers": []}),
                 "settled_publisher_count": len(settled.get(arm, [])),
                 "settled_publishers": settled.get(arm, []),
+                "settled_reads": settled_reads,
+                "settled_read_at_s_into_capture": settled_at_s,
+                "settled_taken_while_the_scenario_ran": settled_reads > 0,
             }
             for arm in common.ARMS
         },

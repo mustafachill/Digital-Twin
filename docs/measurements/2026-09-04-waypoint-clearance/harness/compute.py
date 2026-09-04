@@ -372,8 +372,8 @@ class PairAccumulator:
 
     __slots__ = ("arm", "link", "object", "standing", "hull", "vendor", "delta",
                  "censored", "penetrating_hull", "penetrating_vendor", "close_band",
-                 "closest_hull", "largest_delta", "flip_hull_only", "flip_reversed",
-                 "grip_change", "evaluations")
+                 "closest_hull", "largest_delta", "largest_delta_near_field",
+                 "flip_hull_only", "flip_reversed", "grip_change", "evaluations")
 
     def __init__(self, arm: str, link: str, obj: str) -> None:
         self.arm = arm
@@ -389,6 +389,14 @@ class PairAccumulator:
         self.close_band = 0
         self.closest_hull: dict | None = None
         self.largest_delta: dict | None = None
+        #: RULE M's own sentence, made arithmetic. The broad phase censors on a SOUND LOWER
+        #: BOUND (section 4.3), so a pair that survives it is evaluated exactly and its true
+        #: distance may be far beyond CENSOR -- and then enters every distribution. Rule M
+        #: says "any pair beyond CENSOR enters no distribution", which is false of the data.
+        #: Deviation 7 records the divergence; this is the near-field figure reported beside
+        #: the headline so that the write-up can state rule M's number as well as the
+        #: implemented one. IT DECIDES NOTHING: no verdict is computed from it.
+        self.largest_delta_near_field: dict | None = None
         self.flip_hull_only: list[dict] = []
         self.flip_reversed: list[dict] = []
         self.grip_change: dict | None = None
@@ -412,6 +420,12 @@ class PairAccumulator:
         if self.largest_delta is None or difference > self.largest_delta["delta_m"]:
             self.largest_delta = {"delta_m": difference, "hull_m": hull, "vendor_m": vendor,
                                   **where}
+        if max(hull, vendor) <= common.CENSOR_M and (
+            self.largest_delta_near_field is None
+            or difference > self.largest_delta_near_field["delta_m"]
+        ):
+            self.largest_delta_near_field = {"delta_m": difference, "hull_m": hull,
+                                             "vendor_m": vendor, **where}
         # FLIP1, section 7.2. HULL-ONLY CONTACT is a finding about GEOMETRY; REVERSED is the
         # direction containment forbids and is a DISAGREEMENT under rule E.
         if hull <= 0.0 < vendor:
@@ -424,6 +438,17 @@ class PairAccumulator:
             self.grip_change = {"change_m": change, **where}
 
     def summarise(self) -> dict:
+        # The near-field restriction, derived rather than stored: rule M's sentence applied to
+        # the DISTANCE rather than to section 4.3's bound. `delta` is restricted to the
+        # evaluations where BOTH geometries are inside CENSOR, so it is a difference between
+        # two near-field numbers and not a difference with one end outside.
+        near_hull = [value for value in self.hull if value <= common.CENSOR_M]
+        near_vendor = [value for value in self.vendor if value <= common.CENSOR_M]
+        near_delta = [
+            difference
+            for hull, vendor, difference in zip(self.hull, self.vendor, self.delta)
+            if max(hull, vendor) <= common.CENSOR_M
+        ]
         return {
             "arm": self.arm,
             "link": self.link,
@@ -439,6 +464,13 @@ class PairAccumulator:
             "within_close_band_hull": self.close_band,
             "closest_hull": self.closest_hull,
             "largest_delta": self.largest_delta,
+            # Deviation 7. REPORTED AND DECIDING NOTHING.
+            "censor_m": common.CENSOR_M,
+            "evaluations_beyond_censor": self.evaluations - len(near_delta),
+            "hull_near_field": common.distribution(near_hull),
+            "vendor_near_field": common.distribution(near_vendor),
+            "delta_vendor_minus_hull_near_field": common.distribution(near_delta),
+            "largest_delta_near_field": self.largest_delta_near_field,
             "flip_hull_only_contact": self.flip_hull_only[:50],
             "flip_hull_only_contact_count": len(self.flip_hull_only),
             "flip_reversed": self.flip_reversed[:50],
@@ -469,7 +501,14 @@ def evaluate(pairs, model, meshes, poses, objects, links, where, gripper_links=N
     Rule M's broad phase is applied first, from the link's enclosing sphere, whose radius
     section 2.3 verifies is identical under both sets -- so a censored pair is censored
     identically under both and censoring can never manufacture or hide a difference.
+
+    **RETURNS the two per-geometry maps it has just computed**, so that TUNNEL1's bracketing
+    maps are SERVED rather than recomputed. They are the same numbers by construction: the
+    same `mesh_box_distance` on the same `transforms_for` output, past the same censoring
+    test, which is what `link_distances` does. Nothing about any published quantity changes
+    -- the byte-identity of the compute stage's output across the change is the evidence.
     """
+    maps = {name: {} for name in common.GEOMETRIES}
     for link in links:
         entry = meshes["links"][link]
         rotation, translation = poses[link]
@@ -487,11 +526,14 @@ def evaluate(pairs, model, meshes, poses, objects, links, where, gripper_links=N
             vendor, vendor_pen, _ = geo.mesh_box_distance(
                 entry["meshes"]["vendor"], matrix, offset, obj.half
             )
+            maps["hull"][(link, obj.name)] = hull
+            maps["vendor"][(link, obj.name)] = vendor
             accumulator.add(hull, vendor, hull_pen, vendor_pen, where)
             if gripper_links is not None and link in gripper_links:
                 reference = gripper_reference.get((link, obj.name))
                 if reference is not None:
                     accumulator.note_grip(abs(hull - reference), where)
+    return maps
 
 
 def link_distances(model, meshes, poses, links, objects, geometry_name):
@@ -561,6 +603,7 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
 
     models: dict[str, geo.RobotModel] = {}
     mesh_cache: dict[str, dict] = {}
+    reach_cache: dict[str, dict] = {}
     scene_cache: dict[str, tuple] = {}
     pair_store: dict[str, dict] = {}
     trajectory_rows: list[dict] = []
@@ -596,6 +639,13 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
             if key not in models:
                 models[key] = geo.RobotModel((raw / urdf_file).read_text())
                 mesh_cache[key] = mesh_sets(models[key], root)
+                # Built ONCE per (capture, arm) from the mesh radii, because `joint_reach` is
+                # a static property of the description and the meshes and depends on no
+                # configuration. It was rebuilt inside the interval loop before 2026-09-04.
+                reach_cache[key] = models[key].joint_reach(
+                    radii={link: entry["radius"]
+                           for link, entry in mesh_cache[key]["links"].items()}
+                )
                 reading = next(
                     (record["i4_scene"].get(arm, {}) for record in captures
                      if record["capture"] == capture_name),
@@ -617,6 +667,7 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
 
             model = models[key]
             meshes = mesh_cache[key]
+            reach = reach_cache[key]
             objects, scene_notes = scene_cache[key]
             links = sorted(model.collision)
             pairs = pair_store.setdefault(
@@ -668,6 +719,15 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
             )
             drive = next((name for name in model.movable if name.endswith("_drive_joint")), None)
 
+            # THE MEMO, and it is bit-identity and not an approximation. `evaluate` already
+            # computes every (link, object) distance at every waypoint under BOTH geometries;
+            # TUNNEL1 then recomputed the same maps as its `before`/`after` brackets, twice
+            # per interval per geometry, and `after(i)` is `before(i+1)` besides. The maps are
+            # kept here and served instead. Same function, same inputs, same bits: no
+            # registered quantity moves and REPRO1's byte-identity is untouched. It is scoped
+            # to ONE trajectory and dropped with it, so the memory it holds is bounded by that
+            # trajectory's waypoint count and not by the campaign's.
+            waypoint_maps: list[dict] = []
             for waypoint, (configuration, poses) in enumerate(zip(configurations_list, poses_list)):
                 where = {"capture": capture_name, "arm": arm, "trajectory": index,
                          "waypoint": waypoint}
@@ -675,8 +735,10 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
                 if gripper_links and drive is not None:
                     reference = link_distances(model, meshes, poses, gripper_links, objects,
                                                "hull")
-                evaluate(pairs, model, meshes, poses, objects, links, where,
-                         gripper_links=set(gripper_links), gripper_reference=reference)
+                waypoint_maps.append(
+                    evaluate(pairs, model, meshes, poses, objects, links, where,
+                             gripper_links=set(gripper_links), gripper_reference=reference)
+                )
                 # GRIP1, section 7.4: the SIX moving gripper links recomputed at both ends of
                 # the drive joint's declared range, WITH ALL FIVE MIMIC FOLLOWERS MOVED WITH
                 # IT (section 5.4). `RobotModel.resolve` enforces the coupling, so naming the
@@ -694,18 +756,50 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
                                 )
 
             # TUNNEL1, section 7.4. Per (link, object) pair, and per geometry.
+            # RULE K-ii IS COUNTED HERE TOO, and it has to be: "the question needs both at
+            # once" is a statement about ONE consecutive-waypoint pair, and only this loop has
+            # a step and that same interval's bracketing distances in hand together.
+            k_ii_both: dict[str, set] = {name: set() for name in common.GEOMETRIES}
+            k_ii_witness: dict | None = None
             for interval, step in enumerate(steps):
-                first, second = poses_list[interval], poses_list[interval + 1]
                 deltas = {
                     name: configurations_list[interval + 1].get(name, 0.0)
                     - configurations_list[interval].get(name, 0.0)
                     for name in set(configurations_list[interval])
                     | set(configurations_list[interval + 1])
                 }
-                reach = model.joint_reach()
                 for geometry_name in common.GEOMETRIES:
-                    before = link_distances(model, meshes, first, links, objects, geometry_name)
-                    after = link_distances(model, meshes, second, links, objects, geometry_name)
+                    before = waypoint_maps[interval][geometry_name]
+                    after = waypoint_maps[interval + 1][geometry_name]
+
+                    # Rule K-ii, PER INTERVAL: a step at or above STEP_MID **and**, on that
+                    # same interval, a non-standing pair whose bracketing distance is at or
+                    # below CLOSE_BAND. A pair beyond CENSOR is not in the map at all, which
+                    # is sound here because CENSOR (0.500 m) is far above CLOSE_BAND
+                    # (0.040 m). Evaluated per geometry and reported per geometry; the
+                    # analyser takes the union, because rule K says "a bracketing distance"
+                    # without naming a set.
+                    if step >= common.STEP_MID_M:
+                        for pair_key, distance_a in before.items():
+                            if common.is_standing_pair(*pair_key):
+                                continue
+                            distance_b = after.get(pair_key)
+                            near = min(
+                                value for value in (distance_a, distance_b)
+                                if value is not None
+                            )
+                            if near <= common.CLOSE_BAND_M:
+                                k_ii_both[geometry_name].add(interval)
+                                if k_ii_witness is None:
+                                    k_ii_witness = {
+                                        "interval": interval, "geometry": geometry_name,
+                                        "link": pair_key[0], "object": pair_key[1],
+                                        "tool_step_m": step,
+                                        "bracketing_before_m": distance_a,
+                                        "bracketing_after_m": distance_b,
+                                    }
+                                break
+
                     watch = []
                     for pair_key, distance_a in before.items():
                         if common.is_standing_pair(*pair_key):
@@ -761,6 +855,20 @@ def process_block(raw: Path, label: str, root: Path, verbose: bool,
             record["k_ii_intervals_at_or_above_step_mid"] = sum(
                 1 for step in steps if step >= common.STEP_MID_M
             )
+            # The two halves separately, and THE CONJUNCTION ON ONE INTERVAL. Only the last is
+            # rule K-ii; the analyser conjoined the two halves over the whole capture until
+            # 2026-09-04, which lets a fast interval far from everything and a slow creep near
+            # a table satisfy a rule that asks for both on the SAME consecutive-waypoint pair.
+            record["k_ii_intervals_both_at_once_by_geometry"] = {
+                name: len(intervals) for name, intervals in sorted(k_ii_both.items())
+            }
+            # The UNION over the geometries, counted as a union rather than taken as the
+            # larger of the two: containment makes the hull set the larger one, but rule E
+            # exists precisely because containment is a theorem the measurement may falsify,
+            # and a count that assumes it would be silent when it did.
+            record["k_ii_intervals_both_at_once"] = len(set().union(*k_ii_both.values())) \
+                if k_ii_both else 0
+            record["k_ii_witness"] = k_ii_witness
             trajectory_rows.append(record)
             if verbose:
                 print(f"   {capture_name} {arm} #{index}: {clauses['waypoints']} waypoint(s), "

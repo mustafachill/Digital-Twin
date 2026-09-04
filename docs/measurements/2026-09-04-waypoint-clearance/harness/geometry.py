@@ -313,15 +313,36 @@ class RobotModel:
                 stack.append(joint.child)
         return poses
 
-    def joint_reach(self) -> dict[str, dict[str, float]]:
+    def joint_reach(self, radii: dict[str, float]) -> dict[str, dict[str, float]]:
         """A STATIC upper bound on how far a point of each link can be from each joint axis.
 
-        Used only by `motion_bound`, and it is a bound and never an estimate: the sum of the
-        joint-origin offsets along the chain from the joint to the link, plus the link's own
-        maximum vertex radius, cannot be exceeded by any point of that link at any
-        configuration, because each intervening transform is a rotation about a point at most
-        that far away.
+        Used only by `motion_bound`, and it is a bound and never an estimate.
+
+        `reach[link][j]` is the sum of the joint-origin offsets over the joints STRICTLY
+        BETWEEN `j` and `link`, **plus that link's own maximum vertex radius** from `radii`.
+        Both terms are load-bearing and each was wrong before 2026-09-04:
+
+          * A URDF child link's frame IS its parent joint's frame, so the offset sum for the
+            link's own parent joint is ZERO and the whole bound for that joint is the mesh
+            radius. Accumulating the joint's own `xyz` shifted every entry by one joint, and
+            omitting the radius left `reach[link2][joint2] = 0.0` against a mesh radius of
+            0.3385 m -- so `motion_bound` returned zero for every interval in which only
+            `joint2` moved, and `compute.py` skipped every `link2` pair in it.
+          * `dist(point, axis_j) <= dist(point, origin_j) <= (offset sum) + radius`, and each
+            intervening transform is a rotation about a point at most that far away, so the
+            sum bounds the displacement of any point of the link under any rotation of `j`.
+
+        Measured on the shipped `arm_1` against a brute force over the shakedown's own
+        62-waypoint capture: the pre-fix values were exceeded by the ACTUAL displacement on
+        `link3` (0.011686 m against a bound of 0.009040 m) and on `link2` (0.002609 m against
+        0.000000 m). `radii` is REQUIRED rather than defaulted, because a default of zero is
+        exactly the unsound bound this signature exists to make impossible to write.
         """
+        missing = sorted(set(self.collision) - set(radii))
+        if missing:
+            raise ValueError(
+                f"joint_reach needs a mesh radius for every collision link; missing {missing}"
+            )
         parent_of = {joint.child: joint for joint in self.joints}
         chain: dict[str, list[str]] = {}
         for link in self.links:
@@ -334,12 +355,20 @@ class RobotModel:
             chain[link] = names
         reach: dict[str, dict[str, float]] = {}
         for link, names in chain.items():
-            accumulated = 0.0
+            # The radius of the link's own collision mesh about its ORIGIN. A link carrying no
+            # collision element is not in `radii` and is not a link this campaign measures;
+            # `motion_bound` is never asked about one, and a zero there would be unsound, so
+            # such a link is given no entry at all rather than a zero one.
+            if link not in radii:
+                continue
+            accumulated = float(radii[link])
             per_joint: dict[str, float] = {}
             for name in names:  # walked from the link outward toward the root
-                joint = self.by_name[name]
-                accumulated += float(np.linalg.norm(joint.xyz))
+                # `j` is not yet part of the sum: the offset between `j`'s frame and the link's
+                # is the sum over the joints already walked, which is exactly "strictly
+                # between".
                 per_joint[name] = accumulated
+                accumulated += float(np.linalg.norm(self.by_name[name].xyz))
             reach[link] = per_joint
         return reach
 
@@ -605,7 +634,13 @@ def motion_bound(model: RobotModel, link: str, deltas: dict[str, float],
     provably unnecessary rather than heuristically skipped. Section 7.4's TUNNEL1 asks about
     a sub-sample distance reaching `<= 0`; this cannot hide one.
     """
-    per_joint = reach.get(link, {})
+    if link not in reach:
+        # A zero bound skips work, so an absent link may NOT default to an empty table:
+        # that is the shape that made `reach[link2][joint2] = 0.0` skip every `link2` pair.
+        raise KeyError(
+            f"motion_bound has no reach table for {link!r}; joint_reach was built without it"
+        )
+    per_joint = reach[link]
     total = 0.0
     for name, delta in deltas.items():
         if delta == 0.0:
@@ -616,6 +651,9 @@ def motion_bound(model: RobotModel, link: str, deltas: dict[str, float],
         if joint.type == "prismatic":
             total += abs(delta)
         else:
+            # A joint that is not an ancestor of the link has no entry and moves no point of
+            # it, so 0.0 is the SOUND value here and not a default standing in for a missing
+            # one -- `reach[link]` carries every joint on the link's own chain to the root.
             total += abs(delta) * per_joint.get(name, 0.0)
     return total
 

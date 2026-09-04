@@ -612,18 +612,59 @@ def scrape_capture_log(text: str) -> dict:
     published = DISPLAY_ADAPTER_LINE.findall(text)
     refusals = VALIDATE_REFUSAL_LINE.findall(text)
     planners: list[dict] = []
+    # I2 reading (c) AS REGISTERED: "matched to the publication that follows it in the same
+    # pipeline run". That is an ordering over the log and NOT a positional index, and the
+    # difference decides the attribution wherever the two counts differ. A `ValidateSolution`
+    # refusal writes a `Calling Planner` line and NO publication -- REFUSE1's whole subject --
+    # and a Pilz -> OMPL fallback writes TWO for one publication; either shifts every later
+    # attribution on that arm under a k-th-to-k-th join. So the walk below carries ONE pending
+    # planner call per arm and resolves it on the next event on that arm:
+    #   * a `DisplayMotionPath` adapter line   -> the pending call produced this publication;
+    #   * a `ValidateSolution ... failed` line -> the pending call produced none, and is dropped;
+    #   * another `Calling Planner` line       -> the pending call was superseded (the fallback
+    #                                             case), and is dropped.
+    # A publication with no pending call is attributed to no pipeline rather than guessed at.
+    pending: dict[str | None, dict] = {}
+    publications: list[dict] = []
+    per_arm_publication = {}
     for line in text.splitlines():
+        arm_match = ARM_PREFIX.search(line)
+        arm = arm_match.group(1) if arm_match else None
         match = PLANNER_LINE.search(line)
         if match:
-            arm = ARM_PREFIX.search(line)
-            planners.append(
+            call = {
+                "description": match.group(1),
+                "pipeline": PIPELINE_OF.get(match.group(1)),
+                "arm": arm,
+                "line": line[:400],
+            }
+            planners.append(call)
+            superseded = pending.get(arm)
+            if superseded is not None:
+                superseded["outcome"] = "superseded by a later planner call (fallback)"
+            pending[arm] = call
+            continue
+        if VALIDATE_REFUSAL_LINE.search(line):
+            refused = pending.pop(arm, None)
+            if refused is not None:
+                refused["outcome"] = "refused by ValidateSolution, never published"
+            continue
+        if DISPLAY_ADAPTER_LINE.search(line):
+            call = pending.pop(arm, None)
+            per_arm_publication[arm] = per_arm_publication.get(arm, 0) + 1
+            if call is not None:
+                call["outcome"] = "published"
+            publications.append(
                 {
-                    "description": match.group(1),
-                    "pipeline": PIPELINE_OF.get(match.group(1)),
-                    "arm": arm.group(1) if arm else None,
-                    "line": line[:400],
+                    "arm": arm,
+                    "index_in_arm": per_arm_publication[arm],
+                    "pipeline": call.get("pipeline") if call else None,
+                    "description": call.get("description") if call else None,
+                    "matched": call is not None,
                 }
             )
+    for arm, call in pending.items():
+        call["outcome"] = "no publication before the log ended"
     fallbacks = [
         {"from": a, "to": b} for a, b in (FALLBACK_LINE.search(line).groups()
                                           for line in text.splitlines()
@@ -643,6 +684,19 @@ def scrape_capture_log(text: str) -> dict:
         "i6_codes": sorted(set(refusals)),
         # I2(c) -- THE attribution, in log order, with the arm where the prefix resolves it.
         "i2c_planner_calls": planners,
+        # I2(c)'s attribution PROPER: one entry per publication, in log order per arm, naming
+        # the pipeline of the `Calling Planner` line it followed. `index_in_arm` counts from 1
+        # WITHIN THIS CAPTURE, which is what the recorder's per-capture receipt index joins to.
+        "i2c_publications": publications,
+        "i2c_publications_unmatched": sum(
+            1 for row in publications if not row["matched"]
+        ),
+        "i2c_calls_without_a_publication": sum(
+            1 for row in planners if row.get("outcome") != "published"
+        ),
+        # A POSITIVE cross-check on the walk: it must see exactly the publications I5 counts.
+        # A disagreement means the walk lost a line and is reported rather than assumed away.
+        "i2c_publications_seen": len(publications),
         "i2c_by_pipeline": {
             "pilz": sum(1 for row in planners if row["pipeline"] == "pilz"),
             "ompl": sum(1 for row in planners if row["pipeline"] == "ompl"),

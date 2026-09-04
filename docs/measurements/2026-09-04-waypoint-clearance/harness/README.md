@@ -92,12 +92,34 @@ python3 docs/measurements/2026-09-04-waypoint-clearance/harness/analyse.py \
 **The compute stage is this campaign's long pole and it is not close.** On the machine
 `../criteria.md` section 9 names, one 62-waypoint trajectory took **76 s** to compute against
 12 scene objects under both mesh sets — about **1.2 s per waypoint**, of which the vendor set's
-98,552 triangles are most. A `continuous_line` capture producing a few thousand waypoints is
-therefore an hour or more of compute per block, and the three blocks are additive. **Budget the
-compute stage in hours and the capture stage in tens of minutes.** Two properties keep it
-finite and both are bounds rather than approximations: rule M's broad phase censored 106 of 156
-pairs on that trajectory, and the sub-sampling skip of deviation 5 removes intervals no
-sub-sample could have changed.
+98,552 triangles are most. **That figure is the shakedown's and it is superseded by the
+memoisation below**; both are recorded, because the first is what the shakedown measured and
+the second is what the shipped stage costs.
+
+**The stage now serves TUNNEL1's bracketing distance maps from the maps `evaluate` has already
+computed at each waypoint, instead of recomputing them.** They are the same numbers by
+construction — the same kernel on the same transforms past the same censoring test — and the
+change is verified by running the stage before and after on the shakedown's own capture and
+comparing the output **byte for byte with only `compute_seconds` excluded**: identical, sha256
+`919a8f29…`. Re-measured on the same host and the same trajectory: **71.6 s → 38.4 s**, from
+1.16 s per waypoint to **0.62 s**, a factor of **1.87**. Nothing registered moved and REPRO1's
+byte-identity is untouched.
+
+**REPRO1 NEEDS THREE FULL COMPUTE RUNS, so the campaign's compute is about three times one
+pass.** `../criteria.md` section 9 asks for the stage twice in one interpreter and once more
+in a second one; each is a complete pass over every block, and the reproduction commands above
+are the three. Budget accordingly: a `continuous_line` capture producing a few thousand
+waypoints is an hour or more per pass per block, the three blocks are additive, and then the
+whole thing is taken three times. **Budget the compute stage in hours and the capture stage in
+tens of minutes.**
+
+Two properties keep one pass finite and both are bounds rather than approximations: rule M's
+broad phase censored 106 of 156 pairs on that trajectory, and the sub-sampling skip of
+deviation 5 removes intervals no sub-sample could have changed. **The second of those was
+unsound until 2026-09-04** — the reach table omitted each link's own mesh radius and shifted
+the joint offsets by one — so it skipped intervals a sub-sample *could* have changed. Corrected
+before the first trial; expect the sub-sampling to switch on where the old bound kept it off,
+and expect the memoisation above to pay for it.
 
 ## The shakedown, and it is not data
 
@@ -241,11 +263,32 @@ can report anything; it is pinned by SHA instead, and every block records the SH
 13. **It cannot be run twice for a better sample.** V8: n is what it was, no capture is topped
     up, and a block that aborts is reported with the n it reached. `already_taken` enforces
     that on the host side and `_complete.json` is what it reads.
-14. **It cannot prove its own capture-side fix.** The one permitted capture shakedown ran
-    against a harness that read I4 too early; the fix is committed and **unexercised**. See
-    [`../raw/shakedown/NOTES.md`](../raw/shakedown/NOTES.md).
+14. **It cannot prove its own capture-side fixes, and there are now more of them.** The one
+    permitted capture shakedown ran against a harness that read I4 too early; that fix is
+    committed and **unexercised**, and section 10 grants no second capture shakedown. Four
+    further capture-side changes landed on 2026-09-04 and are unexercised too: the per-capture
+    receipt index that I2 reading (c) joins on, the log-order attribution walk, the settled
+    publisher reading taken **while the scenario runs** rather than after it exited, and the
+    `finally` that kills `./scripts/scenario` on every exit from the capture block. Each is
+    covered by a fixture run outside the repository and by **no** run of a cell. See
+    [`../raw/shakedown/NOTES.md`](../raw/shakedown/NOTES.md), whose correction of 2026-09-04
+    lists them.
 
 ## Recorded limitations, carried rather than fixed
+
+**Deviations 7 to 11 in `analyse.py` are the rest of this list and are not restated here
+(P1).** They are printed at the top of every analyser run. In one line each: rule M's
+censoring is applied to section 4.3's **bound** while rule M's sentence is about the
+**distance**, so the distributions extend beyond `CENSOR` and the near-field subset is
+reported beside them (7); a publication is joined to a **receipt** by position, so a rule C-ii
+shortfall shifts the pipeline attribution after it (8); V6 compares a different spread from the
+registered one, V6's and V7's downgrades are left for the write-up, REPRO1's cross-interpreter
+comparison scores an absent key as zero, and I4's re-read timer is shared across three arms
+(9); three third-state slips and `--startup-ceiling`, which `criteria.md` registers nowhere
+(10); and four exactness slips, including that the standing pair leaks into two counts it is
+excluded from by name (11). **None of them moves a threshold**, and each names the direction it
+errs in.
+
 
 - **`compute.py --diagnostic-scene-from-generated-file` is not a campaign path and must never
   be used as one.** It takes the scene from the generated file instead of I4's read-back, which
