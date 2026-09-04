@@ -6,6 +6,16 @@ the first trial has run**. Until then it is corrigible; after then, any interpre
 to change is recorded as a numbered deviation in `ANALYSIS.md`, applied to data already
 collected — never by re-running until the definition suited.
 
+> **AMENDED 2026-09-04, before the first trial, and this is what that permits.** No harness
+> exists, `raw/` does not exist, and no trial has run, so rule 1 has not yet closed this file.
+> A pre-freeze review found eight defects in the rules below — five of them rules that could
+> not fire, or could only fire one way, which is the failure mode this whole directory exists
+> to prevent. **A rule that cannot refuse is worse than no rule**, because its silence reads as
+> a pass. What changed, and what deliberately did not, is §12; every figure the amendment rests
+> on was re-derived from source here rather than taken from the review. **No threshold moved.**
+> Once the first trial runs this file freezes as it then stands, and every later correction is a
+> numbered deviation in `ANALYSIS.md`.
+
 - **Date opened:** 2026-09-04
 - **Branch under measurement:** `feat/close-phase-debts`
 - **BASE_COMMIT:** **`c38a42c`**. Every figure below is a property of the tree at that commit.
@@ -103,15 +113,25 @@ accepted. This campaign cannot observe one, and the reason is the capture door.*
 
 - The capture door (§2.1) is `DisplayMotionPath`, a **response adapter**, and MoveIt's pipeline
   **breaks the response-adapter chain on the first failure**
-  (`planning_pipeline.cpp:333-350`, MoveIt 2.12.4, read on 2026-09-04). `ValidateSolution`
+  (`planning_pipeline.cpp:332-351`, MoveIt 2.12.4, read on 2026-09-04 from the 2.12.4 tag).
+  `ValidateSolution`
   stands **before** `DisplayMotionPath` in both generated pipelines
   (`cell_a_arm_1_planning_pipelines.yaml`), so **a refused trajectory is never published**. The
   campaign can count refusals (REFUSE1) and cannot measure their geometry.
 - The captured set is therefore **conditioned on acceptance under the hull set**. Together with
-  the containment relation of §2.3 that has an exact consequence, registered here before any
-  number exists: **no captured waypoint can be in collision under either geometry**, so FLIP1
-  (§7.2) is **NONE by construction** and evidences nothing about either set. It is registered so
-  that it cannot later be read as a clearance.
+  the containment relation of §2.3 that has a consequence, registered here before any number
+  exists: **no captured waypoint can be in collision under either geometry — in MoveIt's
+  verdict.**
+  **That is not the same statement about this campaign's distance metric, and the difference is
+  the correction of 2026-09-04.** §2.2.1 establishes a standing base-to-pedestal overlap of
+  about 132 nm that MoveIt reports as valid and an exact triangle-to-box distance must report as
+  contact. **MoveIt accepting a trajectory therefore does not imply that this campaign's
+  distance is positive**, and any rule that assumed it did has been restated. What the
+  conditioning does give, and it is narrower: **for every (link, object) pair MoveIt's own
+  predicate separates, both geometries are separated too**, since a superset cannot be further
+  away. So FLIP1 (§7.2) has **no reachable outcome in the direction that would flatter the
+  hull**, and its one reachable direction is now a named finding rather than an impossibility —
+  §7.2.
 - **What is left, and it is what #49 asked for:** the **margin** — how close the cell actually
   passes, and how much of that margin the hull ate. That is genuinely unknown, and §7 measures
   it.
@@ -171,8 +191,9 @@ Everything in this section was read from source or from the generated tree at `H
   spacing of a PTP trajectory against `SAMPLING_TIME_S = 0.1` and fails if a MoveIt release
   changes it. **This campaign does not re-run that test as its evidence**; it records the
   spacing it measures per captured trajectory and reports any that disagrees.
-- **The adapter chain breaks on the first failure.** `planning_pipeline.cpp:333-350` (MoveIt
-  2.12.4): the response adapters run in order and `if (!res.error_code)` returns false. So a
+- **The adapter chain breaks on the first failure.** `planning_pipeline.cpp:332-351` (MoveIt
+  2.12.4, read from the 2.12.4 tag on 2026-09-04): the response adapters run in order and
+  `if (!res.error_code)` returns false. So a
   trajectory that reaches `DisplayMotionPath` is exactly a trajectory `ValidateSolution`
   accepted, and — because neither adapter modifies the trajectory — **the published waypoint set
   is byte-for-byte the waypoint set that was validated.** That equality is the soundness
@@ -203,11 +224,25 @@ Three consequences, all registered:
    published before a subscription has matched reaches nobody (CLAUDE.md §10). V4 requires a
    matched publisher and records the publisher's resolved endpoint QoS per block, and **rule C
    is what stops an empty capture reading as a quiet cell**.
-3. **The count is independently checkable from the log.** `PlanningPipeline::generatePlan` logs
-   `Calling PlanningResponseAdapter '<description>'` at INFO for every adapter it reaches
-   (`planning_pipeline.cpp:336-337`), and `PlanningResponseAdapter '<description>' failed with
-   error code <code>` at ERROR for one that refuses (`:343-345`). So the launch log carries a
-   second, independent count of both **published** trajectories and **refusals**. I5 and I6.
+3. **The count is independently checkable from the log, and so is the pipeline.**
+   `PlanningPipeline::generatePlan` logs `Calling PlanningResponseAdapter '<description>'` at
+   INFO for every adapter it reaches (`planning_pipeline.cpp:339`), and
+   `PlanningResponseAdapter '<description>' failed with error code <code>` at ERROR for one that
+   refuses (`:345-346`). So the launch log carries a second, independent count of both
+   **published** trajectories and **refusals**. I5 and I6.
+   **It also carries the planner.** The same function logs `Calling Planner '<description>'` at
+   INFO before the planner runs (`:318`), and the two descriptions are distinct string literals:
+   `"Pilz Industrial Motion Planner"`
+   (`pilz_industrial_motion_planner.cpp:116-119`) and `"OMPL"`
+   (`ompl_planner_manager.cpp:104-107`), both read from the 2.12.4 tag on 2026-09-04 and both
+   present in the shipped libraries (`strings` over
+   `/opt/ros/jazzy/lib/libmoveit_planning_pipeline.so.2.12.4` returns the format string
+   `Calling Planner '%s'`, read in the image on 2026-09-04). **That is I2's reading (c), and it
+   is the only one of the three that discriminates** — §4.1.
+   **Note what the adapter lines do *not* discriminate.** `DisplayMotionPath::getDescription()`
+   returns the literal `"DisplayMotionPath"` in both pipelines, because each pipeline loads its
+   own instance of the same plugin, so I5's grep counts publications across both pipelines
+   together and never says which produced one.
 
 ### 2.2 The planning scene, read from the generator rather than taken on trust
 
@@ -230,6 +265,69 @@ half-height offset from the L0 body's stand-on point, and the file says so in it
 **The campaign nevertheless uses the object poses read back off the running `move_group`**
 (I4), not these, so no frame convention of this file has to be trusted; the file is the
 cross-check and a disagreement is reported.
+
+#### 2.2.1 Every arm is bolted to a body that is also a planning-scene object, and the two overlap
+
+**This is the single most consequential fact in this file, it was found by the pre-freeze
+review, and it is registered here because four of the rules below go vacuous without it.**
+
+Read from the tree at `HEAD` on 2026-09-04, each figure computed here:
+
+| quantity | value | where it was read |
+|---|---|---|
+| `pedestal_1` centre, dimensions | `(0, -0.3, 0.3)`, `0.3 x 0.3 x 0.6` | `cell_a_planning_scene.yaml`, parsed |
+| `pedestal_1` top face | **z = 0.600** exactly | centre + half height |
+| `arm_1_mount` in `cite_world` | `(0, -0.3, 0.6)`, yaw `1.570796327` | `cell_a_static_tf.yaml`, parsed |
+| `arm_1_mount` to `arm_1_link_base` | fixed joint `arm_1_world_joint`, origin `0 0 0` | expanded URDF; the macro is `xarm_device_macro.xacro:88-92` |
+| `link_base`'s collision origin | `0 0 0`, `0 0 0` | expanded URDF, all 13 (§2.3) |
+| `link_base.stl` minimum vertex z | **-1.324005e-07 m** | read from the STL, **identical in both mesh sets** |
+| vertex entries below z = 0 | **138 of 978** in the hull mesh, **546 of 7392** in the vendor mesh | the same read; 23 and 88 distinct coordinates |
+| those vertices in the pedestal's XY footprint | **all of them** — the whole link's world AABB is `x` in `[-0.063, 0.063]`, `y` in `[-0.392, -0.237]`, inside `x` in `[-0.15, 0.15]`, `y` in `[-0.45, -0.15]` | computed from the mount transform |
+
+**So the arm's base overlaps its own pedestal by about 132 nm, at every configuration, under
+both geometries.** It is configuration-independent: `link_base` is fixed to `arm_1_mount`, which
+is fixed to the world. The AABBs of the two mesh sets are identical (§2.3), so **the overlap is
+the same under both** and cannot produce a difference. The same arithmetic holds for `arm_2` and
+`arm_3`: the mounts sit at `(2.1, -0.3, 0.6)` and `(4.2, -0.3, 0.6)` above `pedestal_2` and
+`pedestal_3`, whose top faces are also at z = 0.600.
+
+**MoveIt does not report it, and that contrast is itself a registered finding rather than a
+problem to fix.** `cite_skills/test/test_planning_pipeline.py:939-970` applies this exact
+generated scene to a real `move_group`, verifies the objects are in its world, and then asserts
+at **line 964** that the home configuration is `valid` — and that test passes in
+`./scripts/test`. **So MoveIt's collision predicate and an exact triangle-to-box distance are two
+different predicates**, and this campaign measures the second. Candidates for the gap — **listed
+without choosing**, in the shape rule E requires: the narrow-phase tolerance of whatever
+collision detector `move_group` loaded, which **nothing in this tree configures**
+(`grep -rn "collision_detector" model/ workspace/src/cite_generated/ workspace/src/cite_bringup/`
+returns nothing on 2026-09-04, so it is MoveIt's own default and this campaign does not name
+it); link padding or scaling, which **nothing in this tree sets either**
+(`grep -rn "padding\|link_scale"` over the same three paths reaches one unrelated comment on the
+same date, so whatever `move_group` resolves is again MoveIt's default, and I4 records the value
+it read back); the mesh representation the detector builds from the STL; and the pose round trip
+through TF. **Nothing here attributes it**, and no rule below is written as though the cause were
+known.
+
+**What this campaign does about it, registered before any trial.**
+
+1. **The standing pair is named and excluded from every aggregate by name.** The pair
+   `(arm_N_link_base, pedestal_N)` for the arm's own pedestal is reported as **its own row** in
+   every distribution, with its measured distance, and enters **no** minimum-over-pairs, **no**
+   aggregate distribution and **no** verdict in §7.2 – §7.4. It is a property of the layout, not
+   of a trajectory, and averaging it into a per-waypoint minimum would make every such minimum
+   the same number.
+2. **Every metric that was stated over an aggregate minimum is restated over per-(link, object)
+   distances.** MARGIN1, TUNNEL1 and rule K all say "per (link, object)" below, and that is the
+   whole substance of the correction: a question asked of the minimum over all pairs is answered
+   by the closest pair, and the closest pair is a constant.
+3. **The exclusion is by name and by nothing else.** No distance threshold is used to drop it,
+   and **no tolerance anywhere in this file is widened to make it disappear** — widening one
+   would hide every other contact of the same size, which is exactly the class of event #49
+   asks about.
+4. **It is not read as a defect in the model.** Whether a 132 nm overlap between an arm base and
+   its pedestal matters is a question for L0 and for whoever owns the layout; §0 forbids this
+   campaign from editing `model/`, and it takes no position. **What it is, here, is a fact the
+   rules have to survive.**
 
 ### 2.3 The two geometry sets, and the one relation between them that is not a measurement
 
@@ -306,6 +404,15 @@ and no producer of a `MoveTo` goal. So:
 The chord and the arc differ here by **0.05 %** (`0.1099 / 0.109845 = 1.00050`), and the chord is
 the quantity a Cartesian step is, so the chord is what is registered.
 
+**One number in the generated tree looks like it contradicts the 0.400 m/s above and does not.
+Recorded 2026-09-04 so that a reader meeting both does not draw the wrong conclusion.**
+`cell_a_arm_1_cartesian_limits.yaml` declares `max_trans_vel: 0.25` m/s — below the 0.400 m/s at
+which a 0.1 s step reaches 0.040 m — and **it bounds nothing here.** That file's own generated
+header says why: *"Only Pilz reads these, and only its LIN and CIRC generators do — PTP plans in
+joint space and never consults them"*, and it records that they are *"consumed by NO motion in
+this cell today"*. Every motion this campaign captures is planned in joint space. **The 0.25 is
+not a ceiling on the tool step, and STEP1 is not compared against it.**
+
 **Two things this arithmetic is not.** It is a **single-joint** statement: five joints move at
 once and the tool step is their vector sum, so 0.36415 m is neither an upper nor a lower bound on
 what the cell produces — it is the scale at which the question becomes live. And **it does not
@@ -352,8 +459,12 @@ because the 2026-09-04 following-error campaign had to renumber two families to 
 | **PICKPLACE** | `./scripts/scenario pick_and_place` | one arm's full production cycle, including the approach to `table_pick` where the gripper comes closest to furniture |
 | **LINE** | `./scripts/scenario continuous_line` | three arms, the belts, the beams and L4; the longest and most varied trajectory set the cell produces |
 
-> **Rule T — inherited verbatim from the 2026-09-04 following-error campaign's §3, which took it
-> from the 2026-09-03 campaign's, which took it from the 2026-09-02 campaign's.** The captures
+> **Rule T — inherited from the 2026-09-04 following-error campaign's §3, which took it from the
+> 2026-09-03 campaign's, which took it from the 2026-09-02 campaign's, and re-scoped from *arms*
+> to *captures*.** The re-scoping is faithful and the word *verbatim*, which this rule carried
+> until 2026-09-04, was wrong: the source reads *"the arms are not each other's evidence …
+> every verdict is stated per arm"*, and the unit of independence here is the capture. Nothing
+> else in the wording changed. The captures
 > are not each other's evidence. A clean result in one says nothing about any other, **every
 > verdict is stated per capture**, and an inconclusive one belongs in the verdict rather than in
 > a footnote.
@@ -378,7 +489,7 @@ cell and is not reproducible; the compute stage runs no cell and is (REPRO1).
 | # | Quantity | Instrument |
 |---|---|---|
 | **I1** | the trajectory a skill actually planned, as validated | `moveit_msgs/DisplayTrajectory` on each arm's `display_planned_path`, resolved from the running graph (§2.1). Recorded whole: `model_id`, `trajectory_start.joint_state`, and `trajectory[0].joint_trajectory` with its joint names, positions and `time_from_start` |
-| **I2** | which pipeline produced it | **two readings, and neither is taken alone.** (a) the interior `time_from_start` spacing — Pilz emits a uniform 0.1 s (§2.0); (b) the skill server's own WARN `planner fallback: <A> found no path, retrying with <B>` (`skill_server.cpp:1798-1803`), scraped from the block log with its timestamp. **A disagreement between (a) and (b) is reported and is not resolved by choosing** |
+| **I2** | which pipeline produced it | **three readings, and the attribution is (c). Corrected 2026-09-04, before any trial.** (c) — **the attribution** — the `Calling Planner '<description>'` INFO line in the block log, whose description is `Pilz Industrial Motion Planner` or `OMPL` and nothing else (§2.1), matched to the publication that follows it in the same pipeline run. (b) — a **corroboration** — the skill server's own WARN `planner fallback: <A> found no path, retrying with <B>` (`skill_server.cpp:1798-1803`), scraped with its timestamp. (a) — a **corroboration only, and a weak one** — the interior `time_from_start` spacing, which can say *"consistent with 0.1 s"* and can say nothing more, because **both pipelines emit 0.1 s**: `AddTimeOptimalParameterization`'s `resample_dt` default is also **0.1** (`default_response_adapter_parameters.hpp:77` and `:86`, and `time_optimal_trajectory_generation.hpp:196`, read in the image on 2026-09-04) and **the generated pipeline files override it nowhere** (`grep -rn "resample_dt\|totg" workspace/src/cite_generated/ model/` returns nothing on 2026-09-04). **A disagreement between (c) and either corroboration is reported and is not resolved by choosing**, and it is (c) that decides the population |
 | **I3** | the description that actually ran | the `robot_description` read back off the running node: each arm's `<ros2_control>` `plugin` element, and the collision-mesh references, which must be **13** under `cite_description/meshes/collision/xarm5/convex_hull`. V2 and V3 |
 | **I4** | the scene the planner actually held | `GetPlanningScene` on each arm's `move_group` with `WORLD_OBJECT_GEOMETRY \| TRANSFORMS \| ALLOWED_COLLISION_MATRIX \| LINK_PADDING_AND_SCALING`, taken once per arm per block. **The object poses used by the compute stage are these**, in the frame `move_group` reports, not the generated file's. **`link_padding` and `link_scale` are recorded**: the compute stage is unpadded, so a non-zero padding makes MoveIt's verdict and this campaign's distance two different quantities, and that is reported rather than reconciled |
 | **I5** | how many trajectories the pipeline published | the count of `Calling PlanningResponseAdapter 'DisplayMotionPath'` lines in the block log (§2.1). Spent by rule C against the number of messages actually received |
@@ -392,7 +503,7 @@ cell and is not reproducible; the compute stage runs no cell and is (REPRO1).
 
 | # | Quantity | Instrument |
 |---|---|---|
-| **I11** | link poses at a configuration — **primary** | host-side forward kinematics computed from the expanded URDF's joint origins, axes and types, in the model's own root frame. Pure `numpy`; no ROS, no simulator, no clock |
+| **I11** | link poses at a configuration — **primary** | host-side forward kinematics computed from the expanded URDF's joint origins, axes, types **and `<mimic>` couplings**, in the model's own root frame. Pure `numpy`; no ROS, no simulator, no clock. **The mimics are named because omitting them was a real hazard**: five of the six moving gripper joints are `<mimic>` followers of `arm_N_drive_joint` with `multiplier="1" offset="0"` (§5.4), so an implementation reading only origins, axes and types would place all five at zero and disagree with I12 by construction. FK1 is what would catch it |
 | **I12** | link poses at a configuration — **independent check** | `GetPositionFK` on a `move_group` started from the same generated files with **no simulator and no controllers** — the shape `cite_skills/test/test_planning_pipeline.py:207-258` already launches — over a registered random sample of captured waypoints. FK1 in §7.6 |
 
 **Why two.** I11 is a reimplementation, and a reimplementation that nothing checks is where a
@@ -485,13 +596,33 @@ repository ships is touched.**
   `time_from_start`.
 - **The configuration at a waypoint** is that point's `positions` for the joints named in the
   message, **completed** by `trajectory_start.joint_state` for every other joint in the model —
-  which is how the gripper's four moving links get a configuration at all, since the arm group
+  which is how the gripper's **six** moving links get a configuration at all, since the arm group
   excludes the drive joint (the expanded SRDF's `arm_1_xarm5` group runs
   `arm_1_world_joint` … `arm_1_joint_tcp` and contains no gripper joint; the gripper is its own
-  group). **That the gripper does not move during an arm trajectory is an assumption of the
+  group).
+- **Six, not four, and five of the six are coupled followers. Corrected 2026-09-04, before any
+  trial.** Expanding the shipped description gives **15** joints, of which the gripper's are
+  `arm_1_drive_joint` — revolute, limits `0` to `0.85` rad — driving `arm_1_left_outer_knuckle`,
+  and **five `<mimic>` joints**, every one `<mimic joint="arm_1_drive_joint" multiplier="1"
+  offset="0"/>` with the same `0` to `0.85` limits: `left_finger_joint`,
+  `left_inner_knuckle_joint`, `right_outer_knuckle_joint`, `right_finger_joint` and
+  `right_inner_knuckle_joint`. `arm_1_xarm_gripper_base_link` is fixed to `link_eef` by
+  `arm_1_gripper_fix` and does not move. **So six gripper links carry a collision mesh and move
+  with the drive joint, and they move together**: at multiplier 1 and offset 0 every one of the
+  six sits at the drive joint's own value. **A configuration that moves the drive joint and
+  leaves the five followers behind is not a pose this gripper can take**, and neither GRIP1 nor
+  I11 may produce one.
+- **That the gripper does not move during an arm trajectory is an assumption of the
   completion, and it is registered as one**: §7.4's GRIP1 reports the same distances recomputed
-  at both ends of the drive joint's declared range (`0` to `0.85` rad, read from the expanded
-  URDF), so the sensitivity is measured rather than argued.
+  at both ends of the drive joint's declared range, with **all six links moved together**, so the
+  sensitivity is measured rather than argued.
+- **The completion itself is sound, and this is better founded than the paragraph above claims.**
+  `trajectory_start` is not assembled by this campaign: `DisplayMotionPath::adapt` fills it with
+  `moveit::core::robotStateToRobotStateMsg(res.trajectory->getFirstWayPoint(), ...)`
+  (`display_motion_path.cpp:89`, MoveIt 2.12.4, read on 2026-09-04), so it is a full MoveIt
+  `RobotState` with every mimic already enforced by MoveIt's own `RobotModel`. **The gripper
+  configuration the completion supplies is therefore consistent by construction**, and what is
+  assumed is only that it does not change during the trajectory — which is what GRIP1 bounds.
 
 ---
 
@@ -534,15 +665,21 @@ Stated as pass/fail *before* the numbers. Applied literally, including where inc
 ### 7.0 The sizes, and where each comes from
 
 Every one stands on **a dimension of the generated planning scene, a property of the derivation,
-a numerical identity, or an inherited rule** — never on campaign data, never on a figure from
-§2.5's list. **Where a size is a judgement rather than a derivation, its row says so.**
+a numerical identity, a constant this tree already ships, or an inherited rule** — never on
+campaign data, never on a figure from §2.5's list. **Where a size is a judgement rather than a
+derivation, its row says so.**
+
+**Corrected 2026-09-04, before any trial: the claim that every size had a row here was false.**
+Three registered sizes had none — V5's 1e-9 m, FK1's 200-waypoint sample, and rule C-i's ceiling,
+which was not registered anywhere at all and is set in this table. They are rows now, and the fifth
+source — *a constant this tree already ships* — is added because C-i's ceiling stands on one.
 
 | Metric | Size | Why this size |
 |---|---|---|
 | `CLOSE_BAND`, the close-approach band | **0.040 m** | **the smallest dimension of any object in the generated planning scene** (§2.2). An arm closer to a body than the thinnest body in the cell is thick is near it in the only unit the cell itself declares |
 | `STEP_HIGH`, the step that could traverse the thinnest object | **0.040 m** | the same dimension. A consecutive-waypoint step below it cannot carry the tool point clear through a beam housing's thin axis with both endpoints outside |
 | `STEP_MID`, the comparable band's floor | **0.020 m** | half `STEP_HIGH`. **The factor of two is a judgement and is recorded as one**: it is the margin at which "far below" stops being an honest description |
-| `DIFF_FLOOR`, the numerical floor on a hull-versus-vendor difference | **1e-9 m** | the two sets share vertex coordinates exactly (§2.3), so a difference below this is double-precision arithmetic and not geometry. The same role V5's 1e-9 plays in the following-error campaign |
+| `DIFF_FLOOR`, the numerical floor on a hull-versus-vendor difference | **1e-9 m** | **the hull's vertex set is a subset of its source's, bit-identical** (§2.3) — not "the two sets share vertex coordinates", which was the loose wording this row carried until 2026-09-04 and is false in the other direction: the source has vertices the hull does not. Verified on the committed files on 2026-09-04, on four of the thirteen pairs spanning the size range, every hull vertex present in its source to the bit. So a difference below this is double-precision arithmetic and not geometry |
 | `SUB_STEP`, the interpolation target | **0.002 m** of tool-point travel per sub-sample | one twentieth of the thinnest object's thickness. **The twentieth is a judgement, recorded as one**; what is not a judgement is that it is referred to the same declared 0.040 m |
 | `SUB_CEILING`, the sub-sample ceiling | **200** sub-intervals per waypoint interval | a bound on the compute, not on the physics. **Every interval that hits it is counted and reported**, and its achieved sub-step is stated |
 | `CENSOR`, the broad-phase cutoff | **0.500 m** | **12.5×** `CLOSE_BAND`, so nothing either question is about can be censored; and the bound it is applied to is identical under both geometries (§2.3), so censoring is symmetric. Rule M |
@@ -551,6 +688,10 @@ a numerical identity, or an inherited rule** — never on campaign data, never o
 | rule C's trajectory floor | **2** waypoints | a trajectory with fewer has no interval, so it can contribute to neither STEP1 nor TUNNEL1 |
 | rule C's instrument-loss ceiling | **20 %** of a capture's published trajectories | **a judgement, and recorded as one**, inherited in size and reasoning from the 2026-09-04 following-error campaign's rule L: above one in five lost, the surviving set is a sample of what the recorder happened to keep |
 | V7's load flag | load average **4.0** on 16 cores | **inherited** from the 2026-09-02 scenario-ceilings campaign. It **flags and never excludes** |
+| **V5's scene-agreement tolerance** | **1e-9 m** | **added 2026-09-04.** The scene read back and the generated file are the same float64 numbers under a rigid transform, so any residual is arithmetic; 1e-9 m is the same numerical floor `DIFF_FLOOR` uses, in the same units, on the same kind of quantity. **It is expected to fire under one accounting choice and that arithmetic is registered in V5 (§10)**, so a firing is not a discovery |
+| **FK1's sample size** | **200** waypoints | **added 2026-09-04, and a judgement recorded as one.** It bounds a launch-based cross-check that costs a service round trip per waypoint; it is not a power calculation and no proportion is estimated from it. FK1 is a **conjunction over the sample** — every one of the 200 must agree — so a single disagreement is the result and the sample size bounds only how much of the trajectory set the check reaches |
+| **rule C-i's door ceiling**, `DOOR_CEILING_S` | **240.0 s** | **added 2026-09-04, and it is a constant this tree already ships**: `BRING_UP_CEILING_S = 240.0` (`tests/scenarios/bringup.py:94`). The harness cannot need to wait for a publisher that `move_group` creates for longer than the scenario itself waits for the cell to come up, because the scenario has failed by then. **It is a bound on waiting and never a schedule** — the door opening is an event (V4, V13, P4) and nothing sleeps on it. **It is not differenced against anything and imports no campaign figure** (rule H); the tree's own comment records that the shipped ceilings rest on a campaign in this directory, and that campaign's figures do not enter here |
+| **rule R's minimum interesting size**, per metric | DELTA1 **1e-9 m** (`DIFF_FLOOR`); MARGIN1 and STEP1 **0.002 m** (`SUB_STEP`); TUNNEL1 **not applicable** | **added 2026-09-04.** Rule R fired on "that metric's minimum interesting size" and **no table assigned one**: the scope condition was inherited and the number was not. No new number is introduced — DELTA1's quantity is bounded below by arithmetic, so anything above `DIFF_FLOOR` is interesting; MARGIN1 and STEP1 are lengths the campaign resolves geometry at `SUB_STEP`, so two values closer than that are the same approach as far as this instrument can tell. **TUNNEL1 is a binary observation and has no spread**, so rule R does not apply to it and V6 and V7 govern it by their own wording |
 
 ### 7.1 LIVE1 — a measured capture, or a measured nothing
 
@@ -561,14 +702,37 @@ to anything", which is the reassuring answer.
 
 > **Rule C — the capture rule. No distance claim is admissible for a capture that does not
 > satisfy it, and it is checked per capture per block.**
-> - **C-i — the door was open.** The subscription reported at least one matched publisher on
->   each arm's `display_planned_path` **before** the scenario process was started, or, where the
->   topic did not exist yet, within the harness's own ceiling after it appeared; the matched
->   publisher count and the resolved endpoint QoS are recorded (V4).
-> - **C-ii — nothing was dropped.** The number of `DisplayTrajectory` messages received equals
+> - **C-i — the door was open. Restated 2026-09-04, before any trial, because as written it had
+>   a dead primary clause and a live branch naming an unregistered number.** The clause it
+>   carried required a matched publisher *before the scenario process was started*, and **that
+>   can never happen**: the publisher is created by `DisplayMotionPath::initialize` on the
+>   `move_group` node (§2.1), each scenario starts its own `move_group` through
+>   `IncludeLaunchDescription` inside its own process (`tests/scenarios/bringup.py:110`), and
+>   every run owns its own cell. **The topic does not exist until the scenario has started it**,
+>   in all nine runs. So the branch that can occur is the only branch, and it is now the rule:
+>   the subscription reported **at least one matched publisher on each arm's
+>   `display_planned_path` within `DOOR_CEILING_S` (240.0 s, §7.0) of the scenario process being
+>   started**, and it reported it **before that arm's first `Calling Planner` line in the block
+>   log** — which is the clause that actually does the work, because a door matched after the
+>   first plan is a door that missed one. The matched publisher count, **every** matched
+>   publisher endpoint and the resolved endpoint QoS are recorded (V4). An arm that never matched
+>   within the ceiling, or matched after its first plan, fails C-i for that block.
+> - **C-ii — nothing was dropped, and a shortfall has a registered consequence. The consequence
+>   was missing until 2026-09-04.** The number of `DisplayTrajectory` messages received equals
 >   I5's count of `Calling PlanningResponseAdapter 'DisplayMotionPath'` lines in the same block
 >   log. **Where the per-arm attribution of a log line cannot be resolved from the launch
 >   process prefix, the equality is stated over the block total and the ANALYSIS says so.**
+>   **What a shortfall does, registered here because a trajectory that was never received can
+>   neither fail a clause nor be excluded, so the per-trajectory INSTRUMENT LOSS below cannot
+>   reach it.** A shortfall of `k = I5 - received` is a **capture-level instrument loss of k
+>   trajectories**, reported on its own line, never merged with the per-trajectory losses, and
+>   **counted toward the 20 % ceiling** — which is stated over **I5's published count**, the
+>   population the door was supposed to carry, and not over what arrived. If `k` alone exceeds
+>   the ceiling, the capture is **NOT ADMISSIBLE** and rule N applies to it, exactly as for the
+>   per-trajectory losses.
+>   **A surplus is a different finding and is not a loss.** `received > I5` means the log and the
+>   graph disagree about what was published; it is reported as a **DISAGREEMENT** under rule D,
+>   nothing is re-run, and the capture's verdicts are stated with it beside them.
 > - **C-iii — the trajectory is usable.** At least **2** waypoints; `time_from_start` strictly
 >   increasing; every point's `positions` the same length as the message's joint-name list; every
 >   named joint present in the expanded description.
@@ -578,12 +742,14 @@ to anything", which is the reassuring answer.
 >
 > A trajectory failing any clause is an **INSTRUMENT LOSS**: excluded from every distribution,
 > **counted and reported separately from every other exclusion**, and **never counted as a
-> trajectory that stayed clear**. If more than **20 %** of a capture's published trajectories are
-> instrument losses, that capture's DELTA1, MARGIN1, STEP1 and TUNNEL1 are **NOT ADMISSIBLE** and
-> rule N applies to it.
+> trajectory that stayed clear**. If more than **20 %** of a capture's published trajectories —
+> **published**, meaning I5's count, not the count that arrived — are instrument losses of any
+> kind, C-ii's shortfall included, that capture's DELTA1, MARGIN1, STEP1 and TUNNEL1 are **NOT
+> ADMISSIBLE** and rule N applies to it.
 
 > **LIVE1 — ADMISSIBLE / NOT ADMISSIBLE, stated per capture**, with the trajectory count, the
-> waypoint count, the loss count by clause, and the received-versus-logged counts side by side.
+> waypoint count, the loss count by clause, **C-ii's shortfall as its own line**, and the
+> received-versus-logged counts side by side.
 > **`ANALYSIS.md` states LIVE1 before it states any other verdict**, per capture, so that no
 > clearance can be read without the instrument's own report beside it.
 
@@ -591,44 +757,100 @@ to anything", which is the reassuring answer.
 
 Report, per capture, per link and per object: the distribution of `d_hull` and of
 `d_vendor - d_hull` over admissible waypoints (min, median, p95, p99, max), the maximum with the
-trajectory, waypoint, link and object that produced it, and the count of censored pairs.
+trajectory, waypoint, link and object that produced it, and the count of censored pairs. **The
+standing `(link_base, own pedestal)` pair of §2.2.1 is reported as its own row and enters no
+aggregate.**
 
-> **DELTA1 — IDENTICAL / SMALLER / DISAGREEMENT / NOT ADMISSIBLE, stated per capture.**
+> **DELTA1 — IDENTICAL / SMALLER / DISAGREEMENT / NOT EXERCISED / NOT ADMISSIBLE, stated per
+> capture.**
 > **IDENTICAL** iff `max(d_vendor - d_hull) <= DIFF_FLOOR` over every evaluated (waypoint, link,
 > object). **SMALLER** iff it exceeds `DIFF_FLOOR` — reported in full, with the distribution, the
 > maximum, and the minimum distance at that waypoint under each set. **NOT ADMISSIBLE** under
 > rule C.
+> **NOT EXERCISED** under rule K-i, **and this state was missing from the enumeration until
+> 2026-09-04.** K-i's own text already says DELTA1 is then stated as *"not exercised"*, so the
+> rule named an outcome the verdict could not take. It is a real state now that K-i can refuse
+> at all (§7.7), and it takes precedence over IDENTICAL: a capture whose closest approach outside
+> the standing pair never reached `CLOSE_BAND` has **not** measured that the two sets agree, it
+> has measured nothing, and rule N governs its silence.
 
 > **Rule E — one direction is a theorem, so a measurement in it falsifies the instrument.**
 > `d_hull <= d_vendor` follows from containment (§2.3). If any evaluated triple has
 > `d_hull > d_vendor + DIFF_FLOOR`, DELTA1 is **DISAGREEMENT**: it is reported with both numbers
 > and the whole trace, **nothing is re-run**, **nothing is edited**, and **the campaign does not
-> attribute it** — the mesh reader, the hull provenance, the transform, the triangle-box routine
-> and the broad phase are listed as candidates without choosing. It is stated in `ANALYSIS.md`'s
-> verdict line, because it is a result about the instrument and not a procedural exception.
-> This is rule D applied to the one comparison whose answer is known in advance.
+> attribute it** — the mesh reader, the hull provenance, the transform, the triangle-box routine,
+> the broad phase, **MoveIt's link padding and link scaling as I4 recorded them, and the
+> narrow-phase solver's own tolerance** are listed as candidates without choosing. **The last
+> three were added on 2026-09-04**, because §2.2.1 shows this tree already contains a
+> configuration where MoveIt's verdict and an exact distance disagree, and a candidate list that
+> omitted the most likely reason for such a disagreement was not a candidate list. It is stated
+> in `ANALYSIS.md`'s verdict line, because it is a result about the instrument and not a
+> procedural exception. This is rule D applied to the one comparison whose answer is known in
+> advance.
 
-> **FLIP1 — NONE / OBSERVED, stated per capture, and NONE evidences nothing.** A flip is a
-> waypoint in contact under one set and clear under the other. **NONE is guaranteed by
-> construction** (§1.1): the capture is conditioned on acceptance under the hull set, and
-> containment carries that to the vendor set. **Registered before any trial: a NONE verdict is
-> reported in the rule-N shape and may not be read as evidence that either geometry is safe, that
-> the hull changed nothing, or that #49 is closed.** An OBSERVED verdict contradicts either
-> containment or the conditioning, and is handled as a **DISAGREEMENT** under rule E — never as a
-> finding about geometry.
+> **FLIP1 — NONE / HULL-ONLY CONTACT / REVERSED, stated per capture and per (link, object) pair.
+> Split into two named outcomes on 2026-09-04, before any trial, because the single OBSERVED it
+> carried folded the campaign's most valuable possible observation into an instrument fault.**
+> A flip is a **(waypoint, link, object)** at which one geometry set is in contact and the other
+> is clear.
+> - **HULL-ONLY CONTACT** — `d_hull <= 0` and `d_vendor > 0`. **This is a finding about
+>   geometry, and it is exactly #49's feared consequence made visible.** It is reported with its
+>   depth, its trajectory, waypoint, link and object, and with whether MoveIt accepted the
+>   trajectory — which it did, by the capture door (§1.1). **It does not contradict containment**:
+>   containment forbids the hull being *further* away, and this is the hull being *closer*, which
+>   is the direction containment predicts. What it would contradict is the *conditioning* — the
+>   implication *MoveIt accepted, therefore exact `d_hull > 0`* — and **§2.2.1 shows that
+>   implication is already false in this tree**, so this outcome is reachable and must not be
+>   handled as a fault.
+> - **REVERSED** — `d_vendor <= 0` and `d_hull > 0`. **This is the direction containment
+>   forbids**, and it is a **DISAGREEMENT** under rule E: an instrument finding, reported with
+>   its whole trace and not attributed.
+> - **NONE** — neither, over every evaluated pair.
+> **What the conditioning still guarantees, and it is narrower than the sentence this rule
+> carried until 2026-09-04.** For every pair MoveIt's own predicate separates, both sets are
+> separated. It does **not** guarantee that this campaign's exact distance is positive anywhere.
+> **A NONE verdict is reported in the rule-N shape and may not be read as evidence that either
+> geometry is safe, that the hull changed nothing, or that #49 is closed.**
+> **Registered before any trial, so that a HULL-ONLY CONTACT is not read as more than it is.**
+> It would say the hull is in contact where the vendor mesh is not, on a trajectory the cell ran
+> and MoveIt accepted. It would **not** say the hull set refuses a motion the vendor set would
+> accept — that question is structurally outside this campaign (§1.1, §7.5, §8) and **this
+> campaign does not narrow it by one millimetre**, whichever way FLIP1 falls.
+> **The added material is real and is not the reason to expect a flip.** Computed here on the
+> committed files on 2026-09-04, the shipped hull's volume divided by its source's runs from
+> **1.060** on `end_tool` to **2.965** on each inner knuckle, **1.596** over the thirteen
+> together. **That is a bound on where material was added and not a prediction that any of it
+> reaches an object**: every added point lies inside a concavity of the source, and whether a
+> concavity faces anything in this cell at the poses these trajectories reach is precisely what
+> is unknown. It is recorded so that a null result is not read as "the hull is the same shape".
 
 ### 7.3 MARGIN1 — how close this cell actually passes
 
-Report, per capture: the minimum over all admissible waypoints of the minimum over (link,
-object) distance, under each geometry; the count and the fraction of waypoints inside
-`CLOSE_BAND`; and the identity of the closest approach — trajectory, waypoint, link, object,
-arm, block.
+**Restated over per-(link, object) distances on 2026-09-04, before any trial.** As written it
+stood on the minimum over all pairs, and §2.2.1 makes that minimum a configuration-independent
+constant at or below zero — so **TIGHT was guaranteed, and "the fraction of waypoints inside
+`CLOSE_BAND`" was 100 % by construction**. A verdict that cannot come out the other way measures
+nothing.
 
-> **MARGIN1 — TIGHT / CLEAR / NOT ADMISSIBLE, stated per capture.**
-> **TIGHT** iff at least one admissible waypoint's minimum distance under the shipped hull set is
-> `<= CLOSE_BAND` (0.040 m). **CLEAR** otherwise. **NOT ADMISSIBLE** under rule C.
+Report, per capture and **per (link, object) pair**: the distribution over admissible waypoints
+of that pair's distance under each geometry; the count and the fraction of **(waypoint, pair)**
+evaluations inside `CLOSE_BAND`; and, per pair, the identity of the closest approach —
+trajectory, waypoint, arm, block. The standing pair of §2.2.1 is **one of the rows and is in no
+aggregate**.
+
+> **MARGIN1 — TIGHT / CLEAR / NOT ADMISSIBLE, stated per capture, and the set of pairs it is
+> TIGHT on is named.**
+> **TIGHT** iff at least one admissible (waypoint, link, object) **other than the standing pair
+> of §2.2.1** has a distance under the shipped hull set of `<= CLOSE_BAND` (0.040 m). **CLEAR**
+> otherwise. **NOT ADMISSIBLE** under rule C. **A TIGHT verdict is reported with every pair that
+> produced it**, because "something came within 40 mm of something" is not a measurement and the
+> pair is the finding.
 > **A CLEAR verdict carries rule K with it**: it says these trajectories never came within the
-> thinnest object's thickness of anything, and it does **not** say the cell cannot.
+> thinnest object's thickness of anything **but the arm's own pedestal**, and it does **not** say
+> the cell cannot.
+> **Registered before any trial: the standing pair is excluded by name and by nothing else.** No
+> distance threshold drops it, and if the exclusion were removed MARGIN1 would read TIGHT on
+> every capture and say nothing at all — which is what it did until this amendment.
 
 ### 7.4 STEP1, TUNNEL1 and GRIP1 — the gap between two checks
 
@@ -640,9 +862,22 @@ arm, block.
 > **EXCEEDS** iff the maximum step is `>= STEP_HIGH` (0.040 m). **COMPARABLE** iff it lies in
 > `[STEP_MID, STEP_HIGH)`. **FAR BELOW** iff it is below `STEP_MID` (0.020 m).
 > **Stated per pipeline because #17 is a statement about Pilz**: an OMPL trajectory is
-> re-timed by `AddTimeOptimalParameterization` and its spacing is not Pilz's, so mixing the two
-> would report a spacing nobody configured. I2 is the attribution and a trajectory whose two
-> readings disagree is reported separately and enters neither.
+> re-timed by `AddTimeOptimalParameterization`, and although both pipelines land on 0.1 s (§4.1,
+> I2) the quantity is a different one — Pilz's generation spacing against a re-sampling interval
+> — so the two populations are reported separately.
+> **The attribution is I2's reading (c), the `Calling Planner` line, and the rule that discarded
+> the OMPL population is deleted. Corrected 2026-09-04, before any trial.** The rule read *"a
+> trajectory whose two readings disagree is reported separately and enters neither"*, with
+> reading (a) — the interior spacing — as one of the two. **`AddTimeOptimalParameterization`'s
+> `resample_dt` default is also 0.1 and this tree overrides it nowhere** (§4.1), so (a) reads
+> "uniform 0.1" for **both** pipelines; on the stated justification every OMPL trajectory
+> disagreed with itself and **the entire OMPL population was silently discarded**. That data is
+> directly on-question: `ValidateSolution` runs on the post-TOTG trajectory in the OMPL pipeline
+> too, so **#17's residual applies to OMPL identically**. Reading (a) is now a corroboration
+> that can say *"consistent with 0.1 s"* and nothing more, and a trajectory it disagrees with is
+> **reported and kept**, in the population (c) assigns it. **Only a trajectory that reading (c)
+> cannot attribute at all** — no `Calling Planner` line resolvable to it — is reported separately
+> and enters neither population, counted as its own line beside LIVE1.
 > **Registered before any trial: FAR BELOW is the likely outcome and it is not a clearance.** It
 > says these trajectories stepped that far and no further. It does **not** say that a motion
 > exists in this cell that cannot step further, and rule K is stated beside it.
@@ -654,20 +889,36 @@ arm, block.
 > `revolute_joint_model.cpp:170`, read on 2026-09-04) and every arm joint here is
 > `type="revolute"` (§2.4). The interval is subdivided until the tool-point sub-step is
 > `<= SUB_STEP`, to a ceiling of `SUB_CEILING`.
-> **OBSERVED** iff any sub-sample's minimum distance is `<= 0` while **both** bracketing
-> waypoints are `> 0` — a body passing strictly between two checked configurations, which is
-> exactly ADR-0027's residual, measured on the trajectories the cell produced.
+> **OBSERVED** iff, **for some (link, object) pair other than the standing pair of §2.2.1**, a
+> sub-sample's distance for that pair is `<= 0` while **both bracketing waypoints are `> 0` for
+> that same pair** — a body passing strictly between two checked configurations, which is exactly
+> ADR-0027's residual, measured on the trajectories the cell produced.
 > **NOT OBSERVED** otherwise, **with rule K attached**.
+> **Restated over per-(link, object) distances on 2026-09-04, before any trial, and this was the
+> most damaging of the eight defects.** As written the condition was on the **aggregate** minimum
+> at the bracketing waypoints, and §2.2.1 puts that aggregate at or below zero at **every**
+> waypoint — so the OBSERVED branch was unreachable, TUNNEL1 was **NOT OBSERVED
+> unconditionally**, and **PRED5's refuter could not fire**. That refuter is this campaign's
+> whole answer to #17. Per pair, the condition is live: the standing overlap is one pair's
+> business and says nothing about any other pair's bracketing distances.
 > **This is not a claim about the path the arm physically followed.** The controller tracks the
 > same waypoints with its own lag under a first-order plant, so the executed path is neither the
 > waypoint set nor this interpolation. What TUNNEL1 measures is what `ValidateSolution` did not
 > look at.
 
 > **GRIP1 — the gripper completion's sensitivity, reported and deciding nothing.** Every distance
-> involving one of the four gripper finger and knuckle links is recomputed with the drive joint
-> at **0** and at **0.85 rad**, the ends of its declared range, and the largest change is
-> reported per capture. **It sets no verdict**: it exists so that §5.4's completion assumption is
-> a measured sensitivity rather than an argument.
+> involving one of the **six** moving gripper links — `left_outer_knuckle`, `left_finger`,
+> `left_inner_knuckle`, `right_outer_knuckle`, `right_finger`, `right_inner_knuckle` — is
+> recomputed with the drive joint at **0** and at **0.85 rad**, the ends of its declared range,
+> **and with all five `<mimic>` followers moved with it at multiplier 1 and offset 0** (§5.4).
+> The largest change is reported per capture and per pair. **It sets no verdict**: it exists so
+> that §5.4's completion assumption is a measured sensitivity rather than an argument.
+> **Corrected 2026-09-04, before any trial, on two counts.** It said **four** links, which is two
+> short and left a third of the moving gripper outside its scope; and it named the two drive-joint
+> values without saying that the five followers move with the drive joint, which read literally
+> specifies a kinematically impossible gripper — five knuckles and fingers frozen at zero while
+> the sixth swings through 0.85 rad. `arm_1_xarm_gripper_base_link` is **fixed** and is not in
+> GRIP1's scope; it is in every other distribution like any other link.
 
 ### 7.5 REFUSE1 — what the gate refused while we watched
 
@@ -690,12 +941,26 @@ arm, block.
 > under rule D: it is reported with the worst case, nothing is re-run, and **no distance verdict
 > in §7.2–§7.4 is stated for a capture whose FK1 disagrees** — it falls to rule N.
 
-> **VALID1 — CONSISTENT / INCONSISTENT.** At the same sampled waypoints, `GetStateValidity` in
-> I12's rig is called and its verdict is compared with the compute stage's sign, after removing
-> contacts whose two bodies are both robot links. A waypoint the compute stage puts at `d > 0`
-> against every object must come back valid on the scene side. **INCONSISTENT is reported with
-> the scene's recorded `link_padding` and `link_scale` beside it** (I4), because a non-zero
-> padding is a sufficient explanation and the campaign states it rather than assuming it.
+> **VALID1 — CONSISTENT / INCONSISTENT / KNOWN-DIVERGENT, and the informative direction is now
+> the one registered. Restated 2026-09-04, before any trial.** As written its only clause was
+> *a waypoint the compute stage puts at `d > 0` against every object must come back valid* — and
+> §2.2.1 makes that antecedent **false at every waypoint**, so the rule was vacuously satisfied
+> and could not fail. At the same sampled waypoints, `GetStateValidity` in I12's rig is called
+> and its verdict is compared with the compute stage's sign, after removing contacts whose two
+> bodies are both robot links. Three clauses, and the second is the one that carries information:
+> - **Forward.** A waypoint the compute stage puts at `d > 0` for **every** (link, object) pair
+>   must come back valid. Registered in the knowledge that it may have no instances.
+> - **Reverse — the informative direction.** For each (link, object) pair the compute stage puts
+>   at `d <= 0`, MoveIt is expected to report that pair among its contacts. **The standing pair
+>   of §2.2.1 is expected to violate this** — `test_planning_pipeline.py:939-971` already shows
+>   MoveIt calling the home configuration valid — so that pair alone is reported as
+>   **KNOWN-DIVERGENT** and is not counted as an inconsistency. **Any other pair violating it is
+>   INCONSISTENT and is a result**, not an exception: it would mean the two predicates disagree
+>   somewhere the layout does not explain.
+> - **Neither is resolved by choosing.** **INCONSISTENT is reported with the scene's recorded
+>   `link_padding` and `link_scale` beside it** (I4), because a non-zero padding is a sufficient
+>   explanation and the campaign states it rather than assuming it — and rule E's candidate list
+>   applies here too. Nothing is re-run and no tolerance is widened.
 
 > **REPRO1 — REPRODUCED / NOT REPRODUCED.** The compute stage is run **twice in the same
 > interpreter** and must produce **byte-identical** output; and **once more in a second
@@ -706,18 +971,24 @@ arm, block.
 
 > **Rule K — the region of interest, in the rule-W shape of the 2026-09-02 campaign, which took
 > it from ADR-0051's rule S. Defined here, before anything was captured.**
+> **Restated over per-(link, object) distances on 2026-09-04, before any trial. As written,
+> K-i could not refuse.** It keyed on the vendor set's **aggregate** minimum being `<= 0.040 m`,
+> and §2.2.1 puts that aggregate at or below zero at every waypoint of every trajectory — so
+> every capture was "exercised" by construction and the rule §11 calls *the one that matters most
+> here* was inert. Per pair it can refuse, which is the only reason to have it.
 > - **K-i — #49's region.** The hull-versus-vendor question is **exercised** by a capture only if
->   at least one admissible waypoint's minimum distance under the **vendor** set is
->   `<= CLOSE_BAND` (0.040 m). If none is, that capture **has not tested close-approach
->   clearance**: its DELTA1 is stated as *"not exercised; the closest approach was X m"*, and its
->   silence may **not** be read as a pass, as a clearance of the hull selection, as agreement
->   with ADR-0028's audit, or as evidence that #49 is closed.
+>   at least one admissible (waypoint, link, object) **other than the standing pair of §2.2.1**
+>   has a distance under the **vendor** set of `<= CLOSE_BAND` (0.040 m). If none has, that
+>   capture **has not tested close-approach clearance**: its DELTA1 is stated as *"not exercised;
+>   the closest approach outside the standing pair was X m, on pair P"*, and its silence may
+>   **not** be read as a pass, as a clearance of the hull selection, as agreement with ADR-0028's
+>   audit, or as evidence that #49 is closed.
 > - **K-ii — #17's region.** The tunnelling question is **exercised** by a capture only if at
->   least one consecutive-waypoint pair has both a step `>= STEP_MID` (0.020 m) **and** a
->   bracketing minimum distance `<= CLOSE_BAND`. Moving fast far from everything tests nothing,
->   and creeping close to something tests nothing either; **the question needs both at once.** If
->   no pair has both, TUNNEL1 is stated as *"not exercised"* and **#17 stays open on this
->   campaign's evidence**, in those words.
+>   least one consecutive-waypoint pair has both a step `>= STEP_MID` (0.020 m) **and**, for some
+>   (link, object) pair other than the standing one, a bracketing distance `<= CLOSE_BAND`.
+>   Moving fast far from everything tests nothing, and creeping close to something tests nothing
+>   either; **the question needs both at once.** If no waypoint pair has both, TUNNEL1 is stated
+>   as *"not exercised"* and **#17 stays open on this campaign's evidence**, in those words.
 >
 > **If no capture exercises a region, the campaign has not tested that question at all**, and
 > `ANALYSIS.md` says so in its verdict line rather than in a limitation paragraph.
@@ -735,10 +1006,19 @@ arm, block.
 > that either gate behaves. The verdict names what was not tested, and the item stays open on
 > that part.
 
-> **Rule R — resolution. Inherited via the 2026-09-03 and 2026-09-04 campaigns.** For any metric
-> whose spread **within one capture** exceeds that metric's minimum interesting size, a
-> non-detection of a difference between captures is **INCONCLUSIVE for that metric — never "no
-> difference"**.
+> **Rule R — resolution. Inherited via the 2026-09-03 and 2026-09-04 campaigns, and re-scoped
+> here on 2026-09-04, before any trial, because as inherited it quantified over a comparison this
+> campaign never makes.** For any metric whose spread **within one capture in one block** exceeds
+> **that metric's minimum interesting size as §7.0 now assigns it**, a non-detection of a
+> difference is **INCONCLUSIVE for that metric — never "no difference"**.
+> **The comparisons it binds are the two that occur here**: V6's, between two blocks of the same
+> capture; and V7's, between the load-flagged and unflagged subsets of one block. **The
+> "between captures" comparison the rule was inherited with is dropped rather than carried**,
+> because **rule T forbids it** — the captures are not each other's evidence and every verdict is
+> stated per capture, so there is no between-capture non-detection to guard. Carrying a clause
+> that binds nothing is the same defect as a threshold with no number.
+> **The sizes are in §7.0's table**, one per metric, and TUNNEL1 has none because a binary
+> observation has no spread.
 
 > **Rule H — no cross-campaign differencing, and no importing. Inherited from the 2026-09-02
 > scenario-ceilings campaign.** No measured figure from any other campaign, and no figure from
@@ -766,9 +1046,9 @@ arm, block.
 |---|---|---|
 | **PRED1** | **DELTA1 = SMALLER on at least one capture**, with the difference confined to gripper links — fingers, knuckles or gripper base — against a table or a conveyor, because those are the only links whose concavity faces a large flat body during a pick. | IDENTICAL everywhere, or a difference on `link_base`, `link1`, `link2`, `link3`, `link4` or `link5`, either of which says the mechanism is not the one predicted |
 | **PRED2** | **DELTA1 is never DISAGREEMENT.** Containment is a property of the derivation (§2.3), not of the cell. | any triple with `d_hull > d_vendor + DIFF_FLOOR` — which would falsify the instrument, not the geometry, and is the most informative failure this campaign could have |
-| **PRED3** | **FLIP1 = NONE on every capture, and it evidences nothing** (§1.1, §7.2). Registered so that it cannot be read as a result. | any flip, which is a DISAGREEMENT under rule E |
-| **PRED4** | **STEP1 = FAR BELOW on the Pilz trajectories of every capture.** Producing a 0.040 m step from one joint needs a moment arm of 0.36415 m at the shipped scaling (§2.4), and this arm carries the tool point closer to its own axes over most of a station approach. **The moment arm at the poses this cell reaches is not established in this file**, so this is the weakest prediction here and it is marked as such. | any capture whose Pilz maximum step reaches `STEP_MID` |
-| **PRED5** | **TUNNEL1 = NOT OBSERVED on every capture and every geometry**, and **rule K-ii fires** — that is, the campaign predicts it will not have tested the question. Registered in advance because **a NOT OBSERVED that rule K refuses is the honest expected outcome**, and it must not be reported as a clearance of ADR-0027's residual. | any observed sub-sample contact between two clear waypoints — which would be the campaign's headline and a direct measurement of #17 |
+| **PRED3** | **FLIP1 = NONE on every capture, and a NONE evidences nothing** (§1.1, §7.2). Registered so that it cannot be read as a result. **It is a real prediction again as of 2026-09-04**: before FLIP1 was split it was a statement about an outcome that could not occur. | a **HULL-ONLY CONTACT**, which is a geometry finding and would be this campaign's most valuable observation; or a **REVERSED**, which is a DISAGREEMENT under rule E |
+| **PRED4** | **STEP1 = FAR BELOW on the Pilz trajectories of every capture.** Producing a 0.040 m step from one joint needs a moment arm of 0.36415 m at the shipped scaling (§2.4). **No mechanism is offered, and this is the weakest prediction here.** It carried one until 2026-09-04 — *"this arm carries the tool point closer to its own axes over most of a station approach"* — and **that sentence was an unsupported assertion about poses this file establishes nothing about**, in a file that elsewhere refuses those; it is deleted rather than hedged. What remains is a bare guess against an arithmetic scale, and §2.4 already says 0.36415 m is neither an upper nor a lower bound on what the cell produces. | any capture whose Pilz maximum step reaches `STEP_MID` |
+| **PRED5** | **TUNNEL1 = NOT OBSERVED on every capture and every geometry**, and **rule K-ii fires** — that is, the campaign predicts it will not have tested the question. Registered in advance because **a NOT OBSERVED that rule K refuses is the honest expected outcome**, and it must not be reported as a clearance of ADR-0027's residual. **Its refuter was structurally unreachable until 2026-09-04** and is reachable now (§7.4). | any observed sub-sample contact, for one (link, object) pair, between two waypoints clear **for that pair** — which would be the campaign's headline and a direct measurement of #17 |
 | **PRED6** | **FK1 = AGREES and REPRO1 = REPRODUCED.** | either failing, in which case no distance verdict is published for the affected captures |
 
 ---
@@ -882,17 +1162,40 @@ A rule that only ever confirms is not a rule.
   reported**: the trajectories a differently-backed cell produces are a different sample.
 - **V4 — the door was matched before it was needed, and the publisher's resolved QoS is recorded
   rather than assumed.** Per block, per arm, the `display_planned_path` subscription reports at
-  least one matched publisher, and the publisher's resolved endpoint QoS from
-  `get_publishers_info_by_topic` **travels on the block record**. **Treat the match as an event,
+  least one matched publisher, and **every** matched publisher's resolved endpoint QoS from
+  `get_publishers_info_by_topic` **travels on the block record**.
+  **Expect two publishers per arm, not one, and record all of them. Added 2026-09-04.** Each
+  pipeline loads its own `DisplayMotionPath` instance and `initialize` creates a publisher per
+  instance on the same relative topic (`display_motion_path.cpp:63-71`, MoveIt 2.12.4, read on
+  2026-09-04); both pipelines are declared for every arm
+  (`cell_a_arm_1_planning_pipelines.yaml`, all three read). This rule said *"the publisher"* in
+  the singular until this amendment. It is benign — the trajectories arrive on one topic either
+  way — but a count recorded as 1 where 2 is correct is a discrepancy that would have to be
+  explained later, and recording every endpoint costs nothing. **Treat the match as an event,
   never as a sleep** (CLAUDE.md §10). A block that ran a scenario without a matched subscription
   on an arm is reported, and that arm's trajectories for that block are an instrument loss under
   rule C-i rather than a silence.
-- **V5 — the scene that actually planned.** I4's read-back is compared with
-  `cite_generated/moveit/cell_a_planning_scene.yaml`: the object ids must match exactly, and each
-  object's dimensions and pose must agree to **1e-9 m** after the frame the planner reports is
-  accounted for. A disagreement is **reported and the block's distances are stated against the
-  read-back**, never against the file. A block whose read-back is empty is **discarded**: a plan
-  validated against an empty world is not the gate this campaign is about.
+- **V5 — the scene that actually planned. Its tolerance is carried unchanged and its expected
+  firing is registered here rather than discovered in the write-up. Added 2026-09-04.** I4's
+  read-back is compared with `cite_generated/moveit/cell_a_planning_scene.yaml`: the object ids
+  must match exactly, and each object's dimensions and pose must agree to **1e-9 m** after the
+  frame the planner reports is accounted for. A disagreement is **reported and the block's
+  distances are stated against the read-back**, never against the file. A block whose read-back
+  is empty is **discarded**: a plan validated against an empty world is not the gate this
+  campaign is about.
+  **The arithmetic that decides whether this rule fires, computed here on 2026-09-04.** The
+  generated static transform `cite_world -> arm_N_mount` carries yaw `1.570796327`, which is
+  `pi/2` truncated: the difference is **2.051035e-10 rad**. Applied at the horizontal lever arm
+  of the furthest objects that displaces them by more than 1e-9 m — **three (arm, object) pairs
+  of the 36**, all on `arm_1`: `table_accumulation` at **1.273e-9 m**, `beam_c3_out` at
+  **1.185e-9 m** and `conveyor_3` at **1.079e-9 m**, the largest being 1.273e-9 m.
+  **So the accounting decides it, and the choice is registered now.** The harness accounts for
+  the frame using **the generated static transform's own value**, which is the value `move_group`
+  itself was given, so the round trip cancels to double precision and V5 is expected to pass. **If
+  the harness is instead written against `pi/2`, V5 fires on exactly those three pairs and on
+  nothing else, and that firing is arithmetic rather than a scene defect.** Either way, **V5 only
+  reports**: a firing is stated with the pair, the residual and which value was used, no tolerance
+  is widened (V9), and the block's distances stand against the read-back.
 - **V6 — the block effect. Inherited.** Every session is a block and every run is indexed, and
   both travel on every record. If, for any metric, the difference between two blocks within one
   capture is larger than the difference between two captures, that metric's finding is
@@ -959,9 +1262,19 @@ harness is fixed and this file is not touched.**
   ten were written before anything was captured. **Rule K is the one that matters most here**:
   the likely outcome is that these trajectories never went fast near anything, and that is a fact
   about these trajectories and not about the cell.
-- **Two verdicts are guaranteed before any data exists and are registered so that they cannot be
-  cashed.** FLIP1 = NONE follows from the capture's conditioning plus containment; DELTA1's
-  DISAGREEMENT direction is a theorem. Neither is evidence about geometry.
+- **One verdict direction is guaranteed before any data exists, and it is registered so that it
+  cannot be cashed.** DELTA1's DISAGREEMENT direction is a theorem, so a measurement in it
+  falsifies the instrument and never the geometry (rule E).
+  **This bullet said *two* until 2026-09-04, and the second was withdrawn along with three
+  others that were guaranteed and not registered.** FLIP1 = NONE was called guaranteed on a
+  premise §2.2.1 falsifies, and FLIP1 now has a reachable geometry outcome (§7.2). What was
+  guaranteed and **unregistered** was worse: **MARGIN1 = TIGHT**, from a static structural
+  overlap rather than from any trajectory; **TUNNEL1 = NOT OBSERVED**, whose refuting branch
+  could not be reached; and **VALID1 = CONSISTENT**, whose only clause had a false antecedent
+  everywhere. Rule K-i could not refuse either. **All five stood on one fact about the layout
+  that no rule mentioned**, and all five are restated over per-(link, object) distances in §7.
+  **The lesson is registered with them:** a rule stated over an aggregate is answered by the
+  aggregate's extreme member, and if that member is a constant the rule is decoration.
 - **The measurement is allowed to contradict the arithmetic.** Rule D and rule E say what happens
   then, before the answer is known: the disagreement is the result, nothing is re-run and nothing
   is edited.
@@ -978,3 +1291,58 @@ harness is fixed and this file is not touched.**
 - **Figures stay in this directory.** Nothing produced here is copied into ADR-0027, ADR-0028,
   `CLAUDE.md`, [`docs/open-work.md`](../../open-work.md), the generated comments or any layer
   document (P1). **Cite the directory.**
+
+---
+
+## 12. Amendment of 2026-09-04, before the first trial
+
+**Permitted because rule 1 had not closed.** [`../README.md`](../README.md) freezes this file
+**once the first trial has run**. When this amendment was written `harness/` did not exist,
+`raw/` did not exist, `ANALYSIS.md` did not exist and **no trial had run**, so nothing here was
+chosen by data — there was no data. **After the first trial none of this is available**, and
+every later correction is a numbered deviation in `ANALYSIS.md` applied to data already
+collected.
+
+**No threshold moved.** `CLOSE_BAND`, `STEP_HIGH`, `STEP_MID`, `DIFF_FLOOR`, `SUB_STEP`,
+`SUB_CEILING`, `CENSOR`, the FK tolerance, REPRO1's tolerance, rule C's floor of 2, the 20 %
+ceiling, V7's 4.0 and V5's 1e-9 m are all exactly what they were. **No geometry selection, no
+sampling time, no velocity scaling and no layout figure is touched**, and §0 is unchanged.
+
+**What changed, and why.** Eight defects, five of them rules that could not fire or could fire
+only one way.
+
+| # | What was wrong | How it was closed |
+|---|---|---|
+| 1 | **Four rules were vacuous at once.** Every arm's base overlaps its own pedestal by ~132 nm at every configuration under both geometries (§2.2.1), so the **aggregate** minimum distance is at or below zero everywhere. MARGIN1 = TIGHT was guaranteed by a static overlap, TUNNEL1's OBSERVED branch was unreachable and PRED5's refuter with it, rule K-i could never refuse, and VALID1's only clause had a false antecedent. | **By definition.** The fact is registered in §2.2.1 with its arithmetic; MARGIN1, TUNNEL1, rule K and VALID1 are restated over **per-(link, object)** distances; the standing pair is excluded **by name** from every aggregate and reported as its own row. Nothing was widened. |
+| 2 | **The pipeline attribution could not tell Pilz from OMPL, and then discarded every OMPL trajectory.** Reading (a) was the 0.1 s interior spacing, but TOTG's `resample_dt` default is also 0.1 and nothing overrides it — so (a) read the same for both, every OMPL trajectory "disagreed", and STEP1's own rule dropped the lot. The data is on-question: `ValidateSolution` runs post-TOTG in that pipeline too. | **By deletion and replacement.** The discarding rule is deleted. I2 gains reading **(c)**, the `Calling Planner '<description>'` INFO line whose two descriptions are distinct string literals, as **the** attribution; (a) is demoted to a corroboration that can only say *"consistent with 0.1 s"*. |
+| 3 | **FLIP1 foreclosed the only reading #49's positive answer can take.** Its single OBSERVED was routed to rule E as an instrument fault, with *"never as a finding about geometry"* attached — but the only reachable flip is hull-in-contact-where-vendor-is-clear, which is #49's feared consequence, and it contradicts the conditioning rather than containment. Rule E's candidates omitted the likeliest cause. | **By definition.** FLIP1 splits into **HULL-ONLY CONTACT** (a geometry finding, reported with its depth) and **REVERSED** (rule E). *"Never as a finding about geometry"* is **deleted**. Rule E gains MoveIt's padding, scaling and the narrow-phase tolerance as candidates. |
+| 4 | **Rule C-i's primary clause was unsatisfiable** — it wanted a matched publisher before the scenario started, and the scenario starts the `move_group` that creates it — leaving one live branch that named an unregistered ceiling. | **By definition.** C-i is restated over the branch that can occur, with `DOOR_CEILING_S` = **240.0 s** registered in §7.0 against the tree's own `BRING_UP_CEILING_S`, plus the clause that does the work: matched **before** that arm's first plan. |
+| 5 | **Rule C-ii had no consequence.** A trajectory never received can neither fail a clause nor be excluded, so the per-trajectory INSTRUMENT LOSS could not reach a shortfall. | **By definition.** A shortfall is a **capture-level** loss of `k` trajectories, counted toward the 20 % ceiling, which is now stated explicitly over **I5's published count**. A surplus is a rule-D DISAGREEMENT. |
+| 6 | **"Four" moving gripper links; there are six**, five of them `<mimic>` followers, and GRIP1's two drive-joint values were stated without the coupling — read literally, a kinematically impossible gripper. | **By definition.** §5.4 and GRIP1 name all six and state the coupling; I11 names the mimics explicitly. Recorded in passing: FK1 is safe regardless, because `trajectory_start` is a full MoveIt `RobotState`. |
+| 7 | **Rule R's threshold was undefined** — no table assigned a minimum interesting size — and it quantified over between-capture comparisons that rule T forbids, while V7 invoked it for a within-block one. | **By definition and by deletion.** §7.0 assigns a size per metric, introducing no new number; the between-capture clause is **dropped** and the rule re-scoped to V6's and V7's actual comparisons. |
+| 8 | **§7.0's exhaustiveness claim was false** — three registered sizes had no row — and V5's 1e-9 m sits below its own arithmetic floor under one accounting choice. | **By definition.** The three rows are added. V5's tolerance is **carried unchanged** and its expected firing registered with the arithmetic: 2.051035e-10 rad of yaw truncation, three of 36 pairs above 1e-9 m, largest 1.273e-9 m. |
+
+**Five smaller corrections, all of them wording or citation.** Two `DisplayMotionPath` publishers
+per arm rather than one (V4); the Cartesian `max_trans_vel: 0.25` that bounds nothing here
+(§2.4); `planning_pipeline.cpp` citations moved to the lines 2.12.4 actually has; rule T's
+*"inherited verbatim"* corrected to a re-scoping; `DIFF_FLOOR`'s reason corrected from *"the two
+sets share vertex coordinates"* to the true and one-directional *"the hull's vertex set is a
+subset of its source's"*. PRED4's unsupported mechanism is **deleted** rather than hedged, and
+DELTA1 gains the **NOT EXERCISED** state rule K-i already named.
+
+**What was deliberately not changed.** **The registered bound on #49's refusal question stays
+exactly where it was.** §1.1's capture-door argument, §7.5's REFUSE1 and §8's first bullet all
+still say that a refused trajectory is never published, that its geometry is not measurable
+through this door, and that **this campaign cannot answer whether the hull set refuses a motion
+the vendor set would have accepted**. That bound is correct, it is the honest part of this
+design, and **nothing in this amendment weakens it by one millimetre** — FLIP1's new geometry
+outcome is about trajectories that were **accepted**, and it is not a refusal result.
+
+**How the figures in this amendment were obtained.** Every one was computed or read here, on
+2026-09-04, from the tree at `HEAD` and the pinned vendor checkout: the scene and static-transform
+values by parsing the generated files; the mesh bounds, vertex counts, subset relation and
+volumes by reading the committed STLs directly; the link, joint, mimic and collision-origin
+counts by expanding the shipped xacro; the MoveIt behaviour from the 2.12.4 tag and from the
+headers and `strings` of the shipped libraries in this image. **None of it is taken from any
+campaign directory or from §2.5's list** (rule H), and **nothing in `model/`, `workspace/src/`,
+`tools/`, `tests/`, `scripts/`, `assets/` or `external/` was edited** (§0, V1).
