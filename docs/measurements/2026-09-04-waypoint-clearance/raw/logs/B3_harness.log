@@ -1,0 +1,46 @@
+== B3: V1 opening reading, clean=True ==
+   vendor pin: {"manifest": "external/cite.repos", "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_from": "/workspace/workspace/src/external/xarm_ros2", "matches": true}
+   load: 1.13 3.53 3.20
+== V14: {"ros_domain_id_env": "43", "cite_domain_base_env": "43", "resolved_from_plan": 43, "resolver": "cite_bringup.plan.resolve_domain_id(plan, PLANT_SIDE, domain_base(environ))", "v14_ok": true} ==
+== topics: {"expected": {"arm_1": "/cite/cell_a/arm_1/display_planned_path", "arm_2": "/cite/cell_a/arm_2/display_planned_path", "arm_3": "/cite/cell_a/arm_3/display_planned_path"}, "found_on_graph": {"/cite/cell_a/arm_1/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"], "/cite/cell_a/arm_2/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"], "/cite/cell_a/arm_3/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"]}, "expected_all_present": true, "unexpected": [], "publisher_count_by_topic": {"/cite/cell_a/arm_1/display_planned_path": 0, "/cite/cell_a/arm_2/display_planned_path": 0, "/cite/cell_a/arm_3/display_planned_path": 0}, "note": "this node's own subscriptions put every expected name on the graph, so `expected_all_present` is not evidence that a cell is up; `publisher_count_by_topic` is"} ==
+== BRINGUP: ./scripts/scenario bringup -> B3_BRINGUP.log ==
+   door open on arm_2 after 3.5s, 3 matched publisher(s)
+   door open on arm_3 after 3.5s, 3 matched publisher(s)
+   V2/V3 on arm_2: chars=33636 hulls=13 v2=True v3=True
+   V2/V3 on arm_3: chars=33636 hulls=13 v2=True v3=True
+   door open on arm_1 after 9.4s, 3 matched publisher(s)
+   V2/V3 on arm_1: chars=33636 hulls=13 v2=True v3=True
+   I4 on arm_1: read_ok=True objects=12 after 4 attempt(s), 30s into the capture
+   I4 on arm_2: read_ok=True objects=12 after 2 attempt(s), 35s into the capture
+   I4 on arm_3: read_ok=True objects=12 after 1 attempt(s), 40s into the capture
+== BRINGUP: exit=1 received=1 i5=1 i6=0 in 95s ==
+   I9: Scenario 'bringup' failed — 1 teardown assertion(s) failed
+== BRINGUP: 1 trajectory record(s) written ==
+== PICKPLACE: ./scripts/scenario pick_and_place -> B3_PICKPLACE.log ==
+   door open on arm_1 after 0.0s, 2 matched publisher(s)
+   door open on arm_2 after 0.0s, 2 matched publisher(s)
+   door open on arm_3 after 0.0s, 2 matched publisher(s)
+   V2/V3 on arm_1: chars=0 hulls=0 v2=False v3=False
+   V2/V3 on arm_2: chars=33636 hulls=13 v2=True v3=True
+   V2/V3 on arm_3: chars=33636 hulls=13 v2=True v3=True
+   I4 on arm_1: read_ok=True objects=12 after 5 attempt(s), 25s into the capture
+   I4 on arm_2: read_ok=True objects=12 after 1 attempt(s), 30s into the capture
+   I4 on arm_3: read_ok=True objects=12 after 1 attempt(s), 35s into the capture
+== PICKPLACE: exit=1 received=8 i5=8 i6=0 in 141s ==
+   I9: Scenario 'pick_and_place' failed — 1 teardown assertion(s) failed
+== PICKPLACE: 8 trajectory record(s) written ==
+== LINE: ./scripts/scenario continuous_line -> B3_LINE.log ==
+   door open on arm_1 after 0.0s, 2 matched publisher(s)
+   door open on arm_2 after 0.0s, 2 matched publisher(s)
+   door open on arm_3 after 0.0s, 2 matched publisher(s)
+   V2/V3 on arm_1: chars=0 hulls=0 v2=False v3=False
+   V2/V3 on arm_2: chars=33636 hulls=13 v2=True v3=True
+   V2/V3 on arm_3: chars=33636 hulls=13 v2=True v3=True
+   I4 on arm_1: read_ok=True objects=12 after 7 attempt(s), 34s into the capture
+   I4 on arm_2: read_ok=True objects=12 after 1 attempt(s), 39s into the capture
+   I4 on arm_3: read_ok=True objects=12 after 1 attempt(s), 44s into the capture
+== LINE: exit=1 received=63 i5=63 i6=4 in 605s ==
+   I9: Scenario 'continuous_line' failed — 1 teardown assertion(s) failed
+== LINE: 63 trajectory record(s) written ==
+== V1 closing reading: v1_clean=True disagreed_mid_block=False ==
+== B3: 72 trajectory record(s) over 3 capture(s) ==

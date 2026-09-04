@@ -1,0 +1,715 @@
+{
+  "label": "B3",
+  "block": "B3",
+  "is_shakedown": false,
+  "captures_scheduled": [
+    "BRINGUP",
+    "PICKPLACE",
+    "LINE"
+  ],
+  "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9",
+  "base_commit": "c38a42c",
+  "v1_start": {
+    "at": 1788563889.241659,
+    "head": "3a5796cf72dab7adecc42654e9b61e56904590f5",
+    "git_status_porcelain": " M docs/measurements/2026-09-04-waypoint-clearance/raw/logs/campaign.log\n M docs/measurements/2026-09-04-waypoint-clearance/raw/provenance.txt\n?? docs/measurements/2026-09-04-waypoint-clearance/raw/logs/B3_harness.log\n?? docs/measurements/2026-09-04-waypoint-clearance/raw/logs/B3_load.txt",
+    "watched_diff_against_base": "",
+    "watched_worktree_dirty": "",
+    "vendor_pin": {
+      "manifest": "external/cite.repos",
+      "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+      "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+      "matches": true
+    },
+    "clean": true,
+    "model_hash": {
+      "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+      "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+    },
+    "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9"
+  },
+  "load_start": {
+    "load_1m": 1.126953125,
+    "load_5m": 3.5341796875,
+    "load_15m": 3.1953125,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T23:18:09Z"
+  },
+  "v7_start": false,
+  "v14": {
+    "ros_domain_id_env": "43",
+    "cite_domain_base_env": "43",
+    "resolved_from_plan": 43,
+    "resolver": "cite_bringup.plan.resolve_domain_id(plan, PLANT_SIDE, domain_base(environ))",
+    "v14_ok": true
+  },
+  "v12_gz_calls": 0,
+  "v12_note": "the harness constructs no Gazebo environment and makes no gz call (criteria.md V12); the scenarios start their own Gazebo processes through the shipped launch, which carries GZ_PARTITION (ADR-0042)",
+  "v13": {
+    "sleeps_to_sequence_bringup": false,
+    "note": "the recorder waits for a matched publisher (V4, rule C-i) and for nothing else; the scenario is started first and the door is watched while it runs"
+  },
+  "model_hash": {
+    "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+    "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+  },
+  "host": {
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 16,
+    "ros_domain_id": "43",
+    "gz_partition": null,
+    "rmw_implementation": "rmw_fastrtps_cpp",
+    "cite_environment": {
+      "CITE_DOMAIN_BASE": "43",
+      "CITE_VENV": "/opt/cite-venv"
+    }
+  },
+  "topics": {
+    "expected": {
+      "arm_1": "/cite/cell_a/arm_1/display_planned_path",
+      "arm_2": "/cite/cell_a/arm_2/display_planned_path",
+      "arm_3": "/cite/cell_a/arm_3/display_planned_path"
+    },
+    "found_on_graph": {
+      "/cite/cell_a/arm_1/display_planned_path": [
+        "moveit_msgs/msg/DisplayTrajectory"
+      ],
+      "/cite/cell_a/arm_2/display_planned_path": [
+        "moveit_msgs/msg/DisplayTrajectory"
+      ],
+      "/cite/cell_a/arm_3/display_planned_path": [
+        "moveit_msgs/msg/DisplayTrajectory"
+      ]
+    },
+    "expected_all_present": true,
+    "unexpected": [],
+    "publisher_count_by_topic": {
+      "/cite/cell_a/arm_1/display_planned_path": 0,
+      "/cite/cell_a/arm_2/display_planned_path": 0,
+      "/cite/cell_a/arm_3/display_planned_path": 0
+    },
+    "note": "this node's own subscriptions put every expected name on the graph, so `expected_all_present` is not evidence that a cell is up; `publisher_count_by_topic` is"
+  },
+  "generated": {
+    "planning_scene": {
+      "frame_id": "cite_world",
+      "objects": {
+        "beam_c1_out": {
+          "type": "break_beam",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.04,
+            0.04,
+            0.12
+          ],
+          "xyz_m": [
+            1.627,
+            0.25,
+            0.69
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "beam_c2_out": {
+          "type": "break_beam",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.04,
+            0.04,
+            0.12
+          ],
+          "xyz_m": [
+            3.727,
+            0.25,
+            0.69
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "beam_c3_out": {
+          "type": "break_beam",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.04,
+            0.04,
+            0.12
+          ],
+          "xyz_m": [
+            5.75,
+            0.25,
+            0.69
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "beam_pick": {
+          "type": "break_beam",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.04,
+            0.04,
+            0.12
+          ],
+          "xyz_m": [
+            -0.475,
+            0.25,
+            0.69
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "conveyor_1": {
+          "type": "belt_1200x400",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            1.2,
+            0.4,
+            0.6
+          ],
+          "xyz_m": [
+            1.05,
+            0.0,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "conveyor_2": {
+          "type": "belt_1200x400",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            1.2,
+            0.4,
+            0.6
+          ],
+          "xyz_m": [
+            3.15,
+            0.0,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "conveyor_3": {
+          "type": "belt_1200x400",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            1.2,
+            0.4,
+            0.6
+          ],
+          "xyz_m": [
+            5.25,
+            0.0,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "pedestal_1": {
+          "type": "pedestal_600",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.3,
+            0.3,
+            0.6
+          ],
+          "xyz_m": [
+            0.0,
+            -0.3,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "pedestal_2": {
+          "type": "pedestal_600",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.3,
+            0.3,
+            0.6
+          ],
+          "xyz_m": [
+            2.1,
+            -0.3,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "pedestal_3": {
+          "type": "pedestal_600",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.3,
+            0.3,
+            0.6
+          ],
+          "xyz_m": [
+            4.2,
+            -0.3,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "table_accumulation": {
+          "type": "work_table_600",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "xyz_m": [
+            6.2,
+            0.0,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "table_pick": {
+          "type": "work_table_600",
+          "frame_id": "cite_world",
+          "primitive": "box",
+          "dimensions_m": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "xyz_m": [
+            -0.475,
+            0.0,
+            0.3
+          ],
+          "rpy_rad": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    "static_transforms": {
+      "cite_world|arm_1_mount": {
+        "parent": "cite_world",
+        "child": "arm_1_mount",
+        "xyz_m": [
+          0.0,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          1.570796327
+        ]
+      },
+      "cite_world|arm_2_mount": {
+        "parent": "cite_world",
+        "child": "arm_2_mount",
+        "xyz_m": [
+          2.1,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          1.570796327
+        ]
+      },
+      "cite_world|arm_3_mount": {
+        "parent": "cite_world",
+        "child": "arm_3_mount",
+        "xyz_m": [
+          4.2,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          1.570796327
+        ]
+      },
+      "cite_world|cell_a__beam_c1_out__beam": {
+        "parent": "cite_world",
+        "child": "cell_a__beam_c1_out__beam",
+        "xyz_m": [
+          1.627,
+          0.25,
+          0.63
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__beam_c2_out__beam": {
+        "parent": "cite_world",
+        "child": "cell_a__beam_c2_out__beam",
+        "xyz_m": [
+          3.727,
+          0.25,
+          0.63
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__beam_c3_out__beam": {
+        "parent": "cite_world",
+        "child": "cell_a__beam_c3_out__beam",
+        "xyz_m": [
+          5.75,
+          0.25,
+          0.63
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__beam_pick__beam": {
+        "parent": "cite_world",
+        "child": "cell_a__beam_pick__beam",
+        "xyz_m": [
+          -0.475,
+          0.25,
+          0.63
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_1__infeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_1__infeed",
+        "xyz_m": [
+          0.5,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_1__outfeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_1__outfeed",
+        "xyz_m": [
+          1.6,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_1__surface": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_1__surface",
+        "xyz_m": [
+          1.05,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_2__infeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_2__infeed",
+        "xyz_m": [
+          2.6,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_2__outfeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_2__outfeed",
+        "xyz_m": [
+          3.7,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_2__surface": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_2__surface",
+        "xyz_m": [
+          3.15,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_3__infeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_3__infeed",
+        "xyz_m": [
+          4.7,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_3__outfeed": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_3__outfeed",
+        "xyz_m": [
+          5.8,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__conveyor_3__surface": {
+        "parent": "cite_world",
+        "child": "cell_a__conveyor_3__surface",
+        "xyz_m": [
+          5.25,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__pedestal_1__top": {
+        "parent": "cite_world",
+        "child": "cell_a__pedestal_1__top",
+        "xyz_m": [
+          0.0,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__pedestal_2__top": {
+        "parent": "cite_world",
+        "child": "cell_a__pedestal_2__top",
+        "xyz_m": [
+          2.1,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__pedestal_3__top": {
+        "parent": "cite_world",
+        "child": "cell_a__pedestal_3__top",
+        "xyz_m": [
+          4.2,
+          -0.3,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__table_accumulation__surface": {
+        "parent": "cite_world",
+        "child": "cell_a__table_accumulation__surface",
+        "xyz_m": [
+          6.2,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      },
+      "cite_world|cell_a__table_pick__surface": {
+        "parent": "cite_world",
+        "child": "cell_a__table_pick__surface",
+        "xyz_m": [
+          -0.475,
+          0.0,
+          0.6
+        ],
+        "rpy_rad": [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      }
+    },
+    "arms": {
+      "arm_1": {
+        "asset": "arm_1",
+        "namespace": "/cite/cell_a/arm_1",
+        "description": "package://cite_generated/description/cell_a_arm_1.urdf.xacro",
+        "group": "arm_1_xarm5",
+        "base_link": "arm_1_link_base",
+        "tip_link": "arm_1_link_tcp",
+        "home_rad": [
+          0.0,
+          -0.35,
+          -1.05,
+          0.0,
+          1.4
+        ],
+        "srdf": "package://cite_generated/moveit/cell_a_arm_1.srdf.xacro",
+        "kinematics": "package://cite_generated/moveit/cell_a_arm_1_kinematics.yaml",
+        "planning_pipelines": "package://cite_generated/moveit/cell_a_arm_1_planning_pipelines.yaml",
+        "joint_limits": "package://cite_generated/moveit/cell_a_arm_1_joint_limits.yaml",
+        "cartesian_limits": "package://cite_generated/moveit/cell_a_arm_1_cartesian_limits.yaml",
+        "controllers": "package://cite_generated/moveit/cell_a_arm_1_moveit_controllers.yaml"
+      },
+      "arm_2": {
+        "asset": "arm_2",
+        "namespace": "/cite/cell_a/arm_2",
+        "description": "package://cite_generated/description/cell_a_arm_2.urdf.xacro",
+        "group": "arm_2_xarm5",
+        "base_link": "arm_2_link_base",
+        "tip_link": "arm_2_link_tcp",
+        "home_rad": [
+          0.0,
+          -0.35,
+          -1.05,
+          0.0,
+          1.4
+        ],
+        "srdf": "package://cite_generated/moveit/cell_a_arm_2.srdf.xacro",
+        "kinematics": "package://cite_generated/moveit/cell_a_arm_2_kinematics.yaml",
+        "planning_pipelines": "package://cite_generated/moveit/cell_a_arm_2_planning_pipelines.yaml",
+        "joint_limits": "package://cite_generated/moveit/cell_a_arm_2_joint_limits.yaml",
+        "cartesian_limits": "package://cite_generated/moveit/cell_a_arm_2_cartesian_limits.yaml",
+        "controllers": "package://cite_generated/moveit/cell_a_arm_2_moveit_controllers.yaml"
+      },
+      "arm_3": {
+        "asset": "arm_3",
+        "namespace": "/cite/cell_a/arm_3",
+        "description": "package://cite_generated/description/cell_a_arm_3.urdf.xacro",
+        "group": "arm_3_xarm5",
+        "base_link": "arm_3_link_base",
+        "tip_link": "arm_3_link_tcp",
+        "home_rad": [
+          0.0,
+          -0.35,
+          -1.05,
+          0.0,
+          1.4
+        ],
+        "srdf": "package://cite_generated/moveit/cell_a_arm_3.srdf.xacro",
+        "kinematics": "package://cite_generated/moveit/cell_a_arm_3_kinematics.yaml",
+        "planning_pipelines": "package://cite_generated/moveit/cell_a_arm_3_planning_pipelines.yaml",
+        "joint_limits": "package://cite_generated/moveit/cell_a_arm_3_joint_limits.yaml",
+        "cartesian_limits": "package://cite_generated/moveit/cell_a_arm_3_cartesian_limits.yaml",
+        "controllers": "package://cite_generated/moveit/cell_a_arm_3_moveit_controllers.yaml"
+      }
+    }
+  },
+  "registered_sizes": {
+    "close_band_m": 0.04,
+    "step_high_m": 0.04,
+    "step_mid_m": 0.02,
+    "diff_floor_m": 1e-09,
+    "sub_step_m": 0.002,
+    "sub_ceiling": 200,
+    "censor_m": 0.5,
+    "door_ceiling_s": 240.0,
+    "loss_ceiling_share": 0.2
+  }
+}
