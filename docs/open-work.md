@@ -28,6 +28,14 @@ moved**; every later reading carries its own date.
 they name: `main` is still `51195e0` (`git rev-parse main`, with `origin/main` agreeing), and the
 campaign count is **13 on this branch, 11 on `main`**. No other row was re-read on this date.
 
+**Updated again 2026-09-04**, on the same branch at `2affb36`: a **fourteenth** campaign is
+published and **#20 is rewritten against it** — its **healthy-run half is closed** and its firing
+half is not. [ADR-0036](adr/0036-execution-side-trajectory-tolerances.md) carries a dated
+amendment of the same date; its **status did not move**. The same two table rows were re-derived
+with the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, with
+`origin/main` agreeing), and the campaign count is now **14 on this branch, 11 on `main`**. No
+other row was re-read on this date.
+
 ---
 
 ## Where the repository stood when this was written
@@ -47,6 +55,9 @@ re-read and one moved.** Measurement campaigns went **11 → 12**:
 **Re-read on 2026-09-04 at `f6f8827`: the count is 13 on this branch** —
 `2026-09-03-stall-band-flip/` is the thirteenth — **and still 11 on `main`**, which has not
 moved from `51195e0`.
+**Re-read again on 2026-09-04 at `2affb36`: the count is 14 on this branch** —
+`2026-09-04-following-error/` is the fourteenth — **and still 11 on `main`**, which still reads
+`51195e0`.
 The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
 15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
 indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
@@ -63,7 +74,7 @@ history is the note below.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 13 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 14 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
 | CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
@@ -143,26 +154,110 @@ geometries.
 **Never widen a ceiling or a tolerance to absorb a planning refusal that appears after the hull
 promotion.**
 
-### #20 — Following error under `gz_ros2_control` has never been sampled
-The path tolerance is **not** known to be inert: it demonstrably fires against mock hardware
-under an injected fault, in ADR-0036's launch test. What is unestablished is its behaviour under
-`gz_ros2_control`, **in both directions** — neither firing on a genuine obstruction nor staying
-quiet on a healthy run has been shown there.
+### #20 — Following error under `gz_ros2_control`: the healthy-run half is closed, the firing half is not
+**Answered on the healthy-run half, 2026-09-04, and still open on the firing half.** The
+measurement this item asked for, in one of its two directions, is
+[`docs/measurements/2026-09-04-following-error/`](measurements/2026-09-04-following-error/ANALYSIS.md)
+— thresholds registered before the first trial, machine named, run against the shipped cell with
+`gz_ros2_control/GazeboSimSystem` asserted off the description the running node published.
+**Cite the directory; no figure from it is copied here (P1).** The record it bears on,
+[ADR-0036](adr/0036-execution-side-trajectory-tolerances.md), carries a dated amendment of the
+same date, and **its status did not move.**
 
-Why it is a real question: in simulation the position command interface is not a position servo.
+**The heading changed on 2026-09-04.** It read *"has never been sampled"*, and that is no longer
+true of the healthy half. The item's identifier is unchanged.
+
+**What is now known.**
+
+- **The healthy run is sampled, and the sample is a measured one rather than an empty
+  subscription.** A registered admissibility rule refuses a silence produced by an instrument
+  that received nothing — the failure this item's own premise would otherwise have been
+  indistinguishable from — and every condition cleared it with no instrument losses, across
+  three bring-ups.
+- **The path tolerance is *not* structurally silent under `gz_ros2_control`. It fired.** Two
+  trials, on the concurrently loaded condition, aborting as `PATH_TOLERANCE_VIOLATED`, both
+  attributed by the instrument's own naming to **the arm under test's own controller** and
+  neither by its conservative fallback, with zero unattributed events anywhere in the campaign.
+  **This item's premise — that the detector may never fire in CI — is falsified as a structural
+  claim.**
+- **Counts, not causes.** Two events across three bring-ups, **not one per bring-up**: the third
+  produced none at the same schedule slot that fired in the first two. The campaign attributes
+  neither the firings nor their absence, and neither is a rate.
+- **At full velocity scaling the healthy peak lands above ADR-0036's own order-of-magnitude
+  line** — the outcome the campaign registered as the uncomfortable one before any trial. That
+  comparison belongs to ADR-0036 and is quoted in its amendment, not here. The three
+  default-scaled conditions — the scaling `pick_and_place` and `continuous_line` run at — sit
+  below it, and **each of those is a lower bound**: the controller compares its tolerance whether
+  or not the state message is delivered, and a measurable share of the compared states never
+  reached the recorder. The one verdict above the line is not weakened that way — a delivered
+  sample establishes it.
+- **The corrected command law is established rather than merely admitted**: the campaign's
+  arithmetic and its measurement agree on every trial but the two firings, to five significant
+  figures, and it declines to attribute those two. This supersedes the
+  first-order-lag derivation this item states below and the one in ADR-0036's 2026-08-27
+  correction, both of which omit the controller's one-period lookahead.
+- **Concurrent load did not move the distribution** — INDISTINGUISHABLE, with both of the
+  campaign's guards evaluated and neither binding — and **the goal-side verdict is CLEAR and
+  uninformative by construction, registered as such in advance** so that it could not later be
+  read as evidence.
+
+**Still open: the firing half, and the reason is structural.** Nothing above shows the detector
+**can** detect an obstruction under this backend. The two firings were **not induced**; the
+campaign has no mechanism for making the tolerance fire and registered that half as out of scope
+before its first trial. Making it fire needs a **Gazebo-side** mechanism that obstructs an arm
+**link** while `gz_ros2_control` is the loaded hardware component.
+
+**The instrument note this item used to carry is now settled, in the opposite direction.** It
+recorded the item as blocked on the absence of a fixture that can hold a joint part-way, and then
+that `cite_test_hardware::JointStopSystem` (ADR-0040) *"now exists and does exactly that"*.
+**It cannot serve here.** `JointStopSystem` derives from `mock_components::GenericSystem`
+(`workspace/src/cite_test_hardware/include/cite_test_hardware/joint_stop_system.hpp`), so it is a
+`ros2_control` hardware component loaded **instead of** `gz_ros2_control/GazeboSimSystem`, not
+beside it: a description that names it has no Gazebo plugin driving its joints at all, and a rig
+built on it measures mock hardware again — the blind spot ADR-0036 names in its own "How these
+errors survived" paragraph.
+
+**Whether the firing half is worth building is undecided and is the project owner's.** No fixture
+is designed, no ADR is proposed and no campaign is started for it here — the campaign's own §0
+reserves that, and so does this item.
+
+**Also still open, and untouched by the campaign:** the scenario sample ADR-0036's "revisit"
+bullet asks for. That rig drives L3 directly and runs neither `pick_and_place` nor
+`continuous_line`, so that part of the bullet is not discharged.
+
+**Two things the campaign surfaced that this item did not contain, and that no registered rule
+read.** Both are recorded as **observations attributed to nothing** — neither is diagnosed, and
+neither may be written up as a defect on the strength of this paragraph.
+
+- **The campaign's own criteria contained a "by construction" claim that its data falsified.**
+  The criteria stated as a registered rule that three of the four conditions *could not* reach
+  the speed at which the tolerance is stressed; one of them reached nearly twice the cap that
+  clause asserts. The rule was applied literally against data already collected and the clause
+  is recorded as **wrong** rather than corrected. Note the direction: the falsification made the
+  campaign's stress coverage **larger** than registered, so no verdict was weakened by it. **What
+  produced the speed is not attributed.**
+- **Reference velocities exceed the description's own declared joint limit, including in a
+  *healthy* trial**, while **no measured joint speed anywhere exceeded it** — so the exceedance is
+  in the reference and not in the feedback. **Nothing in the campaign's rules reads
+  `reference.velocities` against a limit**, so no rule fired on it and none was invented. Whether
+  it is the time parameterisation's output, an artefact of the abort path, or something else is
+  not decided; whether `gz-sim` clamps the plugin's velocity command against the joint's SDF
+  limit is separately recorded as unverified.
+
+**The original statement of the question, kept because the arithmetic in it is what the campaign
+checked.** In simulation the position command interface is not a position servo:
 `GazeboSimSystem::write()` computes `target_vel = -position_proportional_gain * error *
 update_rate` (`gz_system.cpp:790-806`; default gain 0.1, update rate 150), a first-order lag with
-τ ≈ 67 ms. Reaching the 1.0 rad path tolerance would mean the plugin commanding roughly 15 rad/s,
-about 5× the joint's 3.14 rad/s URDF limit — and that command is computed **inside** the plugin,
-downstream of `enforce_command_limits`, so nothing clamps it.
+τ ≈ 67 ms, and that command is computed **inside** the plugin, downstream of
+`enforce_command_limits`, so nothing clamps it. **The campaign's corrected law adds the
+controller's one-period lookahead to that lag and is what agrees with the measurement**; the lag
+alone does not. The P2 asymmetry this item names — that the detector could be silent in
+simulation while live on hardware — **is not resolved in either direction**, and nothing here is
+evidence about the physical arm.
 
-So the detector may never fire in CI while being live on hardware, which is a **P2 asymmetry in
-the direction this project cares about**.
-
-**Instrument note, now partly out of date.** This task was recorded as blocked on the absence of
-a fixture that can hold a joint part-way. `cite_test_hardware::JointStopSystem` (ADR-0040) now
-exists and does exactly that, and the 2026-09-01 grasp campaign drove it. Re-read the blocker
-before assuming it still holds.
+**Never widen a tolerance to absorb any of this.** ADR-0036's own instruction stands: if the path
+tolerance flakes, set it to `null` before lowering its value. The campaign proposes no tolerance,
+no threshold and no ceiling.
 
 ### #30 — Re-derive the six scenario wall-clock ceilings
 **Answered on the under-load half, 2026-09-03, and still open on the attribution half.** The
