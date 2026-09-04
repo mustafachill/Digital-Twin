@@ -121,6 +121,106 @@ numbers*, and it cannot prove anything about what a real one would be. A configu
 detector whose only evidence comes from a backend that cannot produce the error it detects
 is under-evidenced by construction, and that is the transferable part.
 
+## Amendment — 2026-09-04: the healthy-run half of the "revisit" campaign has been taken, and the path tolerance is not structurally silent under `gz_ros2_control`
+
+**This is an amendment and not a correction.** Nothing in this record or in the 2026-08-27
+correction above was measured false, and neither is rewritten. **The status line does not move,
+this record is not promoted, and the detector is not validated on either backend.** What this
+section adds is that one half of the measurement the "What we will have to revisit" section asks
+for now exists, published as
+[`docs/measurements/2026-09-04-following-error/`](../measurements/2026-09-04-following-error/ANALYSIS.md)
+— thresholds registered before the first trial, machine named, run against the shipped cell with
+`gz_ros2_control/GazeboSimSystem` asserted off the description the running node published.
+**Cite the directory. No figure from it is copied here except the one comparison this record's
+own line makes** (P1).
+
+### What was measured
+
+- **The healthy-run half of [`docs/open-work.md`](../open-work.md) #20 is answered.** The
+  campaign sampled the controller's own `controller_state` on a real Gazebo-backed arm across
+  four conditions and three bring-ups, with a registered admissibility rule that refuses a
+  silence produced by an instrument that received nothing. Every condition was admissible with
+  no instrument losses, so **its quiet is a measured quiet and not an empty subscription** —
+  which is the one thing the launch test in this record could never have shown, for the reason
+  its own "How these errors survived" paragraph gives.
+- **The path tolerance is not structurally silent under this backend. It fired.** Two trials, on
+  the concurrently loaded condition, both aborting as `PATH_TOLERANCE_VIOLATED`, both attributed
+  by the campaign's own instrument to **the arm under test's own controller** rather than to a
+  load arm and rather than by its conservative fallback. Two events across three bring-ups, not
+  one per bring-up: the third produced none at the same schedule slot. **These are counts, not
+  causes** — the campaign attributes neither the firings nor their absence, and neither is a
+  rate.
+- **The derivation this record's 2026-08-27 correction item 3 offered is superseded by a
+  corrected command law, and that law is now established rather than merely admitted.** The
+  campaign's own arithmetic adds the controller's one-period lookahead to the plugin's
+  first-order lag, and the measurement agrees with it on every trial but two, to five significant
+  figures. **The two disagreements are the two firing trials, and the campaign attributes
+  neither.**
+- **The goal-side pair produced no information, exactly as the campaign registered in advance
+  that it would not.** Every settle landed at or below one sample interval on every admissible
+  healthy trial, and the campaign registered before its first trial that a clearance at that
+  resolution evidences nothing about the goal tolerance. `stopped_velocity_tolerance` is
+  recorded as NOT MEASURED, for the two structural reasons correction item 1 above already
+  gives.
+
+### The finding this record has to carry: at full velocity scaling the healthy peak is above this record's own line
+
+The "revisit" section sets the criterion: *"If the observed peak is not at least an order of
+magnitude below `trajectory_tolerance_rad`, the value is wrong and the margin is the finding."*
+Against the shipped `trajectory_tolerance_rad` of `1.0` rad that line is **0.100 rad**, and this
+comparison is quoted here because the line is this record's own.
+
+**At full velocity and acceleration scaling the campaign's healthy peak is 0.115972442 rad —
+above 0.100 rad, by 15.97 %.** The campaign registered that outcome as its uncomfortable
+prediction before any trial, and it landed. **The margin is the finding, in this record's own
+words.**
+
+Three bounds on it, all of them the campaign's own and none of them softening it:
+
+1. **Full scaling is outside the condition this record's sentence is scoped to.** The "revisit"
+   bullet asks for a sample across `pick_and_place` and `continuous_line`, which run at the
+   configured default scaling. The campaign's three default-scaled conditions all sit below the
+   line, subject to item 2; the one that exceeds it is the full-scaling condition, which is the fastest
+   motion the L3 contract permits and is not what those two scenarios run. **A peak above the
+   line at full scaling does not make this record's sentence false and is not written here as
+   though it did.**
+2. **Every below-the-line verdict is a lower bound.** The controller compares its tolerance
+   inside `update()` whether or not the state message is delivered, and the campaign measured a
+   share of those compared states that never reached its recorder. So the peaks
+   below the line are maxima over the samples that arrived and are weaker evidence than the one
+   above it, which a delivered sample establishes outright.
+3. **This is one backend.** The campaign's own rule scopes every figure to `gz_ros2_control`'s
+   command conversion at this gain, this controller-manager rate and this world's step, and to
+   nothing else. Nothing here is a statement about UFACTORY's servo loop, and the P2 asymmetry
+   #20 names is not resolved in either direction.
+
+### The firing half remains unmeasured, and the reason is structural
+
+**Nothing here shows the detector can detect an obstruction under `gz_ros2_control`.** The two
+firings were **not induced**: the campaign has no mechanism for making the tolerance fire and
+registered that half as out of scope before its first trial. Making it fire needs a Gazebo-side
+mechanism that obstructs an arm **link** while `gz_ros2_control` is still the loaded hardware
+component, and the fixture that can hold a joint part-way cannot serve —
+`cite_test_hardware::JointStopSystem` (ADR-0040) derives from `mock_components::GenericSystem`
+and is therefore loaded **instead of** `gz_ros2_control/GazeboSimSystem`, not beside it, so a
+description that names it has no Gazebo plugin driving its joints at all. A rig built on it
+measures mock hardware again, which is the blind spot this record already names.
+
+**Whether that half is worth building is undecided and is the project owner's**; it is not
+proposed here.
+
+### What this amendment does not do
+
+- **The four values are still UFACTORY's, still recorded as copied and not measured.** Nothing
+  in the campaign validates any of them, and **the campaign proposes no tolerance, no threshold
+  and no ceiling** — its own §13 says so, and this record's own instruction stands: a tolerance
+  is never widened to absorb a measurement.
+- **It moves no status.** This record stays as its status line reads. The "revisit" section is
+  **not** discharged: its scenario sample is untaken, since the campaign drives L3 directly and
+  runs neither `pick_and_place` nor `continuous_line`, and the firing half is untouched.
+- **It is still a detector and not a protective measure**, and the "What this costs us" bullet
+  saying so is unchanged by anything measured.
+
 ## Context
 
 The generated `JointTrajectoryController` configuration contains no `constraints:`
