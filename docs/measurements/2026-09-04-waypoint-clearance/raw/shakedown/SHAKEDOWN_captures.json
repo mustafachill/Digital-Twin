@@ -1,0 +1,714 @@
+[
+  {
+    "capture": "BRINGUP",
+    "scenario": "bringup",
+    "log": "/workspace/docs/measurements/2026-09-04-waypoint-clearance/raw/shakedown/logs/SHAKEDOWN_BRINGUP.log",
+    "log_sha256": "b91734b081ba167ce3592c5ffbfb4a73245a96ef0595b99e9039c3eec64ff072",
+    "started_at_wall": 1788555206.225695,
+    "started_at_utc": "2026-09-04T20:53:26Z",
+    "duration_s": 94.01467117900029,
+    "subprocess_exit_code": 1,
+    "subprocess_timed_out": false,
+    "subprocess_wall_ceiling_s": 3600.0,
+    "received_by_arm": {
+      "arm_1": 1,
+      "arm_2": 0,
+      "arm_3": 0
+    },
+    "received_total": 1,
+    "door": {
+      "arm_1": {
+        "matched_publisher_count": 1,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_1",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 2.40994167199824,
+        "matched_at_wall": 1788555208.6356418,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_1/display_planned_path"
+      },
+      "arm_2": {
+        "matched_publisher_count": 3,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "2",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 5.805495874999906,
+        "matched_at_wall": 1788555212.0311928,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_2/display_planned_path"
+      },
+      "arm_3": {
+        "matched_publisher_count": 3,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "2",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 5.805618325000978,
+        "matched_at_wall": 1788555212.0313144,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_3/display_planned_path"
+      }
+    },
+    "door_by_arm": {
+      "arm_1": {
+        "matched_publisher_count": 1,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_1",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 2.40994167199824,
+        "matched_at_wall": 1788555208.6356418,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_1/display_planned_path"
+      },
+      "arm_2": {
+        "matched_publisher_count": 3,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_2",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "2",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 5.805495874999906,
+        "matched_at_wall": 1788555212.0311928,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_2/display_planned_path"
+      },
+      "arm_3": {
+        "matched_publisher_count": 3,
+        "matched_publishers": [
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "1",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          },
+          {
+            "node": "move_group",
+            "namespace": "/cite/cell_a/arm_3",
+            "endpoint_type": "1",
+            "topic_type": "moveit_msgs/msg/DisplayTrajectory",
+            "reliability": "1",
+            "durability": "2",
+            "history": "3",
+            "depth": 0,
+            "liveliness": "1"
+          }
+        ],
+        "waited_s": 5.805618325000978,
+        "matched_at_wall": 1788555212.0313144,
+        "ceiling_s": 240.0,
+        "within_ceiling": true,
+        "subscription_qos": {
+          "history": "KEEP_ALL",
+          "reliability": "RELIABLE",
+          "durability": "VOLATILE"
+        },
+        "topic": "/cite/cell_a/arm_3/display_planned_path"
+      }
+    },
+    "v2": {
+      "arm_1": {
+        "read_from": "/cite/cell_a/arm_1/description_publisher robot_description",
+        "read_returncode": 0,
+        "read_ok": true,
+        "description_chars": 33636,
+        "description_sha256": "79f1504d971a0a8d552afe85bc4f028907c72a1c257b808a9ed4fa9a26c9b1c9",
+        "hull_collision_refs": 13,
+        "vendor_visual_refs": 6,
+        "v2_ok": true,
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true,
+        "urdf_file": "SHAKEDOWN_BRINGUP_arm_1.urdf"
+      },
+      "arm_2": {
+        "read_from": "/cite/cell_a/arm_2/description_publisher robot_description",
+        "read_returncode": 0,
+        "read_ok": true,
+        "description_chars": 33636,
+        "description_sha256": "5b2c3d55e5907951bfee97daa2bec1eaa864b59438730d83565958d9db8bfbfb",
+        "hull_collision_refs": 13,
+        "vendor_visual_refs": 6,
+        "v2_ok": true,
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true,
+        "urdf_file": "SHAKEDOWN_BRINGUP_arm_2.urdf"
+      },
+      "arm_3": {
+        "read_from": "/cite/cell_a/arm_3/description_publisher robot_description",
+        "read_returncode": 0,
+        "read_ok": true,
+        "description_chars": 33636,
+        "description_sha256": "f3d83deab4ae7fe0aacd852b54458ec4ea3d4780204fcd4a7fe0b2c6912eefc8",
+        "hull_collision_refs": 13,
+        "vendor_visual_refs": 6,
+        "v2_ok": true,
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true,
+        "urdf_file": "SHAKEDOWN_BRINGUP_arm_3.urdf"
+      }
+    },
+    "v3": {
+      "arm_1": {
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true
+      },
+      "arm_2": {
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true
+      },
+      "arm_3": {
+        "production_plugin_refs": 3,
+        "fixture_plugin_refs": 0,
+        "mock_plugin_refs": 0,
+        "v3_ok": true
+      }
+    },
+    "i4_scene": {
+      "arm_1": {
+        "read_ok": true,
+        "planning_frame": "",
+        "robot_model_name": "",
+        "object_count": 0,
+        "objects": {},
+        "link_padding": [
+          {
+            "link_name": "arm_1_left_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_left_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_left_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link1",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link2",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link3",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link4",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link5",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_link_base",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_right_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_right_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_right_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_1_xarm_gripper_base_link",
+            "padding": 0.0
+          }
+        ],
+        "link_scale": [
+          {
+            "link_name": "arm_1_left_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_left_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_left_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link1",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link2",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link3",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link4",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link5",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_link_base",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_right_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_right_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_right_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_1_xarm_gripper_base_link",
+            "scale": 1.0
+          }
+        ],
+        "allowed_collision_entries": 14
+      },
+      "arm_2": {
+        "read_ok": true,
+        "planning_frame": "",
+        "robot_model_name": "",
+        "object_count": 0,
+        "objects": {},
+        "link_padding": [
+          {
+            "link_name": "arm_2_left_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_left_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_left_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link1",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link2",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link3",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link4",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link5",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_link_base",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_right_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_right_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_right_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_2_xarm_gripper_base_link",
+            "padding": 0.0
+          }
+        ],
+        "link_scale": [
+          {
+            "link_name": "arm_2_left_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_left_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_left_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link1",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link2",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link3",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link4",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link5",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_link_base",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_right_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_right_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_right_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_2_xarm_gripper_base_link",
+            "scale": 1.0
+          }
+        ],
+        "allowed_collision_entries": 14
+      },
+      "arm_3": {
+        "read_ok": true,
+        "planning_frame": "",
+        "robot_model_name": "",
+        "object_count": 0,
+        "objects": {},
+        "link_padding": [
+          {
+            "link_name": "arm_3_left_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_left_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_left_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link1",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link2",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link3",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link4",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link5",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_link_base",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_right_finger",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_right_inner_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_right_outer_knuckle",
+            "padding": 0.0
+          },
+          {
+            "link_name": "arm_3_xarm_gripper_base_link",
+            "padding": 0.0
+          }
+        ],
+        "link_scale": [
+          {
+            "link_name": "arm_3_left_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_left_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_left_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link1",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link2",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link3",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link4",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link5",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_link_base",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_right_finger",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_right_inner_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_right_outer_knuckle",
+            "scale": 1.0
+          },
+          {
+            "link_name": "arm_3_xarm_gripper_base_link",
+            "scale": 1.0
+          }
+        ],
+        "allowed_collision_entries": 14
+      }
+    },
+    "i5_published": 1,
+    "i6_refusals": 0,
+    "i6_codes": [],
+    "i2c_planner_calls": [
+      {
+        "description": "Pilz Industrial Motion Planner",
+        "pipeline": "pilz",
+        "arm": "arm_1",
+        "line": "[move_group-15] [INFO] [1788555244.939439806] [cite.cell_a.arm_1.move_group]: Calling Planner 'Pilz Industrial Motion Planner'"
+      }
+    ],
+    "i2c_by_pipeline": {
+      "pilz": 1,
+      "ompl": 0,
+      "unattributed": 0
+    },
+    "i2b_fallbacks": [],
+    "i9_verdict_lines": [
+      {
+        "scenario": "bringup",
+        "rest": "failed \u2014 1 teardown assertion(s) failed"
+      }
+    ],
+    "log_chars": 165870,
+    "label": "SHAKEDOWN",
+    "block": "SHAKEDOWN",
+    "is_shakedown": true,
+    "v1_clean": true,
+    "v7_any": false
+  }
+]

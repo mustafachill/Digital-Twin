@@ -1,0 +1,16 @@
+{
+  "label": "SHAKEDOWN",
+  "captures_scheduled": 1,
+  "captures_run": 1,
+  "trajectories_written": 1,
+  "sealed": true,
+  "completed_at": "2026-09-04T20:55:00Z",
+  "load_end": {
+    "load_1m": 0.55712890625,
+    "load_5m": 0.29833984375,
+    "load_15m": 0.17822265625,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T20:55:00Z"
+  }
+}

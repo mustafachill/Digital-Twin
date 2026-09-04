@@ -1,0 +1,238 @@
+{
+  "base_commit": "c38a42c",
+  "block": "SHAKEDOWN",
+  "compute_seconds": 1.1851872229890432,
+  "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9",
+  "diagnostic_scene_from_generated_file": false,
+  "distance_kernel_self_test": {
+    "analytic": [
+      {
+        "case": "face_normal",
+        "expected_m": 0.48,
+        "measured_m": 0.48,
+        "residual_m": 0.0
+      },
+      {
+        "case": "box_corner",
+        "expected_m": 0.08660254037844388,
+        "measured_m": 0.08660254037844385,
+        "residual_m": 2.7755575615628914e-17
+      },
+      {
+        "case": "edge_edge",
+        "expected_m": 0.1,
+        "measured_m": 0.1,
+        "residual_m": 0.0
+      }
+    ],
+    "method": "exact feature enumeration vs the convex QP over the Minkowski difference",
+    "numpy": "1.26.4",
+    "random_disjoint": 92,
+    "random_penetrating": 28,
+    "random_trials": 120,
+    "reference": "scipy 1.11.4 SLSQP",
+    "reference_available": true,
+    "worst_analytic_residual_m": 2.7755575615628914e-17,
+    "worst_residual_m": 6.972200594645983e-14,
+    "worst_residual_vs_independent_m": 6.972200594645983e-14
+  },
+  "fk_sample": [],
+  "fk_sample_pool": 0,
+  "fk_sample_seed": 20260904,
+  "fk_sample_size_registered": 200,
+  "interpreter": "3.12.3 (main, Jul 15 2026, 23:46:41) [GCC 13.3.0]",
+  "is_shakedown": true,
+  "label": "SHAKEDOWN",
+  "mesh_provenance": {
+    "BRINGUP|arm_1": {
+      "collision_links": 13,
+      "hull_root": "/workspace/assets/meshes/collision/xarm5/convex_hull",
+      "hull_triangles_total": 9992,
+      "per_link": [
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 204,
+          "link": "arm_1_left_finger",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.0667000049807954,
+          "relative": "gripper/xarm/left_finger.stl",
+          "vendor_triangles": 4852
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 166,
+          "link": "arm_1_left_inner_knuckle",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.06247599789221056,
+          "relative": "gripper/xarm/left_inner_knuckle.stl",
+          "vendor_triangles": 7324
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 100,
+          "link": "arm_1_left_outer_knuckle",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.06116062304625375,
+          "relative": "gripper/xarm/left_outer_knuckle.stl",
+          "vendor_triangles": 444
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 1084,
+          "link": "arm_1_link1",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.1217926209604706,
+          "relative": "xarm5/visual/link1.stl",
+          "vendor_triangles": 3760
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 2248,
+          "link": "arm_1_link2",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.338485180956593,
+          "relative": "xarm5/visual/link2.stl",
+          "vendor_triangles": 26118
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 1692,
+          "link": "arm_1_link3",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.3924536780945894,
+          "relative": "xarm5/visual/link3.stl",
+          "vendor_triangles": 8824
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 1412,
+          "link": "arm_1_link4",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.13251376838245685,
+          "relative": "xarm5/visual/link4.stl",
+          "vendor_triangles": 7659
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 180,
+          "link": "arm_1_link5",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.057001677414540125,
+          "relative": "end_tool/collision/end_tool.stl",
+          "vendor_triangles": 260
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 326,
+          "link": "arm_1_link_base",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.1619237260645203,
+          "relative": "xarm5/visual/link_base.stl",
+          "vendor_triangles": 2464
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 204,
+          "link": "arm_1_right_finger",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.0667000049807954,
+          "relative": "gripper/xarm/right_finger.stl",
+          "vendor_triangles": 4852
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 166,
+          "link": "arm_1_right_inner_knuckle",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.06247599789221056,
+          "relative": "gripper/xarm/right_inner_knuckle.stl",
+          "vendor_triangles": 7324
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 100,
+          "link": "arm_1_right_outer_knuckle",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.06116062304625375,
+          "relative": "gripper/xarm/right_outer_knuckle.stl",
+          "vendor_triangles": 444
+        },
+        {
+          "aabb_corner_residual_m": 0.0,
+          "hull_triangles": 2110,
+          "link": "arm_1_xarm_gripper_base_link",
+          "origin_radius_residual_m": 0.0,
+          "radius_m": 0.11169651035005738,
+          "relative": "gripper/xarm/base_link.stl",
+          "vendor_triangles": 24227
+        }
+      ],
+      "vendor_root": "/workspace/workspace/src/external/xarm_ros2/xarm_description/meshes",
+      "vendor_triangles_total": 98552,
+      "worst_aabb_corner_residual_m": 0.0,
+      "worst_origin_radius_residual_m": 0.0
+    }
+  },
+  "numpy": "1.26.4",
+  "pairs": {
+    "BRINGUP": {
+      "arm_1": []
+    }
+  },
+  "scene_notes": {
+    "BRINGUP|arm_1": {
+      "frames": {},
+      "refused": []
+    }
+  },
+  "trajectories": [
+    {
+      "arm": "arm_1",
+      "capture": "BRINGUP",
+      "computed": false,
+      "index": 0,
+      "model_id": "arm_1",
+      "receive_index_in_arm": 1,
+      "rule_c": {
+        "c_iii_joints_in_description": true,
+        "c_iii_position_widths_match": true,
+        "c_iii_time_strictly_increasing": true,
+        "c_iii_two_waypoints": true,
+        "c_iv_configuration_complete": true,
+        "c_iv_mimics_supplied_by_coupling": [],
+        "c_iv_missing_joints": [],
+        "failed_clauses": [],
+        "instrument_loss": false,
+        "waypoints": 62
+      },
+      "waypoints": 62,
+      "why": "the scene read-back held no usable box"
+    }
+  ],
+  "tunnel_events": [],
+  "tunnel_sub_sampling": {
+    "achieved_sub_step_m": {
+      "max": null,
+      "median": null,
+      "min": null,
+      "n": 0,
+      "p95": null,
+      "p99": null
+    },
+    "intervals_hitting_the_ceiling": 0,
+    "sub_ceiling": 200,
+    "sub_intervals_taken": 0,
+    "sub_step_target_m": 0.002
+  },
+  "v1_clean_from_record": [
+    "True"
+  ],
+  "v5": {
+    "BRINGUP|arm_1": {
+      "empty_readback": true,
+      "evaluated": false,
+      "v5_ok": null,
+      "why": "the read-back held no object"
+    }
+  }
+}

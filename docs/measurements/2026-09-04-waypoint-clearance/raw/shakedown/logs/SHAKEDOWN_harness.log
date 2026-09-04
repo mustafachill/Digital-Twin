@@ -1,0 +1,20 @@
+== SHAKEDOWN: V1 opening reading, clean=True ==
+   vendor pin: {"manifest": "external/cite.repos", "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d", "imported_from": "/workspace/workspace/src/external/xarm_ros2", "matches": true}
+   load: 0.17 0.06 0.09
+== V14: {"ros_domain_id_env": "43", "cite_domain_base_env": "43", "resolved_from_plan": null, "resolver": "unavailable: TypeError(\"resolve_domain_id() missing 1 required positional argument: 'base'\")", "v14_ok": null} ==
+== topics: {"expected": {"arm_1": "/cite/cell_a/arm_1/display_planned_path", "arm_2": "/cite/cell_a/arm_2/display_planned_path", "arm_3": "/cite/cell_a/arm_3/display_planned_path"}, "found_on_graph": {"/cite/cell_a/arm_1/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"], "/cite/cell_a/arm_2/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"], "/cite/cell_a/arm_3/display_planned_path": ["moveit_msgs/msg/DisplayTrajectory"]}, "expected_all_present": true, "unexpected": []} ==
+== BRINGUP: ./scripts/scenario bringup -> SHAKEDOWN_BRINGUP.log ==
+   door open on arm_1 after 2.4s, 1 matched publisher(s)
+   V2/V3 on arm_1: chars=33636 hulls=13 v2=True v3=True
+   door open on arm_2 after 5.8s, 3 matched publisher(s)
+   door open on arm_3 after 5.8s, 3 matched publisher(s)
+   I4 on arm_1: read_ok=True objects=0
+   V2/V3 on arm_2: chars=33636 hulls=13 v2=True v3=True
+   V2/V3 on arm_3: chars=33636 hulls=13 v2=True v3=True
+   I4 on arm_2: read_ok=True objects=0
+   I4 on arm_3: read_ok=True objects=0
+== BRINGUP: exit=1 received=1 i5=1 i6=0 in 94s ==
+   I9: Scenario 'bringup' failed — 1 teardown assertion(s) failed
+== BRINGUP: 1 trajectory record(s) written ==
+== V1 closing reading: v1_clean=True disagreed_mid_block=False ==
+== SHAKEDOWN: 1 trajectory record(s) over 1 capture(s) ==

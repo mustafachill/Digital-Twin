@@ -1,0 +1,74 @@
+{
+  "label": "SHAKEDOWN",
+  "sealed_because": "the block ran to the end of its schedule",
+  "v1": {
+    "start": {
+      "at": 1788555205.9757378,
+      "head": "3081d9908457f1a6e2d19c615fc576b6b0f2f820",
+      "git_status_porcelain": "?? docs/measurements/2026-09-04-waypoint-clearance/harness/\n?? docs/measurements/2026-09-04-waypoint-clearance/raw/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9"
+    },
+    "end": {
+      "at": 1788555300.2483404,
+      "head": "3081d9908457f1a6e2d19c615fc576b6b0f2f820",
+      "git_status_porcelain": "?? docs/measurements/2026-09-04-waypoint-clearance/harness/\n?? docs/measurements/2026-09-04-waypoint-clearance/raw/",
+      "watched_diff_against_base": "",
+      "watched_worktree_dirty": "",
+      "vendor_pin": {
+        "manifest": "external/cite.repos",
+        "pinned_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_sha": "3dc2b5e8294758d96b54b15fa5920d581b7cbb3d",
+        "imported_from": "/workspace/workspace/src/external/xarm_ros2",
+        "matches": true
+      },
+      "clean": true,
+      "model_hash": {
+        "source": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108",
+        "installed": "95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108"
+      },
+      "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9"
+    },
+    "v1_clean": true,
+    "disagreed_mid_block": false,
+    "head_moved_mid_block": false,
+    "vendor_pin_held": true,
+    "base_commit": "c38a42c",
+    "watched_paths": [
+      "model/",
+      "workspace/src/",
+      "tools/",
+      "tests/",
+      "scripts/",
+      "assets/",
+      "external/"
+    ],
+    "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9"
+  },
+  "load_end": {
+    "load_1m": 0.55712890625,
+    "load_5m": 0.29833984375,
+    "load_15m": 0.17822265625,
+    "load_read_from": "/proc/loadavg inside the container; criteria.md section 9 records why that is the host's own reading on this host",
+    "cpu_count": 16,
+    "wall_clock_utc": "2026-09-04T20:55:00Z"
+  },
+  "v7_start": false,
+  "v7_end": false,
+  "rows": 1,
+  "captures": 1,
+  "sealed_at": "2026-09-04T20:55:00Z"
+}
