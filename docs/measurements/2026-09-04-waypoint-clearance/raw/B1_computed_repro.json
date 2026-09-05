@@ -1,7 +1,7 @@
 {
   "base_commit": "c38a42c",
   "block": "B1",
-  "compute_seconds": 405.39413566001167,
+  "compute_seconds": 400.9320998149924,
   "criteria_sha256": "e4c0351b87d937506fe540cbd8617c359993e77df7b3486b2401d0795ac84dd9",
   "diagnostic_scene_from_generated_file": false,
   "distance_kernel_self_test": {
