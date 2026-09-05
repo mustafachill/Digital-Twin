@@ -36,6 +36,17 @@ with the commands they name: `main` is **still `51195e0`** (`git rev-parse main`
 `origin/main` agreeing), and the campaign count is now **14 on this branch, 11 on `main`**. No
 other row was re-read on this date.
 
+**Updated a third time on 2026-09-04**, on the same branch at `20612c8`: a **fifteenth** campaign
+is published and **#49 and #17 are rewritten against it**. #49's **margin half is partially
+measured** and its refusal half is unanswerable through the door that campaign used; **#17 was
+refused by the campaign's own pre-registered rule and is not advanced one step**.
+[ADR-0027](adr/0027-pilz-planning-pipeline.md) carries a dated amendment of the same date; its
+**status did not move**. A new instrument-honesty item **#59** records the empty description
+read-back, which has now cost three campaigns data. The same two table rows were re-derived with
+the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, with `origin/main`
+agreeing), and the campaign count is now **15 on this branch, 11 on `main`**. No other row was
+re-read on this date.
+
 ---
 
 ## Where the repository stood when this was written
@@ -58,6 +69,9 @@ moved from `51195e0`.
 **Re-read again on 2026-09-04 at `2affb36`: the count is 14 on this branch** —
 `2026-09-04-following-error/` is the fourteenth — **and still 11 on `main`**, which still reads
 `51195e0`.
+**Re-read a third time on 2026-09-04 at `20612c8`: the count is 15 on this branch** —
+`2026-09-04-waypoint-clearance/` is the fifteenth — **and still 11 on `main`**, which still reads
+`51195e0`.
 The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
 15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
 indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
@@ -74,7 +88,7 @@ history is the note below.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 14 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 15 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
 | CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
@@ -126,7 +140,63 @@ what "done" means:
 
 ## 1. Measurement debts
 
-### #49 — Link-versus-environment clearance under hull geometry is measured by nothing
+### #49 — Link-versus-environment clearance under hull geometry: the margin half is partially measured, the refusal half is not
+**Partially answered on 2026-09-04, and every part of the answer is bounded.** The
+measurement this item asked for — in one of its two directions, on two of the three scenarios it
+names — is
+[`docs/measurements/2026-09-04-waypoint-clearance/`](measurements/2026-09-04-waypoint-clearance/ANALYSIS.md),
+thresholds registered before the first trial, machine named, run against the shipped tree with
+neither mesh set flipped by hand. **Cite the directory; no figure from it is copied here, and its
+own reproduction clause forbids copying one** (P1, and see the third bullet below).
+
+**The heading changed on 2026-09-04.** It read *"is measured by nothing"*, and that is no longer
+true of the margin half. The item's identifier is unchanged.
+
+**What is now measured.**
+
+- **The cheap settlement this item named was carried out, for `bringup` and `continuous_line`.**
+  The joint trajectories those scenarios published were replayed under **both** committed mesh
+  sets and every link-to-object distance recomputed per waypoint against the generated planning
+  scene. **It was not carried out for `pick_and_place`**, which this item names by name — see the
+  fourth bullet.
+- **Containment held in the measurement**, on both admissible captures: the hull was never farther
+  from a scene object than the vendor mesh it was derived from, anywhere measured. That direction
+  is a theorem of the derivation rather than a discovery, which is why it was registered as an
+  instrument check — a reading the other way would have falsified the instrument. **No pair
+  contacted under one geometry and cleared under the other**, and the campaign registered in
+  advance that such a null **evidences nothing**.
+- **Real close approaches exist, on trajectories `ValidateSolution` accepted** — the closest a
+  gripper finger against a conveyor, recurring across blocks and across the symmetric arm. **The
+  figures stay in the campaign directory and may not be cited as settled measurements**: REPRO1,
+  the campaign's reproduction clause, is **NOT REPRODUCED** on all three blocks, and its
+  registered consequence is that no distance verdict from the affected captures is published as a
+  measurement. **The diagnosis must travel with that verdict** — what the two interpreters
+  disagree about is an **argmax tie-break over a constant-zero array**, reported in dimensionless
+  waypoint and trajectory indices compared against a metre tolerance, and not a distance. The
+  campaign took the strict reading anyway and this item follows it: **nothing here closes #49, and
+  no threshold, tolerance or ceiling may rest on it.**
+- **`pick_and_place` contributed nothing, in any block.** Its trajectories were captured cleanly
+  — nothing published went missing — and then dropped whole, because the one arm it plans on read
+  its robot description back as zero characters every time (**#59**). So the approach to
+  `table_pick`, the pose this item's own consequence sentence is about and the one the campaign
+  put that scenario in for, is **unmeasured**. A silence produced that way is evidence about
+  nothing.
+- **The gripper's own configuration sensitivity is larger than the band the question is framed
+  in.** Recomputing every gripper-link distance across the declared drive range moves it by more
+  than the campaign's close band — reported, like every distance verdict there, under the failed
+  reproduction clause. It decides nothing by registration; it is noted because any future rule
+  keying on a band for a **gripper** link would be keying on a band narrower than that
+  sensitivity.
+
+**Still open: the refusal direction, and the reason is structural.** A trajectory the hull set
+refuses is **never published** — MoveIt breaks the response-adapter chain on the first failure and
+`ValidateSolution` stands before `DisplayMotionPath` — so a plan the hull set refuses and the
+vendor set would have accepted **cannot be seen through the door this campaign used**. Refusals
+were counted on the line capture; their geometry was not measurable, and a count of zero would
+have established nothing either. **Whether a campaign that could see them runs is the project
+owner's decision and none is proposed here.**
+
+**The original statement of the question, kept because it is what the campaign measured against.**
 ADR-0028's 484-configuration audit covered only the **34 arm-internal** link pairs. No audit has
 ever paired hull geometry with the environment, and the generated planning scene holds four
 40×40×120 mm beam housings, three conveyors, three pedestals and two tables.
@@ -141,15 +211,18 @@ the hull can eat at most its concavity depth: `link2` 61.75 mm, `link3` 60.27 mm
 **Measured clean:** at the SRDF's two named group states (`home`, `hold-up`), all three arms,
 every hull-to-scene clearance equals the vendor's to 0.00 mm.
 
-**Not settled:** the arm at the configurations the cell actually reaches, which needs IK and a
-running `move_group`. The consequence if it bites is a station approach pose newly refused by
-`ValidateSolution`, surfacing as a `MoveTo` planning failure naming nothing about geometry — and
-the pick already does this on `table_pick` under vendor geometry (ADR-0027).
+**Not settled when this was written, and now measured for two of the three scenarios above:** the
+arm at the configurations the cell actually reaches, which needs IK and a running `move_group`.
+The consequence if it bites is a station approach pose newly refused by `ValidateSolution`,
+surfacing as a `MoveTo` planning failure naming nothing about geometry — and the pick already does
+this on `table_pick` under vendor geometry (ADR-0027).
 
 **The cheap settlement, and it needs no campaign:** replay the joint trajectories the existing
 `pick_and_place` and `continuous_line` scenarios produce under vendor geometry, and report
 per-waypoint minimum distance from every link to every planning-scene object under both
-geometries.
+geometries. **This is what the 2026-09-04 campaign did** — for `bringup` and `continuous_line`,
+and not for `pick_and_place` — and it needed a campaign after all, for the reasons in the bullets
+above.
 
 **Never widen a ceiling or a tolerance to absorb a planning refusal that appears after the hull
 promotion.**
@@ -317,6 +390,40 @@ change to the project owner and it proposes no replacement value for anything.
 **Change no ceiling without the measurement, and never widen one to absorb a failure.**
 
 ### #17 — Pilz checks collisions every 0.1 s and can step past a beam housing
+**A campaign has looked for this and refused the question, 2026-09-04. That is not progress
+toward closing it.**
+[`docs/measurements/2026-09-04-waypoint-clearance/`](measurements/2026-09-04-waypoint-clearance/ANALYSIS.md)
+measured the **per-waypoint tool-point step** on the trajectories the shipped scenarios published
+— directly, against the arithmetic below, which is what this item had instead of a measurement; a
+survey of the published campaigns on 2026-09-04 found no earlier one that measured that quantity.
+**Cite the directory; no figure from it is copied here** (P1).
+
+- **The region was never exercised, and the campaign's own rule says so.** Closing this question
+  needs one consecutive-waypoint interval carrying **both** a large enough step **and** a close
+  enough bracketing distance to something — *at the same time*. **No interval on any capture
+  carried both.** The campaign's shape for that result is the useful part: **the cell moves fast
+  where it is far from everything and creeps where it is close.** Moving fast far from everything
+  tests nothing, and creeping close to something tests nothing either.
+- **Its "no body passed between two checked waypoints" is a null that the campaign refuses to read
+  as a pass.** The rule that refuses it was registered before the first trial, and so was the
+  prediction that the campaign would end up unable to test this question — **the prediction
+  held**. **The residual stands exactly as [ADR-0027](adr/0027-pilz-planning-pipeline.md) records
+  it**, and that record carries a dated amendment of 2026-09-04 saying the same thing; its status
+  did not move.
+- **A campaign that did exercise the region would have to produce the two conditions together** —
+  a trajectory that is moving fast at the moment it passes close to a thin object — which the
+  shipped scenarios, at the shipped velocity scaling, did not produce in nine runs.
+  [ADR-0027](adr/0027-pilz-planning-pipeline.md)'s residual section records a second path to a
+  larger step — a caller passing `velocity_scaling: 1.0`, which bypasses the 0.35 default — and
+  nothing sends it today. Note also that the campaign's sub-sampling machinery **never ran on
+  campaign data**: the part of that instrument this question depends on is unexercised, and a
+  later campaign should not treat it as tested. **Whether such a campaign runs is the project
+  owner's decision and none is proposed here.**
+- **What that campaign did refute is a smaller thing, and it belongs here anyway:** one capture's
+  tool-point step landed in the middle band of the scale registered in advance, against a
+  prediction that every capture would land far below it. The step this cell takes is therefore
+  not as small as the campaign guessed, and it is still nowhere near the region above.
+
 Pilz does not search the planning scene; `ValidateSolution` is the sole environment-collision
 gate, and it calls `PlanningScene::isPathValid`, which checks the trajectory's **waypoints** and
 interpolates nothing between them. Waypoint spacing is Pilz's sampling time, 0.1 s — a C++
@@ -820,6 +927,43 @@ corrections and not these. Each needs its own owner decision under CLAUDE.md §1
 sha256 over `grep "^> \*\*Exit criterion:\*\*" what-we-are-doing.md` is
 `c2de0d872adfca9ea16fd8f899e5a1f554715049a4f013341e33bce9d0458454`, verified before and after
 v1.12. Check it before and after any charter change.
+
+### #59 — The robot description reads back as zero characters, and it has now cost three campaigns
+**Three campaign harnesses have lost data to the same read**, and a fourth author will meet it
+too. The read is `ros2 param get <namespace>/description_publisher robot_description` against the
+running cell — the read every recent harness uses to establish **which geometry the cell it is
+measuring was actually built from**, because a generated file on disk is not evidence about a
+running node.
+
+- **2026-09-04**, [`waypoint-clearance`](measurements/2026-09-04-waypoint-clearance/ANALYSIS.md):
+  eight of the twenty-seven arm-captures returned zero characters. One arm failed six of six
+  across the two cycle scenarios while every `bringup` capture read all three arms cleanly; one
+  scenario lost **every** row it contributed, and the campaign lost half its sample.
+- **2026-09-03**, [`stall-band-flip`](measurements/2026-09-03-stall-band-flip/ANALYSIS.md): one
+  trial of eighteen returned zero characters, and the validity rule's discard granularity took the
+  other seventeen with it — see **#36**, where the consequence is recorded.
+- **A read-back failure of a similar shape is recorded once more**, in
+  [`scenario-ceilings`](measurements/2026-09-02-scenario-ceilings/ANALYSIS.md)'s deviation 1: a
+  description read returning a short string carrying no hull reference on five runs of
+  twenty-eight. **Whether it is the same defect is unestablished** and nothing here attributes it.
+
+**Nothing is attributed.** Every one of those readings is a **read failure** and is recorded as
+such: the 2026-09-04 harnesses keep "the rig could not read" and "the cell was built wrongly" in
+separate fields precisely so the two cannot be confused, and **no claim is made anywhere that a
+cell was built from the wrong geometry**. Candidate causes — a
+`description_publisher` answering slowly while three `move_group` processes are up, a shared
+re-read timer, something else — are named in the campaigns and **were not chased**.
+
+**Why it costs more than a flaky read looks like it should.** The read-back is not a data point;
+it is what makes every *other* data point admissible. A failed read therefore does not degrade a
+figure, it **deletes** rows — at whatever granularity the campaign's discard rule uses, which in
+one case was eighteen sound trials for one bad read. A harness author who treats this as unlikely
+will lose the block that matters.
+
+**What would settle it is not known and is not prescribed here.** No fix is proposed, no rule is
+proposed and no campaign is proposed; the read is a harness-side instrument in frozen campaign
+directories, and **whether anything in `workspace/` depends on the same read in the same way is
+unexamined**.
 
 ---
 
