@@ -868,6 +868,15 @@ date it is that value's history and not a current reading.
     met here**: the gate asks for the false-positive flip bracketed to at least **0.05 mm**, that
     arm's stop grid is **2.00 mm**, and the flip is located only to (46.00, 48.00] mm at the
     narrow side. **Do not read "implemented" as "the gate cleared."**
+    **A later campaign moved half of that gate and not the rest.**
+    [`docs/measurements/2026-09-03-stall-band-flip/`](docs/measurements/2026-09-03-stall-band-flip/ANALYSIS.md)
+    brackets the **narrow** edge of the implemented predicate's flip to the width §A.10 asks for.
+    The **wide** edge is **not** bracketed, and what stopped it is an instrument failure rather
+    than a measurement: one trial read the robot description back as zero characters and the
+    validity rule's discard granularity took the whole block with it. **A null is not a
+    clearance** — that campaign's own rule refuses to read its silence at that edge as agreement
+    with the arithmetic or as validation of either band value. The gate is **still not cleared**;
+    [`docs/open-work.md`](docs/open-work.md) #36 is where its clause-by-clause state is kept.
     **And that campaign REPRODUCED a region the new predicate opens.** A drive joint jammed
     part-way through an **opening** stroke, inside the window, on jaws opening onto nothing,
     reports `holding = true` on **9 of 9** valid in-window jams, where the superseded predicate
@@ -920,12 +929,36 @@ date it is that value's history and not a current reading.
     with no ROS parameter exposing it. The smallest object in the generated planning scene is
     a **40 mm** break-beam housing, so a waypoint step exceeds it whenever the tool point moves
     faster than **0.40 m/s**. The arithmetic and the two ways the step can grow are ADR-0027's.
-  - **Nothing has measured what the execution-side tolerances do under Gazebo.** The launch
-    test proves them against mock hardware with an injected fault; under `gz_ros2_control` the
-    position command interface is a velocity law rather than a servo, and no following error
-    has been sampled there. So neither that the path tolerance fires on a genuine obstruction
-    nor that it stays quiet on a healthy run is established on the backend the scenarios use.
-    ADR-0036's "revisit" section names the measurement that would settle it.
+    **The residual has since been tested for, and the region was not exercised**:
+    [`docs/measurements/2026-09-04-waypoint-clearance/`](docs/measurements/2026-09-04-waypoint-clearance/ANALYSIS.md)
+    measured the per-waypoint tool-point step directly on the trajectories the shipped scenarios
+    published, and **no interval anywhere carried both a large enough step and a close enough
+    bracketing distance at the same time** — the cell moves fast where it is far from everything
+    and creeps where it is close. **Its "no body passed between two checked waypoints" is refused
+    as evidence by its own pre-registered rule and may not be read as a clearance.** The edge is
+    still unmeasured; ADR-0027 carries a dated amendment of 2026-09-04 saying exactly that, and
+    its status did not move.
+  - **What the execution-side tolerances do under Gazebo is half measured, and the open half is
+    the one a fault needs. This bullet said "nothing has measured" and "no following error has
+    been sampled there" until 2026-09-04, and both clauses are now false.**
+    [`docs/measurements/2026-09-04-following-error/`](docs/measurements/2026-09-04-following-error/ANALYSIS.md)
+    sampled the controller's own following error on a real `gz_ros2_control` arm, under a
+    registered rule that refuses a silence produced by an instrument that received nothing — so
+    **the quiet is a measured quiet**, which the launch test against mock hardware could never
+    have shown. **The path tolerance also fired**, on the concurrently loaded condition,
+    attributed by the instrument's own naming to the arm under test's own controller.
+    **What is still not established is the half that matters for a fault.** Those firings were
+    **not induced**; nothing there shows the tolerance can *detect an obstruction* under this
+    backend, and the campaign registered that half as out of scope before its first trial.
+    Making it fire needs a Gazebo-side mechanism that obstructs an arm **link** while
+    `gz_ros2_control` stays the loaded hardware component, which `cite_test_hardware`'s joint
+    stop cannot supply — it is loaded *instead of* that plugin, not beside it. At full velocity
+    scaling the healthy peak lands **above** ADR-0036's own order-of-magnitude line; that
+    comparison, and the campaign's other figures, stay in that record's 2026-09-04 amendment and
+    in the campaign directory (P1), and **ADR-0036's status did not move**. Its "revisit" section
+    is **not** discharged either: the scenario sample it asks for is untaken, since that campaign
+    drives L3 directly and runs neither `pick_and_place` nor `continuous_line`. **Never widen a
+    tolerance to absorb any of this.**
   - **A grasp holds a position, not an orientation, and the two published residuals are
     different quantities.** Correcting the grasp-plane offset took rotations above 20° from
     60% to 0% of trials and left a residual —
