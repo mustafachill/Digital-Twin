@@ -266,6 +266,9 @@ The exposure, stated at the size of its evidence:
 Nothing here closes this. It is a residual of choosing a generator over a search, and it is
 named so that it is not rediscovered as a mystery collision.
 
+**A campaign has since looked for this and did not exercise the region — see the amendment of
+2026-09-04, after the corrections and before "Context".** The residual is unchanged by it.
+
 ### What a caller sees: two refusals that no error code tells apart
 
 An L3 consumer must know this, because the obvious way to tell the two refusals apart does
@@ -381,6 +384,38 @@ asset is added to L0 and a number in an ADR is not re-read. The transferable les
 narrower one: **do not state the cardinality of a generated collection in prose.** Name the
 file and let the reader count, or state the count with the date and commit it was counted
 at — which is what the correction above does.
+
+## Amendment — 2026-09-04: the sampling residual was tested for, the region was not exercised, and the residual stands
+
+**This is an amendment and not a correction.** Nothing in this record was measured false, no
+section is rewritten, **the `Status:` line does not move** and no fix is proposed. What this
+section adds is that the residual named in "The residual that is open: the gate checks waypoints
+and interpolates nothing between them" has now been **looked for on the running cell**, and that
+the campaign that looked **did not find the conditions under which it could occur** — which is a
+different result from finding it absent.
+
+The campaign is
+[`docs/measurements/2026-09-04-waypoint-clearance/`](../measurements/2026-09-04-waypoint-clearance/ANALYSIS.md),
+thresholds registered before the first trial, machine named, run against the shipped tree with no
+geometry flipped. **Cite the directory; its figures are not copied here** (P1), and its own
+reproduction clause bars its distance verdicts from being cited as settled measurements anywhere
+outside it.
+
+- **What was measured.** The **per-waypoint tool-point step** on the trajectories the shipped
+  scenarios published — the quantity this record's residual section derives arithmetically and
+  had never had a measurement of — together with, for each consecutive-waypoint interval, whether
+  any body passed between the two waypoints the gate checks.
+- **The region was not exercised.** The question needs one interval carrying **both** a large
+  enough step **and** a close enough bracketing distance *at the same time*, and no interval on
+  any capture carried both: **the cell moves fast where it is far from everything and creeps
+  where it is close.** The campaign predicted before its first trial that it would end up unable
+  to test this, and it did not test it.
+- **Its null is refused as evidence by its own rule.** No body was observed passing between two
+  checked waypoints, and that observation carries the unexercised-region rule with it. **It may
+  not be reported as a clearance of this residual**, and this record does not read it as one.
+- **The residual stands unchanged**, exactly as the section below states it, including the second
+  path to a larger step that section names. Nothing here closes it, narrows it or costs it
+  anything; [`docs/open-work.md`](../open-work.md) #17 remains open on the campaign's own words.
 
 ## Context
 
