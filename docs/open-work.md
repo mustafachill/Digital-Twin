@@ -82,6 +82,12 @@ on this host nor in the container image**, so that row has now gone two days unc
 claim about what CI has done expires the moment CI runs again. The environment row's own
 history is the note below.
 
+**Amended 2026-09-07: the host half of that sentence no longer holds.** A `gh` binary was
+installed on this host on 2026-09-07 — `~/.local/bin/gh`, `gh version 2.100.0 (2026-09-03)` —
+and the last row was re-measured with it that day. Whether the container image carries one was
+**not checked**, so that clause is left as written and unverified. The sentence was true when it
+was written; what it predicted came true faster than it allowed for.
+
 | | | Command |
 |---|---|---|
 | Environment | 29 passed, 0 failed, 1 skipped, **in the container** | `./scripts/enter dev ./scripts/doctor` |
@@ -91,11 +97,19 @@ history is the note below.
 | Measurement campaigns | 15 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
-| CI runs on the shipped geometry | 1, `33501707588` at `e51238e`, all three scenarios passed | `gh run view 33501707588 --log \| grep "Scenario '"` |
+| CI runs on the shipped geometry | 4 — `e51238e`, `4ef2d7c`, `51195e0`, `f6a3779`; `continuous_line` passed in 2 of the 4 | `gh run view <id> --log \| grep -o "Scenario '[a-z_]*'[^\"]*"` |
 
-**The last row is one run and is not a rate.** No thresholds were registered in advance, and it
+**The last row is four runs and is not a rate.** No thresholds were registered in advance, and it
 says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
 it is kept.
+
+**That row read `1, 33501707588 at e51238e, all three scenarios passed` until 2026-09-07**, and
+the note above it said it "has now gone two days unchecked". It had in fact been falsified within
+nine seconds of the commit that wrote it: `4ef2d7c`'s own CI run is a hull run. Re-read on
+2026-09-07 with `gh run list --branch main` and the whole-string grep above over every run's log —
+`gh` is on that host at `~/.local/bin/gh`, which is why the row could be re-measured at all.
+**`pick_and_place` passed in all four**, `bringup`'s cycle passed in all eight invocations with
+one teardown failure at `f6a3779`, and `continuous_line` failed in `4ef2d7c` and `51195e0`.
 
 **The environment row was re-measured on 2026-09-02 at `51195e0` and it moved.** It read
 `25 passed, 0 failed, 1 skipped` until then. Two
@@ -802,12 +816,22 @@ prints **three** distinguishable strings, not two:
 | `Scenario 'X' passed its cycle assertions` | The advisory branch: the cycle passed, teardown did not, `--teardown-advisory` was given. |
 | `Scenario 'X' failed — …` | A cycle failure, or a failure the JUnit report does not explain. |
 
-**The middle string appears in none of the nineteen tabled CI runs**
+**The middle string appeared in none of the nineteen tabled CI runs**
 (`gh run view <id> --log | grep -o "Scenario '[a-z_]*'[^\"]*"`, run over every one of them on
-2026-09-01). So the advisory branch has never fired in CI, every one of the fifteen bare `passed`
-verdicts carries its teardown with it, and only the four whose cycle failed leave teardown masked
-and genuinely unread. The four are `33158091922`, `33208064683`, `33261637940` and `33343317444`
-— the same four CLAUDE.md §2's table names, arrived at independently.
+2026-09-01), so every one of the fifteen bare `passed` verdicts carried its teardown with it, and
+only the four whose cycle failed left teardown masked and genuinely unread. The four were
+`33158091922`, `33208064683`, `33261637940` and `33343317444` — the same four CLAUDE.md §2's
+table named, arrived at independently.
+
+**Amended 2026-09-07: this paragraph said "the advisory branch has never fired in CI", and that
+has expired.** It fired at `f6a3779` (run `34085965578`), for `bringup` and not for
+`continuous_line`: one of that run's two `bringup` invocations printed `Scenario 'bringup' passed
+its cycle assertions`, its cycle having passed and its post-shutdown check having failed on
+`parameter_bridge-2 exited with -11`. Re-read over all twenty-two tabled runs on 2026-09-07 with
+the same grep, anchored at both ends: `continuous_line` is 16 bare `passed`, 6 `failed`, 0
+advisory; `bringup` is 43 bare `passed`, 1 advisory, 0 failed; `pick_and_place` is 22 bare
+`passed`. **The item's own lesson repeats itself here** — this was a claim about what has never
+happened, and only re-running caught it.
 
 **`--teardown-advisory` never reaches the scenario Python.** `scripts/scenario` puts it in
 `TEARDOWN_POLICY` and not in `LAUNCH_TEST_ARGS`, so the post-shutdown assertions always run; the
