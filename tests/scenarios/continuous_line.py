@@ -492,12 +492,17 @@ class Journey(NamedTuple):
     reached: tuple[str, ...]
     breaches: tuple[str, ...]
     #: How long the leg this piece stopped on actually waited, in wall-clock
-    #: seconds. Trailing and defaulted so that positional construction elsewhere
-    #: is unaffected. It exists because the report used to state the LEG CEILING
-    #: as though it were the wait: a leg cut short after three seconds by a
-    #: stopped line was reported as having waited the full 420 s, which is false
-    #: timing evidence in the one place a reader goes for timing evidence.
-    waited_s: float = 0.0
+    #: seconds. It exists because the report used to state the LEG CEILING as
+    #: though it were the wait: a leg cut short after three seconds by a stopped
+    #: line was reported as having waited the full 420 s, which is false timing
+    #: evidence in the one place a reader goes for timing evidence.
+    #:
+    #: REQUIRED, not defaulted. It carried `= 0.0` and a comment saying the
+    #: default kept positional construction elsewhere working; there is no such
+    #: caller — all three construction sites pass it — and a default here is a way
+    #: to build a `Journey` stating a wait of zero it never measured, in the one
+    #: field a reader goes to for exactly that number.
+    waited_s: float
 
 
 # -----------------------------------------------------------------------------
@@ -528,8 +533,8 @@ class TestContinuousLine(unittest.TestCase):
         self._halt: Halt | None = None
         #: The ladder and the journeys, accumulated on the instance rather than
         #: passed to `_context`. Every failure path that raises in flight — and
-        #: `_fail_if_the_line_has_stopped` is now one of them, from three call
-        #: sites — has to be able to print the whole report, and a report that
+        #: `_fail_if_the_line_has_stopped` is now one of them, from every wait
+        #: in this file — has to be able to print the whole report, and a report that
         #: exists only as two locals in the test method is a report only the
         #: final verdict can reach. That is exactly how a run that stopped at a
         #: known station arrived with a message about a removal wait and no
@@ -588,9 +593,12 @@ class TestContinuousLine(unittest.TestCase):
         reads `piece <n>: <milestone>`, and the other two name the work-piece and
         say `to settle on the pick surface` or `to leave the simulator`. That leg
         loop makes the same halt check this method does, in the same spin → halt →
-        predicate order, so the fail-fast above is not confined to `_spin_until`;
-        what is confined here is the `_emit_timing` on the success path, and
-        `_run_one_piece` says why its halt path deliberately emits nothing.
+        predicate order, and it emits its own record on its own success path, so
+        neither the fail-fast nor the timing record is confined to `_spin_until`.
+        Both raise past `_emit_timing` when the line has stopped, and
+        `_run_one_piece` says why that omission is a decision rather than an
+        oversight. What IS confined here is the `what` grammar above, which is the
+        only thing that lets a parser tell a leg from a spawn or a removal.
         """
         # `time.monotonic`, never the node clock: these ceilings are wall clock by
         # deliberate design — this observer does not set `use_sim_time`, for the
@@ -1117,6 +1125,16 @@ class TestContinuousLine(unittest.TestCase):
                 f"the work-piece '{self.workpiece}' to settle on the pick surface",
             )
         except AssertionError as exc:
+            # A STOPPED LINE IS NOT A SETUP FAILURE. `_spin_until` raises this when
+            # the coordinator has published BLOCKED, FAULTED or STALLED, with the
+            # whole report already attached; the framing below would bury that
+            # under a `gz model --list` of a work-piece that was created perfectly
+            # well, spend up to 30 s of a stopped cell's time doing it, and hand
+            # the reader a message about the spawn rather than about the station.
+            # That is the same relabelling `_context` was made argument-free to
+            # end, one frame further down.
+            if self._halt is not None:
+                raise
             # A missing work-piece is a setup failure, not a result. Say which,
             # with the evidence, rather than leaving the reader to decide whether
             # the line failed or the part was never there.
@@ -1194,10 +1212,19 @@ class TestContinuousLine(unittest.TestCase):
         breaches: list[str] = []
         breached = 0
         waited_s = 0.0
-        # Before the first leg, mirroring `_spin_until`'s pre-loop check: a line
-        # that stopped while the piece was being spawned must not buy a full leg
-        # ceiling to be noticed. `ladder` is non-empty — `lifts` above is a subset
-        # of it and was asserted — so there is always a milestone to name.
+        # Mirrors `_spin_until`'s pre-loop check, and is DEFENSIVE RATHER THAN
+        # REACHED TODAY. Every path into this method that can deliver a
+        # `LineState` spins inside `_spin_until` — `_resolve` above, and
+        # `_spawn_workpiece` — and that method makes this same check before and
+        # after every spin of its own, so a halt arriving while the piece was
+        # being spawned has already ended the run before control gets here.
+        # `gz_run` and `_workpiece_xyz` execute no callbacks, so nothing between
+        # those waits can set `_halt` either. It is kept because the reachability
+        # argument is about this method's callers rather than about this method: a
+        # future one that spins without `_spin_until` would otherwise buy the full
+        # leg ceiling this file exists to stop paying. `ladder` is non-empty —
+        # `lifts` above is a subset of it and was asserted — so there is always a
+        # milestone to name.
         self._fail_if_the_line_has_stopped(f"piece {piece}: {ladder[0].describe()}")
         for milestone in ladder:
             # Timed as well as bounded. This is the interval `LEG_CEILING_S` is
@@ -1228,6 +1255,19 @@ class TestContinuousLine(unittest.TestCase):
                         )
                     )
                     self._fail_if_the_line_has_stopped(f"piece {piece}: {milestone.describe()}")
+                    # The append above is correct only because the call above it
+                    # ends the run. A `_fail_if_the_line_has_stopped` that
+                    # returned instead — a narrowed state test, an early return —
+                    # would leave this loop spinning to its deadline appending one
+                    # more journey for this same piece on every spin, and
+                    # `_context` would then report one piece several hundred times
+                    # over. That is a corrupted verdict rather than a missed one,
+                    # so the append does not depend on the helper raising.
+                    raise AssertionError(
+                        "the line reported itself stopped and "
+                        "`_fail_if_the_line_has_stopped` returned instead of ending "
+                        f"the run: {self._halt.describe()}\n{self._context()}"
+                    )
                 position = self._workpiece_xyz()
                 sample = Sample(self._now(), *position) if position is not None else None
                 if sample is not None:
@@ -1296,12 +1336,16 @@ class TestContinuousLine(unittest.TestCase):
             if len(journey.reached) == rungs:
                 lines.append(f"piece {journey.piece}: complete, {rungs}/{rungs}")
                 continue
-            # The next milestone is at `len(reached)` whenever there is one. That
-            # is stated as a condition rather than left to the invariant it used
-            # to rely on — a journey can only be short if the ladder is longer
-            # than it — because this method is now reachable from paths that
-            # append a partial journey themselves, and an IndexError raised while
-            # formatting a failure report destroys the report it was formatting.
+            # The next milestone is at `len(reached)` whenever there is one, and
+            # the `<` is a guard rather than a restatement of that. It does NOT
+            # guard against an over-long journey: `reached` is built from this
+            # same ladder and cannot outrun it. What it guards against is a
+            # journey and a ladder that came from different places — `self._ladder`
+            # still `()` while `self._journeys` is not empty makes the unguarded
+            # expression `()[1]` — which is reachable now that paths other than
+            # the final verdict append a partial journey themselves. An IndexError
+            # raised while formatting a failure report destroys the report it was
+            # formatting.
             waiting = (
                 self._ladder[len(journey.reached)].describe()
                 if len(journey.reached) < rungs
@@ -1314,8 +1358,12 @@ class TestContinuousLine(unittest.TestCase):
             )
         if len(self._journeys) < WORKPIECES:
             lines.append(
-                f"pieces {len(self._journeys) + 1}..{WORKPIECES} were not fed: the line had "
-                "already stalled, and another part does not restart it"
+                f"pieces {len(self._journeys) + 1}..{WORKPIECES} have no journey in this "
+                "report. Usually that means they were never fed — the line had already "
+                "stopped, and another part does not restart it — but the first of them "
+                "may instead be the piece this run died on: the raises between a spawn "
+                "and the first append record no journey, so a piece can be in the "
+                "simulator and absent from this list"
             )
         lines.append(
             "beams that reported BLOCKED: "
