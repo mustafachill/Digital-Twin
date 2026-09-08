@@ -1,33 +1,40 @@
-"""`hardware.params` is legal in L0 and reaches no generated description.
+"""`hardware.params` reaches a description when the loaded backend declares it.
 
-ADR-0040 decision 2 argued that a test-only hardware plugin cannot be loaded by a
-generated description because its parameters "have no home in L0". That is false
-about the model and true about the generator, and the ADR's 2026-08-28 correction
-says so: `HardwareSelection.params` is a free-form map, `HardwareBackend
-.instance_params` is its per-backend allowlist, `validate.referential` already
-enforces one against the other, and `xarm5.yaml` already declares
-`instance_params: [robot_ip, report_type]` for the `real` backend against Phase 2.
+**This file used to pin the opposite**, and its name is kept so that ADR-0053's
+references to it resolve. Until 2026-09-08 the generator bound
+`instance.hardware.ros2_control_plugin` and nothing else, so a `backend: real`
+arm generated a description naming the physical plugin and carrying no address —
+and the vendor's own component answers an empty `robot_ip` with `RCLCPP_ERROR`,
+`rclcpp::shutdown()` and `exit(1)` from inside `on_init`. That failure was loud
+and it was in the wrong place: the value was in L0 and the generator dropped it,
+so it landed at bring-up beside the arm instead of at `./scripts/validate-model`
+on a laptop. ADR-0053 closed that, and the reach itself is asserted in
+`test_hardware_param_bindings.py` against the macro argument list.
 
-What is actually true is one line of `generate/description.py`: it binds
-`instance.hardware.ros2_control_plugin` and nothing else, and `hardware.params`
-appears nowhere under `generate/`. That is the property this file pins, so that
-the Phase 2 wiring fails here — in a host test, in a second — rather than silently
-repealing an unreachability argument that a fixture's safety rests on.
+**What this file pins now is the silence that survived**, which is the one the
+record names as a permanent cost. `params` is indexed by backend id, and a block
+for a backend nobody on this asset selects is legal, valid and inert. That is
+deliberate — it is what makes flipping an arm to hardware a one-field edit — and
+its price is that a stale address in an unexercised block is indistinguishable
+from a deliberate pre-declaration. Nothing in this repository can tell those
+apart, and this file is where that is written down as a tested property rather
+than as a paragraph.
 
-WHY THIS IS NOT THE OBVIOUS XML TEST. "Assert the generated `<ros2_control>`
-blocks carry no `<param>`" would pass today for the wrong reason: the generated
-descriptions contain no literal `<ros2_control>` block at all. They invoke the
-vendor's macro, which emits the block during xacro expansion — which needs ROS and
-does not happen here. Such a test would find nothing, assert nothing and stay
-green through exactly the change it was written to catch. Searching the generated
-text for values the model DOES carry is strictly stronger: it catches a `<param>`,
-a macro argument, a hardware parameter file, or any other route Phase 2 might
-take.
+WHY THIS IS NOT THE OBVIOUS XML TEST, unchanged from the original and still
+true. "Assert the generated `<ros2_control>` blocks carry no `<param>`" would
+pass for the wrong reason: the generated descriptions contain no literal
+`<ros2_control>` block at all. They invoke the vendor's macro, which emits the
+block during xacro expansion — which needs ROS and does not happen here. Such a
+test would find nothing, assert nothing and stay green through exactly the change
+it was written to catch. Searching the generated text for values the model DOES
+carry is strictly stronger.
 
-The positive control is what makes the search trustworthy. The same mutation also
-changes the backend's plugin string, and that string DOES reach the description —
-so a test that finds the plugin and not the parameters has been shown to be
-looking, rather than merely failing to find anything.
+The positive control is what makes the search trustworthy, and it is why this
+file survives its own subject changing. Each search below is paired with a string
+that MUST be found in the same artifact by the same means — the plugin the arm's
+selected backend loads. A test that cannot see the plugin string cannot be
+trusted to have looked for the parameters beside it, and its silence would mean
+nothing.
 """
 
 from __future__ import annotations
@@ -41,37 +48,53 @@ from cite_tools import generate as gen
 from cite_tools.model.loader import load
 from cite_tools.validate import Severity, referential
 
-#: The arm the mutation is applied to, and the backend that declares the
-#: parameters. Both come from the real model rather than from a toy, so a change
-#: to either — a renamed instance, a withdrawn backend — fails here loudly instead
-#: of quietly making the test vacuous.
+#: The arm the mutation is applied to, and the backend whose block is written.
+#: Both come from the real model rather than from a toy, so a change to either —
+#: a renamed instance, a withdrawn backend — fails here loudly instead of quietly
+#: making the test vacuous.
 MUTATED_ARM = "arm_1"
 BACKEND_WITH_PARAMS = "real"
 
 #: Values chosen to be unmistakable in a text search. The address is from
-#: TEST-NET-3 (RFC 5737), which exists so that a routable address never ends up in
-#: an example, and it appears nowhere else in this repository.
-PARAMS = {"robot_ip": "203.0.113.7", "report_type": "normal"}
+#: TEST-NET-3 (RFC 5737), which exists so that a routable address never ends up
+#: in an example, and it appears nowhere else in this repository outside the
+#: tests that use it deliberately.
+PARAMS = {"robot_ip": "203.0.113.7"}
 
-#: The one field of `hardware:` the description generator DOES bind. It is the
-#: positive control: the search must find this in the same artifact in which it
-#: fails to find the parameters above.
+#: The two plugin class strings, each of which is the positive control for the
+#: class that selects its backend.
 PLUGIN_OF_THE_REAL_BACKEND = "uf_robot_hardware/UFRobotSystemHardware"
+PLUGIN_OF_THE_SIM_BACKEND = "gz_ros2_control/GazeboSimSystem"
 
 
-def _select_backend(document: dict) -> None:
-    for asset in document["assets"]:
-        if asset["id"] == MUTATED_ARM:
-            asset["hardware"] = {"backend": BACKEND_WITH_PARAMS, "params": dict(PARAMS)}
-            return
-    raise AssertionError(f"{MUTATED_ARM} is not in assets/instances/arms.yaml any more")
+def _hardware(model: Path, edit_yaml: Callable, block: dict) -> Path:
+    def mutate(document: dict) -> None:
+        for asset in document["assets"]:
+            if asset["id"] == MUTATED_ARM:
+                asset["hardware"] = block
+                return
+        raise AssertionError(f"{MUTATED_ARM} is not in assets/instances/arms.yaml any more")
+
+    edit_yaml(model / "assets/instances/arms.yaml", mutate)
+    return model
 
 
 @pytest.fixture
-def model_with_hardware_params(real_model: Path, edit_yaml: Callable) -> Path:
-    """The real model, with `hardware.params` declared on one arm."""
-    edit_yaml(real_model / "assets/instances/arms.yaml", _select_backend)
-    return real_model
+def selecting_the_backend(real_model: Path, edit_yaml: Callable) -> Path:
+    """The real model, with `arm_1` loading the backend whose block it writes."""
+    return _hardware(
+        real_model,
+        edit_yaml,
+        {"backend": BACKEND_WITH_PARAMS, "params": {BACKEND_WITH_PARAMS: dict(PARAMS)}},
+    )
+
+
+@pytest.fixture
+def not_selecting_the_backend(real_model: Path, edit_yaml: Callable) -> Path:
+    """The same block, on an arm that stays simulated."""
+    return _hardware(
+        real_model, edit_yaml, {"backend": "sim", "params": {BACKEND_WITH_PARAMS: dict(PARAMS)}}
+    )
 
 
 def _descriptions(model: Path) -> dict[str, str]:
@@ -82,49 +105,80 @@ def _descriptions(model: Path) -> dict[str, str]:
     }
 
 
-class TestTheParametersAreLegalAndUnbound:
-    def test_the_mutation_is_valid_l0(self, model_with_hardware_params: Path) -> None:
-        """The premise. An illegal model would make everything below vacuous.
+def _carrying(model: Path, token: str) -> list[str]:
+    return [path for path, content in _descriptions(model).items() if token in content]
 
-        If `params` were rejected here, the ADR's original claim would be right
-        and this file would be asserting against a model nobody can write.
-        """
-        findings = referential.check(load(model_with_hardware_params))
+
+class TestTheSelectedBackendsBlockIsBound:
+    def test_the_mutation_is_valid_l0(self, selecting_the_backend: Path) -> None:
+        """The premise. An illegal model would make everything below vacuous."""
+        findings = referential.check(load(selecting_the_backend))
         assert [f.rule for f in findings if f.severity is Severity.ERROR] == []
 
-    def test_no_generated_description_carries_the_parameters(
-        self, model_with_hardware_params: Path
+    def test_the_value_reaches_a_description(self, selecting_the_backend: Path) -> None:
+        """The reach, by the same coarse search this file has always used.
+
+        The precise form of it — that the value is a macro ARGUMENT and not a
+        word in a comment — is `test_hardware_param_bindings.py`'s job. What this
+        assertion adds is that the coarse instrument below is capable of seeing a
+        value that is present, which is what makes the silence in the next class
+        a measured one.
+        """
+        assert _carrying(selecting_the_backend, PARAMS["robot_ip"])
+
+    def test_the_search_finds_the_plugin_of_the_selected_backend(
+        self, selecting_the_backend: Path
     ) -> None:
-        """The pin. Phase 2 wiring `hardware.params` into a description fails here."""
-        leaked = {
-            path: [token for token in (*PARAMS, *PARAMS.values()) if token in content]
-            for path, content in _descriptions(model_with_hardware_params).items()
-        }
-        assert not any(leaked.values()), (
-            f"a generated description now carries hardware.params: "
-            f"{ {p: t for p, t in leaked.items() if t} }. If this is the Phase 2 "
-            f"backend wiring, it is working as intended — and ADR-0040 decision 2's "
-            f"first unreachability argument has just become false, so the fixture in "
-            f"cite_test_hardware is now expressible in L0. Re-read that decision and "
-            f"its 2026-08-28 correction before deleting this assertion."
+        """The positive control. Same `hardware:` block, same artifact, same search."""
+        assert _carrying(selecting_the_backend, PLUGIN_OF_THE_REAL_BACKEND), (
+            f"{PLUGIN_OF_THE_REAL_BACKEND} reached no generated description, so every "
+            f"search in this file is blind and its results mean nothing. Either the "
+            f"backend selection stopped being bound, or {MUTATED_ARM} stopped being "
+            f"generated."
         )
 
-    def test_the_search_finds_a_field_the_generator_does_bind(
-        self, model_with_hardware_params: Path
-    ) -> None:
-        """The positive control, without which the test above proves nothing.
 
-        Same `hardware:` block, same artifact, same substring search — and this one
-        must be found. A test that cannot see the plugin string cannot be trusted
-        to have looked for the parameters beside it.
+class TestAnUnselectedBackendsBlockIsInertAndUndetectable:
+    def test_the_mutation_is_valid_l0(self, not_selecting_the_backend: Path) -> None:
+        """A block for a declared backend nobody selects is legal (ADR-0053,
+        decision 1). If this ever starts failing, the one-field flip to hardware
+        has stopped being one field."""
+        findings = referential.check(load(not_selecting_the_backend))
+        assert [f.rule for f in findings if f.severity is Severity.ERROR] == []
+
+    def test_nothing_of_it_reaches_a_generated_description(
+        self, not_selecting_the_backend: Path
+    ) -> None:
+        """The pin. Neither the parameter's name nor its value reaches anything.
+
+        THIS IS ALSO THE STATEMENT OF THE COST, and it is why the assertion is
+        worth having rather than merely true. A wrong address written here for an
+        arm nobody has switched over yet is invisible to this repository — no
+        validator rule, no generator raise and no test can distinguish it from a
+        deliberate pre-declaration, and it will be found by the arm failing to
+        connect. A typo in the BACKEND ID is caught, by
+        `unknown-hardware-param-backend`; a typo in a value is not, and never
+        could be.
         """
-        descriptions = _descriptions(model_with_hardware_params)
-        carrying = [
-            path for path, content in descriptions.items() if PLUGIN_OF_THE_REAL_BACKEND in content
-        ]
-        assert carrying, (
-            f"{PLUGIN_OF_THE_REAL_BACKEND} reached no generated description, so the "
-            f"search above was blind and its silence means nothing. Either the "
-            f"backend selection stopped being bound, or {MUTATED_ARM} stopped being "
-            f"generated. Descriptions seen: {sorted(descriptions)}."
+        leaked = {
+            path: [token for token in (*PARAMS, *PARAMS.values()) if token in content]
+            for path, content in _descriptions(not_selecting_the_backend).items()
+        }
+        assert not any(leaked.values()), (
+            f"a generated description now carries an UNSELECTED backend's parameters: "
+            f"{ {p: t for p, t in leaked.items() if t} }. The selected backend is `sim`, "
+            f"whose `instance_params` is empty, so ADR-0053 decision 2b's filter should "
+            f"have dropped the binding. Check that the filter is still the union — "
+            f"declared by some backend and not by the selected one — and re-read that "
+            f"decision before changing this assertion."
+        )
+
+    def test_the_search_finds_the_plugin_of_the_selected_backend(
+        self, not_selecting_the_backend: Path
+    ) -> None:
+        """The positive control for the silence above, without which it proves nothing."""
+        assert _carrying(not_selecting_the_backend, PLUGIN_OF_THE_SIM_BACKEND), (
+            f"{PLUGIN_OF_THE_SIM_BACKEND} reached no generated description, so the "
+            f"search above was blind. Either the backend selection stopped being bound, "
+            f"or {MUTATED_ARM} stopped being generated."
         )

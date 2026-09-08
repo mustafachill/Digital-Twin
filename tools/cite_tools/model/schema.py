@@ -1203,7 +1203,31 @@ class HardwareSelection(Strict):
     #: physical only by someone writing it, and the bring-up refusal in
     #: `cite_bringup.plan.require_hardware_opt_in` then fires on it.
     counterpart_backend: Identifier | None = None
-    params: dict[str, str | bool | int | float] = Field(default_factory=dict)
+    #: This instance's parameters for the hardware component each backend loads,
+    #: indexed BY BACKEND ID and not by side (ADR-0053, decision 1).
+    #:
+    #: The index follows the rule the comment above already states. A backend is
+    #: selected per (asset, side), and what a parameter belongs to is the
+    #: component that reads it: ``robot_ip`` is a property of the thing that opens
+    #: a socket, not of the side that happens to load it. That is why
+    #: `HardwareBackend.instance_params` — the allowlist these blocks are checked
+    #: against — has been per backend since before pairing existed. A side index
+    #: here would restate which side is physical, which ``counterpart_backend``
+    #: already says, and the two could then disagree with nothing to catch it
+    #: (P1).
+    #:
+    #: PER BACKEND IS A STATEMENT ABOUT THE INDEX, NOT ABOUT OWNERSHIP. This field
+    #: stays on `HardwareSelection` and is therefore per instance; the backend id
+    #: is a second index inside it, so two arms loading one backend hold different
+    #: addresses. Hoisting it onto `HardwareBackend`, where the type declares it
+    #: once, would look like the same shape and would give three arms one address.
+    #:
+    #: A block for a backend nobody on this asset selects is legal and inert, and
+    #: that is what makes flipping an arm to hardware a one-field edit. Its cost is
+    #: recorded in ADR-0053 decision 1: an unexercised block is indistinguishable
+    #: from a deliberate pre-declaration, and no check in this repository can tell
+    #: a stale address from a planned one.
+    params: dict[Identifier, dict[str, str | bool | int | float]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _counterpart_defaults_to_the_plant(self) -> HardwareSelection:

@@ -33,9 +33,16 @@ ARM_DESCRIPTION = "description/cell_a_arm_1.urdf.xacro"
 
 
 def _use_real_backend(document: dict) -> None:
-    """Every arm on the hardware backend, which is the case R-04 got wrong."""
+    """Every arm on the hardware backend, which is the case R-04 got wrong.
+
+    The address comes with it because `real` declares `robot_ip` in
+    `instance_params` and the type binds it, so a `real` arm that states no
+    address is refused at generate time (ADR-0053, decision 2a) — which is the
+    point of that decision and not an obstacle to this test. TEST-NET-3
+    (RFC 5737); nothing here connects to anything.
+    """
     for asset in document["assets"]:
-        asset["hardware"]["backend"] = "real"
+        asset["hardware"] = {"backend": "real", "params": {"real": {"robot_ip": "203.0.113.7"}}}
 
 
 def artifacts(path: Path) -> dict[str, str]:

@@ -8,6 +8,7 @@ holds, so it is asserted rather than assumed.
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -231,6 +232,17 @@ class TestGrowingTheLineIsDataOnly:
         assert "arm_4" in produced["bringup/cell_a_plan.yaml"]
 
 
+#: One macro argument per line, which is what lets the parity test below account
+#: for a differing line by NAME rather than by position or by count.
+_MACRO_ARGUMENT = re.compile(r'^\s*([a-z_][a-z0-9_]*)=".*"\s*$')
+
+
+def _argument_name(line: str) -> str | None:
+    """The macro argument a generated line declares, or None if it declares none."""
+    match = _MACRO_ARGUMENT.match(line)
+    return match.group(1) if match else None
+
+
 class TestSimRealParity:
     """P2, asserted on the generator rather than hoped for at run time."""
 
@@ -242,7 +254,8 @@ class TestSimRealParity:
         edit_yaml(
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0].__setitem__(
-                "hardware", {"backend": "real", "params": {"robot_ip": "192.168.1.100"}}
+                "hardware",
+                {"backend": "real", "params": {"real": {"robot_ip": "192.168.1.100"}}},
             ),
         )
         real = artifacts(real_model)
@@ -275,15 +288,35 @@ class TestSimRealParity:
         # subjects (topic, action, controller, joint and frame names) are
         # untouched. So the assertion is tightened rather than widened: the
         # collision line has to differ in its URI SCHEME and in nothing else.
-        differing = [
-            (a, b)
-            for a, b in zip(
-                sim["description/cell_a_arm_1.urdf.xacro"].splitlines(),
-                real["description/cell_a_arm_1.urdf.xacro"].splitlines(),
-                strict=True,
-            )
-            if a != b
-        ]
+        # The two descriptions no longer have the same number of lines, and how
+        # that is reconciled is the whole of this block. `arm.urdf.xacro.j2`
+        # emits one macro argument per line, so a backend that declares an
+        # instance parameter adds one line to its arm's description and none to
+        # the other's (ADR-0053). Every such line is accounted for BY MACRO
+        # ARGUMENT NAME below and then removed, so the comparison that follows is
+        # still line-for-line under `strict=True` over equal-length lists.
+        #
+        # WIDENING THIS IS THE FAILURE MODE, not the fix. Dropping `strict=True`,
+        # or relaxing `len(rest) == 1` to a bound, makes the mismatch go away and
+        # retires the property this test exists for — that between two backends
+        # NOTHING differs except the plugin, the collision root's URI scheme and
+        # the arguments named here. The length equality is therefore asserted
+        # explicitly as well, so that removing the keyword cannot quietly retire
+        # it either.
+        sim_lines = sim["description/cell_a_arm_1.urdf.xacro"].splitlines()
+        real_lines = real["description/cell_a_arm_1.urdf.xacro"].splitlines()
+
+        accounted = ("robot_ip",)
+        surplus = [line for line in real_lines if _argument_name(line) in accounted]
+        assert tuple(_argument_name(line) for line in surplus) == accounted, real_lines
+        assert [line for line in sim_lines if _argument_name(line) in accounted] == []
+        trimmed_real = [line for line in real_lines if _argument_name(line) not in accounted]
+        assert len(trimmed_real) == len(sim_lines), (
+            "the `real` description carries a line the `sim` one does not, and it is not "
+            "one of the macro arguments accounted for above"
+        )
+
+        differing = [(a, b) for a, b in zip(sim_lines, trimmed_real, strict=True) if a != b]
         plugin = [pair for pair in differing if "ros2_control_plugin" in pair[0]]
         rest = [pair for pair in differing if "ros2_control_plugin" not in pair[0]]
         assert len(plugin) == 1, differing

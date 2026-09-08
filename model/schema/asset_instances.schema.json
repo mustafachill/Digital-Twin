@@ -211,21 +211,26 @@
           "title": "Counterpart Backend"
         },
         "params": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
               },
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              }
-            ]
+              "type": "object"
+            }
           },
           "title": "Params",
           "type": "object"

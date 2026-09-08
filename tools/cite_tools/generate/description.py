@@ -30,6 +30,13 @@ class BindingError(Exception):
     """A component library entry named a generator binding that does not exist."""
 
 
+#: The prefix of the open binding family (ADR-0053, decision 2). Every other
+#: binding is a fixed name enumerated in `_binding_value`; this one takes as many
+#: entries as a type has instance parameters to bind, so it is matched by prefix
+#: and resolved from the selected backend's block of `hardware.params`.
+PARAMS_BINDING_PREFIX = "instance.hardware.params."
+
+
 @dataclass(frozen=True)
 class _Frame:
     name: str
@@ -164,6 +171,21 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
         ).lower(),
     }
 
+    # The one open family, resolved from the SELECTED backend's block — the same
+    # quantity `_collision_args` resolves the collision URI scheme against, and
+    # the plant's, because there is one artifact set per asset until ADR-0048
+    # clause 2 is built. Until it is, ADR-0048 clause 1 refuses any asset whose
+    # two sides differ, so both sides load the same backend and the question of
+    # which side this is cannot arise.
+    #
+    # Bools are lowercased for the same reason `fixed_args` lowercases them: xacro
+    # reads `true`, not Python's `True`.
+    selected = asset.instance.hardware.backend
+    for key, supplied in sorted(asset.instance.hardware.params.get(selected, {}).items()):
+        values[f"{PARAMS_BINDING_PREFIX}{key}"] = (
+            str(supplied).lower() if isinstance(supplied, bool) else str(supplied)
+        )
+
     # How fast the fitted end effector's drive joint may travel. Resolved from the
     # END-EFFECTOR TYPE rather than from the instance, because the rate is a fact
     # about the hardware rather than about this arm's use of it — the instance
@@ -184,6 +206,24 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
             f"asset {asset.id!r} fits no end effector whose type declares a grasp "
             f"specification. Fit one, or remove the binding from the type."
         )
+
+    # A key the selected backend DECLARES and the instance does not supply. The
+    # validator answers this first and in the findings report (ADR-0053 decision
+    # 2a); this is the backstop for a caller that came into `generate` by another
+    # door, and it raises for the same reason `_end_effector_drive_rate` does —
+    # handing the vendor macro its own `robot_ip:=''` produces a description that
+    # loads and takes an arm's `ros2_control_node` down at `on_init`.
+    if binding not in values and binding.startswith(PARAMS_BINDING_PREFIX):
+        key = binding[len(PARAMS_BINDING_PREFIX) :]
+        backend = asset.asset_type.hardware_backends.get(asset.instance.hardware.backend)
+        if backend is not None and key in backend.instance_params:
+            raise BindingError(
+                f"type {asset.asset_type.id!r} binds a macro argument to {binding!r}, "
+                f"and asset {asset.id!r} loads backend "
+                f"{asset.instance.hardware.backend!r}, which declares parameter "
+                f"{key!r} — but the asset supplies no value for it. Add it under "
+                f"`hardware.params.{asset.instance.hardware.backend}`."
+            )
 
     if binding not in values:
         raise BindingError(
@@ -210,6 +250,58 @@ def _end_effector_drive_rate(asset: ResolvedAsset, cell: ResolvedCell) -> float 
     return float(effector.grasp.max_drive_rate_rad_s)
 
 
+def _dropped_on_this_backend(asset: ResolvedAsset, binding: str) -> bool:
+    """Whether an `instance.hardware.params.*` binding is left unemitted here.
+
+    THE PREDICATE IS A UNION AND BOTH TERMS ARE LOAD-BEARING (ADR-0053, decision
+    2b). Drop the binding **iff** the key is declared in `instance_params` by
+    SOME backend of the type **and not** by the SELECTED one.
+
+    The first term is what makes a drop DELIBERATE: it fires only on a key L0 has
+    stated somewhere, so the generator is honouring a declaration rather than
+    concealing a failure. The second is what makes it CONDITIONAL on which
+    backend is loaded, which is the whole point — `sim` declares no instance
+    parameters, so on a simulated arm the argument is not emitted at all and the
+    vendor's own default stands. That is correct rather than merely tolerable:
+    `xarm5.ros2_control.xacro` emits no `<param>` block whatsoever unless the
+    plugin is the UFACTORY one, so a value passed to a simulated arm would be
+    inert anyway — and emitting nothing is the same output for a stronger reason,
+    one that lives in this repository instead of in a vendor file a pin bump can
+    change.
+
+    WHY A SINGLE TERM IS THE SILENT SWALLOW. `instance.hardware.params.robot_ipp`
+    is in neither `sim`'s `[]` nor `real`'s `[robot_ip]`. Under "not declared by
+    the selected backend" alone it would be dropped on BOTH backends and would
+    never reach `_binding_value`'s unknown-binding raise, so a typo in a
+    component library entry would silently produce a description with a vendor
+    default in it. Under the union it fails the first term everywhere, is never a
+    candidate for the filter, and raises. Filtering on "could not resolve"
+    instead fails in the same direction.
+
+    This union is NOT the one ADR-0053 rejects as Option B. That one takes the
+    union of every backend's `instance_params` as the VALIDATOR's allowlist over a
+    FLAT map, which is what loses the ability to say which backend a shared name
+    belongs to. Here the map is indexed by backend, the validator still checks
+    each block against the backend that block names, and the union appears only
+    here, where its job is to separate "a backend deliberately declares no such
+    parameter" from "nobody declares it, so this is a typo".
+
+    The precedent for emitting no argument at all is `_collision_args`, which
+    returns `[]` in the same file for the same reason: the shipped model is
+    all-`sim`, so this filter must leave every committed description byte-identical
+    or `./scripts/validate-model` stops being able to tell "the default is
+    unchanged" from "the default moved".
+    """
+    if not binding.startswith(PARAMS_BINDING_PREFIX):
+        return False
+    key = binding[len(PARAMS_BINDING_PREFIX) :]
+    backends = asset.asset_type.hardware_backends
+    declared_somewhere = any(key in backend.instance_params for backend in backends.values())
+    selected = backends.get(asset.instance.hardware.backend)
+    declared_here = selected is not None and key in selected.instance_params
+    return declared_somewhere and not declared_here
+
+
 def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
     spec = asset.asset_type.description
     if not (spec.package and spec.file and spec.macro):
@@ -225,6 +317,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
     args += [
         (name, _binding_value(asset, binding, cell))
         for name, binding in sorted(spec.bound_args.items())
+        if not _dropped_on_this_backend(asset, binding)
     ]
     args += _collision_args(spec, asset)
 

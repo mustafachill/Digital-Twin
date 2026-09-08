@@ -221,12 +221,68 @@ def _unique_by_message(findings: Iterable[Finding]) -> list[Finding]:
 
 
 def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
+    """Every backend an asset names exists, and every parameter block matches it.
+
+    Four answers, and ADR-0053 decision 1 names each one so that a reviewer and a
+    model author can address the same finding by the same word:
+
+    * `unknown-hardware-param-backend` — a key of `params` that is not a declared
+      backend id of the type. This is the typo case, and it is the one thing a
+      per-backend index catches that a flat map cannot.
+    * `unexpected-hardware-param` — a parameter inside a block that the backend
+      THAT BLOCK NAMES does not declare. It used to resolve against the plant's
+      selected backend, which is a different question once the map has an index.
+    * `missing-hardware-param` — a parameter the SELECTED backend declares and the
+      asset does not supply. The mirror of the rule above, and the half a model
+      author meets: the generator raises on the same condition (ADR-0053 decision
+      2a) but a raise aborts the run, so an author fixes one key per invocation
+      instead of reading a report.
+    * Nothing at all for a block naming a declared backend nobody selects. That is
+      deliberate and it is what makes flipping an arm to hardware a one-field
+      edit.
+    """
     findings: list[Finding] = []
     for asset in model.assets:
         asset_type = model.asset_type(asset.type)
         if asset_type is None:
             continue
         backends = asset_type.hardware_backends
+        params = asset.hardware.params
+
+        # IN FRONT OF THE SKIP BELOW, deliberately. `if not backends: continue`
+        # is reached by 3 of this model's 15 assets and skipped by 12 — every
+        # type that declares no backends at all. Behind it, `params: {typo: {…}}`
+        # on a conveyor or a beam would go unread, which is the state this rule
+        # exists to end. No special case is needed for that type: with no
+        # declared backends, every key of a non-empty `params` fails the test on
+        # this line, and there is no backend id such a key could legitimately
+        # name.
+        for name in sorted(set(params) - set(backends)):
+            findings.append(
+                error(
+                    "unknown-hardware-param-backend",
+                    f"assets.{asset.id}.hardware.params.{name}",
+                    f"type {asset_type.id!r} declares no backend named {name!r}",
+                    f"Declared backends: {', '.join(sorted(backends)) or '(none)'}.",
+                )
+            )
+
+        # Each block against the backend IT NAMES, not against the plant's. This
+        # runs whether or not the selected backend resolves, because the question
+        # a block asks is about its own backend and is answerable either way.
+        for name in sorted(set(params) & set(backends)):
+            allowed = set(backends[name].instance_params)
+            for key in sorted(set(params[name]) - allowed):
+                findings.append(
+                    error(
+                        "unexpected-hardware-param",
+                        f"assets.{asset.id}.hardware.params.{name}.{key}",
+                        f"backend {name!r} of type {asset_type.id!r} declares no "
+                        f"parameter {key!r}",
+                        f"Declared parameters: {', '.join(sorted(allowed)) or '(none)'}.",
+                    )
+                )
+
         if not backends:
             continue
         chosen = asset.hardware.backend
@@ -255,14 +311,22 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
             )
         if chosen not in backends:
             continue
-        allowed = set(backends[chosen].instance_params)
-        for key in sorted(set(asset.hardware.params) - allowed):
+
+        # The mirror. A connection parameter has no default that could be right:
+        # the vendor's own `robot_ip:=''` becomes `<param name="robot_ip">R</param>`
+        # and `uf_robot_system_hardware.cpp` answers it with `exit(1)` from inside
+        # a loaded plugin at `on_init`. Reporting it here moves that failure from
+        # the machine standing next to the arm to a laptop, and reports every
+        # missing key at once rather than the first (ADR-0053 decision 2a).
+        supplied = set(params.get(chosen, {}))
+        for key in sorted(set(backends[chosen].instance_params) - supplied):
             findings.append(
                 error(
-                    "unexpected-hardware-param",
-                    f"assets.{asset.id}.hardware.params.{key}",
-                    f"backend {chosen!r} of type {asset_type.id!r} declares no parameter {key!r}",
-                    f"Declared parameters: {', '.join(sorted(allowed)) or '(none)'}.",
+                    "missing-hardware-param",
+                    f"assets.{asset.id}.hardware.params.{chosen}.{key}",
+                    f"backend {chosen!r} of type {asset_type.id!r} declares parameter "
+                    f"{key!r}, which this asset does not supply",
+                    f"Add it under `hardware.params.{chosen}`.",
                 )
             )
     return findings

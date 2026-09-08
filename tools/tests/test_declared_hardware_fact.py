@@ -259,7 +259,15 @@ def reproduction_model(destination: Path) -> Path:
     instances = yaml.safe_load(arms.read_text())
     for asset in instances["assets"]:
         if asset.get("hardware", {}).get("backend") == "sim":
-            asset["hardware"]["params"] = {"robot_ip": "203.0.113.7"}
+            # INDEXED BY THE BACKEND ID, which is `sim` here because the
+            # reproduction changes no id — that is the whole of it. ADR-0053
+            # made `hardware.params` a map of backend id to parameter block, so
+            # the flat `{"robot_ip": ...}` this line carried until then no
+            # longer schema-validates, and the supply has to name the backend
+            # whose `instance_params` declares the key. Without it,
+            # `missing-hardware-param` refuses the model and clause 6 would be
+            # measuring that refusal rather than the hardware gate.
+            asset["hardware"]["params"] = {"sim": {"robot_ip": "203.0.113.7"}}
     arms.write_text(yaml.safe_dump(instances, sort_keys=False))
     return scratch
 

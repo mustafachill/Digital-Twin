@@ -75,6 +75,13 @@ asset_type:
       # end; `docs/open-work.md` #65 carries the fix and does not choose it.
       ros2_control_plugin: instance.hardware.ros2_control_plugin
       add_gripper: instance.end_effector.vendor_integrated
+      # The address of the physical arm this instance describes, carried into the
+      # vendor's own macro parameter (ADR-0053). Emitted only on a backend that
+      # declares it in `instance_params`, so a `sim` arm's description does not
+      # carry the argument at all. The vendor prefixes a literal `R` to the value
+      # inside `xarm5.ros2_control.xacro` and strips it again in
+      # `uf_robot_system_hardware.cpp`; the plain address goes here.
+      robot_ip: instance.hardware.params.robot_ip
       # The fitted end effector's declared close rate, handed to the vendor macro
       # so that it bounds the drive joint's velocity command interface — which is
       # the only route a limit has into the running system. A limit cannot live in
@@ -246,7 +253,20 @@ asset_type:
       ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
       commands_physical_hardware: true
       # Phase 2. Declared now so that a mixed fleet is a data change.
-      instance_params: [robot_ip, report_type]
+      #
+      # ONE NAME, AND `report_type` LEAVING IS A DECISION RATHER THAN AN OMISSION
+      # (ADR-0053, decision 2c). What is listed here every instance selecting this
+      # backend is OBLIGED to state, because an unsupplied declared key is a
+      # `missing-hardware-param` error. `robot_ip` earns that: no vendor can guess
+      # an address, and an empty one takes the arm's ros2_control_node down at
+      # on_init. `report_type` does not: the vendor states `normal` as its own
+      # default twice, and a report mode is a fact about the protocol rather than
+      # a per-instance choice — the same category as `control.update_rate_hz`
+      # below. A facility that ever wants a non-default one writes it in
+      # `fixed_args` above, which is documented as "facts about the type"; putting
+      # the name back here would impose a per-instance obligation on every arm for
+      # a fact that is not per arm.
+      instance_params: [robot_ip]
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

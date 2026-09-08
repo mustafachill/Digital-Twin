@@ -83,16 +83,128 @@ def test_unknown_hardware_backend(minimal_model: Path, edit_yaml: Callable) -> N
     assert "unknown-backend" in rules(minimal_model)
 
 
-def test_hardware_param_the_backend_does_not_declare(
+# The four answers `hardware.params` can produce, one test each, asserted by rule
+# name (ADR-0053 decision 1, promotion clause 5). `params` is indexed by backend
+# id, so each block is checked against the backend THAT BLOCK NAMES rather than
+# against the plant's selected one — which is the question a flat map could not
+# ask.
+
+
+def _findings(path: Path) -> list:
+    return [f for f in referential.check(load(path)) if f.severity is Severity.ERROR]
+
+
+def _hardware(document: dict, block: dict) -> None:
+    """Rewrite `arm_1`'s whole `hardware:` block in the minimal fixture."""
+    document["assets"][1]["hardware"] = block
+
+
+def test_hardware_param_the_named_backend_does_not_declare(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
+    # Against `real`, which is the backend the BLOCK names — and the message has
+    # to say so, or a facility with two backends declaring one name gets an
+    # ambiguous error instead of a wrong value.
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
-        lambda d: d["assets"][1].__setitem__(
-            "hardware", {"backend": "real", "params": {"robot_prt": "192.168.1.1"}}
+        lambda d: _hardware(
+            d,
+            {"backend": "real", "params": {"real": {"robot_ip": "203.0.113.7", "robot_prt": "x"}}},
         ),
     )
-    assert "unexpected-hardware-param" in rules(minimal_model)
+    finding = next(f for f in _findings(minimal_model) if f.rule == "unexpected-hardware-param")
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_prt"
+    assert "'real'" in finding.message
+
+
+def test_a_params_key_that_is_not_a_declared_backend_id(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The typo case, and the one thing the index catches that a flat map cannot.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "sim", "params": {"raal": {"robot_ip": "203.0.113.7"}}}),
+    )
+    finding = next(
+        f for f in _findings(minimal_model) if f.rule == "unknown-hardware-param-backend"
+    )
+    assert finding.where == "assets.arm_1.hardware.params.raal"
+
+
+def test_a_params_block_on_a_type_declaring_no_backends_at_all(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The skip, which is why the rule above runs in FRONT of `if not backends`.
+
+    `pedestal` declares no `hardware_backends`, so it never reaches the rest of
+    this check — and 12 of the real model's 15 assets are in that position. A
+    rule written behind that line would bind three assets and be silent on
+    twelve.
+    """
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][0].__setitem__(
+            "hardware", {"backend": "sim", "params": {"real": {"robot_ip": "203.0.113.7"}}}
+        ),
+    )
+    finding = next(
+        f for f in _findings(minimal_model) if f.rule == "unknown-hardware-param-backend"
+    )
+    assert finding.where == "assets.pedestal_1.hardware.params.real"
+
+
+def test_a_declared_parameter_the_asset_does_not_supply(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The mirror of `unexpected-hardware-param`, and the half a model author
+    # meets: an unsupplied `robot_ip` reaches the far side as
+    # `<param name="robot_ip">R</param>` and takes the ros2_control_node down at
+    # on_init. This moves it to a laptop.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "real"}),
+    )
+    finding = next(f for f in _findings(minimal_model) if f.rule == "missing-hardware-param")
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
+
+
+def test_two_missing_parameters_yield_two_findings(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """Non-aborting, so an author sees every missing key at once.
+
+    This is the whole reason decision 2a puts the reporting half in the
+    validator: the generator's raise is correct and aborts the run, so an author
+    would fix one key per invocation.
+    """
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: d["asset_type"]["hardware_backends"]["real"].__setitem__(
+            "instance_params", ["robot_ip", "report_type"]
+        ),
+    )
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "real"}),
+    )
+    missing = [f for f in _findings(minimal_model) if f.rule == "missing-hardware-param"]
+    assert [f.where for f in missing] == [
+        "assets.arm_1.hardware.params.real.report_type",
+        "assets.arm_1.hardware.params.real.robot_ip",
+    ]
+
+
+def test_a_block_for_a_declared_backend_nobody_selects_is_clean(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """No finding of any severity. This is what makes flipping an arm to
+    hardware a one-field edit, and ADR-0053 decision 1 states its cost: an
+    unexercised block is indistinguishable from a deliberate pre-declaration."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "sim", "params": {"real": {"robot_ip": "203.0.113.7"}}}),
+    )
+    assert referential.check(load(minimal_model)) == []
 
 
 def test_station_references_a_missing_asset(minimal_model: Path, edit_yaml: Callable) -> None:
