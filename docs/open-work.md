@@ -56,6 +56,15 @@ file and in ADR-0048. **#38 is deliberately untouched** and is now stale in two 
 says why and who owes it. No table row below was re-derived on this reading, and none of the
 notes above is disturbed.
 
+**Amended later the same day, after four reviewers read that change.** #45 stated that
+`hosted_by` was *"never a branch on a backend"*, which is false and is corrected in place — it
+was one of #38's three sites, which is why #38's count is **stale** rather than **wrong when
+written**, and the difference matters because ADR-0041 still rests on that argument. #40's
+closure narrated a failure that was already gone at `e18251e` and declined a measurement that
+was two minutes away; the measurement is now taken, on both trees and both model shapes, and
+its base row says the failures were already gone. **#61 is new** — a third side would be gated
+by nothing — and is filed rather than fixed, for the reason it gives itself.
+
 **Updated 2026-09-08**, and this reading is taken on **`main` itself at `30baea8`**, not on a
 branch: the work the notes above describe is merged, and `git rev-parse main` reads `30baea8`
 while `git rev-parse origin/main` reads `13bc8e9`, so `main` is **one commit ahead of the
@@ -838,6 +847,30 @@ no finding of any severity.
 **Note the coupling with the escape hatch:** the vendor set must remain selectable when the range
 rule fires, so these two rules' conditions are already linked and should be designed together.
 
+### #61 — The hardware gate iterates a constant pair of sides, not the plan's own `sides:`
+`cite_bringup.plan.require_hardware_opt_in` walks `BACKEND_FIELD_BY_SIDE`, which names exactly
+`plant` and `counterpart`. A plan declaring a **third** side would have that side's backend
+gated by nothing — including a physical one, which is the direction that matters, since the gate
+is what stands between a checkout and a real arm.
+
+**Not reachable today, and that is the whole reason this is here rather than fixed.**
+`cite_tools.model.ids.SIDES` is exactly two, `cite_twin.routing`'s `_COMMANDED` names only
+those two, and no generator can emit a third. The exposure is identical at `e18251e` and was
+not introduced by ADR-0048 clause 3. It became worth writing down when the load-time refusal
+`_every_declared_side_states_a_backend` landed on 2026-09-08: that function walks the plan's
+own `sides:` and skips a name it has no backend field for, deliberately, because deciding how
+many sides may exist is L0's answer and not the reader's — so the plan can now carry a side
+that one function walks past and the other never looks at.
+
+**The shape a fix should take is already in the tree**, and it is why this is a structural item
+rather than a defect: `cite_twin.routing` refuses to IMPORT if `TwinMode` declares a mode its
+tables have not been told about. The same move here — refuse at import if `ids.SIDES` and
+`BACKEND_FIELD_BY_SIDE` disagree — turns a silent ungating into a build failure. **It belongs
+with the change that adds a third side**, because a guard written against a set that cannot
+grow is a guard nobody can test.
+
+Reported by `safety-auditor` on 2026-09-08 (S-05) and deliberately not fixed there.
+
 ### #38 — The generator cannot render 2.B
 Exactly three generator call sites branch on a backend: `ResolvedAsset.ros2_control_plugin` (into
 the description), `control.py:236` (`use_sim_time`) and `bringup.py:363` (`hosted_by`). **All
@@ -859,10 +892,12 @@ combination until they are.
 `hosted_by` is gone from the generator, the template, the plan schema and the committed plan.
 `ControllerManager.backend_on(side)` replaces it and is the one place in `cite_bringup` that
 maps an (asset, side) to a backend; `require_hardware_opt_in` now reads through it.
-Reproduce with `grep -rn hosted_by workspace tools tests scripts`, which returns **two** files
-and both are about the removal: the guard
+Reproduce with `grep -rn hosted_by workspace tools tests scripts model .github infra`, which
+returns **two** files and both are about the removal: the guard
 `tools/tests/test_a_removed_plan_key_stays_removed.py`, which fails if any other tracked file
-under those four trees states the name, and
+under those seven trees states the name — it walked the first four when this entry was written
+and gained `model/`, `.github/` and `infra/` later the same day, because its own docstring
+claimed every tree code is read out of — and
 `workspace/src/cite_bringup/test/test_a_removed_plan_key_is_ignored.py`, which pins that a plan
 still carrying the key **loads** rather than being refused — the document most likely to carry
 it is one left in a stale build tree, where the cause is a rebuild and not a key.
@@ -880,11 +915,27 @@ asserts the property for every future template edit rather than the value for th
 `_solo_document()`, and #40 below is where that is kept.
 
 **What this does NOT close:** #38 above. Its "exactly three generator call sites" is still
-stated there, and it is now wrong twice over — `hosted_by` was never a branch on a backend and
-is no longer anywhere, while the collision scheme in `generate/description.py` was a site the
-count never included. **That entry is deliberately untouched here**, because the change that
-makes those sites per-side is the one that owes them; `grep -rnE "backend|SIMULATION_BACKEND"
-tools/cite_tools/generate/*.py` returns **four files** today and is the instrument. The two
+stated there, and it is now wrong for **two** reasons — one site was removed, and one site was
+never listed. `hosted_by` **was** a branch on the plant's backend, which is precisely why it
+was one of the three; what made it cheap to delete is that it was a total function of a backend
+the plan already states per side and nothing read it. And the collision scheme in
+`generate/description.py` was a site the count never included at all.
+**[Corrected 2026-09-08 — this paragraph read "`hosted_by` was never a branch on a backend and
+is no longer anywhere" when it was written hours earlier.** That is false: the deleted code was
+`hosted_by="simulator" if asset.instance.hardware.backend == ids.SIMULATION_BACKEND else
+"ros2_control_node"` (`e18251e:tools/cite_tools/generate/bringup.py:382-384`). Saying otherwise
+retroactively invalidates #38's count, which was **correct when written**, and it invalidates
+the same argument where ADR-0041 still rests on it. A stale count is not the same as a count
+that was always wrong, and only the first of those is what happened here.**]**
+**That entry is deliberately untouched here**, because the change that
+makes those sites per-side is the one that owes them; `grep -rn "instance.hardware.backend"
+tools/cite_tools` returns **five lines in four files** today and is the instrument — three of
+them branch (the `ros2_control` plugin in `model/resolve.py`, the collision scheme in
+`generate/description.py`, `use_sim_time` in `generate/control.py`) and one merely restates the
+value into the plan. **The instrument this entry first named,
+`grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`, could not reach the
+first of those three**, which lives outside `generate/`, so it under-read the very list it was
+offered as the answer to. The two
 places this commit's own edits landed in —
 `tools/cite_tools/validate/referential.py`'s `divergent-counterpart-backend` docstring and
 `tools/cite_tools/model/ids.py`'s `SIMULATION_BACKEND` comment — were corrected, because both
@@ -892,19 +943,34 @@ justified their count by naming `hosted_by` and could not be left saying "three"
 gone.
 
 ### #40 — `test_plan.py` on a paired checkout — CLOSED 2026-09-08
-**Closed by construction at `7d7ac19`** on the branch `feat/hosted-by-derived`, and the distinction matters:
-it is not closed by anyone having run against a paired model. The committed model stays
-`twin: {sides: single}` and nothing here flips it.
+**Closed by construction at `7d7ac19`** on the branch `feat/hosted-by-derived`, **and measured
+on 2026-09-08** — the entry said the measurement had not been taken and it was two minutes
+away. The committed model stays `twin: {sides: single}`; the run below was taken in the working
+tree and reverted, and `git status` was checked clean afterwards.
 
 **What the class was:** a test that reads the live generated plan instead of building its own
 document, so it asserts about whichever model the checkout happens to carry. On a checkout
 flipped to `pair`, `_document()["plan"]["sides"].append(_counterpart(...))` produced two sides
 named `counterpart` and the test failed on its own fixture rather than on what it asked about.
+**[Corrected 2026-09-08 — that describes the tree BEFORE an earlier fixture fix, not before
+this commit.** At `e18251e` no test does it: all three `_counterpart(...)` appenders were
+already on `_solo_document()`, put there by the three that #45's older text records as
+"fixed". Written as the state this change found, it credits this change with a failure that
+was already gone — and the measurement below says so directly, since the base passes paired.**]**
 
 **What replaces it.** `_document()` is gone. `_live_document()` is the only reader of the live
 plan and a test may not call it: `test_only_the_two_shape_helpers_read_the_live_plan` parses
 the module and requires its callers to be exactly `_paired_document` and `_solo_document`.
 Parsed rather than grepped, because a guard that counts a string counts its own message.
+**That guard alone had a one-line bypass, and it was demonstrated on 2026-09-08.**
+`_live_document`'s whole body is `yaml.safe_load(_generated().read_text())`, and `_generated`
+is a module-level accessor with two dozen callers — so a test spelling that one line itself got
+the live document with the guard green, and died on a paired tree with this entry's exact
+signature. `test_nothing_reaches_the_live_plan_around_that_reader` closes it by SHAPE rather
+than by caller: outside `_live_document` a call to the accessor must be the direct argument of
+`load`, which returns a `Plan` with no `sides` list to append to, and `GENERATED_PLAN` may be
+read nowhere but the accessor, since `Path(resolve_uri(GENERATED_PLAN))` is the same reach one
+step lower. Both routes were written as mutations first and both are refused by name.
 Every test that edits a plan document now takes a `document` fixture parametrised over
 **both** shapes, so both run on every checkout and neither can be the one nobody tried; the
 three tests that APPEND a side take `_solo_document()` by name and say why.
@@ -917,10 +983,41 @@ pairing adds exactly two things — the side, and a `counterpart_backend` on eve
 manager. So the paired fixture built a document no generator emits. It now applies both, in
 ADR-0041 Decision 3's shape.
 
-Reproduce: `./scripts/test` runs it, or in the container
-`python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q` — **119 passed** at this
-commit, against 76 tests before. **What is still not evidenced:** no run against a paired model
-was taken here, so what is closed is the class, not a measurement of it.
+**The measurement, taken 2026-09-08 in this checkout, on one machine, with nothing registered
+in advance.** Method: `sed -i 's/sides: single/sides: pair/' model/facility/zones.yaml`, then
+`./scripts/validate-model --write`, then
+`./scripts/enter dev bash -lc "cd /workspace && python3 -m pytest <path> -q"`. The generated
+tree is symlink-installed, so no rebuild is needed for the tests to read the paired plan.
+Reverted with `git checkout -- model/facility/zones.yaml workspace/src/cite_generated`, and
+`MODEL_HASH` verified back at `95dbbdd9…`.
+
+| tree | model | `test_plan.py` | whole `cite_bringup` suite |
+|---|---|---|---|
+| `e18251e` (base) | `single` | **84 passed** | not taken |
+| `e18251e` (base) | `pair` | **84 passed** | not taken |
+| branch, after review fixes | `single` | **124 passed** | **205 passed** |
+| branch, after review fixes | `pair` | **124 passed** | **209 passed** |
+
+**Read the base row before reading the branch row.** The base passes paired too, so what this
+change closed is the CLASS — a test may no longer read the live plan, and the guard says so by
+parsing rather than by remembering — and **not** a set of failures that were still occurring.
+The fourteen failures this entry was opened for were already gone at `e18251e`. Saying this
+change fixed them would be claiming a measurement nobody took.
+
+**Two smaller things the run settled.** The count does not move with the model: `test_plan.py`
+collects and passes the same number on both shapes, because the `document` fixture's
+parametrisation is static. And the before-figure this entry carried was wrong —
+**[Corrected 2026-09-08 — it read "119 passed at this commit, against 76 tests before".** The
+119 was measured; the **76** was copied from this entry's own older text, and `test_plan.py` at
+`e18251e` collects **84** (`pytest --collect-only -q`, in the container). Setting a freshly
+measured number beside a copied one is what CLAUDE.md §2 exists to prevent, and it happened
+inside the entry that was closing a defect about trusting a stale figure.**]** The branch figure
+has since moved from 119 to **124**: review added five tests to the same file — four for the
+load-time refusal ADR-0048's promotion section records, one for the hardware gate's narrow
+`except`.
+
+Reproduce with `./scripts/test`, or in the container
+`python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q`.
 
 ### #47 — Five L5 review findings, with their content
 Recorded here because they were once sent as bare identifiers and an agent correctly refused to

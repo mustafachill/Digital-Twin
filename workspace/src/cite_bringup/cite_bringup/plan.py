@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from ament_index_python.packages import get_package_share_directory
 import yaml
@@ -121,13 +122,21 @@ PLANT_SIDE = "plant"
 
 #: The side that exists only where the zone declares ``twin.sides: pair``.
 #:
-#: The second half of the pair `PLANT_SIDE` above states, mirroring
-#: `cite_tools.model.ids.SIDES` for the same reason and with the same limit: this
-#: is a different build unit that cannot import that one, and it does not DECIDE
+#: The second half of the pair `PLANT_SIDE` above states, and it does not DECIDE
 #: which sides exist. Which sides a zone has is read out of the plan's own
 #: `sides:` block, and which side an asset states a backend for is read off the
 #: controller manager - `ControllerManager.backend_on` is the one place those two
 #: names are turned into a value.
+#:
+#: **This is not the only statement of the string, and the count is not stated
+#: here**: `grep -rn COUNTERPART_SIDE` is what says how many exist, not this
+#: comment. Two others are known and they are not the same case.
+#: `cite_tools.model.ids.SIDES` is a different build unit that cannot import this
+#: one, which is the unavoidable kind. `cite_twin.routing.COUNTERPART_SIDE` is
+#: NOT: `cite_twin/package.xml` declares `<depend>cite_bringup</depend>` and
+#: `twin_boundary.py` already imports from this module, so that one could import
+#: rather than restate. Whether it should is that package's question and not
+#: this comment's; what would be wrong is implying all three are forced.
 COUNTERPART_SIDE = "counterpart"
 
 #: Which plan key states each side's backend. A fact about the plan SCHEMA - what
@@ -135,10 +144,17 @@ COUNTERPART_SIDE = "counterpart"
 #: of the value map: `ControllerManager.backend_on` answers what the backend IS,
 #: and this answers what a refusal should call it, so a message and the accessor
 #: behind it cannot name different fields.
-BACKEND_FIELD_BY_SIDE = {
-    PLANT_SIDE: "backend",
-    COUNTERPART_SIDE: "counterpart_backend",
-}
+#:
+#: Read-only, because it sits on the hardware gate's path: a plain dict here is
+#: module state anything in the process can pop the counterpart out of, and the
+#: gate would then walk one side and refuse nothing about the other for the rest
+#: of the run, silently.
+BACKEND_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
+    {
+        PLANT_SIDE: "backend",
+        COUNTERPART_SIDE: "counterpart_backend",
+    }
+)
 
 
 class PlanError(Exception):
@@ -373,7 +389,22 @@ class ControllerManager:
         ADR-0041 Decision 3 chose and what Phase 2.B is made of — and the pair of
         plan keys that state it is exactly the kind of value that acquires a
         second reader, disagrees with the first and is discovered on a physical
-        machine. So callers ask for a side by name and never reach for the field.
+        machine. So this is the accessor a caller SHOULD ask, by side name rather
+        than by reaching for the field.
+
+        **It is not yet the only reader, and saying otherwise would be a claim
+        this repository does not support.** `cite_twin.twin_boundary` builds its
+        own `{asset: {side: backend}}` map straight off the two fields, and that
+        map is what decides whether the injected hardware refusal runs at all.
+        Migrating it is deliberately not a drop-in: `cite_twin.mode.Deployment`
+        keeps a TOTAL contract - `backend` returns `None` for an absent side, and
+        `has_a_far_side`, `assets_without_a_far_side` and
+        `physical_sides_commanded` all test `is None` - where this accessor
+        refuses. A caller swapping one for the other would have to wrap every
+        `(asset, side)` in `try/except SideNotDeclaredError` to rebuild the
+        `None`, which re-creates the three-way branch this refusal exists to
+        prevent. Whoever migrates it adds a total sibling accessor or accepts
+        that cost knowingly; ADR-0048's promotion section carries the decision.
 
         By identity and never by index, for the reason `Plan.side_named` gives at
         length: a caller who meant the counterpart and got whatever is second is
@@ -595,6 +626,8 @@ def load(path: Path) -> Plan:
                 "bring-up would report success having activated nothing"
             )
 
+    _every_declared_side_states_a_backend(sides, managers, path)
+
     conveyors = tuple(
         Conveyor(
             asset=_require(entry, "asset", f"conveyor {index}"),
@@ -656,6 +689,79 @@ def load(path: Path) -> Plan:
         detection=detection,
         workpieces=_workpieces(_optional(plan, "workpieces")),
     )
+
+
+def _every_declared_side_states_a_backend(
+    sides: tuple[Side, ...], managers: tuple[ControllerManager, ...], path: Path
+) -> None:
+    """Refuse a plan whose `sides:` block names a side no asset states a backend for.
+
+    The fourth refusal of the kind `_sides` carries, and it is here rather than
+    there because it is the only one that needs both halves of the document: the
+    `sides:` block says which sides exist, and the controller managers say which
+    sides each asset loads something on. A plan can disagree with itself about
+    that, and every gate downstream then agrees with the wrong half.
+
+    **What it prevents, concretely.** A plan listing `plant` and `counterpart`
+    while a manager omits `counterpart_backend` used to load cleanly:
+    `Plan.side_named('counterpart')` returned a side, `backend_on('counterpart')`
+    raised `SideNotDeclaredError`, and `require_hardware_opt_in` skipped that side
+    without refusing - so `CITE_ALLOW_HARDWARE` gated a side the plan says exists.
+    Through L5 the same document accepted `SetMode(VIRTUAL_LEAD)` for the same
+    reason. The plan said a side was there and every gate said it was not.
+
+    **Why this is a refusal and not a softer accessor.**
+    `ControllerManager.backend_on` documents `counterpart_backend is None` as
+    meaning *the zone has no counterpart*, never *the model left the key out*.
+    That invariant is enforced in the GENERATOR, and this module is the reader
+    that faces documents the generator did not write - stale ones, hand-edited
+    ones. Enforcing it here is what makes the accessor's promise true of every
+    document that loads rather than only of every document we emit.
+
+    **It is not the stale-key tolerance's opposite.** A document carrying a key
+    that was REMOVED still loads and is ignored (ADR-0048 clause 3): the reader
+    stopped needing it, so its presence says nothing. A document MISSING a key a
+    side it declares needs is refused: the reader does need it, and skipping the
+    side silently is how the gate above went quiet. Different questions.
+    """
+    for side in sides:
+        field = BACKEND_FIELD_BY_SIDE.get(side.name)
+        if field is None:
+            # A side this module has no backend field for at all - a third side,
+            # which nothing in this project emits yet. Refusing it here would be
+            # this function deciding how many sides may exist, which is L0's and
+            # `ids.SIDES`' answer, not the reader's.
+            continue
+        silent = sorted(
+            manager.asset
+            for manager in managers
+            if not _states_a_backend_for(manager, side.name)
+        )
+        if silent:
+            raise SideNotDeclaredError(
+                f"{path}: the plan declares a side named {side.name!r}, and "
+                f"{len(silent)} controller manager(s) state no backend for it: "
+                f"{', '.join(repr(asset) for asset in silent)}. Each of those "
+                f"entries is missing `{field}:`. A side that exists in the "
+                "`sides:` block and nowhere else is invisible to every gate that "
+                "asks an asset what it loads - the hardware opt-in would let it "
+                "past unasked - so the plan is refused rather than half-honoured. "
+                "Which sides a zone has is an L0 fact: set `twin: {sides: pair}` "
+                "on the zone and regenerate."
+            )
+
+
+def _states_a_backend_for(manager: ControllerManager, side: str) -> bool:
+    """Whether this asset names a backend for that side, asked the one way.
+
+    Through `backend_on` rather than off the fields, so that this refusal and the
+    accessor it protects cannot disagree about what "states a backend" means.
+    """
+    try:
+        manager.backend_on(side)
+    except SideNotDeclaredError:
+        return False
+    return True
 
 
 def _sides(plan: object, path: Path) -> tuple[Side, ...]:

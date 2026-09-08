@@ -20,10 +20,12 @@ controller manager is created inside the Gazebo process or runs its own
 states per side, and nothing read it. A consumer that needs the distinction
 derives it from `ControllerManager.backend_on` instead.
 
-**Why this is its own file.** The key is barred from every other source file
-under `workspace/`, `tools/`, `tests/` and `scripts/` by
+**Why this is its own file.** The key is barred from every other tracked file
+under the trees code and configuration live in by
 `tools/tests/test_a_removed_plan_key_stays_removed.py`, which exempts this one
-and itself. A field is deleted so that nothing acquires a consumer for it, and a
+and itself. Ask that file's `GUARDED_TREES` which trees those are; naming them
+here would be the same list in two places, and this one already went stale once.
+A field is deleted so that nothing acquires a consumer for it, and a
 guard with a scattering of exemptions cannot say that; a guard with two, each
 whose whole subject is the removal, can.
 

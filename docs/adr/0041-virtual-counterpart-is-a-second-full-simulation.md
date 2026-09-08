@@ -557,6 +557,19 @@ generated trees**, at two call sites that both branch on this one field:
   simulated backend's controller manager is created **inside the Gazebo process**, so there is
   no separate process to wait on, while a real one runs its own node. So the two encodings
   disagree about which side has a process to sequence bring-up against.
+  **[Overtaken 2026-09-08 — this call site no longer exists.**
+  [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 3 removed
+  `hosted_by` from the generator, the template, the plan schema and the committed plan: it was
+  a total function of a backend the plan already states per side and nothing read it, and what
+  needs the distinction now derives it from `ControllerManager.backend_on`. **The refusal this
+  clause states is not weakened** — `use_sim_time` below still branches on the field, and so do
+  the `ros2_control` plugin (`cite_tools/model/resolve.py`) and the collision scheme
+  (`generate/description.py`), neither of which this bullet pair ever named. **The line number
+  was already wrong before the removal**: at `e18251e` the ternary was at `bringup.py:382` and
+  `:346` was unrelated resolve code, which is why the sites are named by symbol from here on.
+  Ask `grep -rn "instance.hardware.backend" tools/cite_tools` for the set; the counts in
+  this record and in `docs/open-work.md` #38 are owed to the change that makes those sites
+  per-side.]**
 - `tools/cite_tools/generate/control.py:234` derives `use_sim_time` from the same field, so
   they disagree about which side's controllers run on simulated time.
 

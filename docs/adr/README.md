@@ -95,6 +95,11 @@ Three rules about them.
    the fourth row is `Replaced`. One in-place use survives, in
    [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md)'s status block, and it
    stays: a record's text is not rewritten to satisfy a convention written after it.
+   **It was briefly three.** The change that landed that record's clause 3 on 2026-09-08 wrote
+   two more, both on status lines and both quoting the wording they replaced — which is the
+   fourth row exactly — and they were converted to `Replaced` the same day. The grandfathered
+   one is grandfathered because it predates this table, not because in-place use is available
+   to a new sentence.
 2. **A marker never edits the sentence it marks.** It stands after it, for the same reason
    corrections do not rewrite: how the wrong claim survived is the valuable part.
 3. **A marker is not a substitute for a section.** `Corrected` and `Amended` require the
@@ -169,7 +174,7 @@ not rewritten either.
 | [0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) | Measure the gripper deadline in the clock the gripper runs on, and declare it in L0 | Proposed (corrected 2026-08-30) |
 | [0046](0046-a-retry-may-not-destroy-the-trigger-it-waits-on.md) | A retry may not re-enter a wait on a trigger its own recovery destroyed | Proposed (corrected 2026-08-30) |
 | [0047](0047-two-independent-launches-joined-not-sequenced.md) | Bring a pair up as two independent launches, joined by a supervisor that sees only processes | Accepted (corrected 2026-09-01) |
-| [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Accepted on clause 1 (corrected 2026-08-30; promoted 2026-08-31) — clauses 2 and 3 unbuilt, see its status block |
+| [0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) | Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts | Accepted on clauses 1 and 3 (corrected 2026-08-30; clause 1 promoted 2026-08-31, clause 3 promoted 2026-09-08) — **clause 2 alone is unbuilt**, see its status block. This row read "Accepted on clause 1 … clauses 2 and 3 unbuilt" for a day after clause 3 landed, and nothing checks a status line against its record: `./scripts/doctor`'s ADR check counts records against this index and does not read either one's status |
 | [0049](0049-measure-the-real-time-floor-as-capacity.md) | Keep the real-time floor and measure it as capacity, not as a throttled rate | Proposed (corrected 2026-09-01) |
 | [0050](0050-what-crosses-the-twin-boundary.md) | Cross the twin boundary in L5's own memory, and say when a divergence number may be believed | Proposed (corrected 2026-08-31) |
 | [0051](0051-restate-the-hull-grasp-gate.md) | Restate ADR-0028's grasp gate, and bind it to the work-piece width it was measured at | Accepted |

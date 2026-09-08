@@ -38,8 +38,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: The key itself.
 REMOVED_KEY = "hosted_by"
 
-#: Where a source file is read as instruction. `docs/` is deliberately absent.
-GUARDED_TREES = ("workspace", "tools", "tests", "scripts")
+#: Where a source file is read as instruction. `docs/` is deliberately absent: a
+#: decision record states what it decided, and open-work names what closed.
+#:
+#: Everything else this repository tracks IS here, and that is the point of the
+#: list rather than an accident of which trees came to mind. `model/` is L0 and
+#: is the layer a reinstated key would most plausibly be declared in; `.github/`
+#: and `infra/` carry the CI and container definitions, which are read as
+#: instruction exactly as source is. The list held only the first four when this
+#: guard was written, leaving those three outside a guard whose own docstring
+#: said it covered every tree code is read out of.
+GUARDED_TREES = ("workspace", "tools", "tests", "scripts", "model", ".github", "infra")
 
 #: Files whose subject IS the removed key, named relative to the repository root.
 #: Both are tests about the removal; neither reads the key out of a plan.
@@ -50,7 +59,7 @@ EXEMPT = (
 
 
 def guarded_files() -> list[Path]:
-    """Every tracked file under the four trees code lives in.
+    """Every tracked file under the trees code and configuration live in.
 
     `git ls-files` rather than a walk, for the reason
     `test_superseded_real_time_requirement.py` gives: the question is what the

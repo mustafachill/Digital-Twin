@@ -1124,8 +1124,10 @@ class TestTwinSidesAndTheGazeboPartition:
         sites that branch on a backend — `ros2_control_plugin` into the
         description, the collision scheme in `generate/description.py` and
         `use_sim_time` in `generate/control.py`; ask
-        `grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`
-        rather than trusting a count written here — all read the PLANT's backend,
+        `grep -rn "instance.hardware.backend" tools/cite_tools` rather than
+        trusting a count written here, and note that the first of those three
+        lives in `model/resolve.py` and so is outside any glob over
+        `generate/*.py` — all read the PLANT's backend,
         and under ADR-0041's Decision 3 a paired zone's plant must be `sim` and a
         2.A counterpart writes no `counterpart_backend` at all, so they answer
         identically for both sides. The site this test used to name fourth left

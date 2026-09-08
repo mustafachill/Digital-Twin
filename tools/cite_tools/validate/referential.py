@@ -343,12 +343,18 @@ def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding
     `real` would leave a third backend to rediscover exactly this gap.
 
     THE SET IS ASKED FOR, NOT COUNTED HERE. This docstring said "three" and named
-    among them a plan key that branched on nothing and that ADR-0048 clause 3 has
-    since removed, while the collision scheme, added 2026-08-31, was never
-    listed. A count in prose is a claim with an expiry
-    date; `grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`
-    is the instrument, and the record's own copies of the count are stale until
-    the change that makes these sites per-side corrects them.
+    among them the bring-up plan key ADR-0048 clause 3 has since removed. That
+    key WAS a branch on the plant's backend, exactly like the three above — the
+    count was right when it was written, and it went stale because a site was
+    deleted, not because it was miscounted. (What made the deletion free is a
+    different property: the key was a total function of a backend the plan
+    already states per side, and nothing read it.) Meanwhile the collision
+    scheme, added 2026-08-31, was never listed at all. So a count in prose is a
+    claim with an expiry date; `grep -rn "instance.hardware.backend"
+    tools/cite_tools` is the instrument — it reaches every read of the PLANT's
+    backend, in `model/` as well as in `generate/`, which a glob over
+    `generate/*.py` does not — and the record's own copies of the count are stale
+    until the change that makes these sites per-side corrects them.
 
     WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
     `backend` stays legal and stays byte-identical to omitting it, which is the

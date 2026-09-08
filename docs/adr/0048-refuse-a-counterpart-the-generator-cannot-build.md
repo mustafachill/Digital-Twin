@@ -6,9 +6,11 @@
   See the section "Correction — 2026-08-30: a pair has come up, and the counterpart backends
   this record refuses are still accepted", below, "Promotion — 2026-08-31: clause 1 only",
   after it, and "Promotion — 2026-09-08: clause 3, eight days late", after that.
-  **[Corrected 2026-09-08 — this line read "Accepted on clause 1 … clauses 2 and 3 are not,
-  and neither is promoted by this" until clause 3 landed. Clause 2 is untouched by that and
-  its bullet below is unchanged.]** In one line each:
+  **[Replaced 2026-09-08, kept for the record:]** *"Accepted on clause 1 (corrected
+  2026-08-30; promoted 2026-08-31) — clause 1 is built and binding; clauses 2 and 3 are not,
+  and neither is promoted by this."* That was right for eight days and clause 3 landing is
+  what made it false, so it is not a `Corrected` — nobody was wrong. Clause 2 is untouched by
+  the rewrite and its bullet below is unchanged. In one line each:
   - **Clause 1 is `Accepted`.** `divergent-counterpart-backend` exists in
     `cite_tools.validate.referential` and refuses any asset whose
     `effective_counterpart_backend` differs from its `hardware.backend`. Violating it is an
@@ -20,12 +22,12 @@
     still carries it loads rather than being refused.
     `cite_bringup.plan.ControllerManager.backend_on` is what a consumer asks instead, and it
     is the only place in `cite_bringup` that turns an (asset, side) into a backend.
-    **[Superseded 2026-09-08 — this bullet read, from 2026-08-30 until then:** *"Clause 3 did
-    not land with clause 1, so it is not promoted either — this block saying so is the
-    condition below working. `hosted_by` is still emitted into the bring-up plan and still
-    read by nothing."* It said that for eight days, `docs/open-work.md` #45 called it OVERDUE
-    for six of them, and the split condition is what kept it visible rather than letting the
-    record read as though all three clauses had shipped.**]**
+    **[Replaced 2026-09-08, kept for the record:]** *"Clause 3 did not land with clause 1, so
+    it is not promoted either — this block saying so is the condition below working.
+    `hosted_by` is still emitted into the bring-up plan and still read by nothing."* It said
+    that for eight days, `docs/open-work.md` #45 called it OVERDUE for six of them, and the
+    split condition is what kept it visible rather than letting the record read as though all
+    three clauses had shipped.
 
   Everything from "nothing in this record is implemented" onward was written against
   `9233766` and is superseded for clause 1 only; the paragraph is left in place per the
@@ -121,9 +123,11 @@ that moves `cite_bringup.plan`, its tests, the committed `cite_generated/` tree 
 `MODEL_HASH`, and it was out of the scope this change was given. The argument for doing it
 before something starts reading the field is unchanged and is now overdue rather than merely
 pending.
-**[Superseded 2026-09-08 — clause 3 has landed; see "Promotion — 2026-09-08" below. The
-`MODEL_HASH` half of this paragraph carries the same error the *Consequences* bullet does and
-is corrected there rather than twice: the committed tree moved and the hash did not.]**
+**[Overtaken 2026-09-08 — clause 3 has landed; see "Promotion — 2026-09-08" below. The
+paragraph was right when it was written and the clause landing is what made it stale. Its
+`MODEL_HASH` half is a different matter and IS an error: it repeats the *Consequences*
+bullet's, and is corrected there rather than twice — the committed tree moved and the hash
+did not.]**
 
 **What this promotion does not evidence.** Nothing here brings a pair up, and nothing here
 touches the generator. The refusal is a validation-time fact about the model, tested on a
@@ -160,8 +164,12 @@ regeneration. Pinned by `test_a_plan_carrying_the_removed_host_key_loads_cleanly
 
 **What holds the removal, since a grep run once by the change that deletes a field says nothing
 about the change after.** `tools/tests/test_a_removed_plan_key_stays_removed.py` parametrises
-over every tracked file under `workspace/`, `tools/`, `tests/` and `scripts/` and fails if any
-of them states the name. `docs/` is deliberately outside it: a record states what it decided.
+over every tracked file under the trees code and configuration live in — `workspace/`,
+`tools/`, `tests/`, `scripts/`, `model/`, `.github/` and `infra/` — and fails if any of them
+states the name. **[Overtaken 2026-09-08 — this sentence named the first four only, which was
+what the guard walked when this section was written; the last three were added the same day,
+after review pointed out that the guard's own docstring claimed every tree code is read out of.
+Ask `GUARDED_TREES` in that file rather than this list.]** `docs/` is deliberately outside it: a record states what it decided.
 The two exemptions are the guard itself and the `cite_bringup` test above, and a second test
 fails if either stops being about the removal — an exemption naming a file that has moved on is
 an exemption nobody notices.
@@ -170,16 +178,76 @@ an exemption nobody notices.
 one side.** With `backend_on` returning `self.backend` unconditionally,
 `workspace/src/cite_bringup/test/test_plan.py` reports **7 failed, 112 passed**; restored, it
 reports **119 passed**. Two of the seven are the pre-existing hardware-gate tests, which is the
-evidence that the gate reads through the accessor rather than beside it.
+evidence that the gate reads through the accessor rather than beside it. **[Overtaken
+2026-09-08 — the 119 is that day's earlier figure; review added five tests to the same file and
+it reports 124. The mutation itself was not re-run against the larger file, so read the 7/112
+as the reading it was, at `8b74f80`.]**
+
+**The invariant `backend_on` documents is now ENFORCED at `load`, and it was prose here.** This
+section said the accessor promises `counterpart_backend is None` means *the zone has no
+counterpart* and never *the model left the key out*. That is enforced in the GENERATOR, and
+`cite_bringup.plan` is the reader that faces documents the generator did not write — a point
+this very change makes, since it also decided to tolerate a stale one. A plan whose `sides:`
+block declared a counterpart while a controller manager omitted `counterpart_backend` loaded
+cleanly: `Plan.side_named` handed out a side, `backend_on` refused it, and
+`require_hardware_opt_in` skipped it **without refusing**, so a side the plan says exists went
+unasked whether it may reach a physical machine. Through L5 the same document accepted
+`SetMode(VIRTUAL_LEAD, force=True)` for the same reason. That is not a regression — the base
+behaved identically, and no generator emits such a plan — but the promise stopped being a
+comment and started being load-bearing here, so `_every_declared_side_states_a_backend` refuses
+it, **naming the assets that are silent**, in the same shape as the three refusals `_sides`
+already carried. It is not the opposite of the stale-key tolerance above: a document carrying a
+key that was REMOVED still loads, because the reader stopped needing it; a document MISSING a
+key a side it declares needs is refused, because the reader does need it and skipping the side
+is how the gate went quiet.
+
+It also caught two fixtures. `test_pair.py`'s `_paired_plan` and `test_simulation_launch.py`'s
+`_paired` each built a paired document by appending the `sides:` entry and nothing else —
+exactly the defect this change had already fixed in `test_plan.py`'s `_paired_document` — so
+both were building a document no generator emits while claiming to build the one it does. Both
+now apply ADR-0041 Decision 3's fallback as well.
 
 **What this promotion does not evidence.** Nothing here brings a cell up, let alone a pair.
 Clause 2 is untouched: no per-side artifact set exists, `divergent-counterpart-backend` still
 refuses a divergent counterpart at validation, and this change neither lifts that refusal nor
-moves a single generator site per-side. `backend_on` has one production caller today —
-`require_hardware_opt_in` — and its second and third are owed to the change that makes the
-remaining generator sites per-side. **`cite_twin.twin_boundary` builds the same map a fourth
+moves a single generator site per-side. `backend_on` has two production callers —
+`require_hardware_opt_in` and the load-time refusal above — and its next is owed to the change
+that makes the remaining generator sites per-side. **[Overtaken 2026-09-08 — this read "one
+production caller today … its second and third are owed" until the load-time refusal landed
+later the same day.]** **`cite_twin.twin_boundary` builds the same map a fourth
 time**, at its `Deployment` construction, and was deliberately left alone here; it is the next
 caller this accessor should have.
+
+**Half of clause 3 landed and half is OWED, and the split is worth naming because the clause
+reads as one sentence.** Clause 3 says the plan stops stating it *and* *"`cite_bringup` derives
+it, in one function, from the side's own backend."* The first half is done. The second is not:
+`backend_on` returns a **backend**, and nothing in this tree turns a backend into the host
+classification `hosted_by` carried — *created inside the Gazebo process* against *runs its own
+`ros2_control_node`*. There is no such function, and building an uncalled one would be building
+a value nobody reads, which is the thing this clause exists to avoid. **So the derivation is
+deferred to the launch-shape change**, the one this section's first bullet under clause 3
+already says owes a hardware side its own launch shape. That is where the classification gets a
+named home. **Until it does it has none at all**: the removal also took the host rule out of
+`ids.SIMULATION_BACKEND`'s enumeration, so the test `if manager.backend_on(side) ==
+SIMULATION_BACKEND:` is currently owed to whoever writes it, and a mixed side needs it in more
+than one place. Read this the way clause 2 is read here — stated, dated and unbuilt — rather
+than as a clause that shipped whole.
+
+**L5's own side→backend map is deliberately NOT migrated, and it is not a drop-in.**
+`cite_twin.twin_boundary` builds `{asset: {PLANT_SIDE: backend, COUNTERPART_SIDE:
+counterpart_backend}}` straight off the two fields, and that map is what decides whether the
+injected hardware refusal runs at all. It was left alone here because migrating an L5 consumer
+inside a plan-schema change widens the blast radius across a layer boundary. **The reason it
+cannot simply be swapped later is a contract difference, not effort.** `cite_twin.mode.
+Deployment` is TOTAL — `backend` returns `None` for an absent side, and `has_a_far_side`,
+`assets_without_a_far_side` and `physical_sides_commanded` all test `is None` — while
+`backend_on` refuses. A drop-in substitution would need `try/except SideNotDeclaredError`
+around every `(asset, side)` to rebuild the `None`, which re-creates at the L5 boundary exactly
+the three-way branch `backend_on`'s docstring argues against. **Whoever migrates it either adds
+a total sibling accessor beside `backend_on` or accepts that cost knowingly.** A migration
+attempted as a drop-in is the failure this paragraph exists to prevent. Nothing is broken
+today: the two maps were driven over 96 mode combinations and answered identically in all 96.
+The risk is the day one of them gains normalisation and the other does not.
 
 **And the cost this record stated for the change was wrong**, which is corrected in
 *Consequences* above rather than here. The short version: the `cite_generated/` diff is real

@@ -591,6 +591,15 @@ def _paired_plan(tmp_path: Path) -> Plan:
                 "domain_offset": 1,
             }
         )
+    for manager in document["plan"]["controller_managers"]:
+        # Both of the things pairing adds, not one. A plan naming a side that no
+        # asset states a backend for is refused at `load` (it is invisible to
+        # every gate that asks an asset what it loads), and it is a document no
+        # generator emits: ADR-0041 Decision 3's fallback makes an instance that
+        # writes no `counterpart_backend` in L0 load the same plugin on both
+        # sides, so the plan states the backend of every side that exists. The
+        # same shape as `_paired_document` in `test_plan.py`.
+        manager.setdefault("counterpart_backend", manager["backend"])
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return load(path)

@@ -69,6 +69,56 @@ def _generated() -> Path:
 _LIVE_READER = "_live_document"
 _SHAPE_HELPERS = ("_paired_document", "_solo_document")
 
+#: The path accessor underneath that reader, and the URI constant underneath
+#: that. Guarding only `_live_document` guards a WRAPPER: its whole body is
+#: `yaml.safe_load(_generated().read_text())`, so a test that spells that one
+#: line itself reaches the live plan with the guard above still green - a bypass
+#: that was demonstrated, and that dies on a paired checkout with open-work #40's
+#: exact signature while passing for everyone on a `single` one.
+#:
+#: So the accessor is guarded too, and by shape rather than by caller: outside
+#: `_live_document` a call to it may only be the direct argument of `load`, which
+#: returns a `Plan` - an object with no `sides` list anybody can append to. And
+#: the URI constant with it, since `Path(resolve_uri(GENERATED_PLAN))` is the
+#: same reach one layer lower down.
+_PLAN_PATH_READER = "_generated"
+_PLAN_URI = "GENERATED_PLAN"
+#: The one call a path outside the reader may sit inside.
+_PLAN_LOADER = "load"
+
+
+def _this_module() -> ast.Module:
+    """Parse this file into the syntax tree the two guards below walk.
+
+    Read from disk rather than from the imported module, because what is guarded
+    is what the repository carries.
+    """
+    return ast.parse(Path(__file__).read_text())
+
+
+def _calls_to(tree: ast.Module, name: str) -> list[ast.Call]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+    ]
+
+
+def _enclosing_functions(tree: ast.Module, nodes: object) -> set[str]:
+    """Name the functions the given nodes appear inside.
+
+    By identity, since `in` over a container of AST nodes falls back to `is`;
+    two syntactically identical calls in two functions are two different nodes,
+    which is what makes this able to name the offender.
+    """
+    return {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, ast.FunctionDef)
+        for inner in ast.walk(function)
+        if any(inner is node for node in nodes)
+    }
+
 
 def _live_document() -> dict:
     """Read the plan this checkout generates, in whatever shape its model declares.
@@ -951,6 +1001,92 @@ def test_the_hardware_gate_reads_through_the_accessor(tmp_path: Path) -> None:
     assert plan.controller_managers[1].backend_on(COUNTERPART_SIDE) == "real"
 
 
+def test_a_declared_side_no_asset_states_a_backend_for_is_refused(tmp_path: Path) -> None:
+    """A plan that disagrees with itself about whether a side exists.
+
+    The `sides:` block says `counterpart`; every controller manager is silent
+    about it. That document used to LOAD, and every gate downstream then agreed
+    with the wrong half: `Plan.side_named` handed out a side,
+    `backend_on(COUNTERPART_SIDE)` refused, and `require_hardware_opt_in` skipped
+    that side without gating it - so a side the plan declares would have gone
+    unasked whether it may reach a physical machine. Through L5 the same document
+    accepted a mode that commands it.
+
+    The generator cannot emit this, which is exactly why it is checked here: this
+    module reads documents the generator did not write. `backend_on`'s own
+    docstring promises `counterpart_backend is None` means *no counterpart*, never
+    *the key is missing*, and that promise is only true of every document that
+    loads if a document breaking it does not.
+    """
+    document = _solo_document()
+    document["plan"]["sides"].append(_counterpart())
+    with pytest.raises(SideNotDeclaredError) as raised:
+        load(_written(tmp_path, document))
+    message = str(raised.value)
+    assert COUNTERPART_SIDE in message
+    # Named assets, because a refusal that cannot say where to look sends its
+    # reader to the wrong half of the cell.
+    for asset in ("arm_1", "arm_2", "arm_3"):
+        assert repr(asset) in message, message
+    assert "counterpart_backend" in message
+
+
+def test_the_refusal_names_only_the_assets_that_are_silent(tmp_path: Path) -> None:
+    """One asset short is the shape a hand-edit actually takes.
+
+    Refusing while naming all three would send the reader to two entries that are
+    correct, which is the failure mode a refusal message exists to avoid.
+    """
+    document = _paired_document()
+    document["plan"]["controller_managers"][1].pop("counterpart_backend")
+    with pytest.raises(SideNotDeclaredError) as raised:
+        load(_written(tmp_path, document))
+    message = str(raised.value)
+    assert "'arm_2'" in message
+    assert "'arm_1'" not in message and "'arm_3'" not in message, message
+
+
+def test_a_solo_plan_is_not_refused_for_the_side_it_does_not_declare(
+    tmp_path: Path,
+) -> None:
+    """The other direction, since a refusal that fires on every plan is not one.
+
+    An untwinned zone declares one side and states one backend, and that is the
+    document every checkout in this repository ships. It must load.
+    """
+    plan = load(_written(tmp_path, _solo_document()))
+    assert [side.name for side in plan.sides] == [PLANT_SIDE]
+
+
+def test_the_gate_does_not_swallow_an_accessor_that_fails_some_other_way(
+    tmp_path: Path,
+) -> None:
+    """The `except SideNotDeclaredError` in the gate is narrow ON PURPOSE.
+
+    Skipping a side is right for exactly one reason - the asset states no backend
+    for it, so there is no machine behind it to command. Any OTHER failure of the
+    accessor is a broken reader, and swallowing it would ungate every side it
+    happened to touch while the launch went on reporting success. That is the
+    quiet direction, so it is the one that needs a test.
+
+    Registered against the mutation `except SideNotDeclaredError` ->
+    `except Exception`, which leaves the rest of this suite green.
+    """
+
+    class _BrokenManager:
+        asset = "arm_1"
+        backend = "real"
+
+        def backend_on(self, side: str) -> str:
+            raise ArithmeticError("the accessor is broken, not the side")
+
+    class _PlanWithOne:
+        controller_managers = (_BrokenManager(),)
+
+    with pytest.raises(ArithmeticError, match="the accessor is broken"):
+        require_hardware_opt_in(_PlanWithOne(), {})
+
+
 # --- The ROS domain, and why the plan carries half of one ---------------------
 #
 # The other isolation, and neither substitutes for the other. `GZ_PARTITION` is a
@@ -1113,21 +1249,9 @@ def test_only_the_two_shape_helpers_read_the_live_plan() -> None:
     catch the NEXT one: a test added on a `single` checkout that calls it passes
     on every machine anybody runs, and says nothing until someone pairs a zone.
     """
-    tree = ast.parse(Path(__file__).read_text())
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == _LIVE_READER
-    ]
-    callers = {
-        function.name
-        for function in ast.walk(tree)
-        if isinstance(function, ast.FunctionDef)
-        for inner in ast.walk(function)
-        if inner in calls
-    }
+    tree = _this_module()
+    calls = _calls_to(tree, _LIVE_READER)
+    callers = _enclosing_functions(tree, calls)
     # Parsed rather than grepped, because a guard that counts a string counts its
     # own message and passes or fails for that reason alone.
     assert callers == set(_SHAPE_HELPERS) and len(calls) == len(_SHAPE_HELPERS), (
@@ -1136,6 +1260,64 @@ def test_only_the_two_shape_helpers_read_the_live_plan() -> None:
         "asserts about whichever model this checkout carries - take the `document` "
         "fixture, which runs both shapes, or one shape helper by name where the "
         "shape is the question"
+    )
+
+
+def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
+    """The same hazard one layer down, where the guard above does not reach.
+
+    `_live_document`'s whole body is `yaml.safe_load(_generated().read_text())`,
+    and `_generated` is a module-level accessor with two dozen callers. So a test
+    that spells that one line itself gets the live document with the guard above
+    green - and on a `single` checkout it passes for everyone, breaking only for
+    whoever flips a zone to `pair`, which is open-work #40 verbatim. That bypass
+    was written and demonstrated before this test existed.
+
+    Guarded by SHAPE rather than by caller, because most of those callers are
+    legitimate: `load(_generated())` returns a `Plan`, which has no `sides` list
+    to append to and no keys to pop. So outside `_live_document` a call to the
+    accessor must be the direct argument of `load`, and the URI constant beneath
+    it may be read nowhere but the accessor - otherwise
+    `Path(resolve_uri(GENERATED_PLAN))` is the same reach with one more step.
+    """
+    tree = _this_module()
+
+    handed_straight_to_the_loader = {
+        argument
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == _PLAN_LOADER
+        for argument in node.args
+        if isinstance(argument, ast.Call)
+        and isinstance(argument.func, ast.Name)
+        and argument.func.id == _PLAN_PATH_READER
+    }
+    loose = [
+        call for call in _calls_to(tree, _PLAN_PATH_READER)
+        if call not in handed_straight_to_the_loader
+    ]
+    assert _enclosing_functions(tree, loose) <= {_LIVE_READER}, (
+        f"{_PLAN_PATH_READER}() is called outside `load(...)` by "
+        f"{sorted(_enclosing_functions(tree, loose))}; only {_LIVE_READER!r} may "
+        "do that. Reading the generated plan's text yourself gives you whichever "
+        "shape this checkout's model declares, which is the hazard "
+        f"{_LIVE_READER!r} exists to contain - take the `document` fixture, or "
+        f"{_PLAN_LOADER}({_PLAN_PATH_READER}()) where a `Plan` is what you want"
+    )
+
+    reads_of_the_uri = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _PLAN_URI
+        and isinstance(node.ctx, ast.Load)
+    ]
+    assert _enclosing_functions(tree, reads_of_the_uri) == {_PLAN_PATH_READER}, (
+        f"{_PLAN_URI} is read by "
+        f"{sorted(_enclosing_functions(tree, reads_of_the_uri))}; only "
+        f"{_PLAN_PATH_READER!r} may resolve it. Resolving the URI yourself walks "
+        "around both guards above and lands on the same live document"
     )
 
 
