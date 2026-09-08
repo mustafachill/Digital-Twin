@@ -55,6 +55,13 @@ has never happened expires the moment the thing runs again, and only re-running 
 command this section names. **Every figure below carries the commit it was taken at**; where a
 figure names `abdae38` it is the second re-audit's, and where it names an earlier value with a
 date it is that value's history and not a current reading.
+**Where a figure names `df91154` it was taken on 2026-09-08 on the branch
+`feat/hosted-by-derived`**, which added a third tree-parametrized test file and so moved four
+counts: the `tools/tests` collection, `test`'s host half, `test`'s per-package total and the
+`lint` walk. Six others were re-run and did not move — `test`'s shell gate, the `tests/`
+collection, the ADR index, the `workspace/src` package count, `build`'s summary and
+`validate-model`'s cardinality. **All ten were re-run rather than reasoned about**, and the
+four that moved are reconciled where they are stated.
 
 - **Phase 1.A is closed.** Container image, the `./scripts/*` contract, dependency
   manifests, CI, and the asset policy all exist and work. `external/cite.repos` pins
@@ -72,30 +79,53 @@ date it is that value's history and not a current reading.
   exits 0, reporting `1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` in
   this checkout on 2026-09-01 at `abdae38` — re-run by both of that date's re-audits and
   **unchanged since 2026-08-29**, which
-  is the one figure in this section neither re-audit had to move. The seventh type is the reference work-piece, which has no
+  is the one figure in this section neither re-audit had to move. **Re-run again on 2026-09-08
+  at `df91154` on `feat/hosted-by-derived` and still identical**, which is worth one line
+  because that branch changed a generated artifact: it removed the `hosted_by` key from every
+  controller manager in `cell_a_plan.yaml` (ADR-0048 clause 3). The cardinality this line
+  reports counts zones, types, assets, stations and files, none of which a removed field
+  moves. The seventh type is the reference work-piece, which has no
   instances on purpose (ADR-0030).
   **Ask `./scripts/validate-model` for the cardinality; do not read it out of prose.** This
   file said "fourteen instances" until 2026-08-27 and it was fifteen — one addition, at
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1023** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1376** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-08 at
-  `30baea8`).
+  `df91154` on `feat/hosted-by-derived`).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
-  **902** later that day, **927** until 2026-09-02 and **973** until 2026-09-08.
+  **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08 and **1023** for
+  part of that day.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
   suite
-  changed, and the count still rose by 25. **Two files parametrize over the tree**, not one:
-  `tools/tests/test_superseded_real_time_requirement.py` contributes **341** of the 973
-  because it parametrizes over every tracked source file, and
-  `tools/tests/test_interface_counts.py` contributes **142** because
-  `test_no_document_states_a_wrong_interface_count` parametrizes over every tracked document.
-  Those two read **321** and **138** at `abdae38`, and **304** and **131** in a worktree at
-  `e51238e`, so they account for +24 of the +25 between those two figures. This file named only
-  the first of the two until 2026-09-01.
+  changed, and the count still rose by 25. **Three files parametrize over the tree**, and this
+  clause named one until 2026-09-01 and two until 2026-09-08. Each has its own base, all three
+  walk `git ls-files`, and the per-file figures below are from
+  `.venv/bin/python -m pytest <file> --collect-only -q | sed 's/\[.*//' | sort | uniq -c` in
+  this checkout on 2026-09-08 at `df91154`.
+  `tools/tests/test_superseded_real_time_requirement.py` contributes **377**, **367** of them
+  one case per tracked source file with a `.py`, `.cpp`, `.hpp`, `.sh`, `.yaml`, `.yml` or
+  `.xacro` suffix and **9** one case per source file citing ADR-0043's half two;
+  `tools/tests/test_interface_counts.py` contributes **158**, **154** of them
+  `test_no_document_states_a_wrong_interface_count` over every tracked `*.md`; and
+  `tools/tests/test_a_removed_plan_key_stays_removed.py` contributes **350**, **348** of them
+  one case per tracked file under the **seven** trees it names — `workspace`, `tools`,
+  `tests`, `scripts`, `model`, `.github` and `infra` — at **every** suffix rather than a
+  chosen set. **That third base is the widest of the three and grows fastest**: any tracked
+  file added under those seven trees moves it, whatever its suffix, where the first moves only
+  on seven suffixes and the second only on `.md`.
+  **The third file's two numbers agree at 350 by coincidence and are not one quantity**:
+  `git ls-files workspace tools tests scripts model .github infra | wc -l` also returns **350**
+  in this checkout, and the collection is 350 because that walk less the guard's **2**
+  exemptions is 348 parametrized cases, plus the file's **2** unparametrized ones.
+  The first two read **375** and **158** in a worktree at this branch's base `e18251e`,
+  measured here on 2026-09-08 — the same pair this file records at `30baea8`, three commits
+  earlier — and this file records **341** and **142** at `51195e0`, **321** and **138** at
+  `abdae38`, and **304** and **131** in a worktree at `e51238e`, so they account for +24 of the
+  +25 between the `e51238e` and `abdae38` figures, which is the move this paragraph is about.
   **The 927 → 973 move is both kinds at once and reconciles exactly**, measured in this checkout
   on 2026-09-02 by the breakdown command below. `tools/tests/test_stall_band.py` is new and
   collects **22** — it is the L0 half of ADR-0052's option F, landed at `53f1d58` — while the two
@@ -116,6 +146,25 @@ date it is that value's history and not a current reading.
   the span with a `.py`, `.cpp`, `.hpp`, `.sh`, `.yaml`, `.yml` or `.xacro` suffix, and one over
   the source files citing ADR-0043's half two, which gained **1**. `test_interface_counts.py`
   walks `git ls-files '*.md'`, which gained exactly **16**. 33 + 1 + 16 = 50.
+  **The 1023 → 1376 move is both kinds at once and closes exactly**, measured in this checkout
+  on 2026-09-08 at `df91154` on
+  `feat/hosted-by-derived` by the breakdown command below, against a worktree at this branch's
+  base `e18251e` — which collects **1023**, so the three commits between `30baea8` and that
+  base moved this figure not at all. The step is **+353**, in three files — the second-largest
+  step in the history this bullet records, after the 411 → 902 of 2026-09-01, which is a
+  statement about that history and not about every step ever taken.
+  `tools/tests/test_a_removed_plan_key_stays_removed.py` is new and collects **350** —
+  ADR-0048 clause 3's guard, landed at `7d7ac19` over four trees and widened to seven at
+  `37921dd` — and it is itself tree-parametrized, so **348 of those 350 are the size of the
+  tree and not the suite growing**.
+  `test_superseded_real_time_requirement.py` moved 375 → **377**, which is exactly the
+  branch's two added tracked `.py` files: `git diff --diff-filter=A --name-only
+  e18251e..df91154` lists those two and nothing else, and `--diff-filter=D` and
+  `--diff-filter=R` both count **0**.
+  `test_generate.py` moved 67 → **68**, and that one *is* the suite — one hand-written case,
+  `test_does_not_change_when_a_template_changes`. 350 + 2 + 1 = 353.
+  `test_interface_counts.py` did **not** move, reading **158** on both sides, because the
+  branch added no tracked `.md`.
   **The remaining +1 is an unresolved disagreement and is left stated rather than smoothed
   over.** That same worktree at `e51238e` collects **903**, not the **902** recorded above,
   and no test file changed between the two commits. Whether a worktree's tracked-file set
@@ -167,26 +216,23 @@ date it is that value's history and not a current reading.
   `external/cite.repos` on 2026-09-01. It was 9 on 2026-08-29 and was unmeasured between.
   `./scripts/build` reported `Summary: 23 packages finished` in this
   checkout on 2026-09-01, and `find workspace/src -name package.xml | wc -l` agrees at
-  **23** — the eleven plus the twelve. This line carried **20** until 2026-08-29, which was
+  **23** — the eleven plus the twelve. **Both `doctor`'s `workspace/src` line and `build`'s
+  summary were re-run on 2026-09-08 at `df91154` and read 23 again**; that branch added no
+  package. This line carried **20** until 2026-08-29, which was
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
-  **`./scripts/test` counts by a run and reports three numbers, not one, and only two of the
-  three were re-taken on 2026-09-08.** Both of those are from one `./scripts/test --host-only`
-  run in this checkout at `b6ab34a`: `124 passed, 0 failed (shell gate self-tests)`, unchanged,
-  and `1092 passed, 1
-  skipped` for the
-  host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
-  collection above. **The third was not measured on that date**: over the eleven first-party
-  packages, eleven per-package summaries
-  totalling **1250 tests, 0 failures, 56 skipped**, measured 2026-09-02 at `51195e0` and not
-  since — `--host-only` stops before the packages. The only change under `workspace/src` over
-  that span is one header file (`git diff --stat 51195e0..30baea8 -- workspace`), which is a
-  reason to expect the figure not to have moved and **is not a measurement of it**.
+  **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
+  re-taken from one full run on 2026-09-08.** That run is `./scripts/test`, with no flag, in
+  this checkout at `df91154`: `124 passed, 0 failed (shell gate self-tests)`, unchanged since
+  2026-08-31; `1445 passed, 1 skipped` for the host half, which walks `tools/` **and**
+  `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
+  first-party packages, eleven per-package summaries totalling **1296 tests, 0 failures, 56
+  skipped**. Its exit status was 0.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
-  124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08 and
-  124 / 1075 / 1250 for a few hours of that day.
+  124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
+  124 / 1075 / 1250 for a few hours of that day and 124 / 1092 / 1250 for a few hours more.
   **One arithmetic check ties the host half to the collection above, and it is what separates a
   re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
   `tools/tests` collection took over the same span, which is what has to happen if the host half
@@ -207,19 +253,30 @@ date it is that value's history and not a current reading.
   `tools/tests` did **not** move this time, because no file was *added* under `tests/`; for the
   same reason `test_gz_calls_carry_the_partition.py` stayed at 13. The tie closes exactly:
   1023 + 70 = 1093 = 1092 passed plus the 1 skipped.
+  **And again at 1092 → 1445, on this branch, where the whole of the move is the `tools/`
+  half.** The step is **+353**: `tools/tests` moved +353, as reconciled above, and `tests/` did
+  not move at all, collecting **70** both in a worktree at `e18251e` and in this checkout
+  (`.venv/bin/python -m pytest tests --collect-only -q`, both read on 2026-09-08). The tie
+  closes exactly: 1376 + 70 = 1446 = 1445 passed plus the 1 skipped.
   **The pair recorded at `51195e0` is internally consistent and was checked rather than
   assumed**: 973 + 37 = 1010 = 1009 passed + 1 skipped.
   **The per-package total carries no such tie and is not given one here.**
   Its 1217 → 1221 step was the four tests the three commits after `f859cb3` added under
   `workspace/src`; the 1221 → 1250 step, **+29**, was **not** reconciled against the
-  `workspace/src` diff, and that is left stated rather than asserted. The shell gate did not
-  move in either step.
+  `workspace/src` diff, and that is left stated rather than asserted. **Nor is the 1250 → 1296
+  step, +46.** The eleven `Summary:` lines the script prints carry no package name, so the
+  total cannot be attributed from the log, and attributing it would mean a full run at the base
+  as well, which was not taken. What is checkable is that the only package whose tests changed
+  on this branch is `cite_bringup` — `git diff --stat e18251e..df91154 -- workspace` names that
+  package and no other — which is a reason to expect the move to sit there and **is not a
+  measurement of it**. The shell gate did not move in any of the three steps.
   **The per-package total is a sum this file performs and `test` does not print**: the script
-  emits one `Summary:` line per package and no grand total, so the 1250 and the 56 were
-  added up by hand from the eleven lines. The two host figures are printed verbatim. **All
-  three were taken from one full `./scripts/test` run through 2026-09-02; the 2026-09-08
-  reading is `--host-only`**, which runs the same two host suites and stops there, which is
-  why the per-package figure above still carries the older date.
+  emits one `Summary:` line per package and no grand total, so the 1296 and the 56 were
+  added up by hand from the eleven lines. The two host figures are printed verbatim. **A
+  `--host-only` reading cannot refresh the third figure at all**, which runs the same two host
+  suites and stops there: that is why the per-package total carried 2026-09-02's date through
+  2026-09-08's `--host-only` reading at `b6ab34a`, and why the three above were taken from one
+  full run instead.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -282,6 +339,16 @@ date it is that value's history and not a current reading.
   hulls** — the last five rows of that table are the runs taken on the geometry this
   repository ships; it said "two are on convex hulls" and "the last row" until 2026-09-07, and
   "eight" and "the last four rows" until 2026-09-08.
+  **One local pair of runs was taken on `feat/hosted-by-derived` and enters none of the CI
+  figures above.** At `37921dd` — that branch's second commit, not its tip `df91154` — with
+  `CITE_PHYSICS_SEED=42`, `bringup` printed the bare verdict `Scenario 'bringup' passed`, so
+  its cycle and its post-shutdown teardown were both clean, and `pick_and_place`'s cycle passed
+  **2 of 2** with one of those two runs failing its teardown on `gz-1 exited with -9`. **One
+  machine, one commit, two scenarios, no thresholds registered in advance, reported by the
+  `tester` agent that ran them and not re-run by the pass that wrote this down.** It is local,
+  so it moves no count in the CI tables in this section, and it is not at the tip. The `-9` is
+  the signal the teardown-family bullet below records as outside the set that split was
+  measured over and still unclassified.
   Treat a `bringup` failure as a finding to
   investigate, not as a known flake to re-run past.
 - **Motion is planned by Pilz.** ADR-0027 is implemented and merged: L0 declares the
@@ -358,10 +425,10 @@ date it is that value's history and not a current reading.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1928 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-08 at `30baea8`; it said **661** until 2026-08-29, **1048** until
+  runs, and reported `1930 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-08 at `df91154`; it said **661** until 2026-08-29, **1048** until
   2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
-  2026-09-02 and **1540** until 2026-09-08. Most of the
+  2026-09-02, **1540** until 2026-09-08 and **1928** for part of that day. Most of the
   difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
   --name-only 60eb4a5..HEAD -- docs/measurements` counts **1175** files added there since the
@@ -380,21 +447,31 @@ date it is that value's history and not a current reading.
   below: `git diff --diff-filter=A --name-only 51195e0..30baea8` counts **386** tracked files
   added, **384** of them under `docs/measurements`, with `--diff-filter=D` and
   `--diff-filter=R` both **0**, so 1540 + 386 = **1926** — and the two *untracked* files below
-  make 1928.
+  make 1928. **The 1928 → 1930 move is the smallest this figure has taken and closes the same
+  way**: `git diff --diff-filter=A --name-only 30baea8..df91154` counts **2** tracked files
+  added, **neither** of them under `docs/measurements`, with `--diff-filter=D` and
+  `--diff-filter=R` both **0**, and the same two untracked files are still on disk. It is the
+  smallest move this bullet records, and the only one of the four it breaks down whose
+  additions include nothing under `docs/measurements` at all: this branch published no
+  campaign.
   **This figure counts what is on disk, not what is committed, and this bullet said "a tracked
   text file" until 2026-09-08.** The remit is an `os.walk` from the repository root with
   directories pruned (`cite_tools.tree.our_files`, reached from
   `cite_tools.english.files_to_check`), and `tools/tests/test_english.py` carries a test named
   `test_a_file_that_is_written_but_not_staged_is_still_reported` asserting exactly that. So a
   file that is present but untracked is checked and counted. **Exactly 2 of this checkout's
-  1928 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
-  built by the 2026-09-03 stall-band campaign's harness — computed on 2026-09-08 by
-  differencing `files_to_check` against `git ls-files`. **A clean clone of `30baea8` therefore
-  reports 1926**, and this figure depends on local build state in a way none of the other
-  counts in this section does. That the 1540 was itself effectively a tracked-only reading was
-  checked rather than assumed: `files_to_check` over a fresh worktree at `51195e0` returns
-  **1540** on 2026-09-08. The two tree-parametrized test files above do **not** share this
-  property — both walk `git ls-files`. Run `lint` rather than
+  1930 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
+  built by the 2026-09-03 stall-band campaign's harness — **re-derived rather than carried
+  forward**, on 2026-09-08 at `df91154`, by differencing `files_to_check` against
+  `git ls-files`, which named those two files and no others. **A clean clone of `df91154`
+  therefore reports 1928**, and this figure depends on local build state in a way none of the
+  other counts in this section does. **That prediction has now been checked once and it held**:
+  this file said a clean clone of `30baea8` would report **1926**, and `files_to_check` over a
+  fresh worktree at this branch's base `e18251e` — three commits later, with no tracked file
+  added in between — returns exactly **1926** on 2026-09-08. That the 1540 was itself
+  effectively a tracked-only reading was checked the same way: `files_to_check` over a fresh
+  worktree at `51195e0` returns **1540** on 2026-09-08. The three tree-parametrized test files
+  above do **not** share this property — all three walk `git ls-files`. Run `lint` rather than
   quoting it. The one exemption is
   `docs/reference/v1-lessons.md`, which quotes the
   original Turkish as primary-source evidence. The limits — chiefly that ASCII-only Turkish and
@@ -1500,7 +1577,10 @@ date it is that value's history and not a current reading.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
     `ADR index` line reported **52 records, all indexed** in this checkout on 2026-09-01 at
-    `abdae38` — it said 51 earlier that day, 48 on 2026-08-30, 46 the day before that, 43
+    `abdae38`, and **still 52 when re-run on 2026-09-08 at `df91154`** — that branch amended
+    existing records and added none, which `git diff --diff-filter=A --name-only
+    e18251e..df91154` confirms by listing no file under `docs/adr/`. It said 51 earlier on
+    2026-09-01, 48 on 2026-08-30, 46 the day before that, 43
     earlier that day, and 40 before that —
     the newest being
     [ADR-0052](docs/adr/0052-what-separates-a-grasp-from-a-stall-on-nothing.md), with
