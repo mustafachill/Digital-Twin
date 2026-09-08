@@ -172,8 +172,8 @@ date it is that value's history and not a current reading.
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one, and only two of the
   three were re-taken on 2026-09-08.** Both of those are from one `./scripts/test --host-only`
-  run in this checkout at `30baea8`: `124 passed, 0 failed (shell gate self-tests)`, unchanged,
-  and `1075 passed, 1
+  run in this checkout at `b6ab34a`: `124 passed, 0 failed (shell gate self-tests)`, unchanged,
+  and `1092 passed, 1
   skipped` for the
   host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
   collection above. **The third was not measured on that date**: over the eleven first-party
@@ -185,7 +185,8 @@ date it is that value's history and not a current reading.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
-  124 / 963 / 1221 later the same day and 124 / 1009 / 1250 until 2026-09-08.
+  124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08 and
+  124 / 1075 / 1250 for a few hours of that day.
   **One arithmetic check ties the host half to the collection above, and it is what separates a
   re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
   `tools/tests` collection took over the same span, which is what has to happen if the host half
@@ -198,6 +199,14 @@ date it is that value's history and not a current reading.
   `test_a_stopped_line_ends_the_run.py`, five in `test_timing_records.py`, and
   `test_gz_calls_carry_the_partition.py` moving 11 → 13 because it parametrizes over the files
   under `tests/` — the same tree-growth effect this bullet already records for `tools/tests`.
+  **And again at 1075 → 1092, hours later the same day, when `b6ab34a` answered a review of that
+  same guard.** The step is **+17** and it is entirely one file:
+  `test_a_stopped_line_ends_the_run.py` moved **9 → 26**, chiefly because its halt fabrications
+  were parametrized over all three stopped states after a mutation sweep found that every one of
+  them had been `STALLED` — so the arm both CI incidents actually published was never executed.
+  `tools/tests` did **not** move this time, because no file was *added* under `tests/`; for the
+  same reason `test_gz_calls_carry_the_partition.py` stayed at 13. The tie closes exactly:
+  1023 + 70 = 1093 = 1092 passed plus the 1 skipped.
   **The pair recorded at `51195e0` is internally consistent and was checked rather than
   assumed**: 973 + 37 = 1010 = 1009 passed + 1 skipped.
   **The per-package total carries no such tie and is not given one here.**
