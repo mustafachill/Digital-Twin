@@ -47,7 +47,8 @@ the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, wit
 agreeing), and the campaign count is now **15 on this branch, 11 on `main`**. No other row was
 re-read on this date.
 
-**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived`, which is ahead of `main`:
+**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived` at `7d7ac19`, which is ahead
+of `main`:
 **#45 and #40 are both closed** by the change that lands ADR-0048 clause 3, and each entry names
 the command that reproduces its closure. #45's own text carried a wrong cost — that removing
 `hosted_by` moves `MODEL_HASH` — which is corrected where it stood rather than deleted, in this
@@ -852,7 +853,7 @@ has no simulator.
 combination until they are.
 
 ### #45 — ADR-0048 clause 3 — CLOSED 2026-09-08
-**Closed** on the branch `feat/hosted-by-derived`. ADR-0048's status block records clause 3 as
+**Closed at `7d7ac19`** on the branch `feat/hosted-by-derived`. ADR-0048's status block records clause 3 as
 `Accepted` and carries a "Promotion — 2026-09-08" section; read that rather than this entry.
 
 `hosted_by` is gone from the generator, the template, the plan schema and the committed plan.
@@ -891,7 +892,7 @@ justified their count by naming `hosted_by` and could not be left saying "three"
 gone.
 
 ### #40 — `test_plan.py` on a paired checkout — CLOSED 2026-09-08
-**Closed by construction** on the branch `feat/hosted-by-derived`, and the distinction matters:
+**Closed by construction at `7d7ac19`** on the branch `feat/hosted-by-derived`, and the distinction matters:
 it is not closed by anyone having run against a paired model. The committed model stays
 `twin: {sides: single}` and nothing here flips it.
 

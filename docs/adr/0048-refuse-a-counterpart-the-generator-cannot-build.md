@@ -15,7 +15,7 @@
     `ESCALATE`.
   - **Clause 2 is not built and is not promoted.** No per-side artifact set exists. The
     commitment stands exactly as written and still has no test date.
-  - **Clause 3 is `Accepted`**, promoted 2026-09-08. `hosted_by` is gone from the generator,
+  - **Clause 3 is `Accepted`**, promoted 2026-09-08 at `7d7ac19`. `hosted_by` is gone from the generator,
     from the template, from the plan schema and from the committed plan, and a document that
     still carries it loads rather than being refused.
     `cite_bringup.plan.ControllerManager.backend_on` is what a consumer asks instead, and it
@@ -134,7 +134,7 @@ with no explanation.
 
 ## Promotion — 2026-09-08: clause 3, eight days late
 
-**What landed.** `hosted_by` is gone from all four places it lived: the `_ManagerView` field
+**What landed, at `7d7ac19`.** `hosted_by` is gone from all four places it lived: the `_ManagerView` field
 and the ternary that computed it in `tools/cite_tools/generate/bringup.py`, the emission and
 its comment block in `tools/cite_tools/templates/bringup/plan.yaml.j2`, the
 `ControllerManager` field and the `_require` call in
