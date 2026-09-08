@@ -14,21 +14,35 @@
 
 """ADR-0040: that no production launch path can reach the test fixture.
 
-Two of the three guarantees in ADR-0040 decision 2 are structural and are not
-tested here, because a test is the weaker statement in both cases:
+Two of the three guarantees in ADR-0040 decision 2 are not tested here, and
+neither is worth as much as the wording of that decision suggests:
 
-  * the fixture refuses to initialise without a `stop_joint` parameter, and the
-    L0 model has no way to express one, so a generated description cannot carry
-    it — that is enforced by `JointStopSystem::on_init` returning ERROR;
+  * the fixture refuses to initialise unless it is given a `stop_joint` and a
+    valid stop interval on a joint declaring both a position command and a
+    position state interface — four refusals in `JointStopSystem::on_init`, not
+    one. **The L0 model CAN express instance parameters**, and since ADR-0053 the
+    description generator carries them into a vendor macro argument, so this leg
+    is a refusal conditioned on values a model could in principle supply rather
+    than on their being inexpressible. The docstring here asserted the opposite
+    until 2026-09-08; ADR-0040's own 2026-08-28 correction had already made it
+    false, and ADR-0053 decision 4 is where the narrower statement is written
+    out. What actually keeps the fixture out on every type in this model is that
+    no vendor macro takes any of the three names, so no `bound_args` entry can
+    carry them — a property of a component library that a new type could change,
+    and one nothing tests;
   * the library, its install rule and its pluginlib export all sit inside
     `if(BUILD_TESTING)`, so a build with testing off contains no loadable class.
+    No build this repository performs sets it off, so that argument is inert
+    here (ADR-0040's 2026-08-28 correction).
 
-The third is a claim about where a NAME appears, and a name can be typed
-anywhere. It is already covered twice over — a hand edit to the generated tree is
-a Critical finding under ADR-0021, and `./scripts/validate-model` catches it by
-byte-diffing that tree against a fresh generator run — but "covered by another
-gate" is not the same as tested, and the cost of testing it directly is this
-file.
+The third guarantee is a claim about where a NAME appears, and a name can be
+typed anywhere. It is already covered twice over — a hand edit to the generated
+tree is a Critical finding under ADR-0021, and `./scripts/validate-model` catches
+it by byte-diffing that tree against a fresh generator run — but "covered by
+another gate" is not the same as tested, and the cost of testing it directly is
+this file. **It is now the strongest of the three**, because selecting the
+fixture requires writing its plugin class string into a type's
+`hardware_backends`, in `model/`, which is exactly what this file refuses.
 
 **What this file is NOT.** It does not check that the fixture behaves; that is
 `cite_bringup/test/test_abort_classification_launch.py`, which runs it. It checks

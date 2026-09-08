@@ -1,31 +1,51 @@
 # ADR-0053: Index a backend's instance parameters by backend, and bind them into the generated description
 
-- **Status:** Proposed — **nothing in this record is implemented.** Every "will", "must" and
-  "may not" below is a commitment, not a description — **and so is every sentence written in
-  the present indicative.** *Decision* sections describe the tree this record asks for, not
-  the tree that exists: "`_arm_view` filters the family" and "the argument is not emitted at
-  all" are commitments in the present tense, because that is how a specification reads, and a
-  reader landing mid-document must not take them for readings. Only *Context* describes the
-  tree, and every line of it names the command that produced it. Established in this checkout
-  on 2026-09-08 at `aed36c4`, by the commands in *Context*:
-  - `grep -rn params tools/cite_tools/generate/` returns nothing, and
-    `grep -rn params tools/cite_tools/model/resolve.py` returns nothing. **No generated
-    artifact carries a `hardware.params` name or value**, on any backend.
-  - `tools/tests/test_hardware_params_unbound.py` pins that property deliberately, with the
-    backend's plugin string as a positive control.
-  - `model/assets/types/robots/xarm5.yaml:228-249` declares
-    `instance_params: [robot_ip, report_type]` for the `real` backend, and the vendor macro
-    chain takes both names.
-  - `HardwareSelection.params` (`tools/cite_tools/model/schema.py:1206`) is one flat
-    `dict[str, str | bool | int | float]` with no index, and
-    `tools/cite_tools/validate/referential.py:232` checks it against the **plant's** backend.
-  - `model/facility/zones.yaml` declares `twin: {sides: single}`, so nothing in this
-    repository is paired and nothing here needs pairing to be built or tested.
+- **Status:** **Accepted, 2026-09-08 — implemented on `feat/hardware-params`, with all nine
+  clauses of *The promotion condition* met.** Decisions 1, 2 (a, b and c), 3 and 4 are in the
+  tree.
+  **[Replaced 2026-09-08, kept for the record:]** *"Proposed — nothing in this record is
+  implemented."*
+  **Read the rest of this record as a specification that has been satisfied, not as a
+  description of the tree.** Every "will", "must" and "may not" below was a commitment when
+  it was written, **and so was every sentence written in the present indicative** — *Decision*
+  sections describe the tree this record asked for, and they now also describe the tree,
+  which is a coincidence of dates rather than a property of the prose. *Context* describes the
+  tree **as it was at `aed36c4`, before this change**, and every line of it names the command
+  that produced it; do not read *Context* as current. In particular
+  `tools/tests/test_hardware_params_unbound.py` no longer pins that no generated artifact
+  carries a `hardware.params` value — clause 9 rewrote it, and what it pins now is the
+  unselected block's inertness.
+  **What the implementing change found wrong in this record: nothing that stopped it.** Every
+  decision was implementable as written. Three notes a later reader is owed, none of them a
+  correction to a decision:
+  - **The measured hash differs from the one *Context* predicts**, and correctly so.
+    Decision 2c's L0 edit alone was measured at `08986aa6…`; the implementing change makes
+    2c's edit **and** adds the `robot_ip` `bound_args` entry, which `model_hash` also digests
+    through the type.
+    **THE VALUE MOVED AGAIN ON 2026-09-10 AND NOT BECAUSE OF THIS RECORD, WHICH IS WHY NO
+    SINGLE VALUE IS QUOTED HERE ANY MORE.** This change was rebased onto ADR-0054, which adds
+    `commands_physical_hardware` to both of `xarm5`'s backends — an L0 field `model_hash`
+    digests through the same type — so the base itself moved from `95dbbdd9…` to
+    `372d1fa5…` under this branch. The branch measured `7610f2fd…` on the old base and
+    `bb0003a2…` after the rebase, from `./scripts/validate-model --write` in each case.
+    Both readings are of one predicate and neither is a threshold: ask
+    `./scripts/validate-model` for the current value rather than reading it out of this
+    record, which is the instruction `CLAUDE.md` §2 gives for every generated cardinality.
+    Clause 7's assertion — exactly one generated artifact moves, and it is `MODEL_HASH` — is
+    met at both bases, and was verified rather than assumed: `git status` after the
+    post-rebase regeneration named `workspace/src/cite_generated/MODEL_HASH` and nothing
+    else.
+  - **`unexpected-hardware-param`'s `where` gained the backend segment**, becoming
+    `assets.<id>.hardware.params.<backend>.<key>`. The record fixes that shape for
+    `missing-hardware-param` and not for this one; the path is what the model document now
+    looks like, and clause 5 asserts it.
+  - **The parity test's tightening needed an explicit length assertion, and `strict=True`
+    alone would not have carried clause 8.** With the surplus argument accounted for and
+    removed, the two line lists are equal-length, so the keyword is inert in the passing
+    state and dropping it is undetectable on its own. The property it stands for is therefore
+    also asserted by name. Both are kept; the mutation results are in the implementing
+    change's report.
 
-  **Promoted to `Accepted`** by the change that binds the parameters, with all nine of the
-  clauses in *The promotion condition*, below. Every one of them is testable on a host with
-  no ROS, no simulator and no physical arm, which is deliberate: there is no physical arm and
-  a condition that needed one would never be met.
   **Promotion is not a claim that any physical arm has ever loaded the plugin** — see
   *What promotion does not claim*, which is a permanent clause and not a status caveat.
 - **Date:** 2026-09-08

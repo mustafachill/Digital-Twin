@@ -20,9 +20,16 @@
   **Amended 2026-09-01.** The guard test that enforces decision 2's "checked, not
   structural" bullet was broader than the bullet, and a published campaign fell into the
   gap. See "Amendment — 2026-09-01: a published campaign is a permitted context for the
-  fixture's name", the first section below and above the 2026-08-28 correction, so that the
+  fixture's name", above the 2026-08-28 correction, so that the
   newest state is what a reader meets first ([`README.md`](README.md) rule 7). The decision,
   the implementation and decision 2's claim are all unchanged.
+  **Amended 2026-09-08.** A revisit item stated a trigger that will never fire, and one
+  sentence of the 2026-08-28 correction has been overtaken by
+  [ADR-0053](0053-index-hardware-params-by-backend.md), which carries `hardware.params` into
+  a generated description. See "Amendment — 2026-09-08: the revisit item's trigger, and which
+  leg of decision 2 is load-bearing", the first section below. The decision and the
+  implementation are unchanged; **which of decision 2's three mechanisms carries the weight
+  is not**.
 - **Date:** 2026-08-28
 - **Deciders:** Coder agent, on the gap
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) records in its correction
@@ -35,6 +42,74 @@
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md),
   charter §4 (P1, P2, P4, P5, P6, P9)
+
+## Amendment — 2026-09-08: the revisit item's trigger, and which leg of decision 2 is load-bearing
+
+[ADR-0053](0053-index-hardware-params-by-backend.md) makes a backend's instance parameters
+reach a generated description. Its decision 4 read this record against the tree and found two
+things wrong with it, in two different marker families. Both are recorded here rather than in
+that record, because they are changes to *this* record's statements.
+
+### 1. The revisit item's trigger never fires, and the item is discharged
+
+The last bullet of *What we will have to revisit* predicts *"if the L0 model ever gains a
+hardware-plugin selector richer than the backend it has today"*. **That premise does not
+happen, and it was the wrong premise to state.** ADR-0053 changes no selector: a type still
+declares `hardware_backends`, keyed by backend id, one plugin class string each. What it
+changes is the **generator** — `generate/description.py` gains an
+`instance.hardware.params.*` binding family — and, in L0, only the *shape* of an existing
+field (`HardwareSelection.params` becomes indexed by backend id).
+
+The item's second clause was wrong for a different reason and had already been corrected
+here: *"what makes the fixture unreachable is that the model cannot express its parameters"*
+is false about the model and was false when this record was written, which is what the
+2026-08-28 correction's section 2 says.
+
+**The item should have read: *"if the generator ever carries `hardware.params` into a
+description"*.** Under that trigger it fires on 2026-09-08, and firing is what this amendment
+records. It is **discharged**, not merely re-worded: ADR-0053 decision 4 performs the
+re-check the item asks for, names the three legs that survive, and states which of them is
+now the weakest. The bullet below in *What we will have to revisit* carries the marker.
+
+### 2. `on_init` is no longer the leg that carries the weight
+
+The 2026-08-28 correction says, in its section 3 and again in decision 2's second structural
+bullet, that the `BUILD_TESTING` argument *"is inert and the `on_init` refusal is the one
+that is load-bearing"*. **The second half of that has been overtaken.**
+
+`JointStopSystem::on_init` refuses when `stop_joint` is absent, and its own comment gives the
+reason as *"a stop has nowhere to be declared in the L0 model"*. **A refusal conditioned on a
+parameter being unsupplied is worth exactly as much as the impossibility of supplying it**,
+and once the generator carries `hardware.params` into a macro argument that impossibility is
+a property of the component library rather than of the model. Supply what the fixture asks
+for and `on_init` returns `SUCCESS` with an `RCLCPP_WARN` — and what it asks for is all three
+of `stop_joint`, `stop_lower_rad` and `stop_upper_rad`, plus a named joint declaring both a
+position command and a position state interface, which is four refusals rather than one. The
+count does not change the conclusion: supplying three values is no harder than supplying one,
+and decision 2 is about a channel rather than about a count.
+
+**`Overtaken` rather than a second `Correction`, and the discriminator is dated.** The
+sentence was **true on 2026-08-28**: nothing in the tree could supply `stop_joint` to a
+generated description on that date, and `on_init` was the only one of decision 2's three
+mechanisms that fired unconditionally in the build everyone performs. What made it false is
+an event since — ADR-0053's binding family — with nobody wrong when they wrote it. The other
+reading is available and is recorded so that a later reader can weigh it: that the sentence
+was already overstated when written, because a conditioned refusal was never worth more than
+its condition. This amendment takes the first, on the ground that the condition genuinely
+held on the date the sentence was written.
+
+**What holds the fixture out now, in decreasing order of strength**, and ADR-0053 decision 4
+is where the argument is set out in full:
+
+1. `cite_test_hardware/test/test_unreachable.py` forbids the plugin class string in `model/`,
+   and selecting the fixture as a backend means writing it there. Tested.
+2. `cite_bringup.plan.require_hardware_opt_in` refuses any non-`sim` backend on any side
+   unless `CITE_ALLOW_HARDWARE=1` is set deliberately. Tested.
+3. No vendor macro in this model takes any of the fixture's three parameter names, so no
+   `bound_args` entry can carry them and the family ADR-0053 adds delivers nothing to a
+   fixture. **This is the weakest leg**: it is a property of a vendor file and of a component
+   library that any new type could change, and nothing tests it. That is the review
+   checkpoint the last bullet of *What we will have to revisit* now names.
 
 ## Amendment — 2026-09-01: a published campaign is a permitted context for the fixture's name
 
@@ -211,6 +286,12 @@ It is pinned now. `tools/tests/test_hardware_params_unbound.py` declares `hardwa
 an arm and asserts the names and values reach no generated description, with the backend's
 own plugin string as a positive control proving the search is not blind. Phase 2 fails that
 test at the moment a reviewer needs to see it.
+**[Overtaken 2026-09-08 — it did, exactly as predicted.
+[ADR-0053](0053-index-hardware-params-by-backend.md) bound the family, that file was
+rewritten around its positive control, and it now pins the inertness of a block for a backend
+nobody selects. The three readings above are also stale: `params` is indexed by backend id,
+`real` declares `instance_params: [robot_ip]` alone, and every line number in this paragraph
+has moved. Read it as a 2026-08-28 reading.]**
 
 ### 3. The `BUILD_TESTING` argument is real in principle and inert in this repository
 
@@ -231,6 +312,10 @@ the build we perform already exists: `cite_test_hardware/test/test_unreachable.p
 **Of the three mechanisms decision 2 offers, exactly one is load-bearing today: the `on_init`
 refusal.** It is unconditional, fail-closed, runs in the build everyone performs, and is
 unit-tested with a passing control beside it (`cite_test_hardware/test/test_refusal.cpp`).
+**[Overtaken 2026-09-08 — [ADR-0053](0053-index-hardware-params-by-backend.md) makes the
+generator carry `hardware.params` into a macro argument, so `on_init`'s refusal is now
+conditioned on values a model could in principle supply. True when written; see
+"Amendment — 2026-09-08", section 2, for what carries the weight instead.]**
 The `test_unreachable.py` guard is a second real gate in that same build. The `BUILD_TESTING`
 argument is a third that currently carries no weight, and decision 2's ordering — which
 presents it as structural and the guard test as merely "checked" — has it backwards.
@@ -463,6 +548,10 @@ worth being precise about which parts are structural and which are merely checke
   **[Corrected 2026-08-28 — see the Correction section above. No build this repository
   performs sets it OFF, so the class is loadable in all of them; this argument is inert and
   the `on_init` refusal is the one that is load-bearing.]**
+  **[Overtaken 2026-09-08 — the last clause of that correction only.
+  [ADR-0053](0053-index-hardware-params-by-backend.md) made `on_init`'s refusal conditional
+  on something a model could supply; the argument above is still inert. See
+  "Amendment — 2026-09-08", section 2.]**
 - **Checked, not structural:** the plugin class name appears nowhere in `model/`, nowhere in
   `workspace/src/cite_generated/`, and in no `launch/` directory. A hand edit that put it
   there would already be a Critical finding under ADR-0021 and would already fail
@@ -568,6 +657,14 @@ residual velocity at the end of an aborted one.
   today**, the first structural argument has to be re-checked: what makes the fixture
   unreachable is that the model cannot express its parameters, and a more expressive model
   is exactly what would change that.
+  **[Amended 2026-09-08 — the trigger is wrong and is replaced by *"if the generator ever
+  carries `hardware.params` into a description"*, which fired on 2026-09-08. The item is
+  discharged: the re-check is [ADR-0053](0053-index-hardware-params-by-backend.md) decision
+  4, and its result is "Amendment — 2026-09-08", section 1. The replacement review
+  checkpoint is the bullet below.]**
+- **If a type is ever added whose vendor macro takes a parameter the fixture could fill**,
+  the third leg named in "Amendment — 2026-09-08" is gone and only the two tested ones
+  remain. Added 2026-09-08 as the successor to the item above.
 
 ## What was measured on it
 
