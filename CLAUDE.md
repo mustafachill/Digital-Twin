@@ -79,11 +79,11 @@ date it is that value's history and not a current reading.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **973** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-02 at
-  `51195e0`).
+  `tools/tests/` holds **1023** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-08 at
+  `30baea8`).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
-  **902** later that day and **927** until 2026-09-02.
+  **902** later that day, **927** until 2026-09-02 and **973** until 2026-09-08.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
@@ -102,6 +102,20 @@ date it is that value's history and not a current reading.
   parametrized files above grew by **20** and **4** as the source and documentation trees grew.
   22 + 20 + 4 = 46, which is the whole of the move; `tools/tests/test_validate_geometric.py` was
   edited over the same span and collects the same **64** it did before.
+  **The 973 → 1023 move is tree growth alone and closes exactly**, measured in this checkout on
+  2026-09-08 at `30baea8` by the breakdown command below, against the two per-file figures this
+  bullet already records at `51195e0`. **No test file under `tools/tests` was added over that
+  span and the one that was edited collects the same number as before** —
+  `git diff --stat 51195e0..30baea8 -- tools/tests tools/cite_tools` names
+  `test_stall_band.py` and nothing else, and that file collects **22** at both commits — and the
+  count still rose by **50**:
+  `test_superseded_real_time_requirement.py` 341 → **375** and `test_interface_counts.py`
+  142 → **158**, which is the whole of the move. Both halves reconcile against the tree rather
+  than against the suite. That first file carries **two** parametrized tests, both walking
+  `git ls-files`: one over every tracked source file, which gained the **33** files added over
+  the span with a `.py`, `.cpp`, `.hpp`, `.sh`, `.yaml`, `.yml` or `.xacro` suffix, and one over
+  the source files citing ADR-0043's half two, which gained **1**. `test_interface_counts.py`
+  walks `git ls-files '*.md'`, which gained exactly **16**. 33 + 1 + 16 = 50.
   **The remaining +1 is an unresolved disagreement and is left stated rather than smoothed
   over.** That same worktree at `e51238e` collects **903**, not the **902** recorded above,
   and no test file changed between the two commits. Whether a worktree's tracked-file set
@@ -156,29 +170,47 @@ date it is that value's history and not a current reading.
   **23** — the eleven plus the twelve. This line carried **20** until 2026-08-29, which was
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
-  **`./scripts/test` counts by a run and reports three numbers, not one**, in this checkout on
-  2026-09-02 at `51195e0`: `124 passed, 0 failed (shell gate self-tests)`; `1009 passed, 1
+  **`./scripts/test` counts by a run and reports three numbers, not one, and only two of the
+  three were re-taken on 2026-09-08.** Both of those are from one `./scripts/test --host-only`
+  run in this checkout at `30baea8`: `124 passed, 0 failed (shell gate self-tests)`, unchanged,
+  and `1075 passed, 1
   skipped` for the
   host half, which walks `tools/` **and** `tests/`, so it is larger than the `tools/tests`
-  collection above; and, over the eleven first-party packages, eleven per-package summaries
-  totalling **1250 tests, 0 failures, 56 skipped**. It builds and tests the eleven only — the
+  collection above. **The third was not measured on that date**: over the eleven first-party
+  packages, eleven per-package summaries
+  totalling **1250 tests, 0 failures, 56 skipped**, measured 2026-09-02 at `51195e0` and not
+  since — `--host-only` stops before the packages. The only change under `workspace/src` over
+  that span is one header file (`git diff --stat 51195e0..30baea8 -- workspace`), which is a
+  reason to expect the figure not to have moved and **is not a measurement of it**.
+  `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
-  2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01 and
-  124 / 963 / 1221 later the same day.
+  2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
+  124 / 963 / 1221 later the same day and 124 / 1009 / 1250 until 2026-09-08.
   **One arithmetic check ties the host half to the collection above, and it is what separates a
   re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
   `tools/tests` collection took over the same span, which is what has to happen if the host half
   walks `tools/`. The check held at the move before it too: 938 → 963, **+25**, against the
-  collection's own +25. **The per-package total carries no such tie and is not given one here.**
+  collection's own +25.
+  **It held again at 1009 → 1075, and this time both halves were derived.** The step is **+66**:
+  `tools/tests` moved +50, as reconciled above, and `tests/` moved **37 → 53**, +16, measured by
+  `.venv/bin/python -m pytest tests --collect-only -q` in a worktree at `51195e0` and in this
+  checkout on 2026-09-08. 50 + 16 = 66. The `tests/` half is nine cases in the new guard
+  `test_a_stopped_line_ends_the_run.py`, five in `test_timing_records.py`, and
+  `test_gz_calls_carry_the_partition.py` moving 11 → 13 because it parametrizes over the files
+  under `tests/` — the same tree-growth effect this bullet already records for `tools/tests`.
+  **The pair recorded at `51195e0` is internally consistent and was checked rather than
+  assumed**: 973 + 37 = 1010 = 1009 passed + 1 skipped.
+  **The per-package total carries no such tie and is not given one here.**
   Its 1217 → 1221 step was the four tests the three commits after `f859cb3` added under
   `workspace/src`; the 1221 → 1250 step, **+29**, was **not** reconciled against the
   `workspace/src` diff, and that is left stated rather than asserted. The shell gate did not
   move in either step.
   **The per-package total is a sum this file performs and `test` does not print**: the script
   emits one `Summary:` line per package and no grand total, so the 1250 and the 56 were
-  added up by hand from the eleven lines. The two host figures are printed verbatim. All three
-  were taken from one full `./scripts/test` run rather than from `--host-only`, which runs the
-  same two host suites and stops there.
+  added up by hand from the eleven lines. The two host figures are printed verbatim. **All
+  three were taken from one full `./scripts/test` run through 2026-09-02; the 2026-09-08
+  reading is `--host-only`**, which runs the same two host suites and stops there, which is
+  why the per-package figure above still carries the older date.
 - **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
@@ -196,17 +228,26 @@ date it is that value's history and not a current reading.
   `the MoveTo goal was never accepted` assertion failed **one local run of four** on 2026-08-29,
   on the merged Phase 2.A branch, reported by the implementing agent — one more event, on one
   machine, with nothing registered in advance, and not a rate either. Against that,
-  `bringup`'s **cycle** has passed **44 of 44** in CI: it runs twice per run and the
-  twenty-two runs listed in the `continuous_line` bullet below all passed its cycle twice.
-  **Its teardown is clean in 43 of the 44**, and the one exception is the only advisory verdict
-  found anywhere in those twenty-two runs' logs — `f6a3779`, 2026-09-07, below. That is a
-  statement about the twenty-two tabled `main` runs read on 2026-09-07 and about nothing
+  `bringup`'s **cycle** has passed **46 of 46** in CI: it runs twice per run and the
+  twenty-three runs listed in the `continuous_line` bullet below all passed its cycle twice.
+  **Its teardown is clean in 44 of the 46**, and the two exceptions are the only advisory
+  verdicts
+  found anywhere in those twenty-three runs' logs — `f6a3779` and `13bc8e9`, both 2026-09-07,
+  below. That is a
+  statement about the twenty-three tabled `main` runs, twenty-two of them read on 2026-09-07
+  and the twenty-third on 2026-09-08, and about nothing
   else. The cycle figure said
   **12 of 12 across the six** until 2026-09-01, **36 of 36 across the eighteen** later that
-  day and **38 of 38 across the nineteen** until 2026-09-07, each right over the runs that
+  day, **38 of 38 across the nineteen** until 2026-09-07 and **44 of 44 across the twenty-two**
+  until 2026-09-08, each right over the runs that
   existed then; **until 2026-09-07 no teardown figure was stated separately at all**, because
   until then no `bringup` teardown had failed in CI and the two questions had never come
   apart.
+  **That the `13bc8e9` run's other `bringup` invocation passed its cycle is inferred, not
+  read.** The scenario step is blocking and `pick_and_place` and `continuous_line` ran after it
+  in that run, which they cannot do if it exited non-zero (`.github/workflows/ci.yml`: only the
+  `continuous_line` step carries `continue-on-error`). Say it that way rather than as a
+  reading; the advisory verdict itself is what was read.
   **The instrument this bullet used to name cannot tell those two apart, and that is the
   finding of the 2026-09-07 re-read.** It was `grep -c "Scenario 'bringup' passed"`, which is
   a prefix and also matches `Scenario 'bringup' passed its cycle assertions`; over
@@ -215,10 +256,23 @@ date it is that value's history and not a current reading.
   `\r`, so strip it first: `gh run view <id> --log | grep -o "Scenario '[a-z_]*'[^\"]*" |
   sed 's/\r//'`, then count `Scenario 'bringup' passed` and
   `Scenario 'bringup' passed its cycle assertions` as separate whole lines. That is how the
-  44 / 43 split above was derived, over all twenty-two runs' logs on 2026-09-07.
-  **Thirty-six of the forty-four are on vendor collision geometry and eight are on convex
-  hulls** — the last four rows of that table are the runs taken on the geometry this
-  repository ships; it said "two are on convex hulls" and "the last row" until 2026-09-07.
+  44 / 43 split then current was derived, over all twenty-two runs' logs on 2026-09-07.
+  **The instrument has a second defect, from the opposite direction, and this file's own
+  documentation is what triggered it.** A CI log carries the **commit message** — it is echoed
+  in the `Build image` step — so a whole-log grep also counts every verdict string the commit
+  body quotes. `13bc8e9`'s message quotes `Scenario 'bringup' passed` while explaining the
+  prefix defect above (`git log -1 --format=%B 13bc8e9`, re-read here on 2026-09-08), and a
+  whole-log grep over its run reported **four** `bringup` verdicts where the scenario step
+  printed two. **Restrict the grep to the `Simulation-in-the-loop scenarios` step column**, the
+  step name in `.github/workflows/ci.yml`. The step-conclusion warning in the
+  `continuous_line` bullet below is the same hazard from the other side: there the instrument
+  under-reads a failure, here it over-reads a pass. The over-count was observed on 2026-09-08
+  by the agent that read that run; the half that is re-derived here is that the string is in
+  the commit body.
+  **Thirty-six of the forty-six are on vendor collision geometry and ten are on convex
+  hulls** — the last five rows of that table are the runs taken on the geometry this
+  repository ships; it said "two are on convex hulls" and "the last row" until 2026-09-07, and
+  "eight" and "the last four rows" until 2026-09-08.
   Treat a `bringup` failure as a finding to
   investigate, not as a known flake to re-run past.
 - **Motion is planned by Pilz.** ADR-0027 is implemented and merged: L0 declares the
@@ -290,19 +344,20 @@ date it is that value's history and not a current reading.
   is still there to be asked a question, and that it stops commanding belts it has stopped
   supervising.
 - **P10 has its first automated check** ([ADR-0035](docs/adr/0035-check-the-english-only-rule-by-character-signal.md)).
-  `./scripts/lint` fails when a tracked text file contains a letter specific to a language
+  `./scripts/lint` fails when a text file in this checkout contains a letter specific to a
+  language
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1540 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-02 at `51195e0`; it said **661** until 2026-08-29, **1048** until
-  2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day and **1430** until
-  2026-09-02. Most of the
+  runs, and reported `1928 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-08 at `30baea8`; it said **661** until 2026-08-29, **1048** until
+  2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
+  2026-09-02 and **1540** until 2026-09-08. Most of the
   difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
-  --name-only 60eb4a5..HEAD -- docs/measurements` counts **791** files added there since the
-  first of those figures was taken, and read 368 on 2026-08-31, 523 earlier on 2026-09-01 and
-  684 later that day —
+  --name-only 60eb4a5..HEAD -- docs/measurements` counts **1175** files added there since the
+  first of those figures was taken, and read 368 on 2026-08-31, 523 earlier on 2026-09-01,
+  684 later that day and 791 until 2026-09-08 —
   so **this number tracks how
   much evidence is committed and is not a
   measure of coverage.** The last two moves demonstrate it arithmetically. The 1267 → 1430 move:
@@ -312,7 +367,25 @@ date it is that value's history and not a current reading.
   exactly: the walk grew by **110**, `git diff --diff-filter=A --name-only abdae38..HEAD` counts
   **110** tracked files added over that span with **107** of them under `docs/measurements`, and
   `--diff-filter=D` and `--diff-filter=R` both count **0**, so nothing left the walk to offset
-  it. Run `lint` rather than
+  it. The 1540 → 1928 move closes exactly in **two** parts, and the second part is the caveat
+  below: `git diff --diff-filter=A --name-only 51195e0..30baea8` counts **386** tracked files
+  added, **384** of them under `docs/measurements`, with `--diff-filter=D` and
+  `--diff-filter=R` both **0**, so 1540 + 386 = **1926** — and the two *untracked* files below
+  make 1928.
+  **This figure counts what is on disk, not what is committed, and this bullet said "a tracked
+  text file" until 2026-09-08.** The remit is an `os.walk` from the repository root with
+  directories pruned (`cite_tools.tree.our_files`, reached from
+  `cite_tools.english.files_to_check`), and `tools/tests/test_english.py` carries a test named
+  `test_a_file_that_is_written_but_not_staged_is_still_reported` asserting exactly that. So a
+  file that is present but untracked is checked and counted. **Exactly 2 of this checkout's
+  1928 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
+  built by the 2026-09-03 stall-band campaign's harness — computed on 2026-09-08 by
+  differencing `files_to_check` against `git ls-files`. **A clean clone of `30baea8` therefore
+  reports 1926**, and this figure depends on local build state in a way none of the other
+  counts in this section does. That the 1540 was itself effectively a tracked-only reading was
+  checked rather than assumed: `files_to_check` over a fresh worktree at `51195e0` returns
+  **1540** on 2026-09-08. The two tree-parametrized test files above do **not** share this
+  property — both walk `git ls-files`. Run `lint` rather than
   quoting it. The one exemption is
   `docs/reference/v1-lessons.md`, which quotes the
   original Turkish as primary-source evidence. The limits — chiefly that ASCII-only Turkish and
@@ -338,10 +411,11 @@ date it is that value's history and not a current reading.
   not gated.** The flag is off by default, so an interactive run still answers the strict
   question. Read `scripts/scenario`'s header and the phase-split block in `scripts/_lib.sh`
   before treating a teardown failure as a gate — and never answer one by widening a tolerance.
-- **The line has completed in sixteen of the twenty-two CI runs that have driven it, and this
+- **The line has completed in seventeen of the twenty-three CI runs that have driven it, and
+  this
   is still the least-settled claim in this file.** It read "three of the six" until
-  2026-09-01, "fourteen of the eighteen" later that day and "fifteen of the nineteen" until
-  2026-09-07, and **the extra runs make the
+  2026-09-01, "fourteen of the eighteen" later that day, "fifteen of the nineteen" until
+  2026-09-07 and "sixteen of the twenty-two" until 2026-09-08, and **the extra runs make the
   count look better without making the
   finding go away**: the three-of-six failures are all still there, they are still
   unreproduced locally, and there are now **three distinct failure signatures among six
@@ -374,15 +448,18 @@ date it is that value's history and not a current reading.
     teardown passing separately. It is better than anything above it. **The tester's own
     reading is that it is one good sample and not a new baseline**, and that is how it is
     recorded here. Do not promote a gate on it.
-  **CI has now run it twenty-two times, and this is the only body of `continuous_line`
-  evidence nobody's local environment could have flattered.** Every one of the twenty-two was
-  on `main`, on a runner nobody prepared. It said "nineteen times" until 2026-09-07. Read by
+  **CI has now run it twenty-three times, and this is the only body of `continuous_line`
+  evidence nobody's local environment could have flattered.** Every one of the twenty-three was
+  on `main`, on a runner nobody prepared. It said "nineteen times" until 2026-09-07 and
+  "twenty-two" until 2026-09-08. Read by
   grepping each run's log for the scenario's own verdict
   line, because **the step conclusion lies**: the step is `continue-on-error`, and
   `gh run view <id> --json jobs` reports it `success` whether the scenario passed or failed —
   verified on 2026-08-29 against `33158091922`, whose `continuous_line` is *known* to have
   failed and which the API still calls `success`. The instrument is
-  `gh run view <id> --log | grep "Scenario 'continuous_line'"`.
+  `gh run view <id> --log | grep "Scenario 'continuous_line'"`, **restricted to the
+  `Simulation-in-the-loop scenarios` step column** — the `bringup` bullet above records what a
+  whole-log grep counted instead.
 
   | CI run | date | commit | cycle |
   |---|---|---|---|
@@ -408,20 +485,31 @@ date it is that value's history and not a current reading.
   | `33575992281` | 2026-09-02 | `4ef2d7c` | **failed** — a third signature, below |
   | `33603610958` | 2026-09-02 | `51195e0` | **failed** — the same third signature |
   | `34085965578` | 2026-09-07 | `f6a3779` | passed |
+  | `34247027502` | 2026-09-07 | `13bc8e9` | passed |
 
-  **Sixteen of twenty-two is a count over the runs that exist, not a rate** — no thresholds
-  were registered in advance and the twenty-two sit at twenty-two different commits. The table
-  said **three of six** until 2026-09-01, **fourteen of eighteen** later that day and
-  **fifteen of nineteen** until 2026-09-07, each right
+  **Seventeen of twenty-three is a count over the runs that exist, not a rate** — no thresholds
+  were registered in advance and the twenty-three sit at twenty-three different commits. The
+  table
+  said **three of six** until 2026-09-01, **fourteen of eighteen** later that day,
+  **fifteen of nineteen** until 2026-09-07 and **sixteen of twenty-two** until 2026-09-08, each
+  right
   over the runs that existed when it was written; the
   twelve rows below `29068d4` were read on 2026-09-01 by the instrument named above, over every
   completed `main` run since, **every one of the nineteen rows was re-read by that
-  instrument at `abdae38`**, reproducing the table exactly, and **all twenty-two rows were
+  instrument at `abdae38`**, reproducing the table exactly, and **all twenty-two rows then
+  existing were
   re-read again on 2026-09-07**, this time with the whole verdict string anchored at both ends
   rather than matched as a prefix, reproducing the table exactly again.
-  **The last four rows are the ones taken on the geometry this repository ships**, and the
+  **The twenty-third row is weaker than the twenty-two above it and is marked so.** It was read
+  on 2026-09-08 by the agent that supplied it, with the whole verdict string anchored and
+  restricted to the scenario step column, and **it was not re-read by the pass that wrote it
+  here**: `gh` is present on this host but unauthenticated, so no CI log could be opened at
+  all. Everything in this file about run `34247027502` — its `continuous_line` verdict, its
+  `pick_and_place` verdict and its `bringup` teardown — carries that one reading and no
+  second one.
+  **The last five rows are the ones taken on the geometry this repository ships**, and the
   collision-geometry item in the gap list below is where that is kept; this file said "the
-  last row is the only one" until 2026-09-07.
+  last row is the only one" until 2026-09-07 and "the last four rows" until 2026-09-08.
   **The prediction the previous re-audit made here was wrong, and how it was wrong is the
   point.** It said *"The next reader should not expect a twentieth soon"*, on the strength of
   five completed `main` runs after `e51238e` — `33534312429`, `33537296558`, `33551642119`,
@@ -438,20 +526,24 @@ date it is that value's history and not a current reading.
   five-run list was never wrong about those five; it was **incomplete as an account of the
   window**, because it omitted `33550148315`, which was already cancelled when it was written.
   A forecast about CI is not a measurement and should not be written in a rulebook.
-  **Teardown is read for sixteen of the twenty-two and is clean in all sixteen, and this file
-  said it was unread until 2026-09-01 and read for fifteen of nineteen until 2026-09-07.**
+  **Teardown is read for seventeen of the twenty-three and is clean in all seventeen, and this
+  file
+  said it was unread until 2026-09-01, read for fifteen of nineteen until 2026-09-07 and for
+  sixteen of twenty-two until 2026-09-08.**
   The verdict line distinguishes **three** states, not
   two: `scripts/scenario` prints `Scenario 'X' passed` only when `launch_test` itself exited 0,
   which it cannot do while a post-shutdown `TestCleanShutdown` assertion is failing; it prints
   `Scenario 'X' passed its cycle assertions` on the advisory branch where the cycle passed and
   teardown did not; and `Scenario 'X' failed — …` otherwise. **The middle string appears for
-  `continuous_line` in none of the twenty-two runs**, so each of the sixteen bare `passed`
+  `continuous_line` in none of the twenty-three runs**, so each of the seventeen bare `passed`
   verdicts carries its teardown with it, and in the six whose cycle failed teardown is masked
   by the cycle failure and stays genuinely unread.
   **This file said until 2026-09-07 that "the advisory branch has never fired in CI", and
-  that is now false.** It appears exactly once in the twenty-two runs' logs, and not for this
-  scenario: at `f6a3779` one of the two `bringup` invocations printed
-  `Scenario 'bringup' passed its cycle assertions`.
+  that is now false.** It appears **twice** in the twenty-three runs' logs, on consecutive runs
+  and never for this
+  scenario: at `f6a3779`, and again at `13bc8e9`, one of the two `bringup` invocations printed
+  `Scenario 'bringup' passed its cycle assertions`. It said "exactly once" until 2026-09-08 —
+  a count over the runs that existed then.
   The claim was only ever safe as a claim about `continuous_line`; stated about CI as a whole
   it was a claim about what has never happened, and §2 has now been caught by that twice.
   **`--teardown-advisory` never reaches the scenario Python**: `scripts/scenario` puts it in
@@ -480,7 +572,9 @@ date it is that value's history and not a current reading.
   the rest of the leg: `(-0.001, 0.273, 1.201)`, `(-0.001, 0.273, 1.201)` and
   `(-0.001, 0.274, 1.201)`, each about 390 s after the peak of the lift. **So the grasp is not
   what failed** — `lifted` is *measured*, computed by the scenario as
-  `sample.z - frame_z > LIFTED_M` (`tests/scenarios/continuous_line.py:674-675`) rather than
+  `sample.z - self._resolve(milestone.frame)[2] > LIFTED_M` — in that file's `milestone.kind == "lifted"` branch,
+  cited by symbol because the line number given here (`674-675`) was stale by 2026-09-08 and a
+  line number in a file under active edit goes stale again — rather than
   reported by the arm, so the piece demonstrably rose off the pick frame and never came back
   down.
   **What stops the piece between those two milestones is now established, by one
@@ -528,11 +622,36 @@ date it is that value's history and not a current reading.
   **This is not the silent dead end and must not be folded into it.** In the three failures
   above, `LineState` read `RUNNING` with `blocked_reason=none stall_reasons=none` and nothing
   escalated; here the station reports `BLOCKED`, the coordinator escalates, the belts are
-  commanded to a standstill and the process exits 1 — which is what ADR-0038 specifies, so the
-  scenario's fail-fast fired as designed rather than waiting out the leg ceiling. It is also
-  not the spawn timeout at `33343317444`. Three signatures, six failures; sharing a scenario
+  commanded to a standstill and the process exits 1 — which is what ADR-0038 specifies. It is
+  also not the spawn timeout at `33343317444`. Three signatures, six failures; sharing a scenario
   name is not evidence of sharing a cause, which is the move this bullet already warns against
   for the fourth failure.
+  **That sentence ended "so the scenario's fail-fast fired as designed rather than waiting out
+  the leg ceiling" until 2026-09-08, and that clause was false.** Two independent readings say
+  so. **Timestamps:** from the coordinator's first `escalated to an operator` line to the
+  `AssertionError` is **417.8 s** at `4ef2d7c` and **420.6 s** at `51195e0`, against
+  `LEG_CEILING_S = 420.0` — the ceiling was spent in full, and those figures are the
+  investigation's, read from the two CI logs and **not re-read here**. **Source:** through
+  `13bc8e9`, and identically at both failing commits, `_run_one_piece`'s per-milestone loop
+  contained no halt check at all — neither `self._halt` nor `_fail_if_the_line_has_stopped`
+  appears between its definition and `_context` at `4ef2d7c`, `51195e0` or `13bc8e9` — and
+  `_fail_if_the_line_has_stopped` was reached only from `_spin_until`; what finally raised was
+  the *removal* wait's pre-loop check, which is why the message named the work-piece leaving
+  the simulator — a wait with nothing to do with the fault — and carried none of the diagnostic
+  report, because `_context` was built at the verdict step and every earlier raise skipped it.
+  That half was re-derived on 2026-09-08 with `git show <sha>:tests/scenarios/continuous_line.py`
+  over all three commits.
+  **It is fixed at `30baea8` on `main`, and what the fix evidences is narrow.** The leg loop
+  gained a halt check and `_fail_if_the_line_has_stopped` now appends the full `_context`
+  report on every path that raises. The guard is
+  `tests/scenarios/guards/test_a_stopped_line_ends_the_run.py`, and it **fails 6 of its 9**
+  against the pre-fix scenario and **passes 9 of 9** after — re-derived on 2026-09-08 by
+  running that file from `30baea8` against a worktree at `13bc8e9`, then in this checkout.
+  **It is a guard over a fabricated clock and a fabricated `LineState`, not a run of the
+  cell**: it drives the shipped functions unbound against a fabricated `self` and brings
+  nothing up. **No run of the cell has exercised the new path.** So what is evidenced is that
+  the code can now end a run promptly and print the report; nothing here says the next failure
+  of this kind was, or will be, reported that way.
   **What the logs record above the escalation, stated as what the log says and not as a
   cause.** In both runs `/cite/cell_a/arm_1/place` returned code 10, after the arm's
   `JointTrajectoryController` aborted — `State tolerances failed for joint 2` and `Aborted due
@@ -543,6 +662,40 @@ date it is that value's history and not a current reading.
   `f6a3779`'s**, whose only code-10 lines come from `skill_goals_test` and `line_nodes_test`.
   Whether any of the nineteen runs before these contains the same chain was **not checked** —
   for those nineteen only the verdict lines were re-read.
+  **What an investigation added on 2026-09-08, at investigation strength: read from those two
+  logs, on two runs, with nothing registered in advance and no cause attributed.** The skill is
+  `Place` and the motion is its **final descent onto the release pose** — the fifth trajectory
+  of the piece, after `Place`'s own approach had reported `Goal reached, success!` — so the arm
+  was over `cell_a__conveyor_1__infeed` **holding the part** when it failed. The joint is
+  **`arm_1_joint3`**, and the log's `State tolerances failed for joint 2` names that same joint
+  rather than a second one: the controller prints a **zero-based index** into its own `joints:`
+  list, which for `arm_1_joint_trajectory_controller` is `joint1 … joint5`
+  (`workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml:47-52`), and upstream
+  prints `joint_idx` as an index into the error arrays (`ros2_controllers`, `jazzy`,
+  `joint_trajectory_controller/include/joint_trajectory_controller/tolerances.hpp`, read
+  2026-09-08). **Those two source facts are re-derived here; every log-derived figure in this
+  paragraph and the next is the investigation's and was not re-read.**
+  **The arm was stationary or drifting further from its goal, not converging, and this is the
+  strongest thing the investigation produced.** Recovered two independent ways that agree — the
+  limiter's clamped command plus one control cycle of that joint's 3.14 rad/s limit, against
+  `actual + reported error` — the implied movement over the last cycle is **1.0e-4 rad** at
+  `4ef2d7c` and **4.3e-6 rad** at `51195e0`. **That is what rules out a scheduling lag**: a lag
+  closing on its target would show the opposite velocity sign.
+  **It violates a deliberate design margin.** `PlaceAt`'s `release_height_m` default is
+  **0.04** against a 50 mm part whose centre rests at 0.025 — a deliberate **15 mm** air gap,
+  stated in that port's own comment
+  (`workspace/src/cite_orchestration/include/cite_orchestration/skill_nodes.hpp:675-686`, read
+  2026-09-08) — so nothing should touch the belt during that descent.
+  **Nothing in the cell changed to explain the onset, and option F is not the discriminator.**
+  Between the last passing hull run `e51238e` and the first failure `4ef2d7c`, the diff over
+  `workspace model tools tests scripts .github assets` is **one test file**
+  (`cite_test_hardware/test/test_unreachable.py`). And `git merge-base --is-ancestor d3eeac4
+  <sha>` fails for `4ef2d7c`, which failed **without** option F, and succeeds for `51195e0`,
+  which failed **with** it, and for `f6a3779`, which **passed** with it. Both re-derived on
+  2026-09-08.
+  **The physical cause is unestablished and nothing above attributes one.**
+  [`docs/open-work.md`](docs/open-work.md) #60 is where the item and the cheapest measurement
+  that would settle it are kept.
   **Neither run is evidence for ADR-0045's or ADR-0046's promotion condition, and it would be
   easy to read it as such.** That condition is a `continuous_line` run in which *the gripper
   fails to answer and the line reports it*. Result code 10 is `MOTION_INTERRUPTED`, ADR-0037's
@@ -605,17 +758,24 @@ date it is that value's history and not a current reading.
   over and are not classified here. `parameter_bridge` has since been observed on **both** -6
   and -11 in the campaign cited above, each once — which is what removes "MoveIt-linked" from
   the signal family's description, and is still two events rather than a rate.
-  **A third `parameter_bridge` signal death has now been seen on a CI runner nobody prepared.**
-  The two above are the campaign's, taken at `de67d8b` on a developer machine; this one is not.
+  **The family now has two occurrences on CI runners nobody prepared, on consecutive runs and
+  on both signals.**
+  The two campaign events are at `de67d8b` on a developer machine; these two are not.
   In CI run `34085965578` at `f6a3779`, one of the two `bringup` invocations passed its cycle and
   failed its post-shutdown check on `FAIL: test_nothing_of_ours_exited_badly` with
-  `parameter_bridge-2 exited with -11`, and nothing else in that run exited badly. It is
-  **not** exempted: `tests/scenarios/bringup.py`'s `UPSTREAM_TEARDOWN_SEGFAULT` covers
-  `move_group` and -11 and nothing else, so the process that died is outside it, exactly as
-  `skill_server`'s -11 is outside `continuous_line`'s. **One more event, on a machine nobody
-  prepared — three in total across two machines, and still not a rate.** Nothing about the
+  `parameter_bridge-2 exited with -11`, and nothing else in that run exited badly. **In the next scenario-driving run in the
+  table above, `34247027502` at `13bc8e9`, the same thing happened on the other
+  signal**: `parameter_bridge-2 exited with -6`. **Neither is exempted**:
+  `tests/scenarios/bringup.py`'s
+  `UPSTREAM_TEARDOWN_SEGFAULT` covers
+  `move_group` and -11 and nothing else, so the process that died is outside it on both
+  signals, exactly as
+  `skill_server`'s -11 is outside `continuous_line`'s. **Four events in total across two
+  machines, and still not a rate.** This bullet said "a third … three in total" until
+  2026-09-08. Nothing about the
   cause moves: no mechanism is demonstrated for any member of this family, and **no exemption
-  may be widened to absorb this one.**
+  may be widened to absorb this one.** The `13bc8e9` reading is the single 2026-09-08 reading
+  described in the `continuous_line` bullet and was not re-read here.
 - **The recorded real-time factor of 0.14 is conditional, and the condition is roughly one CPU
   core.** It is not wrong: it reproduces on the development host — both halves of the recorded
   pair, RTF and the `joint_states` rate, together and by two independent instruments — when the
@@ -1196,26 +1356,31 @@ date it is that value's history and not a current reading.
     the first re-audit published it; it then said **"EXACTLY ONE CI RUN WAS"** until
     2026-09-07, and that expired within seconds of being written and stood for five days
     before anyone re-read it.
-    **What stays true, and it is most of the sentence.** `bringup`'s first 36 of 44, every
+    **What stays true, and it is most of the sentence.** `bringup`'s first 36 of 46, every
     `pick_and_place` run before `e51238e`, the first eighteen rows of the `continuous_line`
     table and the whole teardown-family split were all taken with **vendor** collision
     geometry. Read them as evidence about the cell that was.
-    **What is false, and by how much.** Four CI runs on `main` have brought this cell up
+    **What is false, and by how much.** Five CI runs on `main` have brought this cell up
     against the hulls: **`33501707588`** at **`e51238e`**, **`33575992281`** at **`4ef2d7c`**,
-    **`33603610958`** at **`51195e0`** and **`34085965578`** at **`f6a3779`**. That they are
+    **`33603610958`** at **`51195e0`**, **`34085965578`** at **`f6a3779`** and
+    **`34247027502`** at **`13bc8e9`**. That they are
     hull runs is established rather than assumed: `git merge-base --is-ancestor dd93488 <sha>`
     succeeds for each and `git show <sha>:model/assets/types/robots/xarm5.yaml | grep select:`
-    reads `select: convex_hull` for each. Verdicts were read from the logs, never from the step
+    reads `select: convex_hull` for each — re-derived over all five on 2026-09-08. Verdicts
+    were read from the logs, never from the step
     conclusion, by the instrument this section mandates.
-    **What those four runs show, scenario by scenario.** `pick_and_place` passed in all four —
-    and in all twenty-two tabled runs, 22 of 22 by exact-string match on 2026-09-07.
-    `bringup`'s cycle passed in all eight invocations, and one of the eight failed its
-    teardown, at `f6a3779`, on a `parameter_bridge` -11 — the teardown-family bullet above is
-    where that is kept. `continuous_line` **passed in two of the four and failed in two**;
+    **What those five runs show, scenario by scenario.** `pick_and_place` passed in all five —
+    and in all twenty-three tabled runs: 22 of 22 by exact-string match on 2026-09-07, plus
+    the twenty-third read on 2026-09-08, so 23 of 23.
+    `bringup`'s cycle passed in all ten invocations, and two of the ten failed their
+    teardown, at `f6a3779` on a `parameter_bridge` -11 and at `13bc8e9` on a -6 — the
+    teardown-family bullet above is
+    where that is kept. `continuous_line` **passed in three of the five and failed in two**;
     the two failures are the third signature recorded in that bullet.
-    **What the four runs are not.** **Four runs**, at four commits, on runners nobody prepared,
-    with **no thresholds registered in advance. It is not a rate**, and two of the four
-    contain a `continuous_line` failure. They say **nothing about the grasp** — the 2026-09-01
+    **What the five runs are not.** **Five runs**, at five commits, on runners nobody prepared,
+    with **no thresholds registered in advance. It is not a rate**, and two of the five
+    contain a `continuous_line` failure. This paragraph counted four runs until 2026-09-08.
+    They say **nothing about the grasp** — the 2026-09-01
     hull-grasp campaign's verdict is INCONCLUSIVE by its own pre-registered rule S and these
     runs do not touch it — and **nothing about capacity**, which is the separate case below.
     **Why the "no CI run" clause survived to be falsified twice, because that is the lesson.**
@@ -1294,7 +1459,7 @@ date it is that value's history and not a current reading.
     passed. **Never cite "CI is green" as evidence that a capability works; cite the step that
     gates it** — and note that **the step's own conclusion is not the step's result either**:
     GitHub reports a `continue-on-error` step as `success` when it failed, so the log is the
-    only instrument. See the table in the `continuous_line` bullet, where **six of twenty-two**
+    only instrument. See the table in the `continuous_line` bullet, where **six of twenty-three**
     CI runs failed the cycle, in **three** distinct signatures — three of them in the same way,
     one on a spawn timeout, and two that escalated and stopped the line. It said "four of
     nineteen … three of them in the same way and the fourth on a different signature entirely"
@@ -1304,20 +1469,23 @@ date it is that value's history and not a current reading.
     `test` and `lint`, all clean, from a fresh clone of the remote with zero deviations — and
     **stopped at `lint` without launching the cell**. The clone-to-running-cell half is
     evidenced by the CI runs above, each of which brought the cell up twice from a checkout —
-    `bringup`'s cycle has passed **44 of 44** across the twenty-two, with its teardown clean in
-    **43** of those 44 — and by nothing else. It said "38 of 38 across the nineteen" until
-    2026-09-07, when no teardown figure was stated separately because none had yet failed.
+    `bringup`'s cycle has passed **46 of 46** across the twenty-three, with its teardown clean
+    in
+    **44** of those 46 — and by nothing else. It said "38 of 38 across the nineteen" until
+    2026-09-07, when no teardown figure was stated separately because none had yet failed, and
+    "44 of 44 … 43" until 2026-09-08.
   - **The cycle clause is the least-settled of them.** **Six** CI failures are now part of its
     record, not one: three stopped the same piece at the same milestone, one never spawned a
     work-piece at all, and two escalated and stopped the line. It said "four" until 2026-09-07.
-    **Sixteen CI runs have passed the cycle since the clause closed, and that does not settle
+    **Seventeen CI runs have passed the cycle since the clause closed, and that does not settle
     it** — it was closed on one run with no thresholds registered in advance, and a longer
     unregistered tally is a longer unregistered tally. **The figure here read "thirteen more
     CI runs have passed the cycle since 2026-08-29" until 2026-09-07, and it reconciled with
     no reading of the table that could be derived on that date**: counting the table's `passed`
     rows dated 2026-08-29 or later gave 15 and counting those strictly later gave 12, neither
-    of them 13. The sixteen above is every `passed` row in the table, which is the whole of it
-    since the closure run `33158091922` is the table's first row and it failed. See
+    of them 13. The seventeen above is every `passed` row in the table, which is the whole of it
+    since the closure run `33158091922` is the table's first row and it failed; it read
+    "sixteen" until 2026-09-08. See
     the `continuous_line` bullet above, including that a
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as

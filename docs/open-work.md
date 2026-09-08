@@ -47,12 +47,21 @@ the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, wit
 agreeing), and the campaign count is now **15 on this branch, 11 on `main`**. No other row was
 re-read on this date.
 
+**Updated 2026-09-08**, and this reading is taken on **`main` itself at `30baea8`**, not on a
+branch: the work the notes above describe is merged, and `git rev-parse main` reads `30baea8`
+while `git rev-parse origin/main` reads `13bc8e9`, so `main` is **one commit ahead of the
+remote**. A new known defect **#60** records the third `continuous_line` failure signature, which
+is **not** the door #19 covers; #19 gains a cross-reference and is otherwise untouched. **Six of
+the eight table rows below were re-derived** with the commands they name on this date: five did
+not move and the campaign row did. **Two were not re-read** — the environment row, which needs
+the container, and the CI row, which needs an authenticated `gh` and does not have one here.
+
 ---
 
 ## Where the repository stood when this was written
 
-`main` at `51195e0`, clean — `git rev-parse main` and `git rev-parse origin/main` both read it
-on 2026-09-03. This table was first taken at `3725af5`; every one of its original seven rows was
+`main` at `30baea8` — `git rev-parse main` on 2026-09-08, with `git rev-parse origin/main` one
+commit behind at `13bc8e9`. It read `51195e0` on both, on 2026-09-03. This table was first taken at `3725af5`; every one of its original seven rows was
 re-measured at `abdae38` on 2026-09-01 and **none of them moved**, and the head line read
 `abdae38` until 2026-09-02. Reproduce each figure rather than quoting it from here.
 
@@ -94,14 +103,21 @@ was written; what it predicted came true faster than it allowed for.
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
 | L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
 | Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 15 on this branch, 11 on `main` | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
+| Measurement campaigns | 15, on `main` and on `origin/main` alike | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
-| CI runs on the shipped geometry | 4 — `e51238e`, `4ef2d7c`, `51195e0`, `f6a3779`; `continuous_line` passed in 2 of the 4 | `gh run view <id> --log \| grep -o "Scenario '[a-z_]*'[^\"]*"` |
+| CI runs on the shipped geometry | 5 — `e51238e`, `4ef2d7c`, `51195e0`, `f6a3779`, `13bc8e9`; `continuous_line` passed in 3 of the 5 | `gh run view <id> --log \| grep -o "Scenario '[a-z_]*'[^\"]*"`, restricted to the scenario step column |
 
-**The last row is four runs and is not a rate.** No thresholds were registered in advance, and it
+**The last row is five runs and is not a rate.** No thresholds were registered in advance, and it
 says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
-it is kept.
+it is kept. It read **four** until 2026-09-08, when `34247027502` at `13bc8e9` was added: that
+run's `continuous_line` and `pick_and_place` both passed and one of its two `bringup` invocations
+took the advisory branch on `parameter_bridge-2 exited with -6`. **That row is the only one in
+this table not re-derived on 2026-09-08** — `gh` on this host is unauthenticated, so no CI log
+could be opened; it carries the single reading of the agent that supplied it. The instrument now
+carries a restriction it did not have on 2026-09-07: a CI log echoes the **commit message**, so a
+whole-log grep also counts verdict strings quoted in a commit body, which is exactly what
+`13bc8e9`'s message does.
 
 **That row read `1, 33501707588 at e51238e, all three scenarios passed` until 2026-09-07**, and
 the note above it said it "has now gone two days unchecked". It had in fact been falsified within
@@ -591,6 +607,13 @@ jaws stall at exactly `stall_timeout × ramp rate`, so a control designed to tes
 the ramp instead.
 
 ### #19 — The `station_transfer_1` dead end: fixed, and the records stay `Proposed`
+**This item covers the gripper-deadline door and only that door. It is not #60.** The two failures
+#60 records are at the same station and are a different signature: there the gripper answered with
+a genuine friction stall, the handoff completed, and the word `custody` appears **zero** times in
+the scenario half of either log — the investigation's reading of those two logs on 2026-09-08,
+not re-read since. Do not read a `continuous_line` failure at `station_transfer_1` as this item
+without first checking which of the three signatures it is.
+
 Cause established: a wall-clock gripper deadline supervising a simulation-time process; on expiry
 `Pick` returned `TIMEOUT` without recording custody or cancelling the goal, and the retry's
 `MoveToHome` carried the part off its own trigger beam. Fixed and merged — the deadline is
@@ -606,6 +629,84 @@ Two things recorded and open: whether a friction grasp survives the cancel is un
 (`set_hold_position` holds width and stops squeezing, and ADR-0029 leaves the grasp to friction
 alone); and after a missed grasp `MoveToHome` no longer runs, so the arm stops inside the fixture
 and nothing in software reopens the jaws.
+
+### #60 — `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
+**Two CI failures, on two runners nobody prepared, at two commits, with nothing registered in
+advance. The physical cause is unestablished and nothing here attributes one.** The runs are
+`33575992281` at `4ef2d7c` and `33603610958` at `51195e0`, both 2026-09-02 — the third
+`continuous_line` signature, tabled in CLAUDE.md §2, which is where the log evidence is kept.
+
+**The chain, as the logs record it.** `Place`'s approach reports `Goal reached, success!`; the
+**final descent onto the release pose** — the fifth trajectory of that work-piece — aborts in the
+arm's `JointTrajectoryController` on a state-tolerance failure followed by a `goal_time_tolerance`
+overrun — the exact strings and figures are in CLAUDE.md §2 and are not copied here (P1); the L3
+classifier
+(ADR-0037) reads the arm as stopped part-way and `/cite/cell_a/arm_1/place` returns code 10,
+`MOTION_INTERRUPTED`, whose policy row is `ESCALATE`; L4 stops the line (ADR-0038) and the process
+exits 1. **Every figure in this paragraph is the investigation's reading of those two logs on
+2026-09-08 and was not re-read afterwards** — `gh` on this host is unauthenticated.
+
+**It is not #19, and the check is cheap.** In both runs the gripper answered with a genuine
+friction stall and the handoff completed, and the word `custody` appears **zero** times in the
+scenario half of either log — so ADR-0045's deadline and ADR-0046's custody refusal are not what
+fired. Neither run is evidence for either record's promotion condition, and neither record's
+status moves on this item.
+
+**What was re-derived from the tree on 2026-09-08, as opposed to read from a log.**
+
+- The log's `joint 2` and `arm_1_joint3` are **one joint**, not two. The controller prints a
+  zero-based index into its own `joints:` list, which is `joint1 … joint5`
+  (`workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml:47-52`), and upstream
+  prints that index into the error arrays (`ros2_controllers`, `jazzy`,
+  `joint_trajectory_controller/include/joint_trajectory_controller/tolerances.hpp`).
+- The descent is supposed to leave a **15 mm air gap**: `PlaceAt`'s `release_height_m` default is
+  0.04 against a 50 mm part whose centre rests at 0.025, stated in that port's own comment
+  (`workspace/src/cite_orchestration/include/cite_orchestration/skill_nodes.hpp:675-686`). Nothing
+  should touch the belt during it.
+- **Nothing in the cell changed to explain the onset.** `git diff e51238e..4ef2d7c -- workspace
+  model tools tests scripts .github assets` is **one test file**, and **option F is not the
+  discriminator**: `git merge-base --is-ancestor d3eeac4 <sha>` fails for `4ef2d7c`, which failed
+  without it, and succeeds for `51195e0`, which failed with it, and for `f6a3779`, which passed
+  with it.
+
+**The investigation's strongest reading, not re-taken here: the arm was stationary or drifting
+further from its goal, not converging.** Recovered two independent ways that agree — the limiter's
+clamped command plus one control cycle of that joint's 3.14 rad/s limit, against `actual +
+reported error` — the implied movement over the last cycle is **1.0e-4 rad** and **4.3e-6 rad** in
+the two runs. That is what rules out a scheduling lag: a lag closing on its target would show the
+opposite velocity sign.
+
+**The cheapest measurement that would settle it.** Drive L3 `Place` at
+`cell_a__conveyor_1__infeed` with `release_height_m = 0.04` repeatedly while recording
+`/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state`, and read
+`arm_1_joint3`'s **terminal** error against the 0.010 rad goal tolerance. Running it **with and
+without the part in the gripper** separates payload from contact.
+
+**Most of that rig already exists, and the closest existing measurement did not reproduce the
+abort.** `docs/measurements/2026-09-04-following-error/harness/` subscribes to that topic and its
+**CARRY** arm already runs this exact motion: `PLACE_FRAME = cell_a__conveyor_1__infeed` and
+`RELEASE_HEIGHT_M = 0.04`, with a real work-piece carried and `require_holding` true
+(`harness/common.py:89-90`, `harness/cell.py:104-105`, `harness/measure.py:542-543`, read
+2026-09-08). It ran **9 `place` trials** on that arm — counted from the campaign's own
+`raw/B*_trials.json` on 2026-09-08 — and its verdict for CARRY is **QUIET**: no tolerance event of
+any kind. **So the abort has not been reproduced by the closest instrument that exists**, at nine
+trials, on a developer host rather than on a CI runner. What that harness never varied is the
+**absence** of the part on this frame, and it reports the peak following error in flight rather
+than the terminal error at the goal — which is where the two additions above go.
+
+**One observation, recorded as an observation and not as a decision.** The controller's per-joint
+abort threshold (`goal: 0.01`, `workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml`)
+and the classifier's `arm_goal_tolerance_rad` (0.01,
+`workspace/src/cite_generated/bringup/cell_a_plan.yaml`) are **one L0 value** —
+`goal_tolerance_rad: 0.01` at `model/assets/types/robots/xarm5.yaml:308`, reaching both through
+the generator — so this is **not** a P1 duplication. The consequence is structural:
+`classify_motion_end` tests `within_tolerance(current, goal, arm_goal_tolerance_rad)` per joint
+(`workspace/src/cite_skills/include/cite_skills/motion_end.hpp:102-145`), and a goal-tolerance
+abort means some joint lies outside exactly that band, so such an abort **cannot** classify
+`AT_GOAL`; it is `PART_WAY`, hence `MOTION_INTERRUPTED` and `ESCALATE`, unless the arm is also
+within the band of its start. "Close enough to retry" is unreachable by construction. **Whether
+that is the intended reading of ADR-0037 is the project owner's decision. This item takes none
+and recommends none.**
 
 ### #26 — `bringup`'s `MoveTo` fails when a run is slow, and the split is perfectly disjoint
 In the teardown campaign's 30 pre-fix `bringup` runs, five exited non-zero; two are teardown-only
