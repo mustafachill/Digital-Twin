@@ -52,6 +52,12 @@ if(BUILD_TESTING)
   # and hung at the work-piece spawn. One door, tested here; that nothing goes
   # around it is tests/scenarios/guards/.
   ament_add_pytest_test(gz test/test_gz.py)
+  # ADR-0048 clause 3. The key naming a controller manager's host left the plan,
+  # and a document that still carries it must load rather than be refused - the
+  # document most likely to carry it is a plan left in a stale build tree, where
+  # the cause is a rebuild and not a key. Its own file so that the guard barring
+  # that name from every other source file needs one exemption rather than a list.
+  ament_add_pytest_test(removed_plan_key test/test_a_removed_plan_key_is_ignored.py)
   # The launch description itself: what it refuses to start, and what it stops
   # on. A correct check that nothing calls is the defect this catches, and it is
   # the one that was there.

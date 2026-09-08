@@ -28,14 +28,19 @@ WORLD_FRAME = "cite_world"
 #: The one backend id that cannot reach a physical machine. Every other value
 #: names a `ros2_control` plugin that drives real hardware.
 #:
-#: Here rather than spelled at each call site because three separate rules turn
-#: on it — a controller manager is hosted inside the Gazebo process for this
-#: backend and runs its own node otherwise, `use_sim_time` is derived from it,
-#: and a paired zone may not name anything else on its plant side — and a fourth
-#: statement of the string would be the value-in-two-places P1 forbids.
+#: Here rather than spelled at each call site because two rules turn on it —
+#: `use_sim_time` is derived from it, and a paired zone may not name anything
+#: else on its plant side — and a further statement of the string would be the
+#: value-in-two-places P1 forbids. A third rule used to be here, deciding whether
+#: a controller manager is hosted inside the Gazebo process; ADR-0048 clause 3
+#: removed the field it fed, since nothing read it and it was a total function of
+#: a backend the plan already states per side.
 #: `cite_bringup.plan.SIMULATION_BACKEND` is the one unavoidable second
 #: statement: it is a different build unit that cannot import this one, and it
 #: reads the value out of the generated plan rather than deciding it.
+#: `cite_twin.mode.SIMULATION_BACKEND` is a third, for the same reason and with
+#: the same limit — its own comment says so — so `grep -rn SIMULATION_BACKEND`
+#: is what says how many statements exist, not this comment.
 SIMULATION_BACKEND = "sim"
 
 #: Separates the three parts of a flattened TF frame name. Doubled so that a

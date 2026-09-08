@@ -334,13 +334,21 @@ def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding
 
     WHY IT IS KEYED ON DIFFERENCE RATHER THAN ON `real`. The defect is not that
     a side is physical. Every generator site that branches on a backend reads
-    `hardware.backend` — the PLANT's — and none of the three has ever been asked
+    `hardware.backend` — the PLANT's — and not one of them has ever been asked
     which side it is generating for: the `ros2_control` plugin
-    (`cite_tools.model.resolve`, consumed by `generate.description`),
-    `use_sim_time` (`generate.control`) and `hosted_by` (`generate.bringup`). So
-    whatever the counterpart names, it is handed artifacts derived from the
-    other side's answer. Keying on the literal `real` would leave a third
-    backend to rediscover exactly this gap.
+    (`cite_tools.model.resolve`, consumed by `generate.description`), the
+    collision scheme (`generate.description`, `spec.collision.scheme_for`) and
+    `use_sim_time` (`generate.control`). So whatever the counterpart names, it is
+    handed artifacts derived from the other side's answer. Keying on the literal
+    `real` would leave a third backend to rediscover exactly this gap.
+
+    THE SET IS ASKED FOR, NOT COUNTED HERE. This docstring said "three" and named
+    among them a plan key that branched on nothing and that ADR-0048 clause 3 has
+    since removed, while the collision scheme, added 2026-08-31, was never
+    listed. A count in prose is a claim with an expiry
+    date; `grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`
+    is the instrument, and the record's own copies of the count are stale until
+    the change that makes these sites per-side corrects them.
 
     WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
     `backend` stays legal and stays byte-identical to omitting it, which is the

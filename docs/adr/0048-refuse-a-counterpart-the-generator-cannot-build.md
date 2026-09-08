@@ -1,19 +1,31 @@
 # ADR-0048: Refuse a counterpart whose backend differs from the plant's, until the generator emits per-side artifacts
 
-- **Status:** Accepted on clause 1 (corrected 2026-08-30; promoted 2026-08-31) — **clause 1 is
-  built and binding; clauses 2 and 3 are not, and neither is promoted by this.**
+- **Status:** Accepted on clauses 1 and 3 (corrected 2026-08-30; clause 1 promoted 2026-08-31,
+  clause 3 promoted 2026-09-08) — **clauses 1 and 3 are built and binding; clause 2 is not, and
+  is not promoted by either.**
   See the section "Correction — 2026-08-30: a pair has come up, and the counterpart backends
-  this record refuses are still accepted", below, and "Promotion — 2026-08-31: clause 1 only",
-  after it. In one line each:
+  this record refuses are still accepted", below, "Promotion — 2026-08-31: clause 1 only",
+  after it, and "Promotion — 2026-09-08: clause 3, eight days late", after that.
+  **[Corrected 2026-09-08 — this line read "Accepted on clause 1 … clauses 2 and 3 are not,
+  and neither is promoted by this" until clause 3 landed. Clause 2 is untouched by that and
+  its bullet below is unchanged.]** In one line each:
   - **Clause 1 is `Accepted`.** `divergent-counterpart-backend` exists in
     `cite_tools.validate.referential` and refuses any asset whose
     `effective_counterpart_backend` differs from its `hardware.backend`. Violating it is an
     `ESCALATE`.
   - **Clause 2 is not built and is not promoted.** No per-side artifact set exists. The
     commitment stands exactly as written and still has no test date.
-  - **Clause 3 did not land with clause 1, so it is not promoted either** — this block saying
-    so is the condition below working. `hosted_by` is still emitted into the bring-up plan and
-    still read by nothing.
+  - **Clause 3 is `Accepted`**, promoted 2026-09-08. `hosted_by` is gone from the generator,
+    from the template, from the plan schema and from the committed plan, and a document that
+    still carries it loads rather than being refused.
+    `cite_bringup.plan.ControllerManager.backend_on` is what a consumer asks instead, and it
+    is the only place in `cite_bringup` that turns an (asset, side) into a backend.
+    **[Superseded 2026-09-08 — this bullet read, from 2026-08-30 until then:** *"Clause 3 did
+    not land with clause 1, so it is not promoted either — this block saying so is the
+    condition below working. `hosted_by` is still emitted into the bring-up plan and still
+    read by nothing."* It said that for eight days, `docs/open-work.md` #45 called it OVERDUE
+    for six of them, and the split condition is what kept it visible rather than letting the
+    record read as though all three clauses had shipped.**]**
 
   Everything from "nothing in this record is implemented" onward was written against
   `9233766` and is superseded for clause 1 only; the paragraph is left in place per the
@@ -109,6 +121,9 @@ that moves `cite_bringup.plan`, its tests, the committed `cite_generated/` tree 
 `MODEL_HASH`, and it was out of the scope this change was given. The argument for doing it
 before something starts reading the field is unchanged and is now overdue rather than merely
 pending.
+**[Superseded 2026-09-08 — clause 3 has landed; see "Promotion — 2026-09-08" below. The
+`MODEL_HASH` half of this paragraph carries the same error the *Consequences* bullet does and
+is corrected there rather than twice: the committed tree moved and the hash did not.]**
 
 **What this promotion does not evidence.** Nothing here brings a pair up, and nothing here
 touches the generator. The refusal is a validation-time fact about the model, tested on a
@@ -116,6 +131,60 @@ fixture; that is the whole of what clause 1 promised and the whole of what is cl
 `physical-plant-on-paired-zone`'s hint now names this rule, because it recommends the
 encoding this rule refuses and a reader following it would otherwise meet a second refusal
 with no explanation.
+
+## Promotion — 2026-09-08: clause 3, eight days late
+
+**What landed.** `hosted_by` is gone from all four places it lived: the `_ManagerView` field
+and the ternary that computed it in `tools/cite_tools/generate/bringup.py`, the emission and
+its comment block in `tools/cite_tools/templates/bringup/plan.yaml.j2`, the
+`ControllerManager` field and the `_require` call in
+`workspace/src/cite_bringup/cite_bringup/plan.py`, and the three emitted lines in
+`workspace/src/cite_generated/bringup/cell_a_plan.yaml`.
+
+**What replaces it, and it is an addition rather than a removal.**
+`ControllerManager.backend_on(side)` returns the backend an asset loads on a named side and
+refuses a side the asset states none for — `PLANT_SIDE` and `COUNTERPART_SIDE`, by identity
+and never by index, in the shape `Plan.side_named` already uses. It is the one place in
+`cite_bringup` that maps an (asset, side) to a backend: `require_hardware_opt_in` open-coded
+the same map and now reads through it, unchanged in behaviour and unchanged in what its
+refusal prints. A consumer that needs what `hosted_by` used to say derives it from that
+backend, which is what this clause committed to.
+
+**The key is IGNORED and not rejected, which is a decision this record did not make and this
+promotion does.** The parser stops reading it and says nothing about its presence. Refusing a
+document that still carries it would refuse the document most likely to carry it — a plan left
+in a stale build tree — and the refusal would name a key where the cause is a rebuild.
+`./scripts/validate-model` already refuses a stale committed tree, and it names the
+regeneration. Pinned by `test_a_plan_carrying_the_removed_host_key_loads_cleanly` in
+`workspace/src/cite_bringup/test/test_a_removed_plan_key_is_ignored.py`.
+
+**What holds the removal, since a grep run once by the change that deletes a field says nothing
+about the change after.** `tools/tests/test_a_removed_plan_key_stays_removed.py` parametrises
+over every tracked file under `workspace/`, `tools/`, `tests/` and `scripts/` and fails if any
+of them states the name. `docs/` is deliberately outside it: a record states what it decided.
+The two exemptions are the guard itself and the `cite_bringup` test above, and a second test
+fails if either stops being about the removal — an exemption naming a file that has moved on is
+an exemption nobody notices.
+
+**The mutation check, because an accessor that reads one field passes every test written about
+one side.** With `backend_on` returning `self.backend` unconditionally,
+`workspace/src/cite_bringup/test/test_plan.py` reports **7 failed, 112 passed**; restored, it
+reports **119 passed**. Two of the seven are the pre-existing hardware-gate tests, which is the
+evidence that the gate reads through the accessor rather than beside it.
+
+**What this promotion does not evidence.** Nothing here brings a cell up, let alone a pair.
+Clause 2 is untouched: no per-side artifact set exists, `divergent-counterpart-backend` still
+refuses a divergent counterpart at validation, and this change neither lifts that refusal nor
+moves a single generator site per-side. `backend_on` has one production caller today —
+`require_hardware_opt_in` — and its second and third are owed to the change that makes the
+remaining generator sites per-side. **`cite_twin.twin_boundary` builds the same map a fourth
+time**, at its `Deployment` construction, and was deliberately left alone here; it is the next
+caller this accessor should have.
+
+**And the cost this record stated for the change was wrong**, which is corrected in
+*Consequences* above rather than here. The short version: the `cite_generated/` diff is real
+and `MODEL_HASH` did not move, because the digest is over the model's object graph and a
+generator edit is not a model edit.
 
 ## Correction — 2026-08-30: a pair has come up, and the counterpart backends this record refuses are still accepted
 
@@ -530,6 +599,22 @@ asked here because a real side runs no Gazebo server.
 - **`hosted_by` leaving the plan is a plan-schema change**, so `cite_bringup.plan` and its
   tests move with it, and the plan is committed and hashed (ADR-0021) — the change lands a
   `cite_generated/` diff and a new `MODEL_HASH`.
+  **[Corrected 2026-09-08 — the last three words are wrong, and were wrong when they were
+  written.** The `cite_generated/` diff is real: `bringup/cell_a_plan.yaml` lost twelve lines,
+  three emissions and their shared comment block, and nothing else under `cite_generated/`
+  moved. **`MODEL_HASH` did not move at all, and could not have.** `cite_tools.generate.
+  model_hash` digests the loaded pydantic object graph — `facility`, `zones`, `types`,
+  `assets`, `stations`, `flows` — and its own docstring says it is *"a stable digest of the
+  model's content, not of its files"*. The L0 model is untouched by this change, so the digest
+  is byte-identical: `95dbbdd9f18ca01be6a42a6f4da10e000fc29c5eeb6540396684d365550b7108` before
+  and after, and `./scripts/validate-model --write` reports the same 15 files.
+  **What made this claim easy to write is worth keeping**: `MODEL_HASH` is a generated
+  artifact, and every other change to the generated tree in this project's history moved the
+  model too. A generator edit is not a model edit, and nothing said so. It says so now —
+  `TestModelHash::test_does_not_change_when_a_template_changes` in `tools/tests/test_generate.py`
+  edits the bring-up template on a copy, requires the plan artifact to move, and requires the
+  hash not to. Stated as a property rather than as a recorded value, because a recorded value
+  is what a stale record quotes.**]**
 - **Someone will hit the refusal on a model that would have been fine**, in the sense that they
   wrote a true fact about the facility and were told no. That is the same trade ADR-0042 and
   ADR-0041 Decision 3 each took, and the message has to be good enough to move them: it names

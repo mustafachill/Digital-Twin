@@ -144,6 +144,54 @@ class TestModelHash:
         )
         assert gen.model_hash(load(real_model)) == before
 
+    def test_does_not_change_when_a_template_changes(
+        self, real_model: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The digest is over the model, and a generator edit is not a model edit.
+
+        Stated as a property rather than as a recorded value, because the value
+        is what a stale record quotes. ADR-0048's *Consequences* said that
+        removing a key from the bring-up plan would land "a `cite_generated/`
+        diff and a new `MODEL_HASH`"; the diff is real and the new hash is not,
+        and this is what says so for every future template edit rather than for
+        that one.
+
+        Driven by editing the bring-up template on a copy and rendering through
+        it: the plan artifact must move and the hash must not. Asserting the
+        first is what stops this passing because the edit reached nothing.
+        """
+        import shutil
+
+        from jinja2 import FileSystemLoader
+
+        from cite_tools import render
+        from cite_tools.generate import bringup
+
+        model = load(real_model)
+        before_hash = gen.model_hash(model)
+        before = artifacts(real_model)
+
+        templates = Path(render.__file__).parent / "templates"
+        copied = tmp_path / "templates"
+        shutil.copytree(templates, copied)
+        plan_template = copied / "bringup" / "plan.yaml.j2"
+        plan_template.write_text(plan_template.read_text() + "  # a line no model ever stated\n")
+
+        def through_the_copy() -> object:
+            env = render.environment()
+            env.loader = FileSystemLoader(str(copied))
+            return env
+
+        monkeypatch.setattr(bringup, "environment", through_the_copy)
+        after = artifacts(real_model)
+
+        assert after["bringup/cell_a_plan.yaml"] != before["bringup/cell_a_plan.yaml"], (
+            "the template edit reached no artifact, so this test would pass "
+            "whatever the hash did"
+        )
+        assert gen.model_hash(load(real_model)) == before_hash
+        assert after["MODEL_HASH"] == before["MODEL_HASH"]
+
 
 class TestGrowingTheLineIsDataOnly:
     """The Phase 1 exit criterion, in miniature.
@@ -1072,12 +1120,18 @@ class TestTwinSidesAndTheGazeboPartition:
         environment their processes are started in — `GZ_PARTITION` and
         `ROS_DOMAIN_ID`.
 
-        So this test is a P1 tripwire and not a convenience. Exactly three call
-        sites in the generators branch on a backend — `ros2_control_plugin` into
-        the description, `use_sim_time` in `generate/control.py` and `hosted_by`
-        here — and under ADR-0041's Decision 3 a paired zone's plant must be
-        `sim` and a 2.A counterpart writes no `counterpart_backend` at all, so
-        all three answer identically for both sides. A generator that emitted a
+        So this test is a P1 tripwire and not a convenience. The generator call
+        sites that branch on a backend — `ros2_control_plugin` into the
+        description, the collision scheme in `generate/description.py` and
+        `use_sim_time` in `generate/control.py`; ask
+        `grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`
+        rather than trusting a count written here — all read the PLANT's backend,
+        and under ADR-0041's Decision 3 a paired zone's plant must be `sim` and a
+        2.A counterpart writes no `counterpart_backend` at all, so they answer
+        identically for both sides. The site this test used to name fourth left
+        the generator entirely: ADR-0048 clause 3 removed it, because it was a
+        total function of a backend the plan already states per side and nothing
+        read it. A generator that emitted a
         second world, a second description or a second controller config for that
         pair would be emitting a byte-identical copy of a file already in the
         tree, which is a value in two places.
@@ -1088,12 +1142,12 @@ class TestTwinSidesAndTheGazeboPartition:
 
         **It is blind to the divergence that actually matters, and the answer to
         that is now a refusal one layer up rather than anything here.** The
-        premise above — that both sides answer all three backend call sites
+        premise above — that both sides answer every backend call site
         identically — holds because a 2.A counterpart is a second simulation. A
         counterpart naming a different backend would be handed the plant's
-        description, the plant backend's `ros2_control` plugin and the plant's
-        `use_sim_time`, with `hosted_by` derived from the plant's backend alone:
-        one cell driven by artifacts that describe the other.
+        description, the plant backend's `ros2_control` plugin, the plant's
+        collision scheme and the plant's `use_sim_time`: one cell driven by
+        artifacts that describe the other.
 
         **This tripwire cannot fire on that**, and the reason is structural
         rather than an oversight: it compares the artifacts pairing produces

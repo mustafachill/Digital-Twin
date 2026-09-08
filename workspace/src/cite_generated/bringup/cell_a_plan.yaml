@@ -106,10 +106,6 @@ plan:
     - asset: arm_1
       node: /cite/cell_a/arm_1/controller_manager
       backend: sim
-      # `simulator` means the controller manager is created inside the Gazebo
-      # process by gz_ros2_control, so there is no separate process to wait on —
-      # the spawner's service-availability wait is the synchronisation point.
-      hosted_by: simulator
       description_topic: /cite/cell_a/arm_1/robot_description
       joint_state_topic: /cite/cell_a/arm_1/joint_states
       description: package://cite_generated/description/cell_a_arm_1.urdf.xacro
@@ -253,10 +249,6 @@ plan:
     - asset: arm_2
       node: /cite/cell_a/arm_2/controller_manager
       backend: sim
-      # `simulator` means the controller manager is created inside the Gazebo
-      # process by gz_ros2_control, so there is no separate process to wait on —
-      # the spawner's service-availability wait is the synchronisation point.
-      hosted_by: simulator
       description_topic: /cite/cell_a/arm_2/robot_description
       joint_state_topic: /cite/cell_a/arm_2/joint_states
       description: package://cite_generated/description/cell_a_arm_2.urdf.xacro
@@ -400,10 +392,6 @@ plan:
     - asset: arm_3
       node: /cite/cell_a/arm_3/controller_manager
       backend: sim
-      # `simulator` means the controller manager is created inside the Gazebo
-      # process by gz_ros2_control, so there is no separate process to wait on —
-      # the spawner's service-availability wait is the synchronisation point.
-      hosted_by: simulator
       description_topic: /cite/cell_a/arm_3/robot_description
       joint_state_topic: /cite/cell_a/arm_3/joint_states
       description: package://cite_generated/description/cell_a_arm_3.urdf.xacro

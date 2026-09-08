@@ -40,7 +40,6 @@ class _ManagerView:
     #: backend of every side that exists whether or not the model wrote it
     #: (ADR-0041, Decision 3).
     counterpart_backend: str | None
-    hosted_by: str
     description_topic: str
     #: Where this asset's joint state arrives, which is `joint_state_broadcaster`'s
     #: own topic under the controller manager's namespace.
@@ -375,13 +374,6 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             counterpart_backend=(
                 asset.instance.hardware.effective_counterpart_backend if cell.is_paired else None
             ),
-            # A simulated backend's controller manager is created inside the
-            # Gazebo process, so there is no separate process to wait on; a real
-            # backend runs its own ros2_control_node. The distinction is what
-            # lets a mixed fleet be a configuration rather than a special case.
-            hosted_by="simulator"
-            if asset.instance.hardware.backend == ids.SIMULATION_BACKEND
-            else "ros2_control_node",
             # gz_ros2_control's controller manager inherits the plugin's
             # namespace, so it subscribes to <ns>/robot_description rather than
             # the global topic. The description publisher must match, or the

@@ -47,6 +47,14 @@ the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, wit
 agreeing), and the campaign count is now **15 on this branch, 11 on `main`**. No other row was
 re-read on this date.
 
+**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived`, which is ahead of `main`:
+**#45 and #40 are both closed** by the change that lands ADR-0048 clause 3, and each entry names
+the command that reproduces its closure. #45's own text carried a wrong cost — that removing
+`hosted_by` moves `MODEL_HASH` — which is corrected where it stood rather than deleted, in this
+file and in ADR-0048. **#38 is deliberately untouched** and is now stale in two directions; #45
+says why and who owes it. No table row below was re-derived on this reading, and none of the
+notes above is disturbed.
+
 **Updated 2026-09-08**, and this reading is taken on **`main` itself at `30baea8`**, not on a
 branch: the work the notes above describe is merged, and `git rev-parse main` reads `30baea8`
 while `git rev-parse origin/main` reads `13bc8e9`, so `main` is **one commit ahead of the
@@ -843,36 +851,75 @@ has no simulator.
 **Needs an ADR before 2.B** — either the three sites become per-side, or the schema refuses the
 combination until they are.
 
-### #45 — ADR-0048 clause 3 is overdue
-ADR-0048 decided `hosted_by` should be **removed** from the bring-up plan rather than duplicated
-per side, because it is a total function of a value the plan already carries per side and nothing
-reads it — verified by grep: a dataclass field, a parser, two test fixtures, and
-`simulation.launch.py` never mentions it. Clause 1 promoted 2026-08-31; clause 3 did not land, and
-the status block records it as **OVERDUE** rather than pending, which is the right word.
+### #45 — ADR-0048 clause 3 — CLOSED 2026-09-08
+**Closed** on the branch `feat/hosted-by-derived`. ADR-0048's status block records clause 3 as
+`Accepted` and carries a "Promotion — 2026-09-08" section; read that rather than this entry.
 
-Removing it moves the plan schema, `cite_bringup.plan`, its tests, the committed generated tree
-and `MODEL_HASH` — coherent, just larger than clause 1's scope.
+`hosted_by` is gone from the generator, the template, the plan schema and the committed plan.
+`ControllerManager.backend_on(side)` replaces it and is the one place in `cite_bringup` that
+maps an (asset, side) to a backend; `require_hardware_opt_in` now reads through it.
+Reproduce with `grep -rn hosted_by workspace tools tests scripts`, which returns **two** files
+and both are about the removal: the guard
+`tools/tests/test_a_removed_plan_key_stays_removed.py`, which fails if any other tracked file
+under those four trees states the name, and
+`workspace/src/cite_bringup/test/test_a_removed_plan_key_is_ignored.py`, which pins that a plan
+still carrying the key **loads** rather than being refused — the document most likely to carry
+it is one left in a stale build tree, where the cause is a rebuild and not a key.
 
-Also: `test_two_sides_with_the_same_name_are_refused` copies the plant side and appends it,
-producing three sides on a paired checkout. It passes in both states because the duplicated-name
-refusal fires either way — **it passes for a partly accidental reason** and belongs on
-`_solo_document()` with the rest.
+**One claim in the entry above was wrong and is worth keeping rather than deleting.** It said
+removing the field moves *"the committed generated tree and `MODEL_HASH`"*, copying ADR-0048's
+own *Consequences*. The tree moved — `bringup/cell_a_plan.yaml`, twelve lines, and nothing else
+under `cite_generated/`. **`MODEL_HASH` did not**: it digests the loaded model's object graph
+and not file bytes, the L0 model is untouched here, and the hash is byte-identical
+(`95dbbdd9…`). ADR-0048 carries the correction in place, and
+`tools/tests/test_generate.py::TestModelHash::test_does_not_change_when_a_template_changes`
+asserts the property for every future template edit rather than the value for this one.
 
-### #40 — Fourteen `test_plan.py` tests break on a paired checkout
-Pre-existing on `main`, not the pair branch's debt — but a paired checkout is how a pair gets
-brought up at all, so it is a state developers will be in. All fourteen fail the same way:
-`_document()["plan"]["sides"].append(_counterpart(...))` producing two sides named `counterpart`.
+**The `test_two_sides_with_the_same_name_are_refused` half is also done**: it is on
+`_solo_document()`, and #40 below is where that is kept.
 
-The conversion is mechanical: `test_plan.py` now carries `_paired_document()` and
-`_solo_document()` from the three that were fixed. A reviewer measured it — flip the model to
-`sides: pair`, regenerate, and `test_plan.py` gives 17 failures while `test_pair.py`,
-`test_simulation_launch.py` and `test_readiness_witness.py` stay clean, because the same fixture
-guard was applied there.
+**What this does NOT close:** #38 above. Its "exactly three generator call sites" is still
+stated there, and it is now wrong twice over — `hosted_by` was never a branch on a backend and
+is no longer anywhere, while the collision scheme in `generate/description.py` was a site the
+count never included. **That entry is deliberately untouched here**, because the change that
+makes those sites per-side is the one that owes them; `grep -rnE "backend|SIMULATION_BACKEND"
+tools/cite_tools/generate/*.py` returns **four files** today and is the instrument. The two
+places this commit's own edits landed in —
+`tools/cite_tools/validate/referential.py`'s `divergent-counterpart-backend` docstring and
+`tools/cite_tools/model/ids.py`'s `SIMULATION_BACKEND` comment — were corrected, because both
+justified their count by naming `hosted_by` and could not be left saying "three" once it was
+gone.
 
-**The class is: a test that reads the live generated plan instead of building its own document.**
+### #40 — `test_plan.py` on a paired checkout — CLOSED 2026-09-08
+**Closed by construction** on the branch `feat/hosted-by-derived`, and the distinction matters:
+it is not closed by anyone having run against a paired model. The committed model stays
+`twin: {sides: single}` and nothing here flips it.
 
-**Possibly already fixed — verify by running, not by grep.** `test_plan.py` now holds 76 tests
-including paired ones. Only a run against a paired model settles it.
+**What the class was:** a test that reads the live generated plan instead of building its own
+document, so it asserts about whichever model the checkout happens to carry. On a checkout
+flipped to `pair`, `_document()["plan"]["sides"].append(_counterpart(...))` produced two sides
+named `counterpart` and the test failed on its own fixture rather than on what it asked about.
+
+**What replaces it.** `_document()` is gone. `_live_document()` is the only reader of the live
+plan and a test may not call it: `test_only_the_two_shape_helpers_read_the_live_plan` parses
+the module and requires its callers to be exactly `_paired_document` and `_solo_document`.
+Parsed rather than grepped, because a guard that counts a string counts its own message.
+Every test that edits a plan document now takes a `document` fixture parametrised over
+**both** shapes, so both run on every checkout and neither can be the one nobody tried; the
+three tests that APPEND a side take `_solo_document()` by name and say why.
+`test_two_sides_with_the_same_name_are_refused` is one of those three — #45's second half, the
+one that *"passes for a partly accidental reason"*.
+
+**One thing the fixtures got wrong and this fixes.** `_paired_document()` appended the
+counterpart's `sides:` entry and nothing else, while `_solo_document()`'s own docstring says
+pairing adds exactly two things — the side, and a `counterpart_backend` on every controller
+manager. So the paired fixture built a document no generator emits. It now applies both, in
+ADR-0041 Decision 3's shape.
+
+Reproduce: `./scripts/test` runs it, or in the container
+`python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q` — **119 passed** at this
+commit, against 76 tests before. **What is still not evidenced:** no run against a paired model
+was taken here, so what is closed is the class, not a measurement of it.
 
 ### #47 — Five L5 review findings, with their content
 Recorded here because they were once sent as bare identifiers and an agent correctly refused to

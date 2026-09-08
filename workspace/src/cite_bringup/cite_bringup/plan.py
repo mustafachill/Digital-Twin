@@ -119,6 +119,27 @@ DOMAIN_BAND = range(1, 102)
 #: calling it the plant.
 PLANT_SIDE = "plant"
 
+#: The side that exists only where the zone declares ``twin.sides: pair``.
+#:
+#: The second half of the pair `PLANT_SIDE` above states, mirroring
+#: `cite_tools.model.ids.SIDES` for the same reason and with the same limit: this
+#: is a different build unit that cannot import that one, and it does not DECIDE
+#: which sides exist. Which sides a zone has is read out of the plan's own
+#: `sides:` block, and which side an asset states a backend for is read off the
+#: controller manager - `ControllerManager.backend_on` is the one place those two
+#: names are turned into a value.
+COUNTERPART_SIDE = "counterpart"
+
+#: Which plan key states each side's backend. A fact about the plan SCHEMA - what
+#: the parser reads a side's backend out of - and deliberately not a second copy
+#: of the value map: `ControllerManager.backend_on` answers what the backend IS,
+#: and this answers what a refusal should call it, so a message and the accessor
+#: behind it cannot name different fields.
+BACKEND_FIELD_BY_SIDE = {
+    PLANT_SIDE: "backend",
+    COUNTERPART_SIDE: "counterpart_backend",
+}
+
 
 class PlanError(Exception):
     """The bring-up plan is missing, malformed, or references something absent."""
@@ -322,7 +343,6 @@ class ControllerManager:
     #: it for every asset there, so `None` means "there is no such side" and
     #: never "the model left the key out" (ADR-0041, Decision 3).
     counterpart_backend: str | None
-    hosted_by: str
     description_topic: str
     #: Where this asset's joint state is published, stated by the plan rather
     #: than composed by a consumer (see the generator's own note).
@@ -344,6 +364,44 @@ class ControllerManager:
     #: Keyed by the names in `ARM_KEYS`, delivered by the same route and for the
     #: same reason as `gripper` above.
     arm: Mapping[str, float]
+
+    def backend_on(self, side: str) -> str:
+        """Return the `ros2_control` backend this asset loads on ``side``, or refuse.
+
+        The one place in `cite_bringup` that turns an (asset, side) into a
+        backend. A backend is selected per (asset, side) — that is the grain
+        ADR-0041 Decision 3 chose and what Phase 2.B is made of — and the pair of
+        plan keys that state it is exactly the kind of value that acquires a
+        second reader, disagrees with the first and is discovered on a physical
+        machine. So callers ask for a side by name and never reach for the field.
+
+        By identity and never by index, for the reason `Plan.side_named` gives at
+        length: a caller who meant the counterpart and got whatever is second is
+        the failure this project refuses positional meaning to avoid.
+
+        **A side this asset states no backend for is refused, not reported as
+        `None`.** `counterpart_backend` is `None` exactly when the zone has no
+        counterpart — never when the model left the key out (see the field's own
+        note) — so the honest answer to "what does the counterpart load" on an
+        untwinned zone is that there is no such side, which is what
+        `SideNotDeclaredError` says. Returning `None` would hand every caller the
+        same three-way branch and let one of them read "no side" as "simulated".
+        """
+        if side == PLANT_SIDE:
+            return self.backend
+        if side == COUNTERPART_SIDE and self.counterpart_backend is not None:
+            return self.counterpart_backend
+        declared = (PLANT_SIDE,) if self.counterpart_backend is None else (
+            PLANT_SIDE,
+            COUNTERPART_SIDE,
+        )
+        stated = ", ".join(repr(name) for name in declared)
+        raise SideNotDeclaredError(
+            f"asset {self.asset!r} states no backend for a side named {side!r}; "
+            f"it states one for {stated}. Whether a zone runs as a pair is an L0 "
+            "fact - set `twin: {sides: pair}` on the zone and regenerate, rather "
+            "than asking bring-up to invent a side."
+        )
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Group the controllers by stage, in ascending order.
@@ -957,19 +1015,29 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
     reverse case — a physical plant on a paired zone — cannot reach this
     function: the L0 validator refuses to generate a plan that names one.
     """
-    # Keyed by the plan field the value came from rather than by a side name:
-    # which side `counterpart_backend` describes is stated once, in the plan's
-    # own `sides:` block and in L0 behind it, and repeating it here would be a
-    # third place the pair of names lives.
-    hardware = tuple(
-        (manager, field, backend)
-        for manager in plan.controller_managers
-        for field, backend in (
-            ("backend", manager.backend),
-            ("counterpart_backend", manager.counterpart_backend),
-        )
-        if backend is not None and backend != SIMULATION_BACKEND
-    )
+    # Asked side by side and through `ControllerManager.backend_on`, which is the
+    # one place an (asset, side) becomes a backend. Reading `backend` and
+    # `counterpart_backend` here as well would be the value-in-two-places P1
+    # forbids, and the field that stopped being read is the one that goes stale.
+    #
+    # Reported by the plan FIELD rather than by the side name, because that is
+    # what this refusal has always printed and what its tests assert; the map
+    # from one to the other is `BACKEND_FIELD_BY_SIDE`, beside the constants.
+    #
+    # A side the asset states no backend for is skipped rather than defaulted: on
+    # an untwinned zone the counterpart does not exist, so there is no machine
+    # behind it to command. That is `backend_on`'s judgement and not a second
+    # one - an asset that stopped stating a side would stop being gated here only
+    # because the accessor says the side is gone.
+    hardware = []
+    for manager in plan.controller_managers:
+        for side, field in BACKEND_FIELD_BY_SIDE.items():
+            try:
+                backend = manager.backend_on(side)
+            except SideNotDeclaredError:
+                continue
+            if backend != SIMULATION_BACKEND:
+                hardware.append((manager, field, backend))
     if not hardware:
         return
     if environ.get(HARDWARE_OPT_IN_ENV) == HARDWARE_OPT_IN_VALUE:
@@ -997,7 +1065,18 @@ def _manager(entry: object, index: int) -> ControllerManager:
         node=_require(entry, "node", where),
         backend=_require(entry, "backend", where),
         counterpart_backend=_optional(entry, "counterpart_backend"),
-        hosted_by=_require(entry, "hosted_by", where),
+        # A key naming what hosts this manager's controller manager used to be
+        # read here and is not any more. ADR-0048 clause 3 removed it from the
+        # plan: it was a total function of the backend the plan already states
+        # per side, and nothing read it. A consumer that needs the distinction
+        # derives it from `ControllerManager.backend_on` instead.
+        #
+        # It is IGNORED rather than rejected, and that is a decision. The document
+        # most likely to still carry it is a plan left in a stale build tree, and
+        # refusing that plan would report a key where the cause is a rebuild. So
+        # the parser stops reading it and says nothing about its presence -
+        # pinned by `test_a_plan_carrying_the_removed_host_key_loads_cleanly`,
+        # which is the one test allowed to spell the key.
         description_topic=_require(entry, "description_topic", where),
         joint_state_topic=_require(entry, "joint_state_topic", where),
         description=resolve_uri(_require(entry, "description", where)),
