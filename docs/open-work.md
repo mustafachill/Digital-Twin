@@ -74,6 +74,19 @@ the eight table rows below were re-derived** with the commands they name on this
 not move and the campaign row did. **Two were not re-read** — the environment row, which needs
 the container, and the CI row, which needs an authenticated `gh` and does not have one here.
 
+**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived`, after a second review round
+and a `tester` run over the fix commit. **Three items are new** — **#62**, the two `cite_twin`
+fixtures that append a counterpart unconditionally, which is #40's class alive one package over;
+**#63**, the paired-plan document shape hand-built in five fixtures and tied to the generator in
+none; and **#64**, a host-virtualenv `typer`/`click` incompatibility that breaks
+`cite_tools.cli --help`. **#40 is corrected twice**: its closure is scoped to `cite_bringup`,
+because the guard that holds it parses `Path(__file__)` and reaches one file, and its
+measurement table's `single` row is re-measured — it read **205** and is **209**, which is what
+the `pair` row already read. **#45's instrument count is corrected** from five lines in four
+files to **6 in 5**, one of the six being the sentence that names the instrument. Every figure
+in these edits was re-measured in this checkout on this date by the change that writes them; no
+table row in the section below was re-read.
+
 ---
 
 ## Where the repository stood when this was written
@@ -929,10 +942,23 @@ the same argument where ADR-0041 still rests on it. A stale count is not the sam
 that was always wrong, and only the first of those is what happened here.**]**
 **That entry is deliberately untouched here**, because the change that
 makes those sites per-side is the one that owes them; `grep -rn "instance.hardware.backend"
-tools/cite_tools` returns **five lines in four files** today and is the instrument — three of
+tools/cite_tools` returns **6 lines in 5 files** and is the instrument — three of
 them branch (the `ros2_control` plugin in `model/resolve.py`, the collision scheme in
-`generate/description.py`, `use_sim_time` in `generate/control.py`) and one merely restates the
-value into the plan. **The instrument this entry first named,
+`generate/description.py`, `use_sim_time` in `generate/control.py`), one restates the
+value into the plan, one is `model/resolve.py`'s refusal message beside its own branch, and the
+sixth is `validate/referential.py`'s own sentence naming this instrument.
+**[Corrected 2026-09-08 — this read "five lines in four files today", measured before the
+sentence naming the instrument was written into `referential.py`, which put the search scope
+inside the search.** Re-run in this checkout on 2026-09-08 it is 6 in 5, and the sixth is that
+sentence: **a guard that counts a string counts its own message**, which is the hazard this
+branch named in `test_plan.py` and then walked into one file over. That docstring now states
+6/5 and says which one is prose.**]**
+**Ask the instrument for its reach as well as its count**: it reaches every read through
+`ResolvedAsset.instance`, which is every **generator** site, and not every read of the plant's
+backend — `model/schema.py`, `cli.py` and three lines in `validate/referential.py` spell it
+`asset.hardware.backend` off the raw model asset, and none of them generates an artifact. The
+docstring claimed the wider set and was corrected with the count.
+**The instrument this entry first named,
 `grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`, could not reach the
 first of those three**, which lives outside `generate/`, so it under-read the very list it was
 offered as the answer to. The two
@@ -953,10 +979,20 @@ document, so it asserts about whichever model the checkout happens to carry. On 
 flipped to `pair`, `_document()["plan"]["sides"].append(_counterpart(...))` produced two sides
 named `counterpart` and the test failed on its own fixture rather than on what it asked about.
 **[Corrected 2026-09-08 — that describes the tree BEFORE an earlier fixture fix, not before
-this commit.** At `e18251e` no test does it: all three `_counterpart(...)` appenders were
-already on `_solo_document()`, put there by the three that #45's older text records as
-"fixed". Written as the state this change found, it credits this change with a failure that
-was already gone — and the measurement below says so directly, since the base passes paired.**]**
+this commit.** At `e18251e` no test does it unconditionally. Written as the state this change
+found, it credits this change with a failure that was already gone — and the measurement below
+says so directly, since the base passes paired.
+
+**The first wording of this marker miscounted the base it was about**, which is worth keeping
+because the whole subject of the marker is the base state. It read *"all three
+`_counterpart(...)` appenders were already on `_solo_document()`"*; at `e18251e` there are
+**two** on `_solo_document()`, at `:987` and `:1114`, and the third `_counterpart()` call is
+inside `_paired_document` on `_document()`, guarded by `if not any(side["name"] ==
+"counterpart" ...)`. Three is the **branch's** count, not the base's. Verified on 2026-09-08
+with `git show e18251e:workspace/src/cite_bringup/test/test_plan.py | grep -n "_counterpart("`,
+which returns four lines — the definition at `:931` and the three calls. The load-bearing
+claim is untouched: nothing at `e18251e` appended a counterpart unconditionally, which is why
+the base row passes paired.**]**
 
 **What replaces it.** `_document()` is gone. `_live_document()` is the only reader of the live
 plan and a test may not call it: `test_only_the_two_shape_helpers_read_the_live_plan` parses
@@ -995,12 +1031,33 @@ Reverted with `git checkout -- model/facility/zones.yaml workspace/src/cite_gene
 |---|---|---|---|
 | `e18251e` (base) | `single` | **84 passed** | not taken |
 | `e18251e` (base) | `pair` | **84 passed** | not taken |
-| branch, after review fixes | `single` | **124 passed** | **205 passed** |
-| branch, after review fixes | `pair` | **124 passed** | **209 passed** |
+| branch, after two review rounds | `single` | **124 passed** | **209 passed** |
+| branch, after two review rounds | `pair` | **124 passed** | **209 passed** |
+
+**[Corrected 2026-09-08 — the `single` suite row read 205 and nobody can source it.** Two
+readers went looking: a `tester` could reproduce 205 at neither commit (it read 204 at
+`8b74f80`), and the project owner ran
+`./scripts/enter dev … pytest workspace/src/cite_bringup/test --collect-only -q` on the
+committed single-sided model and got **209 collected**. The row was re-measured a third time on
+2026-09-08 in this checkout, by the change that writes this correction, on the same tree as the
+`pair` row: **209 collected and 209 passed on `single`, 209 collected and 209 passed on
+`pair`**, with `test_plan.py` at **124** on both. **The conclusion the table was offered for
+comes out stronger, not weaker** — the count does not move with the model, and now both rows
+say the same number rather than differing by four. Where the 205 came from is **unestablished**
+and is left stated rather than smoothed over; the branch has gained tests since it was written,
+so a stale reading is the likeliest explanation and nobody has shown it.**]**
 
 **Read the base row before reading the branch row.** The base passes paired too, so what this
-change closed is the CLASS — a test may no longer read the live plan, and the guard says so by
-parsing rather than by remembering — and **not** a set of failures that were still occurring.
+change closed is the class **in `cite_bringup`** — a test in that package may no longer read the
+live plan, and the guard says so by parsing rather than by remembering — and **not** a set of
+failures that were still occurring.
+
+**The scope is the package and not the repository, and this entry said otherwise until
+2026-09-08.** `test_nothing_reaches_the_live_plan_around_that_reader` and its sibling both parse
+`Path(__file__)`, so each guards **one file**, and nothing outside `cite_bringup/test/` is
+reached by either. The class is alive one package over: **#62** records the two `cite_twin`
+fixtures that still append a counterpart unconditionally, measured refusing on a paired tree on
+2026-09-08. Close a class only as far as the guard walks.
 The fourteen failures this entry was opened for were already gone at `e18251e`. Saying this
 change fixed them would be claiming a measurement nobody took.
 
@@ -1018,6 +1075,81 @@ load-time refusal ADR-0048's promotion section records, one for the hardware gat
 
 Reproduce with `./scripts/test`, or in the container
 `python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q`.
+
+### #62 — `cite_twin`'s two launch fixtures append a counterpart unconditionally
+`workspace/src/cite_twin/test/test_twin_boundary_launch.py:97-117` and
+`test_twin_boundary_paired_launch.py:119-140` each build their paired plan the same way: read
+the live generated plan with `default_plan_path(...)`, `plan["sides"].append({"name":
+"counterpart", ...})` with **no test for a counterpart already being there**, write it to a
+temporary file, and bind the result to a module-level `PLAN_PATH`. On a checkout whose L0
+declares `twin: {sides: pair}` the live plan already carries that side, so the fixture writes a
+document with **two sides named `counterpart`** and `cite_bringup.plan.load` refuses it. That is
+**#40 verbatim**, in the package that is Phase 2.A's subject.
+
+**Measured on 2026-09-08, in this checkout, one reading.** Method: flip
+`model/facility/zones.yaml` to `sides: pair`, `./scripts/validate-model --write`, then import
+each module in the container and call `load(PLAN_PATH)`. Both give
+`SideNotDeclaredError: … two sides are named 'counterpart'`. Reverted, with `MODEL_HASH`
+verified back at `95dbbdd9…`.
+
+**Where it bites is later than it looks, and the difference matters for whoever fixes it.**
+Collection **passes** — `pytest --collect-only` over both modules returns `2 tests collected` on
+a paired tree — because `_paired_plan()` only *writes* the file; nothing at module scope loads
+it. The refusal fires when the boundary node reads the plan at launch, so the symptom is a
+launch test whose node exits, not an import error. An earlier reading of this said the module
+errors at collection; it does not.
+
+**Pre-existing, and not introduced by ADR-0048 clause 3.** The same fixtures behave identically
+at `e18251e`. What changed is that #40's closure was written as a repository-wide statement
+about the class while the guard that holds it parses `Path(__file__)` and reaches one file.
+
+**The fix is one line in each**, and it is already written twice in `cite_bringup`:
+`if not any(side["name"] == "counterpart" for side in sides):` around the append, which is what
+`test_plan.py`'s `_paired_document`, `test_pair.py`'s `_paired_plan` and
+`test_simulation_launch.py`'s `_paired` all do. **Deliberately not fixed on
+`feat/hosted-by-derived`**: `cite_twin` is L5 and outside that branch's subject, and an L5 edit
+inside a plan-schema change is the blast-radius widening ADR-0048's own promotion section
+declines for the same package.
+
+**It bites the day anyone pairs the model**, which ADR-0048 clause 2 makes routine — a paired
+checkout is how a pair is brought up at all, and `./scripts/sim --pair` refuses on a clean
+checkout precisely because the shipped model is `single`. Cross-references: #40, whose class this
+is, and #63, which is the same fixtures counted a different way.
+
+Reported by review on 2026-09-08 (G-2) and filed rather than fixed, at the project owner's
+instruction.
+
+### #63 — The paired-plan document shape is hand-built in five places and tied to the generator in none
+Five fixtures now spell out what a paired plan looks like: `cite_bringup/test/test_plan.py`'s
+`_paired_document`, `test_pair.py`'s `_paired_plan`, `test_simulation_launch.py`'s `_paired`,
+and `cite_twin`'s two from #62. Each appends the `sides:` entry and sets `counterpart_backend`
+on every controller manager, and **not one of them is derived from, or checked against, the
+generator that emits the real thing**.
+
+**Why nothing catches the drift.** `tools/tests` asserts what the generator writes;
+`cite_bringup`'s and `cite_twin`'s fixtures assert against a hand-written copy of it. Those are
+two build units — host tooling and ROS packages — and neither suite can see the other's
+fixtures, so the copy can fall behind the generator with every test green. **The next key a
+paired zone acquires is five edits**, and the failure mode if one is missed is the worst
+available: the suite stays green while a real generated plan is refused, or accepted for the
+wrong shape.
+
+**It is a P1 shape** — one value described in six places — and it became load-bearing rather
+than merely untidy when `_every_declared_side_states_a_backend` landed on 2026-09-08: `load`
+now refuses a paired document that omits `counterpart_backend`, so a hand-built paired document
+is no longer just approximate, it is the thing under test. Two of the five were caught omitting
+exactly that key by that refusal, which is the demonstration rather than the argument.
+
+**Two directions, and neither is chosen here.** Either one shared helper that builds the paired
+document once and the five import it — cheap, but it still asserts nothing about the generator
+— or a contract test that **regenerates** a paired plan and loads it, which is the only shape
+that closes the build-unit gap. The second needs a decision about where a test may regenerate
+L0, which is not this item's to take.
+
+Cross-references: #62, which is two of the five and a live defect on its own; #38, which is the
+change that makes the generator sites per-side and will move this shape again.
+
+Reported by review on 2026-09-08 (R-06) and filed rather than fixed.
 
 ### #47 — Five L5 review findings, with their content
 Recorded here because they were once sent as bare identifiers and an agent correctly refused to
@@ -1047,6 +1179,36 @@ guess.
 ## 4. Instrument honesty
 
 Every item here misled this project at least once, including in the session that wrote this file.
+
+### #64 — `cite_tools.cli --help` crashes in the host virtualenv: `typer` is pinned and `click` is not
+`.venv/bin/python -m cite_tools.cli --help` exits **1** with
+`TypeError: Parameter.make_metavar() missing 1 required positional argument: 'ctx'`, raised
+inside `typer/rich_utils.py:369`. So does `--help` on any subcommand. The **commands themselves
+work** — `… cli validate` exits 0 — and every `./scripts/*` entry point works, which is why this
+had gone unnoticed: nothing in the quality gate asks the CLI to describe itself.
+
+**Cause, read from the pins rather than guessed.** `requirements/tools.txt:32` pins
+`typer==0.13.1`; **`click` is not pinned at all**, and the resolved version in this virtualenv is
+**8.5.0**, which changed `Parameter.make_metavar()` to require a `ctx`. `typer` 0.13.1 calls it
+with none. Neither package is a ROS dependency, so this is host tooling and `requirements/` is
+its only home (`requirements/README.md`).
+
+**Not this branch's, and measured so.** It reproduces at base `e18251e`, and
+`git diff e18251e -- requirements/` is **empty** on `feat/hosted-by-derived`, so nothing here
+moved a pin. It is an environment item, filed rather than chased.
+
+**What it costs and what it does not.** It costs a reader the CLI's own documentation, which is
+the instrument anyone reaches for first when `./scripts/*` is not the right door. It costs no
+gate: the container has neither `typer` nor `cite_tools` installed, so CI never runs this path
+at all — which is also why a fix has to be verified on the host and cannot be verified by
+`./scripts/test`.
+
+**The obvious direction is to pin `click` beside `typer`**, at a version 0.13.1 accepts, or to
+move `typer` forward to one that accepts click 8.5. Which of the two is a dependency decision
+and is not taken here; `./scripts/audit-deps` and `requirements/README.md` are where it belongs.
+
+Reported by `tester` on 2026-09-08 (T-02) and re-reproduced the same day by the change that
+files it.
 
 ### #52 — WITHDRAWN 2026-09-01: the verdict line distinguishes three states, and CI's teardown is read and clean
 **This item was wrong in both of its claims, and it is left here rather than deleted because how

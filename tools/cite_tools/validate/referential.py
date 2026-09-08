@@ -351,10 +351,24 @@ def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding
     already states per side, and nothing read it.) Meanwhile the collision
     scheme, added 2026-08-31, was never listed at all. So a count in prose is a
     claim with an expiry date; `grep -rn "instance.hardware.backend"
-    tools/cite_tools` is the instrument — it reaches every read of the PLANT's
-    backend, in `model/` as well as in `generate/`, which a glob over
-    `generate/*.py` does not — and the record's own copies of the count are stale
-    until the change that makes these sites per-side corrects them.
+    tools/cite_tools` is the instrument.
+
+    WHAT THAT INSTRUMENT REACHES, STATED AS WHAT IT IS. It reaches every read
+    through `ResolvedAsset.instance` — which is every GENERATOR site, in
+    `model/` as well as in `generate/`, where a glob over `generate/*.py` misses
+    the first of the three. It does NOT reach a read off the raw model asset,
+    spelled `asset.hardware.backend`: `model/schema.py`'s counterpart fallback,
+    `cli.py`'s asset table and three lines in this file read it that way, and
+    not one of them generates an artifact. This docstring claimed "every read of
+    the PLANT's backend" and that is the wider set.
+
+    AND IT COUNTS ITSELF. The instrument returns **6 lines in 5 files** in this
+    checkout on 2026-09-08, and one of the six is the sentence above, because
+    this file is inside the search scope — the same "a guard that counts a
+    string counts its own message" hazard the guard in
+    `cite_bringup/test/test_plan.py` is parsed rather than grepped to avoid. Five
+    are reads; one is prose about them. The record's own copies of the count are
+    stale until the change that makes these sites per-side corrects them.
 
     WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
     `backend` stays legal and stays byte-identical to omitting it, which is the

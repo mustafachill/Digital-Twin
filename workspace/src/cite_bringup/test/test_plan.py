@@ -110,14 +110,50 @@ def _enclosing_functions(tree: ast.Module, nodes: object) -> set[str]:
     By identity, since `in` over a container of AST nodes falls back to `is`;
     two syntactically identical calls in two functions are two different nodes,
     which is what makes this able to name the offender.
+
+    `AsyncFunctionDef` as well as `FunctionDef`, because a node inside an async
+    function IS inside a function and a walk that knows only the synchronous
+    kind reports it as belonging to nothing - which the caller below reads as a
+    finding rather than as a pass, but only because it asks the question in the
+    total form. Both kinds here, so the two spellings answer alike.
     """
     return {
         function.name
         for function in ast.walk(tree)
-        if isinstance(function, ast.FunctionDef)
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
         for inner in ast.walk(function)
         if any(inner is node for node in nodes)
     }
+
+
+def _not_owned_by(tree: ast.Module, nodes: object, owner: str) -> list[ast.AST]:
+    """Return the given nodes not inside `owner`, and inside nothing else.
+
+    Asked node by node, and that is the guard rather than a detail of it. A set
+    of enclosing function names is EMPTY for a node written at module scope or
+    in a class body, so the subset form - `_enclosing_functions(tree, nodes) <=
+    {owner}` - HOLDS VACUOUSLY for a bypass that names no function at all. That
+    is not hypothetical: a module-level `yaml.safe_load(_generated().read_text())`
+    and a module-level `Path(resolve_uri(GENERATED_PLAN))` were both written
+    above `_live_document` and left both halves of the subset form green. And it
+    is the shape most likely to be copied here, since reading a plan at module
+    scope is an established pattern one package over -
+    `test_grasp_predicate_launch.py`, `test_gripper_deadline_launch.py` and
+    `cite_twin`'s `test_twin_boundary_launch.py` all do it.
+
+    Requiring each node to name `owner` cannot be satisfied by naming nobody.
+    """
+    return [node for node in nodes if _enclosing_functions(tree, [node]) != {owner}]
+
+
+def _named_or_module_scope(tree: ast.Module, nodes: object) -> str:
+    """Say where the offending nodes are, since a module-scope one has no name."""
+    nodes = list(nodes)
+    if not nodes:
+        return "nobody"
+    named = sorted(_enclosing_functions(tree, nodes))
+    where = f"line(s) {sorted({getattr(node, 'lineno', 0) for node in nodes})}"
+    return f"{named} at {where}" if named else f"module or class scope, at {where}"
 
 
 def _live_document() -> dict:
@@ -1279,6 +1315,15 @@ def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
     accessor must be the direct argument of `load`, and the URI constant beneath
     it may be read nowhere but the accessor - otherwise
     `Path(resolve_uri(GENERATED_PLAN))` is the same reach with one more step.
+
+    Asked TOTALLY rather than as a subset, via `_not_owned_by`: every offending
+    node must name `_live_document` itself. Written as
+    `_enclosing_functions(tree, loose) <= {_LIVE_READER}` this guard passed a
+    module-level read of the live plan, because a node at module scope is inside
+    no function and contributes no name to the set - so both halves of the
+    subset form held for a bypass that was demonstrated here. The sibling guard
+    above never had that hole, and not by design: its `len(calls)` clause counts
+    a call the caller set cannot attribute.
     """
     tree = _this_module()
 
@@ -1297,9 +1342,10 @@ def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
         call for call in _calls_to(tree, _PLAN_PATH_READER)
         if call not in handed_straight_to_the_loader
     ]
-    assert _enclosing_functions(tree, loose) <= {_LIVE_READER}, (
+    stray = _not_owned_by(tree, loose, _LIVE_READER)
+    assert not stray, (
         f"{_PLAN_PATH_READER}() is called outside `load(...)` by "
-        f"{sorted(_enclosing_functions(tree, loose))}; only {_LIVE_READER!r} may "
+        f"{_named_or_module_scope(tree, stray)}; only {_LIVE_READER!r} may "
         "do that. Reading the generated plan's text yourself gives you whichever "
         "shape this checkout's model declares, which is the hazard "
         f"{_LIVE_READER!r} exists to contain - take the `document` fixture, or "
@@ -1313,9 +1359,10 @@ def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
         and node.id == _PLAN_URI
         and isinstance(node.ctx, ast.Load)
     ]
-    assert _enclosing_functions(tree, reads_of_the_uri) == {_PLAN_PATH_READER}, (
+    elsewhere = _not_owned_by(tree, reads_of_the_uri, _PLAN_PATH_READER)
+    assert reads_of_the_uri and not elsewhere, (
         f"{_PLAN_URI} is read by "
-        f"{sorted(_enclosing_functions(tree, reads_of_the_uri))}; only "
+        f"{_named_or_module_scope(tree, elsewhere)}; only "
         f"{_PLAN_PATH_READER!r} may resolve it. Resolving the URI yourself walks "
         "around both guards above and lands on the same live document"
     )

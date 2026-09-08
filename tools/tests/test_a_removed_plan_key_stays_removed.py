@@ -41,13 +41,27 @@ REMOVED_KEY = "hosted_by"
 #: Where a source file is read as instruction. `docs/` is deliberately absent: a
 #: decision record states what it decided, and open-work names what closed.
 #:
-#: Everything else this repository tracks IS here, and that is the point of the
-#: list rather than an accident of which trees came to mind. `model/` is L0 and
-#: is the layer a reinstated key would most plausibly be declared in; `.github/`
-#: and `infra/` carry the CI and container definitions, which are read as
-#: instruction exactly as source is. The list held only the first four when this
-#: guard was written, leaving those three outside a guard whose own docstring
-#: said it covered every tree code is read out of.
+#: A NAMED LIST OF TREES, and not the whole repository. Each is here for a
+#: reason: `model/` is L0 and is the layer a reinstated key would most plausibly
+#: be declared in, and `.github/` and `infra/` carry the CI and container
+#: definitions, which are read as instruction exactly as source is. The list
+#: held only the first four when this guard was written, leaving those three
+#: outside a guard whose own docstring said it covered every tree code is read
+#: out of.
+#:
+#: **What is outside it, stated because this comment claimed the opposite.** It
+#: read "everything else this repository tracks IS here", which is measurably
+#: false: `git ls-files | grep -v -E
+#: "^(workspace|tools|tests|scripts|model|.github|infra|docs)/" | wc -l` returns
+#: **37** in this checkout on 2026-09-08. Those 37 are the root files
+#: (`CLAUDE.md`, `README.md`, the dotfiles), `assets/`, `external/` and
+#: `requirements/`. Several of them are configuration read as instruction on
+#: exactly the argument that admitted `.github/` — `external/cite.repos`,
+#: `requirements/*.txt`, `assets/manifest.yaml`,
+#: `.devcontainer/devcontainer.json` — so their absence is a boundary nobody has
+#: moved rather than a reasoned exclusion, and the honest reading of this guard
+#: is "these seven trees", never "everywhere". Run the command before restating
+#: the number.
 GUARDED_TREES = ("workspace", "tools", "tests", "scripts", "model", ".github", "infra")
 
 #: Files whose subject IS the removed key, named relative to the repository root.

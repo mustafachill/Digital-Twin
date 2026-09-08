@@ -164,12 +164,11 @@ regeneration. Pinned by `test_a_plan_carrying_the_removed_host_key_loads_cleanly
 
 **What holds the removal, since a grep run once by the change that deletes a field says nothing
 about the change after.** `tools/tests/test_a_removed_plan_key_stays_removed.py` parametrises
-over every tracked file under the trees code and configuration live in — `workspace/`,
-`tools/`, `tests/`, `scripts/`, `model/`, `.github/` and `infra/` — and fails if any of them
-states the name. **[Overtaken 2026-09-08 — this sentence named the first four only, which was
-what the guard walked when this section was written; the last three were added the same day,
-after review pointed out that the guard's own docstring claimed every tree code is read out of.
-Ask `GUARDED_TREES` in that file rather than this list.]** `docs/` is deliberately outside it: a record states what it decided.
+over every tracked file under `workspace/`, `tools/`, `tests/` and `scripts/` and fails if any
+of them states the name. **[Overtaken 2026-09-08 — three more trees were added the same day,
+after review pointed out that the guard's own docstring claimed every tree code is read out of:
+it walks `model/`, `.github/` and `infra/` as well now. Ask `GUARDED_TREES` in that file rather
+than this list.]** `docs/` is deliberately outside it: a record states what it decided.
 The two exemptions are the guard itself and the `cite_bringup` test above, and a second test
 fails if either stops being about the removal — an exemption naming a file that has moved on is
 an exemption nobody notices.
@@ -210,11 +209,11 @@ now apply ADR-0041 Decision 3's fallback as well.
 **What this promotion does not evidence.** Nothing here brings a cell up, let alone a pair.
 Clause 2 is untouched: no per-side artifact set exists, `divergent-counterpart-backend` still
 refuses a divergent counterpart at validation, and this change neither lifts that refusal nor
-moves a single generator site per-side. `backend_on` has two production callers —
-`require_hardware_opt_in` and the load-time refusal above — and its next is owed to the change
-that makes the remaining generator sites per-side. **[Overtaken 2026-09-08 — this read "one
-production caller today … its second and third are owed" until the load-time refusal landed
-later the same day.]** **`cite_twin.twin_boundary` builds the same map a fourth
+moves a single generator site per-side. `backend_on` has one production caller today —
+`require_hardware_opt_in` — and its second and third are owed to the change that makes the
+remaining generator sites per-side. **[Overtaken 2026-09-08 — the load-time refusal
+`_every_declared_side_states_a_backend` landed later the same day and is the second of those
+callers; only the third is still owed.]** **`cite_twin.twin_boundary` builds the same map a fourth
 time**, at its `Deployment` construction, and was deliberately left alone here; it is the next
 caller this accessor should have.
 
@@ -247,6 +246,15 @@ the three-way branch `backend_on`'s docstring argues against. **Whoever migrates
 a total sibling accessor beside `backend_on` or accepts that cost knowingly.** A migration
 attempted as a drop-in is the failure this paragraph exists to prevent. Nothing is broken
 today: the two maps were driven over 96 mode combinations and answered identically in all 96.
+**[Corrected 2026-09-08 — the 96 has no source.** It reached this record through the
+implementing brief from a `safety-auditor` report with its provenance stripped, and review could
+reproduce neither the number nor where it came from. What replaces it is checkable and stronger:
+built from the generated paired plan the two maps hold the SAME backend for every `(asset, side)`
+this cell declares — **6** of them, three assets × two sides — and driving both through
+`physical_sides_commanded` and `has_a_far_side` over 6 `TwinMode` values × 4 scopes, **24**
+combinations, finds **0** disagreements. Read on a regenerated paired plan on 2026-09-08, twice:
+once by review and once by the change that writes this marker. See the Correction section of this
+date.**]**
 The risk is the day one of them gains normalisation and the other does not.
 
 **And the cost this record stated for the change was wrong**, which is corrected in
@@ -288,6 +296,39 @@ merged one commit later. The transferable part is that **a status block written 
 commit ages at the rate of the branch beside it**, and a record written to unblock a piece of
 work will usually be falsified by that work. Writing "at `9233766`" is what made this cheap to
 find and repair.
+
+## Correction — 2026-09-08: a mode-combination figure with no source
+
+**What was wrong.** The 2026-09-08 promotion section closed its L5-migration paragraph with
+*"the two maps were driven over 96 mode combinations and answered identically in all 96."*
+Nobody can say where the 96 came from. It was produced by a `safety-auditor` reading, passed
+into the implementing brief **without its provenance**, and written into this record as a bare
+number. Review on the same day could reproduce neither the figure nor its source.
+
+**Why it matters more than the arithmetic.** CLAUDE.md §2's standing rule is that a figure names
+who measured it and over how many runs. An unsourced number in a permanent record is the failure
+that rule exists to prevent, and this one landed inside a promotion section whose whole subject is
+what is evidenced and what is not. The project owner records the provenance loss as **theirs**,
+not the implementing agent's.
+
+**What replaces it, and it is checkable rather than sampled.** Built from the generated paired
+plan, `cite_twin.mode.Deployment`'s side→backend map and `ControllerManager.backend_on` return
+the same backend for **6 of 6** `(asset, side)` pairs this cell declares — three assets × two
+sides, so an exhaustive comparison over the plan rather than a sample of it. Driven through
+`physical_sides_commanded` and `has_a_far_side` over 6 `TwinMode` values × 4 scopes, **24**
+combinations, **0** disagreements.
+
+**Two readings, both on 2026-09-08, on one checkout, with nothing registered in advance.** Review
+of this branch took the first; the change that writes this section took the second, by flipping
+`model/facility/zones.yaml` to `twin: {sides: pair}`, running `./scripts/validate-model --write`,
+building both maps from the regenerated plan, then reverting and verifying `MODEL_HASH` back at
+`95dbbdd9…`. **It is a statement about the plan this cell generates, not about every plan** — a
+zone with a mixed counterpart cannot be generated at all while clause 2's refusal stands, so the
+comparison has never been made over one.
+
+**What neither figure establishes.** Nothing here migrates the L5 map, and the paragraph the
+figure sits in argues against a drop-in migration for a reason the agreement does not touch: the
+two accessors differ in **totality**, not in the answers they give today.
 
 ## Context
 
