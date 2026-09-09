@@ -32,13 +32,16 @@ import yaml
 
 PACKAGE_URI_PREFIX = "package://"
 
-#: The one backend that cannot reach a physical machine. Every other value names
-#: a `ros2_control` plugin that drives real hardware, so the check below is an
-#: allowlist rather than a denylist: a backend nobody anticipated is refused
-#: rather than permitted. `cross-cutting-safety.md` requires that a hardware path
-#: is never reachable by omission, and a denylist is reachable by omission by
-#: construction.
-SIMULATION_BACKEND = "sim"
+# A restatement of the backend id `sim` used to live here, and the hardware
+# refusal below compared against it. ADR-0054 removed both: the id is a NAME, a
+# type may declare the vendor's physical `ros2_control` plugin under it, and that
+# record's Context measures this gate returning without refusing on exactly such
+# a model. What decides now is `commands_physical_hardware`, which the plan
+# states per (asset, side) because L0 declares it per backend beside the plugin
+# string it is about. The allowlist property the old comment claimed is what the
+# boolean actually delivers: the dangerous branch is the positive one, so a
+# backend nobody anticipated is refused unless someone wrote `true`, and there is
+# no name left to be wrong about.
 
 #: The deliberate opt-in. The same variable `scripts/_lib.sh` enforces at the
 #: shell boundary, so a person meets one name rather than two — but enforced here
@@ -107,11 +110,13 @@ DOMAIN_BAND = range(1, 102)
 
 #: The side the untwinned model already describes, by name.
 #:
-#: A second statement of a name `tools/cite_tools/model/ids.py` owns, for the
-#: same reason `SIMULATION_BACKEND` above is one: this is a different build unit
-#: that cannot import that one. As there, it does not DECIDE the value — it reads
-#: it out of the generated plan and refuses a plan that does not carry it, so the
-#: two cannot silently disagree.
+#: A second statement of a name `tools/cite_tools/model/ids.py` owns, because
+#: this is a different build unit that cannot import that one. It does not DECIDE
+#: the value — it reads it out of the generated plan and refuses a plan that does
+#: not carry it, so the two cannot silently disagree. (A restatement of the
+#: simulation backend id used to sit above on the same argument; ADR-0054 removed
+#: it with the gate that read it, and side names are the only cross-build-unit
+#: string left here.)
 #:
 #: Named rather than taken as `sides[0]`, and that distinction is the point.
 #: ADR-0044 refuses positional meaning for the offset because positional meaning
@@ -153,6 +158,17 @@ BACKEND_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
     {
         PLANT_SIDE: "backend",
         COUNTERPART_SIDE: "counterpart_backend",
+    }
+)
+
+#: The same map for the fact each side declares, which is what the hardware
+#: refusal decides on and therefore what its message names. Kept beside its
+#: backend sibling because the two are emitted, parsed and answered in lockstep:
+#: a manager states both keys for a side or neither (ADR-0054, decision 3).
+PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
+    {
+        PLANT_SIDE: "commands_physical_hardware",
+        COUNTERPART_SIDE: "counterpart_commands_physical_hardware",
     }
 )
 
@@ -359,6 +375,19 @@ class ControllerManager:
     #: it for every asset there, so `None` means "there is no such side" and
     #: never "the model left the key out" (ADR-0041, Decision 3).
     counterpart_backend: str | None
+    #: Whether this asset's PLANT backend can reach a physical machine, as the
+    #: L0 type declares it beside the plugin string it names (ADR-0054). This and
+    #: not `backend` is what `require_hardware_opt_in` decides on: an id is a
+    #: name, and a name says nothing about the plugin behind it.
+    #:
+    #: Read through `commands_physical_hardware_on` and never off this field —
+    #: see that accessor.
+    commands_physical_hardware: bool
+    #: The same fact for the counterpart side, `None` exactly where
+    #: `counterpart_backend` is `None`. The reader refuses a document that
+    #: states one of the pair without the other, so the two accessors can never
+    #: disagree about which sides this manager declares.
+    counterpart_commands_physical_hardware: bool | None
     description_topic: str
     #: Where this asset's joint state is published, stated by the plan rather
     #: than composed by a consumer (see the generator's own note).
@@ -433,6 +462,75 @@ class ControllerManager:
             "fact - set `twin: {sides: pair}` on the zone and regenerate, rather "
             "than asking bring-up to invent a side."
         )
+
+    def commands_physical_hardware_on(self, side: str) -> bool:
+        """Whether what this asset loads on ``side`` can reach a physical machine.
+
+        To the declared fact what `backend_on` is to the backend: **the one place
+        in `cite_bringup` that turns an (asset, side) into the answer**. Reading
+        `commands_physical_hardware` or its counterpart directly is the
+        value-in-two-places P1 forbids, and the field that stops being read is
+        the one that goes stale (ADR-0054, decision 3).
+
+        It refuses an undeclared side with the same `SideNotDeclaredError`, for
+        the same reason and with the same wording as `backend_on`: the two
+        accessors answer the same shape of question about the same grain, and a
+        caller must not be able to get "there is no such side" from one and an
+        answer from the other. Because the plan states both keys for a side or
+        neither, they cannot disagree about which sides exist.
+
+        **A caller that genuinely needs a total answer asks
+        `commands_physical_hardware_on_or_none`**, which is the sibling
+        `backend_on`'s docstring says whoever migrates `cite_twin` has to add.
+        Do not rebuild the `None` with a `try/except` at a new call site: that
+        re-creates the three-way branch this refusal exists to prevent, and one
+        of the three arms reads "no side" as "simulated".
+        """
+        answer = self.commands_physical_hardware_on_or_none(side)
+        if answer is not None:
+            return answer
+        stated = ", ".join(
+            repr(name)
+            for name in (
+                (PLANT_SIDE,)
+                if self.counterpart_commands_physical_hardware is None
+                else (PLANT_SIDE, COUNTERPART_SIDE)
+            )
+        )
+        raise SideNotDeclaredError(
+            f"asset {self.asset!r} states no hardware declaration for a side named "
+            f"{side!r}; it states one for {stated}. Whether a zone runs as a pair "
+            "is an L0 fact - set `twin: {sides: pair}` on the zone and regenerate, "
+            "rather than asking bring-up to invent a side."
+        )
+
+    def commands_physical_hardware_on_or_none(self, side: str) -> bool | None:
+        """Answer the same question, with `None` where the asset declares no such side.
+
+        **The total sibling, and it exists for one caller.** `cite_twin` builds a
+        `{asset: {side: fact}}` map straight off every controller manager,
+        including on the shipped untwinned plan where no manager declares a
+        counterpart. A refusing accessor there would raise inside
+        `TwinBoundary.__init__` on the model this repository actually ships, and
+        no existing test would catch it because both twin-boundary launch tests
+        fabricate a paired plan first. `backend_on`'s docstring priced exactly
+        this — *"whoever migrates it adds a total sibling accessor or accepts
+        that cost knowingly"* — and this is that accessor (ADR-0054, decision 2).
+
+        **`None` means "this asset has no such side" and never "simulated".**
+        `cite_twin.mode.Deployment` keeps that distinction three-valued on
+        purpose: `assets_without_a_far_side` tests `is None`, and collapsing it
+        to a bare `bool` makes every unpaired asset look like it has a simulated
+        far side, which silently retires the `PRECONDITION_FAILED` refusal of a
+        two-sided mode on a one-sided deployment. Any caller that wants a safety
+        decision rather than a shape must treat `None` as "no machine there"
+        explicitly, in one place, and never by truthiness.
+        """
+        if side == PLANT_SIDE:
+            return self.commands_physical_hardware
+        if side == COUNTERPART_SIDE:
+            return self.counterpart_commands_physical_hardware
+        return None
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
         """Group the controllers by stage, in ascending order.
@@ -1116,41 +1214,62 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
     EVERY SIDE, not only the plant. A backend is selected per (asset, side), so a
     twinned zone can name a physical machine on its counterpart while its plant
     stays simulated — which is exactly what Phase 2.B is (ADR-0041, Decision 3),
-    and what `MODE_VIRTUAL_LEAD` describes. Reading only `backend` here would let
+    and what `MODE_VIRTUAL_LEAD` describes. Reading only the plant here would let
     the far side become physical behind a gate that never looked at it. The
     reverse case — a physical plant on a paired zone — cannot reach this
-    function: the L0 validator refuses to generate a plan that names one.
+    function: the L0 validator refuses to generate a plan that declares one.
+
+    **IT DECIDES ON THE DECLARED FACT AND NOT ON THE BACKEND'S NAME.** This check
+    compared the backend id against the literal `sim`, and ADR-0054's Context
+    measures it returning without refusing — never having consulted
+    `CITE_ALLOW_HARDWARE` — on a model that declares the vendor's physical
+    `ros2_control` plugin under that id. Nothing anywhere constrained what plugin
+    an id could carry, so the allowlist was an allowlist over names, and a name
+    says nothing about the plugin behind it. L0 now declares per backend whether
+    it can reach a physical machine, the plan carries that fact per (asset,
+    side), and this refuses on it: a physical backend is refused whatever it is
+    called, and a simulated one is permitted whatever it is called.
+
+    **The allowlist property is kept and is now structural.** The dangerous
+    branch is the positive one, so reaching an arm requires that someone wrote
+    `true` in L0; there is no unanticipated name left to fall through. What
+    remains is that L0 can lie — `commands_physical_hardware: false` beside the
+    vendor's physical component passes here — which ADR-0054 names as the price
+    of refusing a transcribed list of plugin strings.
     """
-    # Asked side by side and through `ControllerManager.backend_on`, which is the
-    # one place an (asset, side) becomes a backend. Reading `backend` and
-    # `counterpart_backend` here as well would be the value-in-two-places P1
-    # forbids, and the field that stopped being read is the one that goes stale.
+    # Asked side by side and through `ControllerManager.commands_physical_hardware_on`,
+    # which is the one place an (asset, side) becomes this answer. Reading the raw
+    # keys here as well would be the value-in-two-places P1 forbids, and the field
+    # that stopped being read is the one that goes stale.
     #
     # Reported by the plan FIELD rather than by the side name, because that is
     # what this refusal has always printed and what its tests assert; the map
-    # from one to the other is `BACKEND_FIELD_BY_SIDE`, beside the constants.
+    # from one to the other is `PHYSICAL_FIELD_BY_SIDE`, beside the constants.
+    # The backend id is carried alongside as CONTEXT and decides nothing - a
+    # reader still has to be told which entry of the type's `hardware_backends`
+    # to go and look at.
     #
-    # A side the asset states no backend for is skipped rather than defaulted: on
+    # A side the asset declares nothing for is skipped rather than defaulted: on
     # an untwinned zone the counterpart does not exist, so there is no machine
-    # behind it to command. That is `backend_on`'s judgement and not a second
+    # behind it to command. That is the accessor's judgement and not a second
     # one - an asset that stopped stating a side would stop being gated here only
     # because the accessor says the side is gone.
     hardware = []
     for manager in plan.controller_managers:
-        for side, field in BACKEND_FIELD_BY_SIDE.items():
+        for side, field in PHYSICAL_FIELD_BY_SIDE.items():
             try:
-                backend = manager.backend_on(side)
+                physical = manager.commands_physical_hardware_on(side)
             except SideNotDeclaredError:
                 continue
-            if backend != SIMULATION_BACKEND:
-                hardware.append((manager, field, backend))
+            if physical:
+                hardware.append((manager, field, manager.backend_on(side)))
     if not hardware:
         return
     if environ.get(HARDWARE_OPT_IN_ENV) == HARDWARE_OPT_IN_VALUE:
         return
 
     named = ", ".join(
-        f"{manager.asset} ({field} {backend!r})"
+        f"{manager.asset} ({field}, backend {backend!r})"
         for manager, field, backend in sorted(hardware, key=lambda row: (row[0].asset, row[1]))
     )
     raise HardwareNotPermittedError(
@@ -1166,11 +1285,40 @@ def _manager(entry: object, index: int) -> ControllerManager:
     where = f"controller manager {index}"
     asset = _require(entry, "asset", where)
     where = f"controller manager {asset!r}"
+    counterpart_backend = _optional(entry, "counterpart_backend")
     return ControllerManager(
         asset=asset,
         node=_require(entry, "node", where),
         backend=_require(entry, "backend", where),
-        counterpart_backend=_optional(entry, "counterpart_backend"),
+        counterpart_backend=counterpart_backend,
+        # WITH `_require`, AND THE REMOVED-KEY PRECEDENT IN THE COMMENT
+        # IMMEDIATELY BELOW IS DELIBERATELY NOT FOLLOWED - it is a `_optional`
+        # beside a comment arguing for tolerance, and an implementer reading in
+        # file order meets it first.
+        #
+        # A removed key's presence is an absence of
+        # INFORMATION, so ignoring it is right; this key's absence is a SAFETY
+        # FACT NOBODY STATED. Parsing it with `_optional(..., False)` would make
+        # this layer strictly weaker than it was before ADR-0054 - a plan missing
+        # `backend` raises today - and the document most likely to be missing it
+        # is a stale installed `cite_generated`, which is what
+        # `simulation.launch.py` loads from the package share rather than from
+        # the source tree. Every manager would then read `False`, nothing would
+        # consult `CITE_ALLOW_HARDWARE`, and ADR-0054's own defect would reopen
+        # in a build state nobody notices. A `PlanError` naming the key sends its
+        # reader to rebuild; a default sends nobody anywhere.
+        commands_physical_hardware=_flag(
+            _require(entry, "commands_physical_hardware", where),
+            "commands_physical_hardware",
+            where,
+        ),
+        # Present exactly when `counterpart_backend` is, and absent exactly when
+        # it is, so the backend accessor and the fact accessor can never disagree
+        # about which sides this manager declares. Stating one without the other
+        # is refused rather than resolved in either direction.
+        counterpart_commands_physical_hardware=_counterpart_flag(
+            entry, counterpart_backend, where
+        ),
         # A key naming what hosts this manager's controller manager used to be
         # read here and is not any more. ADR-0048 clause 3 removed it from the
         # plan: it was a total function of the backend the plan already states
@@ -1331,6 +1479,54 @@ def _offset(value: object, index: int) -> int:
             "./scripts/validate-model --write, then ./scripts/build."
         )
     return value
+
+
+def _flag(value: object, key: str, where: str) -> bool:
+    """Read a plan key that must be a YAML boolean, refusing anything else.
+
+    Strict about the type rather than truthy about the value, because every
+    caller is a safety gate: the string `"false"` is truthy in Python, and a
+    document that spelled it that way would be read as commanding hardware while
+    saying the opposite. `bool` is checked before `int` would matter, so `1` and
+    `0` are refused too - a plan is generated, and the generator writes `true`
+    and `false`.
+    """
+    if not isinstance(value, bool):
+        raise PlanError(f"{where}: {key!r} must be true or false, not {_kind(value)}")
+    return value
+
+
+def _counterpart_flag(entry: object, counterpart_backend: object, where: str) -> bool | None:
+    """Read the counterpart's declared fact, requiring it exactly where its backend is.
+
+    The pair is emitted together and read together (ADR-0054, decision 3). A
+    document stating a counterpart backend without the fact would give
+    `backend_on(COUNTERPART_SIDE)` an answer while
+    `commands_physical_hardware_on(COUNTERPART_SIDE)` said there is no such side
+    - which is the disagreement `Plan.load`'s declared-side refusal already
+    exists to prevent one layer up, arrived at from inside a single entry. A
+    document stating the fact without the backend is refused for the mirror
+    reason: it declares a side nothing can say what loads.
+    """
+    stated = _optional(entry, "counterpart_commands_physical_hardware")
+    if counterpart_backend is None:
+        if stated is None:
+            return None
+        raise PlanError(
+            f"{where}: states 'counterpart_commands_physical_hardware' without "
+            "'counterpart_backend', so it declares a counterpart side and says nothing "
+            "about what that side loads. The pair is generated together - run "
+            "./scripts/validate-model --write, then ./scripts/build."
+        )
+    if stated is None:
+        raise PlanError(
+            f"{where}: missing required key 'counterpart_commands_physical_hardware'. "
+            "It states 'counterpart_backend', so it declares a counterpart side, and "
+            "whether that side can reach a physical machine is what the hardware opt-in "
+            "decides on. The pair is generated together - run ./scripts/validate-model "
+            "--write, then ./scripts/build."
+        )
+    return _flag(stated, "counterpart_commands_physical_hardware", where)
 
 
 def _number(value: object, key: str, where: str) -> float:

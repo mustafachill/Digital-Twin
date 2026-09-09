@@ -90,6 +90,9 @@ def test_a_reordered_plan_still_yields_the_plants_partition(tmp_path: Path) -> N
     document["plan"]["sides"] = [counterpart, plant]
     for manager in document["plan"]["controller_managers"]:
         manager["counterpart_backend"] = manager["backend"]
+        manager["counterpart_commands_physical_hardware"] = manager[
+            "commands_physical_hardware"
+        ]
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
 

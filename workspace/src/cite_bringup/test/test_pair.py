@@ -600,6 +600,10 @@ def _paired_plan(tmp_path: Path) -> Plan:
         # sides, so the plan states the backend of every side that exists. The
         # same shape as `_paired_document` in `test_plan.py`.
         manager.setdefault("counterpart_backend", manager["backend"])
+        manager.setdefault(
+            "counterpart_commands_physical_hardware",
+            manager["commands_physical_hardware"],
+        )
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return load(path)

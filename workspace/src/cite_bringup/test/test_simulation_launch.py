@@ -118,8 +118,14 @@ def _document() -> dict:
 
 
 def _plan_with_backend(tmp_path: Path, backend: str) -> Path:
+    """Rename one manager's backend AND declare that it reaches a machine.
+
+    The declaration is what the gate reads after ADR-0054; renaming the backend
+    alone moves nothing, which is the whole point of that record.
+    """
     document = copy.deepcopy(_document())
     document["plan"]["controller_managers"][1]["backend"] = backend
+    document["plan"]["controller_managers"][1]["commands_physical_hardware"] = True
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return path
@@ -1072,6 +1078,10 @@ def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
         # sides, so the plan states the backend of every side that exists. The
         # same shape as `_paired_document` in `test_plan.py`.
         manager.setdefault("counterpart_backend", manager["backend"])
+        manager.setdefault(
+            "counterpart_commands_physical_hardware",
+            manager["commands_physical_hardware"],
+        )
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     _use(module, monkeypatch, path)

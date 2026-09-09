@@ -46,6 +46,12 @@ if(BUILD_TESTING)
   # The plan reader is pure logic with no ROS runtime, so it is unit-tested here
   # rather than exercised only by bringing the whole cell up.
   ament_add_pytest_test(plan test/test_plan.py)
+  # ADR-0054 clause 6: the reproduction refused end to end - L0 edit, generate,
+  # load the plan, call the gate. The only assertion that runs the whole path
+  # the defect ran, and the only one crossing `cite_tools` and `cite_bringup`,
+  # which is why it drives the generator through the repository virtualenv in a
+  # subprocess. It brings nothing up.
+  ament_add_pytest_test(reproduction_refused test/test_the_reproduction_is_refused.py)
   # ADR-0042 obliged every path that starts a Gazebo process to carry the
   # partition, and the promotion covered only the launch graph. The scenario
   # harness starts its own, and until this module existed they carried nothing

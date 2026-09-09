@@ -246,6 +246,8 @@ def test_stage_grouping_is_deterministic() -> None:
         # No counterpart: this manager stands for an untwinned zone, which is
         # what `None` means here — never "the key was left out".
         counterpart_backend=None,
+        commands_physical_hardware=False,
+        counterpart_commands_physical_hardware=None,
         description_topic="/robot_description",
         joint_state_topic="/cite/cell_a/arm_1/joint_states",
         description=Path("/dev/null"),
@@ -313,6 +315,7 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
                     "asset": "arm_1",
                     "node": "/cite/cell_a/arm_1/controller_manager",
                     "backend": "sim",
+                    "commands_physical_hardware": False,
                     "description_topic": "/robot_description",
                     "joint_state_topic": "/cite/cell_a/arm_1/joint_states",
                     "description": (
@@ -393,8 +396,19 @@ def test_a_mapping_where_a_list_was_expected_is_a_plan_error(
 
 
 def _with_backend(document: dict, backend: str) -> dict:
+    """Rename one manager's backend and change nothing else.
+
+    A NAME-ONLY change, which after ADR-0054 must move no gate at all.
+    """
     document = copy.deepcopy(document)
     document["plan"]["controller_managers"][1]["backend"] = backend
+    return document
+
+
+def _declaring_physical(document: dict, backend: str = "real") -> dict:
+    """Make one manager declare that its plant side commands physical hardware."""
+    document = _with_backend(document, backend)
+    document["plan"]["controller_managers"][1]["commands_physical_hardware"] = True
     return document
 
 
@@ -403,21 +417,28 @@ def test_the_generated_plan_needs_no_opt_in() -> None:
     require_hardware_opt_in(load(_generated()), {})
 
 
-def test_a_hardware_backend_is_refused_without_the_opt_in(tmp_path: Path, document: dict) -> None:
-    plan = load(_written(tmp_path, _with_backend(document, "real")))
+def test_a_physical_declaration_is_refused_without_the_opt_in(
+    tmp_path: Path, document: dict
+) -> None:
+    plan = load(_written(tmp_path, _declaring_physical(document)))
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
     # The refusal must name the asset. "Hardware is not permitted" sends the
     # reader looking through three arms for the one that is not simulated.
     assert "arm_2" in message
+    # And the plan FIELD that decided, which is what a reader has to go and
+    # change. The backend id rides along as context and decides nothing.
+    assert "commands_physical_hardware" in message
     assert "real" in message
     assert HARDWARE_OPT_IN_ENV in message
 
 
-def test_a_hardware_backend_starts_with_the_opt_in(tmp_path: Path, document: dict) -> None:
+def test_a_physical_declaration_starts_with_the_opt_in(
+    tmp_path: Path, document: dict
+) -> None:
     """The gate is a refusal, not a ban. With the opt-in the plan loads normally."""
-    plan = load(_written(tmp_path, _with_backend(document, "real")))
+    plan = load(_written(tmp_path, _declaring_physical(document)))
     require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
 
 
@@ -427,23 +448,218 @@ def test_the_opt_in_must_say_exactly_one(tmp_path: Path, document: dict) -> None
     The shell gate compares against "1" and this must not be more permissive, or
     the two disagree about what an opt-in is and a person meets two rules.
     """
-    plan = load(_written(tmp_path, _with_backend(document, "real")))
+    plan = load(_written(tmp_path, _declaring_physical(document)))
     for value in ("0", "", "true", "yes", "1 "):
         with pytest.raises(HardwareNotPermittedError):
             require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: value})
 
 
-def test_an_unknown_backend_is_refused_rather_than_allowed(tmp_path: Path, document: dict) -> None:
-    """An allowlist, not a denylist.
+# --- ADR-0054 clause 4: the gate keys on the fact, in BOTH directions ---------
+#
+# The whole of ADR-0054's Context is one model that defeats this gate by naming
+# a physical plugin `sim`, and the record's own reproduction reports
+# `require_hardware_opt_in` returning None with an empty environment. Both
+# directions are asserted, because a check that only refused more would also be
+# passed by an implementation that refuses everything.
 
-    A backend nobody anticipated — a new vendor plugin, a typo — must not be
-    treated as simulation. cross-cutting-safety.md is explicit that a hardware
-    path is never reachable by omission, and a denylist is reachable by omission
-    by construction.
-    """
-    plan = load(_written(tmp_path, _with_backend(document, "mock_components")))
+
+def test_a_backend_named_sim_that_declares_physical_is_refused(
+    tmp_path: Path, document: dict
+) -> None:
+    """The reproduction, at this layer. The id stays `sim` throughout."""
+    physical = _declaring_physical(document, backend="sim")
+    assert physical["plan"]["controller_managers"][1]["backend"] == "sim"
+    plan = load(_written(tmp_path, physical))
     with pytest.raises(HardwareNotPermittedError):
         require_hardware_opt_in(plan, {})
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
+
+
+@pytest.mark.parametrize("backend", ["real", "plant", "mock_components", "anything"])
+def test_a_backend_of_any_name_declaring_no_physical_hardware_is_permitted(
+    tmp_path: Path, document: dict, backend: str
+) -> None:
+    """The other direction, which the id got wrong too.
+
+    A simulation with an unfortunate id is not hardware. Under the old rule
+    `real` was refused on a cell containing no physical machine, and
+    `mock_components` was refused as "a backend nobody anticipated" — a false
+    refusal, and the only thing that used to stand in front of a Gazebo-driven
+    arm configured off `use_sim_time: false`. ADR-0054's *What this costs us*
+    says so in as many words.
+    """
+    plan = load(_written(tmp_path, _with_backend(document, backend)))
+    require_hardware_opt_in(plan, {})
+
+
+def test_the_allowlist_is_now_structural_rather_than_a_list_of_names(
+    tmp_path: Path, document: dict
+) -> None:
+    """cross-cutting-safety.md: a hardware path is never reachable by omission.
+
+    The old check was an allowlist over NAMES, so the property depended on
+    nobody inventing an id it recognised. It is now the shape of the datum: the
+    dangerous branch is the positive one, so reaching an arm requires that
+    somebody wrote `true`. There is no unanticipated value to fall through - the
+    only two values a plan may carry are asserted here, and one of them refuses.
+    """
+    permitted = _with_backend(document, "a_backend_nobody_anticipated")
+    require_hardware_opt_in(load(_written(tmp_path, permitted)), {})
+    refused = _declaring_physical(document, backend="a_backend_nobody_anticipated")
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(load(_written(tmp_path, refused)), {})
+
+
+# --- ADR-0054 clause 5: the plan key is required too --------------------------
+#
+# EVERY OTHER CLAUSE OF THAT RECORD CAN BE SATISFIED BY AN IMPLEMENTATION THAT
+# PARSES THIS KEY WITH `_optional(..., False)`. That implementation makes the
+# plan layer strictly weaker than it was - a plan missing `backend` raises today
+# - and the document most likely to be missing the new key is a plan left in a
+# stale build tree, which is exactly what `simulation.launch.py` loads, from the
+# package share rather than from the source tree. Every manager would read
+# `False`, nothing would consult `CITE_ALLOW_HARDWARE`, and ADR-0054's own
+# defect would reopen in a build state nobody notices.
+
+
+def test_a_plan_omitting_the_hardware_declaration_is_refused(
+    tmp_path: Path, document: dict
+) -> None:
+    """Exactly as deleting `backend` is refused, and for a sharper reason.
+
+    A REMOVED key's presence is an absence of information, which is why the plan
+    tolerates one (ADR-0048 clause 3). This key's ABSENCE is a safety fact
+    nobody stated, and defaulting it sends nobody anywhere. The `PlanError` has
+    to name the key, or its reader cannot tell a stale build tree from a
+    generator bug.
+    """
+    document = copy.deepcopy(document)
+    del document["plan"]["controller_managers"][0]["commands_physical_hardware"]
+    with pytest.raises(PlanError, match="commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_a_null_hardware_declaration_is_refused(tmp_path: Path, document: dict) -> None:
+    """An empty value is not `false`. A key with nothing after it states nothing."""
+    document = copy.deepcopy(document)
+    document["plan"]["controller_managers"][0]["commands_physical_hardware"] = None
+    with pytest.raises(PlanError, match="commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, "no"])
+def test_a_hardware_declaration_that_is_not_a_boolean_is_refused(
+    tmp_path: Path, document: dict, value: object
+) -> None:
+    """Strict about the type, because every caller is a safety gate.
+
+    The string `"false"` is truthy in Python: a document spelling it that way
+    would be read as commanding hardware while saying the opposite, and `1` and
+    `0` would let a plan state the fact in a spelling the generator never emits.
+    """
+    document = copy.deepcopy(document)
+    document["plan"]["controller_managers"][0]["commands_physical_hardware"] = value
+    with pytest.raises(PlanError, match="must be true or false"):
+        load(_written(tmp_path, document))
+
+
+def test_a_counterpart_backend_without_its_declaration_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The pair is stated together, so the two accessors cannot disagree.
+
+    A document stating `counterpart_backend` alone would give
+    `backend_on(COUNTERPART_SIDE)` an answer while the fact accessor said there
+    is no such side - the same disagreement `Plan.load`'s declared-side refusal
+    exists to prevent one layer up, reached from inside a single entry.
+    """
+    document = _paired_document()
+    del document["plan"]["controller_managers"][0][
+        "counterpart_commands_physical_hardware"
+    ]
+    with pytest.raises(PlanError, match="counterpart_commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_a_counterpart_declaration_without_its_backend_is_refused(
+    tmp_path: Path,
+) -> None:
+    """And the mirror: a side nothing can say what loads."""
+    document = _solo_document()
+    document["plan"]["controller_managers"][0][
+        "counterpart_commands_physical_hardware"
+    ] = False
+    with pytest.raises(PlanError, match="counterpart_commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_an_untwinned_plan_states_neither_counterpart_key(tmp_path: Path) -> None:
+    """Absent exactly where `counterpart_backend` is absent."""
+    plan = load(_written(tmp_path, _solo_document()))
+    for manager in plan.controller_managers:
+        assert manager.counterpart_backend is None
+        assert manager.counterpart_commands_physical_hardware is None
+
+
+# --- (asset, side) -> the declared fact, asked once ---------------------------
+
+
+def test_the_plant_declaration_is_reached_by_side_name(
+    tmp_path: Path, document: dict
+) -> None:
+    plan = load(_written(tmp_path, document))
+    for manager in plan.controller_managers:
+        assert (
+            manager.commands_physical_hardware_on(PLANT_SIDE)
+            is manager.commands_physical_hardware
+        )
+
+
+def test_each_side_is_answered_with_its_own_declaration(tmp_path: Path) -> None:
+    """Returning the plant's answer for both sides would pass every other test.
+
+    The same mutation `test_each_side_is_answered_with_its_own_backend` catches
+    for the backend, on the datum that now decides.
+    """
+    document = _paired_document()
+    document["plan"]["controller_managers"][1]["counterpart_backend"] = "real"
+    document["plan"]["controller_managers"][1][
+        "counterpart_commands_physical_hardware"
+    ] = True
+    plan = load(_written(tmp_path, document))
+    divergent = [
+        manager
+        for manager in plan.controller_managers
+        if manager.commands_physical_hardware_on(COUNTERPART_SIDE)
+        != manager.commands_physical_hardware_on(PLANT_SIDE)
+    ]
+    assert len(divergent) == 1
+    assert divergent[0].commands_physical_hardware_on(PLANT_SIDE) is False
+    assert divergent[0].commands_physical_hardware_on(COUNTERPART_SIDE) is True
+
+
+def test_asking_an_untwinned_asset_for_its_counterpart_declaration_says_so(
+    tmp_path: Path,
+) -> None:
+    """`SideNotDeclaredError`, exactly as `backend_on` refuses, and never `False`.
+
+    Reporting `False` would hand every caller a three-way branch and let one of
+    them read "there is no such side" as "that side is simulated".
+    """
+    plan = load(_written(tmp_path, _solo_document()))
+    manager = plan.controller_managers[0]
+    with pytest.raises(SideNotDeclaredError, match="states no hardware declaration"):
+        manager.commands_physical_hardware_on(COUNTERPART_SIDE)
+    assert manager.commands_physical_hardware_on_or_none(COUNTERPART_SIDE) is None
+
+
+def test_the_total_sibling_answers_the_plant_and_none_elsewhere(
+    tmp_path: Path, document: dict
+) -> None:
+    """The accessor `cite_twin` uses. `None` means "no such side", never "safe"."""
+    manager = load(_written(tmp_path, document)).controller_managers[0]
+    assert manager.commands_physical_hardware_on_or_none(PLANT_SIDE) is False
+    assert manager.commands_physical_hardware_on_or_none("somewhere_else") is None
 
 
 # --- The simulation-fidelity aids: two topics per beam, not two names for one --
@@ -900,7 +1116,19 @@ def _with_counterpart_backend(document: dict, backend: str) -> dict:
     document = copy.deepcopy(document)
     for manager in document["plan"]["controller_managers"]:
         manager["counterpart_backend"] = "sim"
+        # A NAME-ONLY change: every side still declares that it commands nothing
+        # physical, which after ADR-0054 is what the gate reads.
+        manager["counterpart_commands_physical_hardware"] = False
     document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
+    return document
+
+
+def _with_physical_counterpart(document: dict, backend: str = "real") -> dict:
+    """Pair the zone, and make one counterpart declare that it reaches a machine."""
+    document = _with_counterpart_backend(document, backend)
+    document["plan"]["controller_managers"][1][
+        "counterpart_commands_physical_hardware"
+    ] = True
     return document
 
 
@@ -913,34 +1141,42 @@ def test_a_simulated_counterpart_needs_no_opt_in(tmp_path: Path) -> None:
 
 def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) -> None:
     # This is Phase 2.B arriving. A backend is selected per (asset, side), so a
-    # gate that read only `backend` would let the far side become physical
+    # gate that read only the plant would let the far side become physical
     # without ever looking at it (ADR-0041, Decision 2).
-    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
     assert "arm_2" in message
-    assert "counterpart_backend" in message
+    assert "counterpart_commands_physical_hardware" in message
     assert HARDWARE_OPT_IN_ENV in message
 
 
 def test_a_physical_counterpart_starts_with_the_opt_in(tmp_path: Path) -> None:
-    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
     require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
 
 
-def test_an_unknown_counterpart_backend_is_refused_rather_than_allowed(
+def test_a_counterpart_of_any_name_declaring_no_hardware_is_permitted(
     tmp_path: Path,
 ) -> None:
-    # The same allowlist as the plant side. A backend nobody anticipated must not
-    # be treated as simulation on either side.
+    """The far side's NAME decides nothing either, in both directions.
+
+    This used to assert the opposite - that `mock_components` on the counterpart
+    was refused as "a backend nobody anticipated". ADR-0054's Context measures
+    what that allowlist-over-names was worth: it also permitted the vendor's
+    physical component named `sim`. What is refused now is the declaration, and
+    a mock far side that declares nothing physical is not hardware.
+    """
     plan = load(
         _written(
             tmp_path, _with_counterpart_backend(_paired_document(), "mock_components")
         )
     )
+    require_hardware_opt_in(plan, {})
+    physical = _with_physical_counterpart(_paired_document(), "mock_components")
     with pytest.raises(HardwareNotPermittedError):
-        require_hardware_opt_in(plan, {})
+        require_hardware_opt_in(load(_written(tmp_path, physical)), {})
 
 
 def test_an_untwinned_plan_states_no_counterpart_backend(tmp_path: Path) -> None:
@@ -1025,16 +1261,21 @@ def test_the_hardware_gate_reads_through_the_accessor(tmp_path: Path) -> None:
     """The refusal names the plan FIELD, and the accessor supplies the value.
 
     Both halves matter and they are different halves. The message has always
-    named the key a reader would grep for, and `BACKEND_FIELD_BY_SIDE` is what
+    named the key a reader would grep for, and `PHYSICAL_FIELD_BY_SIDE` is what
     keeps that name attached to the side the value came from - so a gate that
-    started reading the wrong field could not go on printing the right one.
+    started reading the wrong field could not go on printing the right one. The
+    field it names is now the DECLARATION, because that is what decides; the
+    backend id rides along as context (ADR-0054).
     """
-    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
-    assert "arm_2 (counterpart_backend 'real')" in message
-    assert plan.controller_managers[1].backend_on(COUNTERPART_SIDE) == "real"
+    assert "arm_2 (counterpart_commands_physical_hardware, backend 'real')" in message
+    assert (
+        plan.controller_managers[1].commands_physical_hardware_on(COUNTERPART_SIDE)
+        is True
+    )
 
 
 def test_a_declared_side_no_asset_states_a_backend_for_is_refused(tmp_path: Path) -> None:
@@ -1074,7 +1315,14 @@ def test_the_refusal_names_only_the_assets_that_are_silent(tmp_path: Path) -> No
     correct, which is the failure mode a refusal message exists to avoid.
     """
     document = _paired_document()
+    # Both counterpart keys go together, because the entry-level reader refuses
+    # one without the other before `Plan.load`'s cross-document check is reached
+    # (ADR-0054, decision 3). What is under test here is the LATTER: a manager
+    # silent about a side the plan declares.
     document["plan"]["controller_managers"][1].pop("counterpart_backend")
+    document["plan"]["controller_managers"][1].pop(
+        "counterpart_commands_physical_hardware"
+    )
     with pytest.raises(SideNotDeclaredError) as raised:
         load(_written(tmp_path, document))
     message = str(raised.value)
@@ -1112,6 +1360,10 @@ def test_the_gate_does_not_swallow_an_accessor_that_fails_some_other_way(
     class _BrokenManager:
         asset = "arm_1"
         backend = "real"
+        commands_physical_hardware = True
+
+        def commands_physical_hardware_on(self, side: str) -> bool:
+            raise ArithmeticError("the accessor is broken, not the side")
 
         def backend_on(self, side: str) -> str:
             raise ArithmeticError("the accessor is broken, not the side")
@@ -1248,6 +1500,12 @@ def _paired_document() -> dict:
         # that writes no `counterpart_backend` in L0 loads the same plugin on both
         # sides, so the plan states the backend of every side that exists.
         manager.setdefault("counterpart_backend", manager["backend"])
+        # Emitted exactly where the backend is, and by the same fallback: the
+        # counterpart loads the plant's plugin, so it declares the plant's fact.
+        manager.setdefault(
+            "counterpart_commands_physical_hardware",
+            manager["commands_physical_hardware"],
+        )
     return document
 
 
