@@ -1,37 +1,103 @@
 # ADR-0054: Key the hardware opt-in on a fact the model declares, not on a backend's name
 
-- **Status:** Proposed — **nothing in this record is implemented.** Every "will", "must" and
-  "may not" below is a commitment, not a description — **and so is every sentence written in
-  the present indicative.** The *Decision* sections describe the tree this record asks for,
-  not the tree that exists: "the plan carries the fact per (asset, side)" and "the gate reads
-  the declaration" are commitments in the present tense, because that is how a specification
-  reads, and a reader landing mid-document must not take them for readings. Only *Context*
-  describes the tree, and every line of it names the command that produced it. Established in
-  this checkout on 2026-09-09, at `404bbac` on `main` and at `5afc065` on
-  `feat/hardware-params`, by the commands in *Context*:
-  - A type may declare the vendor's **physical** `ros2_control` plugin under the backend id
-    `sim`. The shipped validator returns **zero referential findings** on that model, the
-    generator emits a description naming that plugin, and
-    `cite_bringup.plan.require_hardware_opt_in` returns without refusing, never having
-    consulted `CITE_ALLOW_HARDWARE`.
-  - The same model on `feat/hardware-params` — the unmerged branch implementing
-    [ADR-0053](0053-index-hardware-params-by-backend.md) — additionally carries a **working
-    `robot_ip`** into that description. Before that branch, the address was dropped and the
-    vendor component took its own `ros2_control_node` down at `on_init`. **The branch converts
-    an accidentally fail-closed misconfiguration into a working, unguarded hardware path**,
-    which is why this record is written now and not later.
-  - Five sites decide something by comparing a backend id against the literal `sim`. One of
-    them is L5's mode gate, which reports **no physical side commanded**, for every mode, on a
-    zone whose every side loads the vendor's physical component.
-  - `./scripts/doctor` reported `53 records, all indexed` before this record was written, so
-    0054 was the next free number; it reports **54** with this record and its index row in.
+- **Status:** Proposed — **decisions 1 to 4 are implemented**, and this record is
+  **NOT promoted**, for one reason stated in full below. Nothing in the *Decision* sections is
+  a commitment any more; what remains a commitment is clause 10's own wording. Every other
+  sentence in this record still describes the tree it asked for, and *Context* still describes
+  the tree as it was on 2026-09-09 at `404bbac`, which is what makes it readable as the
+  reproduction rather than as a current reading.
+  - A type may no longer declare the vendor's **physical** `ros2_control` plugin under the
+    backend id `sim` and pass every gate. `HardwareBackend.commands_physical_hardware` is
+    required with no default, the generated plan carries it per (asset, side), and
+    `cite_bringup.plan.require_hardware_opt_in`, `validate.referential`'s
+    `physical-plant-on-paired-zone`, `cite_twin.mode.Deployment.physical_sides_commanded` and
+    `cite_twin.twin_boundary`'s `far_side_physical` all decide on it. The reproduction is
+    refused end to end.
+  - `ids.SIMULATION_BACKEND` survives, deciding `use_sim_time` and nothing else, with its
+    comment corrected and the residual pinned by two characterisation tests.
+  - **Ten of the eleven clauses in *The promotion condition* are met in full.** The eleventh,
+    clause 10, is met in substance and **its literal wording cannot be met by any
+    implementation**, which is a defect in the clause rather than in the change — see below.
 
-  **Promoted to `Accepted`** by the change that implements decisions 1 to 4, with **all
-  eleven** of the clauses in *The promotion condition*, below. Every one of them runs with no
-  simulator and no physical arm, which is deliberate: **there is no physical arm** (charter §8
-  puts hardware in Phase 2.B) and a condition that needed one would never be met.
+  **Clauses met, each by the test named.** 1 —
+  `tools/tests/test_declared_hardware_fact.py`, two tests on a scratch type, the error naming
+  the field and the backend. 2 — both models state the field, `./scripts/validate-model`
+  exits 0, `model/schema/asset_type.schema.json` regenerated through `cite-model
+  schema --write`. 3 — the generated tree moves in exactly `MODEL_HASH` and
+  `bringup/cell_a_plan.yaml`; no description, world or controller configuration moves.
+  4, 5 — `cite_bringup/test/test_plan.py`, both directions of the gate and both plan keys
+  refused when omitted. 6 —
+  `cite_bringup/test/test_the_reproduction_is_refused.py`, which edits L0, generates through
+  the shipped generator, loads the plan and calls the gate with an empty environment. **It
+  lives in `cite_bringup` rather than in `tools/tests` because the clause's own preamble
+  splits in a way this path does not**: it needs `cite_tools` (pydantic) *and* `cite_bringup`
+  (`ament_index_python`) in one interpreter, and `./scripts/test`'s host half clears
+  `PYTHONPATH` deliberately, so a `tools/tests` home would have made the one end-to-end
+  hardware-gate assertion skip in every run. The generator half is driven through the
+  repository virtualenv in a subprocess; the L0-to-artifact leg is asserted separately and
+  without ROS in `tools/tests/test_declared_hardware_fact.py`, and a guard compares the two
+  halves' model builders so they cannot drift.
+  7 — `tools/tests/test_validate_referential.py`, by rule id and `where`; the `where` moved to
+  `types.<type>.hardware_backends.<id>.commands_physical_hardware`, which is decision 2 item
+  2's expected move, decided rather than inherited. 8 —
+  `cite_twin/test/test_l5_gate_reads_the_declared_fact.py`, all three assertions, none
+  constructing a node. 9 — a guard in `test_declared_hardware_fact.py` that carries its own
+  falsification test. 11 — `tools/tests/test_use_sim_time_still_keys_on_the_id.py`.
+
+  **WHY CLAUSE 10 IS NOT MET AS WRITTEN, AND WHY IT COULD NEVER HAVE BEEN.** The clause asks
+  that `grep -rn SIMULATION_BACKEND tools workspace/src --include=*.py` reach the definition
+  in `cite_tools.model.ids`, the `use_sim_time` derivation at `generate/control.py:236`, *"and
+  nothing else"*. After the change it reaches **four lines in three files**: those two, and
+  `validate/referential.py`'s hint inside `_counterpart_backend_matches_the_plant`, which
+  restates the `use_sim_time` derivation in a message — `f"use_sim_time: {'true' if plant ==
+  ids.SIMULATION_BACKEND else 'false'}"`. **That line is one of the four hint strings this
+  record's own *Context* counted among the seventeen non-deciding lines**, and no decision here
+  asks for it to go; `tools/tests/test_validate_referential.py` asserts on the substring it
+  produces. So "and nothing else" contradicts the inventory in the same record, and the only
+  arrangements that satisfy it either delete a tested message or route both derivations
+  through one helper — at which point `generate/control.py` stops naming the constant and the
+  clause's other half goes stale instead. **The implementing change did neither**, on the
+  ground that a record's clause is corrected by its owner and not worked around by the
+  implementer.
+
+  **What clause 10 asked for in substance is met**, and is separately checkable: the
+  `cite_bringup.plan` and `cite_twin.mode` restatements are gone with their consumers, and the
+  surviving comment no longer says *"the one backend id that cannot reach a physical machine"*
+  — it says what the id decides, that the same defect class survives in that one rule, and
+  what would close it.
+
+  **The decision this leaves open is one line**, and it is the project owner's: either restate
+  clause 10 so that it names the two DECIDING sites and the two removed restatements rather
+  than the raw grep — the route [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md)
+  and [ADR-0051](0051-restate-the-hull-grasp-gate.md) both took with a clause that could not
+  be met as worded — or decide that the hint string is a second statement of a generator rule
+  and should be routed through one helper, which is its own change and reopens nothing here.
   **Promotion is not a claim that anything is safe** — see *What promotion does not claim*,
-  which is a permanent clause and not a status caveat.
+  which is a permanent clause and not a status caveat, and which is already true of the
+  implemented tree.
+
+  **One factual correction to decision 2, found in the code.** That section warns that
+  migrating `twin_boundary` with the refusing accessor *"makes `TwinBoundary.__init__` raise
+  on the shipped model"*. **It would not**: `__init__` resolves both sides through `address()`
+  before it builds any map, and `Plan.side_named` already refuses a counterpart the shipped
+  single-sided plan does not declare, so the node never reaches the map on that model. The
+  conclusion is unchanged and the total sibling accessor is still required — clause 8's own
+  second bullet calls `deployment_from_plan` on that same shipped plan with no node, and a
+  refusing accessor makes *that* raise. The masking is pinned by
+  `test_the_boundary_refuses_the_shipped_plan_at_side_resolution`.
+
+  **And one to decision 4's migration list.** It names
+  `tools/tests/fixtures/minimal/schema/asset_type.schema.json` and offers two branches — the
+  change *"either regenerates it or establishes what reads it"*. **The second branch was
+  taken, and what it established is stronger than "no test compares it": nothing can read
+  it.** `cite_tools.model.loader` prunes any path with a `schema` component from its walk, and
+  `export.differences` is called only on `model/schema` by the CLI, which no test invokes with
+  the fixture. Four of the fixture's five committed exports were **already stale on `main`** by
+  hundreds of lines, predating this record — regenerating `asset_type.schema.json` alone
+  produces a 591-line diff of which ten lines are this change's. Bringing that drift into a
+  safety change would have obscured it; the fixture's exports are left untouched and the
+  staleness is recorded in [`../open-work.md`](../open-work.md).
+
 - **Date:** 2026-09-09
 - **Deciders:** The project owner, who decided that L0 declares per backend whether that
   backend can reach a physical machine, that the field is required with no default, and that

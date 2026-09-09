@@ -46,27 +46,47 @@
   ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), Decision 3).
   There is no `counterpart` field and no `none` sentinel: **twinned is derived** from
   `sides == pair`. Two consequences to carry rather than rediscover. First, no omitted key
-  can produce a non-`sim` value anywhere, because the value `counterpart_backend` falls back
-  to is itself required and explicit. Second, `twin.sides` is read by the generators, so
+  can produce a hardware path anywhere, because the value `counterpart_backend` falls back
+  to is itself required and explicit — and, since
+  [ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md), because what makes
+  a backend a hardware path is a required field on the backend rather than the value of its
+  id. Second, `twin.sides` is read by the generators, so
   pairing a zone produces a committed `cite_generated/` diff and a new `MODEL_HASH` — which
   is accepted, and rests on pairing not being a runtime mode: the runtime knob is `TwinMode`
   and it regenerates nothing. A launch argument or an environment variable that turned
   pairing on without regenerating is the reopening trigger ADR-0041 names, not an
   optimisation.
+  **A type declares whether each backend can reach a physical machine, and every hardware
+  gate reads that rather than the backend's name.** `hardware_backends.<id>` carries
+  `commands_physical_hardware`, **required with no default**, beside the
+  `ros2_control_plugin` string it is about
+  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md), decision 1).
+  It exists because an id is a name: nothing constrained what plugin an id could carry, so a
+  type could declare the vendor's physical component under the id `sim` and the validator,
+  the bring-up refusal, L5's mode gate and L5's divergence validity all answered wrongly at
+  once — that record's *Context* measures all four. **Nothing verifies the claim against the
+  plugin string beside it**, and catching a false one needs a transcribed list of plugin
+  classes, which `cross-cutting-safety.md`'s own lesson refuses; what the field buys is that
+  the fact is stated by the person who chose the plugin, where they chose it.
+  **`use_sim_time` deliberately still keys on the id** and is measured wrong in both
+  directions; that residual is ADR-0054 decision 2's, pinned by two characterisation tests
+  and owed its own record.
   **One configuration is refused rather than left expressible:** a zone declaring
-  `twin.sides: pair` may not contain an asset whose `hardware.backend` is anything but
-  `sim`. `plant` is the side `./scripts/sim`, every scenario and every Phase 1 artifact
+  `twin.sides: pair` may not contain an asset selecting a backend that declares
+  `commands_physical_hardware: true`. `plant` is the side `./scripts/sim`, every scenario and every Phase 1 artifact
   already address, so that encoding would point the existing suite at a physical cell behind
   a bring-up refusal rather than a per-command one. The same two machines are written as
   `counterpart_backend`. It is a cross-document rule — the zone holds one half and the
   instance the other — so it lives in `cite_tools.validate.referential`, as
-  `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it.
+  `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it. **The rule
+  id is unchanged and its `where` moved** to the type's backend declaration, because that is
+  where the cause now lives (ADR-0054).
   **A second refusal sits beside it and closes the other half of the same cross product:**
   no asset's `counterpart_backend` may differ from its `backend`, on a paired zone or a
   `single` one, as `divergent-counterpart-backend`
   ([ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md), clause 1).
   The encoding is unchanged and stays the 2.B encoding; what is refused is *generating* from
-  it. All three generator sites that branch on a backend read `hardware.backend` — the
+  it. Every generator site that branches on a backend reads `hardware.backend` — the
   plant's — so a divergent counterpart was handed the plant's description, plugin and
   `use_sim_time`, validated cleanly and was committed under ADR-0021. It is a cross-*field*
   equality rather than a cross-document one, so pydantic could state it only as a validator
@@ -87,7 +107,8 @@
   `cite_bringup.plan.resolve_domain_id` adds them, once.
   **What L0 emits for a pair, and what it does not:** `twin.sides: pair` emits a second
   `sides:` entry — with the counterpart's partition and its offset — and each asset's
-  counterpart backend into the bring-up plan; there is no second world, no second controller
+  counterpart backend, and what each side declares about physical hardware, into the bring-up
+  plan; there is no second world, no second controller
   manager and no second set of node names, because a counterpart is the same generated
   artifacts started in a different environment. **A pair is brought up by `./scripts/sim --pair`
   as of 2026-08-30** ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md));

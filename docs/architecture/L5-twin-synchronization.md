@@ -130,6 +130,13 @@ The server applies the criterion: which sides the requested mode commands, and w
 them loads something other than a simulation. Transcribing the three left `VALIDATED`
 ungated until 2026-08-31, and `VALIDATED` dispatches an operator's goal to both sides by
 byte-identical code to `VIRTUAL_LEAD`'s — see `cross-cutting-safety.md`'s correction.
+**The shape was right and the datum was wrong until 2026-09-09.** The second half of the
+criterion compared the backend ID against the literal `sim`, so a cell whose every side
+loaded the vendor's physical `ros2_control` component under that id reported **no physical
+side commanded, for every mode**. A criterion applied to a name is still a name.
+[ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md) moves it onto a fact
+L0 declares per backend and the generated plan carries per (asset, side); the intersection
+is untouched.
 
 `require_hardware_opt_in` and `CITE_ALLOW_HARDWARE` bind at bring-up, so what they buy is that the stack could not have
 started with a physical backend; `cite_twin` calls **the same function** when a transition
@@ -258,7 +265,8 @@ clock to the other's and
 - **Whether the far side's backend should be observable alongside the mode.** The other two
   dangerous transitions are self-identifying from the requested value alone: `REAL` and
   `CLOSED_LOOP` mean physical actuation whoever asks. **`VIRTUAL_LEAD` does not.** Its
-  danger condition is *against a real far side*, which is a per-(asset, side) backend fact,
+  danger condition is *against a real far side*, which is a per-(asset, side) fact the far
+  side's backend DECLARES (ADR-0054) rather than one its name implies,
   and `TwinMode` carries no such field — so an operator watching `/cite/twin/mode` cannot
   tell "the arm is driving a second simulation" from "the arm is about to move a physical
   arm". This is filed, not decided: whether the backend belongs on `TwinMode`, on a separate

@@ -1443,3 +1443,16 @@ before acting on it.**
   `left_outer_knuckle` interpenetrate at every one of 200 drive angles. Guarded in the generator;
   the guard is the only thing standing between an ordinary fidelity improvement and a gripper that
   cannot close.
+- **Four of the minimal fixture's five committed JSON Schema exports are stale, and nothing can
+  read them.** `tools/tests/fixtures/minimal/schema/` is copied into every `minimal_model` run and
+  never opened: `cite_tools.model.loader` prunes any path with a `schema` component from its walk,
+  and `export.differences` is called only on `model/schema` by the CLI, which no test invokes with
+  the fixture. `asset_type.schema.json` is behind by ADR-0028's `CollisionMeshSet` and ADR-0052's
+  `GraspSpec` among others — a fresh export is a 591-line diff — and `zones`, `stations`, `facility`
+  and `asset_instances` are behind too. **Established on 2026-09-09 while implementing
+  [ADR-0054](adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)**, whose decision 4 offered
+  exactly this alternative to regenerating them; the drift was left out of that safety change
+  rather than swept into it. What is owed is a decision: regenerate them in a `chore:` commit, add
+  the check that would keep them honest, or delete them as an artifact nothing reads. **Nothing is
+  known to be wrong** — the exports feed no validation — but a reader who opens one is reading a
+  schema this repository has not exported for weeks.
