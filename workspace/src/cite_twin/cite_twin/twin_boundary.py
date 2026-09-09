@@ -100,10 +100,10 @@ from cite_twin.boundary import (
 )
 from cite_twin.divergence import assess, compare, Operand, UNMEASURED
 from cite_twin.mode import (
-    Deployment,
+    deployment_from_plan,
+    far_side_is_physical,
     MODE_NAMES,
     ModeAuthority,
-    SIMULATION_BACKEND,
     Verdict,
 )
 from cite_twin.routing import (
@@ -276,26 +276,33 @@ class TwinBoundary:
             .double_value
         )
 
-        # What L5 read about the far side at start-up. ADR-0050 decision 4: a
-        # runtime knob may not decide whether a side exists, so this is read
-        # once and never re-read.
-        self._far_side_backends = {
-            manager.asset: manager.counterpart_backend
+        # Both sides, read per asset, because the hardware gate asks which sides
+        # the requested mode commands and what each of them DECLARES - never
+        # which mode it is, and never what a backend is called (see
+        # cite_twin.mode).
+        #
+        # Built by a free function rather than inline, and that is a requirement
+        # rather than tidiness: the failure this construction can produce is an
+        # exception raised inside __init__, which no test needing a working
+        # __init__ can reach. `deployment_from_plan` is assertable on the shipped
+        # single-sided plan with no node at all (ADR-0054, clause 8), and it asks
+        # the plan's TOTAL accessor, so an untwinned zone yields `None` for the
+        # counterpart instead of raising.
+        #
+        # ADR-0050 decision 4: a runtime knob may not decide whether a side
+        # exists, so this is read once and never re-read.
+        deployment = deployment_from_plan(plan)
+        # What L5 read about the far side at start-up, kept as the DECLARATION
+        # rather than as a backend id, so `_sample` cannot fall back to deciding
+        # on a name.
+        self._far_side_physical = {
+            manager.asset: deployment.declares_physical_hardware(
+                manager.asset, COUNTERPART_SIDE
+            )
             for manager in plan.controller_managers
         }
-        # Both sides, read per asset, because the hardware gate asks which
-        # sides the requested mode commands and what each of them loads -
-        # never which mode it is (see cite_twin.mode).
         self._authority = ModeAuthority(
-            Deployment(
-                {
-                    manager.asset: {
-                        PLANT_SIDE: manager.backend,
-                        COUNTERPART_SIDE: manager.counterpart_backend,
-                    }
-                    for manager in plan.controller_managers
-                }
-            ),
+            deployment,
             partial(require_hardware_opt_in, plan, environ),
         )
 
@@ -737,15 +744,15 @@ class TwinBoundary:
             operands = dict(self._operands)
             versions = dict(self._model_versions)
         now = time.time()
-        for asset, backend in sorted(self._far_side_backends.items()):
+        for asset, declared in sorted(self._far_side_physical.items()):
             self._divergence_publisher.publish(
-                self._sample(asset, backend, mode, operands, versions, now)
+                self._sample(asset, declared, mode, operands, versions, now)
             )
 
     def _sample(
         self,
         asset: str,
-        backend: str | None,
+        far_side_declares_physical: bool | None,
         mode: int,
         operands: Mapping[tuple[str, str], Operand],
         versions: Mapping[str, str],
@@ -753,7 +760,12 @@ class TwinBoundary:
     ) -> DivergenceMetrics:
         plant = operands.get((PLANT_SIDE, asset))
         counterpart = operands.get((COUNTERPART_SIDE, asset))
-        far_side_physical = backend is not None and backend != SIMULATION_BACKEND
+        # The one place the three-valued declaration becomes the two-valued
+        # answer `assess` wants, and it is a free function so the collapse is
+        # assertable without this node (ADR-0054, clause 8). It used to compare a
+        # backend id against the literal `sim`, which reports a PHYSICAL far side
+        # as simulated whenever the id says `sim` and the plugin does not.
+        far_side_physical = far_side_is_physical(far_side_declares_physical)
         conditions = assess(mode, plant, counterpart, far_side_physical)
         comparison = compare(plant, counterpart)
 

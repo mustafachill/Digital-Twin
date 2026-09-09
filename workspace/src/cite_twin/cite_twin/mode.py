@@ -39,9 +39,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from cite_interfaces.msg import ResultCode, TwinMode
 from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, PLANT_SIDE
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from cite_bringup.plan import Plan
 
 #: Every mode, under the name every document writes it by. Mapped rather than
 #: formatted, for the reason `cite_facility.topology_server.STATION_TYPES` is: a
@@ -106,18 +110,20 @@ INITIAL_MODE = TwinMode.MODE_SIM
 #: refused them there in any case. **No refusal that used to happen stops
 #: happening; two modes gain one.**
 
-#: The one far-side backend that cannot reach a physical machine.
-#:
-#: A third statement of the string `cite_tools.model.ids.SIMULATION_BACKEND`
-#: owns and `cite_bringup.plan.SIMULATION_BACKEND` restates, for the same reason
-#: that one exists: this is a different build unit that cannot import either.
-#: As there, it does not DECIDE the value — every use below reads a backend out
-#: of the generated plan and compares, so a plan naming something else is
-#: treated as hardware rather than silently permitted. An allowlist and never a
-#: denylist: a backend nobody anticipated is refused, because
-#: `cross-cutting-safety.md` requires that a hardware path is never reachable by
-#: omission.
-SIMULATION_BACKEND = "sim"
+# A third restatement of the backend id `sim` used to live here, and
+# `physical_sides_commanded` compared far-side backends against it. ADR-0054
+# removed it: the id is a NAME, and that record's Context measures this gate
+# reporting NO PHYSICAL SIDE COMMANDED, for every mode, on a zone whose every
+# side loads the vendor's physical `ros2_control` component under that id. That
+# is `cross-cutting-safety.md:113-135`'s own lesson reached by a different
+# route - the shape was right and the datum was wrong, because a criterion
+# applied to a name is still a name.
+#
+# What this module reads instead is the fact L0 declares per backend and the
+# generated plan carries per (asset, side). The allowlist property the old
+# comment claimed is what the boolean delivers structurally: the dangerous
+# branch is the positive one, so nothing is permitted by having a name nobody
+# anticipated.
 
 
 class ModeError(Exception):
@@ -138,11 +144,28 @@ class Deployment:
     cannot support rather than accepting it and producing an invalid metric
     forever. This is that fact, as much of it as the generated plan carries.
 
-    `backends` is keyed by asset id and then by SIDE NAME, and a value of
-    `None` means the zone declares no such side for that asset at all. It comes
-    from the plan's `backend` and `counterpart_backend`, which a paired zone
-    states for every asset — so `None` means "there is no such side" and never
-    "the model left the key out" (ADR-0041 Decision 3).
+    `sides` is keyed by asset id and then by SIDE NAME, and its value is
+    **three-valued on purpose**: `True` and `False` are what that side's backend
+    declares about reaching a physical machine, and `None` means the zone
+    declares no such side for that asset at all. It comes from the plan's
+    `commands_physical_hardware` and `counterpart_commands_physical_hardware`,
+    which a paired zone states for every asset — so `None` means "there is no
+    such side" and never "the model left the key out" (ADR-0041 Decision 3).
+
+    **COLLAPSING IT TO A BARE `bool` IS A SILENT SAFETY REGRESSION**, and it is
+    the failure ADR-0054 decision 2 names by hand. `assets_without_a_far_side`
+    tests `is None`, and that is what drives the `PRECONDITION_FAILED` refusal of
+    a two-sided mode on a one-sided deployment. With a bare `bool`, every
+    unpaired asset looks like it *has* a far side that is merely simulated, and
+    that refusal stops firing — on the shipped single-sided model, which is every
+    deployment this repository can generate today.
+
+    **IT HOLDS THE DECLARED FACT AND NOT THE BACKEND ID** (ADR-0054). It used to
+    hold the id and compare against the literal `sim`, which reports no physical
+    side commanded on a zone whose every side loads the vendor's physical
+    component under that name. The id is not carried alongside, because carrying
+    the value the record just removed from the safety path is how a later reader
+    concludes it still decides something.
 
     **Both sides and not only the far one.** `require_hardware_opt_in` reads
     both, for the reason its own docstring gives — a backend is selected per
@@ -161,26 +184,33 @@ class Deployment:
     is a residual and not a check that was decided against.
     """
 
-    backends: Mapping[str, Mapping[str, str | None]]
+    sides: Mapping[str, Mapping[str, bool | None]]
 
     @staticmethod
-    def paired(far_side_backends: Mapping[str, str | None]) -> Deployment:
-        """Build a zone whose plant is simulated, from far-side backends alone.
+    def paired(far_side_physical: Mapping[str, bool | None]) -> Deployment:
+        """Build a zone whose plant is simulated, from what each far side declares.
 
-        The shape of every paired zone this repository can generate, and the one
-        a test states most readably. A constructor and not the representation —
-        nothing downstream stops asking per side.
+        The shape of every paired zone this repository can generate — the L0
+        validator refuses a paired zone whose plant commands physical hardware —
+        and the one a test states most readably. A constructor and not the
+        representation: nothing downstream stops asking per side.
         """
         return Deployment(
             {
-                asset: {PLANT_SIDE: SIMULATION_BACKEND, COUNTERPART_SIDE: backend}
-                for asset, backend in far_side_backends.items()
+                asset: {PLANT_SIDE: False, COUNTERPART_SIDE: physical}
+                for asset, physical in far_side_physical.items()
             }
         )
 
-    def backend(self, asset: str, side: str) -> str | None:
-        """Return what ``side`` loads for ``asset``, or `None` where it has no such side."""
-        return self.backends[asset].get(side)
+    def declares_physical_hardware(self, asset: str, side: str) -> bool | None:
+        """Return what ``side`` declares for ``asset``, or `None` for no such side.
+
+        Total, and three-valued for the reason the class docstring gives. A
+        caller deciding a safety question must ask for `is True` or `is None`
+        explicitly and never by truthiness, because `None` and `False` are
+        different answers to different questions.
+        """
+        return self.sides[asset].get(side)
 
     def assets_in_scope(self, asset_id: str) -> tuple[str, ...]:
         """Return the assets a request naming ``asset_id`` decides for.
@@ -192,12 +222,12 @@ class Deployment:
         an answer for the third (`cross-cutting-safety.md`).
         """
         if asset_id == "":
-            return tuple(sorted(self.backends))
-        if asset_id not in self.backends:
+            return tuple(sorted(self.sides))
+        if asset_id not in self.sides:
             raise ModeError(
                 ResultCode.PRECONDITION_FAILED,
                 f"no asset {asset_id!r} in this zone; it has "
-                f"{', '.join(repr(name) for name in sorted(self.backends))}.",
+                f"{', '.join(repr(name) for name in sorted(self.sides))}.",
             )
         return (asset_id,)
 
@@ -205,7 +235,8 @@ class Deployment:
         """Whether every asset the request decides for has a far side at all."""
         assets = self.assets_in_scope(asset_id)
         return bool(assets) and all(
-            self.backend(asset, COUNTERPART_SIDE) is not None for asset in assets
+            self.declares_physical_hardware(asset, COUNTERPART_SIDE) is not None
+            for asset in assets
         )
 
     def assets_without_a_far_side(self, asset_id: str) -> tuple[str, ...]:
@@ -213,7 +244,7 @@ class Deployment:
         return tuple(
             asset
             for asset in self.assets_in_scope(asset_id)
-            if self.backend(asset, COUNTERPART_SIDE) is None
+            if self.declares_physical_hardware(asset, COUNTERPART_SIDE) is None
         )
 
     def physical_sides_commanded(self, mode: int, asset_id: str) -> tuple[str, ...]:
@@ -224,23 +255,85 @@ class Deployment:
         this function does the intersection and knows nothing about which modes
         are dangerous.
 
-        An allowlist and never a denylist: anything that is not
-        :data:`SIMULATION_BACKEND` is hardware, so a backend nobody anticipated
-        is refused rather than silently permitted. A side that does not exist
-        commands nothing.
+        **The datum is the fact L0 declares, not the backend's name** (ADR-0054).
+        It was the name, compared against the literal `sim`, and that returns the
+        empty tuple for every mode on a cell whose every side loads the vendor's
+        physical component under that id. An allowlist and never a denylist, and
+        now structurally so: the dangerous branch is the positive one, so a side
+        is hardware exactly when someone wrote `commands_physical_hardware: true`
+        in L0 — there is no unanticipated name left to fall through. A side that
+        does not exist commands nothing, which is `is True` and not truthiness.
 
         Named `(asset, side)` and not by asset alone, because that is the
         granularity at which a backend is selected, and because a refusal that
         cannot say *which side* of which asset is the physical one sends its
         reader to look at the wrong half of the cell.
+
+        **THE BACKEND ID IS DELIBERATELY GONE FROM THIS STRING**, and it is named
+        rather than allowed to disappear quietly. This returned
+        `f"{asset} ({side} {backend!r})"` and that string is the `SAFETY_BLOCKED`
+        diagnostic. Once the decision is made on the declaration, printing the id
+        would be printing the value ADR-0054 removed from the safety path, and a
+        reader would take it for the reason. The load-bearing half — which
+        (asset, side) was refused for — is kept.
         """
         return tuple(
-            f"{asset} ({side} {backend!r})"
+            f"{asset} ({side})"
             for asset in self.assets_in_scope(asset_id)
             for side in commanded_sides(mode)
-            if (backend := self.backend(asset, side)) is not None
-            and backend != SIMULATION_BACKEND
+            if self.declares_physical_hardware(asset, side) is True
         )
+
+
+def deployment_from_plan(plan: Plan) -> Deployment:
+    """Read what L5 knows about both sides out of the generated bring-up plan.
+
+    **A free function, and its being one is a requirement rather than a style
+    choice** (ADR-0054, clause 8). This map used to be built inline in
+    `TwinBoundary.__init__`, which means the failure it can produce is an
+    exception raised *during* construction — and no test that needs a working
+    `__init__` can reach that. Built here, the whole of it is assertable on the
+    shipped single-sided plan without a node, a graph or a cell.
+
+    **It asks the plan's TOTAL accessor and never the refusing one.** The shipped
+    zone declares `twin: {sides: single}`, so no controller manager states a
+    counterpart, and `commands_physical_hardware_on` refuses an undeclared side
+    with `SideNotDeclaredError`. Calling that here would raise on the model this
+    repository actually ships. `commands_physical_hardware_on_or_none` returns
+    the `None` `Deployment` needs, with the same meaning `Deployment` gives it,
+    so the distinction survives the crossing instead of being rebuilt from an
+    exception at this end.
+    """
+    return Deployment(
+        {
+            manager.asset: {
+                side: manager.commands_physical_hardware_on_or_none(side)
+                for side in (PLANT_SIDE, COUNTERPART_SIDE)
+            }
+            for manager in plan.controller_managers
+        }
+    )
+
+
+def far_side_is_physical(declared: bool | None) -> bool:
+    """Whether the far side is a physical machine, for ADR-0050's validity terms.
+
+    One line, and a named one, for two reasons. It is the last place in this
+    package that turns the three-valued declaration into the two-valued answer a
+    condition wants, so the direction of that collapse is written down once
+    instead of being spelled at a call site inside a publisher callback — and
+    `divergence.assess` reads it, which is a P8 concern rather than a motion
+    path. And it is what makes the derivation assertable at all: it was a local
+    inside `TwinBoundary._sample`, so migrating `Deployment` fully while leaving
+    `_sample` deciding on a backend's name would have passed every other
+    assertion (ADR-0054, clause 8).
+
+    **`None` is not physical**, because `None` means there is no far side, and a
+    side that does not exist is not a machine. Written `is True` rather than as a
+    truth test so that the two false answers stay one answer here and nowhere
+    else.
+    """
+    return declared is True
 
 
 @dataclass(frozen=True)

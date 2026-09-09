@@ -31,15 +31,18 @@ from cite_twin.routing import commanded_sides, route
 import pytest
 
 #: A Phase 2.A pair: three arms, every far side a second simulation.
-SIMULATED = Deployment.paired({"arm_1": "sim", "arm_2": "sim", "arm_3": "sim"})
+#:
+#: The value is what that side's backend DECLARES about reaching a physical
+#: machine, not what the backend is called (ADR-0054). What a side is named
+#: decides nothing here any more, which is the whole of that record.
+SIMULATED = Deployment.paired({"arm_1": False, "arm_2": False, "arm_3": False})
 
 #: Phase 2.B's planned state, and the one `cross-cutting-safety.md` insists is
 #: not an edge case: one physical arm beside two simulated ones.
-MIXED = Deployment.paired(
-    {"arm_1": "sim", "arm_2": "uf_robot_hardware", "arm_3": "sim"}
-)
+MIXED = Deployment.paired({"arm_1": False, "arm_2": True, "arm_3": False})
 
-#: A zone with no counterpart at all.
+#: A zone with no counterpart at all. `None` is the third value and it means
+#: "there is no such side" - never "that side is simulated".
 UNPAIRED = Deployment.paired({"arm_1": None})
 
 #: Every mode the message declares, read off the message.
@@ -281,9 +284,20 @@ class TestTheGateIsDerivedAndNotListed:
         assert not physical.accepted
         assert physical.code == ResultCode.SAFETY_BLOCKED
 
-    def test_a_backend_nobody_anticipated_counts_as_hardware(self) -> None:
-        """An allowlist: a hardware path is never reachable by omission."""
-        deployment = Deployment.paired({"arm_1": "some_future_driver"})
+    def test_a_far_side_declaring_hardware_is_gated_whatever_it_is_called(
+        self,
+    ) -> None:
+        """An allowlist, and after ADR-0054 a structural one.
+
+        This asserted that a backend NAMED `some_future_driver` counted as
+        hardware, which is an allowlist over names - and ADR-0054's Context
+        measures what that was worth: it reported no physical side commanded, for
+        every mode, on a zone whose every side loaded the vendor's physical
+        component under the name `sim`. The dangerous branch is now the positive
+        one, so a side is gated exactly when L0 declared that it commands
+        hardware, and there is no name left to be wrong about.
+        """
+        deployment = Deployment.paired({"arm_1": True})
         verdict = authority(deployment, _refused).request(
             TwinMode.MODE_VIRTUAL_LEAD, "", "because", force=False
         )

@@ -132,6 +132,9 @@ def _paired_plan() -> Path:
     )
     for manager in plan["controller_managers"]:
         manager["counterpart_backend"] = "sim"
+        # Both sides simulated, declared rather than inferred from the id
+        # (ADR-0054).
+        manager["counterpart_commands_physical_hardware"] = False
     path = Path(tempfile.mkdtemp(prefix="cite_twin_paired_")) / f"{ZONE}_plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return path

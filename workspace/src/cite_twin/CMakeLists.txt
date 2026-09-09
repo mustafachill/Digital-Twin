@@ -47,6 +47,12 @@ if(BUILD_TESTING)
   # and that `force` cannot reach the gate. Pure logic - the hardware check is
   # injected, so both answers are driven without touching the environment.
   ament_add_pytest_test(mode test/test_mode.py)
+  # ADR-0054 clause 8: L5's gate answers on the fact L0 declares rather than on
+  # the backend's name, and the shipped single-sided deployment still refuses a
+  # two-sided mode. Nothing here constructs a node or starts a graph - the map
+  # from the plan and the far-side derivation are free functions for exactly
+  # that reason.
+  ament_add_pytest_test(declared_fact test/test_l5_gate_reads_the_declared_fact.py)
   # ADR-0050 decision 2's table, one row per mode, including the two rows that
   # refuse and the one the record leaves undecided.
   ament_add_pytest_test(routing test/test_routing.py)

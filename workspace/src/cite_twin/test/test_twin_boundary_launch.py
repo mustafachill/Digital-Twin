@@ -106,9 +106,13 @@ def _paired_plan() -> Path:
         }
     )
     for manager in plan["controller_managers"]:
+        physical = manager["asset"] == PHYSICAL_ASSET
         manager["counterpart_backend"] = (
-            PHYSICAL_BACKEND if manager["asset"] == PHYSICAL_ASSET else SIMULATED_BACKEND
+            PHYSICAL_BACKEND if physical else SIMULATED_BACKEND
         )
+        # What that side DECLARES, which after ADR-0054 is what every gate in
+        # this rig reads. The backend id beside it decides nothing.
+        manager["counterpart_commands_physical_hardware"] = physical
     path = Path(tempfile.mkdtemp(prefix="cite_twin_plan_")) / "cell_a_plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return path
