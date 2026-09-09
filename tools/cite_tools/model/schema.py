@@ -418,6 +418,35 @@ class HardwareBackend(Strict):
     """
 
     ros2_control_plugin: str
+
+    #: Whether loading this backend's plugin can reach a physical machine.
+    #:
+    #: Required, with no default, for the reason `HardwareSelection.backend` and
+    #: `TwinSpec.sides` are: `cross-cutting-safety.md` forbids a hardware path
+    #: reachable by omission, and this is now the field every hardware gate
+    #: decides on. A default of `false` would let a backend become simulated
+    #: because a key was left out — which is ADR-0054's own defect with a shorter
+    #: spelling — and a default of `true` would refuse every unmigrated model,
+    #: which is a different way of not being answered.
+    #:
+    #: Named for the question the gates ask rather than for the software, so
+    #: every safety site reads the positive branch and the value that must be
+    #: written to reach an arm is `true` (ADR-0054, decision 1).
+    #:
+    #: A boolean and not an enumeration. The question is binary, and a third
+    #: value would make each consumer map three values onto two — a transcribed
+    #: list, in as many places as there are consumers, each choosing its own
+    #: failure direction (ADR-0054, option E).
+    #:
+    #: **THIS IS A CLAIM THE MODEL MAKES ABOUT ITSELF AND NOTHING VERIFIES IT.**
+    #: `false` beside `uf_robot_hardware/UFRobotSystemHardware` validates,
+    #: generates and starts. Catching that needs a list of plugin strings, which
+    #: ADR-0054 option A rejects for the reason `cross-cutting-safety.md:113-135`
+    #: records. What the field buys is that the fact is stated by the person who
+    #: chose the plugin, one line from the plugin string it is about, rather than
+    #: implied by an id nobody was asked about.
+    commands_physical_hardware: bool
+
     instance_params: list[str] = Field(default_factory=list)
 
 

@@ -218,9 +218,17 @@ asset_type:
   hardware_backends:
     sim:
       ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+      # Whether loading that plugin can reach a physical machine. Required, with
+      # no default, and stated one line from the plugin string it is about: every
+      # hardware gate in this repository decides on this and not on the id above
+      # it, because an id is a name and a name says nothing about the plugin
+      # behind it (ADR-0054). Nothing verifies this claim against the plugin
+      # string; a wrong answer here validates, generates and starts.
+      commands_physical_hardware: false
       instance_params: []
     real:
       ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
+      commands_physical_hardware: true
       # Phase 2. Declared now so that a mixed fleet is a data change.
       instance_params: [robot_ip, report_type]
 

@@ -52,9 +52,9 @@ def check(model: FacilityModel) -> list[Finding]:
 
 def _duplicate_ids(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
-    # `identifiers` rather than `ids`, which is the module this file imports for
-    # `SIMULATION_BACKEND`; the loop variable used to shadow it harmlessly and
-    # stopped being harmless the moment anything below wanted the module.
+    # `identifiers` rather than `ids`, which is the module this file imports;
+    # the loop variable used to shadow it harmlessly and stopped being harmless
+    # the moment anything below wanted the module.
     for label, identifiers in (
         ("asset", [a.id for a in model.assets]),
         ("asset type", [t.id for t in model.types]),
@@ -291,28 +291,57 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
     A physical machine on a paired zone is a ``counterpart_backend``. 2.B may
     reopen this with an argument; leaving it expressible by omission is a
     different thing.
+
+    IT READS THE DECLARATION AND NOT THE ID (ADR-0054, decision 2). This rule
+    compared ``hardware.backend`` against the literal ``sim`` and was therefore
+    satisfied by a paired zone whose plant loads the vendor's physical component
+    under that id — measured, at zero findings, in that record's Context. What
+    decides is now the type's own ``commands_physical_hardware``, so the rule
+    refuses a physical plant whatever its backend is called and permits a
+    simulated one whatever it is called.
+
+    THE RULE ID IS DELIBERATELY UNCHANGED, so no other record's citation of it
+    goes stale; the message, the hints and the ``where`` move. The ``where``
+    moves because the CAUSE moved: it was ``assets.<id>.hardware.backend``, the
+    id the asset selected, and the cause is now the declaration on the type's
+    backend, which is where a reader has to go to change the answer.
     """
     paired = {z.id for z in model.zones if z.twin.sides == "pair"}
     findings: list[Finding] = []
     for asset in model.assets:
         if asset.zone not in paired:
             continue
-        if asset.hardware.backend == ids.SIMULATION_BACKEND:
+        asset_type = model.asset_type(asset.type)
+        if asset_type is None:
+            # `_asset_types_exist` reports the missing type; this rule has
+            # nothing to read and says nothing rather than reporting the same
+            # cause twice.
+            continue
+        backend = asset_type.hardware_backends.get(asset.hardware.backend)
+        if backend is None:
+            # `unknown-backend` reports it, for the same reason.
+            continue
+        if not backend.commands_physical_hardware:
             continue
         findings.append(
             error(
                 "physical-plant-on-paired-zone",
-                f"assets.{asset.id}.hardware.backend",
-                f"zone {asset.zone!r} declares twin.sides: pair, so its plant side must be "
-                f"{ids.SIMULATION_BACKEND!r}, not {asset.hardware.backend!r}",
+                f"types.{asset_type.id}.hardware_backends.{asset.hardware.backend}"
+                ".commands_physical_hardware",
+                f"zone {asset.zone!r} declares twin.sides: pair, so its plant side may not "
+                f"command physical hardware, and asset {asset.id!r} selects backend "
+                f"{asset.hardware.backend!r}, which type {asset_type.id!r} declares as "
+                "commanding it",
                 "`plant` is the side ./scripts/sim, every scenario and every Phase 1 "
                 "artifact already address, so this would silently point the whole existing "
                 "test suite at a physical cell — behind an opt-in that refuses at bring-up "
                 "rather than per command. Write the physical machine as "
-                f"`counterpart_backend: {asset.hardware.backend}` and leave `backend: "
-                f"{ids.SIMULATION_BACKEND}`; that is the same two machines, it is what "
-                "charter §8's Phase 2 scopes, and it is the encoding MODE_VIRTUAL_LEAD "
-                "describes (ADR-0041, Decision 3). Note that "
+                f"`counterpart_backend: {asset.hardware.backend}` and leave the plant on a "
+                "backend declaring `commands_physical_hardware: false`; that is the same "
+                "two machines, it is what charter §8's Phase 2 scopes, and it is the "
+                "encoding MODE_VIRTUAL_LEAD describes (ADR-0041, Decision 3). What decides "
+                "here is the declaration on the type's backend and not the backend's name, "
+                "so renaming the backend changes nothing (ADR-0054). Note that "
                 "`divergent-counterpart-backend` then refuses that encoding as well, "
                 "until the generator emits a per-side artifact set: the vocabulary is "
                 "right and the generator is not ready for it (ADR-0048).",
@@ -362,8 +391,18 @@ def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding
     not one of them generates an artifact. This docstring claimed "every read of
     the PLANT's backend" and that is the wider set.
 
-    AND IT COUNTS ITSELF. The instrument returns **6 lines in 5 files** in this
-    checkout on 2026-09-08, and one of the six is the sentence above, because
+    ONE SITE THE INSTRUMENT REACHES IS NOT A DEFECT, AND IT IS NEW. ADR-0054's
+    bring-up generator asks `commands_physical_hardware_of(instance.hardware
+    .backend)` in order to state the PLANT's fact, and states the counterpart's
+    from `effective_counterpart_backend` on the next line — so it reads the
+    plant's backend to answer a question about the plant, which is the shape this
+    rule is waiting for rather than an instance of the shape it refuses. A reader
+    running the instrument has to look at what each hit is answering; the count
+    alone does not say.
+
+    AND IT COUNTS ITSELF. The instrument returned **6 lines in 5 files** in this
+    checkout on 2026-09-08 and **7 in 5** after that generator site landed, and
+    one of them is the sentence above, because
     this file is inside the search scope — the same "a guard that counts a
     string counts its own message" hazard the guard in
     `cite_bringup/test/test_plan.py` is parsed rather than grepped to avoid. Five
@@ -399,7 +438,8 @@ def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding
                 "generated and committed without a word of warning. ADR-0048 refuses the "
                 "combination until the generator emits a per-side artifact set (its clause "
                 "2); until then both sides of a paired zone name one backend, and "
-                f"`physical-plant-on-paired-zone` fixes which: {ids.SIMULATION_BACKEND!r}."
+                "`physical-plant-on-paired-zone` fixes what that backend may be: one "
+                "declaring `commands_physical_hardware: false` (ADR-0054)."
             )
         else:
             hint = (

@@ -22,8 +22,12 @@ asset_type:
   hardware_backends:
     sim:
       ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+      # Stated rather than defaulted, because the field is required (ADR-0054).
+      # The fixture takes the same position the real robot type does.
+      commands_physical_hardware: false
     real:
       ros2_control_plugin: uf_robot_hardware/UFRobotSystemHardware
+      commands_physical_hardware: true
       instance_params: [robot_ip]
   control:
     update_rate_hz: 150

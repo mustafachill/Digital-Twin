@@ -21,6 +21,7 @@ from cite_tools.model.schema import (
     AssetInstance,
     AssetType,
     ControllerSpec,
+    HardwareBackend,
     TrajectoryConstraints,
 )
 from cite_tools.model.workpieces import WorkpieceWidths, workpiece_types, workpiece_widths
@@ -70,15 +71,34 @@ class ResolvedAsset:
     frames: dict[str, Pose] = field(default_factory=dict)
     controllers: tuple[ResolvedController, ...] = ()
 
-    @property
-    def ros2_control_plugin(self) -> str:
-        backend = self.asset_type.hardware_backends.get(self.instance.hardware.backend)
+    def _backend(self, backend_id: str) -> HardwareBackend:
+        backend = self.asset_type.hardware_backends.get(backend_id)
         if backend is None:
             raise ResolveError(
-                f"asset {self.id!r} selects backend {self.instance.hardware.backend!r}, "
+                f"asset {self.id!r} selects backend {backend_id!r}, "
                 f"which type {self.asset_type.id!r} does not declare"
             )
-        return backend.ros2_control_plugin
+        return backend
+
+    @property
+    def ros2_control_plugin(self) -> str:
+        return self._backend(self.instance.hardware.backend).ros2_control_plugin
+
+    def commands_physical_hardware_of(self, backend_id: str) -> bool:
+        """Whether ``backend_id``, as this asset's type declares it, reaches a machine.
+
+        Takes the backend id rather than reading `instance.hardware.backend`,
+        because the caller that needs it most is the bring-up plan generator,
+        which states the fact for the counterpart side as well and must ask about
+        a backend that is not the plant's (ADR-0041 Decision 3, ADR-0054
+        decision 3).
+
+        It is a total function of the TYPE's declaration, which is why the plan
+        has to carry the answer rather than derive it: the mapping from an id to
+        the fact lives in `hardware_backends`, which the plan does not carry, and
+        two types may declare the same id with different answers.
+        """
+        return self._backend(backend_id).commands_physical_hardware
 
     def frame_name(self, link_suffix: str) -> str:
         return ids.frame(self.zone, self.id, link_suffix)

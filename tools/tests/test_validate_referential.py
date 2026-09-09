@@ -205,6 +205,63 @@ def test_the_refusal_says_which_encoding_to_use_instead(
     assert "counterpart_backend: real" in (refusal.hint or "")
 
 
+def test_the_paired_plant_refusal_reads_the_declaration_and_not_the_backends_name(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """ADR-0054 clause 7. The mutation the id could not catch.
+
+    Asserted by rule id and `where`, never by message substring. The `where`
+    MOVED with this change and moving it was the decision: the cause is no
+    longer the id the asset selected but the declaration on the type's backend,
+    which is the line a reader has to edit to change the answer.
+    """
+    _pair_the_zone(minimal_model, edit_yaml)
+    # The reproduction: the vendor's physical component under the friendly id.
+    # Nothing renames the backend, so a rule reading the name sees `sim` and is
+    # satisfied - which is exactly what ADR-0054's Context measured, at zero
+    # findings.
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: d["asset_type"]["hardware_backends"]["sim"].update(
+            {
+                "ros2_control_plugin": "uf_robot_hardware/UFRobotSystemHardware",
+                "commands_physical_hardware": True,
+            }
+        ),
+    )
+    findings = referential.check(load(minimal_model))
+    refusal = next(f for f in findings if f.rule == "physical-plant-on-paired-zone")
+    assert refusal.where == ("types.xarm5.hardware_backends.sim.commands_physical_hardware")
+
+
+def test_a_paired_plant_is_permitted_whatever_its_backend_is_called(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The other direction of clause 7, and the one a name gets wrong too.
+
+    A backend named `real` that declares it commands nothing physical is a
+    simulation with an unfortunate id, and the rule must not refuse it at any
+    severity. Under the old rule this was an ERROR.
+    """
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: d["asset_type"]["hardware_backends"]["real"].update(
+            {
+                "ros2_control_plugin": "gz_ros2_control/GazeboSimSystem",
+                "commands_physical_hardware": False,
+                "instance_params": [],
+            }
+        ),
+    )
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__("hardware", {"backend": "real"}),
+    )
+    findings = referential.check(load(minimal_model))
+    assert not [f for f in findings if f.rule == "physical-plant-on-paired-zone"]
+
+
 def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:

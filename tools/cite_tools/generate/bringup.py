@@ -40,6 +40,21 @@ class _ManagerView:
     #: backend of every side that exists whether or not the model wrote it
     #: (ADR-0041, Decision 3).
     counterpart_backend: str | None
+    #: Whether the PLANT side's backend, as its type declares it, reaches a
+    #: physical machine. Emitted rather than derived at bring-up: the mapping
+    #: from a backend id to this fact lives in the type's `hardware_backends`,
+    #: which the plan does not carry, and it is per type rather than per zone —
+    #: two types may declare the same id with different answers. Deriving it
+    #: would mean emitting the whole backend table and each asset's type into the
+    #: plan, for the same fact, one indirection further from the consumer
+    #: (ADR-0054, decision 3; contrast ADR-0048 clause 3, where the removed key
+    #: WAS a total function of what the plan already stated).
+    commands_physical_hardware: bool
+    #: The same fact for the counterpart side, emitted exactly where
+    #: `counterpart_backend` is and `None` exactly where it is, so that the
+    #: backend accessor and the fact accessor can never disagree about which
+    #: sides a manager declares.
+    counterpart_commands_physical_hardware: bool | None
     description_topic: str
     #: Where this asset's joint state arrives, which is `joint_state_broadcaster`'s
     #: own topic under the controller manager's namespace.
@@ -373,6 +388,16 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             backend=asset.instance.hardware.backend,
             counterpart_backend=(
                 asset.instance.hardware.effective_counterpart_backend if cell.is_paired else None
+            ),
+            commands_physical_hardware=asset.commands_physical_hardware_of(
+                asset.instance.hardware.backend
+            ),
+            counterpart_commands_physical_hardware=(
+                asset.commands_physical_hardware_of(
+                    asset.instance.hardware.effective_counterpart_backend
+                )
+                if cell.is_paired
+                else None
             ),
             # gz_ros2_control's controller manager inherits the plugin's
             # namespace, so it subscribes to <ns>/robot_description rather than

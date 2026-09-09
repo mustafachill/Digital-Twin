@@ -25,22 +25,37 @@ ROOT = "cite"
 #: The facility root frame, tied to the surveyed physical origin (L5).
 WORLD_FRAME = "cite_world"
 
-#: The one backend id that cannot reach a physical machine. Every other value
-#: names a `ros2_control` plugin that drives real hardware.
+#: The backend id whose controller configuration says `use_sim_time: true`.
 #:
-#: Here rather than spelled at each call site because two rules turn on it —
-#: `use_sim_time` is derived from it, and a paired zone may not name anything
-#: else on its plant side — and a further statement of the string would be the
-#: value-in-two-places P1 forbids. A third rule used to be here, deciding whether
-#: a controller manager is hosted inside the Gazebo process; ADR-0048 clause 3
-#: removed the field it fed, since nothing read it and it was a total function of
-#: a backend the plan already states per side.
-#: `cite_bringup.plan.SIMULATION_BACKEND` is the one unavoidable second
-#: statement: it is a different build unit that cannot import this one, and it
-#: reads the value out of the generated plan rather than deciding it.
-#: `cite_twin.mode.SIMULATION_BACKEND` is a third, for the same reason and with
-#: the same limit — its own comment says so — so `grep -rn SIMULATION_BACKEND`
-#: is what says how many statements exist, not this comment.
+#: **IT DECIDES ONE THING, AND WHETHER A BACKEND CAN REACH A PHYSICAL MACHINE IS
+#: NOT IT.** This comment used to read "the one backend id that cannot reach a
+#: physical machine", and ADR-0054's Context falsified that by measurement: a
+#: type may declare the vendor's physical `ros2_control` plugin under this id,
+#: and the id says nothing about the plugin behind it. That question is answered
+#: by `HardwareBackend.commands_physical_hardware`, which the type declares
+#: beside the plugin string, and every hardware gate reads that instead — in
+#: `validate.referential`, in `cite_bringup.plan` and in `cite_twin`. The two
+#: restatements of this string in those packages are gone with their consumers.
+#:
+#: **WHAT SURVIVES IS THE CLOCK, AND IT IS WRONG IN THE SAME WAY.**
+#: `generate/control.py` derives `use_sim_time` from this id, so ADR-0054's
+#: Context also measures `use_sim_time: false` on a Gazebo-driven arm named
+#: `real` and `use_sim_time: true` on a physical arm named `sim`. That is left
+#: open deliberately rather than closed by extension: the clock asks *does this
+#: controller manager take its time from the simulator*, which coincides with
+#: physical reachability on the two backends this repository declares and
+#: diverges on the third kind — `mock_components/GenericSystem`, which four
+#: `cite_bringup` launch rigs load and which three of them want on `false` while
+#: the fourth wants it `true`, and the vendor's `UFRobotFakeSystemHardware`,
+#: which nothing forbids naming in `model/`. Deriving the clock from the safety
+#: fact would transcribe a coincidence. Answering it properly needs its own
+#: record (ADR-0054, decision 2); two characterisation tests in
+#: `tools/tests/test_use_sim_time_still_keys_on_the_id.py` pin the gap so that a
+#: later reader does not take it for closed.
+#:
+#: Here rather than spelled at each call site because a further statement of the
+#: string would be the value-in-two-places P1 forbids. `grep -rn
+#: SIMULATION_BACKEND` is what says how many statements exist, not this comment.
 SIMULATION_BACKEND = "sim"
 
 #: Separates the three parts of a flattened TF frame name. Doubled so that a

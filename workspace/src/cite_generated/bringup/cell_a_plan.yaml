@@ -106,6 +106,10 @@ plan:
     - asset: arm_1
       node: /cite/cell_a/arm_1/controller_manager
       backend: sim
+      # Whether that backend reaches a physical machine, as the asset's TYPE
+      # declares it beside the plugin string it names. This and not `backend` is
+      # what the hardware opt-in decides on (ADR-0054).
+      commands_physical_hardware: false
       description_topic: /cite/cell_a/arm_1/robot_description
       joint_state_topic: /cite/cell_a/arm_1/joint_states
       description: package://cite_generated/description/cell_a_arm_1.urdf.xacro
@@ -249,6 +253,10 @@ plan:
     - asset: arm_2
       node: /cite/cell_a/arm_2/controller_manager
       backend: sim
+      # Whether that backend reaches a physical machine, as the asset's TYPE
+      # declares it beside the plugin string it names. This and not `backend` is
+      # what the hardware opt-in decides on (ADR-0054).
+      commands_physical_hardware: false
       description_topic: /cite/cell_a/arm_2/robot_description
       joint_state_topic: /cite/cell_a/arm_2/joint_states
       description: package://cite_generated/description/cell_a_arm_2.urdf.xacro
@@ -392,6 +400,10 @@ plan:
     - asset: arm_3
       node: /cite/cell_a/arm_3/controller_manager
       backend: sim
+      # Whether that backend reaches a physical machine, as the asset's TYPE
+      # declares it beside the plugin string it names. This and not `backend` is
+      # what the hardware opt-in decides on (ADR-0054).
+      commands_physical_hardware: false
       description_topic: /cite/cell_a/arm_3/robot_description
       joint_state_topic: /cite/cell_a/arm_3/joint_states
       description: package://cite_generated/description/cell_a_arm_3.urdf.xacro
