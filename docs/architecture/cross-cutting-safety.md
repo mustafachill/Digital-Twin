@@ -7,7 +7,14 @@
   without a deliberate opt-in. `CITE_ALLOW_HARDWARE=1` is required by
   `require_explicit_hardware_opt_in` in `scripts/_lib.sh` for `./scripts/enter hardware`,
   and independently by `require_hardware_opt_in` in `cite_bringup/cite_bringup/plan.py` for
-  any bring-up plan naming a non-simulated backend. Both are covered by tests.
+  any bring-up plan on which some (asset, side) **declares** that it reaches a physical
+  machine. That refusal decides on a declared fact and not on the backend's id: L0 states
+  `commands_physical_hardware` per backend, the generated plan carries it per (asset, side),
+  and a physical backend is refused whatever it is called
+  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). Before ADR-0054
+  it compared the id against the literal `sim`, and a type declaring the vendor's physical
+  `ros2_control` plugin under that id passed the gate without it ever consulting the opt-in.
+  Both are covered by tests.
 - **Related:** [L2](L2-control-and-hal.md), [L5](L5-twin-synchronization.md), [`../operations/safety-procedures.md`](../operations/safety-procedures.md), [`../reference/standards.md`](../reference/standards.md)
 
 ## What this covers, and what it does not

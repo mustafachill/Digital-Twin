@@ -68,8 +68,13 @@
   field. A deceleration ceiling the physical arm cannot honour is caught by nothing here, on
   either backend.
   **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
-  instance in L0, and a plan naming a non-simulated backend is refused at the ROS boundary
-  unless `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`).
+  instance in L0, and a plan on which some (asset, side) declares that its backend reaches a
+  physical machine is refused at the ROS boundary unless `CITE_ALLOW_HARDWARE=1` is set
+  (`cite_bringup/cite_bringup/plan.py`). It is that declared fact — L0's
+  `commands_physical_hardware`, carried into the plan per (asset, side) — and not the
+  backend's id that the refusal reads, so an id says nothing about whether the plan is gated
+  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It binds at
+  bring-up: it does not gate an individual command, and it cannot stop an arm already moving.
   **Held, and this document said otherwise until 2026-08-29:** the configured rate. The model
   asks for 150 Hz and `joint_states` was measured at or above it on an idle cell — the world
   was unthrottled when that was measured, so the rate ran slightly above the configured one.

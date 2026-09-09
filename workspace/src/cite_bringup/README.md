@@ -167,32 +167,53 @@ which is why the answer is a door rather than a convention.
 
 ## The hardware gate
 
-`plan.py::require_hardware_opt_in` refuses a plan that declares any backend other than `sim`
-unless `CITE_ALLOW_HARDWARE=1` is set, and `simulation.launch.py` calls it before it builds
-anything.
+`plan.py::require_hardware_opt_in` refuses a plan on which some (asset, side) declares that
+what it loads reaches a physical machine, unless `CITE_ALLOW_HARDWARE=1` is set, and
+`simulation.launch.py` calls it before it builds anything.
 
-It reads **every side's** backend, not only the plant's. A backend is selected per (asset,
-side), so a twinned zone can name a physical machine on its counterpart while its plant stays
-simulated — which is what Phase 2.B is
+**It decides on a declared fact and not on the backend's id.** L0 states
+`commands_physical_hardware` on each backend a type declares, beside the `ros2_control`
+plugin string it names; the generated plan carries that fact per (asset, side); and this
+reads it. So a physical backend is refused whatever it is called, and a simulated one is
+permitted whatever it is called
+([ADR-0054](../../../docs/adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). This
+check compared the id against the literal `sim` until that record: nothing constrained what
+plugin an id could carry, so a type declaring the vendor's physical
+`uf_robot_hardware/UFRobotSystemHardware` under the id `sim` reached the arm through a gate
+that returned without ever consulting `CITE_ALLOW_HARDWARE`.
+
+It reads **every side's** declaration, not only the plant's. A backend is selected per
+(asset, side), so a twinned zone can name a physical machine on its counterpart while its
+plant stays simulated — which is what Phase 2.B is
 ([ADR-0041](../../../docs/adr/0041-virtual-counterpart-is-a-second-full-simulation.md),
-Decision 3) — and a gate that read only `backend` would let the far side become physical
+Decision 3) — and a gate that read only the plant would let the far side become physical
 without ever looking at it. The reverse case cannot reach this gate at all: the L0 validator
-refuses to generate a plan whose paired zone names a non-`sim` plant.
+refuses to generate a plan whose paired zone names a physical plant.
 
-It is an **allowlist**, not a denylist: `sim` is the one backend that cannot reach a physical
-machine, so a backend nobody anticipated is refused rather than permitted.
+It is an **allowlist**, and now structurally so: the dangerous branch is the positive one, so
+reaching an arm requires that somebody wrote `commands_physical_hardware: true` in L0, and
+there is no unanticipated name left to fall through.
 [`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md) requires that
 a hardware path is never reachable by omission, and a denylist is reachable by omission by
-construction.
+construction. What remains is that **L0 can lie** — `false` beside the vendor's physical
+component passes here — which ADR-0054 names as the price of not transcribing a list of
+plugin strings.
 
 The equivalent shell check in `scripts/_lib.sh` guards `./scripts/enter hardware` and nothing
-else. Every other route into the ROS graph — a launch file run directly, a scenario, CI, an
-editor — arrives at this one instead.
+else, which is why the check also lives at this boundary. **What arrives here is every route that
+brings the cell up through `simulation.launch.py`** — `./scripts/sim` in either form, every
+scenario, CI, and a direct `ros2 launch` — because that launch file is this function's only
+production caller. `cite_twin.mode` applies the same function at a mode transition, injected
+rather than imported. A process that does not come up through that launch file does not arrive
+here at all and this gate cannot refuse it; adding a second door means adding a second call. This
+paragraph claimed *"every other route into the ROS graph"*, which is a reach no single function
+has.
 
 **What this is not.** Refusing to start is the only enforceable form of the rule until Phase 2
 builds the safety layer. It does not change *what* is commanded on either path (P2); it stops
 a physical machine being commanded by accident. There is no hardware launch file in this
-package at this commit, and every backend in `cell_a_plan.yaml` is `sim`.
+package at this commit, and every controller manager in `cell_a_plan.yaml` states
+`commands_physical_hardware: false`.
 
 ## The ROS domain, and the other half of one rule
 
