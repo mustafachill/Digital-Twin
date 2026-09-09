@@ -27,6 +27,7 @@ from pathlib import Path
 
 from cite_bringup.plan import (
     ARM_KEYS,
+    BACKEND_FIELD_BY_SIDE,
     ControllerManager,
     ControllerRef,
     COUNTERPART_SIDE,
@@ -41,6 +42,7 @@ from cite_bringup.plan import (
     HARDWARE_OPT_IN_ENV,
     HardwareNotPermittedError,
     load,
+    PHYSICAL_FIELD_BY_SIDE,
     PlanError,
     PLANT_SIDE,
     require_domain,
@@ -85,6 +87,28 @@ _PLAN_PATH_READER = "_generated"
 _PLAN_URI = "GENERATED_PLAN"
 #: The one call a path outside the reader may sit inside.
 _PLAN_LOADER = "load"
+
+#: Builtins that turn this module's namespace into a dictionary, and so turn a
+#: guarded NAME into a string no AST guard below can see. Barred outright rather
+#: than guarded by shape: none of them has a use in this file, and
+#: `globals().get("_live_document")()` was demonstrated reaching the live plan
+#: with every other guard here green.
+#:
+#: `getattr` is deliberately NOT on this list - it is used twice above on AST
+#: nodes and on a dataclass, neither of which is a namespace reach. So a
+#: determined `getattr(sys.modules[__name__], ...)` is not closed by this, and
+#: saying otherwise would be the overclaim these guards keep catching.
+_NAMESPACE_ACCESSORS = ("globals", "locals", "vars")
+
+#: Every controller-manager key a paired plan carries and an untwinned one does
+#: not, taken from the reader's own maps rather than transcribed. `_solo_document`
+#: removes exactly these; a key added to either map without a matching pop here
+#: would leave the solo shape stating something no generator emits, which is how
+#: this helper came to drop one of two and fail 35 tests on a paired checkout.
+_COUNTERPART_MANAGER_KEYS = (
+    BACKEND_FIELD_BY_SIDE[COUNTERPART_SIDE],
+    PHYSICAL_FIELD_BY_SIDE[COUNTERPART_SIDE],
+)
 
 
 def _this_module() -> ast.Module:
@@ -1278,6 +1302,23 @@ def test_the_hardware_gate_reads_through_the_accessor(tmp_path: Path) -> None:
     )
 
 
+def test_the_two_side_maps_declare_the_same_sides() -> None:
+    """The one thing that can drift between `plan.py`'s two side-to-field maps.
+
+    They are not two copies of one value - each holds different plan-key names,
+    authored once - so deriving one from the other would buy nothing and would
+    make the counterpart's keys an artefact of a naming convention. What they may
+    not do is disagree about WHICH SIDES exist: `require_hardware_opt_in` walks
+    the physical map and reports through it, and asks `backend_on` for the same
+    side, so a side present in one and absent from the other is either a side
+    that is gated and cannot be named or one that is named and never gated.
+    """
+    assert set(PHYSICAL_FIELD_BY_SIDE) == set(BACKEND_FIELD_BY_SIDE) == {
+        PLANT_SIDE,
+        COUNTERPART_SIDE,
+    }
+
+
 def test_a_declared_side_no_asset_states_a_backend_for_is_refused(tmp_path: Path) -> None:
     """A plan that disagrees with itself about whether a side exists.
 
@@ -1484,12 +1525,13 @@ def _paired_document() -> dict:
     The same shape as `_paired` in `test_simulation_launch.py` and `_paired_plan`
     in `test_pair.py`.
 
-    **Both of the things pairing adds, not one.** `_solo_document` below removes
-    the counterpart's `sides:` entry AND every `counterpart_backend`, because
-    those are the two things a paired zone's plan carries. Adding only the first
-    here would leave a document no generator emits - two sides, with every asset
-    silent about what the second one loads - so every test taking the paired half
-    of the `document` fixture would be asking about that instead of about a pair.
+    **All three of the things pairing adds, not one.** `_solo_document` below
+    removes the counterpart's `sides:` entry AND both counterpart keys on every
+    controller manager, because those are the three things a paired zone's plan
+    carries. Adding only the first here would leave a document no generator emits
+    - two sides, with every asset silent about what the second one loads - so
+    every test taking the paired half of the `document` fixture would be asking
+    about that instead of about a pair.
     """
     document = _live_document()
     sides = document["plan"]["sides"]
@@ -1515,18 +1557,30 @@ def _solo_document() -> dict:
     The other half of the same hazard: a test about an untwinned zone read the
     live plan, so it asserted the opposite of what a paired checkout declares.
 
-    Two things go, because pairing adds exactly two things to this plan: the
-    counterpart's `sides:` entry, and a `counterpart_backend` on every controller
-    manager. Dropping only the first would leave a document no generator emits —
-    a zone with one side that still states what its second side loads — and a
-    test written against it would be asking about nothing.
+    THREE things go, because pairing adds exactly three things to this plan: the
+    counterpart's `sides:` entry, a `counterpart_backend` on every controller
+    manager, and — since ADR-0054 — the `counterpart_commands_physical_hardware`
+    emitted beside it. Dropping only some of them would leave a document no
+    generator emits — a zone with one side that still states what its second side
+    loads, or whether that side reaches a machine — and a test written against it
+    would be asking about nothing.
+
+    **The count was two until 2026-09-09 and the third key was not popped**,
+    which is that same defect in this helper rather than in a test: on a checkout
+    flipped to `pair` the solo half of the `document` fixture produced exactly
+    such a document and 35 tests failed on their fixture.
+
+    The two manager keys are taken from `plan.py`'s own side-to-field maps rather
+    than spelled here, so this helper cannot name a key the reader has stopped
+    parsing, or miss one it has started (P1).
     """
     document = _live_document()
     document["plan"]["sides"] = [
         side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
     ]
     for manager in document["plan"]["controller_managers"]:
-        manager.pop("counterpart_backend", None)
+        for field in _COUNTERPART_MANAGER_KEYS:
+            manager.pop(field, None)
     return document
 
 
@@ -1554,6 +1608,28 @@ def test_only_the_two_shape_helpers_read_the_live_plan() -> None:
         "asserts about whichever model this checkout carries - take the `document` "
         "fixture, which runs both shapes, or one shape helper by name where the "
         "shape is the question"
+    )
+    # The NAME and not only the call, because `_ALIAS = _live_document` followed
+    # by `_ALIAS()` reaches the same document with the clause above green: the
+    # call it makes names `_ALIAS`. Demonstrated, on 2026-09-09, against the
+    # clause above alone.
+    mentions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _LIVE_READER
+        and isinstance(node.ctx, ast.Load)
+    ]
+    borrowed = [
+        node
+        for node in mentions
+        if _enclosing_functions(tree, [node]) - set(_SHAPE_HELPERS)
+        or not _enclosing_functions(tree, [node])
+    ]
+    assert not borrowed, (
+        f"{_LIVE_READER!r} is named outside {sorted(_SHAPE_HELPERS)} at "
+        f"{_named_or_module_scope(tree, borrowed)}; binding it to another name "
+        "reaches the live document with the caller check above still green"
     )
 
 
@@ -1623,6 +1699,74 @@ def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
         f"{_named_or_module_scope(tree, elsewhere)}; only "
         f"{_PLAN_PATH_READER!r} may resolve it. Resolving the URI yourself walks "
         "around both guards above and lands on the same live document"
+    )
+
+
+def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> None:
+    """The two reaches the guards above are written against a call shape to miss.
+
+    Both were written and demonstrated on 2026-09-09, each passing every other
+    guard in this file.
+
+    **The namespace spelling.** `globals().get("_live_document")()` calls the
+    reader through a string, so `_calls_to` - which matches a call whose `func`
+    is a `Name` - sees nothing, and the name guard sees nothing either because
+    the name is now a `Constant`. The three builtins that make that possible have
+    no use here, so they are barred rather than shape-checked.
+
+    **The literal spelling.** `Path(resolve_uri("package://..."))` written out is
+    the same reach as `Path(resolve_uri(GENERATED_PLAN))` with the constant
+    guard green, because the constant is never named. So the URI's own text may
+    appear exactly once in this file, where the constant is bound.
+
+    The URI is taken **out of the parsed tree**, from the assignment that binds
+    the constant, rather than by naming `GENERATED_PLAN` here or by writing the
+    string a second time. Both alternatives are barred by the guards above and by
+    this one respectively - and the first is not a formality: written as a plain
+    read of the constant, this guard fails
+    `test_nothing_reaches_the_live_plan_around_that_reader`, which is that guard
+    working.
+    """
+    tree = _this_module()
+
+    dynamic = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in _NAMESPACE_ACCESSORS
+    ]
+    assert not dynamic, (
+        f"{sorted({node.func.id for node in dynamic})} is called by "
+        f"{_named_or_module_scope(tree, dynamic)}; these turn this module's "
+        "namespace into a dictionary, so a guarded name becomes a string every "
+        "guard in this file is blind to. Call what you mean by name"
+    )
+
+    bound = next(
+        node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == _PLAN_URI
+            for target in node.targets
+        )
+    )
+    assert isinstance(bound, ast.Constant), (
+        f"{_PLAN_URI} is no longer bound to a literal, so this guard cannot read "
+        "the URI out of the tree; give it the new shape rather than deleting it"
+    )
+    spellings = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and node.value == bound.value
+    ]
+    assert len(spellings) == 1, (
+        f"the generated plan's URI is written out at line(s) "
+        f"{sorted(node.lineno for node in spellings)}; it may appear only where "
+        f"{_PLAN_URI} is bound. Spelling it again resolves the live plan without "
+        f"naming the constant, which is the reach {_PLAN_PATH_READER!r} exists "
+        "to be the only holder of"
     )
 
 
