@@ -262,6 +262,38 @@ def test_a_paired_plant_is_permitted_whatever_its_backend_is_called(
     assert not [f for f in findings if f.rule == "physical-plant-on-paired-zone"]
 
 
+def test_a_type_declaring_no_backends_is_silent_in_both_rules(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The one case `physical-plant-on-paired-zone` hands to nobody.
+
+    That rule skips an asset whose selected backend is not on its type, with a
+    comment pointing at `unknown-backend`. That is right when the type declares
+    SOME backends. When it declares NONE, `unknown-backend` skips too — on its
+    own `if not backends`, and deliberately, since `hardware` is required on
+    every asset and every conveyor, sensor and fixture here selects a backend on
+    a type that declares none.
+
+    **So this asserts a silence, and it asserts the reason the silence is safe
+    in the same breath.** A plugin class string is authored only on a
+    `HardwareBackend`, so a type with no backends cannot name a physical
+    component at all; the second half below is what fails if that ever stops
+    being true, rather than leaving the first half looking like coverage.
+    """
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: d["asset_type"].pop("hardware_backends", None),
+    )
+    model = load(minimal_model)
+    findings = referential.check(model)
+    assert not [
+        f for f in findings if f.rule in ("physical-plant-on-paired-zone", "unknown-backend")
+    ], "both rules are silent here; if one starts speaking, say which and why"
+    # And the reason that costs nothing: there is no plugin string to find.
+    assert not model.asset_type("xarm5").hardware_backends
+
+
 def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:

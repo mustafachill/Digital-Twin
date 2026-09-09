@@ -110,7 +110,7 @@ plan:
       # Whether that backend reaches a physical machine, as the asset's TYPE
       # declares it beside the plugin string it names. This and not `backend` is
       # what the hardware opt-in decides on (ADR-0054).
-      commands_physical_hardware: {{ 'true' if manager.commands_physical_hardware else 'false' }}
+      commands_physical_hardware: {{ manager.commands_physical_hardware | declared_bool }}
 {% if manager.counterpart_backend %}
       # What the counterpart side of this asset loads. Present only on a paired
       # zone, and carrying the fallback already applied: an instance that writes
@@ -123,7 +123,7 @@ plan:
       # The same fact for that side, emitted exactly where its backend is, so the
       # two accessors can never disagree about which sides this manager declares.
       # The reader refuses a document stating one without the other (ADR-0054).
-      counterpart_commands_physical_hardware: {{ 'true' if manager.counterpart_commands_physical_hardware else 'false' }}
+      counterpart_commands_physical_hardware: {{ manager.counterpart_commands_physical_hardware | declared_bool }}
 {% endif %}
       description_topic: {{ manager.description_topic }}
       joint_state_topic: {{ manager.joint_state_topic }}

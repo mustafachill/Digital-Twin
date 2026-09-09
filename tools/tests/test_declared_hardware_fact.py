@@ -31,8 +31,10 @@ from pathlib import Path
 import pytest
 from conftest import REAL_MODEL
 
+import cite_tools
 from cite_tools.generate import generate as generate_artifacts
 from cite_tools.model.loader import ModelError, load
+from cite_tools.render import environment
 from cite_tools.validate import referential
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -192,14 +194,31 @@ def test_the_guard_itself_catches_a_raw_read() -> None:
 def reproduction_model(destination: Path) -> Path:
     """Write ADR-0054's scratch model: the vendor's plugin, keeping the id `sim`.
 
-    One edit, and no id anywhere changes - which is the whole of the
-    reproduction. Shared with the `cite_bringup` half through an import so the
-    two clauses cannot drift into testing different models.
+    Two edits to the type and its instances, and **no id anywhere changes** -
+    which is the whole of the reproduction. Mirrored in the `cite_bringup` half,
+    `test_the_reproduction_is_refused.py`, which cannot import this module
+    because that tree is not on its interpreter's path; the two are asserted to
+    agree by `test_the_two_halves_build_the_same_model` over there.
+
+    **The zone is pinned to `single` rather than taken from the checkout**, and
+    that is not cosmetic. The copied tree is the live `model/`, so on a checkout
+    flipped to `twin: {sides: pair}` for a run - a real state, and how a pair is
+    brought up at all - this model declares a PHYSICAL PLANT ON A PAIRED ZONE,
+    which `physical-plant-on-paired-zone` refuses. The reproduction would then
+    fail to validate and clause 6 would be measuring that refusal rather than the
+    hardware gate. ADR-0054's Context was measured on the shipped `single` zone;
+    this states that shape instead of inheriting whichever one is committed
+    (open-work #40).
     """
     import yaml
 
     scratch = destination / "model"
     shutil.copytree(REAL_MODEL, scratch)
+    zones = scratch / "facility/zones.yaml"
+    declared = yaml.safe_load(zones.read_text())
+    for zone in declared["zones"]:
+        zone["twin"] = {"sides": "single"}
+    zones.write_text(yaml.safe_dump(declared, sort_keys=False))
     path = scratch / "assets/types/robots/xarm5.yaml"
     document = yaml.safe_load(path.read_text())
     document["asset_type"]["hardware_backends"]["sim"] = {
@@ -250,3 +269,52 @@ def test_the_generated_plan_states_the_truth_for_every_arm(tmp_path: Path) -> No
         "the reproduction keeps the friendly id throughout; a test that renamed "
         "it would be measuring something else"
     )
+
+
+def test_the_template_refuses_to_render_an_unstated_declaration() -> None:
+    """The last hop, where a required field could still acquire a default.
+
+    ADR-0054 makes `commands_physical_hardware` required with no default because
+    a hardware path must never be reachable by omission. The plan template
+    rendered it as `{{ 'true' if manager.commands_physical_hardware else
+    'false' }}` until 2026-09-09, and Jinja renders `None` there as **`false`**
+    in silence - the schema's refused default, reintroduced at the point where
+    the artifact the gate reads is written.
+
+    `StrictUndefined` does not reach this: it catches a name the template never
+    received, and this is a name that arrived carrying `None`.
+
+    Nothing in the generator is believed to pass `None` today. What this asserts
+    is that the template would SAY SO if it did, rather than writing the safe
+    word.
+    """
+    env = environment()
+    template = env.from_string(
+        "{{ value | declared_bool }}"  # the spelling the plan template uses
+    )
+    assert template.render(value=True) == "true"
+    assert template.render(value=False) == "false"
+    with pytest.raises(TypeError, match="reachable by omission"):
+        template.render(value=None)
+
+
+def test_the_plan_template_renders_that_field_through_the_refusing_filter() -> None:
+    """The route, not the behaviour - because the ordinary spelling still works.
+
+    A rewrite back to `{{ 'true' if ... else 'false' }}` renders identically on
+    every value the generator passes today, so no output test would notice it.
+    Read from the template's source for that reason.
+    """
+    source = (Path(cite_tools.__file__).parent / "templates/bringup/plan.yaml.j2").read_text()
+    for field in (
+        "commands_physical_hardware",
+        "counterpart_commands_physical_hardware",
+    ):
+        rendered = [line for line in source.splitlines() if line.strip().startswith(f"{field}:")]
+        assert rendered, f"the template no longer emits {field}"
+        for line in rendered:
+            assert "| declared_bool" in line, (
+                f"{field} is rendered as {line.strip()!r}; a boolean a hardware "
+                "gate decides on must go through `declared_bool`, which refuses "
+                "`None` instead of writing `false`"
+            )

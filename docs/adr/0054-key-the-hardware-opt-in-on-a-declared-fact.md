@@ -89,14 +89,24 @@
   **And one to decision 4's migration list.** It names
   `tools/tests/fixtures/minimal/schema/asset_type.schema.json` and offers two branches — the
   change *"either regenerates it or establishes what reads it"*. **The second branch was
-  taken, and what it established is stronger than "no test compares it": nothing can read
-  it.** `cite_tools.model.loader` prunes any path with a `schema` component from its walk, and
+  taken, and what it established is that no test and no script reads it.**
+  `cite_tools.model.loader` prunes any path with a `schema` component from its walk, and
   `export.differences` is called only on `model/schema` by the CLI, which no test invokes with
-  the fixture. Four of the fixture's five committed exports were **already stale on `main`** by
-  hundreds of lines, predating this record — regenerating `asset_type.schema.json` alone
-  produces a 591-line diff of which ten lines are this change's. Bringing that drift into a
-  safety change would have obscured it; the fixture's exports are left untouched and the
-  staleness is recorded in [`../open-work.md`](../open-work.md).
+  the fixture. **This passage said *"nothing can read it"* until 2026-09-09, and that is
+  false**: `cite-model schema --model tools/tests/fixtures/minimal` is a shipped, read-only
+  command, and it opens every one of those exports and reports on them. A claim about what
+  nothing *can* do is a claim with an expiry date; what is measured is what nothing *does*.
+  **Five of the fixture's six committed exports are stale, and were already stale on `main`**
+  — `git ls-tree -r --name-only <ref> tools/tests/fixtures/minimal/schema/ | wc -l` reads
+  **6** at `main` and at this branch's tip, and that read-only `cite-model schema` command
+  reports **5** `error` lines at each; only `flow.schema.json` matches a fresh export. The
+  record said *"four of five"* and both halves were wrong. Regenerating
+  `asset_type.schema.json` alone produces a **591**-line diff at this branch's tip and
+  **584** at `main` (`git diff --no-index --numstat <committed> <fresh>`, +578 −13 and
+  +572 −12), **of which seven are this change's** — the same command over a fresh export at
+  `main` against one at this tip reads +6 −1, and 584 + 7 = 591. The record said *ten*.
+  Bringing that drift into a safety change would have obscured it; the fixture's exports are
+  left untouched and the staleness is recorded in [`../open-work.md`](../open-work.md).
 
 - **Date:** 2026-09-09
 - **Deciders:** The project owner, who decided that L0 declares per backend whether that

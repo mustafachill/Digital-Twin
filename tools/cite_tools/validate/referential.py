@@ -319,7 +319,27 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
             continue
         backend = asset_type.hardware_backends.get(asset.hardware.backend)
         if backend is None:
-            # `unknown-backend` reports it, for the same reason.
+            # There is nothing here to read, and WHICH of the two ways that
+            # happens decides whether anything else says so. This comment read
+            # "`unknown-backend` reports it" and that is true of only one of
+            # them.
+            #
+            # The type declares SOME backends and the asset selected one that is
+            # not among them: `unknown-backend` reports exactly that, naming the
+            # field and the value.
+            #
+            # The type declares NO backends at all: `unknown-backend` skips it
+            # too, on its own `if not backends`, and deliberately - `hardware` is
+            # required on every asset, so every conveyor, sensor and fixture in
+            # this facility selects a backend on a type that declares none, and a
+            # rule firing there would report the ordinary case. Both rules are
+            # therefore silent, and this one going quiet costs nothing: a plugin
+            # class string is authored only on a `HardwareBackend`, so a type
+            # with no backends cannot name a physical component for this rule to
+            # find. That is why it is a silence and not a hole - but it is a
+            # silence, and `test_a_type_declaring_no_backends_is_silent_in_both_rules`
+            # is what would notice if the first half of that argument stopped
+            # holding.
             continue
         if not backend.commands_physical_hardware:
             continue

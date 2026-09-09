@@ -70,6 +70,8 @@ def environment() -> Environment:
     # `f` where the output is read back as a ROS parameter and the type matters.
     env.filters["f"] = fmt_float
     env.filters["triple"] = _triple
+    # For a boolean a safety gate decides on. See `_declared_bool`.
+    env.filters["declared_bool"] = _declared_bool
     env.filters["xml"] = escape
     env.filters["attr"] = quoteattr
     env.globals["xml_banner"] = xml_banner
@@ -79,3 +81,32 @@ def environment() -> Environment:
 
 def _triple(values: Iterable[float]) -> str:
     return fmt_triple(values)
+
+
+def _declared_bool(value: object) -> str:
+    """Render a REQUIRED boolean, refusing anything that is not one.
+
+    `StrictUndefined` above catches a name a template never received. It does
+    not catch a name that arrived carrying `None`, and the ordinary Jinja
+    spelling of a boolean — `{{ 'true' if x else 'false' }}` — renders that as
+    `false` in silence.
+
+    For most fields that is harmless. For a field a hardware gate decides on it
+    is the exact defect ADR-0054 exists to close, at the last hop: that record
+    makes `commands_physical_hardware` required with NO DEFAULT precisely because
+    a hardware path must never be reachable by omission, and a template that
+    turns an unset value into `false` reintroduces the default the schema
+    refused. Nothing is believed to pass `None` today; the point is that the
+    template would not say so if it did.
+
+    A `TypeError` and not a warning, so the generator stops with the value it was
+    given rather than writing an artifact that reads as a decision somebody made.
+    """
+    if not isinstance(value, bool):
+        raise TypeError(
+            f"declared_bool received {value!r} ({type(value).__name__}); this "
+            "field is required and has no default, so there is no value to fall "
+            "back to. Rendering it as `false` would make a hardware path "
+            "reachable by omission (ADR-0054)."
+        )
+    return "true" if value else "false"

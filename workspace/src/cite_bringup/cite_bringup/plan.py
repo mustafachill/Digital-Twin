@@ -165,6 +165,18 @@ BACKEND_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
 #: refusal decides on and therefore what its message names. Kept beside its
 #: backend sibling because the two are emitted, parsed and answered in lockstep:
 #: a manager states both keys for a side or neither (ADR-0054, decision 3).
+#:
+#: **Two maps and not one derived from the other, deliberately.** They are not
+#: two copies of one value: each holds a DIFFERENT set of plan-key names, and
+#: each name is authored exactly once, here. What they share is the side names,
+#: and those are single-sourced already - both are keyed by `PLANT_SIDE` and
+#: `COUNTERPART_SIDE`, so neither can invent a side the other has not got.
+#: Deriving one from the other would mean building a plan key by string
+#: concatenation from the other's, which makes the counterpart's key names an
+#: artefact of a naming convention rather than something a reader can grep for,
+#: and would silently produce a key for any side added later whether the plan
+#: emits one or not. What must not drift is which SIDES they declare, and
+#: `test_the_two_side_maps_declare_the_same_sides` is what says so.
 PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
     {
         PLANT_SIDE: "commands_physical_hardware",
@@ -1203,10 +1215,25 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
     identically to the simulated one; it simply may not start by accident.
 
     The equivalent shell check, `require_explicit_hardware_opt_in` in
-    `scripts/_lib.sh`, guards `./scripts/enter hardware` and nothing else. Every
-    other route into the ROS graph — a launch file run directly, a scenario, CI,
-    an editor — arrives here instead, which is why the check lives at this
-    boundary rather than only in a script.
+    `scripts/_lib.sh`, guards `./scripts/enter hardware` and nothing else — which
+    is why the check also lives at this boundary rather than only in a script.
+
+    **WHAT ARRIVES HERE, STATED AS WHAT DOES AND NOT AS "EVERYTHING ELSE".** In
+    production this function has exactly one caller,
+    `cite_bringup/launch/simulation.launch.py`, which calls it before it builds
+    anything — so every route that brings the cell up through that launch file
+    arrives here: `./scripts/sim` in either form, every scenario, CI, and a
+    direct `ros2 launch cite_bringup simulation.launch.py`. `cite_twin.mode`
+    applies this same function at a mode transition, injected rather than
+    imported at its call site, which is a second arrival and not a second check.
+
+    **A process that does not come up through that launch file does not arrive
+    here at all**, and this function cannot refuse it: a `ros2 run` on a
+    controller manager, or a launch file somebody adds beside that one, reaches
+    the ROS graph past this boundary. This docstring said *"every other route
+    into the ROS graph ... arrives here instead"*, which claimed a reach no
+    single function has; the enforcement is at the one door the cell is started
+    through, and adding a second door means adding a second call.
 
     ``environ`` is passed in rather than read from `os` here, so that the refusal
     can be tested without mutating the process that tests it.
