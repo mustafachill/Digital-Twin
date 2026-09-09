@@ -26,8 +26,8 @@
   - `./scripts/doctor` reported `53 records, all indexed` before this record was written, so
     0054 was the next free number; it reports **54** with this record and its index row in.
 
-  **Promoted to `Accepted`** by the change that implements decisions 1 to 4, with **all nine**
-  of the clauses in *The promotion condition*, below. Every one of them runs with no
+  **Promoted to `Accepted`** by the change that implements decisions 1 to 4, with **all
+  eleven** of the clauses in *The promotion condition*, below. Every one of them runs with no
   simulator and no physical arm, which is deliberate: **there is no physical arm** (charter §8
   puts hardware in Phase 2.B) and a condition that needed one would never be met.
   **Promotion is not a claim that anything is safe** — see *What promotion does not claim*,
@@ -48,8 +48,12 @@
   simulator* — which coincides with *can this backend reach a physical machine* on exactly the
   two backends this repository declares, and diverges on the third kind the commission itself
   raises. Deriving the clock from the safety fact would transcribe a coincidence, which is the
-  move this whole record exists to refuse. So the constant survives with one meaning, and
-  decision 2 says what is still wrong with it.
+  move this whole record exists to refuse. **The third kind is not hypothetical: it is in this
+  checkout twice**, as `mock_components/GenericSystem` — which four launch rigs load and which
+  three of them want on `use_sim_time: false` while the fourth wants it `true` — and as the
+  vendor's `UFRobotFakeSystemHardware`, which nothing forbids naming in `model/`. Decision 2
+  measures both. So the constant survives with one meaning, and decision 2 says what is still
+  wrong with it.
 - **Related:**
   [ADR-0053](0053-index-hardware-params-by-backend.md) (this record must land **before** that
   record's implementation merges; it does not reopen any of its decisions),
@@ -163,8 +167,14 @@ argument is the vendor's. So `./scripts/sim` starts Gazebo, Gazebo loads
 **It is an allowlist over names, and a name says nothing about the plugin behind it.**
 Nothing anywhere constrains what plugin an id may carry:
 `grep -rn "gz_ros2_control\|GazeboSimSystem\|uf_robot_hardware" tools/cite_tools/` returns
-seven lines, and **not one of them is in `validate/`** — one is the Gazebo plugin element in
-`templates/description/arm.urdf.xacro.j2:50` and the other six are comments.
+**seven** lines, of which **one is emitted and six are prose**. The emitted one is the Gazebo
+plugin element in `templates/description/arm.urdf.xacro.j2:50`. **One of the six comments is in
+`validate/`** — `validate/physical.py:967`, inside `_followers_can_still_correct`, saying that
+dartsim implements no mimic constraint so `gz_ros2_control` substitutes a proportional servo.
+It bounds a gripper follower joint's headroom and says nothing about which plugin a backend id
+may name. So the claim this grep supports is not that `validate/` never mentions a plugin
+string; it is that **no rule anywhere reads the plugin string a backend declares**, which the
+grep shows by what is absent from it rather than by where its hits are.
 
 `grep -rn SIMULATION_BACKEND tools workspace/src --include=*.py` returns **22** lines and
 `grep -rn SIMULATION_BACKEND tools/tests workspace/src/*/test --include=*.py` returns **0**,
@@ -211,6 +221,17 @@ MODE_REAL         -> physical_sides_commanded = ()
 the same outcome the safety document is a record of, reached by a different route: the shape
 is right and the datum is wrong. A criterion applied to a name is still a name.
 
+**And the two layers fail together rather than independently, which is why decision 2 has to
+move both.** L5 does not carry its own refusal:
+`twin_boundary.py:299` injects `partial(require_hardware_opt_in, plan, environ)` into
+`ModeAuthority`, and `mode.ModeAuthority._require_hardware_opt_in` (`:392-394`) calls exactly
+that.
+So the reproduction defeats the **bring-up** gate and the **transition** gate in one move — both
+key on the same name, one of them by calling the other. A reader could otherwise take the two
+as independent barriers and conclude that one surviving would catch the other's miss; neither
+survives, and moving only one would leave a gate whose refusal is decided by the id it was
+supposed to stop trusting.
+
 ### The other direction, and it is not symmetrical
 
 Declare the **simulation** plugin under the id `real` and select it — same method, `main`:
@@ -238,12 +259,20 @@ physical component with nothing refusing at any layer.
 
 ### What the gate covers, and what carries no backend at all
 
-`grep -cn "backend: " workspace/src/cite_generated/bringup/cell_a_plan.yaml` returns **3**,
+`grep -c "backend: " workspace/src/cite_generated/bringup/cell_a_plan.yaml` returns **3**,
 one per controller manager, at `:108`, `:251` and `:394`.
-`require_hardware_opt_in` iterates `plan.controller_managers`, so the twelve non-arm assets,
-which the plan carries under `conveyors:` (`:536`) and `sensors:` (`:564`) with no backend key,
-are outside it. **That is pre-existing and this record does not change it**; it is stated
-because a reader would otherwise take "the gate" for "the cell".
+`require_hardware_opt_in` iterates `plan.controller_managers`, so **the twelve non-arm assets
+are outside it, and they are outside it in two different ways.** `cite_tools.model.loader.load`
+on `model/` returns **15** assets, three of them arms. **Seven** of the other twelve reach the
+plan with no backend key — three under `conveyors:` (`:536`, assets at `:537`, `:541`, `:545`)
+and four under `sensors:` (`:564`, assets at `:565`, `:573`, `:581`, `:589`). The remaining
+**five** — `pedestal_1`, `pedestal_2`, `pedestal_3`, `table_accumulation` and `table_pick` —
+**are absent from the plan document entirely**, so there is nothing for a gate iterating the
+plan to skip. Derived on 2026-09-09 by differencing the loader's asset ids against the ids the
+plan states. **That is pre-existing and this record does not change it**; it is stated because
+a reader would otherwise take "the gate" for "the cell", and because the second way is the
+stronger one — a future belt gate cannot be written as "also iterate the conveyors" without
+first deciding what to do about five assets the plan never mentions.
 
 ### What declares a backend at all
 
@@ -333,15 +362,33 @@ about, which is also where a reviewer reads the two together.
 
 Weighed seriously, because two things in this tree are neither the shipped simulator nor a
 physical arm: `cite_test_hardware/JointStopSystem` (ADR-0040) and
-`mock_components/GenericSystem`, which three `cite_bringup` launch tests substitute into a
-description.
+`mock_components/GenericSystem`, which **four** `cite_bringup` launch tests substitute into a
+description — `test_abort_classification_launch.py:120`, `test_gripper_deadline_launch.py:130`
+and `test_grasp_predicate_launch.py:108` name it as their own constant, and
+`test_trajectory_constraints_launch.py:190` writes the `<hardware><plugin>` block itself
+(`grep -rn "mock_components/GenericSystem" workspace/src/cite_bringup/test/`, 2026-09-09).
 
 **Rejected on the record's own argument.** The question every gate asks is binary — *can this
 reach a physical machine* — so a third value makes each consumer map three values onto two,
-and that map is a list, in as many places as there are consumers. The distinction the third
-value would carry belongs to a different mechanism: neither fixture is declarable in L0 at
-all (decision 5), so there is no `hardware_backends` entry for either whose value could be
-written. What would reopen this is in *What we will have to revisit*.
+and that map is a list, in as many places as there are consumers.
+
+**And the direction of that map is a per-consumer choice, which is the sharper half of the
+cost.** A consumer with three values writes either `value is PHYSICAL` or
+`value is not SIMULATION`, and the two agree on every value anyone has anticipated and
+**disagree exactly on the one nobody has**: a fourth value added later is dangerous under the
+first spelling and safe under the second. The first is a denylist reachable by omission, which
+`plan.py:35-41` already rejects by name — *"a backend nobody anticipated is refused rather than
+permitted"*. So an enumeration does not merely multiply the mapping; it makes each site's
+failure direction an independent decision that nothing in the type system records, at exactly
+the sites where the safe direction matters most. A boolean has one spelling and one direction.
+
+The distinction the third value would carry also belongs to a different mechanism: neither
+fixture is declarable in L0 at all (decision 5), so there is no `hardware_backends` entry for
+either whose value could be written. **The asymmetry there is the reason the enum is worse than
+neutral**: the vendor's own fake system, `uf_robot_hardware/UFRobotFakeSystemHardware`, **is**
+nameable in L0 and nothing forbids it, while `cite_test_hardware` is refused by a token guard —
+so the third kind arrives without an enum anyway, and an enum only adds a spelling for the one
+kind ADR-0040 keeps unnameable. What would reopen this is in *What we will have to revisit*.
 
 ### Option F — do nothing, and rely on the vendor's `exit(1)`
 
@@ -401,20 +448,97 @@ the declared fact:
 1. `cite_bringup.plan.require_hardware_opt_in` — refuses on the declared fact, per (asset,
    side), whatever the id is called.
 2. `validate.referential`'s `physical-plant-on-paired-zone` — a paired zone's plant must
-   declare `commands_physical_hardware: false`. The rule's identity, its `where` and its hints
-   change wording, not subject.
+   declare `commands_physical_hardware: false`. **The rule id
+   `physical-plant-on-paired-zone` is unchanged**, so no other record's citation of it goes
+   stale; only its message and its hints are reworded. **Its `where` is expected to move**, and
+   that is deliberate rather than incidental: it is
+   `assets.<id>.hardware.backend` today (`referential.py:305`), and after this change the cause
+   is no longer the id the asset selected but the declaration on the type's backend, so the
+   `where` should point at the type's `hardware_backends` entry. Clause 7 asserts on `where`, so
+   the implementing change decides it explicitly rather than inheriting the old string.
 3. `cite_twin.mode.Deployment.physical_sides_commanded` — the intersection stays exactly as it
    is; the second datum becomes the declared fact rather than the id.
-4. `cite_twin.twin_boundary`'s `far_side_physical` — the same substitution, on the map that
-   decides whether the injected hardware refusal runs at all.
+4. `cite_twin.twin_boundary`'s `far_side_physical` — the same question, on the map that decides
+   whether the injected hardware refusal runs at all. **It is not a substitution of one
+   expression for another**, and the two paragraphs below are the reason: 3 and 4 both read a
+   map whose absent entries carry meaning, and a migration that drops that meaning passes every
+   behavioural assertion in *The promotion condition* while retiring a refusal.
+
+**`Deployment`'s map stays three-valued, and collapsing it is a silent safety regression.**
+`Deployment.backend` returns `str | None` and `None` means *this asset has no such side*;
+`assets_without_a_far_side` tests exactly that (`mode.py:214-217`), and that is what drives the
+`PRECONDITION_FAILED` refusal of a two-sided mode on a one-sided deployment
+(`mode.py:344-362`). A map carrying a bare `bool` per (asset, side) makes every unpaired asset
+look like it *has* a far side that is merely simulated, and **that refusal stops firing** —
+on the shipped single-sided model, which is every deployment this repository can generate today
+(`model/facility/zones.yaml` declares `sides: single`). So the migrated map carries
+`bool | None`, with `None` still meaning "no such side", and every existing `is None` test keeps
+its meaning.
+
+**And `twin_boundary`'s map may not simply call the refusing accessor.** It builds two maps
+straight off the raw fields — `_far_side_backends` at `twin_boundary.py:282-285` and the
+`Deployment` at `:288-297` — and `manager.counterpart_backend` is `None` on an unpaired zone,
+which the shipped plan is.
+`commands_physical_hardware_on(side)` refuses an undeclared side with `SideNotDeclaredError`
+(decision 3), so a literal substitution makes **`TwinBoundary.__init__` raise on the shipped
+model**, and **no existing test would catch it**: both launch tests fabricate a paired plan
+before constructing the node (`test_twin_boundary_launch.py`,
+`test_twin_boundary_paired_launch.py`). `backend_on`'s own docstring already priced this —
+*"Whoever migrates it adds a total sibling accessor or accepts that cost knowingly"* — and it
+is quoted here because it is the instruction, not a remark. The implementing change therefore
+either adds a **total** sibling accessor returning `bool | None`, or wraps each (asset, side) in
+`try/except SideNotDeclaredError` the way `require_hardware_opt_in` already does at
+`plan.py:1141-1144`, and says in the code which it chose and why. **And it builds that map
+somewhere callable without a node**, because the failure this paragraph is about is an exception
+raised *inside* `__init__`, which no test needing a working `__init__` can reach; clause 8
+asserts it there.
+
+**One thing is deliberately lost, and it is named rather than allowed to happen quietly.**
+`physical_sides_commanded` returns `f"{asset} ({side} {backend!r})"`, and that string is the
+`SAFETY_BLOCKED` diagnostic at `mode.py:392-405`. Once the decision is made on a boolean, the
+backend id is no longer the datum the criterion used, and **printing it would be printing the
+value the record just removed from the safety path**. The load-bearing half is the (asset,
+side), which clause 8 requires the message to keep naming; the id may be carried alongside as
+context or dropped, and the implementing change states which. What it may not do is leave the
+message reading as though the id had decided anything.
 
 **The fifth is `use_sim_time`, and it stays on the id.** It asks *does this backend's
 controller manager take its clock from the simulator*, which is a different question that
 happens to have the same answer on the two backends this repository declares. A clock derived
 from *can this reach a physical machine* is right for `gz_ros2_control` and for
-`uf_robot_hardware`, and **wrong for any hardware component that is neither** — the third kind
-option E weighs, which would be handed `use_sim_time: true` for no better reason than that it
-is not a physical arm. **Transcribing a coincidence is the move this record refuses.**
+`uf_robot_hardware`, and **wrong for any hardware component that is neither**.
+**Transcribing a coincidence is the move this record refuses.**
+
+**The third kind is not hypothetical, and this is what makes the refusal an argument rather
+than a preference. It is in this checkout twice** — both readings taken on 2026-09-09:
+
+- **`mock_components/GenericSystem`, in four `cite_bringup` launch rigs, and the four do not
+  agree with each other about the clock.** Three override the generated `use_sim_time: true`
+  back to `False` and say in a comment why —
+  `test_trajectory_constraints_launch.py:219-225`, `test_abort_classification_launch.py:320-327`
+  and `test_grasp_predicate_launch.py:328-334`. The fourth,
+  `test_gripper_deadline_launch.py:275-280`, loads **the same** hardware component and keeps
+  `use_sim_time: true` deliberately, because it measures a deadline that must follow a `/clock`
+  its own test process publishes; its comment says *"Here that is not an override at all — it is
+  the setting the rig wants"*. **One hardware component, four rigs, two different right
+  answers.** So the clock is demonstrably not a function of the hardware component even inside
+  this repository, and a field about physical reachability could not carry it.
+- **`uf_robot_hardware/UFRobotFakeSystemHardware`**, exported beside the physical component by
+  the pinned vendor library
+  (`workspace/src/external/xarm_ros2/xarm_controller/uf_hardware_interface_plugins.xml`).
+  **Nothing forbids naming it in `model/`** — unlike `cite_test_hardware`, which a token guard
+  refuses there (decision 5). So the third kind arrives as a **data change**, not as a future
+  event: one `hardware_backends` entry, no code, and `commands_physical_hardware: false` is the
+  honest answer for it while `use_sim_time` has no honest answer derivable from that field at
+  all.
+
+**And there is an architectural reason quite apart from the third kind.** A field that gates a
+hardware path should have the **fewest possible consumers, all asking the same question**, so
+that what it means can be sharpened later by reading one list of call sites. Wiring a clock
+derivation onto it makes any later refinement of the safety field's meaning silently move a
+controller manager's clock — a change to a safety declaration with a control-timing side
+effect, which is precisely the kind of coupling a reviewer of the safety change would not think
+to look for.
 
 **So `ids.SIMULATION_BACKEND` is not deleted, and this record says what it still means and
 what is still wrong with it.** After this change it decides one thing: which controller
@@ -447,12 +571,40 @@ Each controller manager gains, beside the backend keys it already states:
       counterpart_commands_physical_hardware: true
 ```
 
+**The plan key is parsed with `_require`, and the `hosted_by` precedent beside it is
+explicitly not followed.** `_manager` reads `backend` with `_require` at `plan.py:1172` and
+`counterpart_backend` with `_optional` at `:1173`; the new keys are emitted and parsed
+**exactly where those two are**, so the backend accessor and the fact accessor can never
+disagree about which sides a manager declares — `commands_physical_hardware` with
+`_require`, and `counterpart_commands_physical_hardware` with `_optional`, beside its
+backend, present exactly when the counterpart is.
+
+**This has to be said because the comment immediately below them argues the other way**, and an
+implementer reading in file order meets it first. `plan.py:1174-1185` records that the removed
+`hosted_by` key is *"IGNORED rather than rejected, and that is a decision"*, because *"the
+document most likely to still carry it is a plan left in a stale build tree"*. **That reasoning
+does not transfer, and the distinction is the whole of it: a removed key's presence is an
+absence of information, and this key's absence is a safety fact nobody stated.** Tolerating it
+would make the plan layer **strictly weaker than it is today** — a plan missing `backend`
+raises `PlanError` now
+(`test_a_removed_plan_key_is_ignored.py:102-105` asserts exactly that), while a plan missing
+the new key would parse cleanly, default to `False` at every manager, and never consult
+`CITE_ALLOW_HARDWARE`. **And the stale build tree the `hosted_by` comment is about is precisely
+the state that would produce it**: `simulation.launch.py:193` loads the plan from the package
+share via `default_plan_path`, not from the source tree, so a stale installed `cite_generated`
+is a plan document that looks valid, reads `False` everywhere and reopens this record's own
+defect in a build state nobody notices. A `PlanError` naming the key sends its reader to
+rebuild; a default sends nobody anywhere. Clause 5 pins it.
+
 Consumers ask `ControllerManager.commands_physical_hardware_on(side)`, which is to this fact
 what `backend_on(side)` is to the backend: **the one place an (asset, side) becomes the
 answer**, refusing an undeclared side with the same `SideNotDeclaredError` for the same reason,
 so the two accessors answer the same shape of question about the same grain. Reading the raw
 keys is the value-in-two-places P1 forbids, and the field that stops being read is the one that
-goes stale.
+goes stale. **Clause 9 makes that checkable rather than asserted**, because "every consumer
+asks the accessor" is a claim about routes and every clause that only asserts behaviour can be
+satisfied by an implementation that open-codes the key in two build units — which is exactly
+the debt ADR-0048's clause-3 promotion had to retrofit eight days late.
 
 **Emitted rather than derived, and ADR-0048 clause 3's precedent is why the question had to be
 asked.** That clause removed a plan key because it was a total function of a backend the plan
@@ -472,8 +624,17 @@ selected (ADR-0041 Decision 3) and the grain `physical_sides_commanded` refuses 
   because `model_hash` digests every type.
 - `model/schema/asset_type.schema.json` — regenerated by `cite-model schema --write`, never by
   hand. **Named separately from the generated tree because `cli.py:224` skips the
-  committed-versus-fresh check while the export is stale**, so a forgotten export does not
-  fail; it *suppresses* the check that would have failed.
+  committed-versus-fresh check while the export is stale.** A stale export **does** fail —
+  `schema_problems` is printed as `error schema-export` and added to `error_count`
+  (`cli.py:216-236`) — so the hazard is not that a forgotten export passes; it is **masking**.
+  Measured on 2026-09-09 on two scratch copies of `model/`: with
+  `asset_type.schema.json` perturbed, `cite-model validate` exits **1** printing
+  `error schema-export … differs from a fresh export` and `1 error(s). The model is not
+  valid.`, and **not one `error generated` line**; with the export left alone, the same command
+  on the same shape of copy exits 1 printing **34** `error generated` lines. The generated check
+  ran in one case and did not run at all in the other, which is why clause 2 is stated apart
+  from clause 3: a genuine generated regression would hide behind a schema-export error until
+  the export is fixed.
 - `tools/tests/fixtures/minimal/assets/types/xarm5.yaml` — the second model that declares
   `hardware_backends`. Both of its backends state the field, or the 73 uses of `minimal_model`
   in `tools/tests/test_validate_referential.py` stop loading.
@@ -481,8 +642,10 @@ selected (ADR-0041 Decision 3) and the grain `physical_sides_commanded` refuses 
   export. **A survey of `tools/tests` on 2026-09-09 found no test that compares it**; the
   implementing change either regenerates it or establishes what reads it, and does not assume
   the survey is a proof that nothing does.
-- `workspace/src/cite_generated/bringup/cell_a_plan.yaml` — gains one key per controller
-  manager. **No description, world or controller configuration may move**: decision 2 leaves
+- `workspace/src/cite_generated/bringup/cell_a_plan.yaml` — gains **one** key per controller
+  manager on the shipped single-sided zone, and **two** on a paired one, the counterpart key
+  being emitted exactly where `counterpart_backend` is (decision 3). **No description, world or
+  controller configuration may move**: decision 2 leaves
   `use_sim_time` alone, and a diff that touches those artifacts is an implementation that
   rewired something this record did not decide.
 - Test fixtures that build a plan or a type inline — `test_plan.py`, `test_pair.py`,
@@ -492,13 +655,24 @@ selected (ADR-0041 Decision 3) and the grain `physical_sides_commanded` refuses 
 ### 5. The fixture backends stay inexpressible, and this field may not be the door
 
 `cite_test_hardware/JointStopSystem` is barred from production by ADR-0040, and the leg that
-does it is `cite_test_hardware/test/test_unreachable.py`, which forbids the token
-`cite_test_hardware` anywhere in `model/`. **So the fixture has no `hardware_backends` entry
-whose field could carry a value, and this record must not give it one.** A third enumeration
-value meaning "test fixture" would create a place in L0 where the fixture is nameable, which
-is the leg ADR-0053 decision 4 records as the *surviving* one after that record weakens
-`on_init`'s. Weakening it here, in a record whose subject is a hardware gate, would be the
-worst possible place to do it.
+does it is `cite_test_hardware/test/test_unreachable.py`, whose `TOKEN` is the package name
+`cite_test_hardware` and whose `test_the_generated_tree_and_the_model_never_name_it` refuses
+that token anywhere under `model/` or `workspace/src/cite_generated/`. **So the fixture has no
+`hardware_backends` entry whose field could carry a value, and this record must not give it
+one.**
+
+**The mechanism is worth stating exactly, because the obvious reading of it is wrong.** The
+token guard bars the fixture **whether this field is a boolean or an enumeration** — what it
+catches is the plugin class string, which contains the package name, not the value of any field
+beside it. An enum value spelled `test_fixture` would not itself trip it. The objection is
+therefore not that the enum makes the fixture declarable; it is that the enum **would create L0
+vocabulary for a kind ADR-0040 keeps unnameable**, and a vocabulary with a word for a thing
+that may not be written is an invitation to a later reader who does not know why the word has
+no referent. That is the leg ADR-0053 decision 4 records as the *surviving* one after that
+record weakens `on_init`'s, and weakening it here, in a record whose subject is a hardware gate,
+would be the worst possible place to do it. Note the asymmetry option E already names: the
+**vendor's** fake system is nameable in L0 and this project's fixture is not, so the enum opens
+a door on the side that is already shut and adds nothing on the side that is already open.
 
 `mock_components/GenericSystem` is not declared in L0 either: three `cite_bringup` launch tests
 name it as their own constant and
@@ -524,6 +698,12 @@ rather than for the software.**
   build units.
 - **The fact is reviewable where it is written.** `commands_physical_hardware: true` sits one
   line from the plugin string it describes, in the one file that authors plugin strings.
+- **It makes a sentence the safety document already states become true.**
+  `cross-cutting-safety.md:123-125` states the criterion as *"does any of those sides, for any
+  asset in scope, load something other than a simulation, **which the generated bring-up plan
+  states per (asset, side)**"*. The plan states a **name** per (asset, side), not that; the
+  document describes the artifact this record produces. Nothing in the safety document has to
+  change — the gap was between it and the plan, and it closes from the plan's side.
 
 ### What this costs us
 
@@ -544,6 +724,18 @@ rather than for the software.**
 - **The `use_sim_time` residual is left open, named, and pinned by a test.** Decision 2 chooses
   that deliberately, and it means the same defect class survives in one rule until a second
   record answers it.
+- **It removes a barrier that was standing in front of the mixed-time misconfiguration by
+  accident, and that is a cost rather than a neutral fact.** *Context* measures the reverse
+  case: Gazebo's own plugin declared under the id `real` generates `use_sim_time: false` and is
+  **refused at bring-up today**, because `require_hardware_opt_in` keys on the id. That refusal
+  is wrong about the cell — nothing physical is there — but it is loud, and it is
+  currently the only thing that stops that model starting. After this change the same model
+  declares `commands_physical_hardware: false`, is **correctly permitted**, and starts an arm
+  Gazebo drives under `use_sim_time: false`: CLAUDE.md §10's *"a mixed-time system produces
+  plausible, wrong results"*. **So this record converts a loud false refusal into a silently
+  wrong cell**,
+  and it leaves the clock on the id, which is what decides that outcome. Clause 11 pins both
+  directions for that reason; nothing here fixes either.
 - **Four consumers change at once, across three build units.** Two of the four are in
   `cite_twin`, which no launch file starts today (CLAUDE.md §2), so that half of the change is
   held by the package's own tests and by nothing else.
@@ -557,9 +749,10 @@ rather than for the software.**
 - **The hardware launch shape.** `simulation.launch.py` hardcodes `use_sim_time: True` at
   ten sites; a launch that brings up a physical arm has to answer the clock question
   properly, and it will settle whether the clock is a per-backend fact at all.
-- **The twelve assets that carry no backend into the plan.** Conveyors and sensors are outside
-  the gate entirely. When an L1/L2 hardware driver exists for a belt, the gate's remit is a
-  decision that has to be taken and is not taken here.
+- **The twelve non-arm assets, which are outside the gate in two different ways.** Seven reach
+  the plan with no backend key; five are not in the plan at all. When an L1/L2 hardware driver
+  exists for a belt, the gate's remit is a decision that has to be taken and is not taken here —
+  and the five will need a plan entry before they can have a backend to gate.
 - **A false declaration being observed.** If one ever is, the cost of option A's list has to
   be re-weighed against the cost of an undetected false declaration — with the evidence in
   hand rather than in advance.
@@ -569,16 +762,18 @@ rather than for the software.**
 
 ## The promotion condition
 
-Promoted to `Accepted` by the change that implements decisions 1 to 4, with **all nine** of the
-following. **None of them needs a simulator or a physical arm**; the `cite_bringup` and
-`cite_twin` clauses need a ROS environment for an import and bring nothing up, and the
-`cite_tools` clauses run on the host.
+Promoted to `Accepted` by the change that implements decisions 1 to 4, with **all eleven** of
+the following. **None of them needs a simulator, a running cell or a physical arm**; the
+clauses that import `cite_bringup` or `cite_twin` need a ROS environment for that import and
+bring nothing up, the `cite_tools` clauses and clause 9's `grep` run on the host, and every
+assertion is against generated text or an in-memory object.
 
 1. **The field is required and unreachable by omission.** A `hardware_backends` entry omitting
    it fails to load, with the error naming the field and the backend. Asserted on a scratch
-   type, not on the shipped one. **This is the clause every other clause rests on**: with a
-   default, all eight below can pass while a backend becomes physical because a key was left
-   out.
+   type, not on the shipped one. **This is the clause every other clause rests on at the L0
+   layer**: with a default, all ten below can pass while a backend becomes physical because a
+   key was left out. **Clause 5 is its counterpart at the plan layer**, and one without the
+   other leaves a whole layer reachable by omission.
 2. **The shipped model migrates and the exports are regenerated.** Both backends of
    `model/assets/types/robots/xarm5.yaml`, and both of the minimal fixture's, state the field;
    `./scripts/validate-model` exits 0; `model/schema/asset_type.schema.json` is produced by
@@ -596,38 +791,96 @@ following. **None of them needs a simulator or a physical arm**; the `cite_bring
    all, and whose declared fact is not physical is **permitted with an empty environment**.
    Both sides asserted, and the refusal still names the asset and the plan field, so the
    message the existing tests assert against does not silently change shape.
-5. **The reproduction in *Context* is refused end to end.** Build that scratch model with the
+5. **The plan key is required too, and a plan that omits it is refused.** Deleting
+   `commands_physical_hardware` from a controller manager in a plan document raises `PlanError`
+   naming the key, exactly as deleting `backend` does today
+   (`test_a_removed_plan_key_is_ignored.py:102-105`). Asserted on a document built in the test,
+   with no ROS graph. **This clause exists because every other clause here can be satisfied by
+   an implementation that parses the key with `_optional(..., False)`**, which would make the
+   plan layer strictly weaker than it is today and would read `False` for every manager of a
+   stale installed `cite_generated` — see decision 3. Asserted on the **counterpart** key as
+   well, in the form decision 3 requires: present exactly when `counterpart_backend` is, absent
+   exactly when it is absent, so the two accessors never disagree about which sides exist.
+6. **The reproduction in *Context* is refused end to end.** Build that scratch model with the
    field declared truthfully, generate it, load the plan, call `require_hardware_opt_in` with an
    empty mapping, and require `HardwareNotPermittedError`. **This is the clause that fails if
    any of decisions 1 to 3 lands partially**, because it is the only one that runs the whole
    path the defect ran.
-6. **`physical-plant-on-paired-zone` reads the declaration.** A paired zone whose plant backend
-   is named `sim` and declares physical is an ERROR, asserted **by rule name and `where`** and
+7. **`physical-plant-on-paired-zone` reads the declaration.** A paired zone whose plant backend
+   is named `sim` and declares physical is an ERROR, asserted **by rule id and `where`** and
    not by message substring; a paired zone whose plant is named anything at all and declares
-   non-physical is not a finding of any severity. The rule keeps its name, so no other record's
-   citation of it goes stale.
-7. **L5's gate answers on the fact.** On the deployment *Context* measures — every side stating
-   the id `sim` while that backend declares physical — `physical_sides_commanded` names at
-   least one (asset, side) for every mode that commands the far side, where today it names
-   none for any mode; and `twin_boundary`'s `far_side_physical` is true for that far side.
-   Asserted directly on `Deployment`, with no ROS graph. **Without this clause the record's own
-   headline finding stays unfixed**, and `cite_twin` is unreachable from any launch, so nothing
-   else would notice.
-8. **`ids.SIMULATION_BACKEND` survives with one meaning, and its comment stops asserting the
+   non-physical is not a finding of any severity. **The rule id `physical-plant-on-paired-zone`
+   is unchanged**, so no other record's citation of it goes stale. The `where` is asserted at
+   whatever value decision 2 item 2 settles — it is `assets.<id>.hardware.backend` today and is
+   expected to move to the type's backend declaration, which is where the cause now lives; the
+   clause requires that it be **chosen and asserted**, not that it stay as it was.
+8. **L5's gate answers on the fact, and the shipped single-sided deployment still behaves.**
+   Three assertions. **None of them constructs a node, starts a graph or brings anything up**;
+   each calls a function on an in-memory object, which is a requirement on the implementation as
+   much as on the test — see the third bullet.
+   - On the deployment *Context* measures — every side stating the id `sim` while that backend
+     declares physical — `physical_sides_commanded` names at least one (asset, side) for every
+     mode that commands the far side, where today it names none for any mode, and the
+     `SAFETY_BLOCKED` message still names the (asset, side) it refused for.
+   - **On a `Deployment` built from the shipped single-sided plan,
+     `assets_without_a_far_side` still names the assets it names today.** This is the assertion
+     that catches decision 2's two-valued collapse: a `bool` map makes every unpaired asset look
+     like it has a simulated far side, silently retiring the `PRECONDITION_FAILED` refusal of a
+     two-sided mode on a one-sided deployment. **The construction of that map from the plan must
+     itself be callable without a node** — a free function or a static method taking the
+     plan — both so this assertion is possible on the host and because the failure it guards is
+     an exception raised *during* `TwinBoundary.__init__`, which no test that needs a working
+     `__init__` can reach. Nothing existing would catch either failure: both twin-boundary
+     launch tests fabricate a paired plan before constructing the node.
+   - **`far_side_physical` is asserted separately, because it does not live on `Deployment`.**
+     It is a local in `twin_boundary._sample` (`:756`) computed from `self._far_side_backends`
+     (`:282-285`), so an implementation could migrate `Deployment` fully, satisfy both
+     assertions above, and leave `_sample` still deciding on a name. The clause requires that
+     the derivation be a **free function of the declared fact**, called by `_sample` and
+     asserted directly — which is what makes it host-testable at all. It is **not a motion
+     path**: it feeds only `frames_correspond` (`divergence.py:244`), a P8 concern, which is why
+     it is a clause and not a High.
+
+   **Without this clause the record's own headline finding stays unfixed**, and `cite_twin` is
+   unreachable from any launch, so nothing else would notice.
+9. **The raw plan keys have exactly one reader per build unit, checked by `grep` and not by
+   assertion.** `grep -rn "commands_physical_hardware" workspace/src --include=*.py` outside
+   tests reaches, in `cite_bringup`, only `plan.py`'s parser and its
+   `commands_physical_hardware_on` accessor, and in `cite_twin` only call sites of that accessor
+   — no consumer names `manager.commands_physical_hardware` or
+   `manager.counterpart_commands_physical_hardware` directly. **Stated as a route and not as a
+   behaviour on purpose**: clause 4 and clause 8 are both satisfied by an implementation that
+   open-codes the two keys inside `require_hardware_opt_in` **and** inside `twin_boundary`,
+   which is four keys across two build units and exactly the P1 debt ADR-0048's clause-3
+   promotion had to retrofit eight days late. Checked the way clause 10 already checks the
+   constant.
+10. **`ids.SIMULATION_BACKEND` survives with one meaning, and its comment stops asserting the
    falsified one.** `grep -rn SIMULATION_BACKEND tools workspace/src --include=*.py` reaches
    the definition in `cite_tools.model.ids`, the `use_sim_time` derivation at
    `generate/control.py:236`, and nothing else — the `cite_bringup.plan` and `cite_twin.mode`
    restatements are gone with their consumers. The surviving comment no longer says *"the one
    backend id that cannot reach a physical machine"*, and says instead what the id decides and
    what it does not.
-9. **The `use_sim_time` residual is pinned rather than left implicit.** A test asserts that a
-   backend declaring `commands_physical_hardware: true` under the id `sim` still generates
-   `use_sim_time: true`, naming decision 2 as the reason. It is a **characterisation test of a
-   known gap**, and it says so in its own docstring, so that a later reader meets the residual
-   instead of inferring from the record's title that it was closed.
+11. **The `use_sim_time` residual is pinned in both directions, with its consequence.** Two
+    characterisation tests, not one, because *Context* measures the rule wrong in both
+    directions and **the direction this record leaves reachable is the one that produces a
+    running, wrong cell**:
+    - a backend declaring `commands_physical_hardware: true` under the id `sim` still generates
+      `use_sim_time: true` — the physical direction, which after this change is reachable only
+      behind a deliberate opt-in or a false declaration;
+    - a backend declaring `commands_physical_hardware: false` under the id `real` still
+      generates `use_sim_time: false` — **the direction this record unblocks**, since that model
+      is refused at bring-up today only because the gate keys on the id, and after this change
+      it is correctly permitted and starts a Gazebo-driven arm on the wrong clock.
 
-**The condition is deliberately not split by clause**, unlike ADR-0048's. One field, one plan
-key and four consumers are satisfied or falsified by one change; there is no part of it that is
+    Both name decision 2 as the reason, and the second cites *What promotion does not claim*'s
+    `use_sim_time` bullet, so a reader meets the traced consequence — a deadline owned by a
+    process that is not the arm — and not merely the existence of a gap. They are
+    **characterisation tests of a known gap** and say so in their own docstrings, so that a
+    later reader does not infer from the record's title that it was closed.
+
+**The condition is deliberately not split by clause**, unlike ADR-0048's. One field, two plan
+keys and four consumers are satisfied or falsified by one change; there is no part of it that is
 a commitment about a component nobody has. If only some of it lands, this record stays
 `Proposed` and its status block names the clauses that were met — the failure ADR-0053's
 clause 9 names, where a deliverable left outside the condition that governed it left
@@ -652,13 +905,32 @@ Permanent. Not a status caveat, and not discharged by anything above.
   guarding and certification against ISO 10218-1/-2 are outside this repository and are neither
   touched nor substituted by anything here. `cross-cutting-safety.md` says it in its own second
   paragraph: no amount of careful software substitutes for them.
-- **That the gate covers the cell.** It covers assets with a controller manager. The twelve
-  conveyor, sensor and fixture assets carry no backend into the plan at all, so a physical belt
-  driver would be outside it — measured in *Context*, and not fixed here.
+- **That the gate covers the cell.** It covers assets with a controller manager. Of the twelve
+  non-arm assets, seven reach the plan with no backend key and five do not reach it at all, so
+  a physical belt driver would be outside it — measured in *Context*, and not fixed here.
 - **That any physical arm exists or has ever loaded anything.** None does (charter §8). Every
   clause above runs against generated text and in-memory objects.
 - **That `use_sim_time` is right.** It still keys on the id, and *Context* measures it wrong in
-  both directions. Clause 9 pins that; it does not fix it.
+  both directions. Clause 11 pins that; it does not fix it.
+  **The consequence of the physical direction is stated here rather than left as "a gap",
+  because it is attributable from the code path without any measurement — and it is reasoned
+  from that path, not measured, and unmeasurable until a hardware launch exists.**
+  `templates/description/arm.urdf.xacro.j2:50-51` emits the `gz_ros2_control` plugin
+  unconditionally and hands it the generated controller configuration through `<parameters>`, so
+  a controller manager hosting the vendor's *physical* component takes its clock from the
+  simulator; every quantity in that control path measured in that clock — trajectory sampling,
+  ADR-0036's `goal_time` and path tolerances, every deadline — is then owned by a process that
+  is not the arm, and **if the simulator stalls mid-trajectory none of them ever expires while
+  the arm holds its last command**. That is `cross-cutting-safety.md:91-93`'s *"motion
+  **stops**. It does not continue on the last command"* failing in the one direction a watchdog
+  cannot catch, because the watchdog's clock is what stopped. It is the mirror of ADR-0045, a
+  deadline measured in the wrong clock, which this project has already paid for once.
+  **It is nevertheless acceptable to carry, and the reasons are what make it a residual rather
+  than a blocker**: after this change it is never the first thing that has to go wrong — it
+  needs either a deliberate `CITE_ALLOW_HARDWARE` opt-in or a false `commands_physical_hardware`
+  declaration standing in front of it — there is no hardware launch for it to bite in its own
+  right (`simulation.launch.py` hardcodes `use_sim_time: True` at ten sites), and clause 11 pins
+  it so that the next reader meets it.
 - **That a paired cell has been brought up this way.** `model/facility/zones.yaml` declares
   `twin: {sides: single}`, so the paired readings in *Context* are of a scratch model, and
   nothing paired ships.
