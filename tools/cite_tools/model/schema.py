@@ -441,7 +441,7 @@ class HardwareBackend(Strict):
     #: **THIS IS A CLAIM THE MODEL MAKES ABOUT ITSELF AND NOTHING VERIFIES IT.**
     #: `false` beside `uf_robot_hardware/UFRobotSystemHardware` validates,
     #: generates and starts. Catching that needs a list of plugin strings, which
-    #: ADR-0054 option A rejects for the reason `cross-cutting-safety.md:113-135`
+    #: ADR-0054 option A rejects for the reason `cross-cutting-safety.md:124-146`
     #: records. What the field buys is that the fact is stated by the person who
     #: chose the plugin, one line from the plugin string it is about, rather than
     #: implied by an id nobody was asked about.

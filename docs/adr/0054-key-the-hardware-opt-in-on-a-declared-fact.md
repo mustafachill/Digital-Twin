@@ -364,7 +364,7 @@ what says how many statements exist, not this comment"*.
 
 ### The gate the safety document holds up as the right shape returns the wrong answer
 
-`cross-cutting-safety.md:113-135` records what transcribing a list cost this project: the
+`cross-cutting-safety.md:124-146` records what transcribing a list cost this project: the
 three-dangerous-transition list was copied into L5's mode server, `VALIDATED` was not on it, a
 goal reached the physical arm, and *"a test asserted that acceptance and passed"*. Its
 conclusion is **"Apply the criterion; never transcribe the list."**
@@ -483,7 +483,7 @@ strings known to be simulations and errors when a backend named `sim` declares s
 outside it.
 
 **Rejected, and it is the same lesson twice.** The set is a transcribed list, and
-`cross-cutting-safety.md:113-135` is this project's own record of what one cost: the list was
+`cross-cutting-safety.md:124-146` is this project's own record of what one cost: the list was
 copied into L5's mode server, a transition nobody had put on it was accepted with no gate, and
 a test asserted the acceptance and passed. That document's conclusion is *"APPLY THE
 CRITERION; NEVER TRANSCRIBE THE LIST."*
@@ -869,7 +869,7 @@ rather than for the software.**
 - **The fact is reviewable where it is written.** `commands_physical_hardware: true` sits one
   line from the plugin string it describes, in the one file that authors plugin strings.
 - **It makes a sentence the safety document already states become true.**
-  `cross-cutting-safety.md:123-125` states the criterion as *"does any of those sides, for any
+  `cross-cutting-safety.md:141-143` states the criterion as *"does any of those sides, for any
   asset in scope, load something other than a simulation, **which the generated bring-up plan
   states per (asset, side)**"*. The plan states a **name** per (asset, side), not that; the
   document describes the artifact this record produces. Nothing in the safety document has to
@@ -1108,7 +1108,7 @@ Permanent. Not a status caveat, and not discharged by anything above.
   simulator; every quantity in that control path measured in that clock — trajectory sampling,
   ADR-0036's `goal_time` and path tolerances, every deadline — is then owned by a process that
   is not the arm, and **if the simulator stalls mid-trajectory none of them ever expires while
-  the arm holds its last command**. That is `cross-cutting-safety.md:91-93`'s *"motion
+  the arm holds its last command**. That is `cross-cutting-safety.md:109-112`'s *"motion
   **stops**. It does not continue on the last command"* failing in the one direction a watchdog
   cannot catch, because the watchdog's clock is what stopped. It is the mirror of ADR-0045, a
   deadline measured in the wrong clock, which this project has already paid for once.

@@ -115,7 +115,7 @@ INITIAL_MODE = TwinMode.MODE_SIM
 # removed it: the id is a NAME, and that record's Context measures this gate
 # reporting NO PHYSICAL SIDE COMMANDED, for every mode, on a zone whose every
 # side loads the vendor's physical `ros2_control` component under that id. That
-# is `cross-cutting-safety.md:113-135`'s own lesson reached by a different
+# is `cross-cutting-safety.md:124-146`'s own lesson reached by a different
 # route - the shape was right and the datum was wrong, because a criterion
 # applied to a name is still a name.
 #

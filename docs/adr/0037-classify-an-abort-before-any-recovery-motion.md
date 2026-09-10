@@ -45,7 +45,7 @@ whose classification is `ESCALATE` or `STOP_LINE` performs no motion at all.
 
 ## This applies a rule this repository already wrote down; it does not invent one
 
-[`cross-cutting-safety.md:85-87`](../architecture/cross-cutting-safety.md) says, of
+[`cross-cutting-safety.md:103-105`](../architecture/cross-cutting-safety.md) says, of
 E-stop reset:
 
 > Requires a **deliberate reset**. Automatic resumption after an unexplained fault is a
