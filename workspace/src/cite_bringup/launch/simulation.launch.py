@@ -203,10 +203,10 @@ def _bring_up(context: LaunchContext) -> list:
         # with the declared fact `commands_physical_hardware`, and that such a
         # plan reaches an arm "by every other route", which claims a reach no
         # single function has. Four copies of one argument is how they drifted
-        # apart. Read `require_hardware_opt_in` in `cite_bringup/plan.py` — the
-        # function three lines below — and ADR-0054 with its Correction of
-        # 2026-09-10 for the two residuals neither this call nor that function
-        # can see.
+        # apart. Read the docstring of `require_hardware_opt_in` in
+        # `cite_bringup/plan.py`, which is the function called immediately below,
+        # and ADR-0054 with its Correction of 2026-09-10 for the two residuals
+        # neither this call nor that function can see.
         require_hardware_opt_in(plan, os.environ)
         # The other half of one rule. A process belonging to a side carries both
         # isolations, so both are refused in the same place: this one asks
