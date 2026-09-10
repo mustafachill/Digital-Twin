@@ -105,7 +105,7 @@ busy working.
 
 | Environment variable | Effect |
 |---|---|
-| `CITE_ALLOW_HARDWARE=1` | permits a plan naming a non-`sim` backend, on either side, to start |
+| `CITE_ALLOW_HARDWARE=1` | permits a plan on which some (asset, side) **declares** `commands_physical_hardware: true` to start. It decides on that declared fact and **not** on the backend's id — see "The hardware gate" below, which is the one statement of this and is not restated here |
 | `CITE_PHYSICS_SEED` | passed to `gz sim --seed`; a malformed value is refused, not ignored |
 
 `GZ_PARTITION` is **not** in that table on purpose: it is not a knob. The launch sets it on

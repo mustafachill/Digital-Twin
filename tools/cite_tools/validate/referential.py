@@ -340,6 +340,21 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
             # silence, and `test_a_type_declaring_no_backends_is_silent_in_both_rules`
             # is what would notice if the first half of that argument stopped
             # holding.
+            #
+            # A SECOND ROUTE MAKES THE SILENCE STRONGER THAN THAT ARGUMENT, and
+            # it does not depend on the argument at all. If such an asset has
+            # controllers, nothing downstream is generated to be silent ABOUT:
+            # `generate/bringup.py:392` asks `commands_physical_hardware_of` for
+            # every controller manager, which resolves the backend through
+            # `ResolvedAsset._backend` and raises `ResolveError: asset <id>
+            # selects backend <id>, which type <type> does not declare` - so the
+            # run stops before any plan or description exists. If it has no
+            # controllers it gets no controller manager and no `<ros2_control>`
+            # block, so there is no plugin anywhere to gate. Driven by
+            # `safety-auditor` on 2026-09-10 and re-read here from those two call
+            # sites. It is a second reason and not a replacement: this rule is
+            # still the one that would have to speak if a plugin string ever
+            # became authorable off a `HardwareBackend`.
             continue
         if not backend.commands_physical_hardware:
             continue

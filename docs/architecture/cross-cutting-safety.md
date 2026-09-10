@@ -15,6 +15,17 @@
   it compared the id against the literal `sim`, and a type declaring the vendor's physical
   `ros2_control` plugin under that id passed the gate without it ever consulting the opt-in.
   Both are covered by tests.
+  **That one rule is not a guarantee about the cell, and this document is the last place that
+  should read as though it were.** The refusal rests on a **self-declaration that nothing
+  verifies**, and it fails in two directions rather than one: L0 can state `false` beside the
+  vendor's physical plugin, and — the sharper one — L0 can be **entirely honest** and the
+  loaded plugin still physical, because nothing checks that the plugin the model declares is
+  the plugin the description loads. That second route needs no false statement at all, only an
+  **omitted binding**, which is the omission this document forbids everywhere else. ADR-0054,
+  linked above, carries both in its Correction of 2026-09-10; `../open-work.md` #65 carries the
+  fix for the second and does not choose its shape. **State the rule with its residual or do
+  not state it here** — this paragraph was corrected once already for stating a guarantee that
+  no code provided.
 - **Related:** [L2](L2-control-and-hal.md), [L5](L5-twin-synchronization.md), [`../operations/safety-procedures.md`](../operations/safety-procedures.md), [`../reference/standards.md`](../reference/standards.md)
 
 ## What this covers, and what it does not

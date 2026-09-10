@@ -192,12 +192,21 @@ def _bring_up(context: LaunchContext) -> list:
     try:
         plan = load(default_plan_path(zone))
         # The safety gate, at the ROS boundary rather than only at the shell one.
-        # `scripts/_lib.sh` refuses `./scripts/enter hardware` without the opt-in
-        # and guards nothing else; a plan naming a hardware backend reaches a
-        # physical arm through this launch by every other route. Refusing to
-        # start is not a divergence between the sim and real paths (P2) — what
-        # gets commanded is identical either way; it simply may not begin by
-        # accident (cross-cutting-safety.md).
+        # Refusing to start is not a divergence between the sim and real paths
+        # (P2) — what gets commanded is identical either way; it simply may not
+        # begin by accident (cross-cutting-safety.md).
+        #
+        # WHAT IT DECIDES ON AND WHAT ARRIVES HERE ARE BOTH IN ITS OWN DOCSTRING,
+        # AND ARE DELIBERATELY NOT RESTATED. This comment carried two claims that
+        # were corrected where they were defined and left standing here: that the
+        # gate keys on a plan NAMING a hardware backend, which ADR-0054 replaced
+        # with the declared fact `commands_physical_hardware`, and that such a
+        # plan reaches an arm "by every other route", which claims a reach no
+        # single function has. Four copies of one argument is how they drifted
+        # apart. Read `require_hardware_opt_in` in `cite_bringup/plan.py` — the
+        # function three lines below — and ADR-0054 with its Correction of
+        # 2026-09-10 for the two residuals neither this call nor that function
+        # can see.
         require_hardware_opt_in(plan, os.environ)
         # The other half of one rule. A process belonging to a side carries both
         # isolations, so both are refused in the same place: this one asks
