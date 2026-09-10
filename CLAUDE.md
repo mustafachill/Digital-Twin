@@ -292,6 +292,19 @@ bullet.
   124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
   124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more,
   124 / 1445 / 1296 for a few hours after that and 124 / 1446 / 1296 until 2026-09-10.
+  **All three were re-run at that branch's tip `b072bfa` and read the same 124 / 1468 / 1363**,
+  which is the first time this bullet's figures have been reproduced by a second full run at a
+  second commit rather than stated from one. The four commits between the two are
+  documentation and one comment, so the agreement is what had to happen and is recorded as a
+  reading rather than as evidence about anything else.
+  **A third full run sits between those two and exited 1**, and it is recorded because a
+  failure this file does not mention is a failure the next reader re-discovers.
+  `cite_orchestration`'s `test_skill_cancellation` hit its **60 s** ctest timeout;
+  re-run alone it passes in **4.23 s**, and the run either side of it passed it. `git diff
+  --stat 404bbac..b072bfa -- workspace/src/cite_orchestration` is **empty**, so the package is
+  untouched by that branch. **A second container was being started on the same host while it
+  ran**, which is a confound the reader should know about and **is not an attribution** — one
+  event, on one machine, with nothing registered in advance, and it is not classified here.
   **One arithmetic check ties the host half to the collection above, and it is what separates a
   re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
   `tools/tests` collection took over the same span, which is what has to happen if the host half
