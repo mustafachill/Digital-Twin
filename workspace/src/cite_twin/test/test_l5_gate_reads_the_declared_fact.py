@@ -150,9 +150,9 @@ def test_a_deployment_declaring_nothing_physical_gates_no_mode() -> None:
 # which is every deployment this repository can generate today.
 
 
-#: The generated plan URI's resolved path, read by `_live_document` and by
-#: nothing else. Named here so the guard at the foot of this section can say
-#: which function is allowed to hold it.
+#: The reader of the live generated plan, and the one helper allowed to call it.
+#: Named rather than spelled inside the guard below, so that the guard cannot
+#: drift from the thing it guards.
 _LIVE_READER = "_live_document"
 _SHAPE_HELPER = "_untwinned_plan"
 
