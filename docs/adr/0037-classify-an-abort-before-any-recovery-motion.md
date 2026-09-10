@@ -52,9 +52,15 @@ E-stop reset:
 > Critical finding — the fault has not been diagnosed, and resuming re-runs whatever caused
 > it.
 
-and its failure-mode table at `:140` grades *"Automatic resumption after fault"* as
-**Critical**. Both quotations were read from the file at `b54140f` and both line numbers are
-exact.
+and its failure-mode table at `:238` grades *"Automatic resumption after fault"* as
+**Critical**. **Both quotations were read from the file at `b54140f`; both line numbers are
+2026-09-10 readings and not that commit's**, and the two halves are stated apart because
+they are two different readings. The document has grown from **156** lines at `b54140f` to
+**254** here — 236 at `404bbac`, 243 at `a986166`, 254 at `2fc0084`, by `wc -l` at each — so
+the numbers `b54140f` carried resolve to nothing now. Each was re-read at its new location
+rather than shifted by arithmetic: `:103` opens the deliberate-reset bullet quoted above,
+`:238` is the table row. The quotations
+themselves are unchanged, which is what makes them still a reading of `b54140f`.
 
 **Two qualifications, because the strong version of this claim does not survive checking,
 and the brief that produced this record used the strong version.**

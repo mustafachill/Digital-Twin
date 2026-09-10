@@ -245,6 +245,52 @@ the two, and the same 154 at `e3ab1d3` before this correction moved either line 
 The generator was trusted to carry a declared value because it does carry it, and nothing
 asked what happens when it is not asked to.
 
+## Note — 2026-09-10: a commit message on this branch credited history with a defect this branch created
+
+**This corrects a commit message, not the tree. The tree is right; the account of who broke
+it is not.** It is recorded here rather than by amending the commit because the commit is
+where the claim was made and this record is where its own last line sends the reader
+(`Refs ADR-0054`) — a visible correction is what this repository does everywhere else, and a
+silent rewrite would teach the next reader nothing.
+
+`3259b3b`, *"docs: repair the line-number citations into cross-cutting-safety.md"*, repaired
+three citations into `docs/architecture/cross-cutting-safety.md` and said of them:
+
+> All three were off by seven in the same direction, which is what a shared earlier insertion
+> looks like; none had been re-read since.
+
+**Two things are wrong with that.**
+
+**The shift of seven is this branch's own, not an earlier one.** `wc -l` on that document
+reads **236** at `404bbac`, **243** at `a986166` and **254** at `2fc0084`. `a986166` is
+*"docs(architecture): describe the hardware gate by the fact it decides on"* — a commit of
+this branch, six commits before the repair — and it is the +7. At `404bbac` all three
+citations land exactly on the text they quote:
+`git show 404bbac:docs/architecture/cross-cutting-safety.md | sed -n '85,87p'` returns the
+deliberate-reset bullet verbatim, `'91,93p'` the *"motion **stops**"* sentence, and
+`'123,125p'` the criterion. So they were **not** already wrong; they were made wrong here,
+and `3259b3b` repaired damage its own branch had done four commits earlier while describing
+it as damage it had found.
+
+**And the size was recalled rather than counted.** The message says *"Eight live citations
+across five files are repaired here"*; `git show --stat 3259b3b` reads **4 files changed, 7
+insertions(+), 7 deletions(-)**, and the message's own enumeration lists seven citations in
+four files.
+
+**Nothing about the repaired numbers changes, and nothing here reopens the deliberate
+exception.** Each new location was re-read at the time, and `ADR-0037:898`'s
+verification-table row stays unrenumbered for the reason that commit gives: it carries its
+own `Read at b54140f` column, so it is a record of a reading rather than a live citation.
+That distinction is the one this note is about — a citation that states its commit is
+historical; one that does not is a claim about now.
+
+**How it survived, since that is the part worth keeping.** The commit was written while
+repairing citations, at the one moment its author had every line number in front of them, and
+the attribution was the only sentence in it that was not measured. `wc -l` at three commits
+would have settled it in one command. This is the failure CLAUDE.md §2 exists for — a claim
+written from recollection rather than measured — caught inside the repository's own machinery
+for catching it.
+
 ## Context
 
 Every fact below was produced by the command beside it, run in this checkout on 2026-09-09.
