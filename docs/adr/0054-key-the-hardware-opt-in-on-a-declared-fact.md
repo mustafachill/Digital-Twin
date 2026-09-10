@@ -198,7 +198,7 @@ bindings, and one no rule anywhere refuses — and:
 | no validator reads `bound_args` at all | `grep -rn bound_args tools/cite_tools/validate/ \| wc -l` | **0** |
 | the model still validates | `cite-model validate --write` | exit 0, `ok model valid — 1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` |
 | `--strict` does not change that answer | `cite-model validate --strict` | exit 0, the same line, no finding |
-| the generated description passes no such argument | `grep -n ros2_control_plugin workspace/src/cite_generated/description/cell_a_arm_1.urdf.xacro` | **no match** — the `<xacro:xarm_device …/>` call carries eighteen arguments and not this one |
+| the generated description passes no such argument | `grep -n ros2_control_plugin workspace/src/cite_generated/description/cell_a_arm_1.urdf.xacro` | **no match** — the `<xacro:xarm_device …/>` call carries **17** arguments where the committed one carries 18, and this is the one it loses |
 | so the vendor's own default applies | `xarm_description/urdf/xarm_device_macro.xacro:14` and `urdf/xarm5/xarm5.ros2_control.xacro:5`, both `ros2_control_plugin:='uf_robot_hardware/UFRobotSystemHardware'`, emitted at `xarm5.ros2_control.xacro:15` as `<plugin>${ros2_control_plugin}</plugin>` | the **physical** component |
 | and L0 and the plan are still honest | `model/…/xarm5.yaml` still reads `ros2_control_plugin: gz_ros2_control/GazeboSimSystem` beside `commands_physical_hardware: false`; `cell_a_plan.yaml` carries `commands_physical_hardware: false` on all three arms | the gate returns without ever consulting `CITE_ALLOW_HARDWARE` |
 

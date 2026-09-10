@@ -1172,7 +1172,7 @@ in the arm type's `bound_args` — and **nothing checks that the binding is ther
 line, a plausible edit while re-working bindings, and `cite-model validate --write` exits 0 with
 `ok model valid — 1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)`, `--strict`
 prints no finding, the generated `cell_a_arm_1.urdf.xacro` calls `<xacro:xarm_device …/>` with
-eighteen arguments and no `ros2_control_plugin` among them, and the vendor macro applies its own
+**17** arguments where the committed one carries 18, `ros2_control_plugin` being the one it loses, and the vendor macro applies its own
 default — `uf_robot_hardware/UFRobotSystemHardware`, at
 `xarm_description/urdf/xarm_device_macro.xacro:14` and `urdf/xarm5/xarm5.ros2_control.xacro:5`,
 emitted at that file's line 15. Meanwhile L0 still reads `gz_ros2_control/GazeboSimSystem` beside
