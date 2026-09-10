@@ -291,6 +291,31 @@ would have settled it in one command. This is the failure CLAUDE.md §2 exists f
 written from recollection rather than measured — caught inside the repository's own machinery
 for catching it.
 
+### And it happened again, in the commit that repaired the rest
+
+**`523ffd9`, the commit that acted on the paragraphs above, miscounts its own diff in two
+places.** Its subject says *"the 50 source citations this branch's own diff displaced"* and
+its body says *"9 more had their interiors edited here and were read rather than mapped"*.
+Both are one too many. Counted from the diff rather than recalled — every `file:N` token on a
+removed line, matched against the added lines — that commit changes the number on **49**
+citation occurrences, and the read-by-hand group is **8**: two `xarm5.yaml` sites, one
+`HardwareBackend`, one `require_hardware_opt_in`, two `ResolvedAsset.ros2_control_plugin`
+sites and two `cite_twin` launch fixtures, which is what its own body enumerates. Every other
+figure in it — 52 found, 41 proven byte-identical, 2 marked, 1 left alone — is right, and
+41 + 8 + 2 + 1 = 52 closes.
+
+**It is corrected here rather than by amending, and the reason is not the one above.** The
+commits are unpushed, so an amend was available — but `523ffd9` is the commit CLAUDE.md §2 now
+names as the one every re-measured count in this round was taken at, in six places, and
+rewriting it would leave those references pointing at nothing. A wrong count in a message is a
+smaller defect than a §2 figure whose stated commit does not exist.
+
+**What it demonstrates is the whole point of this Note.** The miscount was written *by the
+change that fixes miscounted claims*, in the same hour, by someone who had just measured 52
+citations one at a time — and it was caught only by counting the diff afterwards, which is the
+same instrument that catches everything else here. Recollection is not cheaper than
+measurement; it is only faster to be wrong.
+
 ## Context
 
 Every fact below was produced by the command beside it, run in this checkout on 2026-09-09.
