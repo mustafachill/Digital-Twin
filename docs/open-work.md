@@ -98,6 +98,18 @@ fixed because the fix is a choice between two shapes, and ADR-0054 carries a mat
 of the same date for the three places it stated its residual as bounded to a *false* declaration.
 **No other item was touched and no table row below was re-read on this date.**
 
+**Updated again 2026-09-10**, on the same branch at `5516169`, from a `tester` run taken before
+the merge. **#55 is corrected**: its *"One event in eleven paired and twelve solo bring-ups"* was
+true when written and is false now — there is a **second occurrence**, and it is the **first in
+the solo configuration**, which removes the concurrent clean counterpart that was the argument
+for reading it as a race. The signature was compared against both the first occurrence and the
+2026-09-03 sibling rather than matched on the node name: it is **the same as the first** and
+**still distinct from the sibling**, and one of the four grounds that separated the sibling is
+retired by it. Its console is **deliberately not committed** and the item says why and what that
+costs. The item's heading changed and records what it used to read. **No other item was touched**
+— the same run's second failure matches **#26** and is named in #55 without being developed
+there — **and no table row below was re-read on this date.**
+
 ---
 
 ## Where the repository stood when this was written
@@ -778,23 +790,149 @@ defect class that cost this project a belt setpoint for ten commits); or genuine
 
 **If it recurs, capture the log before restarting.**
 
-### #55 — A paired bring-up failed on the plant side
-The counterpart announced readiness; the plant never did. The plant's `planning_scene_loader.py`
+### #55 — `planning_scene_loader.py` exits 1 on a refused scene diff: two occurrences
+**The heading read *"A paired bring-up failed on the plant side"* until 2026-09-10**, and it was
+right about the only occurrence there was. The second occurrence is a **solo** bring-up, so the
+configuration is not what this item is about; the refused scene diff is. Two dated documents
+under [`docs/measurements/`](measurements/README.md) describe this item as a paired bring-up.
+That stays true of the first occurrence and is no longer a description of the item.
+
+**The first occurrence, 2026-09-01, paired.** The counterpart announced readiness; the plant
+never did. The plant's `planning_scene_loader.py`
 for `arm_1` exited 1 with *"move_group refused the planning scene diff for zone 'cell_a'"*,
-**14 ms after** that same `move_group` logged *"Unknown frame: cite_world"*. The node is
+**12.8 ms after** that same `move_group` logged *"Unknown frame: cite_world"*. The node is
 `required`, so the plant's launch shut down, and per ADR-0047 a side that ends ends the pair.
+**That delta read "14 ms" until 2026-09-10 and is recomputed here** from the two timestamps in
+the committed console, `1788290006.935280548` (the first of twelve) and `1788290006.948123256`;
+against the last of the twelve it is 12.79 ms. Nothing rests on the difference — it is corrected
+because it is checkable.
 
 **Why it reads as a race and not a bad scene:** the counterpart brought the identical
-configuration up cleanly at the same moment, on the same machine, in the same trial.
+configuration up cleanly at the same moment, on the same machine, in the same trial. **That
+argument is available for the first occurrence only**, which is the whole significance of the
+second one; see below.
 
-One event in eleven paired and twelve solo bring-ups, **not attributed**. Full evidence:
+**Corrected 2026-09-10.** This item read *"One event in eleven paired and twelve solo bring-ups,
+**not attributed**"* until that date. It is **two events**, and the denominator has been dropped
+rather than added to: the first event was one of eleven paired and twelve solo bring-ups taken
+inside a campaign, the second was one of five `bringup` runs taken to verify a branch before a
+merge, and summing two sets that were taken for different reasons with nothing registered in
+advance either time would be manufacturing a rate. **Not attributed** is the half that survives,
+and it survives for both. The first occurrence's full evidence is still
 `docs/measurements/2026-09-01-capacity-on-shipped-main/raw/PAIR_HULL_FREE_3.console`, which
 carries both sides' output.
 
-**Why one event matters more than usual here:** it fails a `required` node and takes the whole
-pair down, and **no test covers paired bring-up at all** — `launch_test` with
-`IncludeLaunchDescription` holds one context on one domain, so a paired scenario cannot take
-today's shape. A regression here fails nothing.
+**The second occurrence, 2026-09-10, solo — and it is the first in that configuration.**
+A `tester` agent ran `./scripts/scenario bringup` five times on one machine at
+`CITE_PHYSICS_SEED=42` on the branch `feat/declared-simulation-backend` at `5516169`. Three
+printed the bare verdict `Scenario 'bringup' passed`; two failed. This item is one of the two.
+**The other failure matches #26's signature — `the MoveTo goal was never accepted`, 95.977 s
+against 41.5 / 41.2 / 43.5 s for the three that passed, against #26's recorded 94–95 s versus
+32–47 s — and it is named here and nowhere else. #26 was not touched by this reading**, and
+whether that item earns a line of its own is a separate decision. The
+failing run was the first after a clean `./scripts/clean` and `./scripts/build`, as the tester
+reported it; the log's own header records `Running scenario 'bringup' on DDS domain 43` and
+`Bringing up zone cell_a side plant`, so it is a solo plant bring-up with no second side in
+existence.
+
+The chain, in the order the console carries it, quoted rather than summarised:
+
+```
+[move_group-15] [ERROR] [1789063688.916917294] [cite.cell_a.arm_1.move_group.moveit.core.planning_scene]: Unknown frame: cite_world
+        ... twelve such lines, 1789063688.916917294 through .917012729 ...
+[planning_scene_loader.py-24] [ERROR] [1789063688.935452500] [cite.cell_a.arm_1.load_planning_scene_arm_1]: move_group refused the planning scene diff for zone 'cell_a'
+[ERROR] [planning_scene_loader.py-24]: process has died [pid 657, exit code 1, cmd '...cite_facility/planning_scene_loader.py --ros-args -r __node:=load_planning_scene_arm_1 -r __ns:=/cite/cell_a/arm_1 ...']
+[INFO] [launch.user]: BRING-UP FAILED before the planning scene for arm_2: the previous step exited 1.
+[INFO] [launch]: process[planning_scene_loader.py-24] was required: shutting down launched system
+[INFO] [gz-1]: sending signal 'SIGINT' to process[gz-1]
+[ERROR] [move_group-15]: process has died [pid 101, exit code -11, ...]   (and -16, -17, all three)
+error Scenario 'bringup' failed — 8 cycle assertion(s) failed
+```
+
+The refusal is **18.5 ms** after the first of the twelve `Unknown frame` lines and 18.4 ms after
+the last, from the two timestamps above. All eight cycle assertions failed with the identical
+`Exception: Launch stopped before the active tests finished.`, and the teardown assertion
+`test_nothing_of_ours_exited_badly` failed with the same exception — the cell was gone, so
+nothing was measured about it.
+
+**The tester reported 24 `Unknown frame: cite_world` lines; the distinct count is 12.** A raw
+`grep -c` over that console doubles every process line, because `launch_test` replays each
+process's whole output after the run — `Tf has two or more unconnected trees` reads 126 the same
+way and is 63. The first occurrence's console, which is not a `launch_test` run, carries 12 and
+63. **Compare distinct lines, not grep counts**, which is the same instrument defect CLAUDE.md §2
+records for CI logs from the other direction.
+
+**The three `move_group` -11s are recorded and not classified.** They are in
+`rclcpp::CallbackGroup::~CallbackGroup()` on the way out of a shutdown this failure induced, and
+the tester's own framing is kept: they are **consequences of the induced shutdown**, not the
+exempted upstream teardown case, and **no exemption was widened**. They are also **not part of
+this signature** — in the first occurrence all three `move_group`s exited **-15**, so the tails
+differ and only the trigger matches.
+
+**Attribution to the branch it was seen on was checked and is negative**, re-run here on
+2026-09-10: `git diff --stat main..HEAD -- workspace/src/cite_facility
+workspace/src/cite_generated/frames workspace/src/cite_generated/description` is **empty** at
+`5516169` against `main` at `41b41e5`, and the branch's only change to `simulation.launch.py` is
+a comment — `git diff main..HEAD -- '*simulation.launch.py' | grep -E '^[+-][^+-]'` returns
+comment lines and nothing else, so the executable line `require_hardware_opt_in(plan,
+os.environ)` is untouched.
+
+**Strength.** One event, on one machine, at one commit, with **nothing registered in advance**.
+It is **not a rate** and it is **not a campaign**. Nothing about the cause is attributed; the
+first occurrence was not attributed either and this one adds no attribution. **A second
+occurrence of an unattributed signature is a second occurrence and not a diagnosis.**
+
+**It is textually the same failure as the first occurrence, and this was checked rather than
+assumed on the strength of a shared node name.** Four points of identity, read here on
+2026-09-10 from the two consoles: the same error string from the same node
+`cite.cell_a.arm_1.load_planning_scene_arm_1` for the same zone and the same arm; the same
+branch of the loader — the `if not response.success` branch of `PlanningSceneLoader.load` in
+`workspace/src/cite_facility/cite_facility/planning_scene_loader.py`, cited by symbol because a
+line number in a file under edit goes stale — a refusal that **returned**; the same twelve
+`Unknown frame: cite_world` lines from that arm's `move_group` planning-scene logger in one
+sub-millisecond cluster immediately before it; and the same 63 `Tf
+has two or more unconnected trees` warnings — **an identical set, character for character**,
+after stripping the launch prefix and the timestamp
+(`grep "Tf has two or more" <console> | sed 's/^\[plant\] //; s/^\[[a-z_]*-[0-9]*\] //;
+s/\[[0-9.]*\]//; s/^\[WARN\] //' | sort -u`, `diff` clean over both). The launch chain that
+follows is the same line for line, down to `BRING-UP FAILED before the planning scene for
+arm_2`. **What differs is the configuration, the delta (18.5 ms against 12.8) and the shutdown
+tail.**
+
+**What the solo occurrence does to the race reading.** The argument that this is a race and not
+a bad scene was that a counterpart running the identical configuration came up cleanly at the
+same moment, on the same machine, in the same trial — a control the first occurrence had for
+free. **A solo bring-up has no companion side, so that control does not exist here.** What
+replaces it is weaker and should be read as weaker: three of the five runs in the same session,
+on the same machine, at the same commit and the same seed, brought the same cell up cleanly, and
+the two that did not failed in two different ways. That is a control separated in time rather
+than one running concurrently, and it does not rule out a scene that is wrong only sometimes.
+**The race reading is not refuted and it is no longer supported by a concurrent control.**
+
+**The full console is not committed, and that is a decision with a stated cost.**
+[`docs/measurements/`](measurements/README.md) is for campaigns, and CLAUDE.md is explicit that a
+campaign has its thresholds written down before its first trial; this run has none and must not
+be dressed as one. Every committed non-markdown file under `docs/` sits inside a campaign's
+directory — `git ls-files docs | grep -viE '\.md$' | grep -vE '^docs/measurements/'` returns
+`docs/adr/.gitkeep` and nothing else, run 2026-09-10 — so there is no third place for a 224 KB
+console that would not be inventing one, and inventing an evidence category is a
+documentation-structure decision rather than a bookkeeping one. Committing it under a campaign
+directory would also move the `lint` walk, a count CLAUDE.md §2 reconciles by hand and records as
+tracking *how much campaign evidence is committed*. **What is preserved instead is above**: every
+string a future occurrence would be matched on, the timestamps both deltas are computed from, the
+exit codes and the verdict. **What is lost is stated too:** the set comparison in the paragraph
+above was run once, against a console in a session scratchpad that does not survive the session,
+and **a reader cannot re-run it**. The first occurrence's console is committed and can still be
+re-read; this one's cannot. If a third occurrence is caught, capture it — #37's standing
+instruction, which this item already cites, applies to this item too.
+
+**Why an event here matters more than usual:** it fails a `required` node and takes the whole
+launch down — the whole pair, when there is a pair — and **no test covers paired bring-up at
+all**: `launch_test` with `IncludeLaunchDescription` holds one context on one domain, so a paired
+scenario cannot take today's shape. A regression here fails nothing. **This paragraph read "why
+one event matters more than usual here" until 2026-09-10**; the argument is unchanged by there
+being two. Note that the solo half *is* covered — `./scripts/scenario bringup` is a blocking CI
+gate and is exactly what caught this one.
 
 P4 is the lens: if the scene load depends on a frame becoming resolvable, that is a sequencing
 question and the answer is an event, never a retry or a sleep.
@@ -822,11 +960,19 @@ new event is a **solo plant** run, so this item's *"the counterpart brought the 
 configuration up cleanly at the same moment"* has no counterpart to lean on there.
 **The attribution is left open**, and whether the two are one defect is not established.
 
+**One of those four grounds is retired by the second occurrence, and three stand — noted
+2026-09-10.** The configuration ground is gone: this item now has a solo occurrence of its own,
+so *"paired versus solo"* separates nothing. The error text, the branch of the function and the
+arm are unchanged and are the load-bearing ones — a call that returned a refusal and a call that
+never returned are different failures whatever the configuration. The sibling stays uncounted,
+and **the attribution stays open**.
+
 **The console is captured**, at
 `docs/measurements/2026-09-02-scenario-ceilings/raw/C4_continuous_line_1.log`, with the run
-document beside it — which is what #37's standing instruction asks for. **This item's own
-occurrence carries a console too**, named above. **It is #37 whose single event was restarted
-rather than analysed with no log kept**, and the two must not be confused.
+document beside it — which is what #37's standing instruction asks for. **This item's first
+occurrence carries a console too**, named above; **its second does not**, for the reason given
+above. **It is #37 whose single event was restarted rather than analysed with no log kept**, and
+the three must not be confused.
 
 ---
 
