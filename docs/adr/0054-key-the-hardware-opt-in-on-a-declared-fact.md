@@ -1,7 +1,15 @@
 # ADR-0054: Key the hardware opt-in on a fact the model declares, not on a backend's name
 
-- **Status:** Proposed — **decisions 1 to 4 are implemented**, and this record is
-  **NOT promoted**, for one reason stated in full below. Nothing in the *Decision* sections is
+- **Status:** Proposed (corrected 2026-09-10) — **decisions 1 to 4 are implemented**, and this
+  record is **NOT promoted**, for one reason stated in full below.
+  **The correction does not withdraw any decision and does not touch the promotion condition.**
+  It corrects the **size of the residual** this record states in three places: the gate is
+  defeated not only by a false declaration in L0 but by an **omitted binding**, with the
+  declaration honest — nothing verifies that the plugin L0 declares is the plugin the
+  description loads. It is pre-existing, this record did not create it, and it is filed rather
+  than fixed. See the section "Correction — 2026-09-10: the residual is not confined to a false
+  declaration, and an omitted binding reaches an arm with L0 telling the truth", immediately
+  after this block. Nothing in the *Decision* sections is
   a commitment any more; what remains a commitment is clause 10's own wording. Every other
   sentence in this record still describes the tree it asked for, and *Context* still describes
   the tree as it was on 2026-09-09 at `404bbac`, which is what makes it readable as the
@@ -151,6 +159,89 @@
   [L0](../architecture/L0-facility-model.md), [L2](../architecture/L2-control-and-hal.md),
   [L5](../architecture/L5-twin-synchronization.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §3 (P1, P2, P5, P7) and §10, charter §3.2 and §8
+
+## Correction — 2026-09-10: the residual is not confined to a false declaration, and an omitted binding reaches an arm with L0 telling the truth
+
+**This is the first correction on this record.** The decision stands in full and nothing in
+the *Decision* sections is withdrawn: the field is still required with no default, the plan
+still carries it per (asset, side), and the four gates still decide on it. What is corrected
+is the size of the residual this record states in three places, which is larger than every
+one of them says.
+
+### What was written
+
+Three sentences, all bounding the residual to a **false statement in L0**.
+
+Decision 1 says *"It is a claim the model makes about itself, and nothing checks it. A model
+may declare `false` beside the vendor's physical plugin and this record does not catch it"*,
+and closes: *"a reviewer reading a backend declaration sees the plugin and the claim one line
+apart."* *What this costs us* says *"The model can lie, and nothing catches it. **This is the
+real price.**"* *What promotion does not claim* says *"L0 states it and nothing verifies it
+against the plugin string beside it."*
+
+Read together they say the gate is defeated only by someone writing a value that is untrue,
+in the one place a reviewer is looking. Every one of those sentences is true on its own. The
+framing they share is false.
+
+### What is true
+
+**Nothing verifies that the plugin L0 declares is the plugin the description loads.** The
+declaration can be entirely honest and the arm still physical, because the binding that
+carries the declared plugin string into the generated description is itself unguarded.
+
+`model/assets/types/robots/xarm5.yaml` binds the vendor macro's `ros2_control_plugin`
+parameter in `bound_args`, on one line. Delete that line — a plausible edit while re-working
+bindings, and one no rule anywhere refuses — and:
+
+| Fact | Instrument, run in this checkout on 2026-09-10 | Result |
+|---|---|---|
+| no validator reads `bound_args` at all | `grep -rn bound_args tools/cite_tools/validate/ \| wc -l` | **0** |
+| the model still validates | `cite-model validate --write` | exit 0, `ok model valid — 1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` |
+| `--strict` does not change that answer | `cite-model validate --strict` | exit 0, the same line, no finding |
+| the generated description passes no such argument | `grep -n ros2_control_plugin workspace/src/cite_generated/description/cell_a_arm_1.urdf.xacro` | **no match** — the `<xacro:xarm_device …/>` call carries eighteen arguments and not this one |
+| so the vendor's own default applies | `xarm_description/urdf/xarm_device_macro.xacro:14` and `urdf/xarm5/xarm5.ros2_control.xacro:5`, both `ros2_control_plugin:='uf_robot_hardware/UFRobotSystemHardware'`, emitted at `xarm5.ros2_control.xacro:15` as `<plugin>${ros2_control_plugin}</plugin>` | the **physical** component |
+| and L0 and the plan are still honest | `model/…/xarm5.yaml` still reads `ros2_control_plugin: gz_ros2_control/GazeboSimSystem` beside `commands_physical_hardware: false`; `cell_a_plan.yaml` carries `commands_physical_hardware: false` on all three arms | the gate returns without ever consulting `CITE_ALLOW_HARDWARE` |
+
+So the route this record closed — a physical plugin declared under the id `sim` — is closed,
+and a second route of the same shape is open beside it, reached by **omission** rather than
+by assertion. `cross-cutting-safety.md`'s requirement that a hardware path is never reachable
+by omission is met at the L0 field (clause 1) and at the plan key (clause 5), and is **not**
+met at the binding, which no clause of this record ever looked at.
+
+**It is pre-existing and this record did not create it.** The binding line is present at
+`404bbac`, and `bound_args` had zero validator readers there too; the change this record
+specifies strictly narrows the neighbouring hazard and widens nothing. It does not block the
+promotion of anything, and it was not fixed here.
+
+### What survives
+
+Everything the decision commits to. Decision 1's field, decision 2's split, decision 3's plan
+key and decision 4's migration are unaffected, and the reproduction in *Context* is still
+refused end to end. What changes is that this record may no longer be cited for the
+proposition that the declaration is the only way in. *What promotion does not claim* gains a
+bullet naming the second route; the three sentences above are left where they stand, marked.
+
+**The structural fix is not taken here**, because it is an owner-facing choice between two
+shapes and neither is free. It is filed as item **#65** in [`../open-work.md`](../open-work.md),
+scoped to *What we will have to revisit*'s **hardware launch shape** bullet and to be settled
+before any hardware launch exists — which is the last moment at which no deployment depends
+on the answer. The two candidate shapes are recorded there and neither is chosen.
+
+### How the error survived
+
+**The record audited the value and never the path the value travels.** Every clause of *The
+promotion condition* asserts on what L0 states, on what the plan carries, or on how a gate
+branches; clause 3 even asserts that **no description moves**, which is exactly the artifact
+in which this defect appears. A condition that is satisfied by a description not changing
+cannot notice a description that is wrong.
+
+**And the reassurance was structural-sounding rather than measured.** *"One line from the
+plugin string it is about"* is an argument about where a reviewer's eye lands, and it was
+written as though it bounded the failure. It does not: the plugin string a reviewer reads in
+`hardware_backends` and the plugin string the description loads are two different quantities
+that this repository connects by a single unguarded binding, 160 lines away in the same file.
+The generator was trusted to carry a declared value because it does carry it, and nothing
+asked what happens when it is not asked to.
 
 ## Context
 
@@ -515,6 +606,9 @@ value that must be written to reach an arm is `true`.
 promotion does not claim*. What changes is that the fact has a home: today there is nowhere in
 L0 to state it truthfully at all, and a reviewer reading a backend declaration sees the plugin
 and the claim one line apart.
+**[Corrected 2026-09-10 — see the Correction section above. The plugin string a reviewer reads
+here and the plugin string the description loads are two quantities, joined by one unguarded
+binding; the claim being true is not sufficient.]**
 
 ### 2. The safety gates read the declaration; `use_sim_time` does not, and the constant survives
 
@@ -787,6 +881,9 @@ rather than for the software.**
   schema exports, one generated plan, `MODEL_HASH`, and every test fixture that builds a type
   or a plan inline.
 - **The model can lie, and nothing catches it.** This is the real price.
+  **[Corrected 2026-09-10 — see the Correction section above. It is *a* price, not *the*
+  price: the model can also tell the truth and be ignored, because nothing binds the declared
+  plugin string to the description that loads one.]**
   `commands_physical_hardware: false` beside `uf_robot_hardware/UFRobotSystemHardware`
   validates, generates and starts.
   Catching it needs a list of plugin strings, which is option A, which is the thing this record
@@ -825,6 +922,10 @@ rather than for the software.**
 - **The hardware launch shape.** `simulation.launch.py` hardcodes `use_sim_time: True` at
   ten sites; a launch that brings up a physical arm has to answer the clock question
   properly, and it will settle whether the clock is a per-backend fact at all.
+  **It also has to answer the binding the Correction section above measures** — whether the
+  plugin L0 declares is the plugin the description loads — because that is the last point at
+  which no deployment depends on the answer. `../open-work.md` **#65** carries the two
+  candidate shapes and chooses neither.
 - **The twelve non-arm assets, which are outside the gate in two different ways.** Seven reach
   the plan with no backend key; five are not in the plan at all. When an L1/L2 hardware driver
   exists for a belt, the gate's remit is a decision that has to be taken and is not taken here —
@@ -974,6 +1075,16 @@ Permanent. Not a status caveat, and not discharged by anything above.
 - **That the declared fact is true.** L0 states it and nothing verifies it against the plugin
   string beside it. A model declaring `commands_physical_hardware: false` on the vendor's
   physical component passes every clause above and reaches an arm.
+- **That the plugin L0 declares is the plugin the description loads.** Added 2026-09-10 by the
+  Correction section above, which measures it; this list is permanent, and a list of routes to
+  an arm that omits one is the dangerous kind of incomplete. The type's `bound_args` carries
+  the declared plugin string into the vendor macro on one line, **no validator reads
+  `bound_args` at all**, and the vendor macro's own default is
+  `uf_robot_hardware/UFRobotSystemHardware`. So deleting that binding leaves L0 honest, the
+  plan honest, the gate correctly silent, and the physical component loaded. Reachable by
+  **omission**, which is the failure mode `cross-cutting-safety.md` forbids and which clauses
+  1 and 5 close at the two layers they cover. Filed as `../open-work.md` **#65**; not fixed
+  here.
 - **That this is a protective measure.** It is a **bring-up refusal**: it decides whether a
   process starts, once, and it is not a per-command check. It cannot stop an arm that is
   already moving, and it interposes nothing on any command path.

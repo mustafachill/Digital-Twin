@@ -63,6 +63,16 @@ asset_type:
       attach_to: instance.parent_link
       attach_xyz: instance.parent_xyz_m
       attach_rpy: instance.parent_rpy_rad
+      # NOTHING CHECKS THIS BINDING, AND DELETING IT REACHES A PHYSICAL ARM.
+      # It is the only thing carrying the plugin string declared below into the
+      # description. No validator reads `bound_args` (`grep -rn bound_args
+      # tools/cite_tools/validate/` is empty), and the vendor macro defaults this
+      # parameter to `uf_robot_hardware/UFRobotSystemHardware` — so removing this
+      # line leaves the model valid, `--strict` silent, this file's
+      # `commands_physical_hardware: false` honest, the bring-up gate correctly
+      # returning without consulting `CITE_ALLOW_HARDWARE`, and the physical
+      # component loaded. ADR-0054's Correction of 2026-09-10 measures it end to
+      # end; `docs/open-work.md` #65 carries the fix and does not choose it.
       ros2_control_plugin: instance.hardware.ros2_control_plugin
       add_gripper: instance.end_effector.vendor_integrated
       # The fitted end effector's declared close rate, handed to the vendor macro
@@ -224,6 +234,12 @@ asset_type:
       # it, because an id is a name and a name says nothing about the plugin
       # behind it (ADR-0054). Nothing verifies this claim against the plugin
       # string; a wrong answer here validates, generates and starts.
+      #
+      # A RIGHT answer is not sufficient either, and that is the larger half. The
+      # plugin string above is what the DESCRIPTION loads only while `bound_args`
+      # binds it — see the comment on that binding. ADR-0054's Correction of
+      # 2026-09-10 states both routes; do not read this field as covering the
+      # second one.
       commands_physical_hardware: false
       instance_params: []
     real:

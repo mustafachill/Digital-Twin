@@ -445,6 +445,14 @@ class HardwareBackend(Strict):
     #: records. What the field buys is that the fact is stated by the person who
     #: chose the plugin, one line from the plugin string it is about, rather than
     #: implied by an id nobody was asked about.
+    #:
+    #: **AND THE CLAIM BEING TRUE IS NOT SUFFICIENT.** That plugin string reaches
+    #: the description only through the type's ``bound_args``, which no validator
+    #: reads; unbind it and the vendor macro's own default — the physical
+    #: component — is loaded while this field, the plan and the gate are all
+    #: honest. So this field bounds what L0 SAYS and not what the description
+    #: LOADS. ADR-0054's Correction of 2026-09-10 measures both routes;
+    #: ``docs/open-work.md`` #65 carries the fix.
     commands_physical_hardware: bool
 
     instance_params: list[str] = Field(default_factory=list)

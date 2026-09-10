@@ -195,9 +195,16 @@ reaching an arm requires that somebody wrote `commands_physical_hardware: true` 
 there is no unanticipated name left to fall through.
 [`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md) requires that
 a hardware path is never reachable by omission, and a denylist is reachable by omission by
-construction. What remains is that **L0 can lie** — `false` beside the vendor's physical
-component passes here — which ADR-0054 names as the price of not transcribing a list of
-plugin strings.
+construction.
+
+**Two residuals remain, and this gate sees neither.** **L0 can lie** — `false` beside the
+vendor's physical component passes here — and **L0 can tell the truth and be ignored**,
+because nothing verifies that the plugin L0 declares is the plugin the description loads: the
+type's `bound_args` carries it, no validator reads `bound_args`, and the vendor macro's own
+default is the physical component. Read
+[ADR-0054](../../../docs/adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)'s Correction
+of 2026-09-10 for both — they are stated and measured there, and
+[`../../../docs/open-work.md`](../../../docs/open-work.md) #65 carries the second one's fix.
 
 The equivalent shell check in `scripts/_lib.sh` guards `./scripts/enter hardware` and nothing
 else, which is why the check also lives at this boundary. **What arrives here is every route that

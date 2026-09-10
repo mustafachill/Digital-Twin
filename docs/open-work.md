@@ -87,6 +87,17 @@ files to **6 in 5**, one of the six being the sentence that names the instrument
 in these edits was re-measured in this checkout on this date by the change that writes them; no
 table row in the section below was re-read.
 
+**Updated 2026-09-10**, on the branch `feat/declared-simulation-backend`, which is ahead of
+`main` and implements [ADR-0054](adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md). **One
+item is new: #65**, filed from a `safety-auditor` finding on that branch and re-driven by the
+fixer that filed it — the arm type's `bound_args` carries the declared `ros2_control_plugin`
+string into the description, **no validator reads `bound_args`**, and the vendor macro's own
+default is the physical component, so an omitted binding reaches a physical arm with L0, the
+plan and the bring-up gate all telling the truth. It is **pre-existing**, is filed rather than
+fixed because the fix is a choice between two shapes, and ADR-0054 carries a matching Correction
+of the same date for the three places it stated its residual as bounded to a *false* declaration.
+**No other item was touched and no table row below was re-read on this date.**
+
 ---
 
 ## Where the repository stood when this was written
@@ -1150,6 +1161,56 @@ Cross-references: #62, which is two of the five and a live defect on its own; #3
 change that makes the generator sites per-side and will move this shape again.
 
 Reported by review on 2026-09-08 (R-06) and filed rather than fixed.
+
+### #65 — Nothing verifies that the plugin L0 declares is the plugin the description loads
+The hardware opt-in decides on `commands_physical_hardware`, which L0 declares one line from the
+`ros2_control_plugin` string it is about (ADR-0054). That plugin string reaches the generated
+description through exactly one binding — `ros2_control_plugin: instance.hardware.ros2_control_plugin`
+in the arm type's `bound_args` — and **nothing checks that the binding is there.**
+
+**Driven end to end on the shipped model on 2026-09-10, not reasoned about.** Delete that one
+line, a plausible edit while re-working bindings, and `cite-model validate --write` exits 0 with
+`ok model valid — 1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)`, `--strict`
+prints no finding, the generated `cell_a_arm_1.urdf.xacro` calls `<xacro:xarm_device …/>` with
+eighteen arguments and no `ros2_control_plugin` among them, and the vendor macro applies its own
+default — `uf_robot_hardware/UFRobotSystemHardware`, at
+`xarm_description/urdf/xarm_device_macro.xacro:14` and `urdf/xarm5/xarm5.ros2_control.xacro:5`,
+emitted at that file's line 15. Meanwhile L0 still reads `gz_ros2_control/GazeboSimSystem` beside
+`commands_physical_hardware: false`, the plan still carries `false` on all three arms, and
+`require_hardware_opt_in` returns **without ever consulting `CITE_ALLOW_HARDWARE`**. The gate is
+not wrong; it is answering honestly about a fact that stopped being connected to the description.
+`grep -rn bound_args tools/cite_tools/validate/ | wc -l` reads **0**.
+
+**This is the omission direction, and it is the one `cross-cutting-safety.md` forbids.** ADR-0054
+closed the assertion direction — a physical plugin declared under the id `sim` — and made the
+field and the plan key both unreachable by omission (its clauses 1 and 5). The binding is the
+third layer, and no clause of that record looked at it: clause 3 asserts that **no description
+moves**, which is exactly the artifact in which this appears.
+
+**Pre-existing, and not introduced by `feat/declared-simulation-backend`.** The binding line is
+present at `404bbac` and `bound_args` had zero validator readers there too; that branch strictly
+narrows the neighbouring hazard. It blocked no merge and was not fixed there.
+
+**Two candidate shapes, and neither is chosen here — that is the project owner's.**
+
+- **An L0 rule.** A type whose `hardware_backends` declare a `ros2_control_plugin` must bind it:
+  an ERROR in `validate.referential` on the unbound binding, in the shape ADR-0028 decision 4
+  used for collision geometry — L0 declares what the vendor does, and a rule holds it. Cheap,
+  runs anywhere, and catches the edit at the moment it is made. It checks a *binding name*, so
+  it says nothing about what the vendor macro then does with the value.
+- **A generated-artifact check.** Each arm description's `<plugin>` must equal the plugin the
+  selected backend declares. Strictly stronger — it is the actual question — and strictly more
+  expensive: it needs the vendor source imported and a xacro expansion, so it cannot run where
+  `./scripts/validate-model` runs, and it lands in `./scripts/hulls` territory or in a
+  `cite_description` test.
+
+**Do it before any hardware launch exists** — ADR-0054's *What we will have to revisit* bullet on
+the hardware launch shape is where it belongs. That is the last moment at which no deployment
+depends on the answer, and the moment the vendor component acquires the connection parameters
+ADR-0053 delivers is the moment an unguarded description stops being fail-closed by accident.
+
+Reported by `safety-auditor` on 2026-09-10 (S-01), re-driven by the fixer that filed it, and
+deliberately not fixed there. ADR-0054 carries the matching Correction of the same date.
 
 ### #47 — Five L5 review findings, with their content
 Recorded here because they were once sent as bare identifiers and an agent correctly refused to

@@ -1259,10 +1259,15 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
 
     **The allowlist property is kept and is now structural.** The dangerous
     branch is the positive one, so reaching an arm requires that someone wrote
-    `true` in L0; there is no unanticipated name left to fall through. What
-    remains is that L0 can lie — `commands_physical_hardware: false` beside the
-    vendor's physical component passes here — which ADR-0054 names as the price
-    of refusing a transcribed list of plugin strings.
+    `true` in L0; there is no unanticipated name left to fall through.
+
+    **TWO RESIDUALS REMAIN, AND THIS FUNCTION SEES NEITHER.** L0 can lie —
+    `commands_physical_hardware: false` beside the vendor's physical component
+    passes here — and L0 can also tell the truth and be ignored, because nothing
+    verifies that the plugin L0 declares is the plugin the description loads.
+    **Read ADR-0054's Correction of 2026-09-10 for both**, which is where they are
+    stated and measured; restating them here is how four copies of the first one
+    drifted apart, and the second one is the half that no copy had.
     """
     # Asked side by side and through `ControllerManager.commands_physical_hardware_on`,
     # which is the one place an (asset, side) becomes this answer. Reading the raw
