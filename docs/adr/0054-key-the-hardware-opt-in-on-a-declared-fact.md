@@ -239,7 +239,9 @@ cannot notice a description that is wrong.
 plugin string it is about"* is an argument about where a reviewer's eye lands, and it was
 written as though it bounded the failure. It does not: the plugin string a reviewer reads in
 `hardware_backends` and the plugin string the description loads are two different quantities
-that this repository connects by a single unguarded binding, 160 lines away in the same file.
+that this repository connects by a single unguarded binding, in a different block of the same
+file — 154 lines apart in this checkout on 2026-09-10, differencing what `grep -n` reports for
+the two, and the same 154 at `e3ab1d3` before this correction moved either line number.
 The generator was trusted to carry a declared value because it does carry it, and nothing
 asked what happens when it is not asked to.
 
