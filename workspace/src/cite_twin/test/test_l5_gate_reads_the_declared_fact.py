@@ -26,13 +26,30 @@ WHY THIS FILE EXISTS AT ALL. `cite_twin` is started by no launch file (CLAUDE.md
 tests. ADR-0054's headline finding is L5's: `physical_sides_commanded` reported
 no physical side commanded, for every mode, on a zone whose every side loaded the
 vendor's physical `ros2_control` component under the id `sim`.
+
+**WHICH TWIN SHAPE THESE TESTS RUN AGAINST IS FORCED, NOT INHERITED.** Everything
+below the "shipped single-sided plan" heading takes the plan this checkout's own
+generator emitted and normalises it to the UNTWINNED shape before asking anything
+of it — `_untwinned_plan`, which is where that is done and why. This file read the
+live plan directly until 2026-09-10 and seven of its tests failed on their own
+fixture on a checkout flipped to `twin: {sides: pair}`, which is open-work #40 in
+`cite_twin` instead of `cite_bringup`. `test_only_the_shape_helper_reads_the_live_plan`
+is what stops the next one, and states its own residuals.
 """
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
-from cite_bringup.plan import default_plan_path, load as load_plan
+from cite_bringup.plan import (
+    BACKEND_FIELD_BY_SIDE,
+    COUNTERPART_SIDE as PLAN_COUNTERPART_SIDE,
+    default_plan_path,
+    load as load_plan,
+    PHYSICAL_FIELD_BY_SIDE,
+    PLANT_SIDE as PLAN_PLANT_SIDE,
+)
 from cite_interfaces.msg import TwinMode
 from cite_twin.mode import (
     Deployment,
@@ -42,6 +59,7 @@ from cite_twin.mode import (
 )
 from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, PLANT_SIDE
 import pytest
+import yaml
 
 #: Every mode that commands the far side, which is the set clause 8 asks about.
 TWO_SIDED_MODES = sorted(
@@ -132,32 +150,158 @@ def test_a_deployment_declaring_nothing_physical_gates_no_mode() -> None:
 # which is every deployment this repository can generate today.
 
 
-def _shipped() -> Deployment:
-    return deployment_from_plan(load_plan(Path(default_plan_path("cell_a"))))
+#: The generated plan URI's resolved path, read by `_live_document` and by
+#: nothing else. Named here so the guard at the foot of this section can say
+#: which function is allowed to hold it.
+_LIVE_READER = "_live_document"
+_SHAPE_HELPER = "_untwinned_plan"
+
+#: Every controller-manager key a paired plan carries and an untwinned one does
+#: not, taken from `plan.py`'s own side-to-field maps rather than transcribed, so
+#: this helper cannot name a key the reader has stopped parsing or miss one it
+#: has started (P1). Indexed by `plan.py`'s side names and not by `routing.py`'s,
+#: because these are that module's keys: the two modules bind the side names
+#: separately, and a helper that popped nothing would fail silently.
+_COUNTERPART_MANAGER_KEYS = (
+    BACKEND_FIELD_BY_SIDE[PLAN_COUNTERPART_SIDE],
+    PHYSICAL_FIELD_BY_SIDE[PLAN_COUNTERPART_SIDE],
+)
 
 
-def test_the_shipped_plan_yields_a_deployment_with_no_far_side() -> None:
+def _live_document() -> dict:
+    """Read the plan this checkout generates, in whatever shape its model declares.
+
+    **Not for a test to call**, and the guard at the foot of this section is what
+    says so. Which shape this returns depends on the L0 model — `single` today,
+    `pair` on a checkout flipped for a run — so a test built on it asserts about
+    whichever cell happens to be committed rather than about what it is asking.
+    """
+    return yaml.safe_load(Path(default_plan_path("cell_a")).read_text())
+
+
+def _untwinned_plan(tmp_path: Path) -> Path:
+    """Write the generated plan as an UNTWINNED zone generates it, and return it.
+
+    **NORMALISED, NOT PINNED, AND THE DISTINCTION IS THE POINT.** The plan is the
+    one this checkout's own generator emitted — so these tests still grade the
+    shipped generator — and only its twin SHAPE is forced, by dropping the
+    counterpart side and the two controller-manager keys that come with it. What
+    is asserted below is therefore ADR-0054 clause 8's question, "does a
+    single-sided deployment still behave", and not "is this checkout's model
+    single-sided".
+
+    **This file read the live plan directly until 2026-09-10, which is
+    open-work #40's failure class one package over.** `test_plan.py` closed it for
+    `cite_bringup` on 2026-09-09 with the same two-shape treatment; this file
+    landed on the same branch and walked back into it. Measured rather than
+    reasoned about: on a checkout flipped to `twin: {sides: pair}` and
+    regenerated, seven tests here failed on their own fixture — `set(sides) ==
+    {"arm_1", "arm_2", "arm_3"}` is a statement about whichever model this
+    checkout carries.
+
+    Only the untwinned shape is built, and no paired sibling: every assertion in
+    this section is about the deployment that has NO far side, which is the one
+    thing a paired plan cannot express. The paired shape is asserted above from
+    `Deployment.paired`, with no plan and no file at all.
+    """
+    document = _live_document()
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == PLAN_PLANT_SIDE
+    ]
+    for manager in document["plan"]["controller_managers"]:
+        for field in _COUNTERPART_MANAGER_KEYS:
+            manager.pop(field, None)
+    written = tmp_path / "cell_a_plan.yaml"
+    written.write_text(yaml.safe_dump(document))
+    return written
+
+
+@pytest.fixture
+def shipped(tmp_path: Path) -> Deployment:
+    """Build a `Deployment` from the shipped plan in its untwinned shape."""
+    return deployment_from_plan(load_plan(_untwinned_plan(tmp_path)))
+
+
+def test_only_the_shape_helper_reads_the_live_plan() -> None:
+    """The fixture hazard, closed by construction rather than by remembering.
+
+    Reading the source rather than the behaviour, because that is the only way to
+    catch the NEXT one: a test added on a `single` checkout that reads the live
+    plan passes on every machine anybody runs, and says nothing at all until
+    someone pairs a zone.
+
+    Both the CALL and the NAME, because `_alias = _live_document` followed by
+    `_alias()` reaches the same document with a call-only check green — the
+    bypass `test_plan.py` demonstrated on 2026-09-09 against exactly that shape.
+
+    **Its residuals, stated rather than implied.** This guard reads names in this
+    module only; a namespace reach (`globals()[...]()`), a dynamic evaluation
+    (`eval`) or a second resolution of the plan path that never names
+    `_live_document` walks around it. `test_plan.py` carries the wider guard set
+    for `cite_bringup`; this one is deliberately the narrow, single-purpose
+    version, since this file has one shape helper and eleven tests.
+    """
+    tree = ast.parse(Path(__file__).read_text())
+    mentions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _LIVE_READER
+        and isinstance(node.ctx, ast.Load)
+    ]
+    enclosing = {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for inner in ast.walk(function)
+        if any(inner is node for node in mentions)
+    }
+    # Totally, not as a subset: a mention at module scope is inside no function
+    # and contributes no name, so `enclosing <= {_SHAPE_HELPER}` holds vacuously
+    # for a module-level read - the hole `test_plan.py` found in its own sibling.
+    assert mentions and all(
+        {
+            function.name
+            for function in ast.walk(tree)
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for inner in ast.walk(function)
+            if inner is node
+        }
+        == {_SHAPE_HELPER}
+        for node in mentions
+    ), (
+        f"{_LIVE_READER!r} is named by {sorted(enclosing) or 'module scope'}; only "
+        f"{_SHAPE_HELPER!r} may read it. Reading the live plan gives you whichever "
+        "twin shape this checkout's model declares, so the test asserts about the "
+        "committed model rather than about its own question (open-work #40) - take "
+        "the `shipped` fixture"
+    )
+
+
+def test_the_shipped_plan_yields_a_deployment_with_no_far_side(shipped: Deployment) -> None:
     """And building it does not raise, which is the total accessor's whole job."""
-    shipped = _shipped()
     assert set(shipped.sides) == {"arm_1", "arm_2", "arm_3"}
     assert shipped.assets_without_a_far_side("") == ("arm_1", "arm_2", "arm_3")
     assert not shipped.has_a_far_side("")
 
 
-def test_the_shipped_plan_states_no_far_side_rather_than_a_simulated_one() -> None:
+def test_the_shipped_plan_states_no_far_side_rather_than_a_simulated_one(
+    shipped: Deployment,
+) -> None:
     """`None` and not `False`. The two are different answers to different questions.
 
     This is the mutation: collapse the map to `bool` and every value below
     becomes `False`, which reads as "there is a far side and it is simulated".
     """
-    shipped = _shipped()
     for asset in shipped.sides:
         assert shipped.declares_physical_hardware(asset, PLANT_SIDE) is False
         assert shipped.declares_physical_hardware(asset, COUNTERPART_SIDE) is None
 
 
 @pytest.mark.parametrize("mode", TWO_SIDED_MODES)
-def test_a_two_sided_mode_is_refused_on_the_shipped_deployment(mode: int) -> None:
+def test_a_two_sided_mode_is_refused_on_the_shipped_deployment(
+    mode: int, shipped: Deployment
+) -> None:
     """The refusal the collapse would silently retire.
 
     Reported as a verdict rather than raised: `ModeAuthority.request` turns a
@@ -166,7 +310,7 @@ def test_a_two_sided_mode_is_refused_on_the_shipped_deployment(mode: int) -> Non
     """
     from cite_interfaces.msg import ResultCode
 
-    verdict = ModeAuthority(_shipped(), _refused).request(
+    verdict = ModeAuthority(shipped, _refused).request(
         mode, "", "because", force=False
     )
     assert not verdict.accepted
@@ -220,7 +364,7 @@ def test_the_sample_asks_the_free_function_rather_than_deciding_again() -> None:
 # --- What a TwinBoundary does with the shipped single-sided plan -------------
 
 
-def test_the_boundary_refuses_the_shipped_plan_at_side_resolution() -> None:
+def test_the_boundary_refuses_the_shipped_plan_at_side_resolution(tmp_path: Path) -> None:
     """It refuses, and WHERE it refuses is the finding this test records.
 
     ADR-0054's decision 2 warns that migrating `twin_boundary` with the refusing
@@ -235,11 +379,16 @@ def test_the_boundary_refuses_the_shipped_plan_at_side_resolution() -> None:
 
     Pinned so that a later change to the construction ORDER does not quietly turn
     the masked failure into a live one.
+
+    On the plan in its UNTWINNED shape, and not on whatever shape this checkout's
+    model declares: a paired plan declares the counterpart, so on a checkout
+    flipped to `pair` this assertion would have failed on its own fixture rather
+    than on the construction order it is about (open-work #40).
     """
     from cite_bringup.plan import SideNotDeclaredError
     from cite_twin.twin_boundary import TwinBoundary
 
-    plan = load_plan(Path(default_plan_path("cell_a")))
+    plan = load_plan(_untwinned_plan(tmp_path))
     with pytest.raises(SideNotDeclaredError) as raised:
         TwinBoundary(plan, base=1, environ={})
     assert "declares no side named" in str(raised.value), (
