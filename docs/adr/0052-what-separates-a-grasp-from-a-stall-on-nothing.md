@@ -183,10 +183,10 @@ the controller still reports and does not interpret, and the judgement stays in 
   (P3), the registry recording it, and `Detect` reporting it; none of those exist, and **F is
   decided without them** — see §A.5.
 - **The gripper channel exists and is the wrong one.** `plan.py`'s `GRIPPER_KEYS`
-  (`plan.py:284-297`) carries thirteen values from L0 to L3 verbatim, and `skill_server.cpp`
+  (`plan.py:312-325`) carries thirteen values from L0 to L3 verbatim, and `skill_server.cpp`
   declares each one; `gripper_default_grasp_width_m` and `gripper_goal_tolerance_rad` travel
   that way today. But every key on it is sourced by `_grasp` or `_linkage`
-  (`generate/bringup.py:199-230`), both of which read the **end-effector type**. A work-piece
+  (`generate/bringup.py:214-245`), both of which read the **end-effector type**. A work-piece
   width is not a property of an end effector, and putting it on a tuple named for the gripper is
   how a name stops meaning anything — the reason `ARM_KEYS` is a separate tuple.
 
@@ -458,8 +458,8 @@ new quantities derived from the campaign's committed raw; the campaign published
 |---|---|---|
 | The campaign's five verdicts, and the 0.164 mm gap | Read `criteria.md` and `ANALYSIS.md` in full; recomputed the FN per-command table, the pooled band edge in commanded terms and the FP flip from `raw/FN_B*_trials.json` and `raw/FP_trials.json` in a standalone script | **Reproduces.** 31 valid FN trials after V4's single exclusion; per-command reached medians, ratio minima and in-band counts identical; pooled reached median 49.804 mm, band edge 47.698 mm; FP flip between 47.10 (false) and 47.15 (true) |
 | `Pick.Goal.workpiece_id` is an instance id with no type behind it | Read `workpiece_registry.hpp:59-69` and `:231-236`, `line_nodes.hpp:585-620`, `skill_nodes.hpp:653`, `:944` | Exact. `wp_%06u`, minted by L4; `WorkpieceRecord` holds id, owner, location, phase and no type. **No map from an instance id to an L0 type exists in this repository** |
-| The part's width is in L0 and derivable without new schema | Read `model/assets/types/workpieces/workpiece.yaml`, `schema.py:151-174`, `:1300-1317`, `resolve.py:162-182` | Exact. `horizontal_extents_m` derives it from `collision.size_m` and its docstring names this gripper's rule as a consumer |
-| Thirteen gripper values reach L3 through the plan, all sourced from the end-effector type | Read `plan.py:284-297`, `generate/bringup.py:199-230`, `:404-421`, `templates/bringup/plan.yaml.j2:181-187`, `skill_server.cpp:305`, `:402` | Exact. Every `GRIPPER_KEYS` entry comes from `_grasp` or `_linkage`, both of which read the end effector. **The channel exists; a work-piece width does not belong on it** |
+| The part's width is in L0 and derivable without new schema | Read `model/assets/types/workpieces/workpiece.yaml`, `schema.py:151-174`, `:1300-1317`, `resolve.py:182-202` | Exact. `horizontal_extents_m` derives it from `collision.size_m` and its docstring names this gripper's rule as a consumer |
+| Thirteen gripper values reach L3 through the plan, all sourced from the end-effector type | Read `plan.py:312-325`, `generate/bringup.py:214-245`, `:404-421`, `templates/bringup/plan.yaml.j2:189-195`, `skill_server.cpp:305`, `:402` | Exact. Every `GRIPPER_KEYS` entry comes from `_grasp` or `_linkage`, both of which read the end effector. **The channel exists; a work-piece width does not belong on it** |
 | The plan already carries facility-level facts in one block | Read `workspace/src/cite_generated/bringup/cell_a_plan.yaml:15-20` | `zone`, `world`, `scene`, `static_frames`, `topology`, `sides` — one statement each, per zone |
 | Reusing `2 * tolerance` as the window inverts with the declared tolerance | Evaluated the window on a 50 mm part at `goal_tolerance` 0.01 and 0.02 rad in the same script, against `kFreeAirSettle = 0.444793` from `test_gripper.cpp:64` | At 0.01 the window is `[47.895, 52.105]` mm and the 45.852 mm free-air settle is **rejected**; at 0.02 it is `[45.790, 54.210]` mm and the same settle is **admitted**. The reuse is rejected on this |
 | The narrow edge's admissible interval is (1.891, 2.879] mm | Committed FN raw: minimum reached width 48.109 mm against 50.0 nominal. Committed FP data: flip bracketed to 0.05 mm containing 47.1215 mm | **Computed here.** 1.891 mm and 2.879 mm; interval 0.987 mm wide. The campaign's rule R reports every width metric UNRESOLVED at 0.100 mm |
@@ -468,7 +468,7 @@ new quantities derived from the campaign's committed raw; the campaign published
 | F reports 9 of 33 valid FP trials as grasps against today's 18, and the 9 are a subset | Same evaluation on `raw/FP_trials.json`, V6 applied as the campaign applies it | **Computed here.** 9 against 18, subset holds; and it holds for every candidate band with a lower edge at or above 47.1215 mm |
 | The validator's own floor derivation lands at 47.138 mm | Reimplemented `_grasp_discrimination_margin_m` at the shipped 45.0 mm default | 2.137972 mm, floor 47.138 mm — 0.017 mm from the C++ fixed point, below the campaign's 0.100 mm materiality (its D4) |
 | `_narrowest_workpiece_width_m` records the two-state silence F must close | Read `physical.py:470-529` | Exact, including `_workpieces_without_a_stated_width` beside it, which already separates the two states |
-| Two accessors walk the same work-piece list | Read `resolve.py:162-182` and `physical.py:470-502` | Both exist; `check()` takes a `FacilityModel` and the generator a `ResolvedCell`. **One fact, two routes** |
+| Two accessors walk the same work-piece list | Read `resolve.py:182-202` and `physical.py:470-502` | Both exist; `check()` takes a `FacilityModel` and the generator a `ResolvedCell`. **One fact, two routes** |
 | `Grasp.Goal` carries a width and a bool and no part reference | Read `cite_interfaces/action/Grasp.action` | Exact. `width_m`, `max_effort_n`, `expect_object` |
 | That F works | **Not verified. Nothing is built, no band is set, and no run of the cell has exercised F** | **Unverified**, and §A.10 is what would change it |
 
@@ -801,7 +801,7 @@ linkage rather than a snapshot of it. What *is* a constant is the factor **2**.
 
 Every input is declared once, in
 `model/assets/types/end_effectors/xarm_parallel_gripper.yaml`, and reaches L3 through the
-generated bring-up plan (`cite_bringup/plan.py:283-296`, `GRIPPER_KEYS`).
+generated bring-up plan (`cite_bringup/plan.py:311-324`, `GRIPPER_KEYS`).
 
 | L0 field | value | where |
 |---|---|---|
@@ -1167,7 +1167,7 @@ option F is chosen, and this is what F is" above.]**
   the line and calls an operator.
 - **A goal-supplied `grasp_width_m` remains unvalidated**, and L4 sends one from a C++ port
   default that duplicates the L0 value (`skill_nodes.hpp:591`, `:656`; its own comment says the
-  plan does not deliver the default to L3, which is no longer true — `plan.py:287` and
+  plan does not deliver the default to L3, which is no longer true — `plan.py:315` and
   `skill_server.cpp:305` both carry it).
   That duplication is a P1 defect this record found and does not fix.
 - **The factor stays in two languages.** Until option E is taken, an edit to one derivation
@@ -1276,7 +1276,7 @@ In the style of [`toolchain.md`](../reference/toolchain.md). Everything was chec
 | Claim | How | Result |
 |---|---|---|
 | The predicate is `stalled && !reached_goal && margin > 2 * tolerance(q_reached)` | Read `cite_skills/src/gripper.cpp:106-117` | Exact |
-| Its inputs are the seven linkage dimensions plus `goal_tolerance`, all declared in L0 | Read `xarm_parallel_gripper.yaml:204-211`, `:423`, and `cite_bringup/plan.py:283-296` | Exact. All thirteen gripper keys reach L3 through `GRIPPER_KEYS` |
+| Its inputs are the seven linkage dimensions plus `goal_tolerance`, all declared in L0 | Read `xarm_parallel_gripper.yaml:204-211`, `:423`, and `cite_bringup/plan.py:311-324` | Exact. All thirteen gripper keys reach L3 through `GRIPPER_KEYS` |
 | ADR-0045's example: commanded 45.0 mm, stall at 46.6 mm, margin 1.6 mm, threshold 2.12 mm | Recomputed independently in a standalone script from the L0 constants and the three functions in `gripper.cpp` | **Reproduces.** Margin 1.6000 mm, threshold 2.1244 mm, predicate false. Agrees with ADR-0045's own table to four decimals |
 | The band's upper edge is 47.1215 mm against a 45.0 mm command | Bisection on `opening(q) - 0.045 - 2*tolerance(q)` in the same script | 47.1215 mm; band width 2.1215 mm |
 | Worst-case free-air bias is one tolerance = 1.066 mm of width at the commanded position | Same script, `opening(q_cmd - goal_tolerance) - opening(q_cmd)` | 1.0650 mm. So 2x leaves exactly one tolerance of headroom |
@@ -1294,6 +1294,6 @@ In the style of [`toolchain.md`](../reference/toolchain.md). Everything was chec
 | `effort` is the commanded maximum, not a measurement | Extracted every `gripper:` report line from the campaign logs | 60.0 N on every line, including closes that reach their goal with nothing between the pads |
 | `TakeCustody` stands above `PickAt`, and the custody refusal names this defect | Read `cite_orchestration/trees/line_station.xml:87-93` and `line_nodes.hpp:1130-1170` | Exact. `TakeCustody` at `:90`, `PickAt` at `:93`; the refusal keys on `runtime.current_workpiece_id` and its comment names the `gripper_is_holding` margin defect explicitly |
 | `EXECUTION_FAILED` maps to `RETRY_SAME` | Read `recovery_policy.hpp:140-142` | Exact, shared with `TIMEOUT` |
-| L4 sends a non-zero `grasp_width_m` from a C++ default | Read `skill_nodes.hpp:570-591`, `:656` | Exact, 0.045 in both places. **Its comment says the plan does not deliver the L0 default to L3; `plan.py:287` and `skill_server.cpp:305` say it does** — the comment is stale |
+| L4 sends a non-zero `grasp_width_m` from a C++ default | Read `skill_nodes.hpp:570-591`, `:656` | Exact, 0.045 in both places. **Its comment says the plan does not deliver the L0 default to L3; `plan.py:315` and `skill_server.cpp:305` say it does** — the comment is stale |
 | `gripper_is_holding` has one production caller and two consumers | `grep` over `workspace/src`, excluding tests | `skill_server.cpp:2128`; consumed by `Pick` at `:1118` and by `Grasp` with `expect_object` at `:928` |
 | That any of this fixes anything | **Not verified. Nothing here is built, and no option is chosen** | **Unverified**, and deliberately so |

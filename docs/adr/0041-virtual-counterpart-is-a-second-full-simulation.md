@@ -552,7 +552,7 @@ withdrawn: it identifies a side by which field holds it, so it relabels the two 
 without excluding either. What actually separates them is that **they emit different committed
 generated trees**, at two call sites that both branch on this one field:
 
-- `tools/cite_tools/generate/bringup.py:346` sets `hosted_by` to `simulator` for a `sim`
+- `tools/cite_tools/generate/bringup.py:361` sets `hosted_by` to `simulator` for a `sim`
   backend and to `ros2_control_node` otherwise. Its own comment states the consequence: a
   simulated backend's controller manager is created **inside the Gazebo process**, so there is
   no separate process to wait on, while a real one runs its own node. So the two encodings
@@ -565,7 +565,7 @@ generated trees**, at two call sites that both branch on this one field:
   clause states is not weakened** — `use_sim_time` below still branches on the field, and so do
   the `ros2_control` plugin (`cite_tools/model/resolve.py`) and the collision scheme
   (`generate/description.py`), neither of which this bullet pair ever named. **The line number
-  was already wrong before the removal**: at `e18251e` the ternary was at `bringup.py:382` and
+  was already wrong before the removal**: at `e18251e` the ternary was at `bringup.py:407` and
   `:346` was unrelated resolve code, which is why the sites are named by symbol from here on.
   Ask `grep -rn "instance.hardware.backend" tools/cite_tools` for the set; the counts in
   this record and in `docs/open-work.md` #38 are owed to the change that makes those sites

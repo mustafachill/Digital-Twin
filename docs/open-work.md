@@ -126,7 +126,7 @@ moved from `51195e0`.
 The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
 15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
 indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
-`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:143`. The environment row was
+`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:153`. The environment row was
 re-read **in the container** at `29 passed, 0 failed, 1 skipped`, unchanged. **The row not
 re-measured is the last one**, which needs `gh` against a CI run: **`gh` is installed neither
 on this host nor in the container image**, so that row has now gone two days unchecked and a
@@ -740,7 +740,7 @@ than the terminal error at the goal — which is where the two additions above g
 abort threshold (`goal: 0.01`, `workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml`)
 and the classifier's `arm_goal_tolerance_rad` (0.01,
 `workspace/src/cite_generated/bringup/cell_a_plan.yaml`) are **one L0 value** —
-`goal_tolerance_rad: 0.01` at `model/assets/types/robots/xarm5.yaml:308`, reaching both through
+`goal_tolerance_rad: 0.01` at `model/assets/types/robots/xarm5.yaml:332`, reaching both through
 the generator — so this is **not** a P1 duplication. The consequence is structural:
 `classify_motion_end` tests `within_tolerance(current, goal, arm_goal_tolerance_rad)` per joint
 (`workspace/src/cite_skills/include/cite_skills/motion_end.hpp:102-145`), and a goal-tolerance
@@ -897,7 +897,7 @@ Reported by `safety-auditor` on 2026-09-08 (S-05) and deliberately not fixed the
 
 ### #38 — The generator cannot render 2.B
 Exactly three generator call sites branch on a backend: `ResolvedAsset.ros2_control_plugin` (into
-the description), `control.py:236` (`use_sim_time`) and `bringup.py:363` (`hosted_by`). **All
+the description), `control.py:236` (`use_sim_time`) and `bringup.py:378` (`hosted_by`). **All
 three read the plant's backend.**
 
 In 2.A that is harmless — a paired zone's plant must be `sim`, the counterpart writes no
@@ -947,7 +947,7 @@ the plan already states per side and nothing read it. And the collision scheme i
 **[Corrected 2026-09-08 — this paragraph read "`hosted_by` was never a branch on a backend and
 is no longer anywhere" when it was written hours earlier.** That is false: the deleted code was
 `hosted_by="simulator" if asset.instance.hardware.backend == ids.SIMULATION_BACKEND else
-"ros2_control_node"` (`e18251e:tools/cite_tools/generate/bringup.py:382-384`). Saying otherwise
+"ros2_control_node"` (`e18251e:tools/cite_tools/generate/bringup.py:407-409`). Saying otherwise
 retroactively invalidates #38's count, which was **correct when written**, and it invalidates
 the same argument where ADR-0041 still rests on it. A stale count is not the same as a count
 that was always wrong, and only the first of those is what happened here.**]**
@@ -1088,8 +1088,8 @@ Reproduce with `./scripts/test`, or in the container
 `python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q`.
 
 ### #62 — `cite_twin`'s two launch fixtures append a counterpart unconditionally
-`workspace/src/cite_twin/test/test_twin_boundary_launch.py:97-117` and
-`test_twin_boundary_paired_launch.py:119-140` each build their paired plan the same way: read
+`workspace/src/cite_twin/test/test_twin_boundary_launch.py:97-121` and
+`test_twin_boundary_paired_launch.py:119-143` each build their paired plan the same way: read
 the live generated plan with `default_plan_path(...)`, `plan["sides"].append({"name":
 "counterpart", ...})` with **no test for a counterpart already being there**, write it to a
 temporary file, and bind the result to a module-level `PLAN_PATH`. On a checkout whose L0
@@ -1473,7 +1473,7 @@ rather than leaving inside a stage ticket.
   installed an untracked empty `include/`, and `bootstrap` once silently skipped a patch in a
   worktree. The 2026-08-27 walk stopped at `lint` **without launching the cell**.
 - **Interface reference generated** from the `.msg`/`.srv`/`.action` files; per-package READMEs.
-- **`resolve.py:135` and `moveit.py:91` hardcode `"drive_joint"`** instead of reading
+- **`resolve.py:155` and `moveit.py:91` hardcode `"drive_joint"`** instead of reading
   `drive_joint_suffix` — a P1 duplication.
 - **ADR-0022's correction cites candidate-comparison numbers that live only in an agent
   transcript**, not in a committed file. P8 says a fidelity claim is backed by a published metric.

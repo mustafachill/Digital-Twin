@@ -13,10 +13,10 @@
     artifact carries a `hardware.params` name or value**, on any backend.
   - `tools/tests/test_hardware_params_unbound.py` pins that property deliberately, with the
     backend's plugin string as a positive control.
-  - `model/assets/types/robots/xarm5.yaml:218-225` declares
+  - `model/assets/types/robots/xarm5.yaml:228-249` declares
     `instance_params: [robot_ip, report_type]` for the `real` backend, and the vendor macro
     chain takes both names.
-  - `HardwareSelection.params` (`tools/cite_tools/model/schema.py:1169`) is one flat
+  - `HardwareSelection.params` (`tools/cite_tools/model/schema.py:1206`) is one flat
     `dict[str, str | bool | int | float]` with no index, and
     `tools/cite_tools/validate/referential.py:232` checks it against the **plant's** backend.
   - `model/facility/zones.yaml` declares `twin: {sides: single}`, so nothing in this
@@ -245,7 +245,7 @@ that writes the field, not a new one this record introduces.
 
 ### The declaration is already written, with a comment saying why
 
-`model/assets/types/robots/xarm5.yaml:218-225`:
+`model/assets/types/robots/xarm5.yaml:228-249`:
 
 ```yaml
   hardware_backends:
@@ -258,14 +258,14 @@ that writes the field, not a new one this record introduces.
       instance_params: [robot_ip, report_type]
 ```
 
-`HardwareBackend.instance_params` (`tools/cite_tools/model/schema.py:421`) is therefore
+`HardwareBackend.instance_params` (`tools/cite_tools/model/schema.py:458`) is therefore
 already **per backend**, and has been since before pairing existed. That is the shape the
 decision below follows rather than invents.
 
 ### What the schema already says about side indexing
 
 `HardwareSelection.counterpart_backend`'s comment
-(`tools/cite_tools/model/schema.py:1152-1167`) states the rule this record extends:
+(`tools/cite_tools/model/schema.py:1189-1204`) states the rule this record extends:
 
 > `backend` is a scalar with no side index: it says which plugin *this instance* loads, and
 > in a twin pair this instance exists on both sides. So a backend is selected per
@@ -401,18 +401,18 @@ flat `dict[str, str | bool | int | float]` `params` is today.
 plant."* Take that seriously and the parameters follow. `robot_ip` is a property of the
 UFACTORY hardware component — of the thing that opens a socket — and not of the side that
 happens to load it. That is why `HardwareBackend.instance_params` is already declared per
-backend at `schema.py:421`, months before pairing existed. A side gets the parameters of
+backend at `schema.py:458`, months before pairing existed. A side gets the parameters of
 whatever backend it loads; nothing about which side is physical is restated, and nothing here
 can disagree with `counterpart_backend` (P1).
 
 **"Per backend" is a statement about the index, not about ownership, and the difference is
 worth one sentence because the reader most likely to act on the wrong reading arrives in six
-months.** `params` remains a field of `HardwareSelection` (`schema.py:1141-1169`) and is
+months.** `params` remains a field of `HardwareSelection` (`schema.py:1178-1206`) and is
 therefore **per instance**; the backend id is a second index *inside* it. Two instances of one
 backend hold different values under it, which is exactly what `robot_ip` requires. The
 argument above — that `robot_ip` is a property of the UFACTORY hardware component — is true of
 the component **class** and must not be read as licence to hoist `params` onto
-`HardwareBackend` (`schema.py:403-421`), where the type declares it once and three arms would
+`HardwareBackend` (`schema.py:403-458`), where the type declares it once and three arms would
 share one address. That hoist would look like the same shape and would be the one thing this
 decision is not.
 
@@ -543,7 +543,7 @@ A `<key>` that **no** backend declares is therefore never filtered: it falls thr
 `_binding_value` and raises the existing unknown-binding `BindingError` at
 `description.py:189-193`. The union costs the implementation nothing —
 `asset.asset_type.hardware_backends` is already in scope in `_arm_view`, and
-`ResolvedAsset.ros2_control_plugin` (`resolve.py:73-79`) reads that same map to resolve the
+`ResolvedAsset.ros2_control_plugin` (`resolve.py:83-85`) reads that same map to resolve the
 plugin string.
 
 **This union is not Option B's, and the two must not be confused.** Option B takes the union
@@ -590,7 +590,7 @@ promotion condition exists to catch both**, and it is the clause most likely to 
 implemented wrongly.
 
 **2c. `report_type` leaves `real`'s `instance_params`, and no binding is added for it.**
-`model/assets/types/robots/xarm5.yaml:225` becomes `instance_params: [robot_ip]`.
+`model/assets/types/robots/xarm5.yaml:249` becomes `instance_params: [robot_ip]`.
 
 **This is a decision and not a consequence, and the record's first draft presented it as
 one.** That draft said every `real` arm must state both `robot_ip` and `report_type`, as
@@ -635,7 +635,7 @@ than its stillness; see clause 7.
 
 ### 3. An IP address belongs in the hashed L0 artifact
 
-The obvious objection is `domain_offset`'s. `tools/cite_tools/model/ids.py:169-181` refuses
+The obvious objection is `domain_offset`'s. `tools/cite_tools/model/ids.py:184-196` refuses
 to put a ROS domain id into the generated tree, because *"A domain id is not a name: it is a
 host-scoped resource allocation, closer to a TCP port"*, and because deriving it either way
 fails: from the deployment it differs in every clone and breaks
@@ -662,8 +662,8 @@ reason is that there is **one arm**. Two clones of one facility model describe t
 machine at the same address; a value that differed between them would be wrong in at least
 one of them. The residual hazard is real and it is a different hazard: two checkouts can
 command that one arm at once. It is arbitrated by
-`cite_bringup.plan.require_hardware_opt_in` (`plan.py:1097-1160`), which refuses any non-`sim`
-backend on any side unless `CITE_ALLOW_HARDWARE=1` is set deliberately (`plan.py:47-48`),
+`cite_bringup.plan.require_hardware_opt_in` (`plan.py:1207-1311`), which refuses any non-`sim`
+backend on any side unless `CITE_ALLOW_HARDWARE=1` is set deliberately (`plan.py:50-51`),
 and beyond that by physical procedure — **not by the value in `model/`**. A domain collision can be arbitrated by
 choosing a different number; an arm collision cannot be, because there is only one arm, and
 pretending otherwise is the wrong lesson to draw from `domain_offset`.
@@ -742,9 +742,13 @@ demands, because it is the sentence ADR-0040 is about to receive.
    fixture requires writing its plugin class string into a type's `hardware_backends`, in
    `model/`. That guard refuses it, and it refuses it today.
 2. **`cite_bringup.plan.require_hardware_opt_in` refuses any non-`sim` backend.**
-   `plan.py:1145` tests `backend != SIMULATION_BACKEND`, on **every side**, so a fixture
+   `plan.py:1145`, **read at `404bbac` and not renumbered**, tests
+   `backend != SIMULATION_BACKEND`, on **every side**, so a fixture
    backend under any name fails bring-up unless the hardware opt-in environment variable is
-   set deliberately.
+   set deliberately. **ADR-0054 deleted that test**: the gate now refuses on
+   `commands_physical_hardware`, which the type declares per backend, so a fixture backend is
+   refused for what it declares rather than for not being called `sim`. The conclusion is
+   unchanged and the instrument is not — read `require_hardware_opt_in`, not this number.
 3. **The vendor's own guard leaves the fixture no route on this type.** The fixture's three
    parameters are `stop_joint`, `stop_lower_rad` and `stop_upper_rad`
    (`cite_test_hardware/include/cite_test_hardware/joint_stop_system.hpp:93-97`), and
@@ -882,7 +886,7 @@ two.
      re-resolved against the named backend, and the new **`missing-hardware-param`** mirror,
      with the backend-id rule evaluated in front of `referential.py:230`'s skip.
   4. **The binding family and its union filter** in `_binding_value` and `_arm_view`.
-  5. **`model/assets/types/robots/xarm5.yaml:225`** — drop `report_type` from `real`'s
+  5. **`model/assets/types/robots/xarm5.yaml:249`** — drop `report_type` from `real`'s
      `instance_params` (decision 2c) and add the single `robot_ip` `bound_args` entry. This
      moves `MODEL_HASH`, so `workspace/src/cite_generated/MODEL_HASH` is regenerated with it.
   6. **`test_generate.py::TestSimRealParity::test_only_the_plugin_differs_between_backends`**,

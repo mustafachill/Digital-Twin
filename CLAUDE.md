@@ -1201,7 +1201,7 @@ bullet.
   accumulated clock deficit, within ADR-0049's bound — is **false for every sample by
   construction**, for two independent reasons that are both in the code: `DEFICIT_BOUND_S` is
   `None` (ADR-0049 decision 2 declines to set it) and the one production caller that builds an
-  `Operand`, at `twin_boundary.py:713`, passes `clock_deficit_s=None` because nothing in this
+  `Operand`, at `twin_boundary.py:720`, passes `clock_deficit_s=None` because nothing in this
   tree measures it. So **`valid` cannot be true today**, the node publishes samples that name
   the term that failed, and the package's own paired launch test asserts exactly that —
   `self.assertFalse(sample.valid, "the clock-deficit term has no instrument")`, in

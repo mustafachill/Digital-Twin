@@ -260,9 +260,9 @@ coordination properties.
   `FAILURE` (`:921-925`). Either fails the root `Parallel` at `failure_count="1"`, the tick
   loop's `outcome` stops being `RUNNING`, the loop ends, `tree.haltTree()` runs, and the
   process returns 1 (`line_orchestrator.cpp:575-608`).
-- **The coordinator's exit tears down the whole cell.** `simulation.launch.py:844` wires
+- **The coordinator's exit tears down the whole cell.** `simulation.launch.py:853` wires
   `on_exit=_fatal_on_exit("the line coordinator")`, and `_fatal_on_exit`
-  (`simulation.launch.py:1078-1095`) returns `[LogInfo(...), Shutdown(reason=...)]` for any
+  (`simulation.launch.py:1087-1104`) returns `[LogInfo(...), Shutdown(reason=...)]` for any
   non-zero return code outside a shutdown already in progress. Gazebo, `move_group`, the
   three skill servers, the detection server and the bridge all go with it.
 - **`ConveyorIndex::stop()` has no caller in production code.** It is defined at

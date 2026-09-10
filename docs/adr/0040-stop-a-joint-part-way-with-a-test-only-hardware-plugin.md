@@ -197,7 +197,7 @@ field that repeals it.
 `model/schema/asset_instances.schema.json:191-218` gives `HardwareSelection` a free-form
 `params` map; `asset_type.schema.json`'s `HardwareBackend.instance_params` is its per-backend
 allowlist; `tools/cite_tools/validate/referential.py:237-243` already enforces one against
-the other; and `model/assets/types/robots/xarm5.yaml:90-92` **already declares
+the other; and `model/assets/types/robots/xarm5.yaml:100-102` **already declares
 `instance_params: [robot_ip, report_type]`** for the `real` backend, against Phase 2.
 
 What is true is narrower, and it belongs to the generator:

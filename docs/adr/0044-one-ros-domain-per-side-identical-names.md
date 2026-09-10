@@ -159,7 +159,7 @@ number instead of producing silence."* At this commit:
 
 - `ls tests/scenarios/guards/` holds four guards and **none of them is that one**;
 - `grep -n rclpy.init tests/scenarios/*.py` still returns three bare calls, at
-  `bringup.py:120`, `pick_and_place.py:218` and `continuous_line.py:502`;
+  `bringup.py:135`, `pick_and_place.py:218` and `continuous_line.py:502`;
 - and **no stated door exists for a harness to enter a ROS graph through**, so the guard cannot
   be written before something is built for it to point at.
 

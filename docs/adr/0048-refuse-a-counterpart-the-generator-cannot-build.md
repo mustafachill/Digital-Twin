@@ -367,12 +367,15 @@ all. The third site reaches it through the resolver rather than by name.
 
 | Site | Where | What it decides | What it reads |
 |---|---|---|---|
-| The hardware plugin | `ResolvedAsset.ros2_control_plugin`, `tools/cite_tools/model/resolve.py:73`, consumed at `tools/cite_tools/generate/description.py:161` | which `ros2_control` hardware component the description loads | `self.instance.hardware.backend` |
+| The hardware plugin | `ResolvedAsset.ros2_control_plugin`, `tools/cite_tools/model/resolve.py:83-85`, consumed at `tools/cite_tools/generate/description.py:161` | which `ros2_control` hardware component the description loads | `self.instance.hardware.backend` |
 | The clock | `tools/cite_tools/generate/control.py:235-237` | `use_sim_time` in the controller configuration | `asset.instance.hardware.backend` |
-| The host | `tools/cite_tools/generate/bringup.py:363-365` | `hosted_by: simulator` or `ros2_control_node` | `asset.instance.hardware.backend` |
+| The host | `tools/cite_tools/generate/bringup.py:378-380` | `hosted_by: simulator` or `ros2_control_node` | `asset.instance.hardware.backend` |
 
-`tools/cite_tools/model/ids.py:28-39` already names three rules turning on `SIMULATION_BACKEND`
-and says a fourth statement of the string would be the P1 defect. The count is right and the
+`tools/cite_tools/model/ids.py:28-39`, **read at `404bbac` and not renumbered**, already names
+three rules turning on `SIMULATION_BACKEND`
+and says a fourth statement of the string would be the P1 defect. That comment was rewritten by
+ADR-0054, which measured its opening claim false and moved every hardware gate off the id, so
+the sentence above is a reading of the file as it was and no line number here resolves to it. The count is right and the
 **side index is the thing missing from all three**: each reads `hardware.backend`, which
 ADR-0041 Decision 3 established has no side index, and none of them has ever been asked which
 side it is generating for.
@@ -508,7 +511,7 @@ The best possible answer if it worked, and it was checked site by site rather th
   when the backend is `sim`, `ros2_control_node` otherwise — so emitting it *at all* is already
   a value in two places, and emitting it per side would be that twice. **And nothing reads
   it:** `git grep -n hosted_by -- workspace/src/cite_bringup` finds the dataclass field
-  (`plan.py:305`), the parser (`plan.py:840`) and two test fixtures, and
+  (`plan.py:333`), the parser (`plan.py:950`) and two test fixtures, and
   `simulation.launch.py` never mentions it. No production path starts a `ros2_control_node`
   either — `git grep -n ros2_control_node -- workspace scripts tools tests` reaches three
   launch tests (`test_abort_classification_launch.py`, `test_gripper_deadline_launch.py`,
@@ -627,7 +630,7 @@ looking at it:
   refutation of its Option D a physical cell necessarily presents a ROS graph, carrying by P2
   the identical names, with a controller manager to observe. What does not carry over is
   ADR-0047 clause 3's assumption that the witness's exit is consumed by `_gate` at
-  `simulation.launch.py:1077` at the end of *that* file's chain. **The witness is portable; the
+  `simulation.launch.py:1086` at the end of *that* file's chain. **The witness is portable; the
   gate chain in front of it is not**, and the change that gives a hardware side a launch owes
   the second half. ADR-0047 already lists the other half of this — that "stop the other side"
   means something different when the other side is a powered machine — under its own revisit

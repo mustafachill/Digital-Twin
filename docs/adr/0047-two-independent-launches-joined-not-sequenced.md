@@ -255,8 +255,8 @@ and the supervisor reads its own child's pipe.**
   started in the side's own environment — therefore on the side's own domain — that blocks on
   a condition and exits, exactly as `ros_gz_sim create` and the controller-manager spawner
   already do. Its exit is consumed by the existing `_gate` helper
-  (`simulation.launch.py:1077`), whose last link today is labelled `"the skill servers"`
-  (`simulation.launch.py:227`). A witness that cannot satisfy its condition fails the launch
+  (`simulation.launch.py:1086`), whose last link today is labelled `"the skill servers"`
+  (`simulation.launch.py:236`). A witness that cannot satisfy its condition fails the launch
   with a diagnosis, like every other link.
 - On that gate, and **nowhere else in the file**, the launch emits one fixed token line. The
   token is defined once, in `cite_bringup`, and imported by both the emitter and the reader;
@@ -275,7 +275,7 @@ interval.
 
 ### 4. A side that ends, ends the pair — and a pair that never joins fails on a ceiling
 
-`_fatal_on_exit` (`simulation.launch.py:1098`) already states this rule one level down: a
+`_fatal_on_exit` (`simulation.launch.py:1107`) already states this rule one level down: a
 process dying mid-run tears the launch down rather than leaving a cell that answers some
 interfaces and not others. **A half-pair is exactly that, one level up**, and a scenario
 asserting against a pair could pass on the plant alone.
@@ -485,7 +485,7 @@ Chosen.
   it; a developer loses the plain single-launch console they have today and gets two interleaved
   streams. That is a real ergonomic cost, and the operator documentation owes an entry.
 - **Readiness is only as strong as the witness, and today's chain does not have one.** The last
-  gate label at `simulation.launch.py:227` is `"the skill servers"`, and it fires when they are
+  gate label at `simulation.launch.py:236` is `"the skill servers"`, and it fires when they are
   *started*, not when they are serving. A witness is new work on the side path, and it is worth
   saying that it improves the solo bring-up too: today nothing announces that a single cell
   finished coming up either.
