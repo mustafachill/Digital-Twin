@@ -101,6 +101,31 @@ def _declared_bool(value: object) -> str:
 
     A `TypeError` and not a warning, so the generator stops with the value it was
     given rather than writing an artifact that reads as a decision somebody made.
+
+    **AND A `TypeError` AND NOT `PlanningConfigurationError`, WHICH IS A DECIDED
+    CHOICE AND NOT AN OVERSIGHT.** `cli.py::_generate` catches the latter so that
+    a MODEL problem prints as `error <rule> <where>` rather than as a tool that
+    crashed, and this raise is deliberately outside that: what it guards is a
+    GENERATOR INVARIANT, not a model statement, so a traceback naming this
+    function is the honest report. Checked rather than assumed, on 2026-09-10:
+
+    - The value cannot arrive from L0. `HardwareBackend.commands_physical_hardware`
+      is a required `bool` on a pydantic model, so a non-boolean written in the
+      model is refused at LOAD and reported by the loader as a model finding; it
+      never reaches a template.
+    - The one way a non-boolean does arrive is this module's sibling generator
+      contradicting itself — `counterpart_commands_physical_hardware` is
+      `bool | None`, and `plan.yaml.j2` renders it only inside
+      `{% if manager.counterpart_backend %}`, so `None` here means
+      `generate/bringup.py` set a counterpart backend without the fact that goes
+      with it. That is a bug in `tools/`, and giving it the finding shape would
+      send its reader to `model/` to look for it.
+    - A traceback out of the generator is not exceptional either: `ResolveError`
+      from `model/resolve.py` reaches the CLI the same way, uncaught.
+
+    If a future change makes this value reachable from something a model author
+    writes, that inverts: it then needs the finding shape, and this list is the
+    thing to re-read.
     """
     if not isinstance(value, bool):
         raise TypeError(
