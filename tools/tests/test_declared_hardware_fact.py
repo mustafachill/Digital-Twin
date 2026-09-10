@@ -100,11 +100,32 @@ ACCESSORS = (
 )
 
 #: What a READ of the raw datum looks like, as opposed to prose about it: an
-#: attribute access, or a document key subscripted out of the plan. Matched this
-#: way rather than by the bare token because the token legitimately appears in
+#: attribute access, or the key written as a string. Matched this way rather than
+#: by the bare token clause 9 names, because the token legitimately appears in
 #: docstrings, in the generator's template and in this file - and a guard that
 #: counts a string counts its own message.
-RAW_READ = re.compile(r"""[.\[]\s*['"]?(?:counterpart_)?commands_physical_hardware\b""")
+#:
+#: **WIDENED 2026-09-10, ON A MEASUREMENT.** It required `[.\[]` immediately
+#: before the key, which is narrower than clause 9's plain `grep` and missed
+#: three spellings a second build unit would plausibly reach for. Driven through
+#: `_reads_the_raw_datum` on each: `entry.get("...")`, `getattr(manager, "...")`
+#: and a named constant plus `entry[KEY]` all returned `False`. A quote now
+#: counts as well as a dot or a bracket, which catches all three - the third
+#: because the constant has to be SPELLED somewhere, and that spelling is a
+#: quoted token. The three sanctioned forms in
+#: `test_the_guard_itself_catches_a_raw_read` stay green, and the live offender
+#: list is unchanged at empty.
+#:
+#: **Its residual, stated rather than left to a third report.** The key built by
+#: arithmetic or by `.format` - `"commands_" + "physical_hardware"` - carries no
+#: quoted whole token and is not caught, and neither is a read from anywhere this
+#: guard does not walk (it walks non-test `*.py` under `workspace/src` only).
+#: Widening further means matching the bare token, which fires on every docstring
+#: that discusses the key, and a guard that counts its own prose is the one thing
+#: this constant's first comment was written to avoid.
+RAW_READ = re.compile(
+    r"""(?:\.\s*|\[\s*|['"])(?:counterpart_)?commands_physical_hardware\b"""
+)
 
 #: The one file allowed to read it: it parses the two keys and owns the two
 #: accessors.
@@ -160,11 +181,20 @@ def test_the_guard_itself_catches_a_raw_read() -> None:
     Both spellings the clause names, plus the document-key form, because an
     implementation that open-coded the keys would most naturally reach for
     `entry["commands_physical_hardware"]` rather than for the field.
+
+    **The last three were added 2026-09-10 and each was RED before the widening
+    beside `RAW_READ`.** They are the spellings a second build unit reaches for
+    when the plan entry is still a `dict` - `.get`, `getattr`, and a key lifted
+    into a module constant - and clause 9's own plain `grep` catches all three,
+    so a guard that did not was narrower than the clause it stands for.
     """
     for spelling in (
         "manager.commands_physical_hardware",
         "manager.counterpart_commands_physical_hardware",
         'entry["commands_physical_hardware"]',
+        'entry.get("commands_physical_hardware")',
+        'getattr(manager, "commands_physical_hardware")',
+        'KEY = "commands_physical_hardware"',
     ):
         assert _reads_the_raw_datum(spelling), spelling
     # And it must not fire on the sanctioned routes or on prose about them.

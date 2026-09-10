@@ -85,6 +85,9 @@ _SHAPE_HELPERS = ("_paired_document", "_solo_document")
 #: same reach one layer lower down.
 _PLAN_PATH_READER = "_generated"
 _PLAN_URI = "GENERATED_PLAN"
+#: And the function that turns the one into the other. Guarded so that the URI
+#: cannot be assembled from parts the constant check below is blind to.
+_URI_RESOLVER = "resolve_uri"
 #: The one call a path outside the reader may sit inside.
 _PLAN_LOADER = "load"
 
@@ -99,6 +102,14 @@ _PLAN_LOADER = "load"
 #: determined `getattr(sys.modules[__name__], ...)` is not closed by this, and
 #: saying otherwise would be the overclaim these guards keep catching.
 _NAMESPACE_ACCESSORS = ("globals", "locals", "vars")
+
+#: Builtins that execute a string, which reaches a guarded name without any of
+#: the guards here seeing a `Name` node at all: `eval("_live_document()")` was
+#: demonstrated on 2026-09-10 passing the full suite. Barred for the same reason
+#: and on the same terms as the three above - none has a use in this file - and
+#: kept as a separate tuple because the reason differs. Those turn the namespace
+#: into data; these turn data into code.
+_DYNAMIC_EVALUATORS = ("eval", "exec", "__import__")
 
 #: Every controller-manager key a paired plan carries and an untwinned one does
 #: not, taken from the reader's own maps rather than transcribed. `_solo_document`
@@ -1686,6 +1697,34 @@ def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
         f"{_PLAN_LOADER}({_PLAN_PATH_READER}()) where a `Plan` is what you want"
     )
 
+    # The accessor's NAME and not only its call, the clause its sibling above has
+    # had since 2026-09-09 and this guard did not: `_ACCESSOR = _generated`
+    # followed by `yaml.safe_load(_ACCESSOR().read_text())` reaches the live plan
+    # with every clause here green, because the call it makes names `_ACCESSOR`.
+    # Demonstrated on 2026-09-10, passing the full 160-test suite.
+    #
+    # Written as "may only be the callee of a call" rather than as a caller list,
+    # because two dozen legitimate `load(_generated())` sites name it. Handing the
+    # function object to anything - an alias, an argument, a decorator - is what
+    # is barred, and that is exactly the shape the alias bypass needs.
+    handed_around = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _PLAN_PATH_READER
+        and isinstance(node.ctx, ast.Load)
+        and not any(
+            isinstance(call, ast.Call) and call.func is node
+            for call in ast.walk(tree)
+        )
+    ]
+    assert not handed_around, (
+        f"{_PLAN_PATH_READER!r} is passed around as a value by "
+        f"{_named_or_module_scope(tree, handed_around)} rather than called; "
+        "binding it to another name reaches the live plan with the shape check "
+        "above still green"
+    )
+
     reads_of_the_uri = [
         node
         for node in ast.walk(tree)
@@ -1719,6 +1758,29 @@ def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> 
     guard green, because the constant is never named. So the URI's own text may
     appear exactly once in this file, where the constant is bound.
 
+    **The dynamic spelling**, added 2026-09-10. `eval("_live_document()")` never
+    produces a `Name` node for the reader at all, so every guard here is blind to
+    it; it was demonstrated passing all 160 tests. `eval`, `exec` and
+    `__import__` are barred alongside the three namespace builtins, for the same
+    reason and on separate terms - see `_DYNAMIC_EVALUATORS`.
+
+    **WHAT THIS FILE'S GUARDS STILL DO NOT CLOSE, IN FULL.** This block named one
+    residual while three more stood, two of them the same class as bypasses it
+    said it had closed; all three were driven green on 2026-09-10 and are now
+    shut. What is left is stated here so the count cannot go stale again:
+
+    1. `getattr(sys.modules[__name__], "_live_document")()`. `getattr` is used
+       twice in this file on AST nodes and on a dataclass, so it cannot be
+       barred outright the way the six builtins above are. Open, and known.
+    2. A resolution of the generated share directory that never goes through
+       `resolve_uri` at all - importing `ament_index_python` here, or walking up
+       from `__file__` to `workspace/src/cite_generated`. Every guard above is
+       written against the two routes this module actually holds; a new import
+       is a third, and nothing here refuses one.
+
+    A guard that claimed more than that would be the overclaim these guards keep
+    catching.
+
     The URI is taken **out of the parsed tree**, from the assignment that binds
     the constant, rather than by naming `GENERATED_PLAN` here or by writing the
     string a second time. Both alternatives are barred by the guards above and by
@@ -1734,13 +1796,14 @@ def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> 
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id in _NAMESPACE_ACCESSORS
+        and node.func.id in _NAMESPACE_ACCESSORS + _DYNAMIC_EVALUATORS
     ]
     assert not dynamic, (
         f"{sorted({node.func.id for node in dynamic})} is called by "
         f"{_named_or_module_scope(tree, dynamic)}; these turn this module's "
-        "namespace into a dictionary, so a guarded name becomes a string every "
-        "guard in this file is blind to. Call what you mean by name"
+        "namespace into a dictionary, or a string into code, so a guarded name "
+        "becomes something every guard in this file is blind to. Call what you "
+        "mean by name"
     )
 
     bound = next(
@@ -1767,6 +1830,36 @@ def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> 
         f"{_PLAN_URI} is bound. Spelling it again resolves the live plan without "
         f"naming the constant, which is the reach {_PLAN_PATH_READER!r} exists "
         "to be the only holder of"
+    )
+
+    # And the same reach with the string ARITHMETIC that walks past the clause
+    # above: `resolve_uri("package://cite_generated/bringup/" + "cell_a_plan.yaml")`
+    # is a `BinOp`, so no `ast.Constant` in this file equals the URI and the
+    # count stays at one. Demonstrated on 2026-09-10, passing the full suite.
+    #
+    # Closed by refusing the SHAPE rather than by evaluating the string, which is
+    # the only version of this that cannot overclaim: outside the accessor,
+    # `resolve_uri` may be handed a literal and nothing else. A literal is
+    # something the clause above can see; anything computed is not. Adjacent
+    # string literals are folded by the parser into one `ast.Constant`, so the
+    # implicit-concatenation spelling is caught by that clause and not by this
+    # one.
+    computed = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == _URI_RESOLVER
+        and not all(isinstance(argument, ast.Constant) for argument in node.args)
+    ]
+    stray_resolution = _not_owned_by(tree, computed, _PLAN_PATH_READER)
+    assert not stray_resolution, (
+        f"{_URI_RESOLVER}() is called on a COMPUTED value by "
+        f"{_named_or_module_scope(tree, stray_resolution)}; outside "
+        f"{_PLAN_PATH_READER!r} it may only be handed a literal, which is what "
+        "makes the single-spelling check above able to see what is being "
+        "resolved. Building the URI from parts resolves the live plan with every "
+        "other guard in this file green"
     )
 
 
