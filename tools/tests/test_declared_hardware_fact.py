@@ -123,9 +123,7 @@ ACCESSORS = (
 #: Widening further means matching the bare token, which fires on every docstring
 #: that discusses the key, and a guard that counts its own prose is the one thing
 #: this constant's first comment was written to avoid.
-RAW_READ = re.compile(
-    r"""(?:\.\s*|\[\s*|['"])(?:counterpart_)?commands_physical_hardware\b"""
-)
+RAW_READ = re.compile(r"""(?:\.\s*|\[\s*|['"])(?:counterpart_)?commands_physical_hardware\b""")
 
 #: The one file allowed to read it: it parses the two keys and owns the two
 #: accessors.

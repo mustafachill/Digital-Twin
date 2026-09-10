@@ -112,12 +112,12 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1377** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-08 at
-  `6d51966`).
+  `tools/tests/` holds **1399** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-10 at
+  `523ffd9`).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
-  part of that day and **1376** for part of it too.
+  part of that day, **1376** for part of it too and **1377** until 2026-09-10.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
@@ -197,6 +197,25 @@ bullet.
   an `.md` carries none of its seven suffixes and the second because `docs/` is not one of its
   seven trees. `test_generate.py` reads **68**, also unmoved. All four were re-collected at
   `6d51966` rather than reasoned about.
+  **The 1377 → 1399 move is both kinds at once and closes exactly**, measured in this checkout
+  on 2026-09-10 at `523ffd9` on `feat/declared-simulation-backend` — ADR-0054's implementation
+  — against a worktree at that branch's base `404bbac`, by the breakdown command below. The
+  step is **+22**, and **13 of it is the suite and 9 is the tree**.
+  New cases: `tools/tests/test_declared_hardware_fact.py` collects **8** and
+  `tools/tests/test_use_sim_time_still_keys_on_the_id.py` **2**, both new files, and
+  `test_validate_referential.py` moved 26 → **29**.
+  Tree growth, over the **5** tracked files that branch adds
+  (`git diff --diff-filter=A --name-only 404bbac..523ffd9` counts 5, with `--diff-filter=D`
+  and `--diff-filter=R` both **0**): `test_superseded_real_time_requirement.py` 377 → **381**,
+  the **4** of those five carrying one of its seven suffixes;
+  `test_a_removed_plan_key_stays_removed.py` 350 → **354**, the **4** under its seven trees,
+  which are the same four files since the fifth is an ADR; and `test_interface_counts.py`
+  159 → **160**, that one `.md`. 8 + 2 + 3 + 4 + 4 + 1 = 22. `test_generate.py` reads **68**
+  on both sides, unmoved.
+  **The two 4s are the same four files and are not one quantity counted twice** — one walk
+  selects by suffix and the other by tree, and here they agree because ADR-0054's
+  implementation added two `tools/tests` files and two `workspace/src` test files and nothing
+  else. A `.md` under `docs/` moves neither.
   **The remaining +1 is an unresolved disagreement and is left stated rather than smoothed
   over.** That same worktree at `e51238e` collects **903**, not the **902** recorded above,
   and no test file changed between the two commits. Whether a worktree's tracked-file set
@@ -253,27 +272,26 @@ bullet.
   package. **`doctor`'s line was re-run once more later that day at `6d51966` and read 23**;
   `build` was **not** re-run there, and the only tracked change over that span is one added
   `.md` under `docs/adr/`, which is a reason to expect its summary not to have moved and **is
-  not a measurement of it**. This line carried **20** until 2026-08-29, which was
+  not a measurement of it**. **Both were re-run again on 2026-09-10 at `523ffd9` and read
+  23** — `doctor`'s line and `Summary: 23 packages finished` — so that gap is closed by a
+  reading rather than left as an expectation; `feat/declared-simulation-backend` adds four
+  test files and an ADR and no package. This line carried **20** until 2026-08-29, which was
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
-  **`./scripts/test` counts by a run and reports three numbers, not one, and only two of the
-  three were re-taken on 2026-09-08 at `6d51966`.** Both of those are from one
-  `./scripts/test --host-only` run in this checkout at that commit: `124 passed, 0 failed
+  **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
+  re-taken on 2026-09-10 at `523ffd9` from ONE full run**, which is what it takes: a
+  `--host-only` run cannot refresh the third at all. `124 passed, 0 failed
   (shell gate self-tests)`, unchanged since
-  2026-08-31, and `1446 passed, 1 skipped` for the host half, which walks `tools/` **and**
-  `tests/`, so it is larger than the `tools/tests` collection above. Its exit status was 0.
-  **The third was not measured there**: over the eleven
-  first-party packages, eleven per-package summaries totalling **1296 tests, 0 failures, 56
-  skipped**, measured 2026-09-08 at `df91154` from one full `./scripts/test` and not since —
-  `--host-only` stops before the packages. The only change under `workspace/src` over that span
-  is none at all (`git diff --stat df91154..6d51966 -- workspace` is empty), which is a reason
-  to expect the figure not to have moved and **is not a measurement of it**.
+  2026-08-31; `1468 passed, 1 skipped` for the host half, which walks `tools/` **and**
+  `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
+  first-party packages, eleven per-package summaries totalling **1363 tests, 0 failures, 56
+  skipped**. Its exit status was 0.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
   124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
-  124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more and
-  124 / 1445 / 1296 for a few hours after that.
+  124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more,
+  124 / 1445 / 1296 for a few hours after that and 124 / 1446 / 1296 until 2026-09-10.
   **One arithmetic check ties the host half to the collection above, and it is what separates a
   re-measurement from a guess.** The host half moved 963 → 1009, **+46**, the same step the
   `tools/tests` collection took over the same span, which is what has to happen if the host half
@@ -299,7 +317,14 @@ bullet.
   not move at all, collecting **70** both in a worktree at `e18251e` and in this checkout
   (`.venv/bin/python -m pytest tests --collect-only -q`, both read on 2026-09-08). The tie
   closes exactly: 1376 + 70 = 1446 = 1445 passed plus the 1 skipped.
-  **And again at 1445 → 1446, and this one is the smallest step the tie has ever had to
+  **And again at 1446 → 1468, on `feat/declared-simulation-backend`, where the whole of the
+  move is again the `tools/` half.** The step is **+22**: `tools/tests` moved +22, as
+  reconciled above, and `tests/` did not move, collecting **70** both in a worktree at
+  `404bbac` and in this checkout on 2026-09-10. The tie closes exactly: 1399 + 70 = 1469 =
+  1468 passed plus the 1 skipped. **Predicted before it was measured, and it held** — this is
+  the second time that has been done here, and both times the prediction was written down
+  first and then a full run was taken rather than the arithmetic being published as a reading.
+  **And again at 1445 → 1446, and that one was the smallest step the tie has ever had to
   close.** `tools/tests` moved +1, as reconciled above, and `tests/` did not move, collecting
   **70** at `6d51966` as it did at `df91154`. The tie closes exactly: 1377 + 70 = 1447 =
   1446 passed plus the 1 skipped. **The prediction was written before the measurement and then
@@ -309,6 +334,16 @@ bullet.
   **The pair recorded at `51195e0` is internally consistent and was checked rather than
   assumed**: 973 + 37 = 1010 = 1009 passed + 1 skipped.
   **The per-package total carries no such tie and is not given one here.**
+  **Its 1296 → 1363 step, +67, is stated and NOT reconciled**, for the reason the rest of this
+  paragraph gives: the eleven `Summary:` lines are printed in one block with no package name
+  against any of them, so the log cannot attribute a single test to a package, and attributing
+  it would need a full run at `404bbac` as well, which was not taken. What is checkable is
+  that the branch changes tests in **`cite_bringup` and `cite_twin` only** — `git diff --stat
+  404bbac..523ffd9 -- workspace/src` names those two and `cite_generated`, whose change is one
+  generated plan — which is a reason to expect the move to sit there and **is not a
+  measurement of it**. **One test of the 67 is attributed**, because it was measured directly:
+  `cite_twin/test/test_l5_gate_reads_the_declared_fact.py` went 20 → **21** when the
+  live-plan guard was added on 2026-09-10, read from that file's own pytest line.
   Its 1217 → 1221 step was the four tests the three commits after `f859cb3` added under
   `workspace/src`; the 1221 → 1250 step, **+29**, was **not** reconciled against the
   `workspace/src` diff, and that is left stated rather than asserted. **Nor is the 1250 → 1296
@@ -503,10 +538,11 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1931 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-08 at `6d51966`; it said **661** until 2026-08-29, **1048** until
+  runs, and reported `1936 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-10 at `523ffd9`; it said **661** until 2026-08-29, **1048** until
   2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
-  2026-09-02, **1540** until 2026-09-08 and **1928** and then **1930** for parts of that day.
+  2026-09-02, **1540** until 2026-09-08, **1928** and then **1930** for parts of that day and
+  **1931** until 2026-09-10.
   Most of the
   difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
@@ -539,19 +575,32 @@ bullet.
   `docs/measurements`, with `--diff-filter=D` and `--diff-filter=R` both **0**, and the same
   two untracked files are still on disk. **So the two smallest moves this figure has taken are
   consecutive and are both documentation**, which is what this bullet means when it says the
-  number is not a measure of coverage.
+  number is not a measure of coverage. That superlative was re-checked against the move below
+  before being kept, and it survives: +1 and +2 are still the two smallest and still adjacent.
+  **The 1931 → 1936 move is +5 and closes the same way.** `git diff --diff-filter=A
+  --name-only 404bbac..523ffd9`
+  counts **5** tracked files added — four test files and one ADR — **none** under
+  `docs/measurements`, with `--diff-filter=D` and `--diff-filter=R` both **0**, and the same
+  two untracked files are still on disk. 1931 + 5 = 1936. **So three consecutive moves have
+  now added nothing under `docs/measurements`**, which is a statement about these three
+  branches and not a trend.
+  **A superlative was drafted here and withdrawn on checking, which is the reason to say so.**
+  It read *"the first in this bullet's history that is entirely source"*, and the move
+  immediately above it — 1928 → 1930, `df91154` — was **two added tracked `.py` files and
+  nothing else**, so it is more entirely source than this one, which carries an ADR among its
+  five. The paragraph above records those two files, in this same file, four paragraphs up.
   **This figure counts what is on disk, not what is committed, and this bullet said "a tracked
   text file" until 2026-09-08.** The remit is an `os.walk` from the repository root with
   directories pruned (`cite_tools.tree.our_files`, reached from
   `cite_tools.english.files_to_check`), and `tools/tests/test_english.py` carries a test named
   `test_a_file_that_is_written_but_not_staged_is_still_reported` asserting exactly that. So a
   file that is present but untracked is checked and counted. **Exactly 2 of this checkout's
-  1931 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
+  1936 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
   built by the 2026-09-03 stall-band campaign's harness — **re-derived rather than carried
-  forward**, on 2026-09-08 at `6d51966`, by differencing `files_to_check` against
-  `git ls-files`, which named those two files and no others; the same difference at `df91154`
-  earlier that day named the same two. **A clean clone of `6d51966`
-  therefore reports 1929**, and this figure depends on local build state in a way none of the
+  forward**, on 2026-09-10 at `523ffd9`, by differencing `files_to_check` against
+  `git ls-files`, which named those two files and no others; the same difference at `6d51966`
+  and at `df91154` named the same two. **A clean clone of `523ffd9`
+  therefore reports 1934**, and this figure depends on local build state in a way none of the
   other counts in this section does. **That prediction has now been checked once and it held**:
   this file said a clean clone of `30baea8` would report **1926**, and `files_to_check` over a
   fresh worktree at `e18251e` — three commits after `30baea8`, with no tracked file
@@ -1794,16 +1843,19 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **53 records, all indexed** in this checkout on 2026-09-08 at
-    `6d51966`. It read 52 on 2026-09-01 at
+    `ADR index` line reported **54 records, all indexed** in this checkout on 2026-09-10 at
+    `523ffd9`. It read 53 on 2026-09-08 at `6d51966`, 52 on 2026-09-01 at
     `abdae38` and **still 52 when re-run on 2026-09-08 at `df91154`** — that branch amended
     existing records and added none, which `git diff --diff-filter=A --name-only
     e18251e..df91154` confirms by listing no file under `docs/adr/`. It said 51 earlier on
     2026-09-01, 48 on 2026-08-30, 46 the day before that, 43
     earlier that day, and 40 before that —
     the newest being
-    [ADR-0053](docs/adr/0053-index-hardware-params-by-backend.md), landed at `dd6772f` and
-    revised at `6d51966` before implementation, with
+    [ADR-0054](docs/adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md) — the hardware
+    opt-in keyed on a declared fact rather than on a backend's name, **`Proposed (corrected
+    2026-09-10)` and not promoted**, for the clause-10 reason its own status block gives —
+    with
+    [ADR-0053](docs/adr/0053-index-hardware-params-by-backend.md),
     [ADR-0049](docs/adr/0049-measure-the-real-time-floor-as-capacity.md),
     [ADR-0050](docs/adr/0050-what-crosses-the-twin-boundary.md),
     [ADR-0051](docs/adr/0051-restate-the-hull-grasp-gate.md) and
@@ -1812,7 +1864,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **54** on 2026-09-08 at `6d51966` against
+    also matches `0000-template.md`; it read **55** on 2026-09-10 at `523ffd9` against
+    `doctor`'s 54, **54** on 2026-09-08 at `6d51966` against
     `doctor`'s 53, and **53** on 2026-09-01 at `abdae38` against
     `doctor`'s 52, so the
     relation has held at every re-audit — as it did at 52 against 51 earlier on 2026-09-01.
