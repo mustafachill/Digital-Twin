@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from cite_tools.model.loader import load
 from cite_tools.validate import Severity, referential
 
@@ -192,6 +194,42 @@ def test_two_missing_parameters_yield_two_findings(
         "assets.arm_1.hardware.params.real.report_type",
         "assets.arm_1.hardware.params.real.robot_ip",
     ]
+
+
+@pytest.mark.parametrize("quote", ['"', "'"])
+def test_a_quote_in_a_parameter_value(minimal_model: Path, edit_yaml: Callable, quote: str) -> None:
+    """S-02, the laptop half. A value lands in an XML attribute of the generated
+    description, and a quote there is how one L0 string became two macro
+    arguments. The generator escapes it; this refuses it, because no connection
+    parameter is ever right with one in it."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(
+            d,
+            {
+                "backend": "real",
+                "params": {"real": {"robot_ip": f"203.0.113.7{quote} report_type={quote}dev"}},
+            },
+        ),
+    )
+    finding = next(f for f in _findings(minimal_model) if f.rule == "hardware-param-contains-quote")
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
+
+
+def test_a_quote_in_an_unselected_blocks_value_is_refused_too(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """Not gated on selection. An unselected block is inert today and is the
+    block a one-field flip to hardware makes live, so waiting for the flip would
+    move the finding to the moment the arm is switched over."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(
+            d, {"backend": "sim", "params": {"real": {"robot_ip": '203.0.113.7" x="y'}}}
+        ),
+    )
+    finding = next(f for f in _findings(minimal_model) if f.rule == "hardware-param-contains-quote")
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
 
 
 def test_a_block_for_a_declared_backend_nobody_selects_is_clean(

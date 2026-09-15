@@ -18,7 +18,7 @@
   <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
   <xacro:{{ arm.macro }}
 {% for name, value in arm.args %}
-      {{ name }}="{{ value }}"
+      {{ name }}={{ value | attr }}
 {% endfor %}
   />
 

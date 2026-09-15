@@ -223,8 +223,9 @@ def _unique_by_message(findings: Iterable[Finding]) -> list[Finding]:
 def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
     """Every backend an asset names exists, and every parameter block matches it.
 
-    Four answers, and ADR-0053 decision 1 names each one so that a reviewer and a
-    model author can address the same finding by the same word:
+    Five answers. ADR-0053 decision 1 names the first four so that a reviewer and
+    a model author can address the same finding by the same word; the fifth is
+    about the value rather than the index:
 
     * `unknown-hardware-param-backend` — a key of `params` that is not a declared
       backend id of the type. This is the typo case, and it is the one thing a
@@ -237,6 +238,12 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       author meets: the generator raises on the same condition (ADR-0053 decision
       2a) but a raise aborts the run, so an author fixes one key per invocation
       instead of reading a report.
+    * `hardware-param-contains-quote` — a value carrying a quote character, in any
+      block, selected or not. A value lands in an XML attribute of the generated
+      description, and a quote there is how one L0 string became two vendor macro
+      arguments. The generator escapes it regardless; this reports it, because no
+      connection parameter is right with one in it and an escaped mistake is still
+      a mistake, found at the arm instead of on a laptop.
     * Nothing at all for a block naming a declared backend nobody selects. That is
       deliberate and it is what makes flipping an arm to hardware a one-field
       edit.
@@ -266,6 +273,23 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
                     f"Declared backends: {', '.join(sorted(backends)) or '(none)'}.",
                 )
             )
+
+        # Every block, selected or not and declared or not. An unselected block is
+        # the one a one-field flip to hardware makes live, so waiting for the flip
+        # would move this finding to the moment the arm is switched over.
+        for name in sorted(params):
+            for key, value in sorted(params[name].items()):
+                if isinstance(value, str) and any(quote in value for quote in "\"'"):
+                    findings.append(
+                        error(
+                            "hardware-param-contains-quote",
+                            f"assets.{asset.id}.hardware.params.{name}.{key}",
+                            f"parameter {key!r} holds {value!r}, which contains a quote",
+                            "A value reaches an XML attribute of the generated description. "
+                            "No connection parameter contains a quote; check for a stray "
+                            "one closing the value early.",
+                        )
+                    )
 
         # Each block against the backend IT NAMES, not against the plant's. This
         # runs whether or not the selected backend resolves, because the question

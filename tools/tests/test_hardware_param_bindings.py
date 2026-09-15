@@ -22,7 +22,7 @@ address never ends up in an example.
 
 from __future__ import annotations
 
-import re
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable
 from pathlib import Path
 
@@ -36,27 +36,29 @@ ARM = "arm_1"
 ADDRESS = "203.0.113.7"
 SECOND_ADDRESS = "203.0.113.8"
 
-#: One line per macro argument, which is what makes an argument-level assertion
-#: possible at all — `arm.urdf.xacro.j2` emits `{{ name }}="{{ value }}"`.
-_ARGUMENT = re.compile(r'^\s*([a-z_][a-z0-9_]*)="(.*)"\s*$')
+#: Every tag in the generated arm description that is not the macro invocation.
+_XACRO = "{http://ros.org/wiki/xacro}"
 
 
 def macro_arguments(description: str) -> dict[str, str]:
-    """The macro invocation's arguments, by name.
+    """The macro invocation's arguments, by name, as an XML parser reads them.
 
-    Parsed from the invocation block rather than from the whole file, so a name
-    appearing in the generated banner or in a comment cannot be mistaken for an
-    argument.
+    Parsed as XML rather than line by line, and that is the point rather than a
+    convenience. What the vendor macro receives is what xacro's XML parser makes
+    of the invocation element, so the argument set here has to be the one an XML
+    parser sees: a value that closed its own attribute and opened a second one
+    must show up as two arguments, which a line-shaped regex would either miss or
+    reject as unparsed. A name appearing in the generated banner or in a comment
+    is not an attribute, so it cannot be mistaken for one either.
     """
-    lines = description.splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("  <xacro:xarm_device"))
-    end = next(i for i, line in enumerate(lines[start:], start) if line.strip() == "/>")
-    arguments = {}
-    for line in lines[start + 1 : end]:
-        match = _ARGUMENT.match(line)
-        assert match, f"unparsed line inside the macro invocation: {line!r}"
-        arguments[match.group(1)] = match.group(2)
-    return arguments
+    root = ElementTree.fromstring(description)
+    invocations = [
+        element
+        for element in root
+        if element.tag.startswith(_XACRO) and element.tag != f"{_XACRO}include"
+    ]
+    assert len(invocations) == 1, f"expected one macro invocation, found {len(invocations)}"
+    return dict(invocations[0].attrib)
 
 
 def description_of(model: Path, asset: str) -> str:
@@ -231,3 +233,50 @@ class TestTheFilterIsKeyedOnTheDeclaration:
         and the binding is dropped rather than raising.
         """
         assert "robot_ip" not in macro_arguments(description_of(real_model, ARM))
+
+
+class TestAValueIsOneArgumentWhateverItContains:
+    """S-02: an instance parameter reaches an XML attribute, so it is escaped there.
+
+    `arm.urdf.xacro.j2` wrote `{{ name }}="{{ value }}"` with autoescape off, so a
+    value carrying a double quote closed its own attribute and opened another:
+    one L0 string became two macro arguments. The vendor macro takes far more
+    parameters than this model binds, so the second argument has no duplicate to
+    collide with and nothing fails loudly — and among the unbound ones are
+    `kinematics_suffix`, which selects the kinematics file a Cartesian goal is
+    solved against, and `robot_sn`, which selects the link inertials.
+
+    Asserted on the rendered description through an XML parser, because what the
+    vendor macro receives is what xacro's parser makes of that element. The
+    validator refuses the same value (`hardware-param-contains-quote`); this is
+    the half that holds when the generator is reached by another door.
+    """
+
+    INJECTION = '203.0.113.7" report_type="dev'
+
+    def test_a_quote_does_not_open_a_second_argument(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        arms = real_model / "assets/instances/arms.yaml"
+        edit_yaml(arms, select_real)
+        clean = set(macro_arguments(description_of(real_model, ARM)))
+
+        edit_yaml(arms, lambda d: select_real(d, {"real": {"robot_ip": self.INJECTION}}))
+        arguments = macro_arguments(description_of(real_model, ARM))
+
+        assert "report_type" not in arguments
+        assert set(arguments) == clean
+        assert arguments["robot_ip"] == self.INJECTION
+
+    def test_every_character_xml_gives_a_meaning_arrives_as_itself(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The escape is complete, not a quote substitution: `&`, `<` and `>`
+        would make the document unparseable instead, which xacro reports as a
+        column in a generated file rather than as anything about the model."""
+        value = "a&b<c>d'e\"f"
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": value}}),
+        )
+        assert macro_arguments(description_of(real_model, ARM))["robot_ip"] == value
