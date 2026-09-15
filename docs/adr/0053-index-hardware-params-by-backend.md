@@ -68,6 +68,15 @@
     by the same misspelling in `params` and clause 4's raise did not happen; it is now built
     from what the selected backend declares. Each fix is held by a test shown failing without
     it.
+  - **A second fix round on 2026-09-15 closed two blockers the first round reported.** **This
+    branch made the parameter half of `docs/open-work.md` #65 worse**: with a non-physical
+    backend declaring `robot_ip` and the `ros2_control_plugin` binding deleted, the vendor macro
+    loaded its default physical component and, expanded with xacro at `c40215b`, that component
+    received `R203.0.113.7` where before this record it received `R` and exited. A type that
+    binds an instance parameter without binding `instance.hardware.ros2_control_plugin` is now
+    `unrouted-hardware-params`, an ERROR, and the generator refuses the same condition through
+    `DescriptionSpec.unrouted_param_arguments`. **#65 stays open**: nothing checks the argument
+    name the plugin is bound under, and a type binding no instance parameter is not examined.
 
   **Promotion is not a claim that any physical arm has ever loaded the plugin** — see
   *What promotion does not claim*, which is a permanent clause and not a status caveat.

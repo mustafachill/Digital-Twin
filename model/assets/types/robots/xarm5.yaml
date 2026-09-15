@@ -63,16 +63,19 @@ asset_type:
       attach_to: instance.parent_link
       attach_xyz: instance.parent_xyz_m
       attach_rpy: instance.parent_rpy_rad
-      # NOTHING CHECKS THIS BINDING, AND DELETING IT REACHES A PHYSICAL ARM.
-      # It is the only thing carrying the plugin string declared below into the
-      # description. No validator reads `bound_args` (`grep -rn bound_args
-      # tools/cite_tools/validate/` is empty), and the vendor macro defaults this
-      # parameter to `uf_robot_hardware/UFRobotSystemHardware` — so removing this
-      # line leaves the model valid, `--strict` silent, this file's
-      # `commands_physical_hardware: false` honest, the bring-up gate correctly
-      # returning without consulting `CITE_ALLOW_HARDWARE`, and the physical
-      # component loaded. ADR-0054's Correction of 2026-09-10 measures it end to
-      # end; `docs/open-work.md` #65 carries the fix and does not choose it.
+      # DELETING THIS BINDING REACHES A PHYSICAL ARM, AND ONE RULE NOW REFUSES
+      # ONLY PART OF THAT. It is the only thing carrying the plugin string declared
+      # below into the description, and the vendor macro defaults this parameter
+      # to `uf_robot_hardware/UFRobotSystemHardware`. While `robot_ip` below binds
+      # an instance parameter, removing this line is an `unrouted-hardware-params`
+      # ERROR (ADR-0053) — a guard on the parameter half, so that an address never
+      # reaches a component L0 did not name. It is not the check `docs/open-work.md`
+      # #65 asks for, which stays open: remove the parameter binding as well, or
+      # bind the plugin under an argument name the vendor does not read, and the
+      # model is valid, this file's `commands_physical_hardware: false` honest, the
+      # bring-up gate correctly returning without consulting `CITE_ALLOW_HARDWARE`,
+      # and the physical component loaded. ADR-0054's Correction of 2026-09-10
+      # measures it end to end.
       ros2_control_plugin: instance.hardware.ros2_control_plugin
       add_gripper: instance.end_effector.vendor_integrated
       # The address of the physical arm this instance describes, carried into the

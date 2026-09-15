@@ -357,3 +357,100 @@ class TestAValueIsOneArgumentWhateverItContains:
             lambda d: select_real(d, {"real": {"robot_ip": value}}),
         )
         assert macro_arguments(description_of(real_model, ARM))["robot_ip"] == value
+
+
+FAKE_PLUGIN = "uf_robot_hardware/UFRobotFakeSystemHardware"
+
+
+def _non_physical_backend_with_an_address_and_no_plugin_binding(
+    real_model: Path, edit_yaml: Callable, *, bind_plugin: bool
+) -> None:
+    """The combination ADR-0053's review found this branch made worse.
+
+    `sim` is re-pointed at a non-physical plugin, declared non-physical, and
+    given `robot_ip` to state; every arm supplies one. With the plugin binding
+    deleted, the vendor macro loads its own default — the PHYSICAL component —
+    and, measured by xacro expansion in the container at `c40215b`, that
+    component received `R203.0.113.7`: a working address and no gate. On `main`
+    the same edit reached it as `R`, which the vendor answers with `exit(1)`.
+    """
+
+    def the_type(document: dict) -> None:
+        sim = document["asset_type"]["hardware_backends"]["sim"]
+        sim["ros2_control_plugin"] = FAKE_PLUGIN
+        sim["commands_physical_hardware"] = False
+        sim["instance_params"] = ["robot_ip"]
+        if not bind_plugin:
+            del document["asset_type"]["description"]["bound_args"]["ros2_control_plugin"]
+
+    def every_arm_supplies_an_address(document: dict) -> None:
+        for asset in document["assets"]:
+            asset["hardware"] = {"backend": "sim", "params": {"sim": {"robot_ip": ADDRESS}}}
+
+    edit_yaml(real_model / "assets/types/robots/xarm5.yaml", the_type)
+    edit_yaml(real_model / "assets/instances/arms.yaml", every_arm_supplies_an_address)
+
+
+class TestAParameterNeverReachesAnUnnamedPlugin:
+    """ADR-0053: an instance parameter is bound only where the plugin is.
+
+    This guards the parameter half of `docs/open-work.md` #65 and does not close
+    it. Both halves read `DescriptionSpec.unrouted_param_arguments`.
+    """
+
+    def test_the_validator_refuses_the_combination(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        _non_physical_backend_with_an_address_and_no_plugin_binding(
+            real_model, edit_yaml, bind_plugin=False
+        )
+        findings = [
+            f
+            for f in referential.check(load(real_model))
+            if f.rule == "unrouted-hardware-params" and f.severity is Severity.ERROR
+        ]
+        assert [f.where for f in findings] == ["types.xarm5.description.bound_args"]
+
+    def test_the_generator_refuses_the_combination(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        _non_physical_backend_with_an_address_and_no_plugin_binding(
+            real_model, edit_yaml, bind_plugin=False
+        )
+        with pytest.raises(BindingError, match="instance.hardware.ros2_control_plugin"):
+            description_of(real_model, ARM)
+
+    def test_with_the_plugin_bound_the_address_reaches_the_declared_plugin(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The control, without which the two above prove only that something
+        refused. Same model, binding kept: the fake plugin and the address are
+        both macro arguments."""
+        _non_physical_backend_with_an_address_and_no_plugin_binding(
+            real_model, edit_yaml, bind_plugin=True
+        )
+        arguments = macro_arguments(description_of(real_model, ARM))
+        assert arguments["ros2_control_plugin"] == FAKE_PLUGIN
+        assert arguments["robot_ip"] == ADDRESS
+
+    @pytest.mark.parametrize("bind_plugin", [True, False])
+    @pytest.mark.parametrize("bind_param", [True, False])
+    def test_a_finding_and_a_raise_go_together(
+        self, real_model: Path, edit_yaml: Callable, bind_plugin: bool, bind_param: bool
+    ) -> None:
+        def bindings(document: dict) -> None:
+            bound = document["asset_type"]["description"]["bound_args"]
+            if not bind_plugin:
+                del bound["ros2_control_plugin"]
+            if not bind_param:
+                del bound["robot_ip"]
+
+        edit_yaml(real_model / "assets/types/robots/xarm5.yaml", bindings)
+        model = load(real_model)
+        reported = any(f.rule == "unrouted-hardware-params" for f in referential.check(model))
+        try:
+            gen.generate(model)
+            raised = False
+        except BindingError:
+            raised = True
+        assert reported == raised == (bind_param and not bind_plugin)

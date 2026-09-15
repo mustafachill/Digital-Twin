@@ -200,8 +200,9 @@ construction.
 **Two residuals remain, and this gate sees neither.** **L0 can lie** — `false` beside the
 vendor's physical component passes here — and **L0 can tell the truth and be ignored**,
 because nothing verifies that the plugin L0 declares is the plugin the description loads: the
-type's `bound_args` carries it, no validator reads `bound_args`, and the vendor macro's own
-default is the physical component. Read
+type's `bound_args` carries it, the one validator rule that reads that binding
+(`unrouted-hardware-params`, ADR-0053) fires only for a type that also binds an instance
+parameter, and the vendor macro's own default is the physical component. Read
 [ADR-0054](../../../docs/adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)'s Correction
 of 2026-09-10 for both — they are stated and measured there, and
 [`../../../docs/open-work.md`](../../../docs/open-work.md) #65 carries the second one's fix.

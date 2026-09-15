@@ -372,6 +372,20 @@ class CollisionSpec(Strict):
             ) from None
 
 
+#: The binding that carries the selected backend's `ros2_control_plugin` string
+#: into a vendor description. Stated here rather than in the generator because
+#: `DescriptionSpec.unrouted_param_arguments` reads it too, and the validator and
+#: the generator must agree on the one spelling.
+PLUGIN_BINDING = "instance.hardware.ros2_control_plugin"
+
+#: The prefix of the open binding family (ADR-0053, decision 2). Every other
+#: binding is a fixed name enumerated in `generate.description._binding_value`;
+#: this one takes as many entries as a type has instance parameters to bind, so it
+#: is matched by prefix and resolved from the selected backend's block of
+#: `hardware.params`.
+PARAMS_BINDING_PREFIX = "instance.hardware.params."
+
+
 class DescriptionSpec(Strict):
     """How a type becomes geometry.
 
@@ -398,6 +412,41 @@ class DescriptionSpec(Strict):
     #: means "nobody has looked".
     collision: CollisionSpec | None = None
     body: Body | None = None
+
+    def unrouted_param_arguments(self) -> tuple[str, ...]:
+        """Macro arguments bound to an instance parameter, when no argument
+        carries the backend's plugin string. Empty when there is nothing to refuse.
+
+        THE ONE DEFINITION, read by the validator's `unrouted-hardware-params` and
+        by `generate.description`'s backstop raise (ADR-0053).
+
+        WHY. An instance parameter exists only to reach the hardware component the
+        selected backend names. If no `bound_args` entry carries
+        `PLUGIN_BINDING`, the description loads whatever plugin the vendor macro
+        defaults to, and for `xarm_description` that is the physical component —
+        so a backend declaring a non-physical plugin and an address would put that
+        address in front of a physical component while L0, the plan's
+        `commands_physical_hardware` and the bring-up gate all read "not
+        physical". Before ADR-0053 the same model reached the vendor with an empty
+        `robot_ip` and its component exited at `on_init`; this keeps that
+        combination failing, and earlier.
+
+        Keyed on the binding VALUE and not on an argument name: which macro
+        parameter takes the plugin string is a fact about the vendor package, and
+        that knowledge lives in model data, never here. So this does not verify
+        that the argument name is the one the vendor reads, and it says nothing
+        about a type that binds no instance parameter — `docs/open-work.md` #65
+        stays open for both.
+        """
+        if PLUGIN_BINDING in self.bound_args.values():
+            return ()
+        return tuple(
+            sorted(
+                name
+                for name, binding in self.bound_args.items()
+                if binding.startswith(PARAMS_BINDING_PREFIX)
+            )
+        )
 
 
 class HardwareBackend(Strict):
@@ -447,11 +496,13 @@ class HardwareBackend(Strict):
     #: implied by an id nobody was asked about.
     #:
     #: **AND THE CLAIM BEING TRUE IS NOT SUFFICIENT.** That plugin string reaches
-    #: the description only through the type's ``bound_args``, which no validator
-    #: reads; unbind it and the vendor macro's own default — the physical
-    #: component — is loaded while this field, the plan and the gate are all
-    #: honest. So this field bounds what L0 SAYS and not what the description
-    #: LOADS. ADR-0054's Correction of 2026-09-10 measures both routes;
+    #: the description only through the type's ``bound_args``; unbind it and the
+    #: vendor macro's own default — the physical component — is loaded while this
+    #: field, the plan and the gate are all honest. The one validator rule that
+    #: reads that binding, `unrouted-hardware-params`, fires only for a type that
+    #: also binds an instance parameter (`DescriptionSpec.unrouted_param_arguments`).
+    #: So this field bounds what L0 SAYS and not what the description LOADS.
+    #: ADR-0054's Correction of 2026-09-10 measures both routes;
     #: ``docs/open-work.md`` #65 carries the fix.
     commands_physical_hardware: bool
 

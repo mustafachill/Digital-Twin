@@ -21,20 +21,13 @@ from cite_tools.generate import Artifact
 from cite_tools.model import ids
 from cite_tools.model.geometry import Pose
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
-from cite_tools.model.schema import Body
+from cite_tools.model.schema import PARAMS_BINDING_PREFIX, PLUGIN_BINDING, Body
 from cite_tools.model.units import fmt, fmt_triple
 from cite_tools.render import environment
 
 
 class BindingError(Exception):
     """A component library entry named a generator binding that does not exist."""
-
-
-#: The prefix of the open binding family (ADR-0053, decision 2). Every other
-#: binding is a fixed name enumerated in `_binding_value`; this one takes as many
-#: entries as a type has instance parameters to bind, so it is matched by prefix
-#: and resolved from the selected backend's block of `hardware.params`.
-PARAMS_BINDING_PREFIX = "instance.hardware.params."
 
 
 @dataclass(frozen=True)
@@ -165,7 +158,7 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
         # fact twice.
         "instance.parent_xyz_m": fmt_triple((0.0, 0.0, 0.0)),
         "instance.parent_rpy_rad": fmt_triple((0.0, 0.0, 0.0)),
-        "instance.hardware.ros2_control_plugin": asset.ros2_control_plugin,
+        PLUGIN_BINDING: asset.ros2_control_plugin,
         "instance.end_effector.vendor_integrated": str(
             bool(asset.instance.end_effector and asset.instance.end_effector.vendor_integrated)
         ).lower(),
@@ -325,6 +318,21 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         raise BindingError(
             f"type {asset.asset_type.id!r} uses the xacro_macro provider but does not "
             "name a package, file and macro"
+        )
+
+    # Before any argument is resolved, and for every backend. The validator
+    # reports the same condition as `unrouted-hardware-params` and gates
+    # generation on it; this is the backstop for a caller that reached `generate`
+    # by another door. The predicate is the model's one definition, so the two
+    # halves cannot disagree about a type.
+    unrouted = spec.unrouted_param_arguments()
+    if unrouted:
+        raise BindingError(
+            f"type {asset.asset_type.id!r} binds macro argument(s) "
+            f"{', '.join(unrouted)} to an instance parameter, but no `bound_args` entry "
+            f"carries {PLUGIN_BINDING!r}, so the description of asset {asset.id!r} would "
+            f"load the vendor macro's default plugin rather than the one backend "
+            f"{asset.instance.hardware.backend!r} declares. Bind it."
         )
 
     args: list[tuple[str, str]] = [

@@ -1355,6 +1355,14 @@ the hardware launch shape is where it belongs. That is the last moment at which 
 depends on the answer, and the moment the vendor component acquires the connection parameters
 ADR-0053 delivers is the moment an unguarded description stops being fail-closed by accident.
 
+**2026-09-15: ADR-0053's implementation guards the parameter half, and this item stays open.**
+A type that binds an instance parameter without binding `instance.hardware.ros2_control_plugin`
+is refused as `unrouted-hardware-params`, at the validator and at the generator, because that
+branch would otherwise have delivered a working address to the vendor's default physical
+component. So the `grep` above no longer reads 0. Deleting the plugin binding on a type that binds
+no instance parameter, and binding it under an argument name the vendor does not read, are both
+still silent.
+
 Reported by `safety-auditor` on 2026-09-10 (S-01), re-driven by the fixer that filed it, and
 deliberately not fixed there. ADR-0054 carries the matching Correction of the same date.
 

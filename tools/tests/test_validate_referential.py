@@ -251,6 +251,57 @@ def test_a_quote_in_an_unselected_blocks_value_is_refused_too(
     assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
 
 
+def _bind(document: dict, bindings: dict) -> None:
+    """Add `bound_args` entries to the minimal fixture's arm type."""
+    document["asset_type"]["description"]["bound_args"].update(bindings)
+
+
+def test_a_parameter_bound_without_the_plugin_binding(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """ADR-0053, and the parameter half of `docs/open-work.md` #65 only.
+
+    Without a binding carrying the plugin string the vendor macro loads its own
+    default component, and an instance parameter bound beside it reaches that
+    component instead of the one the backend declares. Per type, so no asset
+    has to select anything for the finding to appear.
+    """
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: _bind(d, {"robot_ip": "instance.hardware.params.robot_ip"}),
+    )
+    finding = next(f for f in _findings(minimal_model) if f.rule == "unrouted-hardware-params")
+    assert finding.where == "types.xarm5.description.bound_args"
+    assert "robot_ip" in finding.message
+
+
+def test_a_parameter_bound_beside_the_plugin_binding_is_clean(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The control: the same parameter binding, with the plugin routed, is not
+    refused. Keyed on the binding value, so the argument name carrying it is
+    whatever the type says the vendor calls it."""
+    edit_yaml(
+        minimal_model / "assets/types/xarm5.yaml",
+        lambda d: _bind(
+            d,
+            {
+                "robot_ip": "instance.hardware.params.robot_ip",
+                "hardware_plugin": "instance.hardware.ros2_control_plugin",
+            },
+        ),
+    )
+    assert "unrouted-hardware-params" not in rules(minimal_model)
+
+
+def test_a_type_binding_no_parameter_is_not_examined(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The fixture binds neither, and stays clean. This rule is not #65's check:
+    a type with no parameter binding and no plugin binding is silent here."""
+    assert "unrouted-hardware-params" not in rules(minimal_model)
+
+
 def test_a_block_for_a_declared_backend_nobody_selects_is_clean(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:

@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from cite_tools.model import ids
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
-from cite_tools.model.schema import FlowEdge
+from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge
 from cite_tools.validate import Finding, error
 
 #: Which configuration kind each category expects. `None` means the category
@@ -41,6 +41,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _pose_frames_resolve(model)
     findings += _no_pose_cycles(model)
     findings += _hardware_backends_exist(model)
+    findings += _instance_params_reach_a_bound_plugin(model)
     findings += _paired_zone_has_no_physical_plant(model)
     findings += _counterpart_backend_matches_the_plant(model)
     findings += _configuration_matches_category(model)
@@ -358,6 +359,48 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
                     f"backend {chosen!r} of type {asset_type.id!r} declares parameter "
                     f"{key!r}, which this asset does not supply a value for",
                     f"Add it under `hardware.params.{chosen}`. An empty value is not one.",
+                )
+            )
+    return findings
+
+
+def _instance_params_reach_a_bound_plugin(model: FacilityModel) -> list[Finding]:
+    """A type that binds an instance parameter must also bind the backend's plugin.
+
+    `unrouted-hardware-params`, one ERROR per type. An instance parameter exists
+    only to reach the hardware component the selected backend names; without a
+    `bound_args` entry carrying `instance.hardware.ros2_control_plugin`, the
+    description loads the vendor macro's default plugin instead — for
+    `xarm_description`, the physical one — while L0, the plan and the bring-up
+    gate all read the backend's own `commands_physical_hardware`. Before
+    ADR-0053 bound parameters at all, that combination reached the vendor with an
+    empty address and failed at `on_init`; this keeps it failing, and moves the
+    failure to validation.
+
+    Referential, and so gating generation, because the generator refuses the same
+    condition (`DescriptionSpec.unrouted_param_arguments`, which both read) and
+    would otherwise abort with a traceback. Per type rather than per asset, and
+    regardless of which backend is selected: the defect is in the type, and
+    waiting for an asset to select a backend that declares parameters would move
+    the finding to the moment an arm is switched over.
+
+    This does not close `docs/open-work.md` #65. It does not check that the plugin
+    is bound under the argument name the vendor reads, and a type that binds no
+    instance parameter is not examined at all.
+    """
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        unrouted = asset_type.description.unrouted_param_arguments()
+        if unrouted:
+            findings.append(
+                error(
+                    "unrouted-hardware-params",
+                    f"types.{asset_type.id}.description.bound_args",
+                    f"type {asset_type.id!r} binds {', '.join(unrouted)} to an instance "
+                    f"parameter, and no entry binds {PLUGIN_BINDING}",
+                    "Without it the description loads the vendor macro's default plugin, "
+                    "not the one the selected backend declares, and the parameters reach "
+                    "that component instead. Bind the plugin, or remove the parameter bindings.",
                 )
             )
     return findings
