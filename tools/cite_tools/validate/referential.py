@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from cite_tools.model import ids
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
-from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge
+from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge, xacro_would_evaluate
 from cite_tools.validate import Finding, error
 
 #: Which configuration kind each category expects. `None` means the category
@@ -224,9 +224,9 @@ def _unique_by_message(findings: Iterable[Finding]) -> list[Finding]:
 def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
     """Every backend an asset names exists, and every parameter block matches it.
 
-    Five answers. ADR-0053 decision 1 names the first four so that a reviewer and
-    a model author can address the same finding by the same word; the fifth is
-    about the value rather than the index:
+    Six answers. ADR-0053 decision 1 names the first four so that a reviewer and
+    a model author can address the same finding by the same word; the fifth and
+    sixth are about the value rather than the index:
 
     * `unknown-hardware-param-backend` — a key of `params` that is not a declared
       backend id of the type. This is the typo case, and it is the one thing a
@@ -247,6 +247,13 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       arguments. The generator escapes it regardless; this reports it, because no
       connection parameter is right with one in it and an escaped mistake is still
       a mistake, found at the arm instead of on a laptop.
+    * `hardware-param-contains-dollar` — a value carrying `$`, in any block. xacro
+      evaluates `${...}` and `$(...)` inside the attribute after XML has unescaped
+      it, so escaping does not reach this and the generator refuses the value
+      rather than escaping it. A sibling of the quote rule rather than a widening
+      of it: that id is cited as meaning a quote, and the generator treats the two
+      differently. The predicate is `schema.xacro_would_evaluate`, which the
+      generator's raise reads too.
     * Nothing at all for a block naming a declared backend nobody selects. That is
       deliberate and it is what makes flipping an arm to hardware a one-field
       edit.
@@ -291,6 +298,17 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
                             "A value reaches an XML attribute of the generated description. "
                             "No connection parameter contains a quote; check for a stray "
                             "one closing the value early.",
+                        )
+                    )
+                if xacro_would_evaluate(value):
+                    findings.append(
+                        error(
+                            "hardware-param-contains-dollar",
+                            f"assets.{asset.id}.hardware.params.{name}.{key}",
+                            f"parameter {key!r} holds {value!r}, which contains `$`",
+                            "xacro evaluates `${...}` and `$(...)` in the generated "
+                            "description, and XML escaping does not stop it. No connection "
+                            "parameter contains a `$`.",
                         )
                     )
 

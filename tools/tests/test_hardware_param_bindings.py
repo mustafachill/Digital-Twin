@@ -359,6 +359,65 @@ class TestAValueIsOneArgumentWhateverItContains:
         assert macro_arguments(description_of(real_model, ARM))["robot_ip"] == value
 
 
+class TestAValueXacroWouldEvaluateIsRefused:
+    """ADR-0053, B-2: escaping stops XML, and it does not stop xacro.
+
+    Measured in the container at `c40215b`: `robot_ip="${1+2}.$(env HOSTNAME)"`
+    passed through the escaped template unchanged and xacro expanded it to
+    `<param name="robot_ip">R3.<hostname>`. The template cannot escape `$` for
+    every argument, because a collision root relies on `$(find ...)`, so the
+    value is refused. The validator half is `hardware-param-contains-dollar` in
+    `test_validate_referential.py`; both read `schema.xacro_would_evaluate`.
+    """
+
+    INJECTION = "${1+2}.$(env HOSTNAME)"
+
+    def test_the_generator_refuses_the_injection(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": self.INJECTION}}),
+        )
+        with pytest.raises(BindingError) as raised:
+            description_of(real_model, ARM)
+        assert ARM in str(raised.value)
+        assert "robot_ip" in str(raised.value)
+
+    def test_the_validator_refuses_the_injection_on_the_real_model(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": self.INJECTION}}),
+        )
+        findings = [
+            f.where
+            for f in referential.check(load(real_model))
+            if f.rule == "hardware-param-contains-dollar" and f.severity is Severity.ERROR
+        ]
+        assert findings == [f"assets.{ARM}.hardware.params.real.robot_ip"]
+
+    @pytest.mark.parametrize(
+        "value", [ADDRESS, INJECTION, "$(env X)", "${1}", "$", "a$$b", "0", 0, False]
+    )
+    def test_a_dollar_finding_and_a_raise_go_together(
+        self, real_model: Path, edit_yaml: Callable, value: object
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": value}}),
+        )
+        model = load(real_model)
+        reported = any(f.rule == "hardware-param-contains-dollar" for f in referential.check(model))
+        try:
+            gen.generate(model)
+            raised = False
+        except BindingError:
+            raised = True
+        assert reported == raised == (isinstance(value, str) and "$" in value)
+
+
 FAKE_PLUGIN = "uf_robot_hardware/UFRobotFakeSystemHardware"
 
 

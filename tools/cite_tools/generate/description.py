@@ -21,7 +21,12 @@ from cite_tools.generate import Artifact
 from cite_tools.model import ids
 from cite_tools.model.geometry import Pose
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
-from cite_tools.model.schema import PARAMS_BINDING_PREFIX, PLUGIN_BINDING, Body
+from cite_tools.model.schema import (
+    PARAMS_BINDING_PREFIX,
+    PLUGIN_BINDING,
+    Body,
+    xacro_would_evaluate,
+)
 from cite_tools.model.units import fmt, fmt_triple
 from cite_tools.render import environment
 
@@ -191,6 +196,18 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
     for key in sorted(declared):
         if key in supplied:
             value = supplied[key]
+            # Refused rather than escaped: xacro evaluates `${...}` and `$(...)`
+            # after XML has unescaped the attribute, and the template cannot
+            # escape `$` for every argument because a collision root relies on
+            # `$(find ...)`. The validator reports it first as
+            # `hardware-param-contains-dollar`, reading the same predicate; this
+            # raises only for the binding actually being resolved.
+            if binding == f"{PARAMS_BINDING_PREFIX}{key}" and xacro_would_evaluate(value):
+                raise BindingError(
+                    f"asset {asset.id!r} supplies {value!r} for parameter {key!r} of "
+                    f"backend {selected!r}, which {binding!r} binds into the description, "
+                    f"and it contains `$`, which xacro would evaluate. Remove it."
+                )
             values[f"{PARAMS_BINDING_PREFIX}{key}"] = (
                 str(value).lower() if isinstance(value, bool) else str(value)
             )

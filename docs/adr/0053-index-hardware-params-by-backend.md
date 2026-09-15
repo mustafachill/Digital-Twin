@@ -77,6 +77,13 @@
     `unrouted-hardware-params`, an ERROR, and the generator refuses the same condition through
     `DescriptionSpec.unrouted_param_arguments`. **#65 stays open**: nothing checks the argument
     name the plugin is bound under, and a type binding no instance parameter is not examined.
+    **Escaping stopped XML and did not stop xacro**: xacro evaluates `${...}` and `$(...)` in an
+    attribute after XML has unescaped it, and `robot_ip: "${1+2}.$(env HOSTNAME)"` expanded to
+    `R3.<hostname>` in the container at `c40215b`. The template cannot escape `$` for every
+    argument, because a collision root relies on `$(find ...)`, so a `$` in any `params` value is
+    refused: `hardware-param-contains-dollar`, a sixth answer and a sibling of the quote rule
+    rather than a widening of it, with the generator raising on the same predicate,
+    `schema.xacro_would_evaluate`.
 
   **Promotion is not a claim that any physical arm has ever loaded the plugin** — see
   *What promotion does not claim*, which is a permanent clause and not a status caveat.

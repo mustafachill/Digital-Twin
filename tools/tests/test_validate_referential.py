@@ -251,6 +251,52 @@ def test_a_quote_in_an_unselected_blocks_value_is_refused_too(
     assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
 
 
+@pytest.mark.parametrize(
+    "value", ["${1+2}.$(env HOSTNAME)", "$(env HOSTNAME)", "${1+2}", "203.0.113.$", "$$"]
+)
+def test_a_dollar_in_a_parameter_value(
+    minimal_model: Path, edit_yaml: Callable, value: str
+) -> None:
+    """ADR-0053, B-2. xacro evaluates `${...}` and `$(...)` inside an attribute
+    after XML has unescaped it: `${1+2}.$(env HOSTNAME)` expanded to
+    `R3.<hostname>`. Any `$`, so that xacro's own `$$` escape is not a way in."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "real", "params": {"real": {"robot_ip": value}}}),
+    )
+    finding = next(
+        f for f in _findings(minimal_model) if f.rule == "hardware-param-contains-dollar"
+    )
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
+
+
+def test_a_dollar_in_an_unselected_blocks_value_is_refused_too(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """Not gated on selection, for the reason the quote rule is not."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "sim", "params": {"real": {"robot_ip": "$(env X)"}}}),
+    )
+    finding = next(
+        f for f in _findings(minimal_model) if f.rule == "hardware-param-contains-dollar"
+    )
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
+
+
+def test_a_plain_address_carries_no_dollar_finding(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """The control for the two above."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(
+            d, {"backend": "real", "params": {"real": {"robot_ip": "203.0.113.7"}}}
+        ),
+    )
+    assert "hardware-param-contains-dollar" not in rules(minimal_model)
+
+
 def _bind(document: dict, bindings: dict) -> None:
     """Add `bound_args` entries to the minimal fixture's arm type."""
     document["asset_type"]["description"]["bound_args"].update(bindings)

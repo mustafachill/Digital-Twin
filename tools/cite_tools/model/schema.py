@@ -386,6 +386,26 @@ PLUGIN_BINDING = "instance.hardware.ros2_control_plugin"
 PARAMS_BINDING_PREFIX = "instance.hardware.params."
 
 
+def xacro_would_evaluate(value: object) -> bool:
+    """Whether a `hardware.params` value carries a character xacro substitutes.
+
+    THE ONE DEFINITION, read by the validator's `hardware-param-contains-dollar`
+    and by the generator's backstop raise, so the two cannot disagree about a
+    model (ADR-0053).
+
+    Escaping for XML does not reach this. xacro evaluates `${...}` and `$(...)`
+    inside an attribute value after the XML parser has unescaped it, so
+    `robot_ip="${1+2}.$(env HOSTNAME)"` expanded to `R3.<hostname>` in the
+    description. The template cannot escape `$` for every macro argument, because
+    type-level bindings such as a collision root rely on `$(find ...)`, so the
+    value is refused instead. Any `$` at all rather than the two openers: an
+    instance parameter is a connection value — an address, a serial number — and
+    none has a legitimate one, while a narrower test would have to track xacro's
+    own escaping rules (`$$`) to stay correct.
+    """
+    return isinstance(value, str) and "$" in value
+
+
 class DescriptionSpec(Strict):
     """How a type becomes geometry.
 
