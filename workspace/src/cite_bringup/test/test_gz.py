@@ -161,6 +161,68 @@ def test_run_starts_the_command_with_the_partition(monkeypatch) -> None:
     assert captured["kwargs"]["timeout"] == 30
 
 
+class _FakeNode:
+    """Stands in for `gz.transport13.Node` so no snapshot reaches a real partition."""
+
+    instances: list = []
+
+    def __init__(self, options) -> None:
+        self.partition = options.partition
+        self.subscribed: dict = {}
+        self.unsubscribed: list[str] = []
+        _FakeNode.instances.append(self)
+
+    def subscribe_raw(self, topic, callback, msg_type, options) -> bool:
+        self.subscribed[topic] = (callback, msg_type)
+        return True
+
+    def unsubscribe(self, topic) -> bool:
+        self.unsubscribed.append(topic)
+        return True
+
+
+def _snapshot(**models: tuple[float, float, float]) -> bytes:
+    from gz.msgs10.pose_v_pb2 import Pose_V
+
+    message = Pose_V()
+    for name, (x, y, z) in models.items():
+        pose = message.pose.add()
+        pose.name = name
+        pose.position.x, pose.position.y, pose.position.z = x, y, z
+    return message.SerializeToString()
+
+
+def test_model_poses_answers_from_the_newest_snapshot_only(monkeypatch) -> None:
+    """One subscription, on the plan's partition; absence is read, never remembered.
+
+    The removal wait in `continuous_line` depends on the last clause: a cached
+    pose from before the removal would keep the work-piece "in the world" for
+    ever.
+    """
+    import importlib
+
+    transport = importlib.import_module("gz.transport13")
+    monkeypatch.setattr(transport, "Node", _FakeNode)
+    _FakeNode.instances.clear()
+
+    poses = gz.ModelPoses(zone=ZONE, world="w")
+    (node,) = _FakeNode.instances
+    assert node.partition == load(_generated()).sides[0].gz_partition
+    callback, msg_type = node.subscribed["/world/w/dynamic_pose/info"]
+    assert msg_type == "gz.msgs.Pose_V"
+
+    assert poses.position("workpiece") is None, "no snapshot yet is not a pose"
+    callback(_snapshot(link=(9.0, 9.0, 9.0), workpiece=(0.5, -0.25, 1.0)), None)
+    assert poses.position("workpiece") == (0.5, -0.25, 1.0)
+    callback(_snapshot(link=(9.0, 9.0, 9.0)), None)
+    assert poses.position("workpiece") is None, "a removed model kept its old pose"
+
+    poses.close()
+    poses.close()
+    assert node.unsubscribed == ["/world/w/dynamic_pose/info"]
+    assert poses.position("workpiece") is None
+
+
 def test_the_plan_is_read_once_per_process() -> None:
     # `continuous_line` asks for this about twice a second for the length of a
     # run. Re-reading and re-resolving the YAML per sample would make the

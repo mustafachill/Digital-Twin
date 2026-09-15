@@ -169,3 +169,73 @@ def run(
         timeout=timeout,
         **kwargs,
     )
+
+
+class ModelPoses:
+    """Where each model in one world is, from ONE long-lived subscription.
+
+    Exists because a pose read per `run(["gz", "model", "-p"])` starts a new
+    gz-transport client process per sample, and `gz sim` keeps a reply connection
+    to every client address it has ever answered and never drops it
+    (gz-transport issue #243). Over a line run that is thousands of dead
+    addresses, and when a later process — `ros2 run ros_gz_sim create` — is
+    assigned one of their ports, the server's replies go to the stale connection
+    and the spawn times out after 120 s ("Host unreachable" every 5 s).
+
+    In-process and not a `gz topic -e` subprocess: the bindings ship with
+    `gz_transport_vendor`, and a text echo of a ~60 Hz topic parsed in Python is
+    the expensive way to learn one position twice a second. The callback only
+    keeps the raw bytes of the newest snapshot; parsing happens on `position`.
+
+    `dynamic_pose/info` is used because every message is a COMPLETE snapshot of
+    the world's non-static entities, not a list of changes: a model absent from
+    the newest snapshot is absent from the world. That is what makes absence
+    explicit — a pose from before a model's removal stops being returned as soon
+    as one snapshot taken after it arrives. Before the first snapshot there is no
+    answer, and `position` says so with `None`, like an absent model.
+
+    The partition is taken from the plan through `gz_environment`, the same door
+    `run` uses, and set on the node's options rather than read from the shell.
+    """
+
+    #: The Gazebo message type of the snapshot topic.
+    MESSAGE_TYPE = "gz.msgs.Pose_V"
+
+    def __init__(self, *, zone: str, world: str, side: str = PLANT_SIDE) -> None:
+        # Imported here and not at module scope: the launch graph imports this
+        # module and has no use for a transport node of its own.
+        from gz.transport13 import Node, NodeOptions, SubscribeOptions
+
+        options = NodeOptions()
+        options.partition = gz_environment(plan_for(zone), side)[GZ_PARTITION_ENV]
+        self.topic = f"/world/{world}/dynamic_pose/info"
+        self._snapshot: bytes | None = None
+        self._node = Node(options)
+        if not self._node.subscribe_raw(
+            self.topic, self._on_snapshot, self.MESSAGE_TYPE, SubscribeOptions()
+        ):
+            raise RuntimeError(f"could not subscribe to {self.topic}")
+
+    def _on_snapshot(self, raw: bytes, _info: object) -> None:
+        # One reference assignment on a gz-transport thread; a reader sees either
+        # the previous snapshot or this one, both complete.
+        self._snapshot = raw
+
+    def position(self, model: str) -> tuple[float, float, float] | None:
+        """Return the newest world position of ``model``, or None if it is not in the world."""
+        snapshot = self._snapshot
+        if snapshot is None:
+            return None
+        from gz.msgs10.pose_v_pb2 import Pose_V
+
+        for pose in Pose_V.FromString(snapshot).pose:
+            if pose.name == model:
+                return (pose.position.x, pose.position.y, pose.position.z)
+        return None
+
+    def close(self) -> None:
+        """Stop receiving. Idempotent, so it can be registered as a cleanup."""
+        if self._node is not None:
+            self._node.unsubscribe(self.topic)
+            self._node = None
+        self._snapshot = None

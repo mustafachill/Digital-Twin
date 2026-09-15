@@ -207,9 +207,11 @@ def test_the_scan_actually_reaches_the_scenario_call_sites() -> None:
                 words = _leading_words(node.args[0])
                 if any(words[: len(prefix)] == prefix for prefix in commands):
                     seen += 1
-    assert seen == 7, (
-        f"the guard found {seen} Gazebo command sites under tests/, not the 7 it was "
-        "written against: two spawns, two pose reads, two diagnostics listings, one "
-        "removal. If a call was added, this number moves with it; if one vanished, "
+    assert seen == 6, (
+        f"the guard found {seen} Gazebo command sites under tests/, not the 6 it was "
+        "written against: two spawns, one pose read, two diagnostics listings, one "
+        "removal. `continuous_line` reads poses in-process through "
+        "`cite_bringup.gz.ModelPoses`, which takes the partition from the same plan. "
+        "If a call was added, this number moves with it; if one vanished, "
         "check it was not rewritten into an argv this scan cannot see."
     )

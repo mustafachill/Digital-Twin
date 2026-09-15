@@ -68,7 +68,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import time
 import unittest
 import xml.etree.ElementTree as ElementTree
@@ -81,6 +80,7 @@ import pytest
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup.gz import ModelPoses
 from cite_bringup.gz import run as gz_run
 from cite_interfaces.msg import DetectionEvent, LineState, StationState
 from cite_interfaces.qos import COMMAND, EVENT, STATE
@@ -182,20 +182,16 @@ DROP_MARGIN_M = WORKPIECE_SIZE / 2.0
 #: argument and a faster host only adds samples, so the condition does not disturb
 #: it.
 #:
-#: Not faster, because each sample is a `gz model -p` — a process and a transport
-#: node per sample — and there is nothing left to buy above the dwell times above.
+#: Not faster, because there is nothing left to buy above the dwell times above.
 #:
-#: A CORRECTION, because the first version of this comment was wrong in a way
-#: worth keeping visible. It said the simulator "started logging"
-#: `NodeShared::RecvSrvRequest() error sending response: Host unreachable` at
-#: 0.25 s, and blamed the rate. Measured across the change: 24 of 699 samples at
-#: 0.25 s and 25 of 721 at 0.5 s — the same ~3.4% either way. The losses are a
-#: property of spawning a short-lived transport node per sample, where the
-#: response can arrive after the requester has exited, and they are not
-#: rate-driven. So the rate change is justified by the dwell-time arithmetic
-#: alone, and this instrument drops about one sample in thirty at any rate. That
-#: is immaterial against the hundred-plus samples each measured milestone gets,
-#: and it is recorded rather than left to be rediscovered.
+#: Each sample used to be a `gz model -p` — a new gz-transport client process per
+#: sample. That is what the simulator's `NodeShared::RecvSrvRequest() error
+#: sending response: Host unreachable` lines were about, and it is also what hung
+#: late spawns: `gz sim` keeps a reply connection to every client address it has
+#: answered (gz-transport issue #243), so after thousands of clients a
+#: `ros_gz_sim create` given a reused port times out after 120 s (CI runs
+#: 34258470163 and 33343317444). Samples are now read from one long-lived
+#: subscription, `cite_bringup.gz.ModelPoses`; see `_workpiece_xyz`.
 SAMPLE_PERIOD_S = 0.5
 
 #: How many containment breaches are quoted in full before the rest are counted.
@@ -735,22 +731,15 @@ class TestContinuousLine(unittest.TestCase):
         )
 
     def _workpiece_xyz(self) -> tuple[float, float, float] | None:
-        """Ask the simulator where the work-piece is.
+        """Ask the simulator where the work-piece is, or None if it is not in the world.
 
         Read from Gazebo rather than from anything the system publishes: a
         component reporting success proves only that it thinks so, and the claim
-        under test is that an object physically moved. `gz model -p` prints the
-        pose as bracketed, space-separated triples, position first.
+        under test is that an object physically moved. Read from the one
+        subscription the test opened rather than from a process per sample — see
+        `SAMPLE_PERIOD_S` for what the process per sample cost.
         """
-        result = gz_run(["gz", "model", "-m", self.workpiece, "-p"], zone=ZONE, timeout=30)
-        number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
-        triples = re.findall(rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout)
-        if not triples:
-            return None
-        try:
-            return (float(triples[0][0]), float(triples[0][1]), float(triples[0][2]))
-        except ValueError:
-            return None
+        return self._poses.position(self.workpiece)
 
     def _resolve(self, frame: str) -> tuple[float, float, float]:
         """Where a generated frame is, in the facility root, according to the system."""
@@ -884,6 +873,10 @@ class TestContinuousLine(unittest.TestCase):
         )
         self.workpiece = next(iter(names))
         self.world = world_name(Path(plan.world))
+        # One pose subscription for the whole run, closed with the test so no
+        # transport node outlives it.
+        self._poses = ModelPoses(zone=ZONE, world=self.world)
+        self.addCleanup(self._poses.close)
 
         # 2. Belt footprints, from the generated world, keyed back to assets
         #    through the bring-up plan the launch file reads.
@@ -1244,7 +1237,7 @@ class TestContinuousLine(unittest.TestCase):
                 # spin → halt → predicate order `_spin_until` uses. After the test
                 # instead, this file would have two different answers to "what
                 # wins when a halt and a milestone land in the same spin", and it
-                # would pay a `gz model -p` subprocess on the way out.
+                # would take one more pose sample on the way out.
                 if self._halt is not None:
                     self._journeys.append(
                         Journey(
