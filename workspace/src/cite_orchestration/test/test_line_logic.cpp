@@ -934,12 +934,12 @@ TEST(LineTreeTest, WorkEntersTheLineOnlyWhereTheModelSaysItDoes)
   const std::size_t first = tree.xml.find("station=\"station_transfer_1\"");
   ASSERT_NE(first, std::string::npos);
   const std::string element = tree.xml.substr(first, tree.xml.find("/>", first) - first);
-  EXPECT_NE(element.find("admits_work=\"1\""), std::string::npos);
+  EXPECT_NE(element.find("admits_work=\"true\""), std::string::npos);
 
   const std::size_t second = tree.xml.find("station=\"station_transfer_2\"");
   ASSERT_NE(second, std::string::npos);
   const std::string later = tree.xml.substr(second, tree.xml.find("/>", second) - second);
-  EXPECT_NE(later.find("admits_work=\"0\""), std::string::npos);
+  EXPECT_NE(later.find("admits_work=\"false\""), std::string::npos);
 }
 
 TEST(LineTreeTest, NoStationIsEverToldToTreatAnEmptyDetectionAsAnIdleLine)

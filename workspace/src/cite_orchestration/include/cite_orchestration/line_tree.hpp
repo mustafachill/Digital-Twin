@@ -204,7 +204,7 @@ inline LineTree line_tree_xml(
     // reported failure and there is no attribute here that could ask for anything
     // else. Waiting for work is `AwaitTrigger`'s, from the sensor the topology
     // names — and `station_transfer_1` now has one (`beam_pick`).
-    body += detail::attribute("admits_work", station.upstream_is_source ? "1" : "0");
+    body += detail::attribute("admits_work", station.upstream_is_source ? "true" : "false");
     body += detail::attribute("inbound_buffer", station.inbound_buffer);
     body += detail::attribute("outbound_buffer", station.outbound_buffer);
     body += detail::attribute("move_to_action", skills.move_to);
