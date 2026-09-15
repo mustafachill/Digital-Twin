@@ -5,6 +5,14 @@
   tree.
   **[Replaced 2026-09-08, kept for the record:]** *"Proposed — nothing in this record is
   implemented."*
+  **Corrected 2026-09-15.** Decision 4 says three legs other than `on_init` hold
+  `cite_test_hardware` out of production. ADR-0054 had already removed one of them before
+  this record was rebased onto it — the hardware opt-in now refuses on a declared physical
+  fact, and a test fixture truthfully does not declare one — and the sentence recording
+  ADR-0054's effect on that leg said the conclusion was unchanged. **Two legs survive.** See
+  the section "Correction — 2026-09-15: ADR-0054 moved decision 4's second leg, and the
+  sentence recording it said it had not", below this block. Every decision stands, and so do
+  both changes decision 4 owes ADR-0040.
   **Read the rest of this record as a specification that has been satisfied, not as a
   description of the tree.** Every "will", "must" and "may not" below was a commitment when
   it was written, **and so was every sentence written in the present indicative** — *Decision*
@@ -16,7 +24,7 @@
   carries a `hardware.params` value — clause 9 rewrote it, and what it pins now is the
   unselected block's inertness.
   **What the implementing change found wrong in this record: nothing that stopped it.** Every
-  decision was implementable as written. Three notes a later reader is owed, none of them a
+  decision was implementable as written. Four notes a later reader is owed, none of them a
   correction to a decision:
   - **The measured hash differs from the one *Context* predicts**, and correctly so.
     Decision 2c's L0 edit alone was measured at `08986aa6…`; the implementing change makes
@@ -45,6 +53,21 @@
     state and dropping it is undetectable on its own. The property it stands for is therefore
     also asserted by name. Both are kept; the mutation results are in the implementing
     change's report.
+  - **A review on 2026-09-15 found three defects in the implementation, and they were fixed on
+    this branch before merge.** None is a defect in a decision; each is the implementation
+    answering a narrower question than the decision asked. **A value reached an XML attribute
+    unescaped**: `arm.urdf.xacro.j2` wrote `{{ name }}="{{ value }}"` with autoescape off, so
+    a `robot_ip` carrying a double quote became two vendor macro arguments with no finding at
+    any level. The template now escapes every argument, and the validator gained a **fifth**
+    answer, `hardware-param-contains-quote`, so clause 5's four answers are five. **An empty
+    value counted as supplied**: decision 2a's reason is about the value, and it was
+    implemented as key membership, so `robot_ip: ''` validated clean and generated the
+    `exit(1)` the decision exists to move. `HardwareSelection.supplied_params` is now the one
+    predicate both halves read, and a string empty after stripping is not supplied. **The
+    binding map was built from what the asset supplies**, so a misspelt binding was satisfied
+    by the same misspelling in `params` and clause 4's raise did not happen; it is now built
+    from what the selected backend declares. Each fix is held by a test shown failing without
+    it.
 
   **Promotion is not a claim that any physical arm has ever loaded the plugin** — see
   *What promotion does not claim*, which is a permanent clause and not a status caveat.
@@ -85,6 +108,77 @@
   [`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md),
   [`../../CLAUDE.md`](../../CLAUDE.md) §3, charter §4 (P1, P2, P5, P6, P7, P9) and §8
   (Phase 2.B)
+
+## Correction — 2026-09-15: ADR-0054 moved decision 4's second leg, and the sentence recording it said it had not
+
+### What was written
+
+Decision 4 names three legs other than `on_init` that keep `cite_test_hardware` out of
+production. The second is the hardware opt-in. On 2026-09-10 the change that re-keyed that gate
+under ADR-0054 also repaired this record's citation of it (`523ffd9`), and wrote into the leg:
+*"the gate now refuses on `commands_physical_hardware`, which the type declares per backend, so
+a fixture backend is refused for what it declares rather than for not being called `sim`. The
+conclusion is unchanged and the instrument is not"*.
+
+### What is true
+
+**The gate refuses a backend only when the plan says that backend reaches a physical
+machine.** `cite_bringup.plan.require_hardware_opt_in` collects a controller manager only
+`if physical`, from `commands_physical_hardware_on(side)`, and returns without reading
+`CITE_ALLOW_HARDWARE` when it has collected none. **A test fixture reaches no physical
+machine, so the truthful declaration for one is `false`**, and a `false` backend passes the
+gate whatever it is called: `cite_bringup/test/test_plan.py`'s
+`test_a_backend_of_any_name_declaring_no_physical_hardware_is_permitted` parametrises
+`mock_components` and `anything` among its ids and requires each to pass with an empty
+environment. ADR-0054's own decision 5 says the same of `mock_components/GenericSystem`: if it
+were ever declared, `false` *"would be correct for every gate in decision 2"*.
+
+So **the gate refuses a fixture only if L0 declares it physical, which would be a false
+declaration.** It is no longer a leg against the fixture. Before ADR-0054 it refused a fixture
+under every id except `sim`; after it, it refuses a fixture under no truthful declaration.
+
+**This is not a regression in the gate.** ADR-0054 is strictly stronger for the question the
+gate exists to answer — whether a physical arm can start by accident. The loss is confined to a
+second question the gate used to answer by coincidence: a fixture is neither `sim` nor
+physical, and only the old, name-keyed check happened to catch that.
+
+The count in decision 4, *"Three other legs survive"*, was right on the day it was written, at
+`dd6772f`, and ADR-0054 overtook it. The citation in decision 3 — the opt-in *"refuses any
+non-`sim` backend on any side"* — was written at `6d51966`, also before ADR-0054, and is
+overtaken as to mechanism only: the arm collision it describes is a **physical** arm, whose
+backend declares `true`, so the gate still arbitrates it. Both sentences carry `Overtaken`
+markers. The leg-2 sentence carries `Corrected`, because on the day it was written the gate it
+describes already permitted every `false` backend and the test above already said so.
+
+### What survives
+
+**Every decision in this record, and both changes decision 4 owes ADR-0040.** What changes is
+the count: **two legs hold the fixture out**, not three.
+
+1. `cite_test_hardware/test/test_unreachable.py`, which forbids the package name in `model/`,
+   so the fixture has no `hardware_backends` entry at all. Tested, and ADR-0054 decision 5
+   names it as the leg that bars the fixture.
+2. No vendor macro argument that could carry the fixture's three parameters. **Untested**,
+   and still the weakest.
+
+`on_init` stays weakened exactly as decision 4 says. **The fixture is therefore held out by one
+tested mechanism and one untested one**, which is a narrower margin than decision 4 records,
+and the item decision 4 hands to *What we will have to revisit* is more pressing for it.
+
+ADR-0040's 2026-09-08 amendment — written by this branch before the rebase, and never on
+`main` — carried the same stale list. It is **edited in place rather than marked**, on this
+record's own precedent in *Deciders*: a marker records how a wrong claim survived into use, and
+that text was never in use.
+
+### How the error survived
+
+The sentence was written by a documentation pass whose job was to repair **citations** — its
+subject is *"repair the 50 source citations this branch's own diff displaced"*. It found that
+the cited check had been deleted, cited its replacement, and carried the conclusion across
+without asking again the question the conclusion answers: **what does a fixture declare?** The
+answer was in a test on the same branch, parametrised over exactly the ids the leg was about. A
+citation repair can tell that a line number has moved; it cannot tell whether the sentence
+around that line number is still true, and this one was not.
 
 ## Context
 
@@ -684,7 +778,10 @@ one of them. The residual hazard is real and it is a different hazard: two check
 command that one arm at once. It is arbitrated by
 `cite_bringup.plan.require_hardware_opt_in` (`plan.py:1207-1311`), which refuses any non-`sim`
 backend on any side unless `CITE_ALLOW_HARDWARE=1` is set deliberately (`plan.py:50-51`),
-and beyond that by physical procedure — **not by the value in `model/`**. A domain collision can be arbitrated by
+and beyond that by physical procedure — **not by the value in `model/`**.
+**[Overtaken 2026-09-15 — by ADR-0054: it now refuses a backend declaring
+`commands_physical_hardware: true`, which a physical arm's does, so the arbitration this
+sentence describes still holds; see the Correction section above.]** A domain collision can be arbitrated by
 choosing a different number; an arm collision cannot be, because there is only one arm, and
 pretending otherwise is the wrong lesson to draw from `domain_offset`.
 
@@ -753,6 +850,8 @@ channel rather than about a count — but this record must not understate what t
 demands, because it is the sentence ADR-0040 is about to receive.
 
 **Three other legs survive, and none of them is `on_init`.**
+**[Overtaken 2026-09-15 — by [ADR-0054](0054-key-the-hardware-opt-in-on-a-declared-fact.md),
+which removed leg 2 below; two survive. See the Correction section above.]**
 
 1. **`cite_test_hardware/test/test_unreachable.py` forbids the token in `model/` by name.**
    Four contexts may name `cite_test_hardware` — its own package, any `.md`, anything under a
@@ -769,6 +868,9 @@ demands, because it is the sentence ADR-0040 is about to receive.
    `commands_physical_hardware`, which the type declares per backend, so a fixture backend is
    refused for what it declares rather than for not being called `sim`. The conclusion is
    unchanged and the instrument is not — read `require_hardware_opt_in`, not this number.
+   **[Corrected 2026-09-15 — a fixture reaches no physical machine and truthfully declares
+   `false`, which this gate permits under any id; the leg no longer holds the fixture out. See
+   the Correction section above.]**
 3. **The vendor's own guard leaves the fixture no route on this type.** The fixture's three
    parameters are `stop_joint`, `stop_lower_rad` and `stop_upper_rad`
    (`cite_test_hardware/include/cite_test_hardware/joint_stop_system.hpp:93-97`), and
@@ -779,6 +881,8 @@ demands, because it is the sentence ADR-0040 is about to receive.
    for every type in this model, the family decision 2 adds carries **nothing** to a fixture.
    **This is the weakest of the three legs**: it is a property of a vendor file and of a
    component library that any new type could change, and nothing tests it.
+   **[Overtaken 2026-09-15 — of the two, since ADR-0054 removed leg 2; see the Correction
+   section above.]**
 
 **The honest statement of the consequence is therefore narrower and more useful than the one
 proposed.** ADR-0040 decision 2's first structural argument survives this change, but for a

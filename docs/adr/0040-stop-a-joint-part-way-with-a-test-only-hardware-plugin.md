@@ -68,8 +68,10 @@ is false about the model and was false when this record was written, which is wh
 **The item should have read: *"if the generator ever carries `hardware.params` into a
 description"*.** Under that trigger it fires on 2026-09-08, and firing is what this amendment
 records. It is **discharged**, not merely re-worded: ADR-0053 decision 4 performs the
-re-check the item asks for, names the three legs that survive, and states which of them is
-now the weakest. The bullet below in *What we will have to revisit* carries the marker.
+re-check the item asks for, names the legs that survive, and states which of them is now the
+weakest. **It names two, not the three it first counted**: the hardware opt-in stopped being
+one when [ADR-0054](0054-key-the-hardware-opt-in-on-a-declared-fact.md) re-keyed it, which
+ADR-0053's Correction of 2026-09-15 records. The bullet below in *What we will have to revisit* carries the marker.
 
 ### 2. `on_init` is no longer the leg that carries the weight
 
@@ -103,13 +105,21 @@ is where the argument is set out in full:
 
 1. `cite_test_hardware/test/test_unreachable.py` forbids the plugin class string in `model/`,
    and selecting the fixture as a backend means writing it there. Tested.
-2. `cite_bringup.plan.require_hardware_opt_in` refuses any non-`sim` backend on any side
-   unless `CITE_ALLOW_HARDWARE=1` is set deliberately. Tested.
-3. No vendor macro in this model takes any of the fixture's three parameter names, so no
+2. No vendor macro in this model takes any of the fixture's three parameter names, so no
    `bound_args` entry can carry them and the family ADR-0053 adds delivers nothing to a
    fixture. **This is the weakest leg**: it is a property of a vendor file and of a component
    library that any new type could change, and nothing tests it. That is the review
    checkpoint the last bullet of *What we will have to revisit* now names.
+
+**`cite_bringup.plan.require_hardware_opt_in` is not on that list, and it was until this
+branch was rebased onto ADR-0054.** It refused any non-`sim` backend on any side unless
+`CITE_ALLOW_HARDWARE=1` was set. It now refuses a backend only when L0 declares that backend
+`commands_physical_hardware: true`, and a test fixture commands no physical machine, so the
+fixture's truthful declaration passes it with no opt-in — `cite_bringup/test/test_plan.py`'s
+`test_a_backend_of_any_name_declaring_no_physical_hardware_is_permitted` holds exactly that for
+`mock_components` and for an arbitrary id. It would refuse the fixture only on a false
+declaration. That is a gain for a physical arm and a loss for this question, and it leaves the
+fixture held out by one tested mechanism and one untested one.
 
 ## Amendment — 2026-09-01: a published campaign is a permitted context for the fixture's name
 
