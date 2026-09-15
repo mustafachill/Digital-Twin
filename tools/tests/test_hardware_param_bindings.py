@@ -31,6 +31,7 @@ import pytest
 from cite_tools import generate as gen
 from cite_tools.generate.description import BindingError
 from cite_tools.model.loader import load
+from cite_tools.validate import Severity, referential
 
 ARM = "arm_1"
 ADDRESS = "203.0.113.7"
@@ -189,6 +190,52 @@ class TestADeclaredKeyWithNoValueIsRefused:
         edit_yaml(real_model / "assets/instances/arms.yaml", select_real)
         assert macro_arguments(description_of(real_model, ARM))["robot_ip"] == ADDRESS
 
+    @pytest.mark.parametrize("empty", ["", "   ", "\t"])
+    def test_an_empty_value_is_not_a_supplied_one(
+        self, real_model: Path, edit_yaml: Callable, empty: str
+    ) -> None:
+        """R-01. Decision 2a's reason is about the VALUE: an address has no default
+        that could be right, and `robot_ip=""` reaches the vendor component as the
+        same `R` it answers with `exit(1)`. A test of key membership alone passes
+        a declared key holding nothing."""
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": empty}}),
+        )
+        with pytest.raises(BindingError) as raised:
+            description_of(real_model, ARM)
+        assert ARM in str(raised.value)
+        assert "instance.hardware.params.robot_ip" in str(raised.value)
+
+
+class TestTheValidatorAndTheGeneratorAgreeOnWhatSupplied:
+    """R-01: the two halves of decision 2a read one predicate.
+
+    For each value, the validator reports `missing-hardware-param` exactly when
+    the generator raises. Changing what "supplied" means in one of them and not
+    the other fails here, whichever one it is.
+    """
+
+    @pytest.mark.parametrize("value", ["", " ", "\t\n", ADDRESS, " 203.0.113.7 ", "0", 0, False])
+    def test_a_missing_finding_and_a_raise_go_together(
+        self, real_model: Path, edit_yaml: Callable, value: object
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: select_real(d, {"real": {"robot_ip": value}}),
+        )
+        model = load(real_model)
+        reported = any(
+            f.rule == "missing-hardware-param" and f.severity is Severity.ERROR
+            for f in referential.check(model)
+        )
+        try:
+            gen.generate(model)
+            raised = False
+        except BindingError:
+            raised = True
+        assert reported == raised, f"validator reported={reported}, generator raised={raised}"
+
 
 class TestTheFilterIsKeyedOnTheDeclaration:
     """Promotion clause 4 — the clause that separates decision 2b's union filter
@@ -220,6 +267,36 @@ class TestTheFilterIsKeyedOnTheDeclaration:
     ) -> None:
         edit_yaml(real_model / "assets/types/robots/xarm5.yaml", self._misspell_the_binding)
         edit_yaml(real_model / "assets/instances/arms.yaml", select_real)
+        with pytest.raises(BindingError, match="robot_ipp"):
+            description_of(real_model, ARM)
+
+    def test_a_key_the_asset_supplies_and_no_backend_declares_still_raises(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """R-02. The binding map is built from what the backend DECLARES.
+
+        Built from what the asset supplies instead, a misspelt binding is
+        satisfied by the same misspelling in `params`: the filter correctly
+        leaves it undropped, the resolver then finds a value under that name, and
+        the description carries it as `robot_ip` — so this class's docstring
+        ("must raise") is false exactly when the typo is made twice. The validator
+        reports the second one as `unexpected-hardware-param`; this is the door
+        that does not pass through it.
+
+        Every arm is put on `real` and supplies the misspelt key, so a raise can
+        only come from the resolver refusing it and not from a `sim` arm that
+        supplies nothing.
+        """
+
+        def all_real_with_the_typo_supplied(document: dict) -> None:
+            for asset in document["assets"]:
+                asset["hardware"] = {
+                    "backend": "real",
+                    "params": {"real": {"robot_ip": ADDRESS, "robot_ipp": SECOND_ADDRESS}},
+                }
+
+        edit_yaml(real_model / "assets/types/robots/xarm5.yaml", self._misspell_the_binding)
+        edit_yaml(real_model / "assets/instances/arms.yaml", all_real_with_the_typo_supplied)
         with pytest.raises(BindingError, match="robot_ipp"):
             description_of(real_model, ARM)
 

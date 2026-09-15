@@ -237,7 +237,9 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       asset does not supply. The mirror of the rule above, and the half a model
       author meets: the generator raises on the same condition (ADR-0053 decision
       2a) but a raise aborts the run, so an author fixes one key per invocation
-      instead of reading a report.
+      instead of reading a report. "Supply" is
+      `HardwareSelection.supplied_params`, which the generator reads too, and a
+      string that is empty after stripping does not count.
     * `hardware-param-contains-quote` — a value carrying a quote character, in any
       block, selected or not. A value lands in an XML attribute of the generated
       description, and a quote there is how one L0 string became two vendor macro
@@ -342,15 +344,20 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         # a loaded plugin at `on_init`. Reporting it here moves that failure from
         # the machine standing next to the arm to a laptop, and reports every
         # missing key at once rather than the first (ADR-0053 decision 2a).
-        supplied = set(params.get(chosen, {}))
+        #
+        # "Supplied" is the model's one predicate, which the generator's backstop
+        # reads as well, so the two cannot disagree about a model. A declared key
+        # holding an empty string is unsupplied: decision 2a's reason is about the
+        # value, and `robot_ip: ''` lands the same `exit(1)`.
+        supplied = set(asset.hardware.supplied_params(chosen))
         for key in sorted(set(backends[chosen].instance_params) - supplied):
             findings.append(
                 error(
                     "missing-hardware-param",
                     f"assets.{asset.id}.hardware.params.{chosen}.{key}",
                     f"backend {chosen!r} of type {asset_type.id!r} declares parameter "
-                    f"{key!r}, which this asset does not supply",
-                    f"Add it under `hardware.params.{chosen}`.",
+                    f"{key!r}, which this asset does not supply a value for",
+                    f"Add it under `hardware.params.{chosen}`. An empty value is not one.",
                 )
             )
     return findings

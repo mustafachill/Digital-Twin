@@ -171,20 +171,36 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
         ).lower(),
     }
 
-    # The one open family, resolved from the SELECTED backend's block — the same
-    # quantity `_collision_args` resolves the collision URI scheme against, and
-    # the plant's, because there is one artifact set per asset until ADR-0048
-    # clause 2 is built. Until it is, ADR-0048 clause 1 refuses any asset whose
-    # two sides differ, so both sides load the same backend and the question of
-    # which side this is cannot arise.
+    # The one open family, for the SELECTED backend — the same quantity
+    # `_collision_args` resolves the collision URI scheme against, and the
+    # plant's, because there is one artifact set per asset until ADR-0048 clause 2
+    # is built. Until it is, ADR-0048 clause 1 refuses any asset whose two sides
+    # differ, so both sides load the same backend and the question of which side
+    # this is cannot arise.
+    #
+    # KEYED ON WHAT THE BACKEND DECLARES, AND ONLY VALUED FROM THE BLOCK. The
+    # names come from `instance_params`, the field `_dropped_on_this_backend`
+    # reads, so the resolver and the filter agree about which names exist. Built
+    # from the supplied block instead, a misspelt binding was satisfied by the
+    # same misspelling in `params` and reached the description under the
+    # binding's argument name, never reaching the unknown-binding raise below.
+    #
+    # "Supplied" is `HardwareSelection.supplied_params`, the predicate the
+    # validator's `missing-hardware-param` reads too, so an empty string is not a
+    # value here either and falls through to the backstop.
     #
     # Bools are lowercased for the same reason `fixed_args` lowercases them: xacro
     # reads `true`, not Python's `True`.
     selected = asset.instance.hardware.backend
-    for key, supplied in sorted(asset.instance.hardware.params.get(selected, {}).items()):
-        values[f"{PARAMS_BINDING_PREFIX}{key}"] = (
-            str(supplied).lower() if isinstance(supplied, bool) else str(supplied)
-        )
+    selected_backend = asset.asset_type.hardware_backends.get(selected)
+    declared = selected_backend.instance_params if selected_backend is not None else ()
+    supplied = asset.instance.hardware.supplied_params(selected)
+    for key in sorted(declared):
+        if key in supplied:
+            value = supplied[key]
+            values[f"{PARAMS_BINDING_PREFIX}{key}"] = (
+                str(value).lower() if isinstance(value, bool) else str(value)
+            )
 
     # How fast the fitted end effector's drive joint may travel. Resolved from the
     # END-EFFECTOR TYPE rather than from the instance, because the rate is a fact
@@ -207,7 +223,8 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
             f"specification. Fit one, or remove the binding from the type."
         )
 
-    # A key the selected backend DECLARES and the instance does not supply. The
+    # A key the selected backend DECLARES and the instance does not supply a value
+    # for — absent, or a string that is empty after stripping. The
     # validator answers this first and in the findings report (ADR-0053 decision
     # 2a); this is the backstop for a caller that came into `generate` by another
     # door, and it raises for the same reason `_end_effector_drive_rate` does —

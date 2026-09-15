@@ -196,6 +196,25 @@ def test_two_missing_parameters_yield_two_findings(
     ]
 
 
+@pytest.mark.parametrize("empty", ["", "   ", "\t"])
+def test_a_declared_parameter_supplied_empty_is_not_supplied(
+    minimal_model: Path, edit_yaml: Callable, empty: str
+) -> None:
+    """R-01. `missing-hardware-param` answers about the VALUE, not the key.
+
+    ADR-0053 decision 2a's reason is that a connection parameter has no default
+    that could be right, and `robot_ip: ''` reaches the vendor component as the
+    same `R` it answers with `exit(1)`. Testing key membership alone passes a
+    declared key holding nothing, at every validation level.
+    """
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": "real", "params": {"real": {"robot_ip": empty}}}),
+    )
+    finding = next(f for f in _findings(minimal_model) if f.rule == "missing-hardware-param")
+    assert finding.where == "assets.arm_1.hardware.params.real.robot_ip"
+
+
 @pytest.mark.parametrize("quote", ['"', "'"])
 def test_a_quote_in_a_parameter_value(minimal_model: Path, edit_yaml: Callable, quote: str) -> None:
     """S-02, the laptop half. A value lands in an XML attribute of the generated

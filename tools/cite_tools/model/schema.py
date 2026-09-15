@@ -1229,6 +1229,32 @@ class HardwareSelection(Strict):
     #: a stale address from a planned one.
     params: dict[Identifier, dict[str, str | bool | int | float]] = Field(default_factory=dict)
 
+    def supplied_params(self, backend: str) -> dict[str, str | bool | int | float]:
+        """This instance's parameters for ``backend`` that actually carry a value.
+
+        THE ONE DEFINITION OF "SUPPLIED", and both halves of ADR-0053 decision 2a
+        read it: `validate.referential`'s `missing-hardware-param` and
+        `generate.description`'s backstop raise. Two spellings of the question
+        could disagree about a model, and the disagreement would be a model that
+        validates clean and then fails to generate, or the reverse.
+
+        A string that is empty after stripping is NOT supplied. Decision 2a's
+        reason is about the value — a connection parameter has no default that
+        could be right — and `robot_ip: ''` reaches the vendor component as the
+        same `R` it answers with `exit(1)` at `on_init`. Testing key membership
+        alone let a declared key holding nothing pass at every level.
+
+        A non-string value is supplied whatever it is: `False` and `0` are values
+        somebody wrote, and the emptiness question has no meaning for them. The
+        value itself is returned unchanged — this decides presence, and stripping
+        what is emitted would be a second, silent edit of a model value.
+        """
+        return {
+            key: value
+            for key, value in self.params.get(backend, {}).items()
+            if not (isinstance(value, str) and not value.strip())
+        }
+
     @model_validator(mode="after")
     def _counterpart_defaults_to_the_plant(self) -> HardwareSelection:
         """Apply the fallback at load, so the two spellings are one model.
