@@ -101,3 +101,55 @@ assets:
       frame: cite_world
       xyz_m: [6.200, 0.000, 0.000]
     hardware: {backend: sim}
+
+  # ------------------------------------------------------------------------ #
+  # cell_b — the one-arm cell (ADR-0055)
+  # ------------------------------------------------------------------------ #
+  #
+  # Same fixtures, same dimensions, same relative spacing as `cell_a` above,
+  # translated +3.000 m in y and nothing else. That is the whole placement rule,
+  # and it is chosen so the layout arithmetic in this file's header transfers
+  # without re-derivation: the arm still stands 0.300 m in front of the belt
+  # centreline, the pick table still ends 25 mm short of the pedestal, and the
+  # outfeed table still stands 50 mm clear of the belt's end. Those three numbers
+  # were measured for `cell_a`; re-using the x datum is what keeps them true here
+  # instead of making every distance in this cell a fresh number nobody checked.
+  #
+  # The y offset itself is sized against `cell_a`'s zone box, not against its
+  # bodies: cell_a spans y -1.200..0.800 and cell_b's zone spans 2.000..4.000, so
+  # the boxes are 1.200 m apart. See model/facility/zones.yaml for why that has to
+  # be stated rather than validated.
+  #
+  # LAYOUT STATUS: PROVISIONAL, exactly as cell_a's is. Engineered, not surveyed.
+  - id: b_pedestal_1
+    zone: cell_b
+    type: pedestal_600
+    pose:
+      frame: cite_world
+      xyz_m: [0.000, 2.700, 0.000]
+    hardware: {backend: sim}
+
+  # The cell's only pick surface. `b_transfer_1` picks from its `surface` frame,
+  # which is 0.475 m along -x and 0.300 m along -y from the arm's base: 0.5618 m,
+  # 80.3% of the xarm5's 0.700 m envelope — the same margin the cell_a comment
+  # above derives for `table_pick`, and clean against COMFORTABLE_REACH_FRACTION.
+  - id: b_table_pick
+    zone: cell_b
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [-0.475, 3.000, 0.000]
+    hardware: {backend: sim}
+
+  # Where the belt delivers. `b_accumulation` is a sink with no actor, so nothing
+  # picks from this table and its surface is never a station point — it exists to
+  # catch what runs off `b_conveyor_1`, at the belt's own 0.600 m surface height.
+  # Its near face stands at x = 1.700 against the belt's end at 1.650: the same
+  # 50 mm of designed air cell_a leaves between conveyor_3 and table_accumulation.
+  - id: b_table_out
+    zone: cell_b
+    type: work_table_600
+    pose:
+      frame: cite_world
+      xyz_m: [2.000, 3.000, 0.000]
+    hardware: {backend: sim}

@@ -63,3 +63,59 @@ stations:
     # A sink has no actor, so this is not what starts work: nothing at a sink
     # acts. It is what makes the arrival observed rather than assumed.
     trigger: {sensor: beam_c3_out, state: blocked}
+
+  # ------------------------------------------------------------------------ #
+  # cell_b — the one-arm cell (ADR-0055)
+  # ------------------------------------------------------------------------ #
+  #
+  # THREE STATIONS IS THE MINIMUM, AND IT IS ENFORCED RATHER THAN STYLISTIC.
+  # `line_plan.hpp` refuses a topology with no transfer station, and refuses a
+  # transfer station that has other than exactly one upstream and one downstream
+  # neighbour; `schema.py` requires at least one flow edge and `referential.py`
+  # refuses a self-edge. With one arm there is exactly one possible actor, so the
+  # two remaining slots must be a source and a sink. A two-station cell cannot be
+  # written.
+  #
+  # EVERY ID BELOW NAMES A `cell_b` ASSET, AND NOTHING CHECKS THAT EITHER.
+  # `referential.py` resolves station and flow references against GLOBALLY known
+  # ids, so naming `arm_1` here would pass referential validation and then skip
+  # its reach check in silence, because the geometric level only ever sees one
+  # zone's assets. Filed as a validator gap in docs/open-work.md.
+  - id: b_infeed
+    zone: cell_b
+    type: source_station
+    assets: [b_table_pick]
+    capacity: 6
+
+  # The cell's only acting station: pick off the table, place on the belt.
+  #
+  # ADR-0031's DIRECT-HANDOFF REFUSAL IS STRUCTURALLY UNREACHABLE HERE, and that
+  # is not the gate being relaxed. `line_plan.hpp` computes `receiver_is_a_robot`
+  # as "downstream is not a sink and names an actor", and a source or sink may not
+  # name an actor at all. With one arm the downstream neighbour is always the
+  # sink, so the condition cannot be true — the refusal is still armed, there is
+  # simply no second robot in this cell to hand a part to. A later reader
+  # comparing cell_a's topology with this one should not read the absence of a
+  # refusal as a decision.
+  #
+  # Its inbound edge is `via: null`, which costs this cell ADR-0039's detector
+  # entirely; see model/topology/flow_cell_b.yaml, where that edge is declared,
+  # for what remains.
+  - id: b_transfer_1
+    zone: cell_b
+    type: transfer_station
+    actor: b_arm_1
+    assets: [b_arm_1, b_pedestal_1]
+    pick_from: {asset: b_table_pick, frame: surface}
+    place_to: {asset: b_conveyor_1, frame: infeed}
+    trigger: {sensor: b_beam_pick, state: blocked}
+
+  # The sink. It has a trigger and no actor: nothing here acts, and the trigger is
+  # what makes the arrival observed rather than counted when the arm let go —
+  # which is a statement about a gripper and not about the table.
+  - id: b_accumulation
+    zone: cell_b
+    type: sink_station
+    assets: [b_table_out]
+    capacity: 12
+    trigger: {sensor: b_beam_out, state: blocked}

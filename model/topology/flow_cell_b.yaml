@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=../schema/flow.schema.json
+schema: cite/flow/v1
+
+# `cell_b`'s process flow (ADR-0055). A SEPARATE FILE BECAUSE IT HAS TO BE:
+# `FlowDocument` holds exactly one `flow`, so a second zone's edges cannot join
+# flow.yaml. The loader globs every *.yaml under model/ and dispatches on the
+# document's own `schema:` key, so the file name carries no meaning beyond
+# telling a reader which zone they are looking at.
+#
+# THIS FILE IS NOT OPTIONAL, AND ITS ABSENCE WOULD BE SILENT. A zone with no flow
+# document generates no topology at all — `cite_tools.generate.topology` returns
+# early when it finds no flow for the zone — and with no topology the
+# `unreachable-station` check never runs either, so the model would validate
+# clean while `cell_b` came up with no line to run. That is the likeliest way
+# this cell could be non-functional and green at the same time, so it is pinned
+# by a test rather than described: see
+# tools/tests/test_every_zone_has_a_flow_document.py, which fails if any declared
+# zone loses its flow.
+#
+# TABLE -> ARM -> BELT, in two edges. The arm picks a part off `b_table_pick` and
+# places it on `b_conveyor_1/infeed`; the belt carries it out of the cell to
+# `b_table_out`. Three stations is the minimum a coordinator will accept — see
+# the cell_b block in stations.yaml for the four rules that enforce it.
+#
+# THE FIRST EDGE IS `via: null`, AND THAT COSTS THIS CELL ADR-0039's DETECTOR.
+# `line_nodes.hpp` derives the belt a station indexes from its INBOUND edge and
+# returns `nullopt` immediately when that edge names no conveyor, so a
+# table-fed station has no belt setpoint to read and `untriggerable_reason` is
+# structurally silent there. `b_transfer_1` is this cell's only acting station,
+# so the cell's belt-side stall coverage is not reduced — it is zero. What
+# remains is ADR-0046's custody rule: a station that still holds its work-piece
+# is refused its retry and goes STATE_BLOCKED, which is what stops this cell
+# dead-ending in silence the way `station_transfer_1` did in cell_a.
+#
+# ADR-0055 accepts that deliberately. The alternative shape — feeding the arm
+# FROM a belt — would keep ADR-0039 live, at the cost of making three geometric
+# indexing rules live too, and it is not the flow that was chosen.
+#
+# NO EDGE IN THIS CELL CAN BE A DIRECT ARM-TO-ARM HANDOFF, so ADR-0031's refusal
+# in `line_plan.hpp` is unreachable here rather than relaxed; stations.yaml
+# carries the argument.
+flow:
+  id: cell_b_pick_and_place
+  zone: cell_b
+  edges:
+    # Fed from outside the cell onto a table. `buffer: 6` is `b_infeed`'s own
+    # capacity: the table holds what the source station says it holds.
+    - {from: b_infeed, to: b_transfer_1, via: null, buffer: 6}
+    # 1.2 m of belt holds four 50 mm pieces comfortably. Unlike cell_a's indexed
+    # edges, this 4 is also the effective concurrency: nothing stops this belt,
+    # because `b_accumulation` is a sink with no handoff to complete, so pieces
+    # on it keep moving.
+    - {from: b_transfer_1, to: b_accumulation, via: b_conveyor_1, buffer: 4}

@@ -21,3 +21,40 @@ zones:
     # the asset that acquired hardware does.
     twin:
       sides: single
+
+  - id: cell_b
+    name: One-arm pick-and-place cell
+    bounds:
+      kind: aabb
+      frame: cite_world
+      # PLACED CLEAR OF `cell_a` IN +Y, AND NOTHING CHECKS THAT. Zones are
+      # validated one at a time — `cite_tools.validate.geometric.check` is handed
+      # a single `ResolvedCell` (cli.py runs it once per zone) and
+      # `_no_overlapping_bodies` only ever sees that zone's assets — so a zone
+      # declared inside another produces zero findings and a world with two cells
+      # interpenetrating. The separation below is therefore a stated design fact
+      # rather than an enforced one, and is filed as a validator gap in
+      # docs/open-work.md.
+      #
+      #   cell_a  y -1.200 .. 0.800
+      #   cell_b  y  2.000 .. 4.000     ->  1.200 m of clear air between the boxes
+      #
+      # The two boxes overlap in x on purpose: `cell_b` reuses `cell_a`'s x
+      # datum so that every relative dimension inside it — the 0.300 m arm
+      # standoff, the 0.050 m belt transfer inset, the 25 mm and 50 mm fixture
+      # clearances — is the SAME number that cell_a's layout comment derives and
+      # that its reach margins were measured at. Offsetting in +y alone keeps
+      # that arithmetic transferable; offsetting in x as well would have made
+      # every distance in this cell a new number nobody has checked.
+      #
+      # Only one zone is up at a time (ADR-0055 decision 3), so this separation
+      # buys correctness of the model rather than isolation at run time — the run-
+      # time collisions are on ROS names, not on geometry, and are the reason for
+      # the one-zone-at-a-time rule.
+      min_m: [-1.000, 2.000, 0.000]
+      max_m: [3.000, 4.000, 2.500]
+    # Single, deliberately. ADR-0055 declares `cell_b` unpaired and records that
+    # flipping it to `pair` is a separate change with its own record — nothing
+    # starts L5 today, so a pair would come up with no twin boundary.
+    twin:
+      sides: single

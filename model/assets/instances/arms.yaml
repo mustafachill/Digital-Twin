@@ -72,3 +72,46 @@ assets:
       home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
     registration:
       status: unregistered
+
+  # ------------------------------------------------------------------------ #
+  # cell_b — the one-arm cell (ADR-0055)
+  # ------------------------------------------------------------------------ #
+  #
+  # THE ID CARRIES THE ZONE BECAUSE NOTHING ELSE DOES. `cite_tools.model.ids`
+  # namespaces topics, actions and frames by zone, but joint, link, controller
+  # and `_mount` names are built from the ASSET id alone, and
+  # `referential.py` requires asset ids to be unique across the whole facility
+  # rather than per zone. A second `arm_1` would collide on every one of those,
+  # in a generated artifact, with no finding. Hence `b_`.
+  #
+  # THE DOUBLED LETTER IN `cell_b_b_arm_1.urdf.xacro` IS NOT A TYPO. Generated
+  # artifact names are `<zone>_<asset>`, so a `b_`-prefixed asset in `cell_b`
+  # stutters. The prefix is kept anyway: an asset id travels bare into controller
+  # names, joint names, link names and every log line that mentions them, and in
+  # all of those the zone is the one thing NOT already in scope. A role name such
+  # as `picker` would read better in a filename and would leave a reader of
+  # `picker_joint3` with no way to tell which cell it belongs to.
+  #
+  # Everything else about this arm is `arm_1`: same type, same vendor-integrated
+  # gripper, same home pose, standing on its own pedestal's `top` frame and yawed
+  # +90 degrees to face the belt centreline at +Y. The cell it works in differs;
+  # the arm does not.
+  - id: b_arm_1
+    zone: cell_b
+    type: xarm5
+    pose:
+      frame: b_pedestal_1/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    # `sim` on both sides. ADR-0048 clause 1 refuses an asset whose two sides
+    # declare different backends, and ADR-0055 leaves hardware to Phase 2.B.
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    registration:
+      status: unregistered
