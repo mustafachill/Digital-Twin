@@ -40,15 +40,42 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.node import Node
 
-ZONE = "cell_a"
-ARM = "arm_1"
+#: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE.
+#:
+#: `ARM`, `PICK_FRAME` and `PLACE_FRAME` stood here beside it until ADR-0055 and
+#: are now read from the generated plan and topology in `setUpClass`. They were
+#: correct, and that was the problem: a scenario that spells a cell's arm and its
+#: two station frames is pinned to one layout, so pointing it at another cell
+#: means editing four constants and hoping they agree with the model. The zone is
+#: the only thing anyone should have to choose.
+#:
+#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and comes up
+#: on demand with `./scripts/sim --zone cell_a`. It is no longer driven by this
+#: scenario — a deliberate reduction in regression coverage, recorded in
+#: ADR-0055's consequences.
+ZONE = "cell_b"
+
+#: The Gazebo model name of the part. A FACILITY fact and not a cell one —
+#: `facility.workpiece_models` in the L0 model is facility-scoped, so both zones
+#: handle the same declared part and this name is the same in either. It stays a
+#: constant here for that reason, not by omission.
 WORKPIECE = "workpiece"
 
-#: The frames station_transfer_1 names in the L0 topology. The scenario passes
-#: these names to the coordinator and resolves them through TF for its own
-#: measurements; it never writes the coordinates they stand for.
-PICK_FRAME = f"{ZONE}__table_pick__surface"
-PLACE_FRAME = f"{ZONE}__conveyor_1__infeed"
+
+def cell(zone: str) -> tuple:
+    """The generated bring-up plan and process topology for ``zone``.
+
+    Imported inside the function rather than at module scope, as
+    `continuous_line.py` does: `tests/scenarios/guards/` loads this module with
+    ROS stubbed out, and `plan.load` reads a file out of the built workspace,
+    which a guard has no reason to require.
+    """
+    import yaml
+    from cite_bringup.plan import default_plan_path, load
+
+    plan = load(default_plan_path(zone))
+    return plan, yaml.safe_load(Path(plan.topology).read_text())["topology"]
+
 
 WORKPIECE_SIZE = 0.05
 
@@ -229,6 +256,36 @@ class TestPickAndPlace(unittest.TestCase):
         cls.node = Node("scenario_pick_and_place")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
 
+        # The station this scenario drives, and the arm that serves it, read off
+        # the generated topology in flow order rather than named. The topology is
+        # emitted alphabetically, so "the first station that picks and places"
+        # has to be found by walking the edges — reading the list in file order
+        # would find whichever id sorts first, which is the sink.
+        plan, topology = cell(ZONE)
+        stations = {station["id"]: station for station in topology["stations"]}
+        acting = [
+            stations[edge["from"]]
+            for edge in topology["edges"]
+            if stations[edge["from"]].get("pick_frame")
+        ]
+        assert acting, f"the topology for {ZONE} declares no station that picks and places"
+        cls.station = acting[0]
+        cls.pick_frame = cls.station["pick_frame"]
+        cls.place_frame = cls.station["place_frame"]
+        cls.arm = cls.station["actor"]
+
+        managers = {m.asset: m for m in plan.controller_managers}
+        assert cls.arm in managers, (
+            f"{cls.station['id']} names actor {cls.arm!r}, which the bring-up plan for "
+            f"{ZONE} declares no controller manager for"
+        )
+        # Every action the coordinator is told to call. The plan states these —
+        # this file used to compose them from the zone and the asset under a
+        # comment saying "nothing generated declares a station's skill actions
+        # yet", which had stopped being true.
+        cls.skills = managers[cls.arm].skills
+        assert cls.skills is not None, f"the plan declares no skill actions for {cls.arm}"
+
     @classmethod
     def tearDownClass(cls) -> None:
         cls.node.destroy_node()
@@ -389,7 +446,7 @@ class TestPickAndPlace(unittest.TestCase):
         from cite_interfaces.action import MoveTo
         from rclpy.action import ActionClient
 
-        client = ActionClient(self.node, MoveTo, f"/cite/{ZONE}/{ARM}/move_to")
+        client = ActionClient(self.node, MoveTo, self.skills.move_to)
         self._spin_until(
             lambda: client.wait_for_server(timeout_sec=1.0) or None,
             BRING_UP_CEILING_S,
@@ -405,8 +462,8 @@ class TestPickAndPlace(unittest.TestCase):
         # the buffer, and every later lookup then fails for a reason that has
         # nothing to do with the frames it names.
         self._listener = tf2_ros.TransformListener(buffer, self.node)
-        pick = self._resolve(buffer, PICK_FRAME)
-        place = self._resolve(buffer, PLACE_FRAME)
+        pick = self._resolve(buffer, self.pick_frame)
+        place = self._resolve(buffer, self.place_frame)
 
         # 3. Put a work-piece on the pick surface, resting on it rather than
         #    intersecting it.
@@ -467,10 +524,9 @@ class TestPickAndPlace(unittest.TestCase):
         )
         # The coordinator builds no name. Every action it calls, and the
         # work-piece it handles, arrive as parameters — see line_coordinator.cpp.
-        # They are written here for now because nothing generated declares a
-        # station's skill actions yet; when the topology artifact does, this
-        # block reads them from it instead.
-        skills = f"/cite/{ZONE}/{ARM}"
+        # Every one of them is now read from the generated plan and topology in
+        # `setUpClass`, which is what the superseded version of this comment said
+        # would happen "when the topology artifact does" — it already did.
         command = [
             "ros2",
             "run",
@@ -480,22 +536,22 @@ class TestPickAndPlace(unittest.TestCase):
             "-p",
             f"tree:={tree}",
             "-p",
-            f"asset:={ARM}",
+            f"asset:={self.arm}",
             "-p",
             f"workpiece:={WORKPIECE}",
             "-p",
-            f"move_to_action:={skills}/move_to",
+            f"move_to_action:={self.skills.move_to}",
             "-p",
-            f"pick_action:={skills}/pick",
+            f"pick_action:={self.skills.pick}",
             "-p",
-            f"place_action:={skills}/place",
+            f"place_action:={self.skills.place}",
             "-p",
-            f"pick_frame:={PICK_FRAME}",
-            # Where station_transfer_1 places, per the L0 topology: the first
-            # conveyor's infeed. The scenario names the frame, never a
-            # coordinate — that is the property the model exists to give.
+            f"pick_frame:={self.pick_frame}",
+            # Where this station places, per the L0 topology. The scenario names
+            # the frame, never a coordinate — that is the property the model
+            # exists to give.
             "-p",
-            f"place_frame:={PLACE_FRAME}",
+            f"place_frame:={self.place_frame}",
             "-p",
             "use_sim_time:=true",
         ]
@@ -507,8 +563,8 @@ class TestPickAndPlace(unittest.TestCase):
         context = (
             f"seed={self.seed} (a condition this run was produced under, not a "
             "reproducibility claim — see SEED_VARIABLE and ADR-0027)\n"
-            f"pick frame {PICK_FRAME} at {pick}\n"
-            f"place frame {PLACE_FRAME} at {place}\n"
+            f"pick frame {self.pick_frame} at {pick}\n"
+            f"place frame {self.place_frame} at {place}\n"
             f"resting={resting}, highest z={highest:.3f}, final={final}\n"
             f"coordinator {outcome.summary}\n"
             f"--- coordinator stdout ---\n{outcome.stdout[-3000:]}\n"
@@ -528,7 +584,7 @@ class TestPickAndPlace(unittest.TestCase):
         self.assertLess(
             horizontal,
             PLACE_TOLERANCE_M,
-            f"the work-piece was lifted but did not arrive at {PLACE_FRAME}; it is "
+            f"the work-piece was lifted but did not arrive at {self.place_frame}; it is "
             f"{horizontal:.3f} m away in the horizontal plane.\n" + context,
         )
 
@@ -544,7 +600,7 @@ class TestPickAndPlace(unittest.TestCase):
         self.assertLess(
             vertical,
             PLACE_HEIGHT_TOLERANCE_M,
-            f"the work-piece arrived over {PLACE_FRAME} but is not resting on it; "
+            f"the work-piece arrived over {self.place_frame} but is not resting on it; "
             f"its centre is at z={final[2]:.3f} m against an expected "
             f"{expected_z:.3f} m ({vertical:.3f} m away). Higher than expected "
             "means it was never released; lower means it did not stay on the "

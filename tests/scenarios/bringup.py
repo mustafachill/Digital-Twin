@@ -40,8 +40,36 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-ZONE = "cell_a"
-ARMS = ("arm_1", "arm_2", "arm_3")
+#: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE, and
+#: it took `ARMS`, four frame literals and three controller-name suffixes with it
+#: when it stopped being the only one (ADR-0055).
+#:
+#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and is
+#: brought up on demand with `./scripts/sim --zone cell_a`. It is no longer
+#: driven by this scenario, which is a deliberate reduction in regression
+#: coverage recorded in ADR-0055's consequences. Pointing this constant back at
+#: it is all it takes to run this scenario against it, and NOTHING ELSE IN THIS
+#: FILE NEEDS TO CHANGE — that is the property the parameterisation bought, and
+#: the reason the literals below had to go rather than be re-spelled for cell_b.
+ZONE = "cell_b"
+
+
+def cell(zone: str) -> tuple:
+    """The generated bring-up plan and process topology for ``zone``.
+
+    Imported inside the function rather than at module scope. `cite_bringup` is a
+    workspace package, and `tests/scenarios/guards/` loads this module on a host
+    with no ROS overlay to check its shape; a module-level import would make
+    every guard depend on a built workspace. `continuous_line.py` does the same
+    thing in `test_the_line_carries_every_workpiece_from_pick_to_accumulation`,
+    for the same reason.
+    """
+    import yaml
+    from cite_bringup.plan import default_plan_path, load
+
+    plan = load(default_plan_path(zone))
+    return plan, yaml.safe_load(Path(plan.topology).read_text())["topology"]
+
 
 #: The five axes of an xArm 5.
 ARM_JOINT_SUFFIXES = tuple(f"joint{n}" for n in range(1, 6))
@@ -65,6 +93,15 @@ FOLLOWER_JOINT_SUFFIXES = (
 #: Every joint one arm publishes. Written once, because more than one test below
 #: asserts against it and they must not be able to disagree.
 JOINT_SUFFIXES = (*ARM_JOINT_SUFFIXES, DRIVE_JOINT_SUFFIX, *FOLLOWER_JOINT_SUFFIXES)
+
+#: The same quantity stated a second time, on purpose, and stated per ARM rather
+#: than per cell. `test_joint_names_do_not_collide` asserts against both, so a
+#: `JOINT_SUFFIXES` that silently lost an entry fails rather than lowering the
+#: expectation with it. It used to be the whole-cell total `33`, which was three
+#: arms times this number — a figure that stopped being true the moment a cell
+#: with a different number of arms was driven, while the fact it was guarding
+#: (five axes, one drive joint, five linkage followers) did not change at all.
+JOINTS_PER_ARM = 11
 
 
 def joints_of(arm: str) -> set[str]:
@@ -121,6 +158,12 @@ class TestCellBringUp(unittest.TestCase):
     def setUpClass(cls) -> None:
         rclpy.init()
         cls.node = Node("scenario_bringup")
+        # Every asset, controller, topic, action and frame this scenario asserts
+        # against comes from here. An arm is a controller manager that carries a
+        # MoveIt configuration, which is what distinguishes it from a belt.
+        cls.plan, cls.topology = cell(ZONE)
+        cls.arms = tuple(m for m in cls.plan.controller_managers if m.moveit is not None)
+        assert cls.arms, f"the generated plan for {ZONE} declares no arm"
         # No seed is read here. There was a `cls.seed` that nothing used, beside
         # a comment claiming scenarios are deterministic — a claim this
         # repository cannot currently support, because the physics solver is
@@ -277,29 +320,31 @@ class TestCellBringUp(unittest.TestCase):
 
     def test_every_controller_reaches_active(self) -> None:
         """Bring-up completes, on this machine, without any step being timed."""
-        for arm in ARMS:
-            manager = f"/cite/{ZONE}/{arm}/controller_manager"
-            client = self.node.create_client(ListControllers, f"{manager}/list_controllers")
+        for arm in self.arms:
+            node = arm.node
+            client = self.node.create_client(ListControllers, f"{node}/list_controllers")
             self._spin_until(
                 lambda c=client: c.wait_for_service(timeout_sec=0.5) or None,
                 BRING_UP_CEILING_S,
-                f"{manager} to appear",
+                f"{node} to appear",
             )
 
-            def active(c=client, a=arm):
+            # The controllers the plan declares for this manager, rather than the
+            # three names this test used to compose. Composing them asserted that
+            # the strings this file wrote matched the strings the generator wrote,
+            # which is only the same question while one file copies the other.
+            expected = {controller.name for controller in arm.controllers}
+            self.assertTrue(expected, f"the plan declares no controller for {arm.asset}")
+
+            def active(c=client, want=expected):
                 future = c.call_async(ListControllers.Request())
                 rclpy.spin_until_future_complete(self.node, future, timeout_sec=10.0)
                 if future.result() is None:
                     return None
                 names = {ctrl.name for ctrl in future.result().controller if ctrl.state == "active"}
-                expected = {
-                    f"{a}_joint_state_broadcaster",
-                    f"{a}_joint_trajectory_controller",
-                    f"{a}_gripper_controller",
-                }
-                return names if expected <= names else None
+                return names if want <= names else None
 
-            self._spin_until(active, BRING_UP_CEILING_S, f"{arm}'s controllers to be active")
+            self._spin_until(active, BRING_UP_CEILING_S, f"{arm.asset}'s controllers to be active")
 
     def test_joint_states_are_actually_delivered(self) -> None:
         """Not that a subscriber exists — that a message ARRIVES.
@@ -308,9 +353,9 @@ class TestCellBringUp(unittest.TestCase):
         both endpoints show in `ros2 topic info`, and no error is raised anywhere.
         Only asserting on receipt catches it.
         """
-        for arm in ARMS:
+        for arm in self.arms:
             received: list[JointState] = []
-            topic = f"/cite/{ZONE}/{arm}/joint_states"
+            topic = arm.joint_state_topic
             subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
             try:
                 # `received` is bound as a default argument, not captured. Each
@@ -349,9 +394,9 @@ class TestCellBringUp(unittest.TestCase):
         eighteen joints and write to them every cycle.
         """
         owners: dict[str, str] = {}
-        for arm in ARMS:
+        for arm in self.arms:
             received: list[JointState] = []
-            topic = f"/cite/{ZONE}/{arm}/joint_states"
+            topic = arm.joint_state_topic
             subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
             try:
                 self._spin_until(
@@ -363,11 +408,12 @@ class TestCellBringUp(unittest.TestCase):
                     self.assertNotIn(
                         joint,
                         owners,
-                        f"{joint} is published by both {owners.get(joint)} and {arm}; "
+                        f"{joint} is published by both {owners.get(joint)} and "
+                        f"{arm.asset}; "
                         "the L0 asset-id prefix is what keeps two instances of one "
                         "component type apart, and it is missing here",
                     )
-                    owners[joint] = arm
+                    owners[joint] = arm.asset
             finally:
                 self.node.destroy_subscription(subscription)
         # Three five-axis arms, each with a gripper whose drive joint and five
@@ -382,8 +428,8 @@ class TestCellBringUp(unittest.TestCase):
         # `test_the_gripper_linkage_is_actually_coupled` asserts that they TRACK
         # the drive joint. A count alone would pass again the day the patch is
         # reverted and the followers reappear as five joints that never move.
-        self.assertEqual(len(owners), len(ARMS) * len(JOINT_SUFFIXES), sorted(owners))
-        self.assertEqual(len(owners), 33, sorted(owners))
+        self.assertEqual(len(owners), len(self.arms) * len(JOINT_SUFFIXES), sorted(owners))
+        self.assertEqual(len(owners), len(self.arms) * JOINTS_PER_ARM, sorted(owners))
 
     def test_the_gripper_linkage_is_actually_coupled(self) -> None:
         """The five follower joints track `drive_joint`, rather than merely existing.
@@ -403,8 +449,10 @@ class TestCellBringUp(unittest.TestCase):
         Commanding the gripper is what makes this test able to fail: at rest every
         joint reads zero and any broken coupling looks perfect.
         """
-        arm = ARMS[0]
-        action = f"/cite/{ZONE}/{arm}/{arm}_gripper_controller/gripper_cmd"
+        manager = self.arms[0]
+        arm = manager.asset
+        action = manager.gripper_action
+        self.assertIsNotNone(action, f"the plan declares no gripper action for {arm}")
         client = ActionClient(self.node, GripperCommand, action)
         self._spin_until(
             lambda: client.wait_for_server(timeout_sec=0.5) or None,
@@ -430,7 +478,7 @@ class TestCellBringUp(unittest.TestCase):
         self.assertIsNotNone(result.result(), "the gripper never reported a result")
 
         received: list[JointState] = []
-        topic = f"/cite/{ZONE}/{arm}/joint_states"
+        topic = manager.joint_state_topic
         subscription = self.node.create_subscription(JointState, topic, received.append, STATE)
         try:
             # Read a state published after the close finished, not one buffered
@@ -501,8 +549,10 @@ class TestCellBringUp(unittest.TestCase):
 
     def test_a_trajectory_executes(self) -> None:
         """The arm moves when commanded, through the action the skills will use."""
-        arm = ARMS[0]
-        action = f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/follow_joint_trajectory"
+        manager = self.arms[0]
+        arm = manager.asset
+        action = manager.trajectory_action
+        self.assertIsNotNone(action, f"the plan declares no trajectory action for {arm}")
         client = ActionClient(self.node, FollowJointTrajectory, action)
         self._spin_until(
             lambda: client.wait_for_server(timeout_sec=0.5) or None,
@@ -561,6 +611,22 @@ class TestCellBringUp(unittest.TestCase):
         finally:
             self.node.destroy_subscription(subscription)
 
+    def _acting_station(self) -> dict:
+        """The zone's first station that actually picks and places something.
+
+        Read off the generated topology, in flow order, so that it is the same
+        station a coordinator would drive rather than whichever one sorts first —
+        the topology is emitted alphabetically, which puts the sink at the top.
+        """
+        stations = {s["id"]: s for s in self.topology["stations"]}
+        acting = [
+            stations[edge["from"]]
+            for edge in self.topology["edges"]
+            if stations[edge["from"]].get("pick_frame")
+        ]
+        self.assertTrue(acting, f"the topology for {ZONE} declares no acting station")
+        return acting[0]
+
     def test_station_frames_resolve_against_the_world(self) -> None:
         """Without this an arm's model is a disconnected TF tree.
 
@@ -570,14 +636,30 @@ class TestCellBringUp(unittest.TestCase):
         """
         import tf2_ros
 
+        # The two ends of the chain, both read from what the generator emitted:
+        # a station point in facility coordinates, and the arm's own planning
+        # frame. What this test is about is that they are connected, and it used
+        # to name all four frames literally — `cell_a__table_pick__surface`,
+        # `cell_a__conveyor_1__infeed`, `arm_1_mount`, `arm_1_link_base` — which
+        # made it a test of one cell's layout as well as of the TF tree.
+        #
+        # `_mount` is composed rather than read, and it is the one frame in this
+        # list the plan does not carry: it is the joint between the facility's
+        # static frames and the arm's own description, and it is exactly the link
+        # whose absence this test exists to catch. It is a generated name, so
+        # composing it here is a second statement of it; a plan field for it
+        # would be a new generated key and therefore ADR-0021 territory, which
+        # ADR-0055 does not open. `cell_b_static_tf.yaml` is where it comes from.
+        station = self._acting_station()
+        arm = self.arms[0]
         buffer = tf2_ros.Buffer()
         listener = tf2_ros.TransformListener(buffer, self.node)
         try:
             for frame in (
-                f"{ZONE}__table_pick__surface",
-                f"{ZONE}__conveyor_1__infeed",
-                "arm_1_mount",
-                "arm_1_link_base",
+                station["pick_frame"],
+                station["place_frame"],
+                f"{arm.asset}_mount",
+                arm.moveit.base_link,
             ):
                 self._spin_until(
                     lambda target=frame: buffer.can_transform(
@@ -596,8 +678,10 @@ class TestCellBringUp(unittest.TestCase):
         `home` comes from the L0 model, not from the vendor's SRDF — where an arm
         rests between cycles is a fact about this facility.
         """
-        arm = ARMS[0]
-        client = ActionClient(self.node, MoveTo, f"/cite/{ZONE}/{arm}/move_to")
+        manager = self.arms[0]
+        arm = manager.asset
+        self.assertIsNotNone(manager.skills, f"the plan declares no skills for {arm}")
+        client = ActionClient(self.node, MoveTo, manager.skills.move_to)
         self._spin_until(
             lambda: client.wait_for_server(timeout_sec=0.5) or None,
             BRING_UP_CEILING_S,
