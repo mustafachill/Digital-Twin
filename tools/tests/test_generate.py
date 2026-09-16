@@ -28,6 +28,24 @@ def artifacts(path: Path) -> dict[str, str]:
     return {a.path: a.content for a in gen.generate(load(path))}
 
 
+def per_zone(path: Path, template: str) -> list[str]:
+    """One artifact path per declared zone, sorted, from ``template``.
+
+    Three assertions below are of the form "exactly one of this artifact exists,
+    per zone", and each of them used to spell the answer as a one-element list
+    naming `cell_a`. That made them assertions about how many cells the facility
+    declares as well as about the property they were written for, and declaring
+    `cell_b` (ADR-0055) falsified all three at once while the property each was
+    protecting held perfectly.
+
+    Derived from the model rather than listed, so the next zone falsifies none of
+    them. The sort is on the formatted path and not on the zone id: they coincide
+    while every template has a constant prefix, and relying on that would be a
+    coincidence rather than a reason.
+    """
+    return sorted(template.format(zone=zone.id) for zone in load(path).zones)
+
+
 class TestDeterminism:
     def test_two_runs_are_byte_identical(self, real_model: Path) -> None:
         assert artifacts(real_model) == artifacts(real_model)
@@ -1084,7 +1102,7 @@ class TestTwinSidesAndTheGazeboPartition:
         carrying = sorted(
             path for path, text in artifacts(real_model).items() if "gz_partition" in text
         )
-        assert carrying == ["bringup/cell_a_plan.yaml"]
+        assert carrying == per_zone(real_model, "bringup/{zone}_plan.yaml")
 
     def test_an_untwinned_zone_still_declares_one_fully_isolated_side(
         self, real_model: Path
@@ -1224,9 +1242,17 @@ class TestTwinSidesAndTheGazeboPartition:
         # be duplicated by reflex. A second world would be the same bytes under a
         # second name; what makes two `gz sim` servers on one host separate is
         # the partition each is started with, not a second file (ADR-0042).
+        #
+        # ONE PER ZONE, WHICH IS THE CLAIM — not one in total. A zone genuinely
+        # has its own world, so the quantity that must not move when a zone is
+        # paired is the count per zone, and this used to state it as the literal
+        # `["worlds/cell_a.sdf"]` because there was only ever one zone. Pairing
+        # `cell_a` must leave BOTH sides of that equality alone.
+        before = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
         self._pair(real_model, edit_yaml)
         worlds = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
-        assert worlds == ["worlds/cell_a.sdf"]
+        assert worlds == per_zone(real_model, "worlds/{zone}.sdf")
+        assert worlds == before, "pairing a zone emitted a world it did not have unpaired"
 
     def test_unpairing_a_zone_returns_the_tree_on_disk_to_exactly_where_it_was(
         self, real_model: Path, edit_yaml: Callable, tmp_path: Path
@@ -1325,7 +1351,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # a fact about a deployment; a description, a world or a controller
         # config that carried one would be a second statement of it.
         carrying = sorted(path for path, text in produced.items() if "domain_offset" in text)
-        assert carrying == ["bringup/cell_a_plan.yaml"]
+        assert carrying == per_zone(real_model, "bringup/{zone}_plan.yaml")
 
     def test_a_paired_zone_generates_byte_identically_across_runs(
         self, real_model: Path, edit_yaml: Callable

@@ -1,14 +1,18 @@
 # L0 — Facility model
 
-- **Status:** `BUILT` — `model/` describes the cell (1 zone, 7 types, **15** assets, 5
-  stations, across 15 files) and the generators in `tools/cite_tools/generate/` emit every
-  artifact in the table below except the last two. All five validation levels run:
+- **Status:** `BUILT` — `model/` describes **two cells** (2 zones, 7 types, **22** assets, 8
+  stations, across 16 files) and the generators in `tools/cite_tools/generate/` emit every
+  artifact in the table below except the last two, **once per zone**. All five validation
+  levels run:
   `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
   **and** a determinism check that regenerates in a second interpreter under a different hash
-  seed. `tools/tests/` holds **236** tests at this commit, counted by collection
-  (`pytest tools/tests --collect-only -q`, 2026-08-27).
+  seed. `tools/tests/` holds **1497** tests at this commit, counted by collection
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, 2026-09-16).
   Both figures were stale on 2026-08-27 — the asset count by one instance, the test count by
-  two separate additions — because they are counts of a generated or collected set written by
+  two separate additions — and **both were stale again on 2026-09-16**, the first because
+  ADR-0055 declared the second zone `cell_b` and the second because three of those test files
+  parametrize over `git ls-files` and so grow with the tree. They are counts of a generated or
+  collected set written by
   hand into prose, and nothing can fail when one moves. Take them from the two commands
   above rather than from this sentence.
   **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
@@ -23,8 +27,12 @@
   datum made expressible. The end-effector type's `linkage` block declares the seven vendor
   dimensions from which the grasp-plane offset is *derived*, so the offset is a property of
   L0 and no longer hand-written above it.
-  Seven types, 15 assets: the work-piece type has **no instances**, deliberately — where a
+  Seven types, 22 assets: the work-piece type has **no instances**, deliberately — where a
   part is at any moment is the process's business, not the layout's.
+  **Seven types across two zones, and the seven did not move when the second zone landed.**
+  `resolve.py` hands every type to every zone, so `cell_b` (ADR-0055) is built entirely from
+  the component library `cell_a` already used — that is P9 measured rather than asserted, and
+  it is why a second cell is a data change.
   **L0 now also decides which planner an arm plans with.** The robot type declares the
   default and fallback pipelines, the planner id for each, a per-joint deceleration limit and
   four Cartesian ceilings, and the generator holds what a pipeline is *made* of — that is the

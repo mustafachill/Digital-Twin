@@ -31,6 +31,28 @@ ARM_TYPE = "assets/types/robots/xarm5.yaml"
 ARM_INSTANCES = "assets/instances/arms.yaml"
 ARM_DESCRIPTION = "description/cell_a_arm_1.urdf.xacro"
 
+#: The component-library id the two paths above describe. Stated once, because
+#: `_arm_descriptions` below has to ask the model which instances bind it.
+ARM_TYPE_ID = "xarm5"
+
+
+def _arm_descriptions(path: Path) -> set[str]:
+    """Every generated description a change to the arm TYPE reaches.
+
+    Derived from the model, not listed. A collision selection is a fact about the
+    type, and `resolve.py` hands every type to every zone, so the set of
+    descriptions it moves is "one per instance of that type, wherever it stands".
+    Spelling it as the three `cell_a` arms made the test below an assertion about
+    how many arms the facility declares and in which cell as well as about the
+    property it exists for, and declaring `cell_b` (ADR-0055) falsified it while
+    that property held.
+    """
+    return {
+        f"description/{instance.zone}_{instance.id}.urdf.xacro"
+        for instance in load(path).assets
+        if instance.type == ARM_TYPE_ID
+    }
+
 
 def _use_real_backend(document: dict) -> None:
     """Every arm on the hardware backend, which is the case R-04 got wrong.
@@ -154,13 +176,7 @@ class TestSelectingADerivedSet:
         after = artifacts(real_model)
 
         changed = {path for path in before if before[path] != after[path]}
-        assert changed == {
-            "MODEL_HASH",
-            "package.xml",
-            "description/cell_a_arm_1.urdf.xacro",
-            "description/cell_a_arm_2.urdf.xacro",
-            "description/cell_a_arm_3.urdf.xacro",
-        }
+        assert changed == {"MODEL_HASH", "package.xml"} | _arm_descriptions(real_model)
 
     def test_the_generated_package_declares_the_set_it_installs_from(
         self, real_model: Path
