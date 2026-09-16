@@ -123,12 +123,39 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1399** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-10 at
-  `523ffd9`).
+  `tools/tests/` holds **1502** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-16 at
+  `7e7a744` on `feat/cell-b-zone`).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
-  part of that day, **1376** for part of it too and **1377** until 2026-09-10.
+  part of that day, **1376** for part of it too, **1377** until 2026-09-10, **1399** while
+  that reading stood and **1468** unrecorded.
+  **That last entry is the point of this sentence: 1468 was never written here.** The figure
+  read 1399, taken at `523ffd9`, and two commits landed after it — `ee3d609` and `2b135b3`,
+  both validator refusals — that moved it to **1468** without anyone re-collecting. It was
+  measured on 2026-09-16 in a worktree at `1adf0cf`, which is this branch's base, and the +69
+  those two commits account for is **not reconciled here**: this work did not take them apart,
+  and attributing a step to a commit nobody measured is what this bullet spends most of its
+  length warning against.
+  **The 1468 -> 1502 step is this branch's alone and closes exactly**, measured in this
+  checkout against that same worktree at `1adf0cf`, and it is **both kinds at once**: **+3 is
+  the suite and +31 is the tree**.
+  New cases: `tools/tests/test_every_zone_has_a_flow_document.py` collects **3**, a new file.
+  It is also itself one of the tracked files counted below, so **2 of the 31 are that guard
+  being counted by two other suites** — a file cannot add three cases of its own without
+  adding two of somebody else's.
+  Tree growth, over the **16** tracked files this branch adds (`git diff --diff-filter=A
+  --name-only 1adf0cf..HEAD` counts 16, with `--diff-filter=D` and `--diff-filter=R` both
+  **0**): `test_superseded_real_time_requirement.py` 382 -> **397**, the **15** of those
+  sixteen carrying one of its seven suffixes — `cell_b.sdf` carries none — and
+  `test_a_removed_plan_key_stays_removed.py` 355 -> **371**, all **16** being under its seven
+  trees. `test_interface_counts.py` did **not** move, reading **161** on both sides, because
+  the branch adds no tracked `.md`. 3 + 15 + 16 = 34, and 1468 + 34 = 1502.
+  **Fourteen of those sixteen files are generated**, which is the clearest illustration in
+  this bullet of what the figure measures: declaring one zone in `model/` — one hand-written
+  flow document — emitted **fourteen** artifacts, and every one of them is a tracked file that
+  two tree-parametrized suites then count a case for. **Twenty-seven of the 31 tree cases are
+  those fourteen files**, and not one of them is a new assertion about anything.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
@@ -290,19 +317,52 @@ bullet.
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
-  re-taken on 2026-09-10 at `523ffd9` from ONE full run**, which is what it takes: a
+  re-taken on 2026-09-16 at `7e7a744` on `feat/cell-b-zone` from ONE full run**, which is what
+  it takes: a
   `--host-only` run cannot refresh the third at all. `124 passed, 0 failed
   (shell gate self-tests)`, unchanged since
-  2026-08-31; `1468 passed, 1 skipped` for the host half, which walks `tools/` **and**
+  2026-08-31; `1571 passed, 1 skipped` for the host half, which walks `tools/` **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1363 tests, 0 failures, 56
+  first-party packages, eleven per-package summaries totalling **1364 tests, 0 failures, 56
   skipped**. Its exit status was 0.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
   124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
   124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more,
-  124 / 1445 / 1296 for a few hours after that and 124 / 1446 / 1296 until 2026-09-10.
+  124 / 1445 / 1296 for a few hours after that, 124 / 1446 / 1296 until 2026-09-10 and
+  124 / 1468 / 1363 until 2026-09-16.
+  **The host half ties to the collection above, and the tie is checked at THIS commit rather
+  than differenced against the last recorded one.** `tools/tests` collects **1502** here and
+  `tests/` **70**, and 1502 + 70 = 1572 = 1571 passed plus the 1 skipped. **The 1468 -> 1571
+  step is deliberately NOT reconciled**, because the two figures sit at commits four apart —
+  1468 was taken at `523ffd9` and this at `7e7a744` — and two commits landed in between that
+  this work did not measure. What IS reconciled, in the collection bullet above, is
+  1468 -> 1502 over this branch alone, against a worktree at its base `1adf0cf`.
+  **Differencing two figures taken at non-adjacent commits is how a number gets attributed to
+  the wrong change**, and the collection bullet above already records one unresolved +1 from
+  exactly that habit.
+  **The per-package total's 1363 -> 1364 step is stated and NOT reconciled**, for the standing
+  reason: the eleven `Summary:` lines carry no package name, so the log cannot attribute a
+  test, and attributing it would need a full run at `1adf0cf` as well, which was not taken.
+  What is checkable is that this branch adds **no** package test at all — its `workspace/src`
+  changes are `cite_generated`, four `cite_facility` nodes, `cite_bringup`, `cite_twin` and
+  no test file (`git diff --name-only 1adf0cf..HEAD -- 'workspace/src/*/test/*'` is empty) —
+  so the +1 sits somewhere in the two commits between `523ffd9` and `1adf0cf`
+  and not in this work. That is a reason to expect it there and **is not a measurement of
+  it**.
+  **A full run on this branch before those fixes exited 1**, and it is recorded because a
+  failure this file does not mention is one the next reader re-discovers. Two `cite_twin`
+  launch tests failed — `test_twin_boundary_launch.py` and, on its ctest timeout,
+  `test_twin_boundary_paired_launch.py` — because making `--zone` unconditionally required
+  broke the two rigs that start the boundary with `--plan` and no zone; that is fixed at
+  `1314022` and both pass in the run above. `cite_orchestration` also failed in that run and
+  **passed in the run above with no change whatever to it**. **Which of its tests failed was
+  not read** — the run was cut short at its summary line — so it is recorded as an unattributed
+  failure and NOT as another instance of the `test_skill_cancellation` timeout this bullet
+  records at `b072bfa`, however alike the two look. **A build and a container lint were
+  running on the same host while it failed**, which is a confound the reader should know
+  about and **is not an attribution** either.
   **All three were re-run at that branch's tip `b072bfa` and read the same 124 / 1468 / 1363**,
   which is the first time this bullet's figures have been reproduced by a second full run at a
   second commit rather than stated from one. The four commits between the two are
