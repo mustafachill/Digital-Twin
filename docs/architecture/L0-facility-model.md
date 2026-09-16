@@ -6,7 +6,7 @@
   levels run:
   `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
   **and** a determinism check that regenerates in a second interpreter under a different hash
-  seed. `tools/tests/` holds **1497** tests at this commit, counted by collection
+  seed. `tools/tests/` holds **1502** tests at this commit, counted by collection
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, 2026-09-16).
   Both figures were stale on 2026-08-27 — the asset count by one instance, the test count by
   two separate additions — and **both were stale again on 2026-09-16**, the first because

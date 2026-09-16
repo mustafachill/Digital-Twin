@@ -65,7 +65,7 @@ def require_zone(zone: str) -> str:
 
 
 def require_zones(zones: Sequence[str]) -> list[str]:
-    """The same rule for the node that takes a list of them.
+    """Return ``zones``, or refuse an empty list — the same rule, for a list.
 
     Empty is refused, and so is a list with an empty entry: a zone nobody named
     is not a zone, and stamping it into a published `ModelVersion` would tell

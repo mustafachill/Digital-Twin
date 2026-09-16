@@ -392,6 +392,17 @@ class TestCellBringUp(unittest.TestCase):
         only the generated `<asset_id>_` prefix keeps them apart. If that prefix
         were ever dropped, three controller managers would claim the same
         eighteen joints and write to them every cycle.
+
+        **ON A SINGLE-ARM ZONE THE COLLISION HALF OF THIS TEST IS VACUOUS, and
+        that is a real loss rather than a technicality.** With one arm there is
+        no second instance for a name to collide with, so the `assertNotIn` below
+        cannot fail however the prefix behaves; what still has teeth is the count,
+        which fails if the arm publishes the wrong set of joints. The zone where
+        this test can actually detect a dropped prefix is `cell_a`, which CI no
+        longer drives (ADR-0055 decision 5) — so this is one of the regressions
+        that decision's "What this costs us" is about, named here rather than left
+        for whoever next reads a green run as coverage. Pointing `ZONE` at
+        `cell_a` restores it, and nothing else in this file needs changing.
         """
         owners: dict[str, str] = {}
         for arm in self.arms:
