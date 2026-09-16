@@ -2408,10 +2408,26 @@ int main(int argc, char ** argv)
     return 1;
   }
 
+  // Stop the goal BEFORE the context goes down, not after.
+  //
+  // `MoveGroupInterface::execute` waits for its action result in a bare
+  // `while (!done) sleep(1ms)` with no exit for a shut-down context, and only
+  // this node's executor can deliver that result. Once rclcpp's signal handler
+  // shuts the context down, the executor stops, the result can never arrive, and
+  // the join in `shutdown()` waits on a thread that can never finish: the
+  // process then sits through SIGINT and SIGTERM and is SIGKILLed, which is a
+  // bad exit for every scenario whose teardown catches an arm mid-trajectory.
+  // A pre-shutdown callback runs while the context is still valid and the
+  // executor still spinning, so `abort_motion` reaches move_group, the result
+  // comes back, and the goal thread ends on its own.
+  node->get_node_base_interface()->get_context()->add_pre_shutdown_callback(
+    [node]() {node->shutdown();});
+
   spinner.join();
-  // spin() returns on SIGINT, and a goal may still be inside plan(), execute()
-  // or a feedback publication at that moment. Stop the arm and join the goal
-  // thread before anything this node owns is destroyed.
+  // Idempotent: `shutdown()` returns immediately if the callback above already
+  // ran. It still runs first for a shutdown that arrives by another route than a
+  // signal, where a goal may be inside plan(), execute() or a feedback
+  // publication and must be joined before anything this node owns is destroyed.
   node->shutdown();
   rclcpp::shutdown();
   return 0;
