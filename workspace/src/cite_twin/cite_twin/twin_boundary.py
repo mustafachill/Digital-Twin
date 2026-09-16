@@ -1119,15 +1119,26 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     plan and nothing but a test passes anything else.
     """
     parser = argparse.ArgumentParser(prog="cite_twin", description=__doc__)
-    # Required, with no default (ADR-0055 decision 4). A boundary spans the
-    # two sides of ONE zone, so which zone is the first thing it has to be
-    # told rather than the last thing it assumes.
-    parser.add_argument("--zone", required=True)
+    # NO DEFAULT (ADR-0055 decision 4). `--zone` used to default to `cell_a`,
+    # which decided which cell a boundary spanned without anyone naming it.
+    parser.add_argument("--zone", default="")
     parser.add_argument("--plan", default="")
     # ROS strips its own arguments before a node sees them; anything left that
     # this parser does not know about is ignored rather than fatal, because
     # `launch_ros` appends `--ros-args` unconditionally.
     known, _unknown = parser.parse_known_args(argv)
+    # REQUIRED UNLESS `--plan` NAMES ONE DIRECTLY, rather than `required=True`,
+    # because that is the true condition. The zone is used for exactly one
+    # thing here — locating the generated plan — and a caller that passes the
+    # plan has already answered the question; `main` reads the zone it is
+    # actually spanning off `plan.zone`, never off this argument. Demanding both
+    # would make a test state the same fact twice and let the two disagree,
+    # which is the P1 failure at argument scope.
+    if not known.plan and not known.zone:
+        parser.error(
+            "--zone is required, and has no default: a boundary spans the two sides of ONE "
+            "zone. Pass --zone <name>, or --plan <path> to name a plan directly."
+        )
     return known
 
 
