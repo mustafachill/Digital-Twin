@@ -124,8 +124,8 @@ bullet.
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
   `tools/tests/` holds **1502** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-16 at
-  `7e7a744` on `feat/cell-b-zone`).
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-16 on
+  `feat/cell-b-zone`, whose last commit to touch anything but `CLAUDE.md` is `f7aed46`).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
   part of that day, **1376** for part of it too, **1377** until 2026-09-10, **1399** while
@@ -317,7 +317,9 @@ bullet.
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
-  re-taken on 2026-09-16 at `7e7a744` on `feat/cell-b-zone` from ONE full run**, which is what
+  re-taken on 2026-09-16 from ONE full run**, over a working tree whose content is
+  `f7aed46`'s — the commits after it on `feat/cell-b-zone` change only `CLAUDE.md`, which no
+  suite here executes — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `124 passed, 0 failed
   (shell gate self-tests)`, unchanged since
@@ -336,7 +338,7 @@ bullet.
   than differenced against the last recorded one.** `tools/tests` collects **1502** here and
   `tests/` **70**, and 1502 + 70 = 1572 = 1571 passed plus the 1 skipped. **The 1468 -> 1571
   step is deliberately NOT reconciled**, because the two figures sit at commits four apart —
-  1468 was taken at `523ffd9` and this at `7e7a744` — and two commits landed in between that
+  1468 was taken at `523ffd9` and this at `f7aed46` — and two commits landed in between that
   this work did not measure. What IS reconciled, in the collection bullet above, is
   1468 -> 1502 over this branch alone, against a worktree at its base `1adf0cf`.
   **Differencing two figures taken at non-adjacent commits is how a number gets attributed to
