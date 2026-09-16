@@ -56,6 +56,15 @@ file and in ADR-0048. **#38 is deliberately untouched** and is now stale in two 
 says why and who owes it. No table row below was re-derived on this reading, and none of the
 notes above is disturbed.
 
+**Updated 2026-09-16**, on the branch `feat/cell-b-zone`: two new structural items, **#66**
+and **#67**, record the two validation gaps a second zone exposed — nothing compares two zones'
+bounding boxes, and a cross-zone station reference passes referential validation and then skips
+its reach check in silence. Both are **filed rather than fixed**, which is
+[ADR-0055](adr/0055-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)'s own
+decision and is recorded there under "What this costs us". Each entry names the command that
+reproduces it. **No existing item was re-read on this date** and no table row below was
+re-derived, so everything else in this file still carries whatever date it already carried.
+
 **Amended later the same day, after four reviewers read that change.** #45 stated that
 `hosted_by` was *"never a branch on a backend"*, which is false and is corrected in place — it
 was one of #38's three sites, which is why #38's count is **stale** rather than **wrong when
@@ -1390,6 +1399,93 @@ guess.
   throwaway subscriber inside the test, so that a late joiner is what tests late joining.
 
 ---
+
+### #66 — Nothing compares two zones' bounding boxes, and the overlap check is per zone
+`model/facility/zones.yaml` declares two `aabb` bounds and **no rule anywhere reads one against
+the other.** A `cell_b` declared inside `cell_a`'s box validates clean, generates two worlds that
+describe the same volume twice, and reports nothing.
+
+Two independent reasons, and closing either alone would not close the gap.
+`cite_tools.validate.geometric.check` takes a **single** `ResolvedCell`, and `cli.py` runs the
+geometric level once per zone, so `_no_overlapping_bodies` — the rule that would notice two
+solid bodies in one volume — only ever sees one zone's assets and can never be handed a pair
+from different zones. And no rule at any level compares `Zone.bounds` to `Zone.bounds`; the only
+thing that reads a zone's bounds is `_assets_inside_zone`, which asks whether a body is inside
+**its own** zone.
+
+Reproduce it — widen `cell_b`'s box in `model/facility/zones.yaml` until it swallows `cell_a`'s
+whole, leaving every body exactly where it stands:
+
+```bash
+#   cell_b bounds: min_m [-1.000, 2.000, 0.000] -> [-1.000, -1.200, 0.000]
+#                  max_m [ 3.000, 4.000, 2.500] -> [ 6.800,  4.000, 2.500]
+./scripts/validate-model --write     # ok model valid — 2 zone(s) ... ; restore with git checkout
+```
+
+Run here on 2026-09-16: it exits **0** and reports the model valid, with `cell_b`'s zone now
+containing all three of `cell_a`'s arms, its three belts and both its tables. Not one finding.
+`--write` rather than a bare run, because a bare run fails on the byte-identity diff against the
+committed tree — which fires for **any** model edit and says nothing whatever about this one.
+That distinction is the trap: the first attempt at this recipe read the stale-tree error as the
+validator noticing, and it was not.
+
+Widening a zone is the mild version. Moving `cell_b`'s bodies into `cell_a`'s box as well is
+equally silent, and produces two worlds that describe the same volume twice.
+
+**Not fixed, deliberately** (ADR-0055, "What this costs us"). A guard written against the one
+case we control is weaker than placing the cell correctly and recording why, which is what
+`model/facility/zones.yaml` does: the comment on `cell_b`'s bounds states the 1.200 m of clear
+air between the two boxes and states that nothing checks it. What a fix looks like is a
+model-global rule beside the other model-global levels — `referential.py` and `physical.py` are
+already model-global by construction — asking whether any two zones' boxes intersect. It is
+worth writing when a third zone appears or when anyone moves one, whichever comes first.
+
+**Nothing is known to be wrong today.** The two boxes are disjoint, and
+`./scripts/validate-model` exits 0.
+
+### #67 — A cross-zone station reference passes validation and then skips its reach check in silence
+`referential.py` resolves station and flow references against **globally** known ids —
+`_stations_reference_real_things` builds `known_assets` from `model.assets` and
+`_flow_is_consistent` builds `known_stations` from `model.stations`, neither filtered by zone. So
+a `cell_b` station naming `arm_1`, which stands in `cell_a` three metres away, is a **valid
+reference**.
+
+What makes it silent rather than merely permitted is what happens next.
+`cite_tools.validate.geometric._stations_are_reachable` does `actor = cell.asset(station.actor)`
+against the **resolved cell**, which holds only that zone's assets, and returns `None` for an
+actor from another zone — at which point the rule `continue`s. The single most valuable check in
+that module, the one its own docstring says pays for the file, is skipped with no finding at all
+for exactly the station most likely to need it. The same shape applies to `pick_from` and
+`place_to` naming another zone's asset.
+
+Reproduce it:
+
+```bash
+sed -i 's/^    actor: b_arm_1$/    actor: arm_1/' model/topology/stations.yaml
+./scripts/validate-model --write     # ok model valid — 2 zone(s) ... ; restore with git checkout
+grep -n 'actor' workspace/src/cite_generated/topology/cell_b_flow.yaml
+```
+
+Run here on 2026-09-16: it exits **0** and reports the model valid, and
+`cell_b_flow.yaml` then reads `actor: arm_1` against `b_transfer_1` — an arm three metres away in
+another cell, whose reach to this station's pick point was checked by nothing. L4 would dispatch
+a `cell_b` station's skills at a `cell_a` arm's action names, which on a one-zone-at-a-time
+deployment is a station waiting for a server that is not running.
+
+`--write` rather than a bare run, for the reason #66 gives: a bare run fails on the byte-identity
+diff, which fires for any model edit and is not the validator noticing anything.
+
+**Not fixed, deliberately** (ADR-0055, "What this costs us"), for the same reason as #66. The
+shape of a fix is a referential rule requiring a station's `actor`, `assets`, `trigger.sensor`,
+`pick_from.asset` and `place_to.asset` to be in that station's **own** zone — which is a rule
+about the model rather than a guard against one mistake, and is worth writing as such. Note that
+it is `referential.py` that owes it, not `geometric.py`: by the time the geometric level runs,
+the cross-zone asset is simply absent, and a rule there could only report that an actor it was
+told about does not exist.
+
+**Nothing is known to be wrong today.** Every id a `cell_b` station names is a `cell_b` asset,
+which `model/topology/stations.yaml` states in a comment beside them because nothing states it
+mechanically.
 
 ## 4. Instrument honesty
 

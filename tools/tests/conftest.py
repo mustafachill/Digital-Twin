@@ -46,3 +46,30 @@ def edit_yaml() -> Callable[[Path, Callable[[dict], None]], None]:
         path.write_text(yaml.safe_dump(document, sort_keys=False))
 
     return _edit
+
+
+@pytest.fixture
+def remove_flow() -> Callable[[Path, str], str]:
+    """Delete the flow document that names ``zone``, and return the zone.
+
+    A fixture rather than three lines in the one test that needs it, because
+    finding the document means reading every `cite/flow/v1` file in the tree
+    rather than guessing its name: the loader dispatches on a document's own
+    `schema:` key and not on its path, so `cell_b`'s flow lives in
+    `flow_cell_b.yaml` today only by convention and could legitimately move.
+    """
+
+    def _remove(model: Path, zone: str) -> str:
+        removed = [
+            path
+            for path in sorted(model.rglob("*.yaml"))
+            if "schema" not in path.parts
+            and (document := yaml.safe_load(path.read_text())) is not None
+            and document.get("schema") == "cite/flow/v1"
+            and document["flow"]["zone"] == zone
+        ]
+        assert len(removed) == 1, f"expected one flow document for {zone}, found {removed}"
+        removed[0].unlink()
+        return zone
+
+    return _remove
