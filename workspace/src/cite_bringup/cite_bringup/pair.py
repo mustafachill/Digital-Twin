@@ -618,7 +618,11 @@ def _flags(argv: Sequence[str], parser: argparse.ArgumentParser) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     """Resolve both sides from the plan and supervise them."""
     parser = argparse.ArgumentParser(description="Bring up both sides of a twin pair.")
-    parser.add_argument("--zone", default="cell_a")
+    # Required, with no default (ADR-0055 decision 4). `readiness_witness`
+    # already declares its own zone this way, and the supervisor starts one
+    # of those per side, so a defaulted zone here would decide which cell a
+    # pair is without the caller ever naming it.
+    parser.add_argument("--zone", required=True)
     parser.add_argument(
         "--headless", action="store_true", help="Run both simulators without a GUI."
     )

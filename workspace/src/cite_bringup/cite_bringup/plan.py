@@ -1583,5 +1583,22 @@ def _triple(value: object, key: str, where: str) -> tuple[float, float, float]:
     return (x, y, z)
 
 
-def default_plan_path(zone: str = "cell_a") -> Path:
+def default_plan_path(zone: str) -> Path:
+    """Where the generated bring-up plan for ``zone`` lives.
+
+    THE ZONE IS REQUIRED, AND THAT IS THE WHOLE POINT OF THE PARAMETER. It
+    defaulted to `cell_a` until ADR-0055, and while the facility declared one
+    zone that default was invisible rather than harmless: every caller that
+    omitted it was choosing a cell without saying so, and there was no way to
+    tell a caller that meant `cell_a` from one that had simply never thought
+    about it. A second zone turns each of those into a silently wrong answer —
+    the plan loads, the names resolve, and the cell that comes up is not the one
+    the caller wanted.
+
+    Removing the default is what turned them into visible call sites. It is the
+    same rule `cite_bringup.gz.plan_for`, `readiness_witness`, `skill_server.cpp`
+    and `detection_server.cpp` already follow, and for the reason those two C++
+    nodes state at their own parameter declarations: guessing a name puts the
+    work somewhere nothing is looking.
+    """
     return resolve_uri(f"package://cite_generated/bringup/{zone}_plan.yaml")

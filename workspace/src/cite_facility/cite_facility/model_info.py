@@ -26,7 +26,12 @@ value immediately rather than waiting for a publication that never comes.
 
 from __future__ import annotations
 
-from cite_facility.artifacts import ArtifactError, generated_dir, model_hash
+from cite_facility.artifacts import (
+    ArtifactError,
+    generated_dir,
+    model_hash,
+    require_zones,
+)
 from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
@@ -40,7 +45,10 @@ SERVICE = "/cite/facility/get_model_version"
 class ModelInfo(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("model_info")
-        self.declare_parameter("zones", ["cell_a"])
+        # No default (ADR-0055 decision 4). The list shape is already
+        # multi-zone; what it lacked was a caller obliged to fill it. An
+        # unnamed zone is refused in `on_configure` rather than published.
+        self.declare_parameter("zones", [""])
         self._message: ModelVersion | None = None
         self._publisher = None
         self._service = None
@@ -48,6 +56,9 @@ class ModelInfo(LifecycleNode):
     def on_configure(self, state: State) -> TransitionCallbackReturn:
         try:
             digest = model_hash()
+            zones = require_zones(
+                self.get_parameter("zones").get_parameter_value().string_array_value
+            )
         except ArtifactError as exc:
             self.get_logger().error(f"cannot configure: {exc}")
             return TransitionCallbackReturn.FAILURE
@@ -56,9 +67,7 @@ class ModelInfo(LifecycleNode):
         message.header.stamp = self.get_clock().now().to_msg()
         message.model_hash = digest
         message.generator_version = _generator_version()
-        message.zones = list(
-            self.get_parameter("zones").get_parameter_value().string_array_value
-        )
+        message.zones = zones
         self._message = message
 
         # Created here, not published. `configure` may allocate and create

@@ -59,7 +59,7 @@ are real.
 | `./scripts/lint` | Lint everything lintable on this machine. |
 | `./scripts/format` | Apply formatting in place. |
 | `./scripts/validate-model` | Validate the L0 facility model. Runs anywhere. |
-| `./scripts/sim [--headless] [--pair]` | Launch the simulated cell. `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
+| `./scripts/sim --zone <name> [--headless] [--pair]` | Launch the simulated cell. `--zone` is required and has no default: `cell_b` is the one-arm cell this project works on, `cell_a` the three-arm showcase, and one zone runs at a time ([ADR-0055](../adr/0055-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)). `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |

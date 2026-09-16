@@ -31,7 +31,12 @@ sees a partially-populated tree.
 
 from __future__ import annotations
 
-from cite_facility.artifacts import ArtifactError, static_transforms, StaticTransform
+from cite_facility.artifacts import (
+    ArtifactError,
+    require_zone,
+    static_transforms,
+    StaticTransform,
+)
 from cite_facility.transforms import quaternion_from_rpy
 from cite_runtime import runtime
 from geometry_msgs.msg import TransformStamped
@@ -42,14 +47,17 @@ from tf2_ros import StaticTransformBroadcaster
 class FrameServer(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("frame_server")
-        self.declare_parameter("zone", "cell_a")
+        # No default (ADR-0055 decision 4). `require_zone` below refuses an
+        # empty one with a diagnosis; a `cell_a` here would quietly serve the
+        # wrong cell the moment a second zone exists.
+        self.declare_parameter("zone", "")
         self._transforms: list[StaticTransform] = []
         self._broadcaster: StaticTransformBroadcaster | None = None
 
     def on_configure(self, state: State) -> TransitionCallbackReturn:
         """Read and validate. Publish nothing — that is `activate`'s job."""
-        zone = self.get_parameter("zone").get_parameter_value().string_value
         try:
+            zone = require_zone(self.get_parameter("zone").get_parameter_value().string_value)
             self._transforms = static_transforms(zone)
         except ArtifactError as exc:
             # Failing here stops bring-up with a diagnosis. Activating with an

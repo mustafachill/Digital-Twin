@@ -23,6 +23,7 @@ with no model present at all.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +35,46 @@ GENERATED_PACKAGE = "cite_generated"
 
 class ArtifactError(Exception):
     """A generated artifact is missing or unreadable."""
+
+
+#: Why an unnamed zone is refused rather than defaulted. Stated once, because
+#: four nodes in this package ask the same question and a second copy of the
+#: sentence is a second thing to keep true.
+_NO_ZONE = (
+    "parameter {name!r} is empty. Every artifact this node reads is named after a "
+    "zone, and the generated bring-up plan supplies it; an empty one means the "
+    "plan did not deliver it. Guessing would serve one cell's frames, topology or "
+    "planning scene into another cell's graph, under names that resolve perfectly "
+    "and describe the wrong room."
+)
+
+
+def require_zone(zone: str) -> str:
+    """Return ``zone``, or refuse an empty one.
+
+    The Python half of the rule `skill_server.cpp` and `detection_server.cpp`
+    state at their own parameter declarations, and the reason is theirs: a
+    default that silently works hides a bring-up plan that failed to deliver the
+    value. It was `cell_a` in four nodes here until ADR-0055 declared a second
+    zone, at which point every one of those defaults became a way to serve the
+    wrong cell without a single error anywhere.
+    """
+    if not zone:
+        raise ArtifactError(_NO_ZONE.format(name="zone"))
+    return zone
+
+
+def require_zones(zones: Sequence[str]) -> list[str]:
+    """The same rule for the node that takes a list of them.
+
+    Empty is refused, and so is a list with an empty entry: a zone nobody named
+    is not a zone, and stamping it into a published `ModelVersion` would tell
+    every consumer this deployment covers a cell called "".
+    """
+    named = list(zones)
+    if not named or not all(named):
+        raise ArtifactError(_NO_ZONE.format(name="zones"))
+    return named
 
 
 def generated_dir() -> Path:

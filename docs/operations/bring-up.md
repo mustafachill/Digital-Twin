@@ -159,10 +159,11 @@ A shell is on the plant's domain by default — `./scripts/doctor` prints it —
 other side, resolve its domain from the plan rather than adding one by hand:
 
 ```bash
+export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
 ./scripts/enter dev python3 -c '
 import os
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
-plan = load(default_plan_path())
+plan = load(default_plan_path(os.environ["CITE_ZONE"]))
 for side in plan.sides:
     print(side.name, resolve_domain_id(plan, side.name, domain_base(os.environ)),
           side.gz_partition)'

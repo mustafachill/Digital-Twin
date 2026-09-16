@@ -154,8 +154,15 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "zone",
-                default_value="cell_a",
-                description="Which zone of the facility model to bring up.",
+                # NO DEFAULT, DELIBERATELY. `DeclareLaunchArgument` with no
+                # `default_value` is required, and `ros2 launch` refuses the
+                # launch by name when it is missing. It defaulted to `cell_a`
+                # until ADR-0055, which was invisible rather than harmless while
+                # the facility declared one zone: with two, an omitted zone
+                # brings up a cell nobody asked for and every name in it resolves
+                # perfectly. `./scripts/sim --zone <name>` is the shell door, and
+                # it has no default either.
+                description="Which zone of the facility model to bring up. Required.",
             ),
             DeclareLaunchArgument(
                 "side",

@@ -154,9 +154,11 @@ list an empty transport unless you set the same partition first. Take it from th
 than typing it:
 
 ```bash
+export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
+import os
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
-print(load(default_plan_path()).side_named(PLANT_SIDE).gz_partition)')"
+print(load(default_plan_path(os.environ["CITE_ZONE"])).side_named(PLANT_SIDE).gz_partition)')"
 ```
 
 Be precise about what an unpartitioned command does, because it is not what a terminal

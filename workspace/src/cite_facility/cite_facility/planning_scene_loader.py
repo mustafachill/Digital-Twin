@@ -45,7 +45,12 @@ from __future__ import annotations
 
 import sys
 
-from cite_facility.artifacts import ArtifactError, CollisionBody, planning_scene
+from cite_facility.artifacts import (
+    ArtifactError,
+    CollisionBody,
+    planning_scene,
+    require_zone,
+)
 from cite_facility.transforms import quaternion_from_rpy
 from cite_runtime import runtime
 from geometry_msgs.msg import Pose
@@ -74,12 +79,15 @@ PRIMITIVES = {
 class PlanningSceneLoader(Node):
     def __init__(self) -> None:
         super().__init__("planning_scene_loader")
-        self.declare_parameter("zone", "cell_a")
+        # No default (ADR-0055 decision 4). `require_zone` below refuses an
+        # empty one with a diagnosis; a `cell_a` here would quietly serve the
+        # wrong cell the moment a second zone exists.
+        self.declare_parameter("zone", "")
 
     def load(self) -> int:
         """Apply the generated scene and verify it arrived. 0 on success."""
-        zone = self.get_parameter("zone").get_parameter_value().string_value
         try:
+            zone = require_zone(self.get_parameter("zone").get_parameter_value().string_value)
             frame_id, bodies = planning_scene(zone)
             objects = [_collision_object(body) for body in bodies]
         except (ArtifactError, ValueError) as exc:

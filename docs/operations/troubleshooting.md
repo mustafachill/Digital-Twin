@@ -211,9 +211,11 @@ an accident that disappears the moment two sides share a container.
 Take the value from the plan rather than typing it, then use `gz` as before:
 
 ```bash
+export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
+import os
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
-print(load(default_plan_path()).side_named(PLANT_SIDE).gz_partition)')"
+print(load(default_plan_path(os.environ["CITE_ZONE"])).side_named(PLANT_SIDE).gz_partition)')"
 gz topic -l
 ```
 
@@ -241,10 +243,11 @@ discover each other. The base travels in `CITE_DOMAIN_BASE`, and one function ad
 ask it rather than doing the arithmetic:
 
 ```bash
+export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
 ./scripts/enter dev python3 -c '
 import os
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
-plan = load(default_plan_path())
+plan = load(default_plan_path(os.environ["CITE_ZONE"]))
 base = domain_base(os.environ)
 for side in plan.sides:
     print(side.name, resolve_domain_id(plan, side.name, base))'

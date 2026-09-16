@@ -1119,7 +1119,10 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     plan and nothing but a test passes anything else.
     """
     parser = argparse.ArgumentParser(prog="cite_twin", description=__doc__)
-    parser.add_argument("--zone", default="cell_a")
+    # Required, with no default (ADR-0055 decision 4). A boundary spans the
+    # two sides of ONE zone, so which zone is the first thing it has to be
+    # told rather than the last thing it assumes.
+    parser.add_argument("--zone", required=True)
     parser.add_argument("--plan", default="")
     # ROS strips its own arguments before a node sees them; anything left that
     # this parser does not know about is ignored rather than fatal, because

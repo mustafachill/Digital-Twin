@@ -41,7 +41,7 @@ subscriber (P1).
 
 from __future__ import annotations
 
-from cite_facility.artifacts import ArtifactError, topology
+from cite_facility.artifacts import ArtifactError, require_zone, topology
 from cite_interfaces.msg import LineTopology, StationEdge, StationTopology
 from cite_interfaces.qos import LATCHED
 from cite_runtime import runtime
@@ -66,13 +66,16 @@ TRIGGER_STATES = {
 class TopologyServer(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("topology_server")
-        self.declare_parameter("zone", "cell_a")
+        # No default (ADR-0055 decision 4). `require_zone` below refuses an
+        # empty one with a diagnosis; a `cell_a` here would quietly serve the
+        # wrong cell the moment a second zone exists.
+        self.declare_parameter("zone", "")
         self._message: LineTopology | None = None
         self._publisher = None
 
     def on_configure(self, state: State) -> TransitionCallbackReturn:
-        zone = self.get_parameter("zone").get_parameter_value().string_value
         try:
+            zone = require_zone(self.get_parameter("zone").get_parameter_value().string_value)
             document = topology(zone)
         except (ArtifactError, KeyError, TypeError) as exc:
             self.get_logger().error(f"cannot configure: {exc}")
