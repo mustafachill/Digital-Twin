@@ -384,7 +384,8 @@ bullet.
   suites and stops there: that is why the per-package total carried 2026-09-02's date through
   2026-09-08's `--host-only` reading at `b6ab34a`, and why the three above were taken from one
   full run instead.
-- **The simulated cell comes up.** `./scripts/sim --headless` brings the scene and three
+- **The simulated cell comes up.** `./scripts/sim --headless --zone cell_a` brings the scene
+  and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
   server per arm, one detection server for the zone, the generated planning scene applied
   and read back, the facility's model version, frames and topology served, and one
@@ -392,6 +393,19 @@ bullet.
   declares. The L4 coordinator is **off unless `line:=true`**, because it takes exclusive
   hold of each arm's skills. `./scripts/scenario bringup` asserts the bring-up and is a
   blocking CI gate, run twice per CI run.
+  **EVERY FIGURE IN THIS BULLET AND IN THE THREE BELOW IT IS `cell_a`'s, AND CI NO LONGER
+  DRIVES `cell_a`.** ADR-0055 landed on 2026-09-16: the three scenarios now drive `cell_b`,
+  a one-arm cell, and `cell_a` keeps `validate-model` and `build` coverage only. So the CI
+  tables below — `bringup`'s 50 invocations, `pick_and_place`'s 25, the twenty-five-row
+  `continuous_line` table, the teardown-family split, the hull-run list — are a **closed**
+  record of a cell that is no longer driven. They are not retired and not re-measured:
+  they are records of runs, which stand whatever the model declares.
+  **No CI run has yet driven `cell_b`, and no scenario has been observed against it by
+  anyone.** The zone was declared and the scenarios were pointed at it in one change; what
+  that change is evidenced by is `validate-model`, `build`, `lint` and `test`, and by
+  nothing that brought a cell up. Whoever reads the first `cell_b` run is the first person
+  who can say anything about it — and should say it here, separately from the figures above,
+  rather than letting a count that means `cell_a` absorb a run that means `cell_b`.
   **It is not a scenario that always passes, and until 2026-08-28 nothing said so.** Thirty
   consecutive local runs at `de67d8b` — taken for another purpose and published as
   [`docs/measurements/2026-08-27-teardown-signal-family/`](docs/measurements/2026-08-27-teardown-signal-family/results.md)
