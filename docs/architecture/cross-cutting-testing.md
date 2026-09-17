@@ -24,8 +24,12 @@
   against a stored baseline.
   The scenario level has three: `bringup`, a blocking CI gate run twice per run;
   `pick_and_place`, **promoted to a blocking gate at `c1e9e03`**; and `continuous_line`,
-  which drives the whole three-arm line and is the **one** container-stage step still marked
-  `continue-on-error`. A scenario that cannot fail the build cannot hold a claim up, so
+  which drives the whole of the line its zone declares — end to end, source station to sink,
+  every station and every trigger, derived from the generated topology — and is the **one**
+  container-stage step still marked `continue-on-error`. **It drove the three-arm line until
+  ADR-0056 and drives the one-arm `cell_b` now**; the three-arm figures are a closed record of
+  the cell CI no longer drives, kept in CLAUDE.md §2, and
+  `./scripts/scenario continuous_line --zone cell_a` is what asks that question again. A scenario that cannot fail the build cannot hold a claim up, so
   `continuous_line` is evidence and not a gate.
   All three are run with `--teardown-advisory`, which splits the two questions a scenario
   answers in one exit code: **the cycle gates, the post-shutdown teardown is reported and

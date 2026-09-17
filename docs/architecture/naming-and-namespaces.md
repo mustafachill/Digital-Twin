@@ -122,3 +122,24 @@ costs a few characters and buys both.
 | `/cite/twin/...` | L5 mode, divergence metrics, registration |
 | `/cite/line/...` | L4 line state, throughput, work-piece tracking |
 | `cite_world` | The facility root frame, tied to the survey origin |
+
+**The first three are FACILITY-SINGULAR, and that is what bounds a deployment to one
+zone.** They are deliberately not zone-scoped: there is one `/cite/facility/get_model_version`,
+one `/cite/line/topology`, one `/cite/twin/mode`, whichever cell is running. Meanwhile
+`ROS_DOMAIN_ID` is derived per checkout and per *side* and never per zone
+([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)). Put those two together
+and two zones started from one checkout share one ROS graph and one set of these names.
+
+So the invariant is not a preference: **exactly one zone is up at a time**
+([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
+decision 3). Zone-scoping these three is one of the four ADR-sized changes that record
+declines, and rule 6 above already requires an ADR for the first of them — it changes every
+name in the system.
+
+What a second zone actually collides with, if one is started anyway: two servers on the fixed
+`/cite/facility/get_model_version`; two latched publishers on `/cite/line/topology`, on which
+`line_orchestrator` `RCLCPP_FATAL`s at a zone mismatch, and only with `line:=true`; two
+`/robot_description` publishers describing **different robots**; and two `/clock` publishers
+from two independent simulators, which is the mixed-time system CLAUDE.md §10 warns about.
+ADR-0056 decision 3 records what refuses that, and — just as importantly — what the refusal
+cannot see.

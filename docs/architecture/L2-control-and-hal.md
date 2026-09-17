@@ -2,8 +2,14 @@
 
 - **Status:** `PARTIAL`.
   **Built:** one `ros2_control` controller manager per arm, hosted in Gazebo by
-  `gz_ros2_control`, with **9 controllers active across three arms** — asserted by
-  `./scripts/scenario bringup`. Controller configuration, MoveIt configuration and the
+  `gz_ros2_control`, with **three controllers active per arm** — asserted by
+  `./scripts/scenario bringup`, which derives the set from the zone's bring-up
+  plan rather than counting to a number.
+  **The 9-across-three-arms figure is `cell_a`'s and is a CLOSED RECORD.** That
+  scenario drives `cell_b`, a one-arm cell, since ADR-0056; it last asserted 9
+  across three arms at the commits CLAUDE.md §2's CI table names, and it does not
+  assert it now. `./scripts/scenario bringup --zone cell_a` is what asks the
+  question again. Controller configuration, MoveIt configuration and the
   planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
   the scene per arm and reads it back rather than trusting the service result. The gripper
   runs as a `ros2_control` controller ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md))

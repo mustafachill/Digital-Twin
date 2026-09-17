@@ -65,6 +65,19 @@ decision and is recorded there under "What this costs us". Each entry names the 
 reproduces it. **No existing item was re-read on this date** and no table row below was
 re-derived, so everything else in this file still carries whatever date it already carried.
 
+**Corrected 2026-09-17, on the same branch.** Two table rows below WERE stale and are
+re-derived here rather than left, because the change that made them stale is this branch's:
+the **L0 model** row read `1 zone, 7 types, 15 assets, 5 stations, 15 files` beside a command
+that now answers `2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 16 file(s)`, and the
+**Decision records** row read 52 against `./scripts/doctor`'s 55. A count printed beside the
+command that produces it is a promise the two agree; not re-running a command you have just
+invalidated is how each wrong figure in CLAUDE.md §2 got written. **Four other rows were
+re-run on that date and did not move** — Packages (23), Measurement campaigns (15), Shipped
+collision geometry (`convex_hull`) and the L0 model's own command exit status — and the two CI
+rows were **not** re-read, because no CI run of this branch exists. **Item #67's reproduction
+command was also updated** for the `cell_b` asset rename; a reproduction that no longer
+reproduces is worse than none.
+
 **Amended later the same day, after four reviewers read that change.** #45 stated that
 `hosted_by` was *"never a branch on a backend"*, which is false and is corrected in place — it
 was one of #38's three sites, which is why #38's count is **stale** rather than **wrong when
@@ -164,8 +177,8 @@ was written; what it predicted came true faster than it allowed for.
 |---|---|---|
 | Environment | 29 passed, 0 failed, 1 skipped, **in the container** | `./scripts/enter dev ./scripts/doctor` |
 | Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
-| L0 model | 1 zone, 7 types, 15 assets, 5 stations, 15 files | `./scripts/validate-model` |
-| Decision records | 52 indexed | `./scripts/doctor`, `ADR index` line |
+| L0 model | 2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 16 file(s) | `./scripts/validate-model` |
+| Decision records | 55 indexed | `./scripts/doctor`, `ADR index` line |
 | Measurement campaigns | 15, on `main` and on `origin/main` alike | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
 | Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
 | Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
@@ -1455,8 +1468,24 @@ What makes it silent rather than merely permitted is what happens next.
 against the **resolved cell**, which holds only that zone's assets, and returns `None` for an
 actor from another zone — at which point the rule `continue`s. The single most valuable check in
 that module, the one its own docstring says pays for the file, is skipped with no finding at all
-for exactly the station most likely to need it. The same shape applies to `pick_from` and
-`place_to` naming another zone's asset.
+for exactly the station most likely to need it.
+
+**IT IS `actor` AND ONLY `actor`, and this entry claimed more than that until 2026-09-17.**
+It said the same shape applies to `pick_from` and `place_to` naming another zone's asset. It
+does not. `resolve.py`'s `point` — the local function `_resolve_stations` calls for each
+station point — raises `ResolveError` for an asset that is not in the resolved cell, and
+`cite_tools/cli.py` catches it around its `geometric.check(resolve(...))` call, prints
+`error resolve zone <id>: ...` and raises `typer.Exit(code=1)`. Both were re-read on
+2026-09-17, and both are cited by symbol rather than by line because a line number in a file
+under edit goes stale exactly as this claim did. So a cross-zone `pick_from` or
+`place_to` **aborts the command with a diagnosis**, which is a different instrument from a rule
+that reports a finding and is the opposite of silent. Only `actor` is unguarded, because
+`_stations_are_reachable` reaches it through `cell.asset(...)` and treats `None` as nothing to
+check rather than as something missing.
+
+The distinction matters for whoever fixes this: an error that aborts `validate-model` cannot be
+collected alongside other findings and cannot be downgraded with `--strict`, so a fix that gave
+`actor` the same treatment would change the shape of the answer as well as its content.
 
 Reproduce it:
 
@@ -1486,6 +1515,46 @@ told about does not exist.
 **Nothing is known to be wrong today.** Every id a `cell_b` station names is a `cell_b` asset,
 which `model/topology/stations.yaml` states in a comment beside them because nothing states it
 mechanically.
+
+### #68 — The one-zone-at-a-time refusal is sound and incomplete, in two named ways
+[ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md) decision 3
+says exactly one zone is up at a time. `model_info.on_configure` now refuses a bring-up beside
+another **declared** zone's names and says which zone that is, returning `FAILURE` so that
+`simulation.launch.py`'s existing handler stops the launch. It is a synchronous graph-cache
+query: nothing waits, and nothing is added to a clean bring-up. **It is therefore sound and not
+exhaustive**, in two ways it is worth having written down rather than rediscovered.
+
+**1. The discovery race.** DDS discovery is asynchronous. A zone started at the same instant as
+this one may not be in the graph cache when `on_configure` runs, and will not be seen; the two
+cells then come up together exactly as before. Closing it means concluding "I am alone" from an
+**absence**, which needs a timeout — and a bring-up that waits a guessed interval to decide is
+the timing guess CLAUDE.md P4 forbids. Refusing on a positive is an event; refusing on an
+absence is not. A shape that would close it without a guess is a latched `ModelVersion`
+subscription whose **arrival** is the event, with a rule for telling the newcomer from the
+incumbent; nobody has designed that rule.
+
+**2. The same zone twice.** Two `cell_b` bring-ups collide identically — one
+`/cite/facility/get_model_version`, one `/clock` fed twice — and this rule says nothing about
+them, because `cell_b`'s names are not foreign to `cell_b`. **Deliberate.** CI brings one zone
+up twice in a row per run, and this project has a recurring teardown-leak history
+(CLAUDE.md §2's teardown-family bullet); a rule that could not tell an unfinished teardown from
+a second cell would convert a lingering process into a hard bring-up failure. Whoever closes it
+needs a way to distinguish the two that does not rest on timing.
+
+Reproduce the refusal working, without two simulators:
+
+```bash
+./scripts/enter dev python3 -c '
+from cite_facility.artifacts import declared_zones
+from cite_facility.occupancy import zones_already_on_the_graph
+print(zones_already_on_the_graph(["/cite/cell_a/arm_1/move_to"], ["cell_b"], declared_zones()))
+print(zones_already_on_the_graph(["/cite/cell_b/picker/move_to"], ["cell_b"], declared_zones()))'
+```
+
+The first prints `['cell_a']` — refused. The second prints `[]`, which is residual 2.
+
+**Nothing is known to be wrong today**, and the invariant was enforced by nothing at all before
+this: exactly one of the collisions ADR-0056 lists was loud, and only with `line:=true`.
 
 ## 4. Instrument honesty
 

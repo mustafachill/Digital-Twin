@@ -360,6 +360,37 @@ pgrep -fl "gz sim|controller_manager"
 Kill them. An orphan holds ports and names, and the resulting failure points nowhere near
 the cause.
 
+### Two `/clock` publishers, or two `/cite/facility/*` nodes with the same name
+
+Two zones are up on one ROS graph. **Exactly one is meant to be**
+([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
+decision 3), and the likeliest way it happens is the use `cell_a` is kept for: the showcase
+started in a second terminal while a `cell_b` run is up. `ROS_DOMAIN_ID` is derived per
+checkout and per side, never per zone, so both land on one graph.
+
+```bash
+ros2 topic info /clock                     # more than one publisher is the symptom
+ros2 node list | grep /cite/facility/      # each name should appear once
+ros2 topic list | grep -o '^/cite/[a-z0-9_]*' | sort -u   # one zone scope, plus facility/line/twin
+```
+
+**Only one of the collisions is loud**, and only with `line:=true`: `line_orchestrator`
+`RCLCPP_FATAL`s on a zone mismatch from the second latched `/cite/line/topology`. The rest
+are silent, and the consequences are not subtle — one `/cite/facility/get_model_version`
+answered by whichever server got there first, two `/robot_description` publishers describing
+**different robots**, so a bring-up can spawn the other cell's furniture into this cell's
+world, and a `/clock` fed by two independent simulators, which is CLAUDE.md §10's
+plausible-and-wrong mixed-time system.
+
+**The fix is to stop one of them**, not to work around it. Bring the second cell up from
+another checkout if you need both at once: the domain base is hashed per checkout, so a second
+clone gets its own graph. `./scripts/doctor` prints the domain a shell is on.
+
+A bring-up started *after* another zone is already on the graph is refused by `model_info`,
+naming the zone that is already there. That refusal is a graph-cache query and does not wait,
+so it cannot see a zone DDS has not discovered yet and says nothing about the same zone twice
+— which is why the symptom above is still worth knowing.
+
 ## When none of this helps
 
 Delegate to the `debugger` agent. It carries the full trap list for this stack, isolates

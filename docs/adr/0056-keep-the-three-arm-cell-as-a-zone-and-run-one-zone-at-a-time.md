@@ -1,6 +1,11 @@
 # ADR-0056: Keep the three-arm cell as a second zone, and run one zone at a time
 
-- **Status:** Proposed — nothing in this record is implemented.
+- **Status:** Proposed — implemented at this branch's tip, and awaiting the two
+  bring-ups clauses 4 and 5 ask for. Clauses 1, 2, 3, 6, 7 and 8 of the promotion
+  condition below are met; 4 and 5 require a `cell_b` bring-up and a `cell_a`
+  showcase bring-up, and no run of either exists. It said *"nothing in this record
+  is implemented"* until 2026-09-17, which was true when it was written and had
+  stopped being true by the time three reviewers found it independently.
 - **Date:** 2026-09-16
 - **Deciders:** Project owner; drafted by the orchestrator against a three-pass source audit
   of this checkout at `2b135b3`.
@@ -172,6 +177,30 @@ reason recorded, the four changes Option D would require: reserved-scope namespa
 per-zone domain allocation, `/clock` namespacing, and per-zone facility services. Declining
 them is the decision; discovering them later would not have been.
 
+**What enforces clause 3, and what it does not catch.** `model_info.on_configure`
+asks the ROS graph's own name list which *other declared* zone has names on it,
+and returns `FAILURE` with a diagnosis naming that zone;
+`simulation.launch.py` already turns a configure failure into a `Shutdown`
+carrying the node's own message, so this is the existing refusal route rather
+than a new one. The set of zone names comes from the generated bring-up plans,
+so a third zone is covered without an edit. It is a **graph-cache query and
+nothing waits**, which makes it sound and **incomplete** in two stated ways:
+
+- **The discovery race.** DDS discovery is asynchronous, so a zone started at the
+  same instant may not be in the cache yet and will not be seen. Concluding "I am
+  alone" from an absence needs a timeout, and a bring-up that waits a guessed
+  interval to decide is the timing guess CLAUDE.md P4 forbids. Refusing on a
+  positive is an event; refusing on an absence is not.
+- **The same zone twice.** Two `cell_b` bring-ups collide identically and this
+  says nothing about them. Deliberately: CI brings one zone up twice per run, and
+  a rule that could not tell an unfinished teardown from a second cell would turn
+  a lingering process into a hard bring-up failure.
+
+It **refuses a bring-up**. It is not a protective measure, it cannot stop a cell
+that is already running, and it moves no robot. Both residuals are filed in
+`docs/open-work.md`. Until this existed the invariant was enforced by nothing:
+exactly one of the collisions listed above was loud, and only with `line:=true`.
+
 **4. `default_plan_path`'s zone parameter becomes required** (`plan.py:1586`). It is the root
 of every silent `cell_a`, and making it required turns each remaining default into a visible
 call site rather than a behaviour nobody chose.
@@ -210,6 +239,35 @@ driven by the three simulation-in-the-loop scenarios. This is the project owner'
   coverage is ADR-0046's. Accepted deliberately; the alternative shape — feeding the arm *from*
   the belt — would keep ADR-0039 live at the cost of making three geometric indexing rules
   live too, and it is not the flow the owner chose.
+
+  **What that costs in motion terms, which is the only form of it worth reading.**
+  A `DetectAt` failure sits *above* `TakeCustody` in the shipped station tree, so
+  ADR-0046's custody refusal does not cover it: the station retries, re-enters
+  `AwaitTrigger` on a beam the part is **already breaking**, and waits. Because
+  the inbound edge has no belt, `untriggerable_reason` returns `nullopt` at its
+  first test and nothing is reported; `LineState` reads `RUNNING` with
+  `blocked_reason=none`. In `cell_a` a stall at one station eventually shows as
+  the *next* station starving, which is a second symptom a reader can notice.
+  **With one arm there is no next station**, so there is no second symptom at
+  all: the line sits, healthy by every published signal, until the 420 s leg
+  ceiling ends the scenario. This is the dead end ADR-0038 records, at the only
+  station the cell has.
+
+- **Four belt- and handoff-side paths become code no running cell executes.** Not
+  a test-count observation — a statement about which motions the cell can
+  produce. `cell_b` has one belt, which runs continuously and is never indexed or
+  stopped, and one arm, which hands off to a sink rather than to a receiver. So:
+  `ConveyorIndex::index_on`/`on_edge` — stopping a moving belt at a pick point on
+  a beam edge — never runs; `ConveyorIndex::run()` after the initial `run_all()`
+  — the belt restart at `CompleteHandoff` (ADR-0032) — never runs;
+  `CompleteHandoff` never transfers ownership to a **receiving robot**, because
+  there is no second robot (the same structural fact that makes ADR-0031's
+  refusal unreachable here); and `untriggerable_reason`'s belt branch never
+  evaluates at an acting station, per the item above. All four keep their unit
+  tests, and those tests drive **fake action servers that move no arm** — which
+  is the whole of the difference between "covered" and "exercised". A regression
+  in any of them reaches nothing CI runs until a cell with a belt-fed station or
+  a second robot is driven again.
 - **Two validator gaps are exposed and not closed.** Nothing compares two zones' AABBs, and
   `_no_overlapping_bodies` only ever sees one zone's assets, so a `cell_b` placed inside
   `cell_a`'s box produces zero findings. And `referential.py:686` and `:786` check station and
