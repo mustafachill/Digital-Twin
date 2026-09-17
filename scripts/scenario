@@ -93,16 +93,43 @@ export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
 # carries CITE_* across, and a value the container recomputed would be a second
 # decision able to disagree with this one. Scanned rather than parsed here, since
 # the arguments are parsed properly below, on the side that runs launch_test.
+#
+# THE SAME TWO TOKEN GUARDS `./scripts/sim` CARRIES, and this script needed them
+# more rather than less. `--zone` swallowing the next token is worse here because
+# the SECOND parse loop below also consumes it:
+# `./scripts/scenario bringup --zone --teardown-advisory` set the zone to
+# '--teardown-advisory' AND left `TEARDOWN_POLICY` at `blocking`, so the caller
+# asked for an advisory teardown, silently got a gating one, and the run then
+# died at plan load naming a zone nobody typed.
+#
+# An empty value is refused rather than defaulted, which `./scripts/sim` does not
+# have to think about because it has no default to fall back to. Here it does:
+# `_cell.zone()` reads `os.environ.get(SELECTED_BY) or DRIVEN_ZONE`, so an empty
+# string comes back as `cell_b`. The caller named something and got the default
+# without a word — the same class of silence as the swallowed flag.
+select_zone() {  # select_zone <spelling> <value>
+    case "$2" in
+        "") die "${1} was given an empty zone name.
+  There is no zone called '', and an empty one would silently run the default.
+  ./scripts/scenario bringup --zone cell_a" ;;
+        -*|*:=*) die "--zone needs a zone name and was given '${2}'.
+  ./scripts/scenario bringup --zone cell_a --teardown-advisory" ;;
+    esac
+    export CITE_SCENARIO_ZONE="$2"
+}
 WANT_ZONE=0
 for arg in "$@"; do
     if [ "$WANT_ZONE" -eq 1 ]; then
-        export CITE_SCENARIO_ZONE="$arg"
+        select_zone "--zone" "$arg"
         WANT_ZONE=0
         continue
     fi
     case "$arg" in
         --zone)   WANT_ZONE=1 ;;
-        --zone=*) export CITE_SCENARIO_ZONE="${arg#--zone=}" ;;
+        # The exact spelling first: `--zone=` also matches the pattern below, and
+        # the empty value is the one that has to be refused rather than exported.
+        --zone=)  select_zone "--zone=" "" ;;
+        --zone=*) select_zone "--zone=" "${arg#--zone=}" ;;
     esac
 done
 [ "$WANT_ZONE" -eq 0 ] || die "--zone needs a zone name, e.g. --zone cell_a"
@@ -128,7 +155,10 @@ for arg in "$@"; do
         --teardown-advisory) TEARDOWN_POLICY="advisory" ;;
         # Consumed here rather than forwarded: it was read into
         # CITE_SCENARIO_ZONE above, and `launch_test` would reject an argument
-        # it does not know.
+        # it does not know. The token this skips is a zone NAME and not another
+        # flag, which is what `select_zone` above guarantees — before that guard
+        # existed this line ate `--teardown-advisory` and the caller's policy
+        # with it.
         --zone)   SKIP_NEXT=1 ;;
         --zone=*) ;;
         *) LAUNCH_TEST_ARGS+=("$arg") ;;

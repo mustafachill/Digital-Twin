@@ -1098,6 +1098,69 @@ expect_fail "and it is refused whichever order they come in" \
             sim_args zone:=cell_b --zone=cell_a
 
 # -----------------------------------------------------------------------------
+# ./scripts/scenario — the same two token guards, for the script that HAS a
+# default (ADR-0056 decision 5).
+#
+# `./scripts/scenario --zone` is not `./scripts/sim --zone`: which cell the
+# regression suite drives is a project decision stated once in
+# `tests/scenarios/_cell.py`, so this flag has a default and naming a zone is the
+# override. That is exactly why its failure modes are quieter, and why they are
+# driven here.
+#
+# WHAT CARRIES THE WEIGHT IS THE MESSAGE, not the exit status, and that is
+# measured rather than assumed. Strip the refusals out and every `expect_fail`
+# below still passes — the run goes on to fail downstream instead, which is the
+# same shape of evidence as the ctest timeout that used to stand in for the
+# planning-scene-loader assertion. Only the `scenario_says` cases fail: 2 of them
+# did when this was mutation-checked. So each refusal gets one of each, and the
+# `expect_fail` half is there to pin that a refusal EXITS rather than warning.
+#
+# With the refusals in place every case exits inside the FIRST parse loop, which
+# runs before `require_ros_env`, so none of them starts a container. That is a
+# property of the refusals and not of the argument lists: a regression that
+# removes one lets that case re-enter the container, which is the price of
+# driving the entry point rather than a function — the same price the
+# `./scripts/sim` block above pays.
+scenario_args() { "${REPO_ROOT}/scripts/scenario" "$@"; }
+# Captured and then matched, never piped, for the reason `sim_says` gives.
+scenario_says() { # scenario_says <expected substring> <args...>
+    local expected="$1"; shift
+    local output
+    output="$("${REPO_ROOT}/scripts/scenario" "$@" 2>&1 || true)"
+    grep -qF -- "$expected" <<<"$output"
+}
+
+# `--zone` swallowing the next flag. This set CITE_SCENARIO_ZONE to
+# '--teardown-advisory' AND let the second parse loop consume that flag as the
+# zone's name, so TEARDOWN_POLICY stayed `blocking`: the caller asked for an
+# advisory teardown, silently got a gating one, and the run then died at plan
+# load naming a zone nobody typed.
+expect_fail "./scripts/scenario --zone --teardown-advisory refuses rather than swallowing it" \
+            scenario_args bringup --zone --teardown-advisory
+expect_ok   "and quotes the token it was given" \
+            scenario_says "was given '--teardown-advisory'" bringup --zone --teardown-advisory
+expect_fail "./scripts/scenario --zone zone:=cell_a refuses too" \
+            scenario_args bringup --zone zone:=cell_a
+expect_ok   "and quotes that token as well" \
+            scenario_says "was given 'zone:=cell_a'" bringup --zone zone:=cell_a
+# Already refused before the guards landed, and pinned here so the two spellings
+# of a missing name cannot come apart.
+expect_fail "./scripts/scenario --zone with no name after it refuses" \
+            scenario_args bringup --zone
+
+# An empty zone is refused rather than falling back. `_cell.zone()` reads
+# `os.environ.get(SELECTED_BY) or DRIVEN_ZONE`, so an exported empty string comes
+# back as the default: the caller named something and silently got `cell_b`.
+expect_fail "./scripts/scenario --zone= refuses instead of falling back to the default" \
+            scenario_args bringup --zone=
+expect_ok   "and says that an empty zone would have run the default" \
+            scenario_says "empty zone name" bringup --zone=
+expect_fail "and the two-token spelling of an empty zone is refused as well" \
+            scenario_args bringup --zone ""
+expect_ok   "with the same diagnosis, so the two spellings cannot come apart" \
+            scenario_says "empty zone name" bringup --zone ""
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"
