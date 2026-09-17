@@ -239,12 +239,17 @@ def test_a_node_that_never_answers_and_never_moves_is_named(spawn, capsys) -> No
     The whole ceiling is spent here, which is the point of a ceiling: nothing
     proceeds when it expires, and what it produces is a sentence with a node name
     in it rather than a cell that came up around the node.
+
+    **The step is asserted in its delimited form, and that is not style.** A bare
+    `"configure" in reported` is entailed by the `"unconfigured"` below — the word
+    is a substring of the state — so it would pass against a driver that named no
+    step at all, or named the wrong one. `"asked to configure"` is what binds.
     """
     node = spawn(answers_change=False, transitions=False)
     assert _run(_name(node)) == 1
     reported = capsys.readouterr().err
     assert _name(node) in reported
-    assert "configure" in reported
+    assert "asked to configure" in reported
     assert "unconfigured" in reported
 
 
@@ -255,13 +260,19 @@ def test_a_node_that_answers_and_never_activates_is_named(spawn, capsys) -> None
     it answers everything, and it is not `active`. Reported against the ACTIVATE
     step specifically, because a diagnosis naming the wrong step sends the reader
     to the wrong `on_` callback.
+
+    **Both halves are asserted delimited, for the reason the test above gives.**
+    `"active" in reported` is entailed by `"inactive" in reported`, so the pair
+    that reads as "it wanted active and got inactive" in fact asserts one thing
+    twice. `"the activate request"` and `"not 'active'"` are what bind, and they
+    go red when the driver names the other step or the other state.
     """
     node = spawn(stops_at=Transition.TRANSITION_ACTIVATE)
     assert _run(_name(node)) == 1
     reported = capsys.readouterr().err
     assert _name(node) in reported
-    assert "activate" in reported
-    assert "inactive" in reported and "active" in reported
+    assert "the activate request" in reported
+    assert "in 'inactive'" in reported and "not 'active'" in reported
 
 
 def test_a_node_that_refuses_the_transition_is_named(spawn, capsys) -> None:
