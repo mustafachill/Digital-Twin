@@ -28,8 +28,8 @@
        below is expressed relative to it. -->
   <link name="cite_world"/>
 
-  <!-- b_beam_out — break_beam -->
-  <link name="b_beam_out_base_link">
+  <!-- infeed_beam — break_beam -->
+  <link name="infeed_beam_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
            height above the link origin. `com_m` is measured from the box centre
@@ -50,100 +50,122 @@
       <geometry><box size="0.04 0.04 0.12"/></geometry>
     </collision>
   </link>
-  <joint name="b_beam_out_anchor" type="fixed">
+  <joint name="infeed_beam_anchor" type="fixed">
     <parent link="cite_world"/>
-    <child link="b_beam_out_base_link"/>
-    <origin xyz="1.55 3.25 0.63" rpy="0 0 0"/>
-  </joint>
-  <link name="b_beam_out_beam"/>
-  <joint name="b_beam_out_beam_fixed" type="fixed">
-    <parent link="b_beam_out_base_link"/>
-    <child link="b_beam_out_beam"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-
-  <!-- b_beam_pick — break_beam -->
-  <link name="b_beam_pick_base_link">
-    <inertial>
-      <!-- The body's pose names the point it stands on, so the mass sits half a
-           height above the link origin. `com_m` is measured from the box centre
-           and the tensor beside it is centroidal; declaring both at the foot
-           states a centroidal tensor about a point up to 0.3 m from the mass. -->
-      <origin xyz="0 0 0.06" rpy="0 0 0"/>
-      <mass value="0.25"/>
-      <inertia ixx="0.00033333" ixy="0"
-               ixz="0" iyy="0.00033333"
-               iyz="0" izz="6.667e-05"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0.06" rpy="0 0 0"/>
-      <geometry><box size="0.04 0.04 0.12"/></geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0.06" rpy="0 0 0"/>
-      <geometry><box size="0.04 0.04 0.12"/></geometry>
-    </collision>
-  </link>
-  <joint name="b_beam_pick_anchor" type="fixed">
-    <parent link="cite_world"/>
-    <child link="b_beam_pick_base_link"/>
+    <child link="infeed_beam_base_link"/>
     <origin xyz="-0.475 3.25 0.63" rpy="0 0 0"/>
   </joint>
-  <link name="b_beam_pick_beam"/>
-  <joint name="b_beam_pick_beam_fixed" type="fixed">
-    <parent link="b_beam_pick_base_link"/>
-    <child link="b_beam_pick_beam"/>
+  <link name="infeed_beam_beam"/>
+  <joint name="infeed_beam_beam_fixed" type="fixed">
+    <parent link="infeed_beam_base_link"/>
+    <child link="infeed_beam_beam"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- b_conveyor_1 — belt_1200x400 -->
-  <link name="b_conveyor_1_base_link">
+  <!-- infeed_table — work_table_600 -->
+  <link name="infeed_table_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
            height above the link origin. `com_m` is measured from the box centre
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <mass value="45"/>
-      <inertia ixx="1.95" ixy="0"
-               ixz="0" iyy="6.75"
-               iyz="0" izz="6"/>
+      <mass value="30"/>
+      <inertia ixx="1.8" ixy="0"
+               ixz="0" iyy="1.8"
+               iyz="0" izz="1.8"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="1.2 0.4 0.6"/></geometry>
+      <geometry><box size="0.6 0.6 0.6"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="1.2 0.4 0.6"/></geometry>
+      <geometry><box size="0.6 0.6 0.6"/></geometry>
     </collision>
   </link>
-  <joint name="b_conveyor_1_anchor" type="fixed">
+  <joint name="infeed_table_anchor" type="fixed">
     <parent link="cite_world"/>
-    <child link="b_conveyor_1_base_link"/>
-    <origin xyz="1.05 3 0" rpy="0 0 0"/>
+    <child link="infeed_table_base_link"/>
+    <origin xyz="-0.475 3 0" rpy="0 0 0"/>
   </joint>
-  <link name="b_conveyor_1_infeed"/>
-  <joint name="b_conveyor_1_infeed_fixed" type="fixed">
-    <parent link="b_conveyor_1_base_link"/>
-    <child link="b_conveyor_1_infeed"/>
-    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
-  </joint>
-  <link name="b_conveyor_1_outfeed"/>
-  <joint name="b_conveyor_1_outfeed_fixed" type="fixed">
-    <parent link="b_conveyor_1_base_link"/>
-    <child link="b_conveyor_1_outfeed"/>
-    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
-  </joint>
-  <link name="b_conveyor_1_surface"/>
-  <joint name="b_conveyor_1_surface_fixed" type="fixed">
-    <parent link="b_conveyor_1_base_link"/>
-    <child link="b_conveyor_1_surface"/>
+  <link name="infeed_table_surface"/>
+  <joint name="infeed_table_surface_fixed" type="fixed">
+    <parent link="infeed_table_base_link"/>
+    <child link="infeed_table_surface"/>
     <origin xyz="0 0 0.6" rpy="0 0 0"/>
   </joint>
 
-  <!-- b_pedestal_1 — pedestal_600 -->
-  <link name="b_pedestal_1_base_link">
+  <!-- outfeed_beam — break_beam -->
+  <link name="outfeed_beam_base_link">
+    <inertial>
+      <!-- The body's pose names the point it stands on, so the mass sits half a
+           height above the link origin. `com_m` is measured from the box centre
+           and the tensor beside it is centroidal; declaring both at the foot
+           states a centroidal tensor about a point up to 0.3 m from the mass. -->
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <mass value="0.25"/>
+      <inertia ixx="0.00033333" ixy="0"
+               ixz="0" iyy="0.00033333"
+               iyz="0" izz="6.667e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry><box size="0.04 0.04 0.12"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.06" rpy="0 0 0"/>
+      <geometry><box size="0.04 0.04 0.12"/></geometry>
+    </collision>
+  </link>
+  <joint name="outfeed_beam_anchor" type="fixed">
+    <parent link="cite_world"/>
+    <child link="outfeed_beam_base_link"/>
+    <origin xyz="1.55 3.25 0.63" rpy="0 0 0"/>
+  </joint>
+  <link name="outfeed_beam_beam"/>
+  <joint name="outfeed_beam_beam_fixed" type="fixed">
+    <parent link="outfeed_beam_base_link"/>
+    <child link="outfeed_beam_beam"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- outfeed_table — work_table_600 -->
+  <link name="outfeed_table_base_link">
+    <inertial>
+      <!-- The body's pose names the point it stands on, so the mass sits half a
+           height above the link origin. `com_m` is measured from the box centre
+           and the tensor beside it is centroidal; declaring both at the foot
+           states a centroidal tensor about a point up to 0.3 m from the mass. -->
+      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <mass value="30"/>
+      <inertia ixx="1.8" ixy="0"
+               ixz="0" iyy="1.8"
+               iyz="0" izz="1.8"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <geometry><box size="0.6 0.6 0.6"/></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <geometry><box size="0.6 0.6 0.6"/></geometry>
+    </collision>
+  </link>
+  <joint name="outfeed_table_anchor" type="fixed">
+    <parent link="cite_world"/>
+    <child link="outfeed_table_base_link"/>
+    <origin xyz="2 3 0" rpy="0 0 0"/>
+  </joint>
+  <link name="outfeed_table_surface"/>
+  <joint name="outfeed_table_surface_fixed" type="fixed">
+    <parent link="outfeed_table_base_link"/>
+    <child link="outfeed_table_surface"/>
+    <origin xyz="0 0 0.6" rpy="0 0 0"/>
+  </joint>
+
+  <!-- picker_base — pedestal_600 -->
+  <link name="picker_base_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
            height above the link origin. `com_m` is measured from the box centre
@@ -164,83 +186,61 @@
       <geometry><box size="0.3 0.3 0.6"/></geometry>
     </collision>
   </link>
-  <joint name="b_pedestal_1_anchor" type="fixed">
+  <joint name="picker_base_anchor" type="fixed">
     <parent link="cite_world"/>
-    <child link="b_pedestal_1_base_link"/>
+    <child link="picker_base_base_link"/>
     <origin xyz="0 2.7 0" rpy="0 0 0"/>
   </joint>
-  <link name="b_pedestal_1_top"/>
-  <joint name="b_pedestal_1_top_fixed" type="fixed">
-    <parent link="b_pedestal_1_base_link"/>
-    <child link="b_pedestal_1_top"/>
+  <link name="picker_base_top"/>
+  <joint name="picker_base_top_fixed" type="fixed">
+    <parent link="picker_base_base_link"/>
+    <child link="picker_base_top"/>
     <origin xyz="0 0 0.6" rpy="0 0 0"/>
   </joint>
 
-  <!-- b_table_out — work_table_600 -->
-  <link name="b_table_out_base_link">
+  <!-- transfer_belt — belt_1200x400 -->
+  <link name="transfer_belt_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
            height above the link origin. `com_m` is measured from the box centre
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <mass value="30"/>
-      <inertia ixx="1.8" ixy="0"
-               ixz="0" iyy="1.8"
-               iyz="0" izz="1.8"/>
+      <mass value="45"/>
+      <inertia ixx="1.95" ixy="0"
+               ixz="0" iyy="6.75"
+               iyz="0" izz="6"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <geometry><box size="1.2 0.4 0.6"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <geometry><box size="1.2 0.4 0.6"/></geometry>
     </collision>
   </link>
-  <joint name="b_table_out_anchor" type="fixed">
+  <joint name="transfer_belt_anchor" type="fixed">
     <parent link="cite_world"/>
-    <child link="b_table_out_base_link"/>
-    <origin xyz="2 3 0" rpy="0 0 0"/>
+    <child link="transfer_belt_base_link"/>
+    <origin xyz="1.05 3 0" rpy="0 0 0"/>
   </joint>
-  <link name="b_table_out_surface"/>
-  <joint name="b_table_out_surface_fixed" type="fixed">
-    <parent link="b_table_out_base_link"/>
-    <child link="b_table_out_surface"/>
-    <origin xyz="0 0 0.6" rpy="0 0 0"/>
+  <link name="transfer_belt_infeed"/>
+  <joint name="transfer_belt_infeed_fixed" type="fixed">
+    <parent link="transfer_belt_base_link"/>
+    <child link="transfer_belt_infeed"/>
+    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
   </joint>
-
-  <!-- b_table_pick — work_table_600 -->
-  <link name="b_table_pick_base_link">
-    <inertial>
-      <!-- The body's pose names the point it stands on, so the mass sits half a
-           height above the link origin. `com_m` is measured from the box centre
-           and the tensor beside it is centroidal; declaring both at the foot
-           states a centroidal tensor about a point up to 0.3 m from the mass. -->
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <mass value="30"/>
-      <inertia ixx="1.8" ixy="0"
-               ixz="0" iyy="1.8"
-               iyz="0" izz="1.8"/>
-    </inertial>
-    <visual>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
-    </visual>
-    <collision>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
-    </collision>
-  </link>
-  <joint name="b_table_pick_anchor" type="fixed">
-    <parent link="cite_world"/>
-    <child link="b_table_pick_base_link"/>
-    <origin xyz="-0.475 3 0" rpy="0 0 0"/>
+  <link name="transfer_belt_outfeed"/>
+  <joint name="transfer_belt_outfeed_fixed" type="fixed">
+    <parent link="transfer_belt_base_link"/>
+    <child link="transfer_belt_outfeed"/>
+    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
   </joint>
-  <link name="b_table_pick_surface"/>
-  <joint name="b_table_pick_surface_fixed" type="fixed">
-    <parent link="b_table_pick_base_link"/>
-    <child link="b_table_pick_surface"/>
+  <link name="transfer_belt_surface"/>
+  <joint name="transfer_belt_surface_fixed" type="fixed">
+    <parent link="transfer_belt_base_link"/>
+    <child link="transfer_belt_surface"/>
     <origin xyz="0 0 0.6" rpy="0 0 0"/>
   </joint>
 

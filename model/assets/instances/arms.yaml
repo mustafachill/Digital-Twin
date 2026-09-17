@@ -77,30 +77,37 @@ assets:
   # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
-  # THE ID CARRIES THE ZONE BECAUSE NOTHING ELSE DOES. `cite_tools.model.ids`
-  # namespaces topics, actions and frames by zone, but joint, link, controller
-  # and `_mount` names are built from the ASSET id alone, and
-  # `referential.py` requires asset ids to be unique across the whole facility
-  # rather than per zone. A second `arm_1` would collide on every one of those,
-  # in a generated artifact, with no finding. Hence `b_`.
+  # ASSET IDS ARE FACILITY-UNIQUE, AND THAT IS THE HAZARD A NAME HAS TO CARRY.
+  # `cite_tools.model.ids` namespaces topics, actions and frames by zone, but
+  # joint, link, controller and `_mount` names are built from the ASSET ID ALONE,
+  # and `referential.py` requires asset ids to be unique across the whole
+  # facility rather than per zone. A second `arm_1` would therefore collide on
+  # every one of those, inside a generated artifact, with no finding anywhere.
   #
-  # THE DOUBLED LETTER IN `cell_b_b_arm_1.urdf.xacro` IS NOT A TYPO. Generated
-  # artifact names are `<zone>_<asset>`, so a `b_`-prefixed asset in `cell_b`
-  # stutters. The prefix is kept anyway: an asset id travels bare into controller
-  # names, joint names, link names and every log line that mentions them, and in
-  # all of those the zone is the one thing NOT already in scope. A role name such
-  # as `picker` would read better in a filename and would leave a reader of
-  # `picker_joint3` with no way to tell which cell it belongs to.
+  # A ROLE NAME CARRIES IT. `picker` is unique across the facility exactly as a
+  # zone-prefixed id would be, and it says what the asset does — which is what a
+  # reader of `picker_joint3` or `picker_traj_controller` actually needs, since
+  # the zone is not a fact about the joint. The alternative was a `b_` prefix,
+  # which encodes the zone a second time in a spelling NOTHING DERIVES AND
+  # NOTHING VALIDATES: `cite_tools` never reads it, no rule requires it, and an
+  # asset moved between zones keeps the old letter and becomes a lie. It also
+  # stuttered — generated artifact names are `<zone>_<asset>`, so `b_arm_1` in
+  # `cell_b` produced `cell_b_b_arm_1.urdf.xacro`.
+  #
+  # The project owner chose consistency here on 2026-09-17, after all three
+  # variants were measured: each validates clean at all three levels for both
+  # zones and each leaves `cell_a` byte-identical, so cost was not a
+  # discriminator.
   #
   # Everything else about this arm is `arm_1`: same type, same vendor-integrated
   # gripper, same home pose, standing on its own pedestal's `top` frame and yawed
   # +90 degrees to face the belt centreline at +Y. The cell it works in differs;
   # the arm does not.
-  - id: b_arm_1
+  - id: picker
     zone: cell_b
     type: xarm5
     pose:
-      frame: b_pedestal_1/top
+      frame: picker_base/top
       xyz_m: [0.000, 0.000, 0.000]
       rpy_rad: [0.0, 0.0, 1.570796327]
     end_effector:

@@ -4,7 +4,7 @@
      Regenerate: ./scripts/validate-model, passing the write flag.
      A hand edit here is a Critical review finding (ADR-0004) and is detected by
      ./scripts/validate-model, which diffs this tree against a fresh generator run. -->
-<robot xmlns:xacro="http://ros.org/wiki/xacro" name="b_arm_1">
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="picker">
 
   <!-- The vendor SRDF macro, invoked with our prefix — never copied. It carries
        the self-collision matrix, which the vendor computed against the vendor's
@@ -24,7 +24,7 @@
   <xacro:xarm_macro_srdf
       add_gripper="true"
       dof="5"
-      prefix="b_arm_1_"
+      prefix="picker_"
       robot_type="xarm"
   />
 </robot>

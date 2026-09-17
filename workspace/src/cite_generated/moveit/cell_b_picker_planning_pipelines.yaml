@@ -135,8 +135,8 @@ ompl:
       type: geometric::RRTConnect
       range: 0.0
 
-  b_arm_1_xarm5:
+  picker_xarm5:
     planner_configs:
       - RRTConnectkConfigDefault
-    projection_evaluator: joints(b_arm_1_joint1,b_arm_1_joint2)
+    projection_evaluator: joints(picker_joint1,picker_joint2)
     longest_valid_segment_fraction: 0.005

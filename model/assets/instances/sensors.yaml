@@ -168,7 +168,7 @@ assets:
   #
   # Both offsets are cell_a's, for cell_a's two reasons, and neither is re-derived
   # here: +0.250 m in y stands the housing on the side away from the arm — which
-  # works from -y, as `b_pedestal_1` is at y = 2.700 against a centreline of
+  # works from -y, as `picker_base` is at y = 2.700 against a centreline of
   # 3.000 — and clears the 0.100 m approach corridor
   # `cite_tools.validate.geometric` enforces above a station point. +0.030 m in z
   # is a mounting height: above the surface, under the top of the shortest part.
@@ -179,11 +179,11 @@ assets:
   # told, and for the busy-wait that was rejected.
   #
   # It does not index: a table is not driven, so there is nothing to stop.
-  - id: b_beam_pick
+  - id: infeed_beam
     zone: cell_b
     type: break_beam
     pose:
-      frame: b_table_pick/surface
+      frame: infeed_table/surface
       xyz_m: [0.000, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:
@@ -192,9 +192,9 @@ assets:
       beam_length_m: 0.500
       idle_state: clear
 
-  # What makes the arrival at `b_table_out` observed rather than inferred. Same
+  # What makes the arrival at `outfeed_table` observed rather than inferred. Same
   # asymmetry as `beam_c3_out` in cell_a, and for the same reason: the station it
-  # triggers is a sink with no actor, nothing picks from `b_conveyor_1/outfeed`,
+  # triggers is a sink with no actor, nothing picks from `transfer_belt/outfeed`,
   # so the belt is never stopped and there is no rest position to stand off from.
   #
   # `indexes_workpiece` IS DELIBERATELY ABSENT, and declaring it would be an
@@ -203,11 +203,11 @@ assets:
   # station picks from, which is exactly this frame. It keeps `beam_c3_out`'s
   # authored 50 mm upstream position, which is an ordinary mounting offset here
   # because nothing derives one.
-  - id: b_beam_out
+  - id: outfeed_beam
     zone: cell_b
     type: break_beam
     pose:
-      frame: b_conveyor_1/outfeed
+      frame: transfer_belt/outfeed
       xyz_m: [-0.050, 0.250, 0.030]
     hardware: {backend: sim}
     configuration:

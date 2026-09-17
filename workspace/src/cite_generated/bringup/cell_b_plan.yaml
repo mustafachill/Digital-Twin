@@ -103,24 +103,24 @@ plan:
       domain_offset: 0
 
   controller_managers:
-    - asset: b_arm_1
-      node: /cite/cell_b/b_arm_1/controller_manager
+    - asset: picker
+      node: /cite/cell_b/picker/controller_manager
       backend: sim
       # Whether that backend reaches a physical machine, as the asset's TYPE
       # declares it beside the plugin string it names. This and not `backend` is
       # what the hardware opt-in decides on (ADR-0054).
       commands_physical_hardware: false
-      description_topic: /cite/cell_b/b_arm_1/robot_description
-      joint_state_topic: /cite/cell_b/b_arm_1/joint_states
-      description: package://cite_generated/description/cell_b_b_arm_1.urdf.xacro
+      description_topic: /cite/cell_b/picker/robot_description
+      joint_state_topic: /cite/cell_b/picker/joint_states
+      description: package://cite_generated/description/cell_b_picker.urdf.xacro
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model
       # says where it stands (L1).
       spawn_xyz_m: "0 2.7 0.6"
       spawn_rpy_rad: "0 0 1.57079633"
-      parameters: package://cite_generated/control/cell_b_b_arm_1_controllers.yaml
-      trajectory_action: /cite/cell_b/b_arm_1/b_arm_1_joint_trajectory_controller/follow_joint_trajectory
-      gripper_action: /cite/cell_b/b_arm_1/b_arm_1_gripper_controller/gripper_cmd
+      parameters: package://cite_generated/control/cell_b_picker_controllers.yaml
+      trajectory_action: /cite/cell_b/picker/picker_joint_trajectory_controller/follow_joint_trajectory
+      gripper_action: /cite/cell_b/picker/picker_gripper_controller/gripper_cmd
       # The gripper's drive joint travels between these two values in its OWN
       # units. The skill server maps a task-space width onto it; without the
       # mapping a width in metres would be commanded as an angle.
@@ -215,28 +215,28 @@ plan:
       # what the server advertises and what the coordinator calls are one
       # statement.
       skills:
-        move_to: /cite/cell_b/b_arm_1/move_to
-        pick: /cite/cell_b/b_arm_1/pick
-        place: /cite/cell_b/b_arm_1/place
-        grasp: /cite/cell_b/b_arm_1/grasp
-        transfer: /cite/cell_b/b_arm_1/transfer
+        move_to: /cite/cell_b/picker/move_to
+        pick: /cite/cell_b/picker/pick
+        place: /cite/cell_b/picker/place
+        grasp: /cite/cell_b/picker/grasp
+        transfer: /cite/cell_b/picker/transfer
       controllers:
-        - {name: b_arm_1_joint_state_broadcaster, stage: 0}
-        - {name: b_arm_1_gripper_controller, stage: 1}
-        - {name: b_arm_1_joint_trajectory_controller, stage: 1}
+        - {name: picker_joint_state_broadcaster, stage: 0}
+        - {name: picker_gripper_controller, stage: 1}
+        - {name: picker_joint_trajectory_controller, stage: 1}
       moveit:
-        group: b_arm_1_xarm5
-        base_link: b_arm_1_link_base
-        tip_link: b_arm_1_link_tcp
+        group: picker_xarm5
+        base_link: picker_link_base
+        tip_link: picker_link_tcp
         # The home configuration comes from L0: where an arm rests between cycles
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [0, -0.35, -1.05, 0, 1.4]
-        srdf: package://cite_generated/moveit/cell_b_b_arm_1.srdf.xacro
-        kinematics: package://cite_generated/moveit/cell_b_b_arm_1_kinematics.yaml
-        planning_pipelines: package://cite_generated/moveit/cell_b_b_arm_1_planning_pipelines.yaml
-        joint_limits: package://cite_generated/moveit/cell_b_b_arm_1_joint_limits.yaml
-        cartesian_limits: package://cite_generated/moveit/cell_b_b_arm_1_cartesian_limits.yaml
-        controllers: package://cite_generated/moveit/cell_b_b_arm_1_moveit_controllers.yaml
+        srdf: package://cite_generated/moveit/cell_b_picker.srdf.xacro
+        kinematics: package://cite_generated/moveit/cell_b_picker_kinematics.yaml
+        planning_pipelines: package://cite_generated/moveit/cell_b_picker_planning_pipelines.yaml
+        joint_limits: package://cite_generated/moveit/cell_b_picker_joint_limits.yaml
+        cartesian_limits: package://cite_generated/moveit/cell_b_picker_cartesian_limits.yaml
+        controllers: package://cite_generated/moveit/cell_b_picker_moveit_controllers.yaml
         # Which pipeline the L3 skill server asks first, and what it falls back
         # to when that one refuses (ADR-0027). Here rather than compiled into the
         # server: a planner choice is a claim about this arm, and the server's
@@ -252,9 +252,9 @@ plan:
         cartesian_planner_ids: [LIN, CIRC]
 
   conveyors:
-    - asset: b_conveyor_1
-      state_topic: /cite/cell_b/b_conveyor_1/state
-      command_topic: /cite/cell_b/b_conveyor_1/command
+    - asset: transfer_belt
+      state_topic: /cite/cell_b/transfer_belt/state
+      command_topic: /cite/cell_b/transfer_belt/command
       installed_speed_mps: 0.15
 
   # A break beam has TWO topics and they are deliberately not the same name.
@@ -272,20 +272,20 @@ plan:
   # republished periodically and a dropped sample is recovered by the next; the
   # event is an edge that must not be dropped at all. L3 turns one into the other.
   sensors:
-    - asset: b_beam_out
-      detection_topic: /cite/cell_b/b_beam_out/detection
-      level_topic: /cite/cell_b/b_beam_out/detection_level
+    - asset: infeed_beam
+      detection_topic: /cite/cell_b/infeed_beam/detection
+      level_topic: /cite/cell_b/infeed_beam/detection_level
       # The frame a detection from this beam is reported in, published by the
       # generated static TF table.
-      frame_id: cell_b__b_beam_out__beam
+      frame_id: cell_b__infeed_beam__beam
       beam_axis: y
       beam_length_m: 0.5
-    - asset: b_beam_pick
-      detection_topic: /cite/cell_b/b_beam_pick/detection
-      level_topic: /cite/cell_b/b_beam_pick/detection_level
+    - asset: outfeed_beam
+      detection_topic: /cite/cell_b/outfeed_beam/detection
+      level_topic: /cite/cell_b/outfeed_beam/detection_level
       # The frame a detection from this beam is reported in, published by the
       # generated static TF table.
-      frame_id: cell_b__b_beam_pick__beam
+      frame_id: cell_b__outfeed_beam__beam
       beam_axis: y
       beam_length_m: 0.5
 

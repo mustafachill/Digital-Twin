@@ -16,7 +16,7 @@ topology:
       actor: null
       capacity: 12
       trigger:
-        topic: /cite/cell_b/b_beam_out/detection
+        topic: /cite/cell_b/outfeed_beam/detection
         state: blocked
       upstream: [b_transfer_1]
       downstream: []
@@ -28,15 +28,15 @@ topology:
       downstream: [b_transfer_1]
     - id: b_transfer_1
       type: transfer_station
-      actor: b_arm_1
+      actor: picker
       capacity: 1
-      pick_frame: cell_b__b_table_pick__surface
-      place_frame: cell_b__b_conveyor_1__infeed
+      pick_frame: cell_b__infeed_table__surface
+      place_frame: cell_b__transfer_belt__infeed
       trigger:
-        topic: /cite/cell_b/b_beam_pick/detection
+        topic: /cite/cell_b/infeed_beam/detection
         state: blocked
       upstream: [b_infeed]
       downstream: [b_accumulation]
   edges:
     - {from: b_infeed, to: b_transfer_1, via: null, buffer: 6}
-    - {from: b_transfer_1, to: b_accumulation, via: b_conveyor_1, buffer: 4}
+    - {from: b_transfer_1, to: b_accumulation, via: transfer_belt, buffer: 4}

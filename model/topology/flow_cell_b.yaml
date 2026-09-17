@@ -18,9 +18,9 @@ schema: cite/flow/v1
 # tools/tests/test_every_zone_has_a_flow_document.py, which fails if any declared
 # zone loses its flow.
 #
-# TABLE -> ARM -> BELT, in two edges. The arm picks a part off `b_table_pick` and
-# places it on `b_conveyor_1/infeed`; the belt carries it out of the cell to
-# `b_table_out`. Three stations is the minimum a coordinator will accept — see
+# TABLE -> ARM -> BELT, in two edges. The arm picks a part off `infeed_table` and
+# places it on `transfer_belt/infeed`; the belt carries it out of the cell to
+# `outfeed_table`. Three stations is the minimum a coordinator will accept — see
 # the cell_b block in stations.yaml for the four rules that enforce it.
 #
 # THE FIRST EDGE IS `via: null`, AND THAT COSTS THIS CELL ADR-0039's DETECTOR.
@@ -51,4 +51,4 @@ flow:
     # edges, this 4 is also the effective concurrency: nothing stops this belt,
     # because `b_accumulation` is a sink with no handoff to complete, so pieces
     # on it keep moving.
-    - {from: b_transfer_1, to: b_accumulation, via: b_conveyor_1, buffer: 4}
+    - {from: b_transfer_1, to: b_accumulation, via: transfer_belt, buffer: 4}

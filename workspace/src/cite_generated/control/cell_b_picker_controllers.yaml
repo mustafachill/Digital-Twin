@@ -5,12 +5,12 @@
 # A hand edit here is a Critical review finding (ADR-0004) and is detected by
 # ./scripts/validate-model, which diffs this tree against a fresh generator run.
 #
-# Controller configuration for b_arm_1, loaded by the gz_ros2_control plugin
+# Controller configuration for picker, loaded by the gz_ros2_control plugin
 # in cell_b.urdf.xacro. Every name below is derived from the L0 model, which
 # is what makes ADR-0005's guarantee structural: these are the same controller
 # and joint names the physical arm will use, because there is nowhere else for
 # them to come from.
-/cite/cell_b/b_arm_1/controller_manager:
+/cite/cell_b/picker/controller_manager:
   ros__parameters:
     update_rate: 150  # Hz
     use_sim_time: true
@@ -26,30 +26,30 @@
     # is the switch, the description holds the numbers, and stating a value here
     # as well would be a second place to be wrong that nothing would ever read.
     enforce_command_limits: true
-    b_arm_1_joint_state_broadcaster:
+    picker_joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
-    b_arm_1_gripper_controller:
+    picker_gripper_controller:
       type: position_controllers/GripperActionController
-    b_arm_1_joint_trajectory_controller:
+    picker_joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-/cite/cell_b/b_arm_1/b_arm_1_gripper_controller:
+/cite/cell_b/picker/picker_gripper_controller:
   ros__parameters:
-    joint: b_arm_1_drive_joint
+    joint: picker_drive_joint
     allow_stalling: true
     goal_tolerance: 0.01
     max_effort: 60.0
     stall_timeout: 0.3
     stall_velocity_threshold: 0.05
 
-/cite/cell_b/b_arm_1/b_arm_1_joint_trajectory_controller:
+/cite/cell_b/picker/picker_joint_trajectory_controller:
   ros__parameters:
     joints:
-      - b_arm_1_joint1
-      - b_arm_1_joint2
-      - b_arm_1_joint3
-      - b_arm_1_joint4
-      - b_arm_1_joint5
+      - picker_joint1
+      - picker_joint2
+      - picker_joint3
+      - picker_joint4
+      - picker_joint5
     command_interfaces:
       - position
     state_interfaces:
@@ -108,18 +108,18 @@
       # line exists to override would then start aborting a joint that settles a
       # little late.
       stopped_velocity_tolerance: 0.0
-      b_arm_1_joint1:
+      picker_joint1:
         trajectory: 1.0
         goal: 0.01
-      b_arm_1_joint2:
+      picker_joint2:
         trajectory: 1.0
         goal: 0.01
-      b_arm_1_joint3:
+      picker_joint3:
         trajectory: 1.0
         goal: 0.01
-      b_arm_1_joint4:
+      picker_joint4:
         trajectory: 1.0
         goal: 0.01
-      b_arm_1_joint5:
+      picker_joint5:
         trajectory: 1.0
         goal: 0.01

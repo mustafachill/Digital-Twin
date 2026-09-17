@@ -4,7 +4,7 @@
      Regenerate: ./scripts/validate-model, passing the write flag.
      A hand edit here is a Critical review finding (ADR-0004) and is detected by
      ./scripts/validate-model, which diffs this tree against a fresh generator run. -->
-<robot xmlns:xacro="http://ros.org/wiki/xacro" name="b_arm_1">
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="picker">
 
   <!-- One description per arm, spawned as its own Gazebo model.
        gz_ros2_control attaches to a MODEL, and the controller manager it creates
@@ -17,25 +17,25 @@
   <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
        generated static transform table, so this description states no world
        coordinate of its own. -->
-  <link name="b_arm_1_mount"/>
+  <link name="picker_mount"/>
 
   <xacro:include filename="$(find xarm_description)/urdf/xarm_device_macro.xacro"/>
   <xacro:xarm_device
       add_gripper="true"
       attach_rpy="0 0 0"
-      attach_to="b_arm_1_mount"
+      attach_to="picker_mount"
       attach_xyz="0 0 0"
       collision_mesh_path="file://$(find cite_description)/meshes/collision/xarm5/convex_hull"
       create_attach_link="false"
       dof="5"
       effort_control="false"
       gripper_max_drive_rate_rad_s="1"
-      hw_ns="b_arm_1"
+      hw_ns="picker"
       limited="false"
       load_gazebo_plugin="false"
       mesh_suffix="stl"
       model1300="false"
-      prefix="b_arm_1_"
+      prefix="picker_"
       robot_type="xarm"
       ros2_control_plugin="gz_ros2_control/GazeboSimSystem"
       velocity_control="false"
@@ -43,7 +43,7 @@
 
   <!-- Bolt the arm to the world.
 
-       `create_attach_link` is false and `b_arm_1_mount` is not the name
+       `create_attach_link` is false and `picker_mount` is not the name
        the URDF-to-SDF converter anchors on, so without this the arm's root is a
        free rigid body standing on its pedestal by contact friction alone. Joint
        reaction torques slide or tip it, and the symptom — base drift — reads as
@@ -59,17 +59,17 @@
        The joint carries no pose. Where the arm stands is stated once, by the
        spawn pose in the bring-up plan; a pose here would apply it twice. -->
   <gazebo>
-    <joint name="b_arm_1_mount_world_anchor" type="fixed">
+    <joint name="picker_mount_world_anchor" type="fixed">
       <parent>world</parent>
-      <child>b_arm_1_mount</child>
+      <child>picker_mount</child>
     </joint>
   </gazebo>
 
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-      <parameters>$(find cite_generated)/control/cell_b_b_arm_1_controllers.yaml</parameters>
+      <parameters>$(find cite_generated)/control/cell_b_picker_controllers.yaml</parameters>
       <ros>
-        <namespace>/cite/cell_b/b_arm_1</namespace>
+        <namespace>/cite/cell_b/picker</namespace>
       </ros>
     </plugin>
   </gazebo>

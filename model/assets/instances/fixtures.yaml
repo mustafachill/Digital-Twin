@@ -121,7 +121,7 @@ assets:
   # be stated rather than validated.
   #
   # LAYOUT STATUS: PROVISIONAL, exactly as cell_a's is. Engineered, not surveyed.
-  - id: b_pedestal_1
+  - id: picker_base
     zone: cell_b
     type: pedestal_600
     pose:
@@ -133,7 +133,7 @@ assets:
   # which is 0.475 m along -x and 0.300 m along -y from the arm's base: 0.5618 m,
   # 80.3% of the xarm5's 0.700 m envelope — the same margin the cell_a comment
   # above derives for `table_pick`, and clean against COMFORTABLE_REACH_FRACTION.
-  - id: b_table_pick
+  - id: infeed_table
     zone: cell_b
     type: work_table_600
     pose:
@@ -143,10 +143,10 @@ assets:
 
   # Where the belt delivers. `b_accumulation` is a sink with no actor, so nothing
   # picks from this table and its surface is never a station point — it exists to
-  # catch what runs off `b_conveyor_1`, at the belt's own 0.600 m surface height.
+  # catch what runs off `transfer_belt`, at the belt's own 0.600 m surface height.
   # Its near face stands at x = 1.700 against the belt's end at 1.650: the same
   # 50 mm of designed air cell_a leaves between conveyor_3 and table_accumulation.
-  - id: b_table_out
+  - id: outfeed_table
     zone: cell_b
     type: work_table_600
     pose:

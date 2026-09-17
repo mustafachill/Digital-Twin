@@ -1461,7 +1461,7 @@ for exactly the station most likely to need it. The same shape applies to `pick_
 Reproduce it:
 
 ```bash
-sed -i 's/^    actor: b_arm_1$/    actor: arm_1/' model/topology/stations.yaml
+sed -i 's/^    actor: picker$/    actor: arm_1/' model/topology/stations.yaml
 ./scripts/validate-model --write     # ok model valid — 2 zone(s) ... ; restore with git checkout
 grep -n 'actor' workspace/src/cite_generated/topology/cell_b_flow.yaml
 ```

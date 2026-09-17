@@ -13,23 +13,23 @@ moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControll
 
 moveit_simple_controller_manager:
   controller_names:
-    - b_arm_1_joint_trajectory_controller
-    - b_arm_1_gripper_controller
+    - picker_joint_trajectory_controller
+    - picker_gripper_controller
 
-  b_arm_1_joint_trajectory_controller:
+  picker_joint_trajectory_controller:
     type: FollowJointTrajectory
     action_ns: follow_joint_trajectory
     default: true
     joints:
-      - b_arm_1_joint1
-      - b_arm_1_joint2
-      - b_arm_1_joint3
-      - b_arm_1_joint4
-      - b_arm_1_joint5
+      - picker_joint1
+      - picker_joint2
+      - picker_joint3
+      - picker_joint4
+      - picker_joint5
 
-  b_arm_1_gripper_controller:
+  picker_gripper_controller:
     type: GripperCommand
     action_ns: gripper_cmd
     default: true
     joints:
-      - b_arm_1_drive_joint
+      - picker_drive_joint

@@ -84,7 +84,7 @@ stations:
   - id: b_infeed
     zone: cell_b
     type: source_station
-    assets: [b_table_pick]
+    assets: [infeed_table]
     capacity: 6
 
   # The cell's only acting station: pick off the table, place on the belt.
@@ -104,11 +104,11 @@ stations:
   - id: b_transfer_1
     zone: cell_b
     type: transfer_station
-    actor: b_arm_1
-    assets: [b_arm_1, b_pedestal_1]
-    pick_from: {asset: b_table_pick, frame: surface}
-    place_to: {asset: b_conveyor_1, frame: infeed}
-    trigger: {sensor: b_beam_pick, state: blocked}
+    actor: picker
+    assets: [picker, picker_base]
+    pick_from: {asset: infeed_table, frame: surface}
+    place_to: {asset: transfer_belt, frame: infeed}
+    trigger: {sensor: infeed_beam, state: blocked}
 
   # The sink. It has a trigger and no actor: nothing here acts, and the trigger is
   # what makes the arrival observed rather than counted when the arm let go —
@@ -116,6 +116,6 @@ stations:
   - id: b_accumulation
     zone: cell_b
     type: sink_station
-    assets: [b_table_out]
+    assets: [outfeed_table]
     capacity: 12
-    trigger: {sensor: b_beam_out, state: blocked}
+    trigger: {sensor: outfeed_beam, state: blocked}

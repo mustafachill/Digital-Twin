@@ -56,14 +56,14 @@ assets:
   #
   # One belt, at cell_a's `conveyor_1` x datum translated +3.000 m in y:
   #
-  #   b_conveyor_1  centre 1.050  ->  belt 0.450..1.650  infeed 0.500  outfeed 1.600
+  #   transfer_belt  centre 1.050  ->  belt 0.450..1.650  infeed 0.500  outfeed 1.600
   #
   # It is the `via` of the only belt-mediated edge in this cell, carrying the part
   # from `b_transfer_1` out to the sink. It is never indexed and never stopped:
   # `b_accumulation` is a sink with a trigger and no actor, so it has no handoff
   # to complete, and nothing picks from this belt's outfeed. It runs continuously,
   # exactly as `conveyor_3` does in cell_a.
-  - id: b_conveyor_1
+  - id: transfer_belt
     zone: cell_b
     type: belt_1200x400
     pose:

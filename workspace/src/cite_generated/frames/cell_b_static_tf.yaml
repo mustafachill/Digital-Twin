@@ -8,17 +8,27 @@
 # Frames for assets that are not links in the robot description.
 static_transforms:
 - parent: cite_world
-  child: b_arm_1_mount
+  child: cell_b__infeed_beam__beam
   xyz_m:
+  - -0.475
+  - 3.25
+  - 0.63
+  rpy_rad:
   - 0.0
-  - 2.7
+  - -0.0
+  - 0.0
+- parent: cite_world
+  child: cell_b__infeed_table__surface
+  xyz_m:
+  - -0.475
+  - 3.0
   - 0.6
   rpy_rad:
   - 0.0
   - -0.0
-  - 1.570796327
+  - 0.0
 - parent: cite_world
-  child: cell_b__b_beam_out__beam
+  child: cell_b__outfeed_beam__beam
   xyz_m:
   - 1.55
   - 3.25
@@ -28,57 +38,7 @@ static_transforms:
   - -0.0
   - 0.0
 - parent: cite_world
-  child: cell_b__b_beam_pick__beam
-  xyz_m:
-  - -0.475
-  - 3.25
-  - 0.63
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 0.0
-- parent: cite_world
-  child: cell_b__b_conveyor_1__infeed
-  xyz_m:
-  - 0.5
-  - 3.0
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 0.0
-- parent: cite_world
-  child: cell_b__b_conveyor_1__outfeed
-  xyz_m:
-  - 1.6
-  - 3.0
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 0.0
-- parent: cite_world
-  child: cell_b__b_conveyor_1__surface
-  xyz_m:
-  - 1.05
-  - 3.0
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 0.0
-- parent: cite_world
-  child: cell_b__b_pedestal_1__top
-  xyz_m:
-  - 0.0
-  - 2.7
-  - 0.6
-  rpy_rad:
-  - 0.0
-  - -0.0
-  - 0.0
-- parent: cite_world
-  child: cell_b__b_table_out__surface
+  child: cell_b__outfeed_table__surface
   xyz_m:
   - 2.0
   - 3.0
@@ -88,12 +48,52 @@ static_transforms:
   - -0.0
   - 0.0
 - parent: cite_world
-  child: cell_b__b_table_pick__surface
+  child: cell_b__picker_base__top
   xyz_m:
-  - -0.475
+  - 0.0
+  - 2.7
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 0.0
+- parent: cite_world
+  child: cell_b__transfer_belt__infeed
+  xyz_m:
+  - 0.5
   - 3.0
   - 0.6
   rpy_rad:
   - 0.0
   - -0.0
   - 0.0
+- parent: cite_world
+  child: cell_b__transfer_belt__outfeed
+  xyz_m:
+  - 1.6
+  - 3.0
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 0.0
+- parent: cite_world
+  child: cell_b__transfer_belt__surface
+  xyz_m:
+  - 1.05
+  - 3.0
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 0.0
+- parent: cite_world
+  child: picker_mount
+  xyz_m:
+  - 0.0
+  - 2.7
+  - 0.6
+  rpy_rad:
+  - 0.0
+  - -0.0
+  - 1.570796327
