@@ -106,19 +106,30 @@ assets:
   # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
-  # Same fixtures, same dimensions, same relative spacing as `cell_a` above,
-  # translated +3.000 m in y and nothing else. That is the whole placement rule,
-  # and it is chosen so the layout arithmetic in this file's header transfers
-  # without re-derivation: the arm still stands 0.300 m in front of the belt
-  # centreline, the pick table still ends 25 mm short of the pedestal, and the
-  # outfeed table still stands 50 mm clear of the belt's end. Those three numbers
-  # were measured for `cell_a`; re-using the x datum is what keeps them true here
-  # instead of making every distance in this cell a fresh number nobody checked.
+  # Same fixtures, same dimensions, same relative spacing as `cell_a` above.
   #
-  # The y offset itself is sized against `cell_a`'s zone box, not against its
-  # bodies: cell_a spans y -1.200..0.800 and cell_b's zone spans 2.000..4.000, so
-  # the boxes are 1.200 m apart. See model/facility/zones.yaml for why that has to
-  # be stated rather than validated.
+  # THE PLACEMENT RULE, STATED FOR WHAT IT IS TRUE OF. The three bodies at the
+  # head of the line — `picker_base`, `infeed_table` and `transfer_belt` — are
+  # `cell_a`'s `pedestal_1`, `table_pick` and `conveyor_1` translated +3.000 m in
+  # y and nothing else. The two DOWNSTREAM fixtures are not: `cell_b`'s line is
+  # one belt long where `cell_a`'s is three, so `outfeed_table` sits at x 2.000
+  # against `table_accumulation`'s 6.200. This comment said "+3.000 m in y and
+  # nothing else" of the whole cell, which was false of that table by 4.200 m in
+  # x and of the beam that watches it.
+  #
+  # WHAT DOES TRANSFER, and it is the claim the clearances rest on, is the
+  # RELATIVE placement against the belt: the arm still stands 0.300 m in front of
+  # the belt centreline, the pick table still ends 25 mm short of the pedestal,
+  # and the outfeed table still stands 50 mm clear of the belt's end. Those three
+  # numbers were measured for `cell_a`; re-using its x datum is what keeps them
+  # true here instead of making every distance in this cell a fresh number nobody
+  # has checked. `outfeed_table`'s x is chosen to hold the last of the three
+  # against `transfer_belt`, which is exactly why it is not a copy of
+  # `table_accumulation`'s.
+  #
+  # The y offset itself is sized against `cell_a`'s zone box rather than against
+  # its bodies. The two boxes and the air between them are declared in
+  # model/facility/zones.yaml and are deliberately not restated here.
   #
   # LAYOUT STATUS: PROVISIONAL, exactly as cell_a's is. Engineered, not surveyed.
   - id: picker_base
