@@ -258,12 +258,21 @@ def _bring_up(context: LaunchContext) -> list:
 
     controller_actions, first_spawner, last_spawner = _controllers(plan)
 
-    # The zone's detection server comes up with the arms rather than after them:
-    # it commands no motion, needs neither the planner nor a controller, and the
-    # sooner it is subscribed the sooner a beam that is already blocked is known.
-    # It refuses to start if the plan does not name every sensor's topics and
-    # frame, and that refusal stops bring-up. It resolves a beam's frame against
-    # the facility's static tree, so it waits on the driver with the rest.
+    # The zone's detection server commands no motion and needs neither the
+    # planner nor a controller, so nothing below it has ever held it back. It
+    # refuses to start if the plan does not name every sensor's topics and frame,
+    # and that refusal stops bring-up.
+    #
+    # It used to start with the facility nodes, on the argument that the sooner
+    # it is subscribed the sooner a beam that is already blocked is known. It now
+    # waits on the driver with everything else downstream of `_facility`, and
+    # that is a trade rather than a dependency: its only `lookupTransform` is
+    # inside a `Detect` goal callback under a 5 s timeout, never at start-up, so
+    # an early start would resolve beams perfectly well. What it would also do is
+    # put its output ahead of the driver's diagnosis in a failing log, and make
+    # "nothing downstream of `_facility` starts first" a rule with an exception
+    # in it. The cost is the beam-state subscription arriving a second or two
+    # later, on a cell that is not running yet either way.
     detection = _detection(plan)
 
     # Nothing downstream of `_facility` starts until every managed node has been
@@ -833,6 +842,14 @@ def _managed(node: LifecycleNode, name: str) -> list:
     observing `unconfigured` rather than `inactive` and naming it. These are the
     better-worded answer on the occasions they do arrive, which is why the ones
     that match a failed activation must still not try to activate again.
+
+    **So one failed transition can produce two shutdown messages**, and a reader
+    who sees only one has not necessarily seen the whole of it: on the occasions
+    the event does arrive, a refusal here and the driver's own non-zero exit both
+    ask the launch to stop, and the log carries whichever `Shutdown` reason landed
+    first. **The driver's is the authoritative one.** It is the observation —
+    what the node answered `get_state` with — where a refusal is a broadcast that
+    may or may not have been delivered, and it names the step as well as the node.
     """
     return [
         _refuses(node, name, "configuring", "unconfigured", "on_configure returned FAILURE"),
