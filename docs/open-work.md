@@ -1708,6 +1708,46 @@ forbids, and this item is not an invitation to add one.
 active`. Here configure **succeeds** and the silence is the whole defect.
 
 
+**Trials, from the debugger's final report and stated as counts rather than as a rate.** Real
+`./scripts/scenario bringup` on `cell_b`: 2 stalls in 4. Harness, `cell_b`, no added load: 2 in 35.
+Harness, `cell_b`, plus twelve idle nodes of discovery load: 4 in 45. Harness, **`cell_a`**, plus
+twelve idle nodes: 1 in 12 — which is the configuration `main` ships and is why this is filed as
+pre-existing rather than as a property of the new cell. **About 7 stalls in about 92 harness
+trials, on one host, in one afternoon, with a `tester` running scenarios on the same machine for
+part of it. Not a rate.**
+
+**Load is NOT established as the trigger**, and the tempting reading is wrong: time from launch
+start to `configured` does not separate the outcomes — failures at **0.508 s** and **0.597 s**
+against passes at **0.480 / 0.489 / 0.499 / 0.785 s**. A *faster* node is not what stalls, and the
+loaded and unloaded arms are indistinguishable at this n.
+
+**The four refusals are droppable too.** `_managed`'s `_refuses` handlers are driven by the **same
+topic**, so a transition that *fails* can be lost exactly as one that succeeds. Nothing covers
+either today.
+
+**One assumption is written down as fact elsewhere and is false.**
+`cite_bringup/readiness_witness.py`'s `endpoints()` docstring states that everything before it is
+*"already gated on a real completion event — a spawner exiting, **a lifecycle transition**, the
+planning-scene loader finishing."* That clause is the assumption this defect lives inside, and it
+should be corrected by whoever fixes this.
+
+**Fix direction, from the debugger, and the first line matters most: it is not "wait longer".**
+(A) Stop keying activation and the four refusals on a volatile broadcast — have the launch's own
+node **call `change_state` and read the response**, then **confirm with an idempotent, re-askable
+`get_state`**, chaining configure → activate on answers rather than on events. The reply can be
+dropped too (a `tester` run shows it), which is why the confirmation and not the response is the
+gate. The legal precedent is already in the tree: `readiness_witness.py`'s `_SLICE_S` comment sets
+the rule that a ceiling's expiry must be a **failure naming what never answered**, never a signal
+to proceed. **Do not add a sleep and do not widen any existing ceiling.**
+(B) Separable and cheaper: nothing downstream of `_facility()` may start until each managed node is
+**observed** `active`. These runs would then have failed at ~1 s naming `frame_server`, instead of
+at ~10 s naming frames and the planning scene.
+(C) Cheapest: have `tests/scenarios/bringup.py` assert each managed facility node is `active`. It
+would not prevent the stall but would name it.
+
+**A fix must not break** the four `_refuses` diagnoses, the launch description shared
+byte-identically by all three scenarios, or `--pair`'s readiness-token chain.
+
 ### #73 — `skill_server` and `move_group` hung through `SIGTERM` at teardown and were `SIGKILL`ed
 One observation, `continuous_line` against `cell_b` on 2026-09-17, in a run whose **cycle passed
 3 of 3 work-pieces** and whose post-shutdown check then failed:
@@ -1743,33 +1783,50 @@ rather than a systematic regression. **One occurrence, one host, nothing registe
 Every item here misled this project at least once, including in the session that wrote this file.
 
 
-### #70 — A `./scripts/test` reading taken while a `dev` container is up is not a reading of this repository
-`scripts/_lib.sh:1037` reuses an already-running container with `compose exec`. **`docker exec`
-does not run the image entrypoint**, which is what sources `/opt/ros/jazzy/setup.bash`, so
-`PYTHONPATH` is unset inside that exec. Every ctest then dies on
+### #70 — `./scripts/test` failed all 11 packages twice while another container was up, and the mechanism is NOT established
+**What was observed, three times on 2026-09-17.** Two consecutive `./scripts/test` runs exited 1
+with **123** occurrences of
 
 ```
 ModuleNotFoundError: No module named 'ament_cmake_test'
 ```
 
-**including the `flake8`, `copyright` and `pep257` meta-tests — so nothing of ours executes at
-all**, and the run reports **0 of 11 packages**. The same eleven packages pass **11 of 11**
-through `compose run`.
+from `/opt/ros/jazzy/share/ament_cmake_test/cmake/run_test.py`, failing **all eleven** packages —
+**including the `flake8`, `copyright` and `pep257` meta-tests, so none of our tests executed at
+all.** The host halves were unaffected and identical in both runs (`144` shell gate,
+`1623 passed, 1 skipped`), so only the per-package half is involved. A third run, after the one
+change below, was clean: `1415 tests, 0 errors, 0 failures, 56 skipped`, zero `ModuleNotFoundError`.
 
-Found by a `fixer` on 2026-09-17, which hit it because another session had left a `dev` container
-up. It is not a flake and not a regression in any package: it is a property of which branch
-`exec_in_container` takes.
+**The one thing that changed between the failures and the pass**: an **orphaned container from
+another session's debugging harness** — running twelve idle load nodes on `ROS_DOMAIN_ID=91`, up
+13 minutes, outliving the agent that started it — was stopped. Nothing else was touched, and the
+re-run began immediately.
 
-Check the predicate itself rather than `docker ps`, because that is what the script keys on:
+**What is ruled out, by measurement rather than by argument.**
+- **The `compose exec` path did not fire.** `scripts/_lib.sh:1036` keys on
+  `compose ps --services --status running` and `grep -qx "$service"`. That command was measured
+  **empty immediately before both failing runs**, while `docker ps` showed the orphan — because a
+  `compose run` one-off is not listed by `--services`. So `exec_in_container` took the
+  `compose run` branch both times.
+- **A missing environment in a fresh container is ruled out.** `./scripts/enter dev printenv
+  PYTHONPATH` returns the full path including `/opt/ros/jazzy/lib/python3.12/site-packages`, and
+  `import ament_cmake_test` succeeds there — **with and without a login shell**, so the entrypoint
+  is doing its job.
 
-```bash
-docker compose -f infra/docker/docker-compose.yml ps --services --status running
-```
+**So the correlation is strong and the mechanism is unknown.** Two containers of this project
+share the `cite-build` and `cite-install` volumes, which is the direction worth looking first; that
+is a hypothesis and nothing here tests it. **Three observations, one host, one afternoon, nothing
+registered in advance. That is not a rate and it is not a cause.**
 
-Empty means `./scripts/test` will take the `compose run` path and the reading is real. Non-empty
-means it will not. **Every `./scripts/test` figure quoted anywhere — CLAUDE.md §2 included —
-carries this condition**, and no figure recorded before this date states whether a container was
-up when it was taken.
+**The operational rule survives whatever the mechanism turns out to be**, and it is the reason this
+sits under instrument honesty: **confirm `docker ps` is empty before taking a `./scripts/test`
+figure, and say so when quoting one.** No `./scripts/test` figure recorded anywhere in this
+repository states whether another container was up when it was taken.
+
+**This entry was wrong when first written, and how it got wrong is the point.** It was filed
+naming `compose exec` as the cause, on a `fixer`'s report, **without verifying it** — and the
+verification took two commands and overturned it. `.claude/orchestration.md` rule 5 says not to
+trust a report at face value; this is what it costs when you do.
 
 ### #64 — `cite_tools.cli --help` crashes in the host virtualenv: `typer` is pinned and `click` is not
 `.venv/bin/python -m cite_tools.cli --help` exits **1** with
