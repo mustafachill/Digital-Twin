@@ -72,3 +72,40 @@ def test_arguments_this_parser_does_not_own_are_still_ignored() -> None:
     """
     arguments = _arguments(["--zone", "cell_b", "--ros-args", "-r", "__ns:=/cite/twin"])
     assert arguments.zone == "cell_b"
+
+
+# --- and they may not disagree ------------------------------------------------
+
+
+def test_a_zone_that_contradicts_the_plan_is_refused(capsys) -> None:
+    """`--zone cell_b --plan .../cell_a_plan.yaml` used to span `cell_a` silently.
+
+    `--zone` is never read again once the plan is located: `main` spans
+    `plan.zone`. So the conditional in `_arguments` was satisfied by an argument
+    that then decided nothing, and the caller's stated intention and the cell
+    actually wired across were two different things with no error anywhere.
+
+    Driven through `main`, which is where the comparison is: `_arguments` cannot
+    make it, because it has not read the plan yet.
+    """
+    from cite_bringup.plan import default_plan_path
+    from cite_twin.twin_boundary import main
+
+    other = "cell_b" if default_plan_path("cell_a").is_file() else "cell_a"
+    assert main(["--zone", other, "--plan", str(default_plan_path("cell_a"))]) == 2
+    message = capsys.readouterr().err
+    assert other in message and "cell_a" in message, message
+
+
+def test_a_zone_that_agrees_with_the_plan_is_not_refused(capsys) -> None:
+    """The other half. Stating the same fact twice is redundant, not wrong.
+
+    It gets past the comparison and fails later for its own reason — the shipped
+    model declares `sides: single` and a boundary needs two — which is what shows
+    the comparison let it through rather than stopping it.
+    """
+    from cite_bringup.plan import default_plan_path
+    from cite_twin.twin_boundary import main
+
+    assert main(["--zone", "cell_a", "--plan", str(default_plan_path("cell_a"))]) == 2
+    assert "cannot both be honoured" not in capsys.readouterr().err

@@ -211,13 +211,17 @@ an accident that disappears the moment two sides share a container.
 Take the value from the plan rather than typing it, then use `gz` as before:
 
 ```bash
-export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # or cell_a for the showcase; there is no default
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
-import os
+import sys
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
-print(load(default_plan_path(os.environ["CITE_ZONE"])).side_named(PLANT_SIDE).gz_partition)')"
+print(load(default_plan_path(sys.argv[1])).side_named(PLANT_SIDE).gz_partition)' "$ZONE")"
 gz topic -l
 ```
+
+> The zone is an ARGUMENT and not an environment variable, and the reason is in
+> `workspace/src/cite_bringup/README.md` under "What this costs you at a terminal":
+> `export CITE_ZONE=...` on the host never reaches the container.
 
 If bring-up itself refuses with a message naming `GZ_PARTITION` or `sides:`, that is not this
 problem: the plan is stale or was hand-edited. Run `./scripts/validate-model --write`, then
@@ -243,14 +247,14 @@ discover each other. The base travels in `CITE_DOMAIN_BASE`, and one function ad
 ask it rather than doing the arithmetic:
 
 ```bash
-export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # or cell_a for the showcase; there is no default
 ./scripts/enter dev python3 -c '
-import os
+import os, sys
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
-plan = load(default_plan_path(os.environ["CITE_ZONE"]))
+plan = load(default_plan_path(sys.argv[1]))
 base = domain_base(os.environ)
 for side in plan.sides:
-    print(side.name, resolve_domain_id(plan, side.name, base))'
+    print(side.name, resolve_domain_id(plan, side.name, base))' "$ZONE"
 ```
 
 An untwinned zone prints one line, and it is the domain the checkout already uses. Note that

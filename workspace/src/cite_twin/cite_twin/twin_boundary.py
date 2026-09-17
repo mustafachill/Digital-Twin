@@ -1158,6 +1158,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cite_twin: {error}", file=sys.stderr)
         return 2
 
+    # Both were given and they disagree. `--zone` is not read again after the
+    # plan is located — `main` spans `plan.zone` — so passing `--zone cell_b`
+    # beside `--plan .../cell_a_plan.yaml` satisfied the condition in
+    # `_arguments` and then silently spanned `cell_a`. L5 is the one component
+    # holding endpoints in BOTH domains and computing a hardware gate from the
+    # plan's declared backends, so the cell it is wired across is not a detail
+    # to be inferred from whichever argument happened to win.
+    #
+    # One comparison rather than `required=True`: a caller passing only `--plan`
+    # still states the zone once, which is what keeps both paired launch tests
+    # working.
+    if arguments.zone and plan.zone != arguments.zone:
+        print(
+            f"cite_twin: --zone {arguments.zone!r} and --plan {str(path)!r}, which "
+            f"declares zone {plan.zone!r}. A boundary spans ONE zone and reads it off "
+            "the plan, so these cannot both be honoured. Pass one of them.",
+            file=sys.stderr,
+        )
+        return 2
+
     boundary: TwinBoundary | None = None
     try:
         boundary = TwinBoundary(plan, base, environ)

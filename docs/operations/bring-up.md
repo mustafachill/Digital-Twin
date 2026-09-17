@@ -159,15 +159,19 @@ A shell is on the plant's domain by default — `./scripts/doctor` prints it —
 other side, resolve its domain from the plan rather than adding one by hand:
 
 ```bash
-export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # or cell_a for the showcase; there is no default
 ./scripts/enter dev python3 -c '
-import os
+import os, sys
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
-plan = load(default_plan_path(os.environ["CITE_ZONE"]))
+plan = load(default_plan_path(sys.argv[1]))
 for side in plan.sides:
     print(side.name, resolve_domain_id(plan, side.name, domain_base(os.environ)),
-          side.gz_partition)'
+          side.gz_partition)' "$ZONE"
 ```
+
+> The zone is an ARGUMENT and not an environment variable, and the reason is in
+> `workspace/src/cite_bringup/README.md` under "What this costs you at a terminal":
+> `export CITE_ZONE=...` on the host never reaches the container.
 
 Then `ROS_DOMAIN_ID=<that> ros2 node list`, and `GZ_PARTITION=<that> gz topic -l` for the
 Gazebo half. **Both are needed and neither substitutes for the other**: a shell with the right

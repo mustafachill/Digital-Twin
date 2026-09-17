@@ -154,12 +154,22 @@ list an empty transport unless you set the same partition first. Take it from th
 than typing it:
 
 ```bash
-export CITE_ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # or cell_a for the showcase; there is no default
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
-import os
+import sys
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
-print(load(default_plan_path(os.environ["CITE_ZONE"])).side_named(PLANT_SIDE).gz_partition)')"
+print(load(default_plan_path(sys.argv[1])).side_named(PLANT_SIDE).gz_partition)' "$ZONE")"
 ```
+
+> The zone is passed as an ARGUMENT and not as an environment variable. `export
+> CITE_ZONE=...` on the host never reaches the container: `./scripts/enter` runs
+> `compose run --rm -T`, which inherits nothing from the invoking shell, and compose
+> passes only what `x-common-env` names. Four recipes in this repository said `export`
+> and all four raised `KeyError` — silently correct-looking, because the export
+> succeeds. Adding `CITE_ZONE` to `x-common-env` would fix them by making an EMPTY
+> default reach the container, which is the thing every `require_zone` on this branch
+> exists to refuse.
+
 
 Be precise about what an unpartitioned command does, because it is not what a terminal
 usually teaches you to expect. `gz model --list` against a running cell it cannot reach
