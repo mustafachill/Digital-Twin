@@ -303,10 +303,29 @@ driven by the three simulation-in-the-loop scenarios. This is the project owner'
 This record moves to `Accepted` when all of the following hold, each by the named instrument.
 
 1. `./scripts/validate-model` exits 0 and reports **2 zones**, in a clean checkout.
-2. The same command's byte-identity and second-interpreter checks pass, and
-   `git status` after regeneration names **`MODEL_HASH` and `cell_b_*` artifacts only** — no
-   `cell_a_*` artifact moves. An ordering dependency that perturbs `cell_a` is a defect in this
-   change, not an acceptable diff.
+2. The same command's byte-identity and second-interpreter checks pass, and **every `cell_a`
+   artifact that moves against `main` is accounted for by a deliberate change to the generator
+   or its templates, with regeneration proving it produced the diff.** A `cell_a` diff nobody
+   intended — an ordering dependency, a mapping that acquired an entry, a path that resolved
+   differently — is a defect in this change and not an acceptable diff.
+
+   **Reworded 2026-09-17, with the deviation that forced it recorded rather than explained
+   away.** The clause said `git status` after regeneration must name **`MODEL_HASH` and
+   `cell_b_*` artifacts only — no `cell_a_*` artifact moves**, and four do:
+   `cell_a_arm_{1,2,3}.urdf.xacro` and `cell_a_scene.urdf.xacro`, **fourteen lines, all of them
+   inside XML comments and none of them structural**. They are produced by `c22d087`, which
+   stopped the description templates asserting a three-arm cell — "With all three arms in one
+   model, all three managers claimed all eighteen joints", "joint reaction torques from three
+   arms". Those sentences were false for any zone that is not `cell_a` the moment a second zone
+   was generated from the same templates, so correcting them is the work this record asks for
+   and the clause as written could only have been satisfied by leaving a generated comment
+   lying. What makes them generator-produced rather than hand-edited (ADR-0021) is that
+   `./scripts/validate-model` regenerates the tree and re-runs the generator in a second
+   interpreter under a different hash seed, and the output is byte-identical both times.
+
+   **The previous fix round on `feat/cell-b-zone` reported "no `cell_a_*` artifact moved", which
+   is wrong as stated.** The reviewer that found it is the reason this clause is reworded
+   instead of being quietly treated as met.
 3. `./scripts/build` still reports 23 packages, with no edit to `generate/package.py`, the
    CMake template or `package.xml`.
 4. `./scripts/sim --headless --zone cell_b` brings the cell up, and
