@@ -1041,6 +1041,44 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# ./scripts/sim — the zone is named or the launch does not happen (ADR-0056).
+#
+# The facility declares two cells and exactly one runs at a time, so `--zone` is
+# required and has no default. A default here would put the choice back exactly
+# where removing it from `default_plan_path` took it from: somewhere nobody made
+# it. These assertions are what stops one being added back for convenience.
+#
+# Only the REFUSING paths are driven. `./scripts/sim --zone cell_b` starts a cell
+# — or, on a host with no ROS, a container — and a self-test may not do either.
+# Every case below exits before `require_ros_env`, which is the line that decides
+# where the rest of the script runs.
+# -----------------------------------------------------------------------------
+sim_args() { "${REPO_ROOT}/scripts/sim" "$@"; }
+# Captured and then matched, never piped: `set -o pipefail` is in force here, and
+# a refusal exits non-zero by design, so a pipeline would report the refusal
+# rather than whether the diagnosis said the right thing.
+sim_says() { # sim_says <expected substring> <args...>
+    local expected="$1"; shift
+    local output
+    output="$("${REPO_ROOT}/scripts/sim" "$@" 2>&1 || true)"
+    grep -qF -- "$expected" <<<"$output"
+}
+
+expect_fail "./scripts/sim with no zone refuses instead of choosing one" \
+            sim_args
+expect_ok   "and the refusal names the flag rather than a plan path" \
+            sim_says "--zone is required"
+expect_ok   "and it names both cells, so the reader can act on it" \
+            sim_says "cell_a"
+
+# `--zone` as the last token. Without the check this leaves ZONE empty and the
+# next refusal fires with a message about a missing flag the caller did type.
+expect_fail "./scripts/sim --zone with no name after it refuses" \
+            sim_args --zone
+expect_ok   "and says what is missing is the zone NAME" \
+            sim_says "needs a zone name" --zone
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"

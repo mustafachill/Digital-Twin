@@ -1320,3 +1320,56 @@ def test_every_installed_program_is_executable_in_the_tree() -> None:
             "launch as an exception rather than as a non-zero process exit, so "
             "no gate fires."
         )
+
+
+# --- The zone is named or the launch refuses (ADR-0056 decision 4) -------------
+
+
+def _declared(module: ModuleType, name: str):
+    """The `DeclareLaunchArgument` for `name`, from the real launch description."""
+    from launch.actions import DeclareLaunchArgument
+
+    declared = [
+        action
+        for action in module.generate_launch_description().entities
+        if isinstance(action, DeclareLaunchArgument) and action.name == name
+    ]
+    assert len(declared) == 1, f"expected one `{name}` argument, found {len(declared)}"
+    return declared[0]
+
+
+def test_the_zone_argument_has_no_default(module: ModuleType) -> None:
+    """A default here is a cell nobody chose.
+
+    `zone` defaulted to `cell_a` until ADR-0056. With one zone declared that was
+    invisible rather than harmless; with two, an omitted `zone:=` brings up a
+    cell nobody asked for and every name inside it resolves perfectly, so there
+    is no error anywhere to notice.
+    """
+    assert _declared(module, "zone").default_value is None, (
+        "`zone` has a default value again. `ros2 launch cite_bringup "
+        "simulation.launch.py` would then bring up that cell whenever the caller "
+        "forgot to name one, which is exactly what ADR-0056 decision 4 removes."
+    )
+
+
+def test_a_launch_that_names_no_zone_is_refused_by_name(module: ModuleType) -> None:
+    """The refusal itself, not merely the absence of a default.
+
+    `DeclareLaunchArgument` raises when it is executed with no value available,
+    and the message names the argument — which is what turns "the wrong cell came
+    up" into "you did not say which cell". Executed against a bare context, so
+    nothing is launched.
+    """
+    context = LaunchContext()
+    with pytest.raises(RuntimeError) as refusal:
+        _declared(module, "zone").execute(context)
+    assert "zone" in str(refusal.value), refusal.value
+
+
+def test_a_launch_that_names_a_zone_is_accepted(module: ModuleType) -> None:
+    """The other half: the argument must reject an absence, not every value."""
+    context = LaunchContext()
+    context.launch_configurations["zone"] = "cell_b"
+    _declared(module, "zone").execute(context)
+    assert context.launch_configurations["zone"] == "cell_b"

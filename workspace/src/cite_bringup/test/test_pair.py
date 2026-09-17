@@ -699,3 +699,33 @@ def test_the_supervisor_needs_a_base_it_did_not_read_from_the_ambient_domain(
     plan = _paired_plan(tmp_path)
     with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
         pair.side_specs(plan, {DOMAIN_ENV: "41"})
+
+
+def test_a_pair_with_no_zone_named_is_refused_before_anything_starts(capsys) -> None:
+    """`--zone` is required and has no default (ADR-0056 decision 4).
+
+    It defaulted to `cell_a` until then, so `./scripts/sim --pair` with no zone
+    started two full simulations of whichever cell that default named — and the
+    supervisor starts one readiness witness per side, each of which declares its
+    own zone with no default, so the value this argument supplies is the only
+    one anybody states.
+
+    Asserted through `main` rather than through a parser built here, because a
+    parser built here would keep answering after `main` stopped asking it.
+    Nothing is started: argparse exits during parsing, before the plan is read.
+    """
+    with pytest.raises(SystemExit) as exit_code:
+        pair.main(["--headless"])
+    assert exit_code.value.code == 2
+    assert "--zone" in capsys.readouterr().err
+
+
+def test_a_pair_zone_is_taken_from_the_launch_spelling_too(capsys) -> None:
+    """`zone:=cell_b` satisfies it, because that is the spelling `./scripts/sim`
+    forwards.
+
+    Without this, the no-default rule and the argument rewriting could each be
+    correct while the pair path refused the only spelling that reaches it.
+    """
+    parser = argparse.ArgumentParser()
+    assert pair._flags(["zone:=cell_b"], parser) == ["--zone", "cell_b"]

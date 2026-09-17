@@ -68,6 +68,10 @@ if(BUILD_TESTING)
   # under. The defect this holds shut is a manufactured custody belief: a Pick
   # returning SUCCESS with holding=false, which Pick.action calls impossible.
   ament_add_pytest_test(results test/test_results.py)
+  # Which cell a boundary spans is stated, never defaulted (ADR-0056). L5 is the
+  # one component with endpoints in both domains, so a defaulted zone decided
+  # which cell a process was wired across without anyone naming it.
+  ament_add_pytest_test(needs_a_zone test/test_the_boundary_needs_a_zone.py)
 
   # The node itself, against a plan that declares a counterpart. It brings no
   # cell up - neither side is running - which is exactly the case that has to

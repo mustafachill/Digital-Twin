@@ -209,3 +209,61 @@ def test_nothing_here_reads_the_model_directory() -> None:
                     "tooling with no ROS dependency (ADR-0013) and is deliberately "
                     "not installed alongside the runtime."
                 )
+
+
+# --- An unnamed zone is refused rather than guessed (ADR-0056 decision 4) ------
+#
+# These two functions replaced a `cell_a` default in four nodes in this package.
+# While the facility declared one zone the default was invisible rather than
+# harmless; with two, every one of them was a way to serve one cell's frames,
+# topology or planning scene into another cell's graph under names that resolve
+# perfectly. The nodes' own half of this is in
+# `test_a_node_without_a_zone_refuses.py` — a rule nothing calls is the defect,
+# not the fix.
+
+
+def test_a_named_zone_is_returned_unchanged() -> None:
+    assert artifacts.require_zone("cell_b") == "cell_b"
+    assert artifacts.require_zones(["cell_b"]) == ["cell_b"]
+    assert artifacts.require_zones(["cell_a", "cell_b"]) == ["cell_a", "cell_b"]
+
+
+def test_an_empty_zone_is_refused() -> None:
+    with pytest.raises(artifacts.ArtifactError) as refusal:
+        artifacts.require_zone("")
+    assert "zone" in str(refusal.value)
+
+
+def test_an_empty_zone_list_is_refused() -> None:
+    """The list shape was already multi-zone; what it lacked was a caller obliged
+    to fill it."""
+    with pytest.raises(artifacts.ArtifactError):
+        artifacts.require_zones([])
+
+
+def test_a_list_holding_an_unnamed_zone_is_refused() -> None:
+    """`[""]` is `model_info`'s declared default, so it is the value the node
+    holds whenever the bring-up plan failed to deliver one.
+
+    A list that is merely non-empty would pass a length check and then stamp a
+    zone called "" into a published `ModelVersion`, telling every consumer that
+    this deployment covers a cell of that name.
+    """
+    with pytest.raises(artifacts.ArtifactError):
+        artifacts.require_zones([""])
+    with pytest.raises(artifacts.ArtifactError):
+        artifacts.require_zones(["cell_b", ""])
+
+
+def test_the_refusal_says_why_rather_than_only_that() -> None:
+    """The diagnosis is the whole value of refusing over defaulting.
+
+    "parameter 'zone' is empty" sends the reader to the node; naming the
+    bring-up plan as the thing that should have supplied it sends them to where
+    the value actually went missing.
+    """
+    with pytest.raises(artifacts.ArtifactError) as refusal:
+        artifacts.require_zone("")
+    message = str(refusal.value)
+    assert "plan" in message, message
+    assert "wrong room" in message or "wrong" in message, message

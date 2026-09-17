@@ -49,6 +49,8 @@ if(BUILD_TESTING)
   # dependency is declared. The shutdown mechanism itself is tested where it now
   # lives, in cite_runtime.
   ament_add_pytest_test(runtime_adoption test/test_runtime_adoption.py)
+  # ADR-0056: a node that was never told which cell it serves refuses to start.
+  ament_add_pytest_test(no_zone_refuses test/test_a_node_without_a_zone_refuses.py)
 endif()
 
 ament_package()
