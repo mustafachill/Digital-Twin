@@ -107,7 +107,7 @@ class _RecordedLogger:
 
 
 def _the_refusal_text() -> str:
-    """What `require_zone` says when it refuses, taken from `require_zone`.
+    """Return what `require_zone` says when it refuses, asked of `require_zone`.
 
     Not restated here (P1), and not restated for a second reason that matters
     more: a copy of the sentence would let this test keep passing against a
