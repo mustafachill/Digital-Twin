@@ -1078,6 +1078,25 @@ expect_fail "./scripts/sim --zone with no name after it refuses" \
 expect_ok   "and says what is missing is the zone NAME" \
             sim_says "needs a zone name" --zone
 
+# `--zone` swallowing the next flag. This used to set ZONE="--headless" and hand
+# it to the launch, which failed looking for a plan of that name.
+expect_fail "./scripts/sim --zone --headless refuses rather than swallowing the flag" \
+            sim_args --zone --headless
+expect_ok   "and quotes the token it was given" \
+            sim_says "was given '--headless'" --zone --headless
+expect_fail "./scripts/sim --zone zone:=cell_b refuses too" \
+            sim_args --zone zone:=cell_b
+
+# Three spellings set one value. A comment claimed a bare `zone:=X` was "caught
+# below rather than silently competing with the flag"; both halves were false —
+# the case arm consumed it and the last writer won.
+expect_fail "two spellings naming different zones are refused" \
+            sim_args --zone cell_a zone:=cell_b
+expect_ok   "and the refusal names both spellings and both zones" \
+            sim_says "--zone says 'cell_a' and zone:= says 'cell_b'" --zone cell_a zone:=cell_b
+expect_fail "and it is refused whichever order they come in" \
+            sim_args zone:=cell_b --zone=cell_a
+
 # -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \

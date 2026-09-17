@@ -28,13 +28,38 @@ HEADLESS=0
 PAIR=0
 ZONE=""
 PASSTHROUGH=()
-# `--zone X` and `--zone=X`. A bare `zone:=X` still reaches the launch through
-# PASSTHROUGH, as every other `key:=value` does, and is caught below rather than
-# silently competing with the flag.
+# THREE SPELLINGS SET ONE VALUE, so the last one may not silently win.
+# `--zone X`, `--zone=X` and the launch spelling `zone:=X` all reach here — the
+# third because `./scripts/sim` forwards `key:=value` arguments and somebody who
+# knows `ros2 launch` will type it. A comment here used to claim that a bare
+# `zone:=X` "is caught below rather than silently competing with the flag", and
+# both halves were false: the case arm consumed it and the last writer won, so
+# `--zone cell_a zone:=cell_b` brought up `cell_b` without a word.
+#
+# `set_zone` is what makes the comment true. A second spelling that agrees is
+# redundant and allowed; one that disagrees is refused, naming both, because
+# there is no way to tell which the caller meant.
+ZONE_SPELLING=""
+set_zone() {  # set_zone <spelling> <value>
+    if [ -n "$ZONE" ] && [ "$ZONE" != "$2" ]; then
+        die "two different zones were asked for: ${ZONE_SPELLING} says '${ZONE}' and $1 says '$2'.
+  A cell comes up as one zone or the other, never both, so this cannot be resolved here."
+    fi
+    ZONE="$2"
+    ZONE_SPELLING="$1"
+}
 WANT_ZONE=0
 for arg in "$@"; do
     if [ "$WANT_ZONE" -eq 1 ]; then
-        ZONE="$arg"
+        # A flag or a launch argument here means the NAME was left out and the
+        # next token was swallowed: `./scripts/sim --zone --headless` used to set
+        # ZONE to "--headless" and hand it to the launch, which then failed
+        # looking for a plan of that name.
+        case "$arg" in
+            -*|*:=*) die "--zone needs a zone name and was given '${arg}'.
+  ./scripts/sim --zone cell_b --headless" ;;
+        esac
+        set_zone "--zone" "$arg"
         WANT_ZONE=0
         continue
     fi
@@ -42,8 +67,8 @@ for arg in "$@"; do
         --headless) HEADLESS=1 ;;
         --pair)     PAIR=1 ;;
         --zone)     WANT_ZONE=1 ;;
-        --zone=*)   ZONE="${arg#--zone=}" ;;
-        zone:=*)    ZONE="${arg#zone:=}" ;;
+        --zone=*)   set_zone "--zone=" "${arg#--zone=}" ;;
+        zone:=*)    set_zone "zone:=" "${arg#zone:=}" ;;
         -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
         *)          PASSTHROUGH+=("$arg") ;;
     esac
