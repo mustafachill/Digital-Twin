@@ -7,9 +7,9 @@
        Every link below is joined by a fixed joint, so converting this URDF to
        SDF lumps the whole cell into ONE link. Without this the simulator gets a
        single free rigid body of a few hundred kilograms resting on the ground
-       plane by contact friction alone: joint reaction torques from three arms
-       slide it, and the symptom is base drift that reads as a calibration fault
-       and gets debugged in the wrong layer.
+       plane by contact friction alone: joint reaction torques from the arms
+       standing on it slide it, and the symptom is base drift that reads as a
+       calibration fault and gets debugged in the wrong layer.
 
        `static` rather than a fixed joint to a link named `world`: nothing here
        has a joint that moves, and a `world` link would also become a second TF

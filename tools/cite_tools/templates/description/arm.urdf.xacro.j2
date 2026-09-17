@@ -4,10 +4,10 @@
 
   <!-- One description per arm, spawned as its own Gazebo model.
        gz_ros2_control attaches to a MODEL, and the controller manager it creates
-       claims every ros2_control component in that model's description. With all
-       three arms in one model, all three managers claimed all eighteen joints and
-       wrote to them every cycle. Splitting the arms into separate models gives
-       each manager exactly its own hardware — and keeps the namespace
+       claims every ros2_control component in that model's description. With a
+       zone's arms in one model, every manager claimed every joint in the cell and
+       wrote to all of them each cycle. Splitting the arms into separate models
+       gives each manager exactly its own hardware — and keeps the namespace
        /cite/<zone>/<asset_id> that the naming scheme requires. -->
 
   <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
