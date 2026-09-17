@@ -1,6 +1,13 @@
 # ADR-0058: Drive lifecycle transitions by request and confirmation, not by a volatile broadcast
 
-- **Status:** Proposed — nothing in this record is implemented.
+- **Status:** Proposed. **The Decision is implemented** on `fix/lifecycle-driver`; the
+  promotion condition is **not met**, and implementation is not promotion. This line read
+  "nothing in this record is implemented" until 2026-09-17 and was made false by the change
+  that implements it, which is the drift §2's own discipline exists to catch.
+  Clauses 2, 3, 4 and 6 are held by tests in that branch; **clauses 1 and 5 are untaken** —
+  both need the cell brought up, which is a `tester`'s evidence and not the implementer's.
+  Clause 1 in particular asks for the harness that reproduces the stall today to **stop**
+  reproducing it, and nobody may write that it has until it has been run.
 - **Date:** 2026-09-17
 - **Deciders:** Project owner; drafted by the orchestrator against a root cause a `debugger`
   proved on 2026-09-17.
@@ -171,6 +178,29 @@ answer on the occasions they do arrive. **Nothing relies on them.**
   source has **6** `RegisterEventHandler(` call sites, several inside loops, so the runtime count
   depends on the plan. **Resolve it by counting, not by editing the prose to match** — and this
   change moves the number again.
+
+## Amendment of 2026-09-17, on implementing it
+
+**One item under "What we will have to revisit" is retired rather than scheduled.** That
+item said the driver must learn about any node added to `_facility`, and that the names live
+in `simulation.launch.py` with a second copy in `test_simulation_launch.py`'s `MANAGED`. The
+implementation does not give the driver a list at all: `_facility` returns the
+fully-qualified name of every node it started and the launch passes those on `--node`, so a
+node added there is driven with nothing else to remember and no third copy exists. `MANAGED`
+stays what it was — a deliberately independent statement of what the three are — and a test
+now binds it to what `_facility` actually returns, so a node added in one place and not the
+other is a failure rather than a silence.
+
+**Nothing else in the Decision needed changing to be implementable.** The per-node sequence,
+the confirmation being the gate, the wall-clock ceiling and the gate on `_facility` are as
+written.
+
+**One consequence is worth stating because it is a behaviour change beyond the defect.**
+`move_group` was started ungated, and its docstring said so; it is now gated on the driver.
+That is not caution: it resolves poses against the static tree `frame_server` publishes in
+`on_activate`, and the two errors it logged when that tree was missing are exactly what a
+stalled facility node looked like ten seconds after the fact. The docstring that called it
+unconditional is corrected in place.
 
 ## What this record does not decide
 
