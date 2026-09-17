@@ -79,7 +79,10 @@ from rclpy.task import Future
 #:
 #: It covers the whole program rather than one node, because what a reader needs
 #: is a bound on bring-up standing still, and the diagnosis names the node and
-#: the step either way.
+#: the step either way. The cost of one shared budget is that a slow first node
+#: leaves the third with little of it, and an expiry would then name a healthy
+#: node; `_budget_clause` states the split so that the reader can tell the two
+#: apart. Raising this number is not the answer to either.
 DEADLINE_S = 120.0
 
 #: How long one wait for a `change_state` reply, or for a `get_state` answer,
@@ -92,7 +95,10 @@ DEADLINE_S = 120.0
 #: nothing here proceeds because a slice elapsed. Every slice is spent blocked on
 #: a real answer — the transition's own reply, or the state query's — and the
 #: bound only decides how often the ceiling gets a chance to be enforced.
-#: Shortening or lengthening it changes no outcome.
+#: Shortening or lengthening it changes no outcome, **at any value large enough
+#: to block**. That qualifier is not pedantry: at `0.0` the spins stop waiting on
+#: anything and the loop turns over on the ceiling check alone, which is the busy
+#: wait this docstring would otherwise be denying.
 _SLICE_S = 1.0
 
 #: The two steps, in order, each as (name, the transition requested, the state
@@ -128,10 +134,15 @@ class LifecycleDriver(Node):
         )
         self._budget_s = deadline_s
         self._deadline = time.monotonic() + deadline_s
+        # When the node currently being driven was reached. Only ever read by
+        # `_budget_clause`, which exists because the ceiling above is a ceiling
+        # on the whole program and an expiry has to say whose time was spent.
+        self._node_started = self._deadline - deadline_s
 
     def drive(self, names: list[str]) -> str | None:
         """Take every node to `active`. None on success, else the diagnosis."""
         for name in names:
+            self._node_started = time.monotonic()
             change = self.create_client(ChangeState, f"{name}/change_state")
             state = self.create_client(GetState, f"{name}/get_state")
             try:
@@ -152,10 +163,10 @@ class LifecycleDriver(Node):
         for client in (change, state):
             if not client.wait_for_service(timeout_sec=self._remaining_s()):
                 return (
-                    f"{_PREFIX} {name} never advertised {client.srv_name!r} within "
-                    f"{self._budget_s:g} s. It is the launch that started it, so "
-                    "either the process is not running or it is not the node this "
-                    "launch believes it started."
+                    f"{_PREFIX} {name} never advertised {client.srv_name!r}. It is "
+                    "the launch that started it, so either the process is not "
+                    "running or it is not the node this launch believes it started."
+                    + self._budget_clause(name)
                 )
         for step, transition, expected in _STEPS:
             failure = self._step(name, step, transition, expected, change, state)
@@ -179,12 +190,28 @@ class LifecycleDriver(Node):
         future = change.call_async(request)
 
         while True:
+            if not rclpy.ok(context=self.context):
+                # The context went away under this loop — the cell is being torn
+                # down around a driver that had not finished. Asked here rather
+                # than left to whichever exception rclpy's internals raise next:
+                # a shutdown reaches this loop as an `RCLError` out of the global
+                # executor when the context alone was shut down, and as a bare
+                # `TypeError` when `rclpy.shutdown()` was called, and only the
+                # first is in `runtime.SHUTDOWN_EXCEPTIONS`. Both measured. The
+                # policy is `main`'s and unchanged — an interrupted run is a
+                # failure, because nothing was proven `active`.
+                return (
+                    f"{_PREFIX} the ROS context was shut down while {name} was "
+                    f"being asked to {step}, so no managed node can be confirmed "
+                    "active and nothing downstream of them is started."
+                )
+
             if not future.done():
                 # Blocked on the reply rather than on a duration. `change_state`
                 # answers when the transition callback has returned, so while the
                 # node is inside `on_configure` this is where the driver waits —
                 # and it stops waiting the instant the answer arrives.
-                rclpy.spin_until_future_complete(self, future, timeout_sec=_SLICE_S)
+                self._spin(future)
 
             observed = self._observed(state)
             if observed is not None and observed.id == expected:
@@ -197,9 +224,9 @@ class LifecycleDriver(Node):
                 # a failed transition is what this program exists not to do.
                 if self._expired():
                     return (
-                        f"{_PREFIX} {name} never answered {state.srv_name!r} within "
-                        f"{self._budget_s:g} s, so the {step} it was asked for cannot "
-                        "be confirmed either way."
+                        f"{_PREFIX} {name} never answered {state.srv_name!r}, so the "
+                        f"{step} it was asked for cannot be confirmed either way."
+                        + self._budget_clause(name)
                     )
                 continue
 
@@ -216,19 +243,48 @@ class LifecycleDriver(Node):
 
             if self._expired():
                 return (
-                    f"{_PREFIX} {name} never reached {wanted!r} within "
-                    f"{self._budget_s:g} s of being asked to {step}; it is in "
-                    f"{observed.label!r} and {change.srv_name!r} has not answered. "
-                    "Read the state: a transitional one means the node is still "
-                    "inside the callback, and a settled one means the request "
-                    "never took effect."
+                    f"{_PREFIX} {name} never reached {wanted!r} after being asked to "
+                    f"{step}; it is in {observed.label!r} and {change.srv_name!r} has "
+                    "not answered. Read the state: a transitional one means the node "
+                    "is still inside the callback, and a settled one means it is no "
+                    "longer transitioning — either the request never took effect, or "
+                    "it took effect and was refused. The node logged which."
+                    + self._budget_clause(name)
                 )
+
+    def _spin(self, future: Future) -> None:
+        """Block on `future` for one slice, or not at all once the context is gone.
+
+        The guard is here rather than left to rclpy, because of what rclpy does
+        instead. `rclpy.spin_until_future_complete` asks
+        `rclpy.get_global_executor` for an executor, and a context shutdown
+        discards the cached one through an `on_shutdown` callback — so the next
+        call builds a **fresh** executor against the dead context, and its guard
+        condition fails. Measured, both ways round: `RCLError` when only the
+        context was shut down, and a bare `TypeError` when `rclpy.shutdown()` was
+        called, because by then `context.handle` is None. Only the first is in
+        `runtime.SHUTDOWN_EXCEPTIONS`, so the second left `main` with a traceback
+        in place of a diagnosis.
+
+        Returning without spinning leaves the future unfinished, which `_step`
+        and `_observed` already treat as "no answer this slice" — and the caller's
+        own `rclpy.ok` check then says what happened. A shutdown landing *inside*
+        a spin is not this window: the executor's own loop stops on
+        `context.ok()` and the call returns normally.
+        """
+        if not rclpy.ok(context=self.context):
+            return
+        rclpy.spin_until_future_complete(self, future, timeout_sec=_SLICE_S)
 
     def _observed(self, state: Client) -> State | None:
         """Return what the node says it is, or None when it did not answer in a slice."""
+        if not rclpy.ok(context=self.context):
+            # Before `call_async`, which needs the client's handle, and not only
+            # before the spin. `_step`'s own check turns this into the diagnosis.
+            return None
         future = state.call_async(GetState.Request())
         try:
-            rclpy.spin_until_future_complete(self, future, timeout_sec=_SLICE_S)
+            self._spin(future)
             if not future.done() or future.exception() is not None:
                 return None
             response = future.result()
@@ -243,6 +299,28 @@ class LifecycleDriver(Node):
 
     def _expired(self) -> bool:
         return time.monotonic() >= self._deadline
+
+    def _budget_clause(self, name: str) -> str:
+        """Split the spent ceiling between this node and the ones before it.
+
+        One ceiling covers the whole program, so a node reached late is given
+        whatever is left and can expire having been asked a moment ago. Without
+        this, the diagnosis reads identically for a node that stood still for two
+        minutes and for a healthy one that arrived to find the budget gone — and
+        the second sends the reader to the wrong node's logs.
+
+        Both figures are stated rather than one of them branched on, because
+        picking which to report would need a threshold on what counts as "late",
+        and that is a guessed constant deciding what a failure is called.
+        """
+        here = max(0.0, time.monotonic() - self._node_started)
+        earlier = max(0.0, self._budget_s - here)
+        return (
+            f" The {self._budget_s:g} s ceiling covers the whole program: about "
+            f"{earlier:g} s of it went on the nodes before {name} and {here:g} s on "
+            f"{name} itself. A short figure here means this node was reached late, "
+            "not that it was slow."
+        )
 
 
 def _verdict(future: Future) -> str:

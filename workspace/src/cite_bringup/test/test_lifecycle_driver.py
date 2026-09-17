@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 
 from cite_bringup import lifecycle_driver
 from cite_bringup.lifecycle_driver import main
@@ -320,3 +321,93 @@ def test_naming_no_node_is_refused_before_a_context_exists(capsys) -> None:
     """
     assert main(["--deadline", _TEST_DEADLINE_S]) == 2
     assert "no managed node" in capsys.readouterr().err
+
+
+# --- What an expiry says, beyond which node it was ----------------------------
+
+
+def test_an_expiry_states_whose_share_of_the_budget_was_spent(spawn, capsys) -> None:
+    """One ceiling covers the whole program, so it has to say whose time went.
+
+    Without this the two failures are indistinguishable in the log: a node that
+    stood still for the whole budget, and a healthy node reached with almost none
+    of it left because the node before it stood still. The second sends the
+    reader to the wrong node's `on_configure`.
+
+    Here the first node consumes the budget and the run never reaches the second,
+    so what is asserted is the shape — both figures present and attributed — and
+    that the node named is the one that spent it.
+    """
+    stalled = spawn(answers_change=False, transitions=False)
+    assert _run(_name(stalled), deadline="4.0") == 1
+    reported = capsys.readouterr().err
+    assert "covers the whole program" in reported
+    assert f"went on the nodes before {_name(stalled)}" in reported
+    assert f"on {_name(stalled)} itself" in reported
+    assert "reached late" in reported
+
+
+def test_an_expiry_does_not_claim_a_settled_state_means_the_request_was_ignored(
+    spawn, capsys
+) -> None:
+    """Three cases reach that branch and only two of them are "never took effect".
+
+    The third is a `change_state` reply that was lost while the transition itself
+    returned FAILURE: the node is settled, and the request did take effect and was
+    refused. ADR-0058's own rejection of Option A rests on a *failing* transition
+    being exactly as droppable as a succeeding one, so this case is the record's
+    own reasoning and not a hypothetical.
+    """
+    node = spawn(answers_change=False, transitions=False, succeeds=False)
+    assert _run(_name(node), deadline="4.0") == 1
+    reported = capsys.readouterr().err
+    assert "no longer transitioning" in reported
+    assert "the request never took effect" in reported
+    assert "it took effect and was refused" in reported
+
+
+# --- Being torn down is a failure, and it says so rather than raising ---------
+
+
+def test_a_shutdown_under_the_loop_is_reported_and_not_waited_out(spawn, capsys) -> None:
+    """The cell is torn down around a driver that had not finished.
+
+    **Measured rather than reasoned about.** Once the context is shut down,
+    `rclpy.get_global_executor` discards the executor it cached and builds a new
+    one against the dead context, and that construction fails — as `RCLError` when
+    only the context was shut down, and as a bare `TypeError` when
+    `rclpy.shutdown()` was called. Only the first is in
+    `runtime.SHUTDOWN_EXCEPTIONS`, so before the loop asked for itself, this path
+    left `main` with an unhandled `TypeError` traceback in place of a diagnosis.
+
+    The assertion is on both halves: it says what happened, and it says it
+    promptly rather than sitting on the ceiling. The deadline here is far longer
+    than the wait this test tolerates, so a driver that waited it out fails on
+    time and not only on wording.
+    """
+    node = spawn(answers_change=False, transitions=False)
+    outcome: dict[str, object] = {}
+
+    def run() -> None:
+        started = time.monotonic()
+        try:
+            outcome["code"] = _run(_name(node), deadline="60.0")
+        except BaseException as error:  # noqa: BLE001 - the point is that it must not
+            outcome["raised"] = f"{type(error).__name__}: {error}"
+        outcome["elapsed_s"] = time.monotonic() - started
+
+    driver = threading.Thread(target=run)
+    driver.start()
+    # Long enough that the driver is inside a slice rather than still building
+    # its clients, and far short of the 60 s ceiling above.
+    time.sleep(2.0)
+    rclpy.shutdown()
+    driver.join(timeout=20.0)
+
+    assert not driver.is_alive(), "the driver did not return after the shutdown"
+    assert "raised" not in outcome, outcome.get("raised")
+    assert outcome["code"] == 1, "an interrupted run is a failure: nothing was proven"
+    assert float(outcome["elapsed_s"]) < 20.0, "the shutdown was waited out, not noticed"
+    reported = capsys.readouterr().err
+    assert "context was shut down" in reported
+    assert _name(node) in reported and "configure" in reported
