@@ -92,7 +92,7 @@ def _present(names: list[str], zone: str) -> bool:
 
 
 def refusal(intruders: list[str], ours: list[str], domain: str) -> str:
-    """What a person reads when the refusal fires.
+    """Compose what a person reads when the refusal fires.
 
     Names the zone that is already there, because "another zone is running" sends
     the reader to look for it and this sends them to stop it.

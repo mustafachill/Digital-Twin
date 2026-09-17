@@ -52,7 +52,7 @@ MANAGED = (FrameServer, ModelInfo, TopologyServer)
 
 @pytest.fixture()
 def ros():
-    """A context for the nodes to be constructed in, torn down either way."""
+    """Provide a context for the nodes, and tear it down either way."""
     rclpy.init()
     try:
         yield

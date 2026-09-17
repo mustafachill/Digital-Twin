@@ -91,8 +91,11 @@ def test_an_empty_graph_refuses_nothing() -> None:
 
 
 def test_a_zone_name_that_is_a_prefix_of_another_is_not_a_false_match() -> None:
-    """`cell_b` and `cell_b2` are different cells, and `startswith` is why this is
-    asked."""
+    """Match a whole zone name and not a prefix of one.
+
+    `cell_b` and `cell_b2` are different cells, and `startswith` is why this is
+    asked.
+    """
     assert zones_already_on_the_graph(
         ["/cite/cell_b2/arm_1/move_to"], ["cell_b"], ["cell_b", "cell_b2"]
     ) == ["cell_b2"]
@@ -102,7 +105,7 @@ def test_a_zone_name_that_is_a_prefix_of_another_is_not_a_false_match() -> None:
 
 
 def test_the_refusal_names_the_zone_that_is_already_there() -> None:
-    """"Another zone is running" sends the reader looking. This sends them to it."""
+    """Name the intruder, because "another zone is running" only sends a reader looking."""
     message = refusal(["cell_a"], ["cell_b"], "37")
     assert "cell_a" in message
     assert "cell_b" in message
@@ -143,8 +146,11 @@ def _configure(node, zones: list[str], graph: tuple[str, ...]):
 
 
 def test_model_info_refuses_to_configure_beside_another_zone(ros) -> None:
-    """The bring-up stops here, with `simulation.launch.py` turning it into a
-    `Shutdown` that carries this node's own diagnosis."""
+    """Refuse to configure beside another zone.
+
+    The bring-up stops here, with `simulation.launch.py` turning the FAILURE into
+    a `Shutdown` that carries this node's own diagnosis.
+    """
     node = ModelInfo()
     try:
         available = declared_zones()
@@ -162,8 +168,11 @@ def test_model_info_refuses_to_configure_beside_another_zone(ros) -> None:
 
 
 def test_model_info_configures_when_it_is_the_only_zone(ros) -> None:
-    """The other half: a refusal that fires on a cell running alone is worse than
-    none, because it refuses every ordinary bring-up."""
+    """Configure normally when this is the only zone.
+
+    The other half: a refusal that fires on a cell running alone is worse than
+    none, because it refuses every ordinary bring-up.
+    """
     node = ModelInfo()
     try:
         ours = declared_zones()[0]
@@ -174,8 +183,10 @@ def test_model_info_configures_when_it_is_the_only_zone(ros) -> None:
 
 
 def test_the_node_reads_the_real_graph_rather_than_an_empty_list(ros) -> None:
-    """`graph_names` is stubbed above; this is the tripwire for it being stubbed
-    in production too.
+    """Read the real graph rather than an empty list.
+
+    `graph_names` is stubbed above; this is the tripwire for it being stubbed in
+    production too.
 
     It asserts only that the node's own names come back — which they must, since
     it has just created none of its interfaces but the graph carries the

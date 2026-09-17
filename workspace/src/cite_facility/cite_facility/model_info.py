@@ -26,6 +26,8 @@ value immediately rather than waiting for a publication that never comes.
 
 from __future__ import annotations
 
+import os
+
 from cite_facility.artifacts import (
     ArtifactError,
     declared_zones,
@@ -38,7 +40,6 @@ from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
 from cite_runtime import runtime
-import os
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 TOPIC = "/cite/facility/model_version"

@@ -235,15 +235,20 @@ def test_an_empty_zone_is_refused() -> None:
 
 
 def test_an_empty_zone_list_is_refused() -> None:
-    """The list shape was already multi-zone; what it lacked was a caller obliged
-    to fill it."""
+    """Refuse an empty list.
+
+    The list shape was already multi-zone; what it lacked was a caller obliged to
+    fill it.
+    """
     with pytest.raises(artifacts.ArtifactError):
         artifacts.require_zones([])
 
 
 def test_a_list_holding_an_unnamed_zone_is_refused() -> None:
-    """`[""]` is `model_info`'s declared default, so it is the value the node
-    holds whenever the bring-up plan failed to deliver one.
+    """Refuse a list whose only entry is unnamed.
+
+    `[""]` is `model_info`'s declared default, so it is the value the node holds
+    whenever the bring-up plan failed to deliver one.
 
     A list that is merely non-empty would pass a length check and then stamp a
     zone called "" into a published `ModelVersion`, telling every consumer that

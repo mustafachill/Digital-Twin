@@ -721,8 +721,7 @@ def test_a_pair_with_no_zone_named_is_refused_before_anything_starts(capsys) -> 
 
 
 def test_a_pair_zone_is_taken_from_the_launch_spelling_too(capsys) -> None:
-    """`zone:=cell_b` satisfies it, because that is the spelling `./scripts/sim`
-    forwards.
+    """Accept the launch spelling too, since that is what `./scripts/sim` forwards.
 
     Without this, the no-default rule and the argument rewriting could each be
     correct while the pair path refused the only spelling that reaches it.

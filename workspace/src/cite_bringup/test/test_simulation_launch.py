@@ -1326,7 +1326,7 @@ def test_every_installed_program_is_executable_in_the_tree() -> None:
 
 
 def _declared(module: ModuleType, name: str):
-    """The `DeclareLaunchArgument` for `name`, from the real launch description."""
+    """Return the `DeclareLaunchArgument` for `name`, from the real description."""
     from launch.actions import DeclareLaunchArgument
 
     declared = [
