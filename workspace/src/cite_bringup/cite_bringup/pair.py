@@ -97,8 +97,12 @@ from cite_bringup.readiness import announced_side
 #: force. Neither is a bring-up condition (ADR-0049 decision 4).
 #:
 #: **It is stated rather than derived, and nothing binds it to the ceilings a
-#: side's own gate chain carries.** The readiness witness alone allows 300 s, and
-#: the spawners and scene loader ahead of it carry their own. If those ever sum
+#: side's own gate chain carries.** `lifecycle_driver.py` allows 120 s at the
+#: head of the chain, before anything else in it starts (ADR-0058); the readiness
+#: witness at the tail allows 300 s; and the spawners and scene loader between
+#: them carry their own. The driver's is listed because it is new and because an
+#: inventory that is silently incomplete is worse than none — this list is the
+#: only auditable statement of the chain that exists. If those ever sum
 #: past this number, this ceiling fires first and the pair reports "never
 #: announced readiness and never exited" for a side that was about to fail with a
 #: diagnosis naming the step - a strictly worse answer, produced by a number and
