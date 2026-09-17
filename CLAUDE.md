@@ -560,10 +560,29 @@ bullet.
   `continuous_line` table, the teardown-family split, the hull-run list — are a **closed**
   record of a cell that is no longer driven. They are not retired and not re-measured:
   they are records of runs, which stand whatever the model declares.
-  **No CI run has yet driven `cell_b`** — the branch is unpushed — **and as of 2026-09-17 the
-  scenarios have been observed against it locally, which they had not been when this bullet
-  was written.** They are recorded here rather than added to any count above, because a count
-  that means `cell_a` must not absorb a run that means `cell_b`.
+  **CI HAS NOW DRIVEN `cell_b`, ONCE, AND THE RUN WAS CLEAN END TO END.** Run
+  `35267272730` at `ad25a22`, 2026-09-17: conclusion `success`, all three jobs `success`, and
+  **all four scenario invocations printed the BARE verdict** — `bringup` twice,
+  `pick_and_place` once, `continuous_line` once. The bare string is the load-bearing detail:
+  `scripts/scenario` prints it only when `launch_test` itself exited 0, which it cannot do
+  while a post-shutdown assertion is failing, **so cycle and teardown both passed in all
+  four**. The advisory branch fired nowhere. **Nothing exited badly anywhere in the run** — no
+  `move_group` `-11`, no `parameter_bridge` `-6`/`-11`, no `gz` `-9`. And the `frame_server`
+  stall did not fire: **4 `configured with` against 4 `published`**, every managed transition
+  heard.
+  Read with the instrument this section mandates — the whole verdict string, anchored, and
+  restricted to the three `Simulation-in-the-loop` step columns.
+  **One run. It is not a rate, and it must not start one**: `continuous_line` has failed 7 of
+  25 CI runs against `cell_a`, and a single clean run against `cell_b` says nothing about how
+  often it will. **Do not append a `cell_b` run to any count above** — those close at
+  `cell_a`; this is the first row of a separate record.
+  **The commit-message trap fired on the way to this reading and is worth one line.** A
+  whole-log grep for the host test figure returns `1610` as well as `1623`, because the `Build
+  image` step echoes the pushed commit bodies and those bodies quote earlier figures. Only the
+  `Test` step's `1623 passed, 1 skipped` is a reading. Same hazard the `bringup` bullet
+  records for verdict strings, in a different string.
+  **Before that run the scenarios had been observed only locally**, on 2026-09-17, and those
+  readings stand as what they were:
   **`bringup`: 2 of 2**, once per zone, under the **strict** policy rather than CI's
   `--teardown-advisory` — the bare `ok Scenario 'bringup' passed`, which `scripts/scenario`
   prints only when `launch_test` itself exited 0, so cycle **and** post-shutdown teardown
