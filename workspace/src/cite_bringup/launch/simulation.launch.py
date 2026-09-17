@@ -89,7 +89,6 @@ from launch import LaunchContext, LaunchDescription
 from launch.actions import (
     AppendEnvironmentVariable,
     DeclareLaunchArgument,
-    EmitEvent,
     ExecuteProcess,
     LogInfo,
     OpaqueFunction,
@@ -97,13 +96,10 @@ from launch.actions import (
     Shutdown,
 )
 from launch.event_handlers import OnProcessExit
-from launch.events import matches_action
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import LifecycleNode, Node
 from launch_ros.event_handlers import OnStateTransition
-from launch_ros.events.lifecycle import ChangeState
 from launch_ros.parameter_descriptions import ParameterValue
-from lifecycle_msgs.msg import Transition
 import yaml
 
 #: Deadline, not a schedule. Generous enough that a loaded machine still makes it,
@@ -254,10 +250,47 @@ def _bring_up(context: LaunchContext) -> list:
     actions += _simulator(plan, headless=headless, seed=seed, gz_env=gz_env)
     actions += _scene(plan, gz_env)
     actions += _arms(plan, gz_env)
-    actions += _facility(plan)
-    controller_actions, last_spawner = _controllers(plan)
+
+    facility_actions, managed = _facility(plan)
+    actions += facility_actions
+    driver = _lifecycle_driver(managed)
+    actions.append(driver)
+
+    controller_actions, first_spawner, last_spawner = _controllers(plan)
+
+    # The zone's detection server comes up with the arms rather than after them:
+    # it commands no motion, needs neither the planner nor a controller, and the
+    # sooner it is subscribed the sooner a beam that is already blocked is known.
+    # It refuses to start if the plan does not name every sensor's topics and
+    # frame, and that refusal stops bring-up. It resolves a beam's frame against
+    # the facility's static tree, so it waits on the driver with the rest.
+    detection = _detection(plan)
+
+    # Nothing downstream of `_facility` starts until every managed node has been
+    # OBSERVED `active` (ADR-0058). Until this gate existed `_facility` was
+    # spliced into the action list with nothing gated on it, so a facility node
+    # that never activated did not stop bring-up: the chain ran on, and the first
+    # consumer to notice was `move_group` ten seconds later reporting
+    # `Tf has two or more unconnected trees` and `Unknown frame: cite_world`. The
+    # launch then died blaming the model and the planning scene, which is a
+    # diagnosis pointing nowhere near the cause.
+    #
+    # The three processes here are the ones that start on nothing; everything
+    # else in the chain hangs off one of them by a `_gate` of its own, and those
+    # handlers stay at the top level where they can be checked as a set.
+    actions.append(
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=driver,
+                on_exit=_gate(
+                    [first_spawner, *_motion_planning(plan), *detection],
+                    "the controllers, the planners and detection",
+                    hint=_DRIVER_HINT,
+                ),
+            )
+        )
+    )
     actions += controller_actions
-    actions += _motion_planning(plan)
 
     # The cell's furniture into each arm's planning scene, then the skills. Both
     # gated, and in that order: every pick and place point in this cell lies
@@ -267,13 +300,6 @@ def _bring_up(context: LaunchContext) -> list:
     # the completion event the gate needs (P4).
     scene_actions, last_step = _planning_scene(plan, last_spawner)
     actions += scene_actions
-
-    # The zone's detection server comes up with the facility nodes rather than
-    # after the arms: it commands no motion, needs neither the planner nor a
-    # controller, and the sooner it is subscribed the sooner a beam that is
-    # already blocked is known. It refuses to start if the plan does not name
-    # every sensor's topics and frame, and that refusal stops bring-up.
-    actions += _detection(plan)
 
     # Skills come last. That is the order cross-cutting-lifecycle.md fixes —
     # controllers, then MoveIt, then skills — and it is a real dependency, not a
@@ -313,6 +339,16 @@ def _bring_up(context: LaunchContext) -> list:
     return actions
 
 
+#: Appended to the lifecycle gate's message. The driver has already named the
+#: node and the step on its own standard error; this says what the exit code by
+#: itself does not, which is that nothing after it was started and why that is
+#: the right answer rather than a harsh one.
+_DRIVER_HINT = (
+    "No managed node was confirmed active, so nothing that depends on the "
+    "facility's frames, model version or topology was started. The driver names "
+    "the node and the step it never got an answer to."
+)
+
 #: Appended to the readiness gate's message. A witness that expires has already
 #: said which endpoints never answered, on its own standard error; this points at
 #: the difference between that and every other failure in the chain.
@@ -343,6 +379,44 @@ def _witness(plan: Plan, side: str) -> Node:
         arguments=_witness_arguments(plan, side),
         output="screen",
     )
+
+
+def _lifecycle_driver(managed: list[str]) -> Node:
+    """Build the process whose exit means every managed node is `active`.
+
+    ADR-0058. A blocking wait that exits, in the shape of every other link in
+    this chain — `ros_gz_sim create`, the controller-manager spawners, the
+    planning-scene loader, the readiness witness. It asks each node to configure
+    and to activate and confirms each with `get_state`, so no transition event is
+    load-bearing any more and there is nothing left to lose.
+
+    It is started alongside the nodes it drives rather than after them, because
+    what it waits on first is their `change_state` service appearing — which is a
+    condition, not an estimate. Its exit is what the rest of bring-up is gated
+    on: `_facility` was spliced into the action list with nothing downstream of
+    it, which is why a node that stalled cost ten seconds and a diagnosis
+    pointing at the model instead of one second and the node's name.
+    """
+    return Node(
+        package="cite_bringup",
+        executable="lifecycle_driver.py",
+        name="lifecycle_driver",
+        arguments=_lifecycle_driver_arguments(managed),
+        output="screen",
+    )
+
+
+def _lifecycle_driver_arguments(managed: list[str]) -> list[str]:
+    """Build the driver's argument vector, so that a test can read it back.
+
+    Same reason as `_witness_arguments`: `launch_ros` keeps a node's arguments
+    behind a private attribute, so a test reaching into the action would be
+    testing launch's internals rather than this file's decisions.
+    """
+    arguments: list[str] = []
+    for name in managed:
+        arguments += ["--node", name]
+    return arguments
 
 
 def _witness_arguments(plan: Plan, side: str) -> list[str]:
@@ -607,18 +681,25 @@ def _arms(plan: Plan, gz_env: dict[str, str]) -> list:
     return actions
 
 
-def _controllers(plan: Plan) -> tuple[list, Node]:
+def _controllers(plan: Plan) -> tuple[list, Node, Node]:
     """Spawn each manager's controllers, stage by stage, gated on the previous.
 
-    The chain starts from `create` exiting — the moment the cell is genuinely in
-    the world — and every subsequent step starts only when the one before it
-    exits successfully. A non-zero exit anywhere stops the launch with a message
-    naming the step, rather than leaving a half-built system running. Including
-    the last stage: what follows the final spawner is gated by the caller with
-    the same `_gate`, because an ungated last link is how a chain that reports
-    every intermediate failure still lets the one that matters through.
+    Every step starts only when the one before it exits successfully. A non-zero
+    exit anywhere stops the launch with a message naming the step, rather than
+    leaving a half-built system running. Including the last stage: what follows
+    the final spawner is gated by the caller with the same `_gate`, because an
+    ungated last link is how a chain that reports every intermediate failure
+    still lets the one that matters through.
+
+    Returns the chain's handlers and both of its ends. The **first** spawner is
+    returned rather than included, because it is the one action here that starts
+    on nothing, and the caller gates it on the lifecycle driver — otherwise a
+    controller manager would be spawned into a cell whose facility nodes had
+    never activated. The **last** is what the caller chains the planning scene
+    onto.
     """
     actions: list = []
+    first: Node | None = None
     previous: object | None = None
 
     # One chain across every manager and stage, rather than one chain per arm.
@@ -651,7 +732,9 @@ def _controllers(plan: Plan) -> tuple[list, Node]:
                 # which exists only once gz_ros2_control has instantiated it —
                 # which in turn happens only once the model is in the world. The
                 # dependency is enforced by service availability, not by a guess.
-                actions.append(spawner)
+                # It is handed back to the caller instead of started here, so
+                # that the whole chain hangs off the lifecycle driver's exit.
+                first = spawner
             else:
                 actions.append(
                     RegisterEventHandler(
@@ -667,8 +750,10 @@ def _controllers(plan: Plan) -> tuple[list, Node]:
                 )
             previous = spawner
 
-    assert previous is not None, "the plan declared no controllers to spawn"
-    return actions, previous
+    assert first is not None and previous is not None, (
+        "the plan declared no controllers to spawn"
+    )
+    return actions, first, previous
 
 
 def _planning_scene(plan: Plan, previous: Node) -> tuple[list, Node]:
@@ -718,55 +803,44 @@ def _planning_scene(plan: Plan, previous: Node) -> tuple[list, Node]:
 
 
 def _managed(node: LifecycleNode, name: str) -> list:
-    """Drive a managed node through configure and activate, on its transitions.
+    """Start a managed node, with the diagnosis for each way it can refuse.
 
-    Not on a timer. `configure` is where a node reads and validates everything it
-    needs; if it cannot, it returns FAILURE and never reaches `inactive`.
+    **It no longer drives the node.** `lifecycle_driver.py` does, by calling
+    `change_state` and confirming with `get_state`, and this file gates the rest
+    of bring-up on that program's exit (ADR-0058).
 
-    That last sentence used to be the whole story, and it was half of one: the
-    activation below indeed never fires, but nothing else was gated on these
-    nodes either, so bring-up carried on regardless. `frame_server.on_configure`
-    returning FAILURE produced a cell that came up fully with a disconnected TF
-    tree, and every subsequent skill goal failed with a lookup error naming
-    frames rather than the node that never published them. So each failing
-    transition is registered here and stops the launch with the node's own
-    diagnosis.
+    What used to be here was an `EmitEvent(ChangeState(CONFIGURE))` and an
+    `OnStateTransition(configuring -> inactive)` that emitted the activation.
+    `launch_ros` derives that event from a **subscription** to
+    `/<node>/transition_event`, and both endpoints are RELIABLE + VOLATILE —
+    reliable is a promise to *matched* subscribers, so a node whose
+    `on_configure` returned before the launch's subscription had matched
+    published into nobody and the sample was never re-sent. The node then sat in
+    `inactive` forever, published no TF, and bring-up died ten seconds later in
+    `move_group` reporting unconnected TF trees and an unknown frame — a
+    diagnosis pointing at the model, which was the expensive part. Observed in
+    3 of 11 scenario launches; `docs/open-work.md` #72 has the proof.
 
-    The success handler matches `configuring -> inactive` specifically rather
-    than any transition ending in `inactive`. A failed activation lands in
-    `inactive` too, and a handler matching only the goal state would answer it by
-    trying to activate again.
+    The comment this function used to end on said the handlers being registered
+    before the transition was emitted meant "a node that configures very quickly
+    cannot reach `inactive` before anything is watching". Registration order in a
+    launch description says nothing about when a DDS subscription matches, and
+    that sentence is the assumption the defect lived inside.
+
+    **The four refusals stay, and nothing relies on them.** They ride the same
+    volatile topic, so a transition that *fails* is exactly as droppable as one
+    that succeeded; what makes a failure reach a person either way is the driver
+    observing `unconfigured` rather than `inactive` and naming it. These are the
+    better-worded answer on the occasions they do arrive, which is why the ones
+    that match a failed activation must still not try to activate again.
     """
-    configure = EmitEvent(
-        event=ChangeState(
-            lifecycle_node_matcher=matches_action(node),
-            transition_id=Transition.TRANSITION_CONFIGURE,
-        )
-    )
-    activate = RegisterEventHandler(
-        OnStateTransition(
-            target_lifecycle_node=node,
-            start_state="configuring",
-            goal_state="inactive",
-            entities=[
-                EmitEvent(
-                    event=ChangeState(
-                        lifecycle_node_matcher=matches_action(node),
-                        transition_id=Transition.TRANSITION_ACTIVATE,
-                    )
-                )
-            ],
-        )
-    )
-    refusals = [
+    return [
         _refuses(node, name, "configuring", "unconfigured", "on_configure returned FAILURE"),
         _refuses(node, name, "configuring", "errorprocessing", "on_configure raised"),
         _refuses(node, name, "activating", "inactive", "on_activate returned FAILURE"),
         _refuses(node, name, "activating", "errorprocessing", "on_activate raised"),
+        node,
     ]
-    # The handlers are registered before the transition is emitted, so a node that
-    # configures very quickly cannot reach `inactive` before anything is watching.
-    return [activate, *refusals, node, configure]
 
 
 def _refuses(
@@ -789,51 +863,62 @@ def _refuses(
     )
 
 
-def _facility(plan: Plan) -> list:
+#: The namespace every facility node is started in. One statement, because the
+#: fully-qualified names below are composed from it and the driver is handed
+#: those — a second spelling of it would be a second place a name is made (§8).
+_FACILITY_NAMESPACE = "/cite/facility"
+
+
+def _facility(plan: Plan) -> tuple[list, list[str]]:
     """Runtime access to the generated artifacts: frames, model version, topology.
 
     These are managed nodes with no dependency on the simulator, so they come up
     alongside it rather than after it. The frame server matters most: without it
     an arm's own model is a disconnected TF tree, and a skill given a pose in
     cite_world can never resolve it into the arm's planning frame.
+
+    Returns the actions and **the fully-qualified name of every node it started**,
+    which is what `_lifecycle_driver` is given. ADR-0058 expected the driver to
+    carry its own list and recorded that as a thing to revisit whenever a node is
+    added here; passing the names instead removes the revisit rather than
+    scheduling it, and removes the third copy of them that §4 prohibits. Add a
+    node below and it is driven, with nothing else to remember.
     """
     zone = {"zone": plan.zone}
-    return [
-        *_managed(
-            LifecycleNode(
-                package="cite_facility",
-                executable="frame_server.py",
-                name="frame_server",
-                namespace="/cite/facility",
-                parameters=[zone, {"use_sim_time": True}],
-                remappings=[("/tf_static", "/tf_static")],
-                output="screen",
-            ),
+    # One row per node, and the name in each row is written once: it becomes the
+    # node's ROS name, the subject of that node's four refusal messages, and the
+    # fully-qualified name the driver is given. `launch_ros` keeps a node's
+    # resolved name behind a property that refuses to be read before the action
+    # has executed, which is exactly when this description is built, so the name
+    # is carried here rather than asked of the action.
+    declared: tuple[tuple[str, str, list, list], ...] = (
+        (
             "frame_server",
+            "frame_server.py",
+            [zone],
+            # Without this the publisher would write inside the namespace and
+            # nothing listening on /tf_static would ever see the facility tree.
+            [("/tf_static", "/tf_static")],
         ),
-        *_managed(
-            LifecycleNode(
-                package="cite_facility",
-                executable="model_info.py",
-                name="model_info",
-                namespace="/cite/facility",
-                parameters=[{"zones": [plan.zone]}, {"use_sim_time": True}],
-                output="screen",
-            ),
-            "model_info",
-        ),
-        *_managed(
-            LifecycleNode(
-                package="cite_facility",
-                executable="topology_server.py",
-                name="topology_server",
-                namespace="/cite/facility",
-                parameters=[zone, {"use_sim_time": True}],
-                output="screen",
-            ),
-            "topology_server",
-        ),
-    ]
+        ("model_info", "model_info.py", [{"zones": [plan.zone]}], []),
+        ("topology_server", "topology_server.py", [zone], []),
+    )
+
+    actions: list = []
+    managed: list[str] = []
+    for name, executable, parameters, remappings in declared:
+        node = LifecycleNode(
+            package="cite_facility",
+            executable=executable,
+            name=name,
+            namespace=_FACILITY_NAMESPACE,
+            parameters=[*parameters, {"use_sim_time": True}],
+            remappings=remappings,
+            output="screen",
+        )
+        actions += _managed(node, name)
+        managed.append(f"{_FACILITY_NAMESPACE}/{name}")
+    return actions, managed
 
 
 def _skills(plan: Plan) -> list:
@@ -1114,9 +1199,18 @@ def _motion_planning(plan: Plan) -> list:
     description and its own controller manager. Nothing above L3 talks to MoveIt
     (ADR-0006); the skill servers are its only client.
 
-    move_group is started unconditionally rather than gated on the controllers:
-    it waits for /joint_states on its own, and gating it here would add an
-    ordering constraint that the system does not actually have.
+    move_group is not gated on the controllers: it waits for /joint_states on its
+    own, and gating it on them would add an ordering constraint the system does
+    not have.
+
+    It IS gated on the lifecycle driver, and that one is a real dependency rather
+    than caution. move_group resolves poses against the facility's static tree,
+    which `frame_server` publishes in `on_activate`; a move_group started before
+    that reports `Tf has two or more unconnected trees` and `Unknown frame:
+    cite_world`, and those two messages are what a stalled facility node used to
+    look like ten seconds after the fact (ADR-0058). This docstring said
+    "started unconditionally" until then, which was true of the code and is the
+    sentence that made the real dependency easy to miss.
     """
     actions: list = []
     for manager in plan.controller_managers:

@@ -45,6 +45,7 @@ from cite_bringup.readiness import announced_side, READY_TOKEN
 from launch import LaunchContext
 from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
+from launch.events.process import ProcessExited
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import StateTransition
@@ -360,6 +361,150 @@ def test_activation_is_triggered_only_by_a_successful_configure(
             assert not any(
                 type(entity).__name__ == "EmitEvent" for entity in entities
             ), "a failed activation triggered another activation"
+
+
+# --- ADR-0058: the transitions are driven, and everything waits on that --------
+#
+# `_managed` used to trigger activation on `OnStateTransition(configuring ->
+# inactive)`, which `launch_ros` derives from a subscription to
+# `/<node>/transition_event`. Both endpoints are RELIABLE + VOLATILE, so a
+# transition published before that subscription matched was dropped and never
+# re-sent; the node sat in `inactive` forever and bring-up died ten seconds later
+# in `move_group`, blaming the model. `docs/open-work.md` #72.
+#
+# Two properties are checked here and they are separable. The FIRST is that the
+# driver is asked about every managed node — a driver that is handed two of three
+# exits 0 having confirmed nothing about the third. The SECOND is that nothing
+# downstream of `_facility` is started before that exit, which is what turns a
+# stalled node from a ten-second misdirection into a one-second diagnosis.
+
+
+def _driver(actions: list) -> object:
+    """Return the one lifecycle driver, or fail saying the description has none."""
+    found = [a for a in actions if getattr(a, "node_executable", None) == "lifecycle_driver.py"]
+    assert len(found) == 1, f"expected exactly one lifecycle driver, got {len(found)}"
+    return found[0]
+
+
+def _exit(action, returncode: int) -> ProcessExited:
+    """Build a real `ProcessExited` for `action`, so that `matches` can be asked.
+
+    The `_Exited` stand-in above is enough for `handle`, which the older tests
+    call directly. It is not enough here: what is being checked is WHICH process
+    a gate waits on, and `OnProcessExit.matches` tests the event's type before it
+    tests anything else.
+    """
+    return ProcessExited(
+        action=action,
+        name="lifecycle_driver",
+        cmd=["lifecycle_driver.py"],
+        cwd=None,
+        env=None,
+        pid=1,
+        returncode=returncode,
+    )
+
+
+def test_the_driver_is_asked_about_every_managed_node(module: ModuleType) -> None:
+    """The driver's list comes from the nodes the launch built, not from a copy.
+
+    `_facility` hands back the fully-qualified name of each node it started, so a
+    node added there is driven with nothing else to remember — which is why this
+    asserts against `MANAGED` above, the deliberately independent statement of
+    what the three are. A driver handed two of three would exit 0 having
+    confirmed nothing about the third, and every gate below it would fire.
+    """
+    _, managed = module._facility(_plan())
+    assert [name.rsplit("/", 1)[-1] for name in managed] == list(MANAGED)
+    assert all(name.startswith("/") for name in managed), managed
+
+    arguments = module._lifecycle_driver_arguments(managed)
+    assert arguments == [part for name in managed for part in ("--node", name)]
+
+
+def test_nothing_downstream_of_the_facility_starts_until_the_driver_exits(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """The structural half of #72, and the half that made it expensive.
+
+    `_facility` was spliced into the action list with nothing gated on it, so a
+    facility node that never activated did not stop bring-up. The chain ran on,
+    and the first consumer to notice was `move_group` ten seconds later reporting
+    unconnected TF trees and an unknown frame — a diagnosis pointing at the model
+    and the planning scene rather than at the node that never published.
+
+    Asserted in both directions. Nothing that depends on the facility may start
+    at the top level, AND the gate that starts it must be the one waiting on the
+    driver — a process behind some other gate would satisfy the first half while
+    still racing the frames it needs.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+    driver = _driver(actions)
+
+    downstream = ("spawner", "move_group", "detection_server")
+    for executable in downstream:
+        assert _nodes(actions, executable, context), (
+            f"{executable} is not in the description at all, so this test would "
+            "pass by checking nothing"
+        )
+        assert not [a for a in actions if getattr(a, "node_executable", None) == executable], (
+            f"{executable} starts without waiting for any managed node to be "
+            "observed active"
+        )
+
+    started = [
+        getattr(entity, "node_executable", None)
+        for action in actions
+        if isinstance(action, RegisterEventHandler)
+        and isinstance(action.event_handler, OnProcessExit)
+        and action.event_handler.matches(_exit(driver, 0))
+        for entity in (action.event_handler.handle(_exit(driver, 0), context) or [])
+    ]
+    assert started.count("spawner") == 1, "the controller chain has more than one head"
+    assert started.count("move_group") == 3, started
+    assert started.count("detection_server") == 1, started
+
+
+def test_no_transition_event_makes_anything_happen(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """Every transition event is now a diagnosis or nothing, never a trigger.
+
+    The generalisation of `test_activation_is_triggered_only_by_a_successful_
+    configure`, and it is the property the record actually decided: a transition
+    event is delivered to *matched* subscribers under a VOLATILE publisher, so
+    anything keyed on one is droppable. Stopping the launch on a refusal that did
+    arrive is still worth having; making a step of bring-up depend on one is what
+    may not come back.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+
+    nodes = [action for action in actions if type(action).__name__ == "LifecycleNode"]
+    handlers = [
+        action.event_handler
+        for action in actions
+        if isinstance(action, RegisterEventHandler)
+        and isinstance(action.event_handler, OnStateTransition)
+    ]
+    assert nodes and handlers
+
+    states = ("unconfigured", "inactive", "active", "configuring", "activating",
+              "errorprocessing", "finalized")
+    for node in nodes:
+        for start_state in states:
+            for goal_state in states:
+                event = _transition(node, start_state, goal_state)
+                for handler in handlers:
+                    if not handler.matches(event):
+                        continue
+                    for entity in handler.handle(event, context) or []:
+                        assert type(entity).__name__ in ("LogInfo", "Shutdown"), (
+                            f"{start_state} -> {goal_state} makes bring-up do "
+                            f"something ({type(entity).__name__}), and a "
+                            "transition event can be dropped"
+                        )
 
 
 # --- The seed reaches gz sim, and a bad one is refused ------------------------
