@@ -197,10 +197,44 @@ written.
 
 **One consequence is worth stating because it is a behaviour change beyond the defect.**
 `move_group` was started ungated, and its docstring said so; it is now gated on the driver.
-That is not caution: it resolves poses against the static tree `frame_server` publishes in
-`on_activate`, and the two errors it logged when that tree was missing are exactly what a
-stalled facility node looked like ten seconds after the fact. The docstring that called it
-unconditional is corrected in place.
+The docstring that called it unconditional is corrected in place.
+
+**Correction of 2026-09-17, on review: the gate is kept and the reason given for it was
+false.** This amendment said the gate "is not caution" because `move_group` "resolves poses
+against the static tree `frame_server` publishes in `on_activate`", and the launch's own
+docstring said it was "a real dependency rather than caution". **That causal claim does not
+hold in the healthy case.** `frame_server` publishes through a `StaticTransformBroadcaster`,
+whose publisher is `TRANSIENT_LOCAL, depth=1, KEEP_LAST` over a `TFMessage` that
+**accumulates** every transform it has been given (`tf2_ros/static_transform_broadcaster.py`,
+Jazzy, read in this container on 2026-09-17). So a late-joining `move_group` receives the
+whole tree, and this repository already said so in the very file the claim was about:
+`frame_server.on_deactivate`'s comment reads *"A static broadcaster is transient-local: what
+it published stays available to late joiners."* **The two errors quoted above were read off
+the stall**, where the tree was never published at all — they are what a node that never
+activated looks like, not what starting early looks like. `detection_server` is the same
+case: its only `lookupTransform` is inside a `Detect` goal callback under a 5 s timeout
+(`cite_skills/src/detection_server.cpp:508`), never at start-up.
+
+**This is the ADR-0028 lesson, repeated inside the record that cites it.** A mechanism was
+stated as fact from an audit of a condition the machine was never in, and in doing so it
+replaced a correct non-constraint: the launch docstring had recorded that gating `move_group`
+"would add an ordering constraint that the system does not actually have", about the
+controllers, and the new sentence read as though that reasoning had been overturned.
+
+**What the gate actually buys, and it is enough to keep it.** Neither item is an ordering
+dependency.
+
+1. **Log ordering.** Ungated, `move_group` starts at t≈0 and logs those two frame errors
+   *seconds before* the driver's own diagnosis. The misdirection this record exists to remove
+   would still be the first thing a reader sees.
+2. **One testable invariant.** *"Nothing downstream of `_facility` starts before the driver
+   exits"* — clause 4 of the promotion condition — stays a single rule rather than a rule with
+   a carve-out for one process.
+
+**And what it costs, stated here rather than discovered later.** Three `move_group`s and their
+three `xacro` expansions move from running beside facility activation to running behind it,
+which is roughly 1-3 s added to every bring-up. Every scenario ceiling in this repository is
+wall clock, and **none of them may be widened to absorb it.**
 
 ## What this record does not decide
 

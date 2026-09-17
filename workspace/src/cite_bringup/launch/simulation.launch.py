@@ -1203,14 +1203,38 @@ def _motion_planning(plan: Plan) -> list:
     own, and gating it on them would add an ordering constraint the system does
     not have.
 
-    It IS gated on the lifecycle driver, and that one is a real dependency rather
-    than caution. move_group resolves poses against the facility's static tree,
-    which `frame_server` publishes in `on_activate`; a move_group started before
-    that reports `Tf has two or more unconnected trees` and `Unknown frame:
-    cite_world`, and those two messages are what a stalled facility node used to
-    look like ten seconds after the fact (ADR-0058). This docstring said
-    "started unconditionally" until then, which was true of the code and is the
-    sentence that made the real dependency easy to miss.
+    It IS gated on the lifecycle driver, and **that is not an ordering dependency
+    either** (ADR-0058, amended 2026-09-17). `frame_server` publishes the
+    facility's static tree through a `StaticTransformBroadcaster`, whose publisher
+    is TRANSIENT_LOCAL depth 1 over a message that accumulates every transform
+    sent — so a move_group that starts late still receives the whole tree, and
+    `frame_server.on_deactivate`'s own comment says so: "what it published stays
+    available to late joiners". The `Tf has two or more unconnected trees` and
+    `Unknown frame: cite_world` errors were read off the **stall**, where the tree
+    was never published at all. They are what a node that never activated looks
+    like, not what starting early looks like.
+
+    What the gate buys is two things, neither of which is a dependency:
+
+    * **Log ordering.** Ungated, move_group starts at t≈0 and logs those two
+      frame errors seconds before the driver says which node never answered — so
+      the misdirection ADR-0058 exists to remove would still be the first thing
+      in the log.
+    * **One invariant instead of a rule with a hole in it.** "Nothing downstream
+      of `_facility` starts before the driver exits" is testable as written; a
+      carve-out for move_group is a second rule nothing checks.
+
+    **The cost is real and is stated here rather than discovered.** Three
+    move_groups and their three `xacro` expansions now sit behind facility
+    activation instead of running beside it, which is roughly 1-3 s added to
+    every bring-up on this project's development host. Every scenario ceiling in
+    this repository is wall clock and none of them may be widened to absorb it
+    (CLAUDE.md §2, the real-time-factor bullet).
+
+    This docstring said "started unconditionally" until the gate landed, and then
+    said the gate was "a real dependency rather than caution" until 2026-09-17.
+    The first was true of the code; the second was a mechanism asserted from an
+    audit of the broken case, which is the ADR-0028 lesson this project keeps.
     """
     actions: list = []
     for manager in plan.controller_managers:
