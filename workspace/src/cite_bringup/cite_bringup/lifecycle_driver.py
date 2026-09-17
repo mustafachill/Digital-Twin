@@ -219,7 +219,9 @@ class LifecycleDriver(Node):
                     f"{_PREFIX} {name} never reached {wanted!r} within "
                     f"{self._budget_s:g} s of being asked to {step}; it is in "
                     f"{observed.label!r} and {change.srv_name!r} has not answered. "
-                    "The request was neither answered nor acted on."
+                    "Read the state: a transitional one means the node is still "
+                    "inside the callback, and a settled one means the request "
+                    "never took effect."
                 )
 
     def _observed(self, state: Client) -> State | None:
