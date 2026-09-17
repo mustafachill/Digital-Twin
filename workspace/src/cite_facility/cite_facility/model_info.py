@@ -58,11 +58,28 @@ class ModelInfo(LifecycleNode):
         self._service = None
 
     def on_configure(self, state: State) -> TransitionCallbackReturn:
+        # `declared_zones()` is read in here rather than at its call site below,
+        # and the move is about the `except` and not about the value. It reaches
+        # the generated tree exactly as `model_hash()` does, so it is an
+        # `ArtifactError` waiting to happen; outside this block that exception
+        # escapes `on_configure` instead of becoming the clean FAILURE the launch
+        # knows how to report. It cannot raise TODAY — `model_hash()` above has
+        # already proved `generated_dir()` resolves — which is precisely the kind
+        # of "cannot happen yet" that stops being true without anyone editing
+        # this file.
+        #
+        # THE OTHER DIRECTION FAILS OPEN AND IS NOT FIXED HERE. A generated tree
+        # with no `bringup/` directory makes `declared_zones()` return `[]`
+        # rather than raise, and an empty declared set makes the refusal below
+        # silently inert: no zone is foreign when no zone is declared. That is a
+        # silence, not a diagnosis, and it is recorded rather than closed because
+        # closing it is a change to the occupancy rule.
         try:
             digest = model_hash()
             zones = require_zones(
                 self.get_parameter("zones").get_parameter_value().string_array_value
             )
+            declared = declared_zones()
         except ArtifactError as exc:
             self.get_logger().error(f"cannot configure: {exc}")
             return TransitionCallbackReturn.FAILURE
@@ -75,7 +92,7 @@ class ModelInfo(LifecycleNode):
         #
         # Asked of the graph's own name list, so nothing waits. What this does
         # and does not catch is in `occupancy.py` and is not restated here.
-        intruders = zones_already_on_the_graph(self.graph_names(), zones, declared_zones())
+        intruders = zones_already_on_the_graph(self.graph_names(), zones, declared)
         if intruders:
             self.get_logger().error(
                 refusal(intruders, zones, os.environ.get("ROS_DOMAIN_ID", "unset"))

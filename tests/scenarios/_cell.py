@@ -61,9 +61,25 @@ SELECTED_BY = "CITE_SCENARIO_ZONE"
 def zone() -> str:
     """Which cell this run drives.
 
-    Read at call time rather than at import: `./scripts/scenario` sets it in the
-    environment, and a module-level read would freeze whatever was set when the
-    guards imported the module on a host that runs no cell at all.
+    **THIS FUNCTION reads the environment on every call; the SCENARIOS bind
+    `ZONE = zone()` once at module scope. Both are right, and the reason is that
+    they are answering for two different processes.**
+
+    A scenario process is handed its environment by `./scripts/scenario` before
+    it starts and it drives one cell from the first assertion to the last, so it
+    resolves the answer once — a scenario that re-read this per test could assert
+    against two cells in one run and report neither.
+
+    The guards are the other process. `tests/scenarios/guards/` imports these
+    modules on a host that runs no cell at all, and
+    `test_the_selected_zone_overrides_the_default` sets and unsets the variable
+    and expects a different answer each time. A module-level read here would
+    freeze whatever was set at import and make that unaskable — and then
+    `./scripts/scenario <name> --zone cell_a`, which is ADR-0056's own named
+    mitigation for a broken showcase, would be held up by nothing.
+
+    This docstring argued for the call-time read alone until 2026-09-17, which
+    read as an argument against what all three scenarios actually do.
     """
     return os.environ.get(SELECTED_BY) or DRIVEN_ZONE
 
