@@ -123,9 +123,9 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1502** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-16 on
-  `feat/cell-b-zone`, whose last commit to touch anything but `CLAUDE.md` is `f7aed46`).
+  `tools/tests/` holds **1514** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-17 on
+  `feat/cell-b-zone`, after the four reviews of that branch were remediated).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
   part of that day, **1376** for part of it too, **1377** until 2026-09-10, **1399** while
@@ -156,6 +156,19 @@ bullet.
   flow document — emitted **fourteen** artifacts, and every one of them is a tracked file that
   two tree-parametrized suites then count a case for. **Twenty-seven of the 31 tree cases are
   those fourteen files**, and not one of them is a new assertion about anything.
+  **The 1502 -> 1514 step is the remediation of that branch's four reviews, and it is tree
+  growth ALONE** — measured in this checkout on 2026-09-17, against the figures the paragraph
+  above records at `f7aed46`. **No file was added under `tools/tests` at all**, so the +12 is
+  entirely the six tracked files the remediation adds elsewhere being counted twice:
+  `test_superseded_real_time_requirement.py` 397 -> **403**, all **6** carrying one of its
+  seven suffixes since all six are `.py`, and `test_a_removed_plan_key_stays_removed.py`
+  371 -> **377**, the same six, all under `tests/` or `workspace/`.
+  `test_interface_counts.py` did **not** move, reading **161** on both sides: the remediation
+  adds no tracked `.md`, and the one `.md` it touched by name — ADR-0055 renumbered to
+  ADR-0056 — is a rename and not an addition. 6 + 6 = 12.
+  **The two 6s are the same six files and are not one quantity counted twice.** One walk
+  selects by suffix and the other by tree, and they agree here because every file the
+  remediation adds is a `.py` under `tests/` or `workspace/`.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
@@ -317,26 +330,57 @@ bullet.
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
-  re-taken on 2026-09-16 from ONE full run**, over a working tree whose content is
-  `f7aed46`'s — the commits after it on `feat/cell-b-zone` change only `CLAUDE.md`, which no
+  re-taken on 2026-09-17 from ONE full run**, over a working tree whose content is
+  `04f8374`'s — the commit after it changes only `CLAUDE.md`, which no
   suite here executes — which is what
   it takes: a
-  `--host-only` run cannot refresh the third at all. `124 passed, 0 failed
-  (shell gate self-tests)`, unchanged since
-  2026-08-31; `1571 passed, 1 skipped` for the host half, which walks `tools/` **and**
+  `--host-only` run cannot refresh the third at all. `135 passed, 0 failed
+  (shell gate self-tests)`, **which moved for the first time since 2026-08-31**;
+  `1610 passed, 1 skipped` for the host half, which walks `tools/` **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1364 tests, 0 failures, 56
+  first-party packages, eleven per-package summaries totalling **1414 tests, 0 failures, 56
   skipped**. Its exit status was 0.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
   124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
   124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more,
-  124 / 1445 / 1296 for a few hours after that, 124 / 1446 / 1296 until 2026-09-10 and
-  124 / 1468 / 1363 until 2026-09-16.
+  124 / 1445 / 1296 for a few hours after that, 124 / 1446 / 1296 until 2026-09-10,
+  124 / 1468 / 1363 until 2026-09-16 and 124 / 1571 / 1364 until 2026-09-17.
+  **The shell gate's 124 -> 135 is the first move that figure has made since 2026-08-31**, and
+  it is entirely `./scripts/sim`'s argument parsing: **eleven** cases for `--zone` — absent,
+  dangling, swallowing the next flag, given a launch argument instead of a name, and two
+  spellings naming different zones in either order — **five of the eleven asserting on the
+  DIAGNOSIS rather than on the exit status**, because a refusal that does not say which flag
+  or which zone sends the reader nowhere. Every one of them exits before `require_ros_env`, so
+  the self-test starts no cell and no container. 124 + 11 = 135.
   **The host half ties to the collection above, and the tie is checked at THIS commit rather
-  than differenced against the last recorded one.** `tools/tests` collects **1502** here and
-  `tests/` **70**, and 1502 + 70 = 1572 = 1571 passed plus the 1 skipped. **The 1468 -> 1571
+  than differenced against the last recorded one.** `tools/tests` collects **1514** here and
+  `tests/` **97**, and 1514 + 97 = 1611 = 1610 passed plus the 1 skipped.
+  **The `tests/` half moved 70 -> 97 and closes exactly**, measured in this checkout on
+  2026-09-17 by `--collect-only -q | sed 's/::.*//' | sort | uniq -c`. **+16** is
+  `test_continuous_line_ladder.py` 16 -> **32** and **+5** is
+  `test_place_assertion_sees_height.py` 5 -> **10**: both stopped naming `cell_a`'s artifacts
+  and now parametrise over every zone the generated tree declares, so each zone-dependent case
+  became two and each gained one tripwire for the parametrisation collecting nothing. **+4** is
+  four new cases in `test_scenario_modules_load.py` holding the driven zone to one statement.
+  **+2 is tree growth of the same kind the `tools/` half shows**:
+  `test_gz_calls_carry_the_partition.py` 13 -> **15**, because it parametrises over the files
+  under `tests/` and two were added there. 16 + 5 + 4 + 2 = 27.
+  **The per-package 1364 -> 1414 step, +50, is stated and NOT reconciled**, for the reason
+  this bullet already gives: the eleven `Summary:` lines carry no package name, so the log
+  cannot attribute a test to a package, and attributing it would need a full run at the base
+  as well, which was not taken. What is checkable is that the remediation changes tests in
+  **`cite_facility`, `cite_bringup` and `cite_twin` only** (`git diff --stat f7aed46..HEAD --
+  'workspace/src/*/test/*'`), which is a reason to expect the move to sit there and **is not a
+  measurement of it**. **Thirty-nine of the 50 are attributed, because they were measured
+  directly**: three new files collect **11**, **12** and **6** cases
+  (`test_a_node_without_a_zone_refuses.py`, `test_one_zone_at_a_time.py`,
+  `test_the_boundary_needs_a_zone.py`, each collected in the container), and **5**, **3** and
+  **2** cases were added to `test_artifacts.py`, `test_simulation_launch.py` and
+  `test_pair.py`. **The remaining 11 is not attributed and was not chased**: a ctest
+  per-package total and a pytest collection are different instruments, and guessing which
+  accounts for the difference is exactly what the rule above forbids. **The 1468 -> 1571
   step is deliberately NOT reconciled**, because the two figures sit at commits four apart —
   1468 was taken at `523ffd9` and this at `f7aed46` — and two commits landed in between that
   this work did not measure. What IS reconciled, in the collection bullet above, is
@@ -638,11 +682,16 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1936 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-10 at `523ffd9`; it said **661** until 2026-08-29, **1048** until
+  runs, and reported `1961 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-17 on `feat/cell-b-zone`; it said **661** until 2026-08-29, **1048**
+  until
   2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
-  2026-09-02, **1540** until 2026-09-08, **1928** and then **1930** for parts of that day and
-  **1931** until 2026-09-10.
+  2026-09-02, **1540** until 2026-09-08, **1928** and then **1930** for parts of that day,
+  **1931** until 2026-09-10 and **1936** until 2026-09-17.
+  **The 1936 was stale for the whole of this branch and nothing here caught it**, which is
+  worth one line because the branch re-derived every neighbouring count in this section and
+  not this one. A reviewer found it by running `lint`, which is the only way any of these has
+  ever been found.
   Most of the
   difference is the
   measurement campaigns publishing their raw logs into the walk — `git diff --diff-filter=A
@@ -684,6 +733,16 @@ bullet.
   two untracked files are still on disk. 1931 + 5 = 1936. **So three consecutive moves have
   now added nothing under `docs/measurements`**, which is a statement about these three
   branches and not a trend.
+  **The 1936 → 1961 move is +25 and closes exactly, in the two parts this bullet's caveat
+  requires.** `git diff --diff-filter=A --name-only 523ffd9..HEAD` counts **24** tracked files
+  added — fourteen of them the artifacts one declared zone emits, the rest source and one ADR,
+  **none** under `docs/measurements` — with `--diff-filter=D` and `--diff-filter=R` both **0**.
+  That is 1934 + 24 = **1958** tracked. The other **+1 is a third untracked file**: the project
+  owner's raw LiDAR capture under `assets/scans/raw/`, Phase 3 material which
+  `assets/README.md` keeps out of git. 1958 + 3 = 1961. **So four consecutive moves have now
+  added nothing under `docs/measurements`**, and this is the first whose additions are mostly
+  GENERATED — which is the same lesson from a new direction: declaring one zone in `model/`
+  moves this figure by fourteen without anybody writing fourteen files.
   **A superlative was drafted here and withdrawn on checking, which is the reason to say so.**
   It read *"the first in this bullet's history that is entirely source"*, and the move
   immediately above it — 1928 → 1930, `df91154` — was **two added tracked `.py` files and
@@ -694,13 +753,15 @@ bullet.
   directories pruned (`cite_tools.tree.our_files`, reached from
   `cite_tools.english.files_to_check`), and `tools/tests/test_english.py` carries a test named
   `test_a_file_that_is_written_but_not_staged_is_still_reported` asserting exactly that. So a
-  file that is present but untracked is checked and counted. **Exactly 2 of this checkout's
-  1936 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
-  built by the 2026-09-03 stall-band campaign's harness — **re-derived rather than carried
-  forward**, on 2026-09-10 at `523ffd9`, by differencing `files_to_check` against
-  `git ls-files`, which named those two files and no others; the same difference at `6d51966`
-  and at `df91154` named the same two. **A clean clone of `523ffd9`
-  therefore reports 1934**, and this figure depends on local build state in a way none of the
+  file that is present but untracked is checked and counted. **Exactly 3 of this checkout's
+  1961 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
+  built by the 2026-09-03 stall-band campaign's harness, and now `assets/scans/raw/scan 1 room
+  scan.e57`, the raw capture above — **re-derived rather than carried
+  forward**, on 2026-09-17 on `feat/cell-b-zone`, by differencing `files_to_check` against
+  `git ls-files`, which named those three files and no others; the same difference named two
+  at `523ffd9`, at `6d51966` and at `df91154`. It said **2 of 1936** until 2026-09-17.
+  **A clean clone of this branch's tip
+  therefore reports 1958**, and this figure depends on local build state in a way none of the
   other counts in this section does. **That prediction has now been checked once and it held**:
   this file said a clean clone of `30baea8` would report **1926**, and `files_to_check` over a
   fresh worktree at `e18251e` — three commits after `30baea8`, with no tracked file
@@ -1943,14 +2004,21 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **54 records, all indexed** in this checkout on 2026-09-10 at
-    `523ffd9`. It read 53 on 2026-09-08 at `6d51966`, 52 on 2026-09-01 at
+    `ADR index` line reported **55 records, all indexed** in this checkout on 2026-09-17 on
+    `feat/cell-b-zone`, whose one added record is ADR-0056. It read **54** on 2026-09-10 at
+    `523ffd9`, 53 on 2026-09-08 at `6d51966`, 52 on 2026-09-01 at
     `abdae38` and **still 52 when re-run on 2026-09-08 at `df91154`** — that branch amended
     existing records and added none, which `git diff --diff-filter=A --name-only
     e18251e..df91154` confirms by listing no file under `docs/adr/`. It said 51 earlier on
     2026-09-01, 48 on 2026-08-30, 46 the day before that, 43
     earlier that day, and 40 before that —
     the newest being
+    [ADR-0056](docs/adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md) —
+    keep the three-arm cell as a second zone and run one zone at a time, **`Proposed` and not
+    promoted**, because its clauses 4 and 5 want a `cell_b` bring-up and a `cell_a` showcase
+    bring-up and neither run exists. **ADR-0055 is not on this branch**: a concurrent session
+    holds it unmerged, which is why this record was renumbered from 0055 at `f762a35`, and
+    why `doctor`'s count here is 55 rather than 56. Before it,
     [ADR-0054](docs/adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md) — the hardware
     opt-in keyed on a declared fact rather than on a backend's name, **`Proposed (corrected
     2026-09-10)` and not promoted**, for the clause-10 reason its own status block gives —
@@ -1964,7 +2032,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **55** on 2026-09-10 at `523ffd9` against
+    also matches `0000-template.md`; it read **56** on 2026-09-17 on `feat/cell-b-zone`
+    against `doctor`'s 55, **55** on 2026-09-10 at `523ffd9` against
     `doctor`'s 54, **54** on 2026-09-08 at `6d51966` against
     `doctor`'s 53, and **53** on 2026-09-01 at `abdae38` against
     `doctor`'s 52, so the
@@ -2095,7 +2164,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/validate-model` | L0 schema validation + generator dry-run. Runs anywhere. |
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares (ADR-0028). Needs the imported vendor source, so unlike `validate-model` it does not run anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
-| `./scripts/scenario [name]` | Headless simulation-in-the-loop scenario; no argument lists them |
+| `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` selects the cell to drive and, unlike `./scripts/sim --zone`, HAS a default — which cell the regression suite drives is a project decision (ADR-0056 decision 5) stated once in `tests/scenarios/_cell.py`, not one each caller makes. `./scripts/scenario bringup --zone cell_a` is how the three-arm showcase is checked without a commit |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |
