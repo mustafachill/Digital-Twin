@@ -3,9 +3,24 @@
 #
 #   ./scripts/scenario                 list available scenarios
 #   ./scripts/scenario pick_and_place  run one
+#   ./scripts/scenario bringup --zone cell_a
+#                                      run one against another cell
 #   ./scripts/scenario bringup --teardown-advisory
 #                                      gate on the cycle only; still run and
 #                                      report the post-shutdown check
+#
+# --zone names the cell to drive. Unlike `./scripts/sim --zone` it has a default,
+# and the difference is deliberate: `sim` STARTS a cell, so which one is the
+# caller's to choose, while which cell this repository's regression suite drives
+# is a project decision (ADR-0056 decision 5) and is stated ONCE, in
+# `tests/scenarios/_cell.py`. A required flag here would put that decision back
+# into every caller — CI, the tester agent and each developer — which is the
+# three-copies shape it was just taken out of.
+#
+# It is what makes ADR-0056's own mitigation available: the record names "a cheap
+# periodic `bringup` against `cell_a`" as the answer if the showcase is found
+# broken, and `./scripts/scenario bringup --zone cell_a` is that, as a command
+# rather than as a commit.
 #
 # --teardown-advisory exists for CI and is off by default, so an interactive run
 # keeps answering the strict question. It does not delete, skip or exempt the
@@ -55,6 +70,11 @@ if [ $# -eq 0 ]; then
     if [ -d "$SCENARIO_DIR" ] && [ -n "$(ls -A "$SCENARIO_DIR" 2>/dev/null)" ]; then
         for s in "$SCENARIO_DIR"/*.py; do
             [ -e "$s" ] || continue
+            # `_`-prefixed files are shared helpers, not runnable scenarios —
+            # the same rule `scenario_paths()` in the guards already applies.
+            # Without this, `tests/scenarios/_cell.py` is offered as a scenario
+            # called `_cell` that has no launch description at all.
+            case "$(basename "$s")" in _*) continue ;; esac
             printf '  %s\n' "$(basename "$s" .py)"
         done
     else
@@ -69,6 +89,24 @@ fi
 # and the two agreed only because the default happens to be a constant.
 export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
 
+# Decided before re-entry for the same reason the seed is: `exec_in_container`
+# carries CITE_* across, and a value the container recomputed would be a second
+# decision able to disagree with this one. Scanned rather than parsed here, since
+# the arguments are parsed properly below, on the side that runs launch_test.
+WANT_ZONE=0
+for arg in "$@"; do
+    if [ "$WANT_ZONE" -eq 1 ]; then
+        export CITE_SCENARIO_ZONE="$arg"
+        WANT_ZONE=0
+        continue
+    fi
+    case "$arg" in
+        --zone)   WANT_ZONE=1 ;;
+        --zone=*) export CITE_SCENARIO_ZONE="${arg#--zone=}" ;;
+    esac
+done
+[ "$WANT_ZONE" -eq 0 ] || die "--zone needs a zone name, e.g. --zone cell_a"
+
 require_ros_env scenario "$@"
 
 NAME="$1"; shift
@@ -80,9 +118,19 @@ SCENARIO="${SCENARIO_DIR}/${NAME}.py"
 # that actually runs launch_test.
 TEARDOWN_POLICY="blocking"
 LAUNCH_TEST_ARGS=()
+SKIP_NEXT=0
 for arg in "$@"; do
+    if [ "$SKIP_NEXT" -eq 1 ]; then
+        SKIP_NEXT=0
+        continue
+    fi
     case "$arg" in
         --teardown-advisory) TEARDOWN_POLICY="advisory" ;;
+        # Consumed here rather than forwarded: it was read into
+        # CITE_SCENARIO_ZONE above, and `launch_test` would reject an argument
+        # it does not know.
+        --zone)   SKIP_NEXT=1 ;;
+        --zone=*) ;;
         *) LAUNCH_TEST_ARGS+=("$arg") ;;
     esac
 done
@@ -90,7 +138,7 @@ done
 [ -d "${REPO_ROOT}/workspace/install" ] || die "No build found. Run ./scripts/build first."
 source_overlay
 
-info "Running scenario '${NAME}' on DDS domain ${ROS_DOMAIN_ID}"
+info "Running scenario '${NAME}' against zone '${CITE_SCENARIO_ZONE:-the default in tests/scenarios/_cell.py}' on DDS domain ${ROS_DOMAIN_ID}"
 # Stated on every run rather than buried in a header nobody opens: the seed does
 # reach Gazebo now, but it seeds the wrong thing to make a run repeatable, so a
 # green run here still does not mean the next one is green.

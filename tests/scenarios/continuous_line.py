@@ -35,10 +35,12 @@ work-piece's *name* is read out of the generated world rather than written.
 
 ## Two things this scenario does that are the line's boundary, not intervention
 
-1. **It feeds the source.** `station_infeed` is a `source_station` and the L0
-   model says in as many words that it is fed externally. Something has to put a
-   part on the pick table; here it is `ros_gz_sim create`, at the pick frame TF
-   reports.
+1. **It feeds the source.** The first station in the flow is a `source_station`
+   and the L0 model says in as many words that it is fed externally. Something
+   has to put a part on the pick table; here it is `ros_gz_sim create`, at the
+   pick frame TF reports. Its ID IS DELIBERATELY NOT WRITTEN HERE — it was
+   `station_infeed`, which is `cell_a`'s, and stayed that way after this
+   scenario was pointed at a cell that has no station of that name.
 2. **It empties the sink, and it has no choice.** The belt's `<carry>` list and
    the beam's `<watch>` list match a Gazebo model name *exactly*
    (`conveyor.cpp`, `break_beam.cpp`), and `facility.workpiece_models` declares
@@ -68,9 +70,9 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import unittest
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import NamedTuple
 
@@ -78,7 +80,6 @@ import launch_testing
 import launch_testing.markers
 import pytest
 import rclpy
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from cite_bringup.gz import ModelPoses
 from cite_bringup.gz import run as gz_run
@@ -90,16 +91,32 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.node import Node
 from std_msgs.msg import Float64
 
-#: The cell this scenario drives. Its only cell-specific fact: everything else —
-#: the milestone ladder, the work-piece name, the world name and every belt
-#: footprint — is derived from the generated topology and world below, which is
-#: why pointing this at another zone is a one-line change (ADR-0056).
+# `tests/scenarios/` is not on `sys.path` when this file runs. `launch_test`
+# loads a scenario BY PATH — `spec_from_file_location` then `exec_module`, with
+# no `sys.modules` entry and no path entry — so a plain `from _cell import ...`
+# raises ModuleNotFoundError under the loader that actually runs this, while
+# working perfectly under `import`. Put the directory this file lives in on the
+# path first, and the sibling resolves under both loaders; the guard
+# `test_scenario_loads_by_path` is what proves that, because it uses the same
+# loader.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from _cell import carried_models, cell, world_root, zone  # noqa: E402  (insert first)
+
+#: The cell this scenario drives, resolved once at load. Its only cell-specific
+#: fact: everything else — the milestone ladder, the work-piece name, the world
+#: name and every belt footprint — is derived from the generated topology and
+#: world below.
 #:
-#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and comes up
-#: on demand with `./scripts/sim --zone cell_a`. It is no longer driven by this
-#: scenario — a deliberate reduction in regression coverage, recorded in
-#: ADR-0056's consequences.
-ZONE = "cell_b"
+#: NOT A LITERAL ANY MORE. `ZONE = "cell_b"` stood in all three scenarios, which
+#: is one fact stated three times and able to disagree silently — the shape
+#: CLAUDE.md §4 prohibits — and it also made ADR-0056's own mitigation, a cheap
+#: periodic `bringup` against `cell_a`, a source edit rather than a command. The
+#: statement lives once in `tests/scenarios/_cell.py`; `./scripts/scenario
+#: <name> --zone <zone>` overrides it for one run.
+ZONE = zone()
 
 #: How many work-pieces have to traverse the line. The charter says "N"; three is
 #: the smallest N that distinguishes "the line ran once" from "the line runs",
@@ -368,32 +385,12 @@ def milestones(topology: dict) -> tuple[Milestone, ...]:
     return tuple(ladder)
 
 
-def _world_root(world: Path) -> ElementTree.Element:
-    return ElementTree.parse(world).getroot()
-
-
 def world_name(world: Path) -> str:
     """The Gazebo world's name, for the service that removes a finished piece."""
-    element = _world_root(world).find("world")
+    element = world_root(world).find("world")
     if element is None or not element.get("name"):
         raise ValueError(f"{world} declares no named <world>")
     return str(element.get("name"))
-
-
-def carried_models(world: Path) -> frozenset[str]:
-    """Every Gazebo model name the belts carry and the beams watch.
-
-    Both plugins match this set EXACTLY — `carried_.count(name->Data())` in
-    `conveyor.cpp`, `watched_.count(name->Data())` in `break_beam.cpp` — so a part
-    spawned under any other name rides through the cell untouched and unseen. The
-    intersection is taken rather than either list alone: a name a belt carries but
-    no beam watches would move and never be reported, and a scenario that fed one
-    would be testing a piece the line is blind to.
-    """
-    root = _world_root(world)
-    carried = {element.text.strip() for element in root.iter("carry") if element.text}
-    watched = {element.text.strip() for element in root.iter("watch") if element.text}
-    return frozenset(carried & watched)
 
 
 def belt_extents(world: Path) -> dict[str, tuple[float, float]]:
@@ -405,7 +402,7 @@ def belt_extents(world: Path) -> dict[str, tuple[float, float]]:
     a name this repository generates (CLAUDE.md §8).
     """
     extents: dict[str, tuple[float, float]] = {}
-    for plugin in _world_root(world).iter("plugin"):
+    for plugin in world_root(world).iter("plugin"):
         topic = plugin.findtext("command_topic")
         length = plugin.findtext("belt_length_m")
         width = plugin.findtext("belt_width_m")
@@ -848,10 +845,8 @@ class TestContinuousLine(unittest.TestCase):
 
     def test_the_line_carries_every_workpiece_from_pick_to_accumulation(self) -> None:
         import tf2_ros
-        from cite_bringup.plan import default_plan_path, load
 
-        plan = load(default_plan_path(ZONE))
-        topology = yaml.safe_load(Path(plan.topology).read_text())["topology"]
+        plan, topology = cell(ZONE)
         ladder = milestones(topology)
         self.assertTrue(ladder, "the generated topology yields no milestones to observe")
         self.assertEqual(

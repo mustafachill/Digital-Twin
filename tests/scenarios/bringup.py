@@ -18,6 +18,7 @@ Assertions are on outcomes and constraints, never on exact trajectories.
 from __future__ import annotations
 
 import json
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -40,35 +41,29 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-#: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE, and
-#: it took `ARMS`, four frame literals and three controller-name suffixes with it
-#: when it stopped being the only one (ADR-0056).
+# `tests/scenarios/` is not on `sys.path` when this file runs. `launch_test`
+# loads a scenario BY PATH — `spec_from_file_location` then `exec_module`, with
+# no `sys.modules` entry and no path entry — so a plain `from _cell import ...`
+# raises ModuleNotFoundError under the loader that actually runs this, while
+# working perfectly under `import`. Put the directory this file lives in on the
+# path first, and the sibling resolves under both loaders; the guard
+# `test_scenario_loads_by_path` is what proves that, because it uses the same
+# loader.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from _cell import cell, zone  # noqa: E402  (the path insert above has to come first)
+
+#: The cell this scenario drives, resolved once at load.
 #:
-#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and is
-#: brought up on demand with `./scripts/sim --zone cell_a`. It is no longer
-#: driven by this scenario, which is a deliberate reduction in regression
-#: coverage recorded in ADR-0056's consequences. Pointing this constant back at
-#: it is all it takes to run this scenario against it, and NOTHING ELSE IN THIS
-#: FILE NEEDS TO CHANGE — that is the property the parameterisation bought, and
-#: the reason the literals below had to go rather than be re-spelled for cell_b.
-ZONE = "cell_b"
-
-
-def cell(zone: str) -> tuple:
-    """The generated bring-up plan and process topology for ``zone``.
-
-    Imported inside the function rather than at module scope. `cite_bringup` is a
-    workspace package, and `tests/scenarios/guards/` loads this module on a host
-    with no ROS overlay to check its shape; a module-level import would make
-    every guard depend on a built workspace. `continuous_line.py` does the same
-    thing in `test_the_line_carries_every_workpiece_from_pick_to_accumulation`,
-    for the same reason.
-    """
-    import yaml
-    from cite_bringup.plan import default_plan_path, load
-
-    plan = load(default_plan_path(zone))
-    return plan, yaml.safe_load(Path(plan.topology).read_text())["topology"]
+#: NOT A LITERAL ANY MORE. `ZONE = "cell_b"` stood in all three scenarios, which
+#: is one fact stated three times and able to disagree silently — the shape
+#: CLAUDE.md §4 prohibits — and it also made ADR-0056's own mitigation, a cheap
+#: periodic `bringup` against `cell_a`, a source edit rather than a command. The
+#: statement lives once in `tests/scenarios/_cell.py`; `./scripts/scenario
+#: <name> --zone <zone>` overrides it for one run.
+ZONE = zone()
 
 
 #: The five axes of an xArm 5.

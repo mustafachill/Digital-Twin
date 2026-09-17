@@ -35,6 +35,7 @@ followed for the same reason.
 from __future__ import annotations
 
 import os
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 #: The zone the scenarios drive when nothing says otherwise, stated ONCE for all
@@ -115,3 +116,31 @@ def acting_station(topology: dict) -> dict:
             "scenario to drive"
         )
     return ordered[0]
+
+
+def world_root(world: Path) -> ElementTree.Element:
+    """The generated world, parsed. Plain XML, so no simulator is needed."""
+    return ElementTree.parse(world).getroot()
+
+
+def carried_models(world: Path) -> frozenset[str]:
+    """Every Gazebo model name the belts carry and the beams watch.
+
+    Both plugins match this set EXACTLY — `carried_.count(name->Data())` in
+    `conveyor.cpp`, `watched_.count(name->Data())` in `break_beam.cpp` — so a
+    part spawned under any other name rides through the cell untouched and
+    unseen. The intersection is taken rather than either list alone: a name a
+    belt carries but no beam watches would move and never be reported, and a
+    scenario that fed one would be testing a piece the line is blind to.
+
+    Here rather than in one scenario because BOTH scenarios that spawn a part
+    need it. `pick_and_place` carried `WORKPIECE = "workpiece"` under a comment
+    arguing that the name is a facility fact and not a cell one. That is true and
+    it is not the question: being facility-scoped does not stop it being a second
+    statement of `facility.workpiece_models`, which is exactly the value in two
+    places CLAUDE.md §4 prohibits. `continuous_line` already derived it.
+    """
+    root = world_root(world)
+    carried = {element.text.strip() for element in root.iter("carry") if element.text}
+    watched = {element.text.strip() for element in root.iter("watch") if element.text}
+    return frozenset(carried & watched)

@@ -24,6 +24,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -40,42 +41,29 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.node import Node
 
-#: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE.
+# `tests/scenarios/` is not on `sys.path` when this file runs. `launch_test`
+# loads a scenario BY PATH — `spec_from_file_location` then `exec_module`, with
+# no `sys.modules` entry and no path entry — so a plain `from _cell import ...`
+# raises ModuleNotFoundError under the loader that actually runs this, while
+# working perfectly under `import`. Put the directory this file lives in on the
+# path first, and the sibling resolves under both loaders; the guard
+# `test_scenario_loads_by_path` is what proves that, because it uses the same
+# loader.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from _cell import acting_station, carried_models, cell, zone  # noqa: E402  (insert first)
+
+#: The cell this scenario drives, resolved once at load.
 #:
-#: `ARM`, `PICK_FRAME` and `PLACE_FRAME` stood here beside it until ADR-0056 and
-#: are now read from the generated plan and topology in `setUpClass`. They were
-#: correct, and that was the problem: a scenario that spells a cell's arm and its
-#: two station frames is pinned to one layout, so pointing it at another cell
-#: means editing four constants and hoping they agree with the model. The zone is
-#: the only thing anyone should have to choose.
-#:
-#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and comes up
-#: on demand with `./scripts/sim --zone cell_a`. It is no longer driven by this
-#: scenario — a deliberate reduction in regression coverage, recorded in
-#: ADR-0056's consequences.
-ZONE = "cell_b"
-
-#: The Gazebo model name of the part. A FACILITY fact and not a cell one —
-#: `facility.workpiece_models` in the L0 model is facility-scoped, so both zones
-#: handle the same declared part and this name is the same in either. It stays a
-#: constant here for that reason, not by omission.
-WORKPIECE = "workpiece"
-
-
-def cell(zone: str) -> tuple:
-    """The generated bring-up plan and process topology for ``zone``.
-
-    Imported inside the function rather than at module scope, as
-    `continuous_line.py` does: `tests/scenarios/guards/` loads this module with
-    ROS stubbed out, and `plan.load` reads a file out of the built workspace,
-    which a guard has no reason to require.
-    """
-    import yaml
-    from cite_bringup.plan import default_plan_path, load
-
-    plan = load(default_plan_path(zone))
-    return plan, yaml.safe_load(Path(plan.topology).read_text())["topology"]
-
+#: NOT A LITERAL ANY MORE. `ZONE = "cell_b"` stood in all three scenarios, which
+#: is one fact stated three times and able to disagree silently — the shape
+#: CLAUDE.md §4 prohibits — and it also made ADR-0056's own mitigation, a cheap
+#: periodic `bringup` against `cell_a`, a source edit rather than a command. The
+#: statement lives once in `tests/scenarios/_cell.py`; `./scripts/scenario
+#: <name> --zone <zone>` overrides it for one run.
+ZONE = zone()
 
 WORKPIECE_SIZE = 0.05
 
@@ -180,7 +168,7 @@ def generate_test_description() -> LaunchDescription:
     )
 
 
-def _workpiece_sdf() -> str:
+def _workpiece_sdf(name: str) -> str:
     """A plain box. Its inertia is computed, not guessed — a wrong tensor here
     would make the pick behave oddly for reasons that look like a controller
     fault (L1).
@@ -197,7 +185,7 @@ def _workpiece_sdf() -> str:
     inertia = mass * (side * side + side * side) / 12.0
     return f"""<?xml version="1.0"?>
 <sdf version="1.9">
-  <model name="{WORKPIECE}">
+  <model name="{name}">
     <link name="link">
       <inertial>
         <mass>{mass}</mass>
@@ -257,19 +245,13 @@ class TestPickAndPlace(unittest.TestCase):
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
 
         # The station this scenario drives, and the arm that serves it, read off
-        # the generated topology in flow order rather than named. The topology is
-        # emitted alphabetically, so "the first station that picks and places"
-        # has to be found by walking the edges — reading the list in file order
-        # would find whichever id sorts first, which is the sink.
+        # the generated topology in flow order rather than named. The rule is
+        # `_cell.acting_station` and is written once: the topology is emitted
+        # alphabetically, so "the first station that picks and places" has to be
+        # found by walking the edges — reading the list in file order would find
+        # whichever id sorts first, which is the sink.
         plan, topology = cell(ZONE)
-        stations = {station["id"]: station for station in topology["stations"]}
-        acting = [
-            stations[edge["from"]]
-            for edge in topology["edges"]
-            if stations[edge["from"]].get("pick_frame")
-        ]
-        assert acting, f"the topology for {ZONE} declares no station that picks and places"
-        cls.station = acting[0]
+        cls.station = acting_station(topology)
         cls.pick_frame = cls.station["pick_frame"]
         cls.place_frame = cls.station["place_frame"]
         cls.arm = cls.station["actor"]
@@ -285,6 +267,19 @@ class TestPickAndPlace(unittest.TestCase):
         # yet", which had stopped being true.
         cls.skills = managers[cls.arm].skills
         assert cls.skills is not None, f"the plan declares no skill actions for {cls.arm}"
+
+        # The Gazebo model name of the part, DERIVED rather than written. It was
+        # `WORKPIECE = "workpiece"` under a comment arguing that the name is a
+        # facility fact and not a cell one. That is true and it is not the
+        # question: being facility-scoped does not stop it being a second
+        # statement of `facility.workpiece_models`. `continuous_line` already
+        # derived it from the generated world; this is the same three lines.
+        names = carried_models(Path(plan.world))
+        assert len(names) == 1, (
+            f"the generated world for {ZONE} declares {sorted(names)} as both carried and "
+            "watched. This scenario drives one part, so it cannot choose between two."
+        )
+        cls.workpiece = next(iter(names))
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -415,7 +410,7 @@ class TestPickAndPlace(unittest.TestCase):
         so the first numeric triple is the position. The header's `[ XYZ (m) ]`
         contains no numbers and therefore does not match.
         """
-        result = gz_run(["gz", "model", "-m", WORKPIECE, "-p"], zone=ZONE, timeout=30)
+        result = gz_run(["gz", "model", "-m", self.workpiece, "-p"], zone=ZONE, timeout=30)
         number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
         triples = re.findall(rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout)
         if not triples:
@@ -473,7 +468,7 @@ class TestPickAndPlace(unittest.TestCase):
             pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M,
         )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
-        sdf_path.write_text(_workpiece_sdf())
+        sdf_path.write_text(_workpiece_sdf(self.workpiece))
         created = gz_run(
             [
                 "ros2",
@@ -483,7 +478,7 @@ class TestPickAndPlace(unittest.TestCase):
                 "-file",
                 str(sdf_path),
                 "-name",
-                WORKPIECE,
+                self.workpiece,
                 "-x",
                 str(spawn[0]),
                 "-y",
@@ -538,7 +533,7 @@ class TestPickAndPlace(unittest.TestCase):
             "-p",
             f"asset:={self.arm}",
             "-p",
-            f"workpiece:={WORKPIECE}",
+            f"workpiece:={self.workpiece}",
             "-p",
             f"move_to_action:={self.skills.move_to}",
             "-p",

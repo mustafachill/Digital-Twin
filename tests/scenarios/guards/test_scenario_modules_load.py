@@ -251,3 +251,74 @@ def test_scenario_loader_still_matches_upstream() -> None:
         "upstream now registers the scenario in sys.modules; the by-path hazard this "
         f"guard exists for may be gone, and this guard should be re-derived: {source}"
     )
+
+
+# --- the driven zone is stated once (ADR-0056 decision 5) ---------------------
+
+
+def test_every_scenario_takes_its_zone_from_the_one_statement() -> None:
+    """`ZONE = "cell_b"` stood in all three, and three copies can disagree.
+
+    They cannot disagree now because they do not each state it: `_cell.zone()`
+    answers, from one `DRIVEN_ZONE` and one environment variable. This asserts
+    the wiring rather than the value, so changing which cell CI drives stays a
+    one-line change and does not also break this.
+    """
+    import _artifacts  # puts tests/scenarios on sys.path
+    import _cell
+
+    assert _artifacts.SCENARIOS  # the import above is what makes `_cell` resolve
+    for path in scenario_paths():
+        with _ros_stubs():
+            module = _load_like_launch_test(path)
+        assert getattr(module, "ZONE", None) == _cell.zone(), (
+            f"{path.name} does not take its zone from `_cell.zone()`. A scenario that "
+            "spells a cell is a fourth statement of which cell this repository drives."
+        )
+
+
+def test_no_scenario_assigns_a_zone_literal() -> None:
+    """The tripwire for the assignment coming back.
+
+    The test above compares two values and would keep passing if a scenario
+    re-introduced `ZONE = "cell_b"` while `DRIVEN_ZONE` still said `cell_b` —
+    which is exactly the state the three files were already in.
+    """
+    import re
+
+    for path in scenario_paths():
+        assignments = re.findall(r"^ZONE\s*=\s*['\"]", path.read_text(), re.MULTILINE)
+        assert not assignments, (
+            f"{path.name} assigns a zone literal to ZONE. It has to come from "
+            "`_cell.zone()`, or `./scripts/scenario --zone` reaches this file and "
+            "changes nothing."
+        )
+
+
+def test_the_selected_zone_overrides_the_default(monkeypatch) -> None:
+    """What makes `./scripts/scenario bringup --zone cell_a` work at all.
+
+    ADR-0056 names "a cheap periodic `bringup` against `cell_a`" as the answer if
+    the showcase is found broken. Without this it is a source edit, and the
+    record's own mitigation is unavailable to whoever needs it.
+    """
+    import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
+    import _cell
+
+    monkeypatch.setenv(_cell.SELECTED_BY, "cell_a")
+    assert _cell.zone() == "cell_a"
+    monkeypatch.delenv(_cell.SELECTED_BY)
+    assert _cell.zone() == _cell.DRIVEN_ZONE
+
+
+def test_a_helper_module_is_not_offered_as_a_scenario() -> None:
+    """`_cell.py` has no launch description, so running it as a scenario fails.
+
+    `./scripts/scenario` lists `tests/scenarios/*.py`, and this is the shell half
+    of the same `_`-prefix rule `scenario_paths()` applies here.
+    """
+    listing = (Path(__file__).resolve().parents[3] / "scripts" / "scenario").read_text()
+    assert "in _*) continue" in listing, (
+        "./scripts/scenario no longer skips `_`-prefixed files when it lists "
+        "scenarios, so `_cell` is offered as one and dies with no launch description"
+    )
