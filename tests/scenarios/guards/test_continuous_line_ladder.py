@@ -26,25 +26,13 @@ resolves through TF at run time (P1).
 
 from __future__ import annotations
 
-from pathlib import Path
-
+import _artifacts
 import pytest
-import yaml
 from test_scenario_modules_load import (  # the loader `launch_test` itself uses
     SCENARIO_DIR,
     _load_like_launch_test,
     _ros_stubs,
 )
-
-GENERATED = Path(__file__).resolve().parents[3] / "workspace" / "src" / "cite_generated"
-
-#: The generated process topology for the cell the scenario drives, and the
-#: generated static transform table. Read as plain YAML rather than through ROS:
-#: this suite is deliberately ROS-free, and both files are produced from the L0
-#: model (ADR-0021), so reading them duplicates no value.
-TOPOLOGY = GENERATED / "topology" / "cell_a_flow.yaml"
-STATIC_TF = GENERATED / "frames" / "cell_a_static_tf.yaml"
-WORLD = GENERATED / "worlds" / "cell_a.sdf"
 
 #: Where the work-piece was measured at the pre-ADR-0029 baseline, in metres. A
 #: recorded observation of one broken run and NOT a layout value: it is never used
@@ -62,15 +50,38 @@ def scenario():
         return _load_like_launch_test(SCENARIO_DIR / "continuous_line.py")
 
 
+@pytest.fixture(scope="module", params=_artifacts.zone_ids(), ids=lambda zone: zone)
+def artifacts(request) -> _artifacts.Artifacts:
+    """One case per zone the generated tree declares, NOT per zone anyone drives.
+
+    The scenario is pointed at one cell at a time and this guard covers every
+    cell it could be pointed at, so the two cannot come apart — which they did:
+    these constants named `cell_a` for as long as the scenarios drove `cell_b`.
+    """
+    return _artifacts.load(request.param)
+
+
 @pytest.fixture(scope="module")
-def topology() -> dict:
-    assert TOPOLOGY.is_file(), f"{TOPOLOGY} is missing; it is generated from the L0 model"
-    return dict(yaml.safe_load(TOPOLOGY.read_text())["topology"])
+def topology(artifacts: _artifacts.Artifacts) -> dict:
+    return artifacts.topology
 
 
 @pytest.fixture(scope="module")
 def ladder(scenario, topology: dict) -> tuple:
     return tuple(scenario.milestones(topology))
+
+
+def test_the_generated_tree_declares_at_least_one_zone() -> None:
+    """The tripwire for the parametrisation collecting nothing.
+
+    Every assertion below runs per zone. If the plans move or are renamed, the
+    fixture yields no cases, every test in this file disappears, and the suite
+    reports green having checked no cell at all.
+    """
+    assert _artifacts.zone_ids(), (
+        f"no <zone>_plan.yaml under {_artifacts.GENERATED / 'bringup'}; this guard "
+        "would collect zero cases and pass"
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -170,19 +181,20 @@ def test_a_broken_flow_is_refused_rather_than_walked(scenario, topology: dict) -
         scenario.flow_order(forked)
 
 
-def test_every_milestone_frame_exists_in_the_generated_transform_table(ladder) -> None:
+def test_every_milestone_frame_exists_in_the_generated_transform_table(
+    ladder, artifacts: _artifacts.Artifacts
+) -> None:
     """A frame the ladder names that TF cannot place is a scenario that hangs.
 
     It would hang for `BRING_UP_CEILING_S` and then blame TF, which is a diagnosis
     pointing at the transform table rather than at the topology that named a frame
     the table does not carry. Checked here in milliseconds instead.
     """
-    table = yaml.safe_load(STATIC_TF.read_text())["static_transforms"]
-    published = {entry["child"] for entry in table}
+    published = artifacts.published_frames
     named = {m.frame for m in ladder if m.frame}
     assert named <= published, (
-        f"the ladder names {sorted(named - published)}, which the generated static "
-        f"transform table does not publish"
+        f"the ladder for {artifacts.zone} names {sorted(named - published)}, which the "
+        f"generated static transform table does not publish"
     )
 
 
@@ -191,7 +203,9 @@ def test_every_milestone_frame_exists_in_the_generated_transform_table(ladder) -
 # -----------------------------------------------------------------------------
 
 
-def test_the_world_declares_exactly_one_workpiece_name(scenario) -> None:
+def test_the_world_declares_exactly_one_workpiece_name(
+    scenario, artifacts: _artifacts.Artifacts
+) -> None:
     """The tripwire on the scenario's serial structure.
 
     `conveyor.cpp` and `break_beam.cpp` match a Gazebo model name exactly, and a
@@ -204,18 +218,20 @@ def test_the_world_declares_exactly_one_workpiece_name(scenario) -> None:
     line whose pieces never overlap is the weaker of the two claims, and the
     scenario should stop making it as soon as the aids allow.
     """
-    names = scenario.carried_models(WORLD)
+    names = scenario.carried_models(artifacts.world)
     assert len(names) == 1, (
-        f"the generated world declares {sorted(names)} as both carried and watched. The "
+        f"{artifacts.world.name} declares {sorted(names)} as both carried and watched. The "
         "scenario's one-piece-at-a-time structure exists only because there was one "
         "name; with more, it should drive them concurrently."
     )
 
 
-def test_the_belts_are_all_described_by_the_world(scenario) -> None:
+def test_the_belts_are_all_described_by_the_world(
+    scenario, artifacts: _artifacts.Artifacts
+) -> None:
     """Every belt the scenario measures against has a footprint to measure against."""
-    extents = scenario.belt_extents(WORLD)
-    assert extents, f"{WORLD.name} describes no conveyor plugin with a command topic"
+    extents = scenario.belt_extents(artifacts.world)
+    assert extents, f"{artifacts.world.name} describes no conveyor plugin with a command topic"
     for topic, (length, width) in extents.items():
         assert length > 0 and width > 0, f"{topic} has a non-positive footprint"
 
@@ -226,13 +242,24 @@ def test_the_belts_are_all_described_by_the_world(scenario) -> None:
 
 
 @pytest.fixture(scope="module")
-def belt_z() -> float:
-    """A belt surface's height, from the generated transform table."""
-    table = yaml.safe_load(STATIC_TF.read_text())["static_transforms"]
-    for entry in table:
-        if entry["child"].endswith("__conveyor_1__surface"):
-            return float(entry["xyz_m"][2])
-    pytest.fail(f"no conveyor surface frame in {STATIC_TF.name}")
+def belt_z(artifacts: _artifacts.Artifacts) -> float:
+    """A belt surface's height, from the generated transform table.
+
+    The belt is SELECTED FROM THE PLAN, not matched by spelling. This used to
+    take the first frame whose name ended `__conveyor_1__surface`, which is an
+    assertion about how an asset id is spelled: rename the asset — which
+    ADR-0056's cell did — and the fixture finds nothing, or worse finds some
+    other frame that ends the same way.
+    """
+    assets = artifacts.conveyor_assets
+    assert assets, (
+        f"the bring-up plan for {artifacts.zone} declares no conveyor, so this guard has "
+        "no belt to measure against"
+    )
+    # Every belt has to be placeable, not only the one the arithmetic uses: a
+    # belt the transform table cannot place is a belt the scenario hangs on.
+    heights = [artifacts.frame_height(artifacts.belt_surface_frame(a)) for a in assets]
+    return heights[0]
 
 
 def _resting_z(scenario, surface_z: float) -> float:

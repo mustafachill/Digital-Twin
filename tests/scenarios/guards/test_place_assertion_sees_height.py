@@ -22,34 +22,28 @@ checkable in milliseconds, so it is checked on every `./scripts/test`, including
 `--host-only`. The scenario proves the number is achievable in a real cell; this
 proves the comparison would still reject the failure it was written for.
 
-Nothing here writes a coordinate. The belt height comes from the generated
-static transform table — the same L0-derived value the scenario resolves through
-TF at run time — so a layout change moves this guard with it (P1). The layout has
-moved twice on this branch already.
+Nothing here writes a coordinate, and nothing here names a cell. The place frame
+is the one the station that acts declares, and its height comes from the
+generated static transform table — the same two L0-derived values the scenario
+resolves at run time — so a layout change moves this guard with it (P1). The
+layout has moved twice on this branch already.
+
+It used to name `cell_a`'s transform table and the frame `cell_a__conveyor_1__infeed`
+as constants, and went on naming them after the scenario it guards was pointed
+at `cell_b`: arithmetic over one cell's belt height, checking another cell's
+assertion, green either way. It parametrises over every zone the generated tree
+declares instead — see `_artifacts`.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
+import _artifacts
+import _cell
 import pytest
-import yaml
 from test_scenario_modules_load import (  # the loader `launch_test` itself uses
     SCENARIO_DIR,
     _load_like_launch_test,
     _ros_stubs,
-)
-
-#: The generated static transform table for the cell the scenario drives. Read
-#: rather than imported: this suite is ROS-free, and the file is plain YAML
-#: produced from the L0 model (ADR-0021), so reading it here duplicates no value.
-STATIC_TF = (
-    Path(__file__).resolve().parents[3]
-    / "workspace"
-    / "src"
-    / "cite_generated"
-    / "frames"
-    / "cell_a_static_tf.yaml"
 )
 
 #: Where the work-piece was measured at the pre-ADR-0029 baseline, in metres, in
@@ -67,19 +61,30 @@ def scenario():
         return _load_like_launch_test(SCENARIO_DIR / "pick_and_place.py")
 
 
+@pytest.fixture(scope="module", params=_artifacts.zone_ids(), ids=lambda zone: zone)
+def artifacts(request) -> _artifacts.Artifacts:
+    """One case per zone the generated tree declares."""
+    return _artifacts.load(request.param)
+
+
 @pytest.fixture(scope="module")
-def place_z() -> float:
-    """The height of the place frame, from the generated transform table."""
-    assert STATIC_TF.is_file(), (
-        f"{STATIC_TF} is missing; it is generated from the L0 model and this guard "
-        "reads the belt height from it rather than writing one"
+def place_z(artifacts: _artifacts.Artifacts) -> float:
+    """The height of the place frame, from the generated transform table.
+
+    The frame is the one the acting station declares — the same station
+    `pick_and_place` resolves in `setUpClass`, found by the same rule, which is
+    written once in `_cell.acting_station` and read from there by both.
+    """
+    station = _cell.acting_station(artifacts.topology)
+    return artifacts.frame_height(station["place_frame"])
+
+
+def test_the_generated_tree_declares_at_least_one_zone() -> None:
+    """The tripwire for the parametrisation collecting nothing."""
+    assert _artifacts.zone_ids(), (
+        f"no <zone>_plan.yaml under {_artifacts.GENERATED / 'bringup'}; this guard "
+        "would collect zero cases and pass"
     )
-    table = yaml.safe_load(STATIC_TF.read_text())["static_transforms"]
-    frame = "cell_a__conveyor_1__infeed"
-    for entry in table:
-        if entry.get("child") == frame:
-            return float(entry["xyz_m"][2])
-    pytest.fail(f"{frame} is not in {STATIC_TF.name}; the scenario resolves it through TF")
 
 
 def _resting_z(scenario, place_z: float) -> float:
