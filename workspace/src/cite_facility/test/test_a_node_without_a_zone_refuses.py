@@ -132,6 +132,12 @@ def test_a_named_zone_still_configures(ros, node_type) -> None:
         name = "zones" if node_type is ModelInfo else "zone"
         value = ["cell_a"] if node_type is ModelInfo else "cell_a"
         node.set_parameters([rclpy.Parameter(name, value=value)])
+        if node_type is ModelInfo:
+            # Stood down so that this test answers the question it asks. The
+            # other rule `model_info.on_configure` applies is "no other zone is
+            # on this graph", and ctest runs many nodes on one domain; that rule
+            # has its own file, `test_one_zone_at_a_time.py`.
+            node.graph_names = list
         assert node.on_configure(None) == TransitionCallbackReturn.SUCCESS, (
             f"{node_type.__name__} refuses a zone it was given; the rule is about an "
             "unnamed zone and this one is named"

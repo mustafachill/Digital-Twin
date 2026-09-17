@@ -77,6 +77,20 @@ def require_zones(zones: Sequence[str]) -> list[str]:
     return named
 
 
+def declared_zones() -> list[str]:
+    """Every zone this facility's generated tree can bring up, sorted.
+
+    Read from the bring-up plans because a plan is how a zone is addressed:
+    `./scripts/sim --zone X` and every scenario reach a cell by loading `X`'s
+    plan, so a zone with no plan is a zone nothing can start. Derived rather than
+    listed, so that declaring a third zone in L0 needs no edit here (P5).
+    """
+    return sorted(
+        path.name[: -len("_plan.yaml")]
+        for path in (generated_dir() / "bringup").glob("*_plan.yaml")
+    )
+
+
 def generated_dir() -> Path:
     try:
         return Path(get_package_share_directory(GENERATED_PACKAGE))

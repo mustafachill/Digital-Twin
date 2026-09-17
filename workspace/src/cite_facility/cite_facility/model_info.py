@@ -28,14 +28,17 @@ from __future__ import annotations
 
 from cite_facility.artifacts import (
     ArtifactError,
+    declared_zones,
     generated_dir,
     model_hash,
     require_zones,
 )
+from cite_facility.occupancy import refusal, zones_already_on_the_graph
 from cite_interfaces.msg import ModelVersion
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import GetModelVersion
 from cite_runtime import runtime
+import os
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 
 TOPIC = "/cite/facility/model_version"
@@ -63,6 +66,21 @@ class ModelInfo(LifecycleNode):
             self.get_logger().error(f"cannot configure: {exc}")
             return TransitionCallbackReturn.FAILURE
 
+        # ADR-0056 decision 3, enforced rather than described. This node is the
+        # facility-scope one and it runs in every bring-up, so it is where the
+        # question belongs; a FAILURE here is registered by
+        # `simulation.launch.py` and stops the launch with this diagnosis, which
+        # is the same route a missing artifact already takes.
+        #
+        # Asked of the graph's own name list, so nothing waits. What this does
+        # and does not catch is in `occupancy.py` and is not restated here.
+        intruders = zones_already_on_the_graph(self.graph_names(), zones, declared_zones())
+        if intruders:
+            self.get_logger().error(
+                refusal(intruders, zones, os.environ.get("ROS_DOMAIN_ID", "unset"))
+            )
+            return TransitionCallbackReturn.FAILURE
+
         message = ModelVersion()
         message.header.stamp = self.get_clock().now().to_msg()
         message.model_hash = digest
@@ -78,6 +96,16 @@ class ModelInfo(LifecycleNode):
         )
         self.get_logger().info(f"configured for model {digest[:12]}")
         return TransitionCallbackReturn.SUCCESS
+
+    def graph_names(self) -> list[str]:
+        """Every topic and service name this node has discovered.
+
+        Its own method so that a test can hand the occupancy rule a graph
+        without standing two cells up to make one.
+        """
+        return [name for name, _types in self.get_topic_names_and_types()] + [
+            name for name, _types in self.get_service_names_and_types()
+        ]
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         result = super().on_activate(state)
