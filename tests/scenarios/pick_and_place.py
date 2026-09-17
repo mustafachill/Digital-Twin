@@ -42,7 +42,7 @@ from rclpy.node import Node
 
 #: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE.
 #:
-#: `ARM`, `PICK_FRAME` and `PLACE_FRAME` stood here beside it until ADR-0055 and
+#: `ARM`, `PICK_FRAME` and `PLACE_FRAME` stood here beside it until ADR-0056 and
 #: are now read from the generated plan and topology in `setUpClass`. They were
 #: correct, and that was the problem: a scenario that spells a cell's arm and its
 #: two station frames is pinned to one layout, so pointing it at another cell
@@ -52,7 +52,7 @@ from rclpy.node import Node
 #: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and comes up
 #: on demand with `./scripts/sim --zone cell_a`. It is no longer driven by this
 #: scenario — a deliberate reduction in regression coverage, recorded in
-#: ADR-0055's consequences.
+#: ADR-0056's consequences.
 ZONE = "cell_b"
 
 #: The Gazebo model name of the part. A FACILITY fact and not a cell one —

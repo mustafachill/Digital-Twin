@@ -35,7 +35,7 @@ def per_zone(path: Path, template: str) -> list[str]:
     per zone", and each of them used to spell the answer as a one-element list
     naming `cell_a`. That made them assertions about how many cells the facility
     declares as well as about the property they were written for, and declaring
-    `cell_b` (ADR-0055) falsified all three at once while the property each was
+    `cell_b` (ADR-0056) falsified all three at once while the property each was
     protecting held perfectly.
 
     Derived from the model rather than listed, so the next zone falsifies none of

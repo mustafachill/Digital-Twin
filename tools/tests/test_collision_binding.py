@@ -44,7 +44,7 @@ def _arm_descriptions(path: Path) -> set[str]:
     descriptions it moves is "one per instance of that type, wherever it stands".
     Spelling it as the three `cell_a` arms made the test below an assertion about
     how many arms the facility declares and in which cell as well as about the
-    property it exists for, and declaring `cell_b` (ADR-0055) falsified it while
+    property it exists for, and declaring `cell_b` (ADR-0056) falsified it while
     that property held.
     """
     return {

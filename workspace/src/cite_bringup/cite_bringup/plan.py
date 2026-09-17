@@ -1587,7 +1587,7 @@ def default_plan_path(zone: str) -> Path:
     """Where the generated bring-up plan for ``zone`` lives.
 
     THE ZONE IS REQUIRED, AND THAT IS THE WHOLE POINT OF THE PARAMETER. It
-    defaulted to `cell_a` until ADR-0055, and while the facility declared one
+    defaulted to `cell_a` until ADR-0056, and while the facility declared one
     zone that default was invisible rather than harmless: every caller that
     omitted it was choosing a cell without saying so, and there was no way to
     tell a caller that meant `cell_a` from one that had simply never thought

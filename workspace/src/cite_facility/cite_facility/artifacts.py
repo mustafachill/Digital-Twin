@@ -55,7 +55,7 @@ def require_zone(zone: str) -> str:
     The Python half of the rule `skill_server.cpp` and `detection_server.cpp`
     state at their own parameter declarations, and the reason is theirs: a
     default that silently works hides a bring-up plan that failed to deliver the
-    value. It was `cell_a` in four nodes here until ADR-0055 declared a second
+    value. It was `cell_a` in four nodes here until ADR-0056 declared a second
     zone, at which point every one of those defaults became a way to serve the
     wrong cell without a single error anywhere.
     """

@@ -93,12 +93,12 @@ from std_msgs.msg import Float64
 #: The cell this scenario drives. Its only cell-specific fact: everything else —
 #: the milestone ladder, the work-piece name, the world name and every belt
 #: footprint — is derived from the generated topology and world below, which is
-#: why pointing this at another zone is a one-line change (ADR-0055).
+#: why pointing this at another zone is a one-line change (ADR-0056).
 #:
 #: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and comes up
 #: on demand with `./scripts/sim --zone cell_a`. It is no longer driven by this
 #: scenario — a deliberate reduction in regression coverage, recorded in
-#: ADR-0055's consequences.
+#: ADR-0056's consequences.
 ZONE = "cell_b"
 
 #: How many work-pieces have to traverse the line. The charter says "N"; three is

@@ -47,13 +47,13 @@ zones:
       # that arithmetic transferable; offsetting in x as well would have made
       # every distance in this cell a new number nobody has checked.
       #
-      # Only one zone is up at a time (ADR-0055 decision 3), so this separation
+      # Only one zone is up at a time (ADR-0056 decision 3), so this separation
       # buys correctness of the model rather than isolation at run time — the run-
       # time collisions are on ROS names, not on geometry, and are the reason for
       # the one-zone-at-a-time rule.
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
-    # Single, deliberately. ADR-0055 declares `cell_b` unpaired and records that
+    # Single, deliberately. ADR-0056 declares `cell_b` unpaired and records that
     # flipping it to `pair` is a separate change with its own record — nothing
     # starts L5 today, so a pair would come up with no twin boundary.
     twin:

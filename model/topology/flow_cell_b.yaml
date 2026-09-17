@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../schema/flow.schema.json
 schema: cite/flow/v1
 
-# `cell_b`'s process flow (ADR-0055). A SEPARATE FILE BECAUSE IT HAS TO BE:
+# `cell_b`'s process flow (ADR-0056). A SEPARATE FILE BECAUSE IT HAS TO BE:
 # `FlowDocument` holds exactly one `flow`, so a second zone's edges cannot join
 # flow.yaml. The loader globs every *.yaml under model/ and dispatches on the
 # document's own `schema:` key, so the file name carries no meaning beyond
@@ -33,7 +33,7 @@ schema: cite/flow/v1
 # is refused its retry and goes STATE_BLOCKED, which is what stops this cell
 # dead-ending in silence the way `station_transfer_1` did in cell_a.
 #
-# ADR-0055 accepts that deliberately. The alternative shape — feeding the arm
+# ADR-0056 accepts that deliberately. The alternative shape — feeding the arm
 # FROM a belt — would keep ADR-0039 live, at the cost of making three geometric
 # indexing rules live too, and it is not the flow that was chosen.
 #

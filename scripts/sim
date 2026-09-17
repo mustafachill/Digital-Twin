@@ -5,7 +5,7 @@
 #   ./scripts/sim --zone cell_b --headless   no GUI — the form used by CI and by the tester agent
 #   ./scripts/sim --zone cell_b --pair       both sides of a twin pair, under the pair supervisor
 #
-# --zone IS REQUIRED AND HAS NO DEFAULT (ADR-0055). The facility declares two
+# --zone IS REQUIRED AND HAS NO DEFAULT (ADR-0056). The facility declares two
 # cells: `cell_b`, the one-arm cell this project works on, and `cell_a`, the
 # three-arm cell Phase 1 closed on, which is kept as a showcase and is brought up
 # with `./scripts/sim --zone cell_a`. Exactly one zone runs at a time — two share
@@ -55,14 +55,14 @@ if [ "$WANT_ZONE" -eq 1 ]; then
   ./scripts/sim --zone cell_a   the three-arm showcase"
 fi
 
-# Refused rather than defaulted (ADR-0055 decision 4). A default here would put
+# Refused rather than defaulted (ADR-0056 decision 4). A default here would put
 # the zone back exactly where removing it from `default_plan_path` took it from:
 # somewhere nobody chose it.
 if [ -z "$ZONE" ]; then
     die "--zone is required and has no default.
   ./scripts/sim --zone cell_b   the one-arm cell this project works on
   ./scripts/sim --zone cell_a   the three-arm cell Phase 1 closed on, kept as a showcase
-  Exactly one zone runs at a time; see ADR-0055."
+  Exactly one zone runs at a time; see ADR-0056."
 fi
 
 # A pair is headless, and there is no other form of it to offer. Two windows of a

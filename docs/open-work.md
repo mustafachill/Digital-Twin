@@ -60,7 +60,7 @@ notes above is disturbed.
 and **#67**, record the two validation gaps a second zone exposed — nothing compares two zones'
 bounding boxes, and a cross-zone station reference passes referential validation and then skips
 its reach check in silence. Both are **filed rather than fixed**, which is
-[ADR-0055](adr/0055-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)'s own
+[ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)'s own
 decision and is recorded there under "What this costs us". Each entry names the command that
 reproduces it. **No existing item was re-read on this date** and no table row below was
 re-derived, so everything else in this file still carries whatever date it already carried.
@@ -1432,7 +1432,7 @@ validator noticing, and it was not.
 Widening a zone is the mild version. Moving `cell_b`'s bodies into `cell_a`'s box as well is
 equally silent, and produces two worlds that describe the same volume twice.
 
-**Not fixed, deliberately** (ADR-0055, "What this costs us"). A guard written against the one
+**Not fixed, deliberately** (ADR-0056, "What this costs us"). A guard written against the one
 case we control is weaker than placing the cell correctly and recording why, which is what
 `model/facility/zones.yaml` does: the comment on `cell_b`'s bounds states the 1.200 m of clear
 air between the two boxes and states that nothing checks it. What a fix looks like is a
@@ -1475,7 +1475,7 @@ deployment is a station waiting for a server that is not running.
 `--write` rather than a bare run, for the reason #66 gives: a bare run fails on the byte-identity
 diff, which fires for any model edit and is not the validator noticing anything.
 
-**Not fixed, deliberately** (ADR-0055, "What this costs us"), for the same reason as #66. The
+**Not fixed, deliberately** (ADR-0056, "What this costs us"), for the same reason as #66. The
 shape of a fix is a referential rule requiring a station's `actor`, `assets`, `trigger.sensor`,
 `pick_from.asset` and `place_to.asset` to be in that station's **own** zone — which is a rule
 about the model rather than a guard against one mistake, and is worth writing as such. Note that

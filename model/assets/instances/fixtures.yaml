@@ -103,7 +103,7 @@ assets:
     hardware: {backend: sim}
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0055)
+  # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
   # Same fixtures, same dimensions, same relative spacing as `cell_a` above,

@@ -1,6 +1,6 @@
 """A zone with no flow document generates nothing, and says nothing.
 
-ADR-0055's promotion clause 7. This is the likeliest way `cell_b` could validate
+ADR-0056's promotion clause 7. This is the likeliest way `cell_b` could validate
 clean while being non-functional, and the reason it is a test rather than a
 sentence in the model is that **every instrument in the repository stays quiet
 for it**:

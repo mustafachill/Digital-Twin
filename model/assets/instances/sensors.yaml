@@ -157,7 +157,7 @@ assets:
       idle_state: clear
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0055)
+  # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
   # Two beams, and NEITHER indexes. That is the whole difference between this

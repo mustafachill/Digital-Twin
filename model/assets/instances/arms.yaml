@@ -74,7 +74,7 @@ assets:
       status: unregistered
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0055)
+  # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
   # THE ID CARRIES THE ZONE BECAUSE NOTHING ELSE DOES. `cite_tools.model.ids`
@@ -107,7 +107,7 @@ assets:
       type: xarm_parallel_gripper
       vendor_integrated: true
     # `sim` on both sides. ADR-0048 clause 1 refuses an asset whose two sides
-    # declare different backends, and ADR-0055 leaves hardware to Phase 2.B.
+    # declare different backends, and ADR-0056 leaves hardware to Phase 2.B.
     hardware:
       backend: sim
     configuration:

@@ -42,12 +42,12 @@ from trajectory_msgs.msg import JointTrajectoryPoint
 
 #: The cell this scenario drives. THE ONE CELL-SPECIFIC VALUE IN THIS FILE, and
 #: it took `ARMS`, four frame literals and three controller-name suffixes with it
-#: when it stopped being the only one (ADR-0055).
+#: when it stopped being the only one (ADR-0056).
 #:
 #: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and is
 #: brought up on demand with `./scripts/sim --zone cell_a`. It is no longer
 #: driven by this scenario, which is a deliberate reduction in regression
-#: coverage recorded in ADR-0055's consequences. Pointing this constant back at
+#: coverage recorded in ADR-0056's consequences. Pointing this constant back at
 #: it is all it takes to run this scenario against it, and NOTHING ELSE IN THIS
 #: FILE NEEDS TO CHANGE — that is the property the parameterisation bought, and
 #: the reason the literals below had to go rather than be re-spelled for cell_b.
@@ -399,7 +399,7 @@ class TestCellBringUp(unittest.TestCase):
         cannot fail however the prefix behaves; what still has teeth is the count,
         which fails if the arm publishes the wrong set of joints. The zone where
         this test can actually detect a dropped prefix is `cell_a`, which CI no
-        longer drives (ADR-0055 decision 5) — so this is one of the regressions
+        longer drives (ADR-0056 decision 5) — so this is one of the regressions
         that decision's "What this costs us" is about, named here rather than left
         for whoever next reads a green run as coverage. Pointing `ZONE` at
         `cell_a` restores it, and nothing else in this file needs changing.
@@ -660,7 +660,7 @@ class TestCellBringUp(unittest.TestCase):
         # whose absence this test exists to catch. It is a generated name, so
         # composing it here is a second statement of it; a plan field for it
         # would be a new generated key and therefore ADR-0021 territory, which
-        # ADR-0055 does not open. `cell_b_static_tf.yaml` is where it comes from.
+        # ADR-0056 does not open. `cell_b_static_tf.yaml` is where it comes from.
         station = self._acting_station()
         arm = self.arms[0]
         buffer = tf2_ros.Buffer()

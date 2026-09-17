@@ -65,7 +65,7 @@ stations:
     trigger: {sensor: beam_c3_out, state: blocked}
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0055)
+  # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
   # THREE STATIONS IS THE MINIMUM, AND IT IS ENFORCED RATHER THAN STYLISTIC.

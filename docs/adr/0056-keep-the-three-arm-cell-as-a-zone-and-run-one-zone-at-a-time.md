@@ -1,4 +1,4 @@
-# ADR-0055: Keep the three-arm cell as a second zone, and run one zone at a time
+# ADR-0056: Keep the three-arm cell as a second zone, and run one zone at a time
 
 - **Status:** Proposed — nothing in this record is implemented.
 - **Date:** 2026-09-16

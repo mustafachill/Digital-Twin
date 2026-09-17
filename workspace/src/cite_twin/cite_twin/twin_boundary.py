@@ -1119,7 +1119,7 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     plan and nothing but a test passes anything else.
     """
     parser = argparse.ArgumentParser(prog="cite_twin", description=__doc__)
-    # NO DEFAULT (ADR-0055 decision 4). `--zone` used to default to `cell_a`,
+    # NO DEFAULT (ADR-0056 decision 4). `--zone` used to default to `cell_a`,
     # which decided which cell a boundary spanned without anyone naming it.
     parser.add_argument("--zone", default="")
     parser.add_argument("--plan", default="")

@@ -51,7 +51,7 @@ assets:
       direction: forward
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0055)
+  # cell_b — the one-arm cell (ADR-0056)
   # ------------------------------------------------------------------------ #
   #
   # One belt, at cell_a's `conveyor_1` x datum translated +3.000 m in y:

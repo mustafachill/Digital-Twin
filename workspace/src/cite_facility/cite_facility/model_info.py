@@ -45,7 +45,7 @@ SERVICE = "/cite/facility/get_model_version"
 class ModelInfo(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("model_info")
-        # No default (ADR-0055 decision 4). The list shape is already
+        # No default (ADR-0056 decision 4). The list shape is already
         # multi-zone; what it lacked was a caller obliged to fill it. An
         # unnamed zone is refused in `on_configure` rather than published.
         self.declare_parameter("zones", [""])
