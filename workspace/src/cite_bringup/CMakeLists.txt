@@ -14,8 +14,18 @@ ament_python_install_package(${PROJECT_NAME})
 # ADR-0047 clause 3's readiness witness. A process that blocks on this side's own
 # endpoints and exits, so that the gate chain ends on "serving" rather than on
 # "started" - and so that the launch has something real to announce readiness on.
+#
+# ADR-0058's lifecycle driver. The same shape, at the other end of the chain: it
+# asks each managed node to configure and activate and confirms each with
+# `get_state`, so that no transition event is load-bearing and everything
+# downstream of the facility nodes is gated on one process exiting.
+#
+# Both are installed as PROGRAMS and both therefore need their executable bit in
+# the tree - `test_every_installed_program_is_executable_in_the_tree` checks it,
+# because a program that cannot exec produces no launch event at all.
 install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
+  ${PROJECT_NAME}/lifecycle_driver.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -77,6 +87,13 @@ if(BUILD_TESTING)
   # a witness whose condition is almost empty exits 0 having checked almost
   # nothing - which the launch announces and the supervisor reports as a pair.
   ament_add_pytest_test(readiness_witness test/test_readiness_witness.py)
+  # ADR-0058 clause 2. The driver's failure paths, driven against fake managed
+  # nodes that advertise the two lifecycle services and answer them as the test
+  # says - including one that transitions and never answers, which is the case
+  # the record is about and the one a driver trusting the response gets wrong.
+  # It brings nothing up: no simulator, no controller manager, no arm. The
+  # timeout covers three runs that deliberately spend their whole ceiling.
+  ament_add_pytest_test(lifecycle_driver test/test_lifecycle_driver.py TIMEOUT 120)
 
   # ADR-0036. The generator suite proves the `constraints:` block is emitted;
   # only a running controller proves the parameter names are ones
