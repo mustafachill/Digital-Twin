@@ -4,10 +4,33 @@
   promotion condition is **not met**, and implementation is not promotion. This line read
   "nothing in this record is implemented" until 2026-09-17 and was made false by the change
   that implements it, which is the drift §2's own discipline exists to catch.
-  Clauses 2, 3, 4 and 6 are held by tests in that branch; **clauses 1 and 5 are untaken** —
-  both need the cell brought up, which is a `tester`'s evidence and not the implementer's.
-  Clause 1 in particular asks for the harness that reproduces the stall today to **stop**
-  reproducing it, and nobody may write that it has until it has been run.
+  Clauses 2, 3, 4 and 6 are held by tests in that branch. **Clause 5 is taken and clause 1 is
+  not**, and clause 1 is the one that decides promotion.
+- **Clause 5, taken 2026-09-17 by a `tester`:** all three scenarios passed their cycle strict
+  against `cell_b`, and `./scripts/sim --zone cell_a` brought the showcase up. The driver's
+  failure path was also induced end to end on a running cell: it named the node and the step,
+  the gate fired, and nothing downstream of `_facility` started.
+- **Clause 1 is NOT closed, and the reason is the strength of the evidence rather than
+  anything about the change.** 160 trials in four arms on one host:
+
+  | arm | load | trials | stalls |
+  |---|---|---|---|
+  | pre-fix control | 12 | 45 | **1** |
+  | driven | 12 | 45 | **0** |
+  | pre-fix control | 0 | 35 | **0** |
+  | driven | 0 | 35 | **0** |
+
+  **The control barely reproduced.** The before-figures this clause is written against are
+  2/35 unloaded and 4/45 loaded; the same host produced **0/35 and 1/45** with a rig that is
+  *more* sensitive than the one that took them (see `docs/open-work.md` #72 — the original
+  harness rescued the trials it was counting). So **0 of 80 driven is consistent with a
+  working fix and equally consistent with a quiet afternoon**, and the tester declined to
+  close the clause on it. **Nobody may write that the stall stopped reproducing.** What is
+  needed is a control arm that reproduces at a rate the driven arm can be distinguished from.
+- **The preserved harness could not be used as-is, which is worth knowing before re-running.**
+  `repro.launch.py` carries its own private copy of `_managed` and imports nothing from
+  `simulation.launch.py`, so after the fix it drives the **old** shape verbatim. The tester
+  built a driven arm mirroring the new launch and kept the original as the control.
 - **Date:** 2026-09-17
 - **Deciders:** Project owner; drafted by the orchestrator against a root cause a `debugger`
   proved on 2026-09-17.

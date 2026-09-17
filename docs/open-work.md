@@ -1716,6 +1716,26 @@ pre-existing rather than as a property of the new cell. **About 7 stalls in abou
 trials, on one host, in one afternoon, with a `tester` running scenarios on the same machine for
 part of it. Not a rate.**
 
+**THOSE HARNESS FIGURES ARE LOWER BOUNDS, BECAUSE THE INSTRUMENT RESCUED WHAT IT WAS COUNTING.**
+Reported by the `tester` who re-ran this on 2026-09-17 and **not re-derived** here — the harness
+is not in the tree, it lives in an untracked `REPRO/` directory on that host. `run3.sh`'s probe
+re-drives `cleanup` + `configure` at **6 s** into each trial. That second request is exactly the
+intervention the debugger's proof above used to un-stall a node: it makes the launch's still
+registered handler fire and the node publish. The trial's own success grep then matches, and **a
+stalled trial is counted as a pass.** So 2/35 and 4/45 are floors on that rig, not measurements
+of the stall's frequency, and **anyone comparing a post-fix arm against them is comparing against
+a number taken with a different instrument.** The 2026-09-17 re-run dropped the probe, which can
+only raise sensitivity, and the control arm still produced **0/35 unloaded and 1/45 loaded** —
+barely reproducing at all. That is why ADR-0058 clause 1 is **not** closed by 0 of 80 driven
+trials: a driven arm cannot be distinguished from a control that does not reproduce.
+
+**Two consequences for whoever re-runs clause 1.** The harness's `repro.launch.py` carries its
+own private copy of `_managed` and imports nothing from `simulation.launch.py`, so after ADR-0058
+it drives the **old** shape verbatim and is a control rather than a reproduction of current
+`main`. And the first thing that campaign needs is a control arm that reproduces at a workable
+rate — **without** the 6 s probe — because until one exists there is nothing for a driven arm to
+be better than.
+
 **Load is NOT established as the trigger**, and the tempting reading is wrong: time from launch
 start to `configured` does not separate the outcomes — failures at **0.508 s** and **0.597 s**
 against passes at **0.480 / 0.489 / 0.499 / 0.785 s**. A *faster* node is not what stalls, and the
