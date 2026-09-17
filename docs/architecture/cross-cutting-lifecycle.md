@@ -2,10 +2,25 @@
 
 - **Status:** `PARTIAL`.
   **Built:** bring-up is event-driven. `cite_bringup/launch/simulation.launch.py` contains
-  **no `TimerAction` and no sleep**, and sequences on 7 registered event handlers — process
-  exit and service availability — with every deadline documented as a ceiling on a failure
-  rather than a schedule. The three `cite_facility` nodes (`frame_server`, `model_info`,
-  `topology_server`) are `LifecycleNode`s with real `on_configure`/`on_activate` work.
+  **no `TimerAction` and no sleep**, and sequences on process exit and service availability,
+  with every deadline documented as a ceiling on a failure rather than a schedule. The three
+  `cite_facility` nodes (`frame_server`, `model_info`, `topology_server`) are
+  `LifecycleNode`s with real `on_configure`/`on_activate` work, and they are driven through
+  `configure` and `activate` by a program that asks and confirms rather than by a transition
+  event ([ADR-0058](../adr/0058-drive-lifecycle-transitions-by-request-and-confirmation.md));
+  everything downstream of them waits on that program's exit.
+- **How many handlers there are, and why this line names the command instead of a number.**
+  This entry said "sequences on **7** registered event handlers" from 2026-08-27 to
+  2026-09-17, and 7 was not a count of anything: `grep -c "RegisterEventHandler(" ` over that
+  file reads **6** call sites, three of them inside loops, so the runtime figure follows the
+  plan rather than the source. Built from `_bring_up` and counted, on 2026-09-17 at this
+  commit: **23** for `cell_a` and **17** for `cell_b`, each **12** `OnStateTransition` and
+  **11** or **5** `OnProcessExit`. ADR-0058 moved all three figures itself — before it they
+  were 6 call sites, 25 and 19, with 15 `OnStateTransition`: it removed one activation
+  handler per managed node and added one process gate. **Count it rather than quoting this
+  paragraph**, by building the description and filtering it for
+  `launch.actions.RegisterEventHandler`; a number in prose about a generated graph is one
+  zone away from being wrong again.
   **Not built:** "every node that participates in bring-up is a managed node" is not true
   today. `cite_skills`' skill server and `cite_orchestration`'s line coordinator are plain
   `rclcpp::Node`s with no lifecycle interface. The pattern below remains binding on them.

@@ -121,10 +121,21 @@ def endpoints(plan: Plan) -> list[tuple[str, type]]:
     """Every action server this side must be answering before it is ready.
 
     The tail of the bring-up chain and only the tail. Everything before it is
-    already gated on a real completion event — a spawner exiting, a lifecycle
-    transition, the planning-scene loader finishing — so re-checking it here
+    already gated on a real completion event — a spawner exiting, the lifecycle
+    driver exiting, the planning-scene loader finishing — so re-checking it here
     would be a second statement of a fact the launch already holds. What the
     chain did *not* hold is that the servers it started last are serving.
+
+    **That list read "a lifecycle transition" until 2026-09-17, and it was the
+    false assumption a bring-up defect lived inside.** A lifecycle transition is
+    a message on `/<node>/transition_event`, published RELIABLE + VOLATILE, and
+    reliable is a promise to *matched* subscribers: the launch's subscription had
+    to have matched before the node's `on_configure` returned or the sample was
+    dropped and never re-sent. It is not a completion event the way a process
+    exiting is, and calling it one here is part of why nothing looked at it for
+    as long as it did — 3 of 11 scenario launches (ADR-0058,
+    `docs/open-work.md` #72). What the launch gates on now is
+    `lifecycle_driver.py` exiting, which is a process exit like the other two.
 
     The L4 line coordinator is **not** in this list, and that is a stated
     limitation rather than an oversight: it starts only under `line:=true`, it
