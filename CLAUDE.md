@@ -123,13 +123,13 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1514** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1516** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-17 on
-  `feat/cell-b-zone`, after the four reviews of that branch were remediated).
+  `feat/cell-b-zone`, after the SECOND remediation round of that branch).
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
   part of that day, **1376** for part of it too, **1377** until 2026-09-10, **1399** while
-  that reading stood and **1468** unrecorded.
+  that reading stood, **1468** unrecorded and **1514** for part of 2026-09-17.
   **That last entry is the point of this sentence: 1468 was never written here.** The figure
   read 1399, taken at `523ffd9`, and two commits landed after it — `ee3d609` and `2b135b3`,
   both validator refusals — that moved it to **1468** without anyone re-collecting. It was
@@ -169,6 +169,20 @@ bullet.
   **The two 6s are the same six files and are not one quantity counted twice.** One walk
   selects by suffix and the other by tree, and they agree here because every file the
   remediation adds is a `.py` under `tests/` or `workspace/`.
+  **The 1514 -> 1516 step is the SECOND remediation round of that branch, and it is tree
+  growth alone** — measured in this checkout on 2026-09-17, against the figures the paragraph
+  above records. That round adds **exactly one** tracked file,
+  `tests/scenarios/guards/test_expected_joint_names.py` (`git diff --diff-filter=A
+  --name-only 4f29761..HEAD` counts 1, with `--diff-filter=D` and `--diff-filter=R` both
+  **0**), and **no file at all under `tools/tests`**, so every case of the +2 is that one file
+  being counted by two other suites: `test_superseded_real_time_requirement.py` 403 -> **404**,
+  it being a `.py`, and `test_a_removed_plan_key_stays_removed.py` 377 -> **378**, it being
+  under `tests/`. `test_interface_counts.py` did **not** move, reading **161** on both sides
+  and for the third consecutive step, because the round adds no tracked `.md` — it edits
+  `docs/open-work.md`, `docs/adr/0056-*.md` and this file, and an edit is not an addition.
+  1 + 1 = 2. **This is the smallest step this bullet has ever had to close**, and it is a
+  guard whose own ten cases live under `tests/` and are therefore counted in the OTHER half,
+  below.
   **The 902 → 927 move was entirely tree growth and not one new case**, and it is the clearest
   demonstration in this file of what the figure actually measures: `git diff --stat
   e51238e..abdae38 -- tools/tests tools/cite_tools` is **empty**, so not a line of the host
@@ -330,23 +344,35 @@ bullet.
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
   **`./scripts/test` counts by a run and reports three numbers, not one, and all three were
-  re-taken on 2026-09-17 from ONE full run**, over a working tree whose content is
-  `04f8374`'s — the commit after it changes only `CLAUDE.md`, which no
-  suite here executes — which is what
+  re-taken on 2026-09-17 from ONE full run**, over a working tree whose content is this
+  branch's second remediation round — which is what
   it takes: a
-  `--host-only` run cannot refresh the third at all. `135 passed, 0 failed
-  (shell gate self-tests)`, **which moved for the first time since 2026-08-31**;
-  `1610 passed, 1 skipped` for the host half, which walks `tools/` **and**
+  `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
+  (shell gate self-tests)`; `1623 passed, 1 skipped` for the host half, which walks `tools/`
+  **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1414 tests, 0 failures, 56
+  first-party packages, eleven per-package summaries totalling **1415 tests, 0 failures, 56
   skipped**. Its exit status was 0.
+  **THAT RUN WAS TAKEN AS `./scripts/enter dev ./scripts/test` AND NOT AS `./scripts/test`,
+  and the difference is not cosmetic.** `exec_in_container` reuses a running container with
+  `compose exec` when one of the service is up, and `docker exec` does **not** run the image's
+  entrypoint — which is what sources `/opt/ros/jazzy/setup.bash` and the overlay. Attached to
+  a `dev` container another session had left running, `PYTHONPATH` was **unset** and every
+  ctest invocation died on `ModuleNotFoundError: No module named 'ament_cmake_test'`: **0 of
+  11 packages passed, three runs running**, with the `flake8`, `pep257` and `copyright` meta
+  tests among the casualties, and nothing of ours was executed at all. The same eleven
+  packages pass 11 of 11 through `compose run`, which does run the entrypoint. So **a `test`
+  reading taken while any `dev` container is up is not a reading of this repository**; check
+  `compose ps --services --status running` before believing one. The defect is
+  `scripts/_lib.sh`'s `compose exec` branch and it is not fixed here.
   `./scripts/test` builds and tests the eleven only — the
   twelve imported packages are built and not tested here. The three read 113 / 367 / 854 on
   2026-08-29, 124 / 447 / 962 on 2026-08-31, 124 / 938 / 1217 earlier on 2026-09-01,
   124 / 963 / 1221 later the same day, 124 / 1009 / 1250 until 2026-09-08,
   124 / 1075 / 1250 for a few hours of that day, 124 / 1092 / 1250 for a few hours more,
   124 / 1445 / 1296 for a few hours after that, 124 / 1446 / 1296 until 2026-09-10,
-  124 / 1468 / 1363 until 2026-09-16 and 124 / 1571 / 1364 until 2026-09-17.
+  124 / 1468 / 1363 until 2026-09-16, 124 / 1571 / 1364 until 2026-09-17 and
+  135 / 1610 / 1414 for part of that day.
   **The shell gate's 124 -> 135 is the first move that figure has made since 2026-08-31**, and
   it is entirely `./scripts/sim`'s argument parsing: **eleven** cases for `--zone` — absent,
   dangling, swallowing the next flag, given a launch argument instead of a name, and two
@@ -354,9 +380,29 @@ bullet.
   DIAGNOSIS rather than on the exit status**, because a refusal that does not say which flag
   or which zone sends the reader nowhere. Every one of them exits before `require_ros_env`, so
   the self-test starts no cell and no container. 124 + 11 = 135.
+  **The 135 -> 144 step is the same parsing question asked of `./scripts/scenario`**, whose
+  `--zone` had none of those guards: **nine** cases, **four** of them asserting on the
+  diagnosis. They cover the two silences the second remediation round closed — `--zone`
+  swallowing `--teardown-advisory`, which set the zone to that flag AND left the teardown
+  policy gating, and an empty `--zone=`, which fell back to the default the caller had just
+  overridden. 135 + 9 = 144.
+  **What discriminates is the diagnosis and that was measured, not assumed**: with the
+  refusals stripped out, every `expect_fail` in the new block still passes — the run fails
+  downstream instead — and only the message assertions fail. The `expect_fail` half is kept
+  for what it does pin, which is that a refusal EXITS rather than warning.
   **The host half ties to the collection above, and the tie is checked at THIS commit rather
-  than differenced against the last recorded one.** `tools/tests` collects **1514** here and
-  `tests/` **97**, and 1514 + 97 = 1611 = 1610 passed plus the 1 skipped.
+  than differenced against the last recorded one.** `tools/tests` collects **1516** here and
+  `tests/` **108**, and 1516 + 108 = 1624 = 1623 passed plus the 1 skipped.
+  **It was predicted before it was measured and it held** — the arithmetic was written down
+  off the two collections and a full run then read 1623. It said 1514 / 97 / 1611 / 1610 until
+  the second remediation round of 2026-09-17.
+  **The 1610 -> 1623 step is +13, and BOTH halves moved.** `tools/tests` moved **+2**, as
+  reconciled above. `tests/` moved **97 -> 108**, **+11**, measured in this checkout on
+  2026-09-17 by `--collect-only -q | sed 's/::.*//' | sort | uniq -c`: **+10** is
+  `test_expected_joint_names.py`, a new guard holding `bringup`'s expected joint names to the
+  plan's asset ids, and **+1 is tree growth of the same kind the `tools/` half shows** —
+  `test_gz_calls_carry_the_partition.py` 15 -> **16**, because it parametrises over the `.py`
+  files under `tests/` and that guard is one. 10 + 1 = 11, and 2 + 11 = 13.
   **The `tests/` half moved 70 -> 97 and closes exactly**, measured in this checkout on
   2026-09-17 by `--collect-only -q | sed 's/::.*//' | sort | uniq -c`. **+16** is
   `test_continuous_line_ladder.py` 16 -> **32** and **+5** is
@@ -388,6 +434,14 @@ bullet.
   **Differencing two figures taken at non-adjacent commits is how a number gets attributed to
   the wrong change**, and the collection bullet above already records one unresolved +1 from
   exactly that habit.
+  **The per-package total's 1414 -> 1415 step IS attributed, because it was measured
+  directly**, which is the exception this bullet's standing rule allows rather than a
+  weakening of it: the second remediation round adds exactly one package test, the
+  planning-scene loader's declared-default check, to
+  `cite_facility/test/test_a_node_without_a_zone_refuses.py`, and that file collects **11 ->
+  12** in the container. Nothing else under `workspace/src/*/test/*` changed but the same
+  file's refusal assertion, which is a rewrite of an existing case and not a new one
+  (`git diff --name-only 4f29761..HEAD -- 'workspace/src/*/test/*'` names that one file).
   **The per-package total's 1363 -> 1364 step is stated and NOT reconciled**, for the standing
   reason: the eleven `Summary:` lines carry no package name, so the log cannot attribute a
   test, and attributing it would need a full run at `1adf0cf` as well, which was not taken.
@@ -682,12 +736,20 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1961 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-17 on `feat/cell-b-zone`; it said **661** until 2026-08-29, **1048**
+  runs, and reported `1979 files checked, no non-English content outside 1 exemption(s)` in
+  this checkout on 2026-09-17 on `feat/cell-b-zone`. **That reading is NOT reproducible and
+  the next one will differ**, which is the first time this bullet has had to say so: **21** of
+  the 1979 are untracked and **18 of those are one concurrent debugging session's `.dbg/`
+  directory**, which was being written while the walk ran. The same walk read **1980** from a
+  Python one-liner a minute later, then **1999** from `./scripts/enter dev ./scripts/lint`,
+  then **1999** again from a second host `lint` — four readings, one tree, and **no commit
+  between any of them**. **The figure that IS
+  reproducible is the clean-worktree one below.**
+  It said **661** until 2026-08-29, **1048**
   until
   2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
   2026-09-02, **1540** until 2026-09-08, **1928** and then **1930** for parts of that day,
-  **1931** until 2026-09-10 and **1936** until 2026-09-17.
+  **1931** until 2026-09-10, **1936** until 2026-09-17 and **1961** for part of that day.
   **The 1936 was stale for the whole of this branch and nothing here caught it**, which is
   worth one line because the branch re-derived every neighbouring count in this section and
   not this one. A reviewer found it by running `lint`, which is the only way any of these has
@@ -743,6 +805,15 @@ bullet.
   added nothing under `docs/measurements`**, and this is the first whose additions are mostly
   GENERATED — which is the same lesson from a new direction: declaring one zone in `model/`
   moves this figure by fourteen without anybody writing fourteen files.
+  **The 1961 -> 1979 move is +18 and only ONE of the eighteen is this repository's**, which is
+  why the in-checkout reading is retired above in favour of the clean-worktree one. The second
+  remediation round adds **1** tracked file,
+  `tests/scenarios/guards/test_expected_joint_names.py` (`git diff --diff-filter=A
+  --name-only 4f29761..HEAD`, with `--diff-filter=D` and `--diff-filter=R` both **0**). The
+  other **+17** is a concurrent debugging session's `.dbg/` directory arriving in the walk
+  while this was being measured, and it was **18 files by the time the container run read it**
+  — a number that was still moving. Nothing under `docs/measurements` was added, which makes
+  this the **fifth** consecutive move with no campaign in it.
   **A superlative was drafted here and withdrawn on checking, which is the reason to say so.**
   It read *"the first in this bullet's history that is entirely source"*, and the move
   immediately above it — 1928 → 1930, `df91154` — was **two added tracked `.py` files and
@@ -753,15 +824,25 @@ bullet.
   directories pruned (`cite_tools.tree.our_files`, reached from
   `cite_tools.english.files_to_check`), and `tools/tests/test_english.py` carries a test named
   `test_a_file_that_is_written_but_not_staged_is_still_reported` asserting exactly that. So a
-  file that is present but untracked is checked and counted. **Exactly 3 of this checkout's
-  1961 are untracked** — `predicate_eval` and `predicate_eval_superseded`, gitignored binaries
-  built by the 2026-09-03 stall-band campaign's harness, and now `assets/scans/raw/scan 1 room
-  scan.e57`, the raw capture above — **re-derived rather than carried
+  file that is present but untracked is checked and counted. **21 of this checkout's 1979 are
+  untracked, and that is the largest this bullet has ever recorded** — `predicate_eval` and
+  `predicate_eval_superseded`, gitignored binaries built by the 2026-09-03 stall-band
+  campaign's harness; `assets/scans/raw/scan 1 room scan.e57`, the raw capture above; and
+  **18 files under `.dbg/`, which belong to a concurrent debugging session and to no commit**.
+  **Re-derived rather than carried
   forward**, on 2026-09-17 on `feat/cell-b-zone`, by differencing `files_to_check` against
-  `git ls-files`, which named those three files and no others; the same difference named two
-  at `523ffd9`, at `6d51966` and at `df91154`. It said **2 of 1936** until 2026-09-17.
+  `git ls-files`; the same difference named three files earlier that day and two
+  at `523ffd9`, at `6d51966` and at `df91154`. It said **3 of 1961** earlier on 2026-09-17 and
+  **2 of 1936** before that.
   **A clean clone of this branch's tip
-  therefore reports 1958**, and this figure depends on local build state in a way none of the
+  reports 1959**, which is **measured here and not predicted**: `files_to_check` over a fresh
+  worktree at `cca27b8` returns exactly **1959**, and over one at `4f29761` exactly **1958**,
+  both on 2026-09-17. That pair is what closes the +1 this round owns and separates it from
+  the +17 it does not. **The 1958 half also confirms the prediction this bullet made earlier
+  the same day**, which said a clean clone of this branch's tip would report 1958 and had not
+  been checked. This figure depends on local
+  build state — and, as of this reading, on what another agent happens to be writing — in a way
+  none of the
   other counts in this section does. **That prediction has now been checked once and it held**:
   this file said a clean clone of `30baea8` would report **1926**, and `files_to_check` over a
   fresh worktree at `e18251e` — three commits after `30baea8`, with no tracked file
