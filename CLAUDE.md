@@ -837,7 +837,10 @@ bullet.
   **A clean clone of this branch's tip
   reports 1959**, which is **measured here and not predicted**: `files_to_check` over a fresh
   worktree at `cca27b8` returns exactly **1959**, and over one at `4f29761` exactly **1958**,
-  both on 2026-09-17. That pair is what closes the +1 this round owns and separates it from
+  both on 2026-09-17. The commits after `cca27b8` add no tracked file — one edits a docstring
+  and one edits this file — so the figure is the tip's, and that is said rather than assumed
+  because naming a commit and meaning a different one is how the counts in this section go
+  wrong. That pair is what closes the +1 this round owns and separates it from
   the +17 it does not. **The 1958 half also confirms the prediction this bullet made earlier
   the same day**, which said a clean clone of this branch's tip would report 1958 and had not
   been checked. This figure depends on local
