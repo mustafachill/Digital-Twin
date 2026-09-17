@@ -132,6 +132,16 @@ costs. The item's heading changed and records what it used to read. **No other i
 — the same run's second failure matches **#26** and is named in #55 without being developed
 there — **and no table row below was re-read on this date.**
 
+**Updated 2026-09-17**, on the branch `feat/cell-b-zone` at `87470fc`, which is ahead of `main`
+and lands [ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md).
+**Three items are new and all three were measured rather than reasoned about**: **#69**, which a
+`tester` reproduced 3 of 3 while answering a question about #68 and which **amends #68's closing
+sentence**; **#70**, found by a `fixer` when `./scripts/test` reported 0 of 11 packages and
+nothing of ours executed; and **#71**, a coverage gap a `tester` named in the round that closed
+the defect around it. **No existing item below was re-read on this date and no table row was
+re-derived**, except #68, which #69 amends where it stands.
+
+
 ---
 
 ## Where the repository stood when this was written
@@ -1568,9 +1578,115 @@ The first prints `['cell_a']` — refused. The second prints `[]`, which is resi
 **Nothing is known to be wrong today**, and the invariant was enforced by nothing at all before
 this: exactly one of the collisions ADR-0056 lists was loud, and only with `line:=true`.
 
+
+### #69 — A second bring-up from one checkout destroys the first, whatever zone either is
+**Measured 3 of 3 on 2026-09-17 at `4f29761`, one run per configuration.** This is a defect in
+its own right, it is **pre-existing**, and it needs neither a second zone nor
+`cite_facility/occupancy.py` to happen — which is why it is filed apart from
+[#68](#68--the-one-zone-at-a-time-refusal-is-sound-and-incomplete-in-two-named-ways) rather than
+inside it.
+
+**The mechanism.** A second `./scripts/sim` from the same checkout emits `configure` on
+`/cite/facility/model_info/change_state` and `/cite/facility/topology_server/change_state`.
+Those names are **facility-singular by design** (`docs/architecture/naming-and-namespaces.md`'s
+reserved-name section; `ids.RESERVED_SCOPES` refuses any zone or asset called `facility`, `twin`
+or `line`), so they resolve to the **incumbent's already-active** nodes, which are asked for a
+transition they cannot make:
+
+```
+[WARN] [rcl_lifecycle]: No transition matching 1 found for current state active
+RCLError: Failed to trigger lifecycle state machine transition: Transition is not registered.,
+    at ./src/rcl_lifecycle.c:355
+process has died [pid NN, exit code 1]
+```
+
+The incumbent then fills with `[tf2_buffer]: Detected jump back in time. Clearing TF buffer.`,
+which is two simulators feeding one `/clock`.
+
+**The three runs, and the third is the one that matters:**
+
+| incumbent | intruder | refusal fired? | what happened to the incumbent |
+|---|---|---|---|
+| `cell_b` | `cell_a` | no | `model_info` + `topology_server` dead, exit 1 |
+| `cell_b` | `cell_b` | no — excluded by design, #68 residual 2 | **all three** facility nodes dead; 24 x jump-back |
+| `cell_a` | `cell_b` | **yes, verbatim and correct** | still died — 3 x `move_group` exit **-11**, whole launch shut down |
+
+**So the damage is not about zones, and #68's refusal cannot prevent it.** The refusal is the
+**8th** process the launch starts, at **+0.753 s**; ahead of it sit `gz` (1st), the scene's
+`robot_state_publisher` on `/robot_description` (3rd) and `create` (4th). By the time the rule
+answers, two simulators are up and two publishers are describing different robots on one
+`/robot_description` — the collision `occupancy.py`'s own docstring predicts. The damage
+**precedes** the refusal by construction, so hardening the rule in place cannot close this; only
+something that runs before `gz` could.
+
+**This amends #68's last line.** That item ends *"Nothing is known to be wrong today"*. Something
+is: a concurrent bring-up destroys a running cell, reproducibly, and it did so in the one run
+where the refusal worked perfectly.
+
+**Nothing here attributes the `-11`.** That is the unattributed `move_group` teardown family
+CLAUDE.md §2 records, and its appearance in the third run is recorded rather than explained.
+
+Reproduce it:
+
+```bash
+./scripts/sim --headless --zone cell_b     # wait for CITE_SIDE_READY, then in a second shell:
+./scripts/sim --headless --zone cell_a     # from the SAME checkout
+grep -c "No transition matching" <the first shell's output>
+```
+
+**Three runs, one host, one session, nothing registered in advance. That is not a rate.**
+
+
+### #71 — The refusals and the verdict are tested; the join between them is not
+`./scripts/scenario --zone` gained nine shell-gate cases on 2026-09-17 covering its **refusals**
+(`--zone` swallowing the next token, `--zone=` empty), and `scenario_verdict` is covered on
+synthetic reports including the advisory branch. **Nothing asserts that a well-formed
+`./scripts/scenario <name> --zone X --teardown-advisory` actually binds
+`TEARDOWN_POLICY=advisory`.** The nearest self-test greps the script for the literal default
+`TEARDOWN_POLICY="blocking"`, which pins the default and not the parse.
+
+Why it is worth a line: the combination was **impossible** until that date — the `--zone` loop
+consumed the following flag, so a caller who asked for an advisory teardown silently got a gating
+one — and a run that passes cannot demonstrate the fix, because `scripts/scenario` exits at the
+`launch_test` success branch before `scenario_verdict` is ever called. The only observation that
+would show it is a run whose teardown fails.
+
+Named by a `tester` in the round that closed the defect around it, and **deliberately not fixed
+there**: one shell-gate case does not warrant a fix round of its own. It folds into the next round
+that touches `scripts/scenario`.
+
 ## 4. Instrument honesty
 
 Every item here misled this project at least once, including in the session that wrote this file.
+
+
+### #70 — A `./scripts/test` reading taken while a `dev` container is up is not a reading of this repository
+`scripts/_lib.sh:1037` reuses an already-running container with `compose exec`. **`docker exec`
+does not run the image entrypoint**, which is what sources `/opt/ros/jazzy/setup.bash`, so
+`PYTHONPATH` is unset inside that exec. Every ctest then dies on
+
+```
+ModuleNotFoundError: No module named 'ament_cmake_test'
+```
+
+**including the `flake8`, `copyright` and `pep257` meta-tests — so nothing of ours executes at
+all**, and the run reports **0 of 11 packages**. The same eleven packages pass **11 of 11**
+through `compose run`.
+
+Found by a `fixer` on 2026-09-17, which hit it because another session had left a `dev` container
+up. It is not a flake and not a regression in any package: it is a property of which branch
+`exec_in_container` takes.
+
+Check the predicate itself rather than `docker ps`, because that is what the script keys on:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml ps --services --status running
+```
+
+Empty means `./scripts/test` will take the `compose run` path and the reading is real. Non-empty
+means it will not. **Every `./scripts/test` figure quoted anywhere — CLAUDE.md §2 included —
+carries this condition**, and no figure recorded before this date states whether a container was
+up when it was taken.
 
 ### #64 — `cite_tools.cli --help` crashes in the host virtualenv: `typer` is pinned and `click` is not
 `.venv/bin/python -m cite_tools.cli --help` exits **1** with
