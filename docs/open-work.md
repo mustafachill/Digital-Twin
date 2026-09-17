@@ -1541,6 +1541,18 @@ up twice in a row per run, and this project has a recurring teardown-leak histor
 a second cell would convert a lingering process into a hard bring-up failure. Whoever closes it
 needs a way to distinguish the two that does not rest on timing.
 
+**That teardown-leak exposure is not confined to the same zone, and the argument above reads as
+though it were.** The rule that IS enforced fires on any *declared* zone's names, so a `cell_b`
+process that outlives its run and still holds `/cite/cell_b/...` makes the next
+`./scripts/scenario bringup --zone cell_a` — ADR-0056's own named mitigation for a broken
+showcase — fail at `on_configure`, naming `cell_b` as the intruder. Nothing is wrong with the
+rule there: a live `cell_b` on the graph is exactly what it refuses on, and it cannot know the
+process is a corpse. What is recorded here is the reading hazard. **A refused showcase bring-up
+is evidence that `cell_b`'s names are on the graph and is not evidence that a second cell was
+started**, and this repository's leak history makes the first far likelier than the second.
+Check for a surviving process before attributing it to a cell nobody launched. The same-zone
+case is excluded from the rule; the exposure the exclusion was reasoning about is not.
+
 Reproduce the refusal working, without two simulators:
 
 ```bash
