@@ -81,19 +81,106 @@ def test_a_managed_node_given_no_zone_fails_to_configure(ros, node_type) -> None
         node.destroy_node()
 
 
+class _RecordedLogger:
+    """Stands in for the node's own logger, and keeps what was logged at ERROR.
+
+    The node is real and `load()` runs for real; only the sink is replaced. It is
+    replaced because the return code alone cannot answer this file's question —
+    see `test_the_planning_scene_loader_given_no_zone_refuses_to_load`.
+    """
+
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def error(self, message: object, **_kwargs: object) -> bool:
+        self.errors.append(str(message))
+        return True
+
+    def info(self, message: object, **_kwargs: object) -> bool:
+        return True
+
+    def warn(self, message: object, **_kwargs: object) -> bool:
+        return True
+
+    def debug(self, message: object, **_kwargs: object) -> bool:
+        return True
+
+
+def _the_refusal_text() -> str:
+    """What `require_zone` says when it refuses, taken from `require_zone`.
+
+    Not restated here (P1), and not restated for a second reason that matters
+    more: a copy of the sentence would let this test keep passing against a
+    diagnosis the node no longer produces. Asking the rule for its own words ties
+    the two together, which is the same wiring
+    `test_the_rule_the_nodes_call_is_the_one_that_refuses` asserts below.
+    """
+    try:
+        require_zone("")
+    except ArtifactError as exc:
+        return str(exc)
+    raise AssertionError("require_zone('') did not refuse; see the test at the foot of this file")
+
+
 def test_the_planning_scene_loader_given_no_zone_refuses_to_load(ros) -> None:
     """The same rule for the one node here that is not managed.
 
     It is the node whose silent success is worst: it APPLIES a scene and then
     verifies it, so a wrong zone's objects are read back successfully and the
     arm plans against a room it is not in.
+
+    **THIS ASSERTS THE DIAGNOSIS AND NOT THE RETURN CODE, and the difference is
+    the whole value of the test.** `load()` returns 1 on the zone refusal and
+    also on `if not apply_client.wait_for_service(...)` — and in a unit-test
+    environment no `move_group` ever answers, so `load() != 0` is satisfied by a
+    node that never looked at its zone at all. Restoring
+    `self.declare_parameter("zone", "cell_a")` — the exact edit this file's
+    docstring names — left that assertion passing; what surfaced the mutation was
+    the ament ctest wall-clock timeout, which reports "timeout" rather than a
+    diagnosis and stops working the moment anyone lengthens `TIMEOUT` or shortens
+    `SERVICE_DEADLINE_S`.
+
+    `require_zone`'s text is the one message the service-timeout path cannot
+    produce, so requiring it is what discriminates the two.
     """
     node = PlanningSceneLoader()
+    recorder = _RecordedLogger()
+    node.get_logger = lambda: recorder  # type: ignore[method-assign]
     try:
-        assert node.load() != 0, (
+        code = node.load()
+        assert code != 0, (
             "PlanningSceneLoader loaded a scene with no zone supplied; its `zone` "
             "parameter has a default again and it will apply that cell's collision "
             "objects into whichever cell is actually running"
+        )
+        refusal = _the_refusal_text()
+        assert any(refusal in logged for logged in recorder.errors), (
+            "PlanningSceneLoader failed, but not because it was given no zone: it "
+            f"logged {recorder.errors!r}, none of which carries what `require_zone` "
+            "says. A `zone` default has probably been restored and this is the "
+            "120 s move_group service deadline expiring instead — a failure that "
+            "looks identical in the exit code and means the opposite."
+        )
+    finally:
+        node.destroy_node()
+
+
+def test_the_planning_scene_loader_declares_no_zone_of_its_own(ros) -> None:
+    """The diagnosis for the test above, and the one that fails instantly.
+
+    The managed nodes have had this since this file was written; the loader was
+    left out because `MANAGED` drives `on_configure` and the loader has no
+    lifecycle. The check itself has nothing to do with lifecycle, and without it
+    the loader was the one node here whose restored default had to be inferred
+    from behaviour rather than read off the parameter.
+    """
+    node = PlanningSceneLoader()
+    try:
+        declared = node.get_parameter("zone").get_parameter_value().string_value
+        assert not declared, (
+            f"PlanningSceneLoader declares zone default {declared!r}. A facility node "
+            "may not name a cell it was not given (ADR-0056 decision 4), and this one "
+            "applies that cell's collision objects into whichever cell is running."
         )
     finally:
         node.destroy_node()
