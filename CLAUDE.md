@@ -560,12 +560,31 @@ bullet.
   `continuous_line` table, the teardown-family split, the hull-run list — are a **closed**
   record of a cell that is no longer driven. They are not retired and not re-measured:
   they are records of runs, which stand whatever the model declares.
-  **No CI run has yet driven `cell_b`, and no scenario has been observed against it by
-  anyone.** The zone was declared and the scenarios were pointed at it in one change; what
-  that change is evidenced by is `validate-model`, `build`, `lint` and `test`, and by
-  nothing that brought a cell up. Whoever reads the first `cell_b` run is the first person
-  who can say anything about it — and should say it here, separately from the figures above,
-  rather than letting a count that means `cell_a` absorb a run that means `cell_b`.
+  **No CI run has yet driven `cell_b`** — the branch is unpushed — **and as of 2026-09-17 the
+  scenarios have been observed against it locally, which they had not been when this bullet
+  was written.** They are recorded here rather than added to any count above, because a count
+  that means `cell_a` must not absorb a run that means `cell_b`.
+  **`bringup`: 2 of 2**, once per zone, under the **strict** policy rather than CI's
+  `--teardown-advisory` — the bare `ok Scenario 'bringup' passed`, which `scripts/scenario`
+  prints only when `launch_test` itself exited 0, so cycle **and** post-shutdown teardown
+  both. **`pick_and_place`: 2 runs, cycle 1 of 2**, the passing run `Ran 1 test in 68.393s`
+  with one genuine friction stall (`commanded 45.0 mm, reached 49.9 mm, stalled=true,
+  reached_goal=false -> holding`). **`continuous_line`: 2 runs, cycle 2 of 2 and teardown
+  1 of 2**, both runs carrying **3 of 3** work-pieces with three genuine stalls and **zero**
+  `escalated to an operator`, at `179.280s` and `139.612s`.
+  **Two of those four runs failed on the first attempt, and that is the part a summary would
+  drop.** Neither failure was this branch's: one is the `frame_server` stall — configure
+  succeeds, the node never activates, and the launch dies blaming the model — which reached
+  `pick_and_place` for the first time there and has now hit **3 of 11** scenario launches
+  across two scenarios; the other is a teardown in which `skill_server` and `move_group`
+  failed to terminate 105 s after `SIGTERM` and were `SIGKILL`ed. **No exemption absorbed
+  either**: the `-9` was reported, because the allowance covers `-11` for `move_group` alone.
+  Both are in [`docs/open-work.md`](docs/open-work.md), and **neither is attributed**.
+  **One earlier `bringup` failure was this branch's own and is fixed**: it failed 4 of 4 on
+  both zones because the scenario compared the published joint set against a dataclass repr,
+  which no gate could see since `./scripts/test` runs no scenario.
+  **All of it is one tester agent, one host, one or two runs per scenario, with nothing
+  registered in advance. It is a demonstration that the cell works and it is not a rate.**
   **It is not a scenario that always passes, and until 2026-08-28 nothing said so.** Thirty
   consecutive local runs at `de67d8b` — taken for another purpose and published as
   [`docs/measurements/2026-08-27-teardown-signal-family/`](docs/measurements/2026-08-27-teardown-signal-family/results.md)

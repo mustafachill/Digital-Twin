@@ -1,11 +1,27 @@
 # ADR-0056: Keep the three-arm cell as a second zone, and run one zone at a time
 
-- **Status:** Proposed — implemented at this branch's tip, and awaiting the two
-  bring-ups clauses 4 and 5 ask for. Clauses 1, 2, 3, 6, 7 and 8 of the promotion
-  condition below are met; 4 and 5 require a `cell_b` bring-up and a `cell_a`
-  showcase bring-up, and no run of either exists. It said *"nothing in this record
-  is implemented"* until 2026-09-17, which was true when it was written and had
-  stopped being true by the time three reviewers found it independently.
+- **Status:** **Proposed — implemented, and all eight promotion clauses now have evidence
+  behind them. Promotion is the project owner's, and this record does not take it**, for the
+  reason clause 4's evidence gives below: the cycle is met as worded and it took two attempts
+  per scenario to get there.
+  **Clause 5 is met and it is the one this record said was most likely to be skipped.**
+  `./scripts/sim --headless --zone cell_a` brought the three-arm showcase up — nine controllers
+  active, one `move_group` and one skill server per arm, `zones=['cell_a']` — on 2026-09-17.
+  Adding a second zone did not break the first.
+  **Clause 4 is met as worded and the wording is narrower than it reads.** All three scenarios
+  passed their cycle against `cell_b`: `bringup` 2 of 2 (both zones, under the *strict* policy,
+  so cycle and post-shutdown teardown both), `pick_and_place` 1 of 2, `continuous_line` 2 of 2
+  carrying 3 of 3 work-pieces with zero escalations in both. **Two of those four runs failed on
+  the first attempt**, on two defects this branch did not create: the `frame_server` stall
+  (`docs/open-work.md`, and it reached `pick_and_place` for the first time here) and a teardown
+  in which `skill_server` and `move_group` failed to terminate 105 s after `SIGTERM` and were
+  `SIGKILL`ed. Neither was absorbed by an exemption; the `-9` was reported, as the exemption's
+  `-11`-only allowance requires.
+  **What that evidence is not.** One or two runs per scenario on one host, with nothing
+  registered in advance. It is a demonstration that the cell works, not a reliability figure,
+  and **no CI run has driven `cell_b`** — the branch is unpushed.
+  It said *"nothing in this record is implemented"* until 2026-09-17, which was true when it was
+  written and had stopped being true by the time three reviewers found it independently.
 - **Date:** 2026-09-16
 - **Deciders:** Project owner; drafted by the orchestrator against a three-pass source audit
   of this checkout at `2b135b3`.

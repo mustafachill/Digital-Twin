@@ -1655,6 +1655,89 @@ Named by a `tester` in the round that closed the defect around it, and **deliber
 there**: one shell-gate case does not warrant a fix round of its own. It folds into the next round
 that touches `scripts/scenario`.
 
+**One trigger would change that judgement.** The gap bites only a caller who passes `--zone`
+**and** `--teardown-advisory` together, and CI today passes `--teardown-advisory` alone with no
+`--zone`. If a periodic `./scripts/scenario bringup --zone cell_a` job is ever added — which is
+exactly [ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)'s
+named mitigation for the showcase it stops driving — the untested join becomes load-bearing on a
+gating path, and it should be closed **before** that job lands rather than after it has been
+trusted once. Whoever adds that job should trip over this sentence.
+
+### #72 — `frame_server` configures and never activates, because a lifecycle transition event is dropped
+**Root cause established 2026-09-17 by a `debugger`, and it is not this project's code.**
+`simulation.launch.py`'s `_managed` triggers activation on
+`OnStateTransition(configuring -> inactive)`, and `launch_ros` derives that launch event from a
+**subscription to `/<node>/transition_event`** (`launch_ros/utilities/lifecycle_event_manager.py`,
+`setup_lifecycle_manager`). Both endpoints were read off a live stalled cell and are **RELIABLE +
+VOLATILE**. Reliable is a promise to **matched** subscribers only, so when the node's publisher
+has not yet matched the launch node's subscription at the instant `on_configure` returns, the
+message is dropped and never re-sent. **This is CLAUDE.md §10's own named silent failure**, this
+time inside `launch_ros`'s lifecycle plumbing rather than in ours — the same class that once cost
+this project a belt setpoint that was never delivered.
+
+**Proof rather than a story.** In a stalled trial the node was probed from outside and was in
+`inactive`, so configure had succeeded. Driving `cleanup` and `configure` again from a third
+process 9.7 s later made the launch's **same, still-registered** handler fire, and the node logged
+`published 9 static transform(s)` immediately. Same handler, same node, same transition —
+delivered the second time, dropped the first.
+
+**Not ours**, established without a `main` build: `git diff main...HEAD -- simulation.launch.py`
+changes only the `zone` `DeclareLaunchArgument`, so `_managed` is byte-identical to `main`'s; the
+only `frame_server` change is `require_zone`, a string check ahead of `static_transforms` that
+cannot touch DDS discovery; and the stall reproduces in a **three-node scratchpad harness** with
+no Gazebo, no MoveIt and nothing zone-specific.
+
+**What it costs when it fires.** No TF is published, `move_group` reports
+`Tf has two or more unconnected trees` and `Unknown frame: cite_world`, the planning-scene diff is
+refused, and the launch dies with `BRING-UP FAILED before the skill servers` — **a diagnosis that
+points at the model and is wrong**. That misdirection is the expensive part.
+
+**Observed 3 of 11 scenario launches** across two sessions and two scenarios — `bringup` 2 of 4 at
+`4f29761`, `pick_and_place` 1 of 2 at `e726384`. **One host, a handful of runs, nothing registered
+in advance: not a rate.**
+
+**The structural half is separately fixable and is the cheaper half.** `_managed`'s four `_refuses`
+handlers all cover a transition **returning FAILURE**; a **missed transition event** — node
+healthy, sitting in `inactive`, nothing ever told to it again — is covered by nothing. That is
+what lets bring-up continue for ten seconds and then fail in another layer. **A fix must not be a
+timeout**: waiting a guessed interval to decide a node is stuck is the timing guess CLAUDE.md §4
+forbids, and this item is not an invitation to add one.
+
+**Distinguish it from [#69](#69--a-second-bring-up-from-one-checkout-destroys-the-first-whatever-zone-either-is)**, which looks superficially similar and is not: there a node that is already
+`active` is told to configure and dies loudly on `No transition matching 1 found for current state
+active`. Here configure **succeeds** and the silence is the whole defect.
+
+
+### #73 — `skill_server` and `move_group` hung through `SIGTERM` at teardown and were `SIGKILL`ed
+One observation, `continuous_line` against `cell_b` on 2026-09-17, in a run whose **cycle passed
+3 of 3 work-pieces** and whose post-shutdown check then failed:
+
+```
+process[skill_server-15] failed to terminate '105.0' seconds after receiving 'SIGTERM',
+    escalating to 'SIGKILL'
+process[move_group-11] failed to terminate '105.0' seconds after receiving 'SIGTERM',
+    escalating to 'SIGKILL'
+AssertionError: -9 not found in [0, 130, -11]
+```
+
+**The exemption behaved correctly and was not touched.** `UPSTREAM_TEARDOWN_SEGFAULT` allows
+`-11` for `move_group` alone, so the `-9` was **reported rather than absorbed** — which is the
+whole point of keeping that allowance narrow. **No exemption may be widened to cover this.**
+
+**It is a different phenomenon from the two this project already records**, and the resemblance is
+only the minus sign. CLAUDE.md §2's teardown family is a **segfault** family (`-11`, and
+`parameter_bridge` on `-6`); the `gz -9` recorded there is an unclassified `SIGKILL` at teardown.
+This is a **hang, then a supervisor-issued `SIGKILL` after a stated 105 s** — a process that did
+not respond to `SIGTERM` at all, which is a liveness failure and not a crash.
+
+**Nothing here attributes it.** Worth one line for whoever picks it up: the base carries
+`f11f453`, *"ends an in-flight `skill_server` goal in a pre-shutdown callback"*, which is the same
+process in the same phase. **Whether that is related is unestablished and was not chased.**
+
+The second run of the same scenario at the same commit tore down cleanly, so it is intermittent
+rather than a systematic regression. **One occurrence, one host, nothing registered in advance.**
+
+
 ## 4. Instrument honesty
 
 Every item here misled this project at least once, including in the session that wrote this file.
