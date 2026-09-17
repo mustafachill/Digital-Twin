@@ -99,8 +99,26 @@ JOINT_SUFFIXES = (*ARM_JOINT_SUFFIXES, DRIVE_JOINT_SUFFIX, *FOLLOWER_JOINT_SUFFI
 JOINTS_PER_ARM = 11
 
 
-def joints_of(arm: str) -> set[str]:
-    return {f"{arm}_{suffix}" for suffix in JOINT_SUFFIXES}
+def joints_of(arm) -> set[str]:
+    """Every joint name `arm` must publish, prefixed with its L0 asset id.
+
+    TAKES THE PLAN'S `ControllerManager`, NOT THE ASSET ID, and that is the whole
+    point of the signature. It used to take the id as a `str`, and when
+    `TestCellBringUp.arms` became a tuple of `ControllerManager` objects the one
+    call site here went on passing the loop variable: `f"{arm}_{suffix}"` then
+    interpolated the DATACLASS REPR, so the expected set was built out of
+    `ControllerManager(asset='picker', node='/cite/cell_b/...', ...)_joint1` and
+    the scenario could not pass on any zone. A `str` and a `ControllerManager`
+    both format, which is exactly why the wrong one was silent.
+
+    Reading `.asset` in here removes the choice: a caller that hands this
+    function an id gets an `AttributeError` naming the line, and a caller that
+    hands it the manager gets the right names. The guard
+    `tests/scenarios/guards/test_expected_joint_names.py` exercises this against
+    every zone the generated tree declares, because `./scripts/test` runs no
+    scenario and nothing else in the quality gate evaluates this expression.
+    """
+    return {f"{arm.asset}_{suffix}" for suffix in JOINT_SUFFIXES}
 
 
 #: How far a follower may sit from `drive_joint` and still count as tracking it.
