@@ -99,9 +99,18 @@ def boundary_announcement(zone: str) -> str:
 
     The zone is named for the same reason a side's name is: the supervisor
     already knows which zone it asked for, so a boundary announcing another one
-    is a boundary spanning a cell nobody asked for — the one error a process
-    given `--zone` and `--plan` can make that neither argument's own reader
-    catches, and the supervisor is positioned to catch it for free.
+    is a boundary spanning a cell nobody asked for, and the supervisor is
+    positioned to catch it for free.
+
+    **This said "the one error neither argument's own reader catches" until
+    2026-09-18, and that was wrong about the reader it names.** `twin_boundary`'s
+    own `main` compares `--zone` against the zone its `--plan` declares and exits
+    2 when they disagree, so the boundary refuses that pair itself. What the
+    supervisor's check is worth is what a check on a pipe is always worth: it is
+    an independent statement, read from what the process SAID rather than from
+    what it was given, so it survives a program that ignores its arguments, that
+    resolves a different plan, or that is not the process the supervisor thinks
+    it started. Redundancy, not sole cover.
 
     **What the line means is stronger than "the process started".** It is
     printed from inside the executor that serves the boundary's endpoints, so it

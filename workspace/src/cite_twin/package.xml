@@ -22,12 +22,16 @@
 
   <depend>rclpy</depend>
   <depend>cite_interfaces</depend>
-  <!-- The bring-up plan READER, and two things in it that ADR-0050 requires
-       this package to reuse rather than restate: `resolve_domain_id`, which is
-       ADR-0044 clause 4's single resolver of base plus offset — L5 recomputes
-       that arithmetic nowhere — and `require_hardware_opt_in`, which is the
-       check SetMode.srv's header commits this server to applying at the
-       transition. "The same check" means the same function.
+  <!-- The bring-up plan READER, and three things in it that this package is
+       required to reuse rather than restate. Two are ADR-0050's:
+       `resolve_domain_id`, which is ADR-0044 clause 4's single resolver of base
+       plus offset — L5 recomputes that arithmetic nowhere — and
+       `require_hardware_opt_in`, which is the check SetMode.srv's header
+       commits this server to applying at the transition. "The same check" means
+       the same function. The third is ADR-0057's: `boundary_announcement`, the
+       one statement of the token this program prints and the pair supervisor
+       reads, which two string literals would put in two places. This comment
+       said "two things" until 2026-09-18.
 
        A dependency on a reader of generated data, not on the launch graph:
        nothing here starts a process, and ADR-0047 clause 2 forbids it to. -->
