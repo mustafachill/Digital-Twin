@@ -676,10 +676,36 @@ bullet.
   heard.
   Read with the instrument this section mandates — the whole verdict string, anchored, and
   restricted to the three `Simulation-in-the-loop` step columns.
-  **One run. It is not a rate, and it must not start one**: `continuous_line` has failed 7 of
-  25 CI runs against `cell_a`, and a single clean run against `cell_b` says nothing about how
-  often it will. **Do not append a `cell_b` run to any count above** — those close at
-  `cell_a`; this is the first row of a separate record.
+  **That paragraph said "ONCE" and the second run has happened, so the count and the word
+  "clean" both move.** Run `35399988901` at `21b0b44`, 2026-09-18 — the merge that paired
+  `cell_b` (ADR-0059) — read with the same instrument. Its workflow conclusion is `success`
+  **and it is not a clean run**, which is the trap this file spends a paragraph on:
+  `bringup` printed the bare verdict **twice** and `pick_and_place` once, so those three are
+  cycle and teardown both; **`continuous_line` printed `passed its cycle assertions`**, the
+  advisory branch, with `Scenario 'continuous_line': the cycle passed and the post-shutdown
+  check did not.` beside it.
+  **Its cycle carried 3 of 3 work-pieces** — `wp_000001` … `wp_000003 reached b_accumulation;
+  3 completed` — on a runner nobody prepared, which is the strongest `continuous_line` evidence
+  this project has for either cell.
+  **What failed is the teardown, on `move_group-12 exited with -9`**, twice in that step's log,
+  against an allowance of `[0, 130, -11]`. **`move_group` at -11 is exempted and -9 is not**,
+  and **no exemption may be widened to absorb it**.
+  **It reproduces the local observation of 2026-09-18 exactly** — same process, same signal,
+  same scenario, same teardown — which makes **two events on two machines** and is a
+  reproduction of a *signature*, **not a diagnosis and not a rate**. `-9` is `SIGKILL`; the
+  teardown-family bullet below keeps that signal outside the set that family's split was
+  measured over, and it has been seen there on `gz` rather than on `move_group`. **Sharing a
+  teardown and a minus sign is not evidence of sharing a cause.**
+  **So the `cell_b` CI record is two runs: cycle 4 of 4 invocations in the first and 4 of 4 in
+  the second, teardown 4 of 4 then 3 of 4.** **It is not a rate, and it must not start one**:
+  `continuous_line` has failed 7 of 25 CI runs against `cell_a`, and two runs against `cell_b`
+  say nothing about how often it will. **Do not append a `cell_b` run to any count above** —
+  those close at `cell_a`; this is a separate record and it now has two rows.
+  **This is also the first time the advisory branch has fired for `continuous_line` anywhere.**
+  The paragraph below records that across `cell_a`'s twenty-five runs the middle string
+  appeared for `bringup` and `pick_and_place` and **never** for this scenario; that sentence is
+  a claim about those twenty-five and stays true of them, and it is no longer true of the
+  repository.
   **The pair itself has now been brought up from the committed model, which is the first time
   any paired run recorded in this file was reproducible from a checkout.** `./scripts/sim
   --zone cell_b --pair` on 2026-09-18, no edit to `model/`: both sides announced readiness in
