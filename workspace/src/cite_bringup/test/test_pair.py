@@ -87,6 +87,19 @@ ZONE = "cell_a"
 #: test below deliberately lets it expire and that expiry is the test's runtime.
 BOUNDARY_S = 5.0
 
+#: How long a test is willing to hold a supervisor that should have returned.
+#:
+#: **A ceiling on THIS TEST, and not on anything it is testing.** Nothing under
+#: test measures itself against it, no assertion reads it, and no production
+#: value is compared to it. It exists because the failure mode of every ordering
+#: test below is a HANG rather than a wrong answer: a supervisor that never
+#: starts the boundary leaves a side waiting on a console line that never
+#: arrives, and the suite then reports `ament_add_pytest_test`'s timeout with no
+#: sentence in it. A mutation sweep on 2026-09-18 made exactly that happen twice.
+#:
+#: Comfortably above `CEILING_S`, because two tests below deliberately spend that
+#: whole ceiling and are not hanging when they do.
+BACKSTOP_S = 30.0
 
 class _Log(io.StringIO):
     """The supervisor's console, with a tripwire on one line of it.
@@ -152,6 +165,55 @@ def _run(specs: list[pair.SideSpec], *, log: _Log | None = None) -> tuple[int, s
     out = _Log() if log is None else log
     code = pair.supervise(specs, ceiling_s=CEILING_S, out=out)
     return code, out.getvalue()
+
+def _supervise_within(
+    seconds: float,
+    specs: list[pair.SideSpec],
+    *,
+    if_it_hangs: str = "",
+    log: _Log | None = None,
+    **kwargs,
+) -> tuple[int, str]:
+    """Run the supervisor on a worker thread, so a hang fails with a sentence.
+
+    **Every assertion below is still the supervisor's own behaviour; what this
+    adds is that a supervisor which does not return fails the test instead of the
+    job.** Without it a mutation that stops the boundary being started at all
+    leaves two fake sides waiting on a console line that never comes, and what
+    the suite reports is a bare ctest timeout - a number, from which nobody can
+    tell which test hung or why. A wall clock is the only instrument that catches
+    "it never returned", and it is not a ceiling on anything under test: it reads
+    no production constant and nothing compares itself to it.
+
+    The worker thread is deliberate twice over. `supervise` skips its signal
+    handlers off the main thread, which it documents, so this drives exactly the
+    join and the failure rule; and a thread that IS stuck can be abandoned, where
+    a stuck call in the test's own thread cannot.
+
+    ``if_it_hangs`` is what a hang here would mean, in the words of whoever wrote
+    the test. A backstop that fires with nothing but a duration is only half an
+    instrument.
+    """
+    out = _Log() if log is None else log
+    finished: dict[str, object] = {}
+
+    def run() -> None:
+        try:
+            finished["code"] = pair.supervise(specs, out=out, **kwargs)
+        except BaseException as error:  # noqa: BLE001 - re-raised below
+            finished["error"] = error
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        raise AssertionError(
+            f"the supervisor had not returned {seconds:g} s after the pair it was "
+            "given should have ended. " + (if_it_hangs or "It did not hang before.")
+        )
+    if "error" in finished:
+        raise finished["error"]  # type: ignore[misc]
+    return finished["code"], out.getvalue()  # type: ignore[return-value]
 
 
 # --- The boundary -------------------------------------------------------------
@@ -1049,3 +1111,145 @@ def test_the_two_tokens_are_not_one_word_in_two_places() -> None:
     assert announced_side(boundary_line) is None
     assert announced_side(side_line) == "plant"
     assert announced_boundary(boundary_line) == ZONE
+
+
+# --- Ending a pair: who is signalled, where, and in what order ----------------
+
+
+def _forwards_nothing(tmp_path: Path, caught: Path) -> pair.SideSpec:
+    """Return the real boundary spec running `ros2 run`'s SHAPE, not its name.
+
+    **The one thing about the boundary this file could not see.** Every other
+    fake here is a `python3` process started directly, so it is its own leader
+    and honours a leader-only SIGINT — while the participant it stands for begins
+    its argv with `ros2 run`, which does neither. `ros2run.api.run_executable` is
+    `subprocess.Popen(cmd)` followed by a loop that catches `KeyboardInterrupt`
+    and **keeps waiting**: it installs no handler, forwards no signal, and the
+    program it started is a grandchild of this supervisor. So the fakes honoured
+    a signal the real participant never received, and the defect was invisible
+    here while the tester reproduced it on a real pair.
+
+    Reproduced rather than named: the parent below is that loop, and the child is
+    a program that would shut down cleanly if it were ever asked to. It records
+    being asked, in a file, because "the teardown was quick" is a duration and
+    "the program received SIGINT" is the fact.
+
+    **The CHILD announces, which is faithful and is also what makes this test
+    deterministic.** The real boundary is the grandchild and prints the token
+    itself, on the standard output it inherits. Announcing from the parent
+    instead left a window in which the supervisor could have joined, been ended
+    and signalled before the child interpreter had reached `signal.signal` — and
+    the child then died on the DEFAULT SIGINT disposition, recording nothing,
+    which reads exactly like the defect. Ordering the announcement after the
+    handler closes that window without a sleep: the token now means the handler
+    is installed, which is the same kind of fact a real readiness token is.
+    """
+    child = (
+        "import signal, time\n"
+        "def received(number, frame):\n"
+        f"    open({str(caught)!r}, 'w').write('SIGINT')\n"
+        "    raise SystemExit(0)\n"
+        "signal.signal(signal.SIGINT, received)\n"
+        f"print({boundary_announcement(ZONE)!r}, flush=True)\n"
+        "while True:\n"
+        "    time.sleep(0.02)\n"
+    )
+    parent = (
+        "import subprocess, sys\n"
+        f"child = subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+        "while child.returncode is None:\n"
+        "    try:\n"
+        "        child.communicate()\n"
+        "    except KeyboardInterrupt:\n"
+        "        pass\n"
+        "raise SystemExit(child.returncode)\n"
+    )
+    return _fake_boundary(tmp_path, parent)
+
+
+def _joined_then_ended(
+    tmp_path: Path, release: Path
+) -> list[pair.SideSpec]:
+    """Two sides that both announce; the counterpart ends the pair once joined.
+
+    The plant stays up so that it is still there to be stopped, and the
+    counterpart's exit is what returns the join — which is the only way a pair
+    that came up reaches the stop path without a signal, and a signal is what a
+    test driving `supervise` off the main thread does not have.
+    """
+    return [
+        _announces("plant", then="time.sleep(600)\n"),
+        _held_until("counterpart", release),
+    ]
+
+
+def test_the_boundarys_first_signal_reaches_the_program_ros2_run_started(
+    tmp_path: Path,
+) -> None:
+    """The boundary is ASKED to stop, rather than waited out and then killed.
+
+    `ros2 run` forks and forwards nothing (see :func:`_forwards_nothing`), so a
+    SIGINT delivered to the leader alone is caught by `ros2` and reaches the
+    boundary never. What follows is not a slow teardown: the boundary is never
+    asked at all, spends `STOP_GRACE_S` in full, and is then killed by the
+    escalation — so its own `stop()` and `rclpy` shutdown do not run, every
+    paired teardown costs 90 s it should not, and the console says the boundary
+    refused to stop when nothing had asked it to. A tester observed exactly that
+    on a real pair, twice, and isolated it outside this supervisor as well.
+
+    **The fix is data and not a shorter ceiling**: `SideSpec.stop_reach` says
+    where a participant's first SIGINT goes, and `STOP_GRACE_S` is correctly
+    sized for the launch teardown it was written for.
+    """
+    release = tmp_path / "joined"
+    caught = tmp_path / "sigint"
+    log = _Log(marker="the twin boundary announced", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        _joined_then_ended(tmp_path, release),
+        boundary=_forwards_nothing(tmp_path, caught),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        log=log,
+        if_it_hangs=(
+            "That is what a leader-only SIGINT costs: `ros2 run` swallows it, "
+            "the program it started is never asked to stop, and the supervisor "
+            "sits out the whole of STOP_GRACE_S before escalating."
+        ),
+    )
+    assert caught.exists(), (
+        "the program `ros2 run` started never received SIGINT. The supervisor "
+        "signalled the leader alone, which is `ros2 run` - it installs no "
+        "handler and forwards nothing, so the boundary was waited out and "
+        "killed rather than stopped."
+    )
+    assert caught.read_text() == "SIGINT"
+    # And therefore no grace was spent: the participant went on the first signal.
+    assert f"did not stop within {pair.STOP_GRACE_S:g} s of SIGINT" not in text
+    assert "boundary: ready=True" in text
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_side_is_signalled_at_its_leader_and_the_boundary_at_its_group(
+    tmp_path: Path,
+) -> None:
+    """Which reach each participant declares, and why it is that one.
+
+    The behavioural test above is the evidence; this is the statement of it next
+    to the commands it is a fact about. A side is `ros2 launch`, which runs the
+    launch service in its own process and installs the handler its documented
+    shutdown path runs on — signalling its group would deliver a second SIGINT
+    to processes launch is already stopping. The boundary is `ros2 run`, which
+    does neither.
+
+    **So this asserts the first token of `argv` beside the reach**, because the
+    reach is a property of the command: changing either without the other is the
+    edit that would put this back.
+    """
+    plan = _paired_plan(tmp_path)
+    for spec in pair.side_specs(plan, {DOMAIN_BASE_ENV: "41"}):
+        assert spec.argv[:2] == ("ros2", "launch")
+        assert spec.stop_reach == pair.STOP_LEADER
+    boundary = pair.boundary_spec(plan, tmp_path / "plan.yaml")
+    assert boundary.argv[:2] == ("ros2", "run")
+    assert boundary.stop_reach == pair.STOP_GROUP

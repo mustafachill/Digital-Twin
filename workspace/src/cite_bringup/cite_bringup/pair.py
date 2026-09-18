@@ -191,6 +191,37 @@ _SWEEP_POLL_S = 0.1
 #: is up and working.
 BOUNDARY_NAME = "boundary"
 
+#: Where a participant's first SIGINT is delivered: to its leader alone, or to
+#: its whole process group.
+#:
+#: **Data rather than a branch on what the participant is**, for the reason every
+#: other difference between a side and the boundary is data: the supervisor does
+#: the same four things to all three participants, and a `if it is the boundary`
+#: on the teardown path is the shape this module has kept out of every other one.
+#:
+#: **It is a property of the command, not of the participant's purpose.** A side
+#: is `ros2 launch`, which runs the launch service IN ITS OWN PROCESS and installs
+#: the SIGINT handler its documented shutdown path runs on — so the leader is the
+#: right and only target, and signalling the group would deliver a second SIGINT
+#: to processes launch is already stopping.
+#:
+#: The boundary is `ros2 run`, which does neither. `ros2run.api.run_executable`
+#: is `subprocess.Popen(cmd)` followed by a loop that catches `KeyboardInterrupt`
+#: and **continues waiting** — it forwards nothing, because the case it was
+#: written for is a terminal delivering the signal to the whole foreground group
+#: itself. This supervisor starts every participant in a session of its own
+#: precisely so that no terminal does that, so the program `ros2 run` started is
+#: a GRANDCHILD reachable only by the group signal. A leader-only SIGINT there
+#: reaches `ros2`, which swallows it, and the boundary is never asked to stop at
+#: all: it spends `STOP_GRACE_S` in full and is then killed by the escalation
+#: instead of running its own `stop()` and `rclpy` shutdown.
+#:
+#: **The ceilings are not what is wrong with that and must not be touched.**
+#: `STOP_GRACE_S` is correctly sized for a launch teardown; what was wrong is
+#: that one participant was never sent the signal the ceiling is timing.
+STOP_LEADER = "leader"
+STOP_GROUP = "group"
+
 #: What to add when a SIDE neither announced nor exited within its ceiling.
 _A_SIDE_IN_NEITHER_STATE = (
     "That is not a slow side: every step of its bring-up either completes or "
@@ -230,10 +261,18 @@ class SideSpec:
     **The twin boundary is described by this same record** (ADR-0057), because
     everything this supervisor does to a participant is the same for all three:
     start it in its own session, read its pipe for its announcement, stop it,
-    sweep its group. What differs between a side and the boundary is the four
-    fields below — which word it announces, what that word has to say, which
-    argument decided that, and what its silence means — and every one of them is
-    data rather than a branch.
+    sweep its group. What differs between a side and the boundary is the five
+    optional fields below — which word it announces, what that word has to say,
+    which argument decided that, what its silence means, and where its first
+    SIGINT is delivered — and every one of them is data rather than a branch.
+
+    **Two differences are NOT fields here, and saying which keeps this list
+    honest.** The ceiling a participant's silence is measured against is control
+    flow rather than data: `_join` carries one ceiling before the join and the
+    other after it, because it is a property of the phase and not of the
+    participant. And which participant is stopped first is decided in
+    :func:`supervise` from the spec it was handed, because it is a property of
+    the list and not of any one member of it.
     """
 
     name: str
@@ -256,6 +295,11 @@ class SideSpec:
     #: What to say when this participant neither announces nor exits. The ceiling
     #: is the same mechanism for all three and the diagnosis is not.
     silence: str = _A_SIDE_IN_NEITHER_STATE
+    #: Where this participant's first SIGINT goes: `STOP_LEADER` for a command
+    #: that installs its own handler, `STOP_GROUP` for one that forwards nothing
+    #: to the program it started. See those two constants for why the answer is
+    #: a property of the command rather than of what the participant is for.
+    stop_reach: str = STOP_LEADER
 
 
 def side_specs(
@@ -332,6 +376,11 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
         announces=plan.zone,
         argument="--zone",
         silence=_THE_BOUNDARY_IN_NEITHER_STATE,
+        # `ros2 run` forks and forwards nothing, so the program above is a
+        # grandchild and the group signal is the only one that reaches it. See
+        # `STOP_GROUP`, and note that this is a fact about the first token of
+        # `argv` and would change if that token did.
+        stop_reach=STOP_GROUP,
     )
 
 
@@ -430,13 +479,19 @@ def _pump(side: _Side, events: queue.Queue, out) -> None:
 
 
 def _stop(side: _Side, out) -> None:
-    """End a side, giving its own teardown the time the launch asks for.
+    """End a participant, giving its own teardown the time its command asks for.
 
-    SIGINT to the launch process alone first, because that is the signal `launch`
-    installs a handler for and the one its documented shutdown path runs on;
-    signalling the whole group here would deliver a second SIGINT to processes
-    launch is already stopping. The group is only reached here if the launch
-    itself does not go.
+    SIGINT first, **to whichever of its leader and its group its spec says
+    reaches the program that has to handle it** — `STOP_LEADER` for `ros2
+    launch`, which installs the handler itself, and `STOP_GROUP` for `ros2 run`,
+    which installs none and forwards nothing to the grandchild it started. Those
+    two constants carry the reasoning; what matters here is that both spellings
+    are one signal at one ceiling and the difference is data.
+
+    A leader that is sent a signal the program behind it never receives is not a
+    slow teardown: it is a participant that was never asked to stop, spending the
+    whole grace below before the escalation kills it. **The ceiling is not the
+    defect in that and is not to be shortened for it.**
 
     **A side that has already exited is not this function's job and is not
     ignored either** — see :func:`_sweep`, which runs after every side's stop and
@@ -446,10 +501,13 @@ def _stop(side: _Side, out) -> None:
     if side.process.poll() is not None:
         return
     print(f"[pair] stopping {side.name}", file=out, flush=True)
-    try:
-        side.process.send_signal(signal.SIGINT)
-    except ProcessLookupError:
-        return
+    if side.spec.stop_reach == STOP_GROUP:
+        _signal_group(side, signal.SIGINT)
+    else:
+        try:
+            side.process.send_signal(signal.SIGINT)
+        except ProcessLookupError:
+            return
     try:
         side.process.wait(timeout=STOP_GRACE_S)
         return
