@@ -1592,8 +1592,8 @@ bullet.
   model is `single`, so `--pair` refuses on a clean checkout** — so a regression in the
   boundary, the mode gate or the monitor still fails no gate outside the package's own tests,
   which is ADR-0057's unmet promotion clause 4 and not a detail. What holds it is those tests,
-  which `./scripts/test` runs — driving the node against **fake sides**, which bring no cell up
-  and move no arm. **Nothing here is evidence about motion, and 2.A produces no fidelity number
+  which `./scripts/test` runs — five pytest modules and two launch tests, driving the node
+  against **fake sides**, which bring no cell up and move no arm. **Nothing here is evidence about motion, and 2.A produces no fidelity number
   in any case** (charter §8).
   **A pair with a boundary has been brought up and `SetMode` called on it**, by a `tester` on
   one machine on 2026-09-18, with the model flipped to `pair` for the run and reverted — the
