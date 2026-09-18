@@ -1601,6 +1601,15 @@ bullet.
   path naming the boundary 2 of 2. **One machine, no thresholds registered in advance, no
   directory in [`docs/measurements/`](docs/measurements/README.md), not re-taken here. That is
   not a rate and it is not a CI gate.**
+  **And a pair has now been torn down by one signal**, on this machine on 2026-09-18, the same
+  way and reverted the same way: the supervisor stopped the **boundary first**, no participant
+  printed `did not stop within … s of SIGINT`, and the verdict read `boundary: ready=True
+  status=0` — so the boundary ran its own shutdown rather than being waited out and killed.
+  **It measures no cost**: the whole teardown fitted inside the 5 s granularity of the
+  instrument, so the `3 × (90 + 30) s` worst case ADR-0057 states was never approached and stays
+  stated rather than measured. `move_group` exited **-11** on **both** sides in that teardown —
+  the characterised upstream family member, seen for the first time in a paired teardown, and
+  **not classified there or here**. One machine, one run, nothing registered in advance.
   **The divergence metric has a consumer and no producer, and that is by decision rather than
   by omission.** ADR-0050 decision 3's conjunction has five terms, and term 3 — each side's
   accumulated clock deficit, within ADR-0049's bound — is **false for every sample by

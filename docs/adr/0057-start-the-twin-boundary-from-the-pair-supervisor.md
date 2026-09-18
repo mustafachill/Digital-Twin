@@ -255,3 +255,35 @@ an action client on each side for the whole of both sides' teardown. **Neither w
 moving a ceiling.** The cost this record's Consequences section states — a third participant
 extending the worst case to `3 × (90 + 30) s` — is unchanged and remains stated rather than
 measured.
+
+**A real paired teardown has now been observed, which is the one thing the tests above cannot
+show, and it is one run.** Taken on this machine on 2026-09-18, on `cell_b` flipped to `pair`
+for the run and reverted afterwards, with **one** SIGINT delivered to the container's PID 1 —
+where a `Ctrl-C` in the terminal running `./scripts/sim` arrives. What was read from the
+supervisor's own output: it printed `asked to stop (signal 2); ending both sides`, then
+`stopping boundary`, `stopping plant`, `stopping counterpart` **in that order**, so the
+participant that commands anything is stopped first; no participant printed
+`did not stop within … s of SIGINT`; and the verdict line read **`boundary: ready=True
+status=0`**, so the boundary ran its own `stop()` and `rclpy` shutdown rather than being waited
+out and killed. **Both sides reported `status=1` and that is not a failure**: `_verdict` keys on
+no participant's exit status, and 1 is what `ros2 launch` exits after an interrupt — all three
+participants were `ready`, so the run graded 0.
+
+**What this run does NOT measure is the cost the paragraph above states.** The whole teardown
+completed inside the 5 s polling granularity of the instrument that timed it, so the
+`3 × (90 + 30) s` worst case was never approached and is **still stated rather than measured**.
+One machine, one run, nothing registered in advance, no directory in `docs/measurements/`.
+**That is not a rate.**
+
+**The instrument has a trap worth writing down, because the first attempt fell into it.** A
+SIGINT sent to the *host* process group of `./scripts/sim` kills `docker compose run` and the
+container dies before the supervisor's stop path runs: the log then contains **no** `[pair]
+stopping …` line at all and no verdict, and a reader could take that silence for a clean
+teardown. Signal the container, not the host side.
+
+**One process died badly on this teardown, on both sides, and it is not classified here.**
+`move_group` exited **-11** on the plant and on the counterpart. That is the member of the
+teardown signal family CLAUDE.md §2 records as characterised and upstream, and the only one the
+scenarios exempt. What is new is that it was seen in a **paired** teardown, symmetrically on
+both sides; **sharing a signal is not evidence of sharing a cause**, no exemption is widened
+here, and nothing else exited badly in the run.
