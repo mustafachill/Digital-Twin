@@ -563,6 +563,43 @@ bullet.
   suites and stops there: that is why the per-package total carried 2026-09-02's date through
   2026-09-08's `--host-only` reading at `b6ab34a`, and why the three above were taken from one
   full run instead.
+- **Bring-up now drives its lifecycle transitions by asking and confirming, and a stalled
+  facility node stops the cell instead of misleading it**
+  ([ADR-0058](docs/adr/0058-drive-lifecycle-transitions-by-request-and-confirmation.md),
+  merged 2026-09-18). `cite_bringup/lifecycle_driver.py` takes each `cite_facility` managed
+  node through `configure` and `activate` by calling `change_state` and **confirming with
+  `get_state`**, and **everything downstream of the facility nodes is gated on its exit** —
+  the controllers, the planners and the detection server.
+  **The rule that carries it: the confirmation is the gate, not the response.** A service
+  reply can be dropped exactly as a broadcast can, and `get_state` is idempotent and
+  re-askable, so asking again is free and correct. The shape was already in the tree —
+  `cite_facility/planning_scene_loader.py` calls a service, reads the response and then
+  confirms with a second read-only query, for the same reason one layer up.
+  **What it replaced was a silent loss.** Activation used to be triggered by a launch event
+  `launch_ros` derives from a **subscription** to `transition_event`; both endpoints are
+  RELIABLE + VOLATILE, and reliable is a promise to **matched** subscribers only, so a
+  transition published before that subscription matched was dropped and never re-sent. The
+  node then sat in `inactive` publishing no TF, bring-up carried on for ten seconds, and the
+  launch died **naming frames and the planning scene** — pointing the reader at the model,
+  which was not the cause. That is CLAUDE.md §10's own first bullet, inside upstream
+  plumbing, and it was **pre-existing**: `_managed` was byte-identical on `main`, and the
+  stall reproduced on `cell_a` and in a Gazebo-free three-node harness.
+  **ADR-0058 is `Proposed` and its promotion clause 1 is deliberately open. NOBODY MAY WRITE
+  THAT THE STALL STOPPED REPRODUCING.** The experiment that would show it is underpowered on
+  the host it was run on: the **control** arm — the arm whose job is to prove the stall can
+  still be produced — fired **1 of 45** loaded and **0 of 35** unloaded, against recorded
+  before-figures of 4 of 45 and 2 of 35. A treatment arm of 0 of 80 against a control that
+  barely fires is consistent with a working fix **and** with a quiet afternoon, and the
+  `tester` declined to close the clause on it. **What IS evidenced** is the mechanism — there
+  is no transition event left to lose — and the failure path, observed end to end: a node that
+  never answers produces a diagnosis naming **that node and that step**, the gate fires, and
+  nothing downstream starts.
+  **The harness that measures this has a defect of its own**, recorded in
+  [`docs/open-work.md`](docs/open-work.md) #72: its probe re-drives the transition part-way
+  through a trial, which makes the node publish and the trial's own success check match, so a
+  stalled trial is counted as a pass. The before-figures are therefore **lower bounds taken
+  with an instrument that rescues what it counts**, and anyone re-running clause 1 needs that
+  before they compare.
 - **The simulated cell comes up.** `./scripts/sim --headless --zone cell_a` brings the scene
   and three
   arms into Gazebo Harmonic with nine controllers active, one `move_group` and one skill
