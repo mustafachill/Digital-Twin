@@ -392,6 +392,9 @@ ready file is a false join**.
 | a side exits after both announced | the same; the pair ends |
 | neither announces and neither exits | the ceiling fires: stop both, and say the side never announced readiness **and** never exited |
 | a side announces the other side's name | stop both; a launch given the wrong `side:=` is not the pair it says it is |
+| both sides announce | the twin boundary is started, on that event and on nothing else |
+| the boundary exits before announcing | stop everything; exit non-zero naming **the boundary**, not a side |
+| the boundary neither announces nor exits | its own ceiling fires, saying so of the boundary |
 
 **It holds no `rclpy` context, and that is checked rather than promised.**
 `test/test_pair.py` walks its import graph and fails if it reaches a ROS client library, and
@@ -400,13 +403,30 @@ test executed rather than asserted. A supervisor that cannot import `rclpy` cann
 mistake ADR-0044 warns about: sequencing a counterpart's managed node from a context on the
 other side's domain, which hangs forever with no log line at any level.
 
-**What it costs you.** The supervisor owns both sides' output, so the plain single-launch
-console becomes two labelled interleaved streams, every line prefixed with its side.
+**It starts the twin boundary, and it is still not L5** (ADR-0057). The supervisor is the
+only component that knows both sides are ready, so it is the only one positioned to start L5
+on that event rather than on an operator's judgement of when the console looks settled — and
+**starting a process is not deciding what crosses.** It passes `--zone` and `--plan`, which
+are two facts it already holds, and nothing else: not `divergence_period_s`, which is a ROS
+parameter L5 declares. It gains no branch on modes, routing, skills or divergence, and
+`test_pair.py` fails if it so much as names one of them. A change that passes a mode, a side
+preference or a skill list has crossed that line and needs its own record.
+
+The boundary carries a ceiling of its own, because the join drops the sides' ceiling on the
+iteration it completes and a participant covered by nothing is the silent indefinite hang
+ADR-0044 records. A boundary that fails is reported as the boundary: both sides are up and
+working, and a diagnosis naming one of them sends the reader to a cell that is fine.
+
+**What it costs you.** The supervisor owns every participant's output, so the plain
+single-launch console becomes three labelled interleaved streams, every line prefixed with the
+participant it came from. The stop path is sequential and the boundary is a third participant,
+so a worst case in which nothing will go costs `3 × (STOP_GRACE_S + STOP_KILL_S)` — stated
+rather than absorbed by shortening either ceiling.
 
 **What it is not.** It is not L5 and it is not a scenario harness. It decides nothing about
-what crosses between the sides, and ADR-0047 defers what a paired scenario looks like:
-`launch_test` with `IncludeLaunchDescription` puts the launch in the test process, which holds
-one context on one domain, so two sides cannot be hosted there.
+what crosses between the sides, and there is still no automated paired scenario: ADR-0057's
+promotion clause 4 is open, so a regression in the witness, either side's bring-up or the
+boundary fails no gate in CI.
 
 ## What it deliberately does not do
 
@@ -435,14 +455,17 @@ one context on one domain, so two sides cannot be hosted there.
 ```bash
 ./scripts/sim --headless                 # the cell, without the L4 coordinator
 ./scripts/sim --headless line:=true      # with it
-./scripts/sim --pair                     # both sides of a twinned zone, under the supervisor
+./scripts/sim --pair                     # both sides of a twinned zone, and the boundary
 ./scripts/scenario bringup               # headless, asserted, and a blocking CI gate
 ```
 
 `--pair` implies headless and requires the zone to declare `twin: {sides: pair}` in the L0
-model; on an untwinned zone it refuses rather than inventing a second side. There is no
-asserted paired scenario — ADR-0047 defers what one would look like, and `./scripts/scenario`
-addresses the plant.
+model; on an untwinned zone it refuses rather than inventing a second side. **The shipped
+model declares `single` on every zone**, so `--pair` refuses on a clean checkout: pairing one
+is a one-line L0 change and the project owner's to make (ADR-0056, ADR-0057). It brings up
+both sides and then the twin boundary, which serves `SetMode` — nothing here chooses a mode.
+There is still no asserted paired scenario; ADR-0057's promotion clause 4 is where that sits,
+and `./scripts/scenario` addresses the plant.
 
 Invoke `./scripts/sim` rather than `ros2 launch` (CLAUDE.md §7): it routes to the right
 environment, and on a machine without ROS it re-executes itself inside the container.
@@ -482,7 +505,9 @@ Both lines appear, the driver's first, and it is the one that names the node and
 | `zone 'cell_a' declares no side named 'counterpart'` | the model says `sides: single`. Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
 | `READINESS WITNESS FAILED: side 'X' did not finish coming up within N s` | every step before it succeeded, so the servers were started and are not serving. The message names the endpoints that never answered |
 | `[pair] X never announced readiness and never exited` | the pair's ceiling. That is not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
-| `[pair] X announced readiness as 'Y'` | that launch was given the wrong `side:=` |
+| `[pair] X announced readiness as 'Y'` | that participant was given the wrong `side:=` or `--zone`; the message names which |
+| `[pair] boundary never announced readiness and never exited` | the boundary's own ceiling. Both sides are up: what it is waiting on is not a cell coming up |
+| `[pair] boundary exited 2` | L5 refused. `twin_boundary` exits 0 or 2 and never 1 — it prints `cite_twin: <reason>` on stderr immediately above |
 | `move_group` logs "No 3D sensor plugin(s) defined for octomap updates" | accurate — no depth sensor feeds this cell. It goes away when Phase 3 brings depth sensing, not before |
 
 The `TEARDOWN_SIGTERM_S`/`TEARDOWN_SIGKILL_S` ceilings are ceilings on a failure, not a
