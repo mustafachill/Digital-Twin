@@ -1104,14 +1104,22 @@ class TestTwinSidesAndTheGazeboPartition:
         #
         # It degenerates to the original assertion on an all-`single` facility,
         # where `paired` is empty and nothing may mention a counterpart at all.
+        #
+        # Named artifact by artifact rather than by an allowlist over a paired
+        # zone's whole tree, and the difference is measured rather than stylistic:
+        # an allowlist keyed on the zone in the path admits the word into any of
+        # that zone's artifacts -- its world, its description, its controllers --
+        # and a review demonstrated exactly that by injecting it into each in
+        # turn. What is being protected is ADR-0044 clause 1: pairing emits **no
+        # per-side artifact**, so the counterpart is a bring-up fact and may
+        # appear in the bring-up plan and NOWHERE else. That is the same shape,
+        # and the same spelling, as `test_only_the_bring_up_plan_carries_a_
+        # partition` four assertions below.
         paired = {zone.id for zone in load(real_model).zones if zone.twin.sides == "pair"}
         mentions = sorted(
             path for path, text in artifacts(real_model).items() if "counterpart" in text
         )
-        # Facility-wide artifacts are covered by this too, since their paths
-        # carry no zone: a counterpart leaking into one names no paired zone and
-        # is caught here rather than by a rule that only looked at zone files.
-        assert [path for path in mentions if not any(zone in path for zone in paired)] == []
+        assert mentions == sorted(f"bringup/{zone}_plan.yaml" for zone in paired)
 
     def test_only_the_bring_up_plan_carries_a_partition(self, real_model: Path) -> None:
         # A partition is a bring-up fact, not a description or a world fact. If

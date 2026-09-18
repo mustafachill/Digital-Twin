@@ -146,8 +146,9 @@ def test_a_deployment_declaring_nothing_physical_gates_no_mode() -> None:
 # THE ASSERTION THAT CATCHES DECISION 2's TWO-VALUED COLLAPSE. A map carrying a
 # bare `bool` per (asset, side) makes every unpaired asset look like it HAS a far
 # side that is merely simulated, and the `PRECONDITION_FAILED` refusal of a
-# two-sided mode on a one-sided deployment stops firing - on the shipped model,
-# which is every deployment this repository can generate today.
+# two-sided mode on a one-sided deployment stops firing - on any single-sided
+# deployment, which since ADR-0059 is `cell_a` rather than every zone the model
+# declares.
 
 
 #: The reader of the live generated plan, and the one helper allowed to call it.
@@ -172,9 +173,10 @@ def _live_document() -> dict:
     """Read the plan this checkout generates, in whatever shape its model declares.
 
     **Not for a test to call**, and the guard at the foot of this section is what
-    says so. Which shape this returns depends on the L0 model — `single` today,
-    `pair` on a checkout flipped for a run — so a test built on it asserts about
-    whichever cell happens to be committed rather than about what it is asking.
+    says so. Which shape this returns depends on the L0 model — `single` for the
+    `cell_a` it names today, `pair` for `cell_b` since ADR-0059 — so a test built
+    on it asserts about whichever cell happens to be committed rather than about
+    what it is asking.
     """
     return yaml.safe_load(Path(default_plan_path("cell_a")).read_text())
 

@@ -435,7 +435,14 @@ measured and bought against.
    grasp evidence and a geometric clearance argument, by a separate change, and **nothing here
    was bought, tuned or widened on this record's evidence**, which is what the clause says.]**;
    the generated world
-   keeps `real_time_factor` `1.0`; `twin: {sides: single}` stays; and **half 2 in either shape
+   keeps `real_time_factor` `1.0`; `twin: {sides: single}` stays **[Overtaken 2026-09-18 —
+   [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) declares `cell_b`
+   `twin: {sides: pair}` on a project-owner scope decision; `cell_a` stays `single`. **Nothing
+   in this clause is weakened by that**: the pairing was not bought, tuned or widened on this
+   record's evidence, and neither of this record's two thresholds is set either way. What it
+   does mean is that a paired cell is now reachable from a clean checkout, so the capacity
+   question this record asks can be asked of a shipped pair rather than of a hand-edited
+   one.]**; and **half 2 in either shape
    remains outside bring-up**, exactly as [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)
    clause 4 states — a side may still be up, slow, and indistinguishable from a healthy one.
 5. **An instrument is owed, and three constraints on it are decided here.** Nothing in the tree

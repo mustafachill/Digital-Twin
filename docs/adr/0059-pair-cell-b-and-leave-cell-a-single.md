@@ -8,6 +8,7 @@
   [ADR-0044](0044-one-ros-domain-per-side-identical-names.md),
   [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md),
   [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md),
+  [ADR-0049](0049-measure-the-real-time-floor-as-capacity.md),
   [ADR-0050](0050-what-crosses-the-twin-boundary.md),
   [ADR-0056](0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md),
   [ADR-0057](0057-start-the-twin-boundary-from-the-pair-supervisor.md),
@@ -125,7 +126,11 @@ ADR-0056 made it.
   that measured it and the capacity cost of a second world is real
   (`docs/measurements/2026-08-28-second-world-cost/`). Nothing here widens a ceiling to
   absorb it and nothing may.
-- **`MODEL_HASH` moves**, and with it every artifact that carries it.
+- **`MODEL_HASH` moves**, so the cell publishes a different model version after the flip
+  (`cite_facility/artifacts.py` reads it and `model_info` serves it). **No other generated
+  artifact carries it** — the diff above would have shown them — so this sentence used to
+  say "and with it every artifact that carries it" and implied a blast radius the
+  measurement contradicts.
 - **#62 becomes load-bearing rather than merely open.** It stays dormant only because both
   of its fixtures name `cell_a` and `cell_a` is `single`. Anyone who pairs `cell_a`, or who
   makes either fixture read the default zone, trips it immediately and `./scripts/test`
@@ -145,3 +150,54 @@ ADR-0056 made it.
   today, and lifting it is that phase's work and not this record's.
 - **If the paired bring-up proves unreliable on this host.** The evidence is one bring-up and
   one teardown on one machine. A second reader should re-take both rather than cite these.
+
+## Verification — 2026-09-18
+
+**The Consequences section above says the single-side path "is verified below", and until this
+section existed there was nothing below.** That is recorded rather than quietly fixed: a record
+that promises a verification and carries none is the shape P7 exists to prevent.
+
+**The paired path, run from the committed model with no edit — the first paired run of `cell_b`
+and the first of any zone from a clean checkout.** `./scripts/sim --zone cell_b --pair`: both
+sides announced readiness in about 15 s, the supervisor started the boundary on the join, and
+the boundary printed `CITE_BOUNDARY_READY zone=cell_b` after reporting `twin boundary up: plant
+on domain 43, counterpart on domain 44, 5 routable skill(s), mode SIM`. One SIGINT to the
+container then tore it down in about 3 s with the boundary stopped **first**, no participant
+printing `did not stop within … s of SIGINT`, and the verdict `boundary: ready=True status=0`.
+**One run, one machine, nothing registered in advance, no directory in `docs/measurements/`.
+That is not a rate**, and it says nothing about how often it will work.
+
+**The single-side path, which is what CI drives, and which mattered more.** Three scenarios,
+all against the paired zone's plant alone:
+
+| Scenario | Runs | Result |
+|---|---|---|
+| `bringup` | 4 | **3 of 4**, the three printing the **bare** verdict, so cycle and post-shutdown teardown both |
+| `pick_and_place` (a blocking CI step) | 1 | bare verdict, with one genuine friction stall |
+| `continuous_line` (advisory in CI) | 1 | **cycle passed, 3 of 3 work-pieces**; **teardown failed** on `move_group-12 exited with -9` |
+
+**`continuous_line`'s teardown failure is recorded and not classified, and no exemption is
+widened.** The allowance covers `move_group` at `-11`; this is `-9`, `SIGKILL`, which CLAUDE.md
+§2 keeps outside the teardown signal family's measured set. It would not have gated CI, whose
+step for this scenario carries `continue-on-error` and `--teardown-advisory`; the local run
+answered the strict question instead. **One event, one machine, nothing registered in advance.**
+
+**The one `bringup` failure is reported as a finding and not re-run past**, which CLAUDE.md §2
+requires. It is the `MoveTo` assertion that section already records as recurring — on `cell_a`,
+weeks before this change — and **the shared thing is the assertion string**. Its mechanism here
+is `[skill_server] [rclcpp_action]: Failed to send goal response … (timeout): client will not
+receive response`, so the goal **was** accepted and the acceptance was lost; that mechanism is
+attached to no earlier occurrence, and §2's own rule is that sharing a string is not evidence of
+sharing a cause. **Nothing here attributes the loss to pairing and nothing exonerates it**: no
+base-rate run was taken at the commit before the flip, so 3 of 4 supports neither direction.
+
+**What says the single-side path is unaffected is structural, not that tally.** Every consumer
+of a side addresses it **by name**: `simulation.launch.py` defaults `side:=plant` and passes the
+name to `require_domain` and the Gazebo environment; `cite_bringup/gz.py` addresses a side by
+name and records in its own docstring that `plan.sides[0]` was removed for exactly this reason;
+`resolve_domain_id` is called per requested side; `require_hardware_opt_in` iterates both sides
+and both are `false`; `cite_facility` and `tests/scenarios/` read no side at all. Against that,
+the artifact diff shows the counterpart's lines are purely additive. **Two things a reader
+should not let the phrase "nothing changed" hide**: the plant reads the whole plan document,
+which is not byte-identical, and `MODEL_HASH` moves, so the published model version differs.
+What is unchanged is everything the plant reads **about itself**.

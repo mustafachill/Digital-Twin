@@ -44,11 +44,14 @@ carries the level each mode sits at.
 
 `VIRTUAL_LEAD` is `CLOSED_LOOP` without the validation gate and `SHADOW` with the arrow
 reversed ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
-Decision 2). **A node now serves the mode and no bring-up starts it** —
-`cite_twin/twin_boundary.py` serves `SetMode` and publishes `TwinMode`, and it refuses to
-start against a zone that declares one side, which the shipped model does
-([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)). So the mode set is still
-vocabulary in every deployment anyone has run.
+Decision 2). **A node serves the mode and only the paired bring-up starts it** —
+`cite_twin/twin_boundary.py` serves `SetMode` and publishes `TwinMode`
+([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)), started by `./scripts/sim --pair`
+and by nothing else ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
+It refuses a zone that declares one side, which `cell_a` does and the paired `cell_b` does not
+([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)). A mode has been set on a
+running boundary by hand, once; **nothing automated brings a pair up**, so the mode set is
+still vocabulary in every run CI takes.
 
 ## Architecture
 

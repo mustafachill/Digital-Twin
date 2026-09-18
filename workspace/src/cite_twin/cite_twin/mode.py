@@ -295,10 +295,11 @@ def deployment_from_plan(plan: Plan) -> Deployment:
     `__init__` can reach that. Built here, the whole of it is assertable on the
     shipped single-sided plan without a node, a graph or a cell.
 
-    **It asks the plan's TOTAL accessor and never the refusing one.** The shipped
-    zone declares `twin: {sides: single}`, so no controller manager states a
-    counterpart, and `commands_physical_hardware_on` refuses an undeclared side
-    with `SideNotDeclaredError`. Calling that here would raise on the model this
+    **It asks the plan's TOTAL accessor and never the refusing one.** `cell_a`
+    declares `twin: {sides: single}` (ADR-0059 leaves it there), so no controller
+    manager of that zone states a counterpart, and
+    `commands_physical_hardware_on` refuses an undeclared side with
+    `SideNotDeclaredError`. Calling that here would raise on a zone this
     repository actually ships. `commands_physical_hardware_on_or_none` returns
     the `None` `Deployment` needs, with the same meaning `Deployment` gives it,
     so the distinction survives the crossing instead of being rebuilt from an

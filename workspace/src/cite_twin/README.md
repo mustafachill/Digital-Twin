@@ -11,19 +11,23 @@ restated here (P1).
 
 ## Status, stated before anything else
 
-- **It has never run against a pair.** The shipped model declares `twin: {sides: single}`,
-  and [ADR-0049](../../../docs/adr/0049-measure-the-real-time-floor-as-capacity.md) decision 4
-  keeps it there — so `twin_boundary.py` **refuses to start on a clean checkout**, saying that
-  the zone declares no counterpart. Its launch test drives it against a plan fabricated in
-  memory from the generated one.
+- **It has run against a pair once, on one machine, by hand.** `cell_b` declares
+  `twin: {sides: pair}` as of 2026-09-18
+  ([ADR-0059](../../../docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so
+  `twin_boundary.py` **starts on a clean checkout** under `./scripts/sim --zone cell_b --pair`;
+  that run is recorded in ADR-0059 and its figures are not copied here. On `cell_a`, which
+  stays `single`, it still refuses, saying that the zone declares no counterpart. Its launch
+  tests drive it against a plan fabricated in memory from `cell_a`'s generated one — see
+  [`docs/open-work.md`](../../../docs/open-work.md) #62 for why that fabrication is what it is.
 - **The pair supervisor starts it, and nothing else does**
   ([ADR-0057](../../../docs/adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
   `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
   this program on that event — passing `--zone` and `--plan` and nothing else. It is still not
   in `simulation.launch.py` and not in any scenario, so **a solo bring-up is exactly what it
   was before this package existed**, and **no CI step reaches this package outside its own
-  tests**: the shipped model is unpaired, so `--pair` refuses on a clean checkout and nothing
-  automated brings a boundary up.
+  tests**: pairing `cell_b` removed the refusal and added no gate, so nothing automated brings
+  a boundary up and what CI drives on that zone is the plant alone. That is ADR-0057's unmet
+  promotion clause 4, now a wider gap rather than a narrower one.
 - **It announces itself on standard output.** `CITE_BOUNDARY_READY zone=<zone>`, formatted by
   `cite_bringup.readiness` — the one module that states the token, imported by the process
   that prints it and the supervisor that reads it. It is printed from a callback the plant's

@@ -14,7 +14,7 @@
   | `cite_twin` does not exist; `workspace/src` holds ten packages and none of them is it | `ls workspace/src` |
   | Nothing publishes or subscribes `DivergenceMetrics`, and nothing serves `SetMode` | `git grep -n 'DivergenceMetrics\|SetMode' -- workspace tools tests scripts` reaches the definitions, the `CMakeLists.txt` entries, `interfaces.baseline`, `cite_interfaces/README.md`'s own **"nothing — L5 does not exist"** row, and one test docstring — no endpoint of any kind |
   | [L5](../architecture/L5-twin-synchronization.md) is `DESIGNED` | `head -3 docs/architecture/L5-twin-synchronization.md` |
-  | The shipped model is not paired | `model/facility/zones.yaml:22-23` declares `twin: {sides: single}` |
+  | The shipped model is not paired | `model/facility/zones.yaml:22-23` declares `twin: {sides: single}` **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`; `cell_a` stays `single`.]** |
   | `/cite/twin/` is reserved for this layer and has no publisher | [`naming-and-namespaces.md`](../architecture/naming-and-namespaces.md) lines 8-9 and 118 |
 
   **[Corrected 2026-08-31 — four of these five rows are false; see the Correction
@@ -75,7 +75,7 @@ shape ADR-0044's own correction names: a record falsified by the change that sat
 | `cite_twin` does not exist | **False.** It exists, with five modules and six test files. |
 | Nothing publishes or subscribes `DivergenceMetrics`, and nothing serves `SetMode` | **False.** Both endpoints exist, on the plant's domain. |
 | L5 is `DESIGNED` | **False.** `PARTIAL`, with what is and is not built named in its status bullet. |
-| The shipped model is not paired | **True, and unchanged.** `model/facility/zones.yaml` still declares `twin: {sides: single}`, so L5 refuses to start on a clean checkout. |
+| The shipped model is not paired | **True, and unchanged.** `model/facility/zones.yaml` still declares `twin: {sides: single}`, so L5 refuses to start on a clean checkout. **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b` and leaves `cell_a` `single`, so L5 starts on `cell_b` from a clean checkout and is refused on `cell_a`. The promotion clause below is untouched: nothing automated brings a pair up.]** |
 | `/cite/twin/` is reserved and has no publisher | **False.** It has three: mode, divergence, and one action server per arm per skill. |
 
 **What is NOT wrong: the status.** The promotion clause is *"the change that first computes a

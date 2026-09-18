@@ -106,8 +106,18 @@ bullet.
   `bringup/cell_b_plan.yaml`, and the plan's **15** changed lines are **all additions, with
   nothing modified and nothing removed** — the counterpart's `sides:` entry with its partition
   and `domain_offset`, and `counterpart_backend` / `counterpart_commands_physical_hardware`
-  with their comments. **So nothing the PLANT side reads changed**, which is what says the
-  single-side path CI drives is structurally untouched by the flip.
+  with their comments. **So nothing the plant reads ABOUT ITSELF changed**, and the loose form
+  of that sentence — "nothing the plant side reads changed" — is false in two ways a reader
+  would quote: the plant reads the **whole** plan document, which is not byte-identical, and
+  `cite_facility/artifacts.py` reads `MODEL_HASH`, which `model_info` serves, so the cell
+  publishes a different model version after the flip.
+  **What actually carries "the single-side path is untouched" is the consumers, not the diff**,
+  and they were traced rather than assumed: every consumer of a side addresses it **by name** —
+  `simulation.launch.py` defaults `side:=plant` and passes the name on, `cite_bringup/gz.py`
+  addresses a side by name and records in its own docstring that `plan.sides[0]` was removed for
+  exactly this reason, `resolve_domain_id` is called per requested side,
+  `require_hardware_opt_in` iterates both sides and both are `false`, and `cite_facility` and
+  `tests/scenarios/` read no side at all.
   **It read `1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` until that
   date, and that reading had survived four re-audits** — 2026-09-01 at `abdae38` twice,
   2026-09-08 at `df91154` and again at `6d51966` — which is what made it, until now, the one
@@ -670,20 +680,51 @@ bullet.
   25 CI runs against `cell_a`, and a single clean run against `cell_b` says nothing about how
   often it will. **Do not append a `cell_b` run to any count above** — those close at
   `cell_a`; this is the first row of a separate record.
+  **The pair itself has now been brought up from the committed model, which is the first time
+  any paired run recorded in this file was reproducible from a checkout.** `./scripts/sim
+  --zone cell_b --pair` on 2026-09-18, no edit to `model/`: both sides announced readiness in
+  about 15 s, the supervisor started the boundary on the join, and it printed
+  `CITE_BOUNDARY_READY zone=cell_b` after reporting `twin boundary up: plant on domain 43,
+  counterpart on domain 44, 5 routable skill(s), mode SIM`. One SIGINT tore it down in about
+  3 s, boundary first, `boundary: ready=True status=0`. **It is also the first paired run of
+  `cell_b`** — one arm, one conveyor — every earlier one having been taken on a hand-flipped
+  model whose zone this file never named. **One run, one machine, nothing registered in
+  advance. That is not a rate**, and **nothing automated brings a pair up**, which is
+  ADR-0057's unmet clause 4.
   **`bringup` was run four times locally against a PAIRED `cell_b` on 2026-09-18, and it
-  passed 3 of the 4.** That is `./scripts/sim`'s single-side path — the plant alone, on a plan
-  that now declares a counterpart — which is exactly what ADR-0059 had to leave working. The
-  three passes printed the **bare** verdict, so cycle and post-shutdown teardown both. **The
-  one failure is the `MoveTo` assertion this bullet already records as recurring**, and it is
-  reported here as a finding rather than re-run past.
+  passed 3 of the 4**, and `pick_and_place` — a **blocking** CI step on this zone — passed once
+  with the bare verdict and one genuine friction stall. That is `./scripts/sim`'s single-side
+  path — the plant alone, on a plan that now declares a counterpart — which is exactly what
+  ADR-0059 had to leave working. The passes printed the **bare** verdict, so cycle and
+  post-shutdown teardown both. **The one failure shares its assertion string with the `MoveTo`
+  failure this bullet already records as recurring, and that is all it shares**: that earlier
+  event was on `cell_a`, unpaired, weeks before this change, and **no mechanism was ever
+  attached to it**. It is reported here as a finding rather than re-run past.
   **Its mechanism was captured and it is not what the assertion says.** The message is `the
   MoveTo goal was never accepted`, and the goal **was** accepted: the log carries
   `[skill_server] [rclcpp_action]: Failed to send goal response … (timeout): client will not
   receive response` — the acceptance was sent and lost, so the client's handle stayed `None`.
   **Read that as a lost response, not a rejection**, and note that the string appeared in **0**
   of the three passing runs. One machine, four runs, nothing registered in advance. **That is
-  not a rate**, and nothing here attributes the loss to pairing — the artifact diff above says
-  the plant side's inputs are byte-identical either way — nor exonerates it.
+  not a rate**, and **nothing here attributes the loss to pairing and nothing exonerates it**:
+  the cheapest discriminator — four `bringup` runs at the commit before the flip, for a base
+  rate to compare 1-of-4 against — **was not taken**, so 3 of 4 supports neither direction.
+  What does bear on it is structural and is in the `validate-model` bullet above: every
+  consumer of a side addresses it by name, and the counterpart's lines are purely additive.
+  **`continuous_line` was run once against the paired zone's plant side and its two questions
+  came apart.** Its **cycle passed** — `wp_000003 reached b_accumulation; 3 completed`, three of
+  three work-pieces carried end to end, `Ran 1 test in 181.359s`, with **no** `escalated to an
+  operator` line anywhere. Its **post-shutdown teardown failed**: `FAIL:
+  test_nothing_of_ours_exited_badly … AssertionError: -9 not found in [0, 130, -11] :
+  move_group-12 exited with -9`. **That is not exempted and no exemption may be widened to
+  absorb it**: the allowance covers `move_group` at **-11**, and this is **-9**, `SIGKILL`.
+  **It is recorded and not classified.** `-9` is the signal the teardown-family bullet below
+  keeps outside the set that family's split was measured over, and it has been seen there on
+  `gz` rather than on `move_group`. **Sharing a teardown and a minus sign is not evidence of
+  sharing a cause**, and one event on one machine with nothing registered in advance is not a
+  rate. **It would not have gated CI**: that step carries `continue-on-error` *and*
+  `--teardown-advisory`, so it would have printed the advisory verdict — which this local run
+  did not, because an interactive run answers the strict question.
   **The commit-message trap fired on the way to this reading and is worth one line.** A
   whole-log grep for the host test figure returns `1610` as well as `1623`, because the `Build
   image` step echoes the pushed commit bodies and those bodies quote earlier figures. Only the

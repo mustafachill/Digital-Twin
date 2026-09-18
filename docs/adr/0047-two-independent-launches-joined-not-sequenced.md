@@ -42,6 +42,10 @@
     `twin: {sides: single}`, so `./scripts/sim --pair` refuses on a clean checkout rather than
     inventing a second side. Reproducing the run means editing L0 and regenerating, which moves
     `MODEL_HASH`. The pair is a mechanism the repository can run, not a configuration it ships.
+    **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs
+    `cell_b`, so a pair is now a configuration this repository ships and `--pair` comes up on
+    that zone from a clean checkout; `cell_a` stays `single` and still refuses. The bullet
+    above it is untouched: nothing automated brings a pair up.]**
   - **Nothing here is a fidelity claim, and 2.A produces none** — both sides run the same L0
     model and the same solver.
   - **Real-time factor is still not a bring-up condition**, exactly as clause 4 says. It has
@@ -66,7 +70,9 @@
   **When written this record was `Proposed` and nothing was implemented**, and that block is kept
   rather than replaced. At `5c2990f`:
   - `model/facility/zones.yaml:23` declares `twin.sides: single`, so the committed model
-    describes one side.
+    describes one side. **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md)
+    pairs `cell_b`; `cell_a` stays `single`. The reading was taken at `5c2990f` and is not
+    re-taken.]**
   - **`twin.sides: pair` emits only the counterpart's partition and each asset's backend**,
     and that was re-established against this commit rather than taken from
     [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md): the model was copied

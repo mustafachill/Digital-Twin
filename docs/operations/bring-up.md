@@ -1,10 +1,13 @@
 # Bring-up
 
 - **Status:** `PARTIAL` — the simulated path below works and is what `./scripts/scenario bringup`
-  drives. Of the last two stages of the step-4 sequence, **twin sync is not started by any
-  bring-up** — `cite_twin` now exists, and nothing in `simulation.launch.py`, `./scripts/sim`
-  or any scenario starts it; it also refuses to start against the shipped model, which
-  declares one side — and **orchestration is off by default**: the line coordinator
+  drives. Of the last two stages of the step-4 sequence, **twin sync is started by the paired
+  bring-up and by nothing else** — `cite_twin` is started by `./scripts/sim --pair`
+  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)) and appears in
+  no launch file and no scenario, so a solo bring-up starts no L5; it refuses a zone that
+  declares one side, which `cell_a` does and `cell_b`, paired since 2026-09-18
+  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), does not — and
+  **orchestration is off by default**: the line coordinator
   starts only with `line:=true`, because it takes exclusive hold of every arm's skills, so a
   default bring-up leaves the arms free for an operator or a scenario. The physical path is
   Phase 2 and has never been run.
@@ -116,12 +119,17 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 ## Twin pair — Phase 2.A
 
 > **The zone must declare it.** `./scripts/sim --pair` refuses an untwinned zone rather than
-> inventing a second side: whether a zone runs as a pair is an L0 fact, `model/facility/zones.yaml`
-> ships `twin: {sides: single}`, and the shipped model is not paired.
+> inventing a second side: whether a zone runs as a pair is an L0 fact.
+> `model/facility/zones.yaml` ships `cell_b` as `twin: {sides: pair}` and `cell_a` as `single`
+> ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so the command below comes
+> up on `cell_b` from a clean checkout and refuses on `cell_a`.
+>
+> **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
+> step does, and what CI drives on `cell_b` is the plant alone.
 
 ```bash
-./scripts/sim --pair                   # implies headless; both sides, under the supervisor
-./scripts/sim --pair line:=true        # and let L4 drive every station, on both sides
+./scripts/sim --zone cell_b --pair             # implies headless; both sides, under the supervisor
+./scripts/sim --zone cell_b --pair line:=true  # and let L4 drive every station, on both sides
 ```
 
 **Launch arguments keep the `key:=value` spelling they have without `--pair`.** A pair takes
@@ -140,8 +148,8 @@ side lives in the environment rather than in a name.
 line saying the pair is up:
 
 ```
-[plant] [INFO] [launch.user]: CITE_SIDE_READY side=plant zone=cell_a
-[counterpart] [INFO] [launch.user]: CITE_SIDE_READY side=counterpart zone=cell_a
+[plant] [INFO] [launch.user]: CITE_SIDE_READY side=plant zone=cell_b
+[counterpart] [INFO] [launch.user]: CITE_SIDE_READY side=counterpart zone=cell_b
 [pair] both sides announced readiness; the pair is up
 ```
 
@@ -197,8 +205,8 @@ model and the same solver, so any agreement between them is agreement of a thing
   holds one context on one domain — and defers what one would look like. `./scripts/scenario`
   addresses the plant.
 - **No mirroring, and a divergence metric nothing can read.** `cite_twin` exists and
-  publishes `DivergenceMetrics` per asset, but no bring-up starts it, it refuses a
-  single-sided zone, and `valid` is false in every sample it can produce — one of the
+  publishes `DivergenceMetrics` per asset, but only `./scripts/sim --pair` starts it, it
+  refuses a single-sided zone, and `valid` is false in every sample it can produce — one of the
   conjunction's terms is each side's clock deficit within a bound
   [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) leaves unset, measured by
   nothing ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3). Mirroring in

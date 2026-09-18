@@ -34,7 +34,9 @@
   a domain of its own — test isolation, not a side.
   The generated plan's `sides:` list carries a `gz_partition` per side and
   **no domain** (`workspace/src/cite_generated/bringup/cell_a_plan.yaml`); `model/facility/zones.yaml`
-  declares `twin.sides: single`, so the list has one entry; `cite_bringup.gz.gz_environment`
+  declares `twin.sides: single` **[Overtaken 2026-09-18 —
+[ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`, whose plan carries two
+entries; `cell_a` stays `single`.]**, so the list has one entry; `cite_bringup.gz.gz_environment`
   takes `plan.sides[0]` and says in its own docstring that "bringing a counterpart up is a
   separate launch and is not built yet" **[Corrected 2026-08-30 — see the Correction section
   above.]**; and `cite_twin` does not exist. **[Overtaken 2026-08-31 — `cite_twin` exists:
@@ -149,6 +151,10 @@ project forms present once on each** — which is clause 1 and clause 4 demonstr
 **Review did not re-take it, no test covers it and no CI step runs it**, and the committed model
 declares `twin: {sides: single}`, so the run is not reproducible from a clean checkout without an
 L0 edit that moves `MODEL_HASH`. Three runs on one machine is the size of that evidence.
+**[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs
+`cell_b`, so a pair is reproducible from a clean checkout on that zone without an L0 edit;
+`cell_a` stays `single`. The first clause is unchanged: no test covers it and no CI step runs
+it.]**
 
 **Why this record still stays `Proposed`, in its own words.** The promotion condition in the
 status block does not stop at a launch-graph test. It names a second class of process — a

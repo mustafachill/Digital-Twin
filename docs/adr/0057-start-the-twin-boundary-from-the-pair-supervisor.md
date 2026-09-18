@@ -214,7 +214,10 @@ ADR-0046 are kept in: a mechanism that is evidenced and an outcome that is not.
 
 **The strength of what follows.** Clauses 1, 2 and 3 were exercised by a `tester` agent driving
 real paired bring-ups on one machine, with the shipped model temporarily flipped to `pair` for
-the run and reverted afterwards — **no thresholds registered in advance, no directory in
+the run and reverted afterwards **[Overtaken 2026-09-18 —
+[ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`, so no flip is needed to
+repeat this on that zone. The evidence below was taken before that and is not re-taken.]** —
+**no thresholds registered in advance, no directory in
 `docs/measurements/`, and not re-taken by the pass that wrote this**. That is the size of the
 evidence, and it is not a campaign.
 
@@ -240,6 +243,10 @@ evidence, and it is not a campaign.
   model is `single`, so `./scripts/sim --pair` refuses on a clean checkout, and `grep -rn
   cite_twin tests .github` still reaches nothing. **A regression in the witness, the token,
   either side's bring-up or the boundary fails no gate**, exactly as the clause says.
+  **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs
+  `cell_b`, so the refusal is gone and the missing gate is not: a pair now comes up from a
+  clean checkout and still fails no gate, which makes this clause a WIDER gap rather than a
+  narrower one. The clause itself is still untouched.]**
 
 **The ceiling the correction below asked for is built and is its own number**
 (`BOUNDARY_CEILING_S`), not an extension of `READY_CEILING_S`, and a test asserts that the

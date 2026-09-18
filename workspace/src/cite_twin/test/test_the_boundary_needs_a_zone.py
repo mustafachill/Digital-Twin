@@ -100,9 +100,10 @@ def test_a_zone_that_contradicts_the_plan_is_refused(capsys) -> None:
 def test_a_zone_that_agrees_with_the_plan_is_not_refused(capsys) -> None:
     """The other half. Stating the same fact twice is redundant, not wrong.
 
-    It gets past the comparison and fails later for its own reason — the shipped
-    model declares `sides: single` and a boundary needs two — which is what shows
-    the comparison let it through rather than stopping it.
+    It gets past the comparison and fails later for its own reason — `cell_a`,
+    the zone this case names, declares `sides: single` and a boundary needs two
+    (ADR-0059 pairs `cell_b` and leaves this one alone) — which is what shows the
+    comparison let it through rather than stopping it.
     """
     from cite_bringup.plan import default_plan_path
     from cite_twin.twin_boundary import main

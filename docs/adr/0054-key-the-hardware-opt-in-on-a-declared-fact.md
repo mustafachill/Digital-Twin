@@ -714,7 +714,10 @@ the declared fact:
 (`mode.py:344-362`). A map carrying a bare `bool` per (asset, side) makes every unpaired asset
 look like it *has* a far side that is merely simulated, and **that refusal stops firing** —
 on the shipped single-sided model, which is every deployment this repository can generate today
-(`model/facility/zones.yaml` declares `sides: single`). So the migrated map carries
+(`model/facility/zones.yaml` declares `sides: single`) **[Overtaken 2026-09-18 —
+[ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`, so a single-sided
+deployment is `cell_a` rather than every zone. The reason for the migrated map is unaffected:
+`cell_a` is still generated and still single-sided.]**. So the migrated map carries
 `bool | None`, with `None` still meaning "no such side", and every existing `is None` test keeps
 its meaning.
 
@@ -1193,4 +1196,7 @@ Permanent. Not a status caveat, and not discharged by anything above.
   it so that the next reader meets it.
 - **That a paired cell has been brought up this way.** `model/facility/zones.yaml` declares
   `twin: {sides: single}`, so the paired readings in *Context* are of a scratch model, and
-  nothing paired ships.
+  nothing paired ships. **[Overtaken 2026-09-18 —
+  [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`, so a paired zone now
+  ships. The claim this bullet refuses is untouched: no cell has been brought up on a physical
+  hardware path, and ADR-0048 clause 1 keeps both of `cell_b`'s sides simulated.]**
