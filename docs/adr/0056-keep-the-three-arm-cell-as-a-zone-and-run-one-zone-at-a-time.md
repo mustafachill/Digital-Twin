@@ -364,7 +364,7 @@ This record moves to `Accepted` when all of the following hold, each by the name
   would be a new generated key and therefore ADR-0021 territory.
 - **Whether `MODE_VIRTUAL_LEAD` is the right mode for the demonstration.** It dispatches to both
   sides (`routing.py:181`) and produces **no divergence number by its own definition**
-  (`routing.py:270-283` makes `observed_sides` empty, because the mode *is* the absence of a
+  (`routing.py`'s `reverse_state_flow` returns `()`, because the mode *is* the absence of a
   reverse flow). `VALIDATED` is the mode that observes both sides. Whichever is chosen, 2.A
   produces no fidelity number at all (charter §8).
 - **Phase 2.B.** ADR-0048 clause 1 refuses any asset whose two sides declare different

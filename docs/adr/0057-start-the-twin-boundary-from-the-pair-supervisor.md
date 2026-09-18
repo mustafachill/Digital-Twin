@@ -110,7 +110,8 @@ pair exists for. It fails with a diagnosis naming the boundary, not a side.
 - **The demonstration becomes possible**: one goal into `SetMode`, dispatched to both sides,
   which is charter §8's virtual-led flow and the owner's stated target.
 - **The join is reused rather than re-derived.** The boundary starts on an event that already
-  exists and already has a ceiling.
+  exists — `pair.py`'s `if all(s.ready for s in sides)`, the one place the join completes as an
+  event rather than as a re-derived predicate.
 - **Pairing stays a one-line L0 change**, as measured above. Nothing in the generated tree moves
   for this record.
 
@@ -123,8 +124,8 @@ pair exists for. It fails with a diagnosis naming the boundary, not a side.
   extends that.
 - **Still no fidelity number.** 2.A produces none by construction, both sides running the same
   L0 model and the same solver (charter §8), and `MODE_VIRTUAL_LEAD` computes no divergence
-  **by definition** — `routing.py`'s `observed_sides` is empty for it, because the mode *is* the
-  absence of a reverse flow. Nothing here changes that, and no number this produces may be
+  **by definition** — `routing.py`'s `reverse_state_flow` returns `()` for it, because the mode
+  *is* the absence of a reverse flow. Nothing here changes that, and no number this produces may be
   presented as fidelity.
 - **`DivergenceMetrics.valid` remains false for every sample**, because ADR-0049 sets no
   `DEFICIT_BOUND_S` and nothing in this tree measures a clock deficit. Starting the boundary
@@ -142,7 +143,11 @@ pair exists for. It fails with a diagnosis naming the boundary, not a side.
 ## The promotion condition
 
 1. `./scripts/sim --pair --zone <paired zone>` brings both sides up **and** a boundary, and the
-   boundary is observed serving `SetMode` on the plant's domain.
+   boundary is observed serving `SetMode` on the plant's domain **by a token it prints on
+   stdout**, not by a log line. There is no such token today: `twin_boundary` logs prose through
+   the ROS logger, whose sink is stderr, and `readiness.py` matches only `CITE_SIDE_READY`. The
+   clause therefore names a mechanism the implementing change has to build, and said so from
+   here on rather than reading as though one existed.
 2. A pair whose boundary fails to start fails the run **naming the boundary**, and a test drives
    that path rather than describing it.
 3. `pair.py` passes the zone and the plan path and nothing else; a test fails if it passes more.
@@ -167,3 +172,31 @@ pair exists for. It fails with a diagnosis naming the boundary, not a side.
   second simulation of the same three-arm cell"* and says *"the cell stays three-armed"*. Pairing
   a one-arm cell instead is the sentence that becomes false, and the charter is protected: that
   amendment is the project owner's, with a version bump and a §14 entry.
+
+## Correction — 2026-09-18: three defects this record carried, found by exploring what implementing it would touch
+
+Written before implementation, and three of its sentences did not survive contact with the
+source. None withdraws a decision.
+
+**1. The ceiling claim was half wrong.** *"The boundary starts on an event that already exists
+and already has a ceiling"* — the event exists, and the ceiling does not apply to it.
+`pair.py`'s join loop sets its timeout to `None` on the same iteration that marks the last side
+ready, so anything started at the join point is covered by **no ceiling at all**. A boundary
+that hangs would leave the supervisor waiting indefinitely. **The implementing change owes the
+boundary a ceiling of its own**, written in the house idiom — a failure naming what never
+answered — and **not** an extension of `READY_CEILING_S`, which that module already records as
+stated rather than derived, and which a third contributor makes harder to sum rather than easier.
+
+**2. `observed_sides` does not exist.** The function is `reverse_state_flow`, and it returns
+`()` for `MODE_VIRTUAL_LEAD`. The claim was right and the name was invented; a reader greps and
+finds nothing. ADR-0056 carries the same wrong name and is corrected in the same pass.
+
+**3. Promotion clause 1 named a mechanism that does not exist.** It asks for the boundary
+*"observed serving `SetMode`"*, and nothing witnesses the boundary the way `readiness_witness`
+witnesses a side. The clause is not relaxed — it is the implementing change's job to build the
+token, and the clause now says so.
+
+**One thing measured rather than argued, and it shortens the work:** flipping a zone's
+`twin.sides` to `pair` moves **two** artifacts, `MODEL_HASH` and that zone's plan, with **zero**
+validator findings. The L0 half of pairing is one line; the work is entirely in who starts the
+boundary, which is what this record decides.
