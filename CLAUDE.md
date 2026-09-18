@@ -123,9 +123,18 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1516** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-09-17 on
-  `feat/cell-b-zone`, after the SECOND remediation round of that branch).
+  `tools/tests/` holds **1521** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, **on `main` at
+  `7c6e902`**, 2026-09-18).
+  **The 1516 → 1521 step is tree growth alone and closes exactly**, which is worth one line
+  because it is the first step in this bullet's history whose three contributors are all
+  different files. `main` gained **3** tracked files over that span
+  (`git diff --diff-filter=A --name-only 1af668b..7c6e902`, with `--diff-filter=D` and `R`
+  both **0**): two `.py` under `workspace/src/cite_bringup`, which
+  `test_superseded_real_time_requirement.py` counts by suffix (404 → **406**) and
+  `test_a_removed_plan_key_stays_removed.py` counts by tree (378 → **380**); and one `.md`,
+  `docs/adr/0058-…`, which only `test_interface_counts.py` counts (161 → **162**).
+  2 + 2 + 1 = 5. Not one test case was added to `tools/tests`.
   It said **302** until 2026-08-29, **331** until 2026-08-31, **411** earlier on 2026-09-01,
   **902** later that day, **927** until 2026-09-02, **973** until 2026-09-08, **1023** for
   part of that day, **1376** for part of it too, **1377** until 2026-09-10, **1399** while
@@ -348,11 +357,21 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1623 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1628 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1415 tests, 0 failures, 56
-  skipped**. Its exit status was 0.
+  first-party packages, eleven per-package summaries totalling **1435 tests, 0 failures, 56
+  skipped**. Its exit status was 0. **Re-taken on `main` at `7c6e902` on 2026-09-18**, from
+  one full run, with `docker ps` confirmed empty first.
+  **The host-half tie closes exactly**: `tools/tests` collects 1521 and `tests/` **108**, and
+  1521 + 108 = 1629 = 1628 passed plus the 1 skipped.
+  **The per-package total is the one figure here that was nearly published as arithmetic**, and
+  the episode is worth keeping. It was reasoned about as 1432 + 3 from an earlier run, and a
+  re-review caught that the newest full log on that host predated the commits it was being
+  attributed to. Measuring it instead **failed on `flake8`** — a 104-character line in a
+  documentation correction, invisible to the host half because the ROS package linters run only
+  in the container. The line was fixed and the run retaken; 1435 is a reading. **This is the
+  mechanism by which this section has acquired a wrong count four times, caught on the fifth.**
   **THAT RUN WAS TAKEN AS `./scripts/enter dev ./scripts/test` AND NOT AS `./scripts/test`,
   and the difference is not cosmetic.** `exec_in_container` reuses a running container with
   `compose exec` when one of the service is up, and `docker exec` does **not** run the image's
@@ -774,15 +793,18 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1979 files checked, no non-English content outside 1 exemption(s)` in
-  this checkout on 2026-09-17 on `feat/cell-b-zone`. **That reading is NOT reproducible and
-  the next one will differ**, which is the first time this bullet has had to say so: **21** of
-  the 1979 are untracked and **18 of those are one concurrent debugging session's `.dbg/`
-  directory**, which was being written while the walk ran. The same walk read **1980** from a
-  Python one-liner a minute later, then **1999** from `./scripts/enter dev ./scripts/lint`,
-  then **1999** again from a second host `lint` — four readings, one tree, and **no commit
-  between any of them**. **The figure that IS
-  reproducible is the clean-worktree one below.**
+  runs, and reported `1965 files checked, no non-English content outside 1 exemption(s)` on
+  **`main` at `7c6e902`**, 2026-09-18. **Exactly 3 of those 1965 are untracked** — the two
+  gitignored campaign binaries this bullet already records, plus
+  `assets/scans/raw/scan 1 room scan.e57`, a raw capture moved out of the repository root and
+  deliberately left out of git (`assets/README.md`'s storage policy) — re-derived by
+  differencing `cite_tools.english.files_to_check` against `git ls-files` rather than carried
+  forward. **A clean clone of `7c6e902` therefore reports 1962.**
+  **The previous reading was 1979 and it was NOT reproducible, which is why it is retired
+  rather than differenced against.** It was taken while a concurrent debugging session was
+  writing a `.dbg/` directory into the walk: 21 untracked, 18 of them that session's, and the
+  same tree then read 1980, 1999 and 1999 again with **no commit between any of them**. Nothing
+  is reconciled across that reading, and nothing should be.
   It said **661** until 2026-08-29, **1048**
   until
   2026-08-31, **1085** earlier on 2026-09-01, **1267** later that day, **1430** until
@@ -2126,8 +2148,11 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **55 records, all indexed** in this checkout on 2026-09-17 on
-    `feat/cell-b-zone`, whose one added record is ADR-0056. It read **54** on 2026-09-10 at
+    `ADR index` line reported **56 records, all indexed** on `main` at `7c6e902`, 2026-09-18 —
+    the newest being ADR-0058, which is `Proposed` with **promotion clause 1 deliberately
+    open**: nobody may write that the stall it repairs stopped reproducing, because the
+    control arm of the experiment that would show it barely reproduced. It read **55** on
+    2026-09-17 on `feat/cell-b-zone`, whose one added record is ADR-0056. It read **54** on 2026-09-10 at
     `523ffd9`, 53 on 2026-09-08 at `6d51966`, 52 on 2026-09-01 at
     `abdae38` and **still 52 when re-run on 2026-09-08 at `df91154`** — that branch amended
     existing records and added none, which `git diff --diff-filter=A --name-only
@@ -2154,7 +2179,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **56** on 2026-09-17 on `feat/cell-b-zone`
+    also matches `0000-template.md`; it read **57** on `main` at `7c6e902` on 2026-09-18
+    against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
     against `doctor`'s 55, **55** on 2026-09-10 at `523ffd9` against
     `doctor`'s 54, **54** on 2026-09-08 at `6d51966` against
     `doctor`'s 53, and **53** on 2026-09-01 at `abdae38` against
