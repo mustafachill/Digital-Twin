@@ -1592,8 +1592,14 @@ bullet.
   model is `single`, so `--pair` refuses on a clean checkout** — so a regression in the
   boundary, the mode gate or the monitor still fails no gate outside the package's own tests,
   which is ADR-0057's unmet promotion clause 4 and not a detail. What holds it is those tests,
-  which `./scripts/test` runs — five pytest modules and two launch tests, driving the node
-  against **fake sides**, which bring no cell up and move no arm. **Nothing here is evidence about motion, and 2.A produces no fidelity number
+  which `./scripts/test` runs — **seven** pytest modules and two launch tests, driving the node
+  against **fake sides**, which bring no cell up and move no arm. It said **five** until
+  2026-09-18, and it was left stale on purpose by the branch that noticed it: that pass was told
+  not to edit this section, so it restored the figure verbatim and named the count it had
+  measured in its own commit message. Re-measured here on `main` by two instruments that agree —
+  `ls workspace/src/cite_twin/test/*.py` less the `fake_side.py` helper, and that package's
+  `CMakeLists.txt`, which registers seven `ament_add_pytest_test` and two `add_launch_test`
+  entries. **Nothing here is evidence about motion, and 2.A produces no fidelity number
   in any case** (charter §8).
   **A pair with a boundary has been brought up and `SetMode` called on it**, by a `tester` on
   one machine on 2026-09-18, with the model flipped to `pair` for the run and reverted — the
