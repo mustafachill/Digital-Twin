@@ -292,7 +292,7 @@ def side_specs(
 
 
 def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
-    """The third participant: the twin boundary, spanning the two sides above.
+    """Return the third participant: the boundary spanning the two sides above.
 
     **Two arguments and nothing else, and that is ADR-0057's load-bearing
     sentence rather than an economy.** The supervisor hands over the two facts
@@ -359,7 +359,7 @@ class _Side:
 
     @property
     def announces(self) -> str:
-        """What this participant has to announce for the announcement to be its.
+        """Return what this participant must announce for an announcement to be its.
 
         A side announces its own name, which the spec already carries, so the
         spec states it only where it is something else. Defaulting it here

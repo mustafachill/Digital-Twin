@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from dataclasses import replace
 import io
 import os
 from pathlib import Path
@@ -75,6 +76,11 @@ SOURCE_ROOT = PACKAGE.parent
 #: also most of their runtime; every other side either announces at once or is
 #: released by the tripwire, so nothing else waits on it.
 CEILING_S = 10.0
+
+#: The zone every fixture in this file is built from. Its generated plan is read
+#: and copied into a tempdir; nothing here starts a cell, of this zone or any
+#: other.
+ZONE = "cell_a"
 
 #: The boundary's ceiling here, shorter than the sides' because everything it
 #: covers in this file is a `python3` process that starts in milliseconds. One
@@ -121,7 +127,7 @@ def _announces(name: str, *, before: str = "", then: str = "") -> pair.SideSpec:
     anything printed before the announcement has certainly been forwarded by the
     time the join completes. Printed after it, it is a race with the stop.
     """
-    announcement = ready_announcement(name, "cell_a")
+    announcement = ready_announcement(name, ZONE)
     return _fake_side(
         name,
         "import os, time\n" + before + f"print({announcement!r}, flush=True)\n" + then,
@@ -566,7 +572,7 @@ def test_a_side_that_announces_the_other_sides_name_is_refused() -> None:
     # A launch given the wrong `side:=` would otherwise announce readiness for a
     # side the supervisor believes is the other one. The supervisor is the only
     # thing positioned to catch that, and it catches it for free.
-    announcement = ready_announcement("plant", "cell_a")
+    announcement = ready_announcement("plant", ZONE)
     wrong = _fake_side(
         "counterpart",
         f"import time\nprint({announcement!r}, flush=True)\ntime.sleep(600)\n",
@@ -589,7 +595,7 @@ def test_readiness_is_the_token_and_not_the_absence_of_a_crash() -> None:
 
 
 def _paired_plan(tmp_path: Path) -> Plan:
-    document = yaml.safe_load(default_plan_path("cell_a").read_text())
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
     # See the note on the same fixture in `test_simulation_launch.py`: built from
     # whatever the generated plan declares, so that a checkout flipped to `pair`
     # for a run does not fail these on the fixture.
@@ -656,7 +662,7 @@ def test_an_untwinned_zone_is_refused_rather_than_given_a_second_side(
     `pair` for a run - which is what it did, once, and it took two minutes and a
     SIGTERM to find out.
     """
-    document = yaml.safe_load(default_plan_path("cell_a").read_text())
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
     document["plan"]["sides"] = [
         side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
     ]
@@ -750,25 +756,30 @@ def test_a_pair_zone_is_taken_from_the_launch_spelling_too(capsys) -> None:
 # and would be testing `cite_twin`.
 
 
-def _fake_boundary(script: str, *, zone: str = "cell_a") -> pair.SideSpec:
-    """A boundary that is not L5 at all, announcing on the boundary's own token."""
-    return pair.SideSpec(
-        pair.BOUNDARY_NAME,
-        (sys.executable, "-c", script),
-        announcement=announced_boundary,
-        announces=zone,
-        argument="--zone",
-        silence=pair._THE_BOUNDARY_IN_NEITHER_STATE,
-    )
+def _fake_boundary(tmp_path: Path, script: str) -> pair.SideSpec:
+    """Return the REAL boundary spec with a `python3` process for its command.
+
+    Everything about the participant except what to run comes from
+    `pair.boundary_spec` — which token it announces, what that token has to say,
+    which argument decided it, what its silence means — so a change to any of
+    them reaches these tests instead of being restated here and agreeing with
+    nothing (P1). A fake that declared its own token would keep passing after the
+    supervisor stopped reading it.
+    """
+    real = pair.boundary_spec(_paired_plan(tmp_path), tmp_path / "plan.yaml")
+    return replace(real, argv=(sys.executable, "-c", script))
 
 
-def _boundary_announces(*, zone: str = "cell_a", then: str = "") -> pair.SideSpec:
+def _boundary_announces(
+    tmp_path: Path, *, zone: str = ZONE, then: str = ""
+) -> pair.SideSpec:
+    """Return a boundary that announces `zone` — by default the one it is for."""
     announcement = boundary_announcement(zone)
     return _fake_boundary(
+        tmp_path,
         "import os, time\n"
         "print('the boundary process is running', flush=True)\n"
         f"print({announcement!r}, flush=True)\n" + then,
-        zone=zone,
     )
 
 
@@ -805,7 +816,7 @@ def test_the_boundary_is_started_after_the_join_and_not_before(
     held = f"while not os.path.exists({str(release)!r}):\n    time.sleep(0.02)\n"
     code = pair.supervise(
         [_held_until("plant", release), _held_until("counterpart", release)],
-        boundary=_boundary_announces(then=held),
+        boundary=_boundary_announces(tmp_path, then=held),
         ceiling_s=CEILING_S,
         boundary_ceiling_s=BOUNDARY_S,
         out=log,
@@ -823,7 +834,7 @@ def test_the_boundary_is_started_after_the_join_and_not_before(
     assert code == pair.PAIR_ENDED
 
 
-def test_a_join_that_never_completes_starts_no_boundary() -> None:
+def test_a_join_that_never_completes_starts_no_boundary(tmp_path: Path) -> None:
     """The other half of "after the join": a pair that never joins starts nothing.
 
     The strongest form of "not before", because a boundary that is never started
@@ -832,7 +843,7 @@ def test_a_join_that_never_completes_starts_no_boundary() -> None:
     """
     code, text = _run_with_boundary(
         [_announces("plant", then="time.sleep(600)\n"), _blocks("counterpart")],
-        _boundary_announces(then="time.sleep(600)\n"),
+        _boundary_announces(tmp_path, then="time.sleep(600)\n"),
     )
     assert code == 1
     assert "counterpart never announced readiness and never exited" in text
@@ -856,6 +867,7 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
     plan = _paired_plan(tmp_path)
     path = tmp_path / "plan.yaml"
     spec = pair.boundary_spec(plan, path)
+    assert plan.zone == ZONE
 
     assert spec.argv == (
         "ros2",
@@ -944,7 +956,9 @@ def test_the_vocabulary_guard_would_catch_the_edit_it_is_for() -> None:
     assert "mode" not in _identifiers("print('set it in the L0 model')\n")
 
 
-def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary() -> None:
+def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary(
+    tmp_path: Path,
+) -> None:
     """ADR-0057's promotion clause 2, and the ceiling its correction asks for.
 
     The join drops the sides' ceiling on the iteration it completes, so without
@@ -958,7 +972,7 @@ def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary() ->
             _announces("plant", then="time.sleep(600)\n"),
             _announces("counterpart", then="time.sleep(600)\n"),
         ],
-        _fake_boundary("import time\ntime.sleep(600)\n"),
+        _fake_boundary(tmp_path, "import time\ntime.sleep(600)\n"),
     )
     assert code == 1
     assert "boundary never announced readiness and never exited" in text
@@ -971,7 +985,9 @@ def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary() ->
     assert "stopping plant" in text and "stopping counterpart" in text
 
 
-def test_a_boundary_that_exits_ends_the_pair_reported_as_the_boundarys() -> None:
+def test_a_boundary_that_exits_ends_the_pair_reported_as_the_boundarys(
+    tmp_path: Path,
+) -> None:
     """`twin_boundary` exits 0 or 2 and never 1, so nothing here reads a 1.
 
     Every refusal it makes - a zone with one side, a plan that disagrees with
@@ -983,7 +999,7 @@ def test_a_boundary_that_exits_ends_the_pair_reported_as_the_boundarys() -> None
             _announces("plant", then="time.sleep(600)\n"),
             _announces("counterpart", then="time.sleep(600)\n"),
         ],
-        _fake_boundary("raise SystemExit(2)"),
+        _fake_boundary(tmp_path, "raise SystemExit(2)"),
     )
     assert code == 1
     assert "boundary exited 2" in text
@@ -991,7 +1007,7 @@ def test_a_boundary_that_exits_ends_the_pair_reported_as_the_boundarys() -> None
     assert "stopping plant" in text and "stopping counterpart" in text
 
 
-def test_a_boundary_announcing_another_zone_is_refused() -> None:
+def test_a_boundary_announcing_another_zone_is_refused(tmp_path: Path) -> None:
     """The redundancy in the token, which is the same check a side's name is.
 
     A boundary spans one zone and reads it off the plan it was handed. Handed a
@@ -1003,8 +1019,8 @@ def test_a_boundary_announcing_another_zone_is_refused() -> None:
     # Started for `cell_a` - which is what `announces` on the spec records - and
     # announcing `cell_b`.
     wrong = _fake_boundary(
+        tmp_path,
         f"import time\nprint({announcement!r}, flush=True)\ntime.sleep(600)\n",
-        zone="cell_a",
     )
     code, text = _run_with_boundary(
         [
@@ -1027,9 +1043,9 @@ def test_the_two_tokens_are_not_one_word_in_two_places() -> None:
     side announced twice" the same observation at the point where the difference
     decides whether L5 is started at all.
     """
-    side_line = ready_announcement("plant", "cell_a")
-    boundary_line = boundary_announcement("cell_a")
+    side_line = ready_announcement("plant", ZONE)
+    boundary_line = boundary_announcement(ZONE)
     assert announced_boundary(side_line) is None
     assert announced_side(boundary_line) is None
     assert announced_side(side_line) == "plant"
-    assert announced_boundary(boundary_line) == "cell_a"
+    assert announced_boundary(boundary_line) == ZONE
