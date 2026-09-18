@@ -1,8 +1,13 @@
 # L5 — Twin synchronization
 
 - **Status:** `PARTIAL` — `cite_twin` exists and implements
-  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md); **nothing has ever run it against
-  a pair.**
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md). This line said **"nothing has ever
+  run it against a pair"** until 2026-09-18, and a tester has: `./scripts/sim --pair` brought
+  both sides and this node up and `SetMode` was called on the running boundary
+  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)). **One machine,
+  with the model flipped to `pair` for the run and reverted, no thresholds registered in
+  advance, and nothing automated does it** — so what moved is that it has been run, not that
+  anything holds it.
   **Built:** one process per zone holding one `rclpy` context per side
   (`cite_twin/twin_boundary.py`), a `SetMode` server that applies the hardware opt-in **at the
   transition** and publishes `TwinMode` latched on `/cite/twin/mode`, an action server per arm
