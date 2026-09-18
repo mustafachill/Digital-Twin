@@ -32,6 +32,22 @@ subscription, client, service or action endpoint on either domain; set
 side — it sets them in a child's; decide anything about what crosses between the
 sides, which is L5's definition and this is not L5.
 
+**It starts L5, and it is still not L5** (ADR-0057). The supervisor is the only
+component that knows both sides are ready, so it is the only one positioned to
+start the twin boundary on that event rather than on somebody's judgement of when
+the console looks settled. **Starting a process is not deciding what crosses:**
+it hands the boundary the two facts it already holds — which zone this is, and
+where the plan is — and gains no branch on modes, routing, skills or divergence.
+A change here that passes a mode, a side preference or a skill list has crossed
+that line and needs its own record.
+
+**That dependency is one argument vector, and it is deliberately not declared in
+`package.xml`.** `cite_twin` build-depends on this package, so an `exec_depend`
+back would be a cycle colcon refuses to order. The program is resolved on the
+ament index at run time instead, and a workspace without it does not fail
+silently: `ros2 run` exits non-zero at once and the pair reports the BOUNDARY
+exiting, which is the diagnosis ADR-0057 asks for.
+
 **The membership test, for a design nobody anticipated:** if both sides' DDS and
 both Gazebo transports were removed from the machine, this module's own code
 would run unchanged, because it never speaks either. `test/test_pair.py` drives
@@ -55,10 +71,11 @@ interleaved streams. Every line carries its side's name as a prefix.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 import os
+from pathlib import Path
 import queue
 import signal
 import subprocess
@@ -75,7 +92,7 @@ from cite_bringup.plan import (
     PlanError,
     resolve_domain_id,
 )
-from cite_bringup.readiness import announced_side
+from cite_bringup.readiness import announced_boundary, announced_side
 
 #: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
 #: both sides are stopped and the pair exits non-zero, saying which side never
@@ -111,6 +128,31 @@ from cite_bringup.readiness import announced_side
 #: recorded hazard rather than a fixed one.
 READY_CEILING_S = 900.0
 
+#: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
+#: every participant is stopped and the pair exits non-zero, saying that THE
+#: BOUNDARY never announced readiness and never exited.
+#:
+#: **Its own number, and not an extension of `READY_CEILING_S`** (ADR-0057's
+#: correction of 2026-09-18). The join drops that ceiling on the very iteration
+#: it completes — `_join` sets its wait to `None` once every participant is
+#: ready — so the boundary, which is started at exactly that point, would
+#: otherwise be covered by no ceiling at all and a boundary that hung would leave
+#: this supervisor waiting for ever. Widening the one above instead would put two
+#: waits that measure different things behind one number, and that number is
+#: already recorded as stated rather than derived; a second contributor makes it
+#: harder to derive, not easier.
+#:
+#: **Shorter than a side's, because the boundary starts no cell.** Both sides
+#: have already announced when it starts: it reads a plan, opens one context per
+#: side, creates its endpoints and reaches its executor. There is no simulator,
+#: no controller manager and no planner in that list, so this is not a bring-up
+#: ceiling scaled down — it is how long a process with nothing to wait for may be
+#: silent before the silence is the fault.
+#:
+#: **It must never be widened to absorb a slow host**, for the reason the ceiling
+#: above gives at length and which is not restated here.
+BOUNDARY_CEILING_S = 120.0
+
 #: How long a side is given to shut itself down after SIGINT before the group is
 #: signalled, and then how long before it is killed. Both are ceilings on a
 #: failure: a side that exits at once is not delayed by a millisecond.
@@ -120,12 +162,16 @@ READY_CEILING_S = 900.0
 #: killed the group sooner would truncate the very teardown the launch is in the
 #: middle of performing, and record the truncation instead of what happened.
 #:
-#: **Both are spent per side, because the stop loop is sequential.** Two sides
-#: that both refuse to go cost `2 * (STOP_GRACE_S + STOP_KILL_S)` before the pair
-#: reports, which is a stated cost rather than a measured one: nothing has ever
-#: taken it. Stopping the sides concurrently would halve it and is deliberately
-#: not done here, because ending a pair is the path along which evidence is most
-#: easily lost (ADR-0038) and a sequential stop keeps each side's teardown
+#: **Both are spent per PARTICIPANT, because the stop loop is sequential.** Two
+#: sides that both refuse to go cost `2 * (STOP_GRACE_S + STOP_KILL_S)` before
+#: the pair reports, which is a stated cost rather than a measured one: nothing
+#: has ever taken it. **The boundary is a third participant and extends it to
+#: `3 * (STOP_GRACE_S + STOP_KILL_S)` in the worst case** (ADR-0057), and that is
+#: recorded here rather than hidden by lowering either number — a teardown
+#: ceiling shortened to keep a worst case tidy truncates the teardown it was
+#: measuring. Stopping them concurrently would divide it and is deliberately not
+#: done here, because ending a pair is the path along which evidence is most
+#: easily lost (ADR-0038) and a sequential stop keeps each participant's teardown
 #: readable in the console.
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
@@ -140,6 +186,29 @@ STOP_KILL_S = 30.0
 #: that happens and is not a guess about how long anything takes.
 _SWEEP_POLL_S = 0.1
 
+#: What the boundary is reported as. Deliberately not a side's name: a failure
+#: of it that read `plant` or `counterpart` would send the reader to a cell that
+#: is up and working.
+BOUNDARY_NAME = "boundary"
+
+#: What to add when a SIDE neither announced nor exited within its ceiling.
+_A_SIDE_IN_NEITHER_STATE = (
+    "That is not a slow side: every step of its bring-up either completes or "
+    "fails, so a side in neither state is one that is waiting on something that "
+    "will not arrive."
+)
+
+#: And when the BOUNDARY does not, which is a different diagnosis and sends the
+#: reader somewhere else. Both sides had already announced when it was started,
+#: so nothing it is waiting for is a cell coming up.
+_THE_BOUNDARY_IN_NEITHER_STATE = (
+    "That is the twin boundary and not a side, and both sides had announced "
+    "before it was started — so it is not waiting for a cell to come up. It "
+    "reads the plan, opens one context per side and announces only once its own "
+    "endpoints are being served; a boundary in neither state reached none of "
+    "those and is holding a context on each side's domain while it does not."
+)
+
 #: The exit status of a pair that ended because a side ended.
 #:
 #: Distinct from 1, which any of the refusals below the supervisor may produce,
@@ -150,18 +219,43 @@ PAIR_ENDED = 3
 
 @dataclass(frozen=True)
 class SideSpec:
-    """One side: what to run, and the environment that decides which side it is.
+    """One participant: what to run, and the environment that says which it is.
 
     ``env`` is an OVERLAY on the supervisor's own environment rather than a
     replacement, and it carries the whole of the difference between the two
     sides. That is ADR-0047 clause 1 stated as a data structure: the sides share
     every generated artifact and differ only in the environment their processes
     start in.
+
+    **The twin boundary is described by this same record** (ADR-0057), because
+    everything this supervisor does to a participant is the same for all three:
+    start it in its own session, read its pipe for its announcement, stop it,
+    sweep its group. What differs between a side and the boundary is the four
+    fields below — which word it announces, what that word has to say, which
+    argument decided that, and what its silence means — and every one of them is
+    data rather than a branch.
     """
 
     name: str
     argv: tuple[str, ...]
     env: Mapping[str, str] = field(default_factory=dict)
+    #: Which of this participant's output lines is its announcement, and what it
+    #: announces. Two tokens, one pump: a participant's readiness is a line on
+    #: its own pipe whatever the participant is, and the words are different so
+    #: that two copies of one announcement cannot be read as two participants.
+    announcement: Callable[[str], str | None] = announced_side
+    #: What that line has to say for this participant to be the one that said it.
+    #: Empty means "its own name", which is a side; the boundary announces the
+    #: zone it spans. Either way it is a fact the supervisor already holds, and
+    #: the redundancy is the check.
+    announces: str = ""
+    #: The argument that decided `announces`, named in the diagnosis when the
+    #: announcement disagrees with it. A reader who is told only that two strings
+    #: differ has to find out which knob sets them.
+    argument: str = "side:="
+    #: What to say when this participant neither announces nor exits. The ceiling
+    #: is the same mechanism for all three and the diagnosis is not.
+    silence: str = _A_SIDE_IN_NEITHER_STATE
 
 
 def side_specs(
@@ -197,9 +291,53 @@ def side_specs(
     return specs
 
 
+def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
+    """The third participant: the twin boundary, spanning the two sides above.
+
+    **Two arguments and nothing else, and that is ADR-0057's load-bearing
+    sentence rather than an economy.** The supervisor hands over the two facts
+    it already holds — which zone this is, and where the plan is — and every
+    decision about what crosses stays inside `cite_twin` where ADR-0050 put it.
+    In particular it does not pass `divergence_period_s`: that is a ROS
+    parameter, passing it would mean appending `--ros-args`, and a supervisor
+    that states a value L5 declares is a value in two places (P1).
+
+    **No environment overlay, and that is not an omission either.** A side is
+    told which domain it is on because a side is one domain; the boundary holds
+    a context on BOTH and resolves each of them itself, from `CITE_DOMAIN_BASE`
+    and the plan, through the same `resolve_domain_id` that resolved the sides.
+    There is no single `ROS_DOMAIN_ID` that would be right for it, and setting
+    one would put it on a side.
+
+    Both `--zone` and `--plan`, though the boundary reads the zone off the plan:
+    the two are checked against each other there, and a supervisor that passed
+    only the path would be handing over a cell name it never stated.
+    """
+    return SideSpec(
+        BOUNDARY_NAME,
+        (
+            "ros2",
+            "run",
+            "cite_twin",
+            # The installed program's own file name. `cite_twin` installs it
+            # under PROGRAMS rather than as a console script, so this is the
+            # spelling `ros2 run` resolves and the one its launch tests use.
+            "twin_boundary.py",
+            "--zone",
+            plan.zone,
+            "--plan",
+            str(path),
+        ),
+        announcement=announced_boundary,
+        announces=plan.zone,
+        argument="--zone",
+        silence=_THE_BOUNDARY_IN_NEITHER_STATE,
+    )
+
+
 @dataclass
 class _Side:
-    """A started side, and everything the supervisor knows about it."""
+    """A started participant, and everything the supervisor knows about it."""
 
     spec: SideSpec
     process: subprocess.Popen
@@ -218,6 +356,17 @@ class _Side:
     @property
     def name(self) -> str:
         return self.spec.name
+
+    @property
+    def announces(self) -> str:
+        """What this participant has to announce for the announcement to be its.
+
+        A side announces its own name, which the spec already carries, so the
+        spec states it only where it is something else. Defaulting it here
+        rather than at every construction site keeps the two `SideSpec`
+        factories from repeating what one of them already said (P1).
+        """
+        return self.spec.announces or self.spec.name
 
 
 def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
@@ -243,24 +392,38 @@ def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
     )
 
 
-def _started(spec: SideSpec, environ: Mapping[str, str]) -> _Side:
-    """Start one side and record the group it owns, while its leader is alive."""
+def _launch(
+    spec: SideSpec, environ: Mapping[str, str], events: queue.Queue, out
+) -> _Side:
+    """Start one participant, record the group it owns, and read its pipe.
+
+    The group is recorded while its leader is alive, and the pump is started
+    here rather than by the caller so that no participant can be started without
+    one: a process whose pipe nothing reads can neither announce nor be seen to
+    exit, and would be invisible to the join that is about to wait for it.
+    """
     process = _start(spec, environ)
-    return _Side(spec, process, pgid=process.pid)
+    started = _Side(spec, process, pgid=process.pid)
+    threading.Thread(target=_pump, args=(started, events, out), daemon=True).start()
+    return started
 
 
 def _pump(side: _Side, events: queue.Queue, out) -> None:
     """Forward one side's output, labelled, and post what the supervisor needs.
 
-    The reader and the join are the same loop on purpose. A side's readiness IS a
-    line on this pipe, so there is nothing to poll and no interval to choose: the
-    thread blocks in `readline` and the token arrives when the side says so.
+    The reader and the join are the same loop on purpose. A participant's
+    readiness IS a line on this pipe, so there is nothing to poll and no interval
+    to choose: the thread blocks in `readline` and the token arrives when the
+    participant says so.
+
+    Which token is the participant's own, off its spec, so that this one reader
+    serves a side and the boundary without knowing which it is holding.
     """
     assert side.process.stdout is not None
     for raw in side.process.stdout:
         line = raw.rstrip("\n")
         print(f"[{side.name}] {line}", file=out, flush=True)
-        announced = announced_side(line)
+        announced = side.spec.announcement(line)
         if announced is not None:
             events.put(("ready", side, announced))
     events.put(("exit", side, side.process.wait()))
@@ -370,13 +533,15 @@ def _sweep(sides: Sequence[_Side], out) -> None:
 def supervise(
     specs: Sequence[SideSpec],
     *,
+    boundary: SideSpec | None = None,
     environ: Mapping[str, str] | None = None,
     ceiling_s: float = READY_CEILING_S,
+    boundary_ceiling_s: float = BOUNDARY_CEILING_S,
     out=None,
 ) -> int:
-    """Start every side at once, join them, and own the pair until it ends.
+    """Start every side at once, join them, start the boundary, and own the pair.
 
-    The whole of ADR-0047 clause 4's failure table, and nothing else:
+    ADR-0047 clause 4's failure table, and ADR-0057's three rows under it:
 
     ==================================== =========================================
     What happens                         What this does
@@ -388,19 +553,29 @@ def supervise(
     Neither announces, neither exits      the ceiling fires: stop both, and say
                                           that the side never announced readiness
                                           AND never exited, rather than "timeout"
+    Both sides announce                   the boundary is started, on that event
+                                          and on nothing else
+    The boundary exits before announcing  stop everything, exit non-zero naming
+                                          THE BOUNDARY and its status
+    The boundary is silent                its own ceiling fires, saying the
+                                          boundary never announced and never
+                                          exited
     ==================================== =========================================
 
+    ``boundary`` is optional, and a supervisor given none joins two sides and
+    stops there. That is not a mode: it is what keeps ADR-0047's membership test
+    able to drive this function against two processes that are not ROS at all.
+
     Nothing in here knows what a ROS domain is. It is given argument vectors and
-    environment overlays, it reads pipes, and it reads exit statuses — which is
-    why the membership test can drive it against two processes that are not ROS.
+    environment overlays, it reads pipes, and it reads exit statuses — and it
+    does not know what the boundary it starts is for, which is the line ADR-0057
+    draws.
     """
     out = sys.stdout if out is None else out
     environ = os.environ if environ is None else environ
 
     events: queue.Queue = queue.Queue()
-    sides = [_started(spec, environ) for spec in specs]
-    for side in sides:
-        threading.Thread(target=_pump, args=(side, events, out), daemon=True).start()
+    sides = [_launch(spec, environ, events, out) for spec in specs]
 
     print(
         "[pair] started " + ", ".join(s.name for s in sides) + "; waiting for each "
@@ -409,9 +584,27 @@ def supervise(
         flush=True,
     )
 
+    def start_the_boundary() -> _Side:
+        # The whole command, because what this supervisor is allowed to pass the
+        # boundary is two arguments and a reader should be able to see all of
+        # them in the console rather than take this file's word for it.
+        print(
+            "[pair] starting the twin boundary: " + " ".join(boundary.argv),
+            file=out,
+            flush=True,
+        )
+        return _launch(boundary, environ, events, out)
+
     interrupted = False
     with _stop_requests(events):
-        interrupted = _join(sides, events, ceiling_s, out)
+        interrupted, participants = _join(
+            sides,
+            events,
+            ceiling_s,
+            out,
+            start_boundary=None if boundary is None else start_the_boundary,
+            boundary_ceiling_s=boundary_ceiling_s,
+        )
     # Drained BEFORE anything is stopped, and that ordering is the point. When
     # two sides fail for one reason they fail together, and a side stopped by
     # this supervisor reports the stop rather than whatever it was reporting -
@@ -419,15 +612,19 @@ def supervise(
     # fault takes the evidence of the fault with it. Anything already on the
     # queue is that evidence, and it costs nothing to read it first.
     _drain(events)
-    for side in sides:
-        _stop(side, out)
-        if side.status is None:
-            side.status = side.process.poll()
-    # After every side's own stop, and unconditionally. `_stop` reaches a side
-    # whose launch is still running; this reaches what a launch that has already
-    # gone left behind, which is the half nothing else covers.
-    _sweep(sides, out)
-    return _verdict(sides, interrupted, out)
+    # Every participant the join returned, which includes the boundary if it was
+    # started and does not if the join never completed. A boundary that was never
+    # started is not a process to stop, and a list built here from the specs
+    # rather than from what ran would try to stop one.
+    for participant in participants:
+        _stop(participant, out)
+        if participant.status is None:
+            participant.status = participant.process.poll()
+    # After every participant's own stop, and unconditionally. `_stop` reaches
+    # one whose process is still running; this reaches what a process that has
+    # already gone left behind, which is the half nothing else covers.
+    _sweep(participants, out)
+    return _verdict(participants, interrupted, out)
 
 
 def _drain(events: queue.Queue) -> None:
@@ -469,6 +666,14 @@ def _stop_requests(events: queue.Queue):
     repair is a self-pipe plus a reader thread - new mechanism on the teardown
     path, where a bug is worse than the one it removes. Whoever needs it should
     write the reader thread rather than moving the `put`.
+
+    **A third participant widens the exposure, and that is recorded here rather
+    than acted on** (ADR-0057). The orphan a deadlocked supervisor strands used
+    to be two launches and their Gazebo servers; it is now those and a twin
+    boundary, which holds an `rclpy` context on BOTH sides' domains and whose
+    endpoints stay advertised on them. Nothing about the window or the fix
+    changes - it is the same narrow race and the same self-pipe - but what it
+    would leave behind is larger.
     """
     previous: dict[int, object] = {}
 
@@ -487,82 +692,144 @@ def _stop_requests(events: queue.Queue):
             signal.signal(number, handler)
 
 
-def _join(sides: Sequence[_Side], events: queue.Queue, ceiling_s: float, out) -> bool:
-    """Block until the pair is up and then until it ends. Return whether asked to.
+def _join(
+    sides: Sequence[_Side],
+    events: queue.Queue,
+    ceiling_s: float,
+    out,
+    *,
+    start_boundary: Callable[[], _Side] | None = None,
+    boundary_ceiling_s: float = BOUNDARY_CEILING_S,
+) -> tuple[bool, list[_Side]]:
+    """Block until the pair is complete and then until it ends.
 
-    Two phases and one loop. Before the join the wait carries the ceiling, whose
-    expiry is a failure; after it there is nothing left to time — a pair that is
-    up ends when a side ends or when somebody asks it to, and neither is an
-    interval.
+    Return whether it was asked to stop, and every participant that was started
+    — which the caller stops, sweeps and reports on, and which is why this
+    returns the list rather than letting the caller rebuild it from the specs: a
+    boundary that was never started is not a process to stop.
+
+    Three phases and one loop. Before the join the wait carries the sides'
+    ceiling; **the moment the last side announces, the boundary is started and
+    the wait carries ITS ceiling instead**, because the first one is dropped on
+    that same iteration and a participant covered by no ceiling is the hang
+    ADR-0044 records (ADR-0057's correction of 2026-09-18). After everything has
+    announced there is nothing left to time — a pair that is up ends when a
+    participant ends or when somebody asks it to, and neither is an interval.
     """
-    deadline = time.monotonic() + ceiling_s
+    participants = list(sides)
+    ceiling = ceiling_s
+    deadline = time.monotonic() + ceiling
+    pending_boundary = start_boundary
+    # Distinct from `pending_boundary is None`, which is also true when no
+    # boundary was asked for at all. What the second arrival of "everything is
+    # ready" means depends on which of those two it is.
+    boundary_started = False
     while True:
-        joined = all(side.ready for side in sides)
+        joined = all(participant.ready for participant in participants)
         timeout = None if joined else max(0.0, deadline - time.monotonic())
         try:
             kind, side, payload = events.get(timeout=timeout)
         except queue.Empty:
-            _report_ceiling(sides, ceiling_s, out)
-            return False
+            _report_ceiling(participants, ceiling, out)
+            return False, participants
         if kind == "stop":
             print(
                 f"[pair] asked to stop (signal {payload}); ending both sides",
                 file=out,
                 flush=True,
             )
-            return True
+            return True, participants
         if kind == "ready":
-            if payload != side.name:
+            if payload != side.announces:
                 print(
-                    f"[pair] {side.name} announced readiness as {payload!r}. A side "
-                    "announces the side it was started as, so this launch was given "
-                    "the wrong side:= argument and the pair is not what it says.",
+                    f"[pair] {side.name} announced readiness as {payload!r}, and "
+                    f"this supervisor started it as {side.announces!r}. A "
+                    "participant announces what it was started as, so this one was "
+                    f"given the wrong {side.spec.argument} argument and the pair is "
+                    "not what it says.",
                     file=out,
                     flush=True,
                 )
-                return False
+                return False, participants
             side.ready = True
-            if all(s.ready for s in sides):
+            if not all(p.ready for p in participants):
+                continue
+            if boundary_started:
                 print(
-                    "[pair] both sides announced readiness; the pair is up",
+                    "[pair] the twin boundary announced readiness; the pair is "
+                    "complete",
                     file=out,
                     flush=True,
                 )
+                continue
+            print(
+                "[pair] both sides announced readiness; the pair is up",
+                file=out,
+                flush=True,
+            )
+            if pending_boundary is None:
+                # No boundary was asked for, so this is the whole of the join.
+                continue
+            # On this event and on nothing else (ADR-0057). This is the one
+            # place in this system where "both sides are ready" is a fact rather
+            # than a judgement, and the boundary has nothing to connect to
+            # before it.
+            participants.append(pending_boundary())
+            boundary_started = True
+            ceiling = boundary_ceiling_s
+            deadline = time.monotonic() + ceiling
         else:
             side.status = payload
             print(
                 f"[pair] {side.name} exited {payload}", file=out, flush=True
             )
-            return False
+            return False, participants
 
 
-def _report_ceiling(sides: Iterable[_Side], ceiling_s: float, out) -> None:
-    for side in sides:
-        if side.ready:
+def _report_ceiling(
+    participants: Iterable[_Side], ceiling_s: float, out
+) -> None:
+    """Name what never answered, and say what its silence means.
+
+    The sentence after the ceiling is the participant's own, because a side that
+    is silent and a boundary that is silent send the reader to different places.
+    """
+    for participant in participants:
+        if participant.ready:
             continue
         print(
-            f"[pair] {side.name} never announced readiness and never exited, "
-            f"within {ceiling_s:g} s. That is not a slow side: every step of its "
-            "bring-up either completes or fails, so a side in neither state is "
-            "one that is waiting on something that will not arrive.",
+            f"[pair] {participant.name} never announced readiness and never "
+            f"exited, within {ceiling_s:g} s. {participant.spec.silence}",
             file=out,
             flush=True,
         )
 
 
-def _verdict(sides: Sequence[_Side], interrupted: bool, out) -> int:
-    """Report both sides' statuses, never only the first, and grade the run."""
-    for side in sides:
+def _verdict(participants: Sequence[_Side], interrupted: bool, out) -> int:
+    """Report every participant's status, never only the first, and grade the run.
+
+    Every participant that was started, which is both sides and the boundary
+    when there is one. A boundary that failed is reported as the boundary and
+    graded as one: it never announced, so the pair never came up, which is the
+    same 1 a side that would not start produces and is deliberately not a code
+    of its own — the line above it says which participant it was.
+
+    **Nothing here keys on a participant's exit status**, and for the boundary
+    that matters: `twin_boundary` exits 0 or 2 and never 1, so a verdict that
+    read 1 as its failure would call every refusal it makes a success.
+    """
+    for participant in participants:
         print(
-            f"[pair] {side.name}: ready={side.ready} status={side.status}",
+            f"[pair] {participant.name}: ready={participant.ready} "
+            f"status={participant.status}",
             file=out,
             flush=True,
         )
-    if interrupted and all(side.ready for side in sides):
+    if interrupted and all(participant.ready for participant in participants):
         # The pair came up and an operator ended it. That is what asking for a
         # pair and then stopping it looks like, and it is not a failure.
         return 0
-    if not all(side.ready for side in sides):
+    if not all(participant.ready for participant in participants):
         return 1
     return PAIR_ENDED
 
@@ -639,7 +906,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        plan = load(default_plan_path(args.zone))
+        path = default_plan_path(args.zone)
+        plan = load(path)
         specs = side_specs(plan, os.environ, headless=args.headless, line=args.line)
     except PlanError as exc:
         print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
@@ -655,7 +923,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    return supervise(specs, ceiling_s=args.ceiling)
+    # The path rather than the zone, so that the boundary reads the same
+    # document this supervisor resolved the sides from. Resolving it a second
+    # time from the zone would be the same lookup written twice, and the two
+    # copies disagree the first time one of them is pointed elsewhere - which is
+    # exactly what a test does.
+    return supervise(specs, boundary=boundary_spec(plan, path), ceiling_s=args.ceiling)
 
 
 if __name__ == "__main__":

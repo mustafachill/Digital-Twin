@@ -51,7 +51,13 @@ from cite_bringup.plan import (
     PLANT_SIDE,
     resolve_domain_id,
 )
-from cite_bringup.readiness import ready_announcement, READY_TOKEN
+from cite_bringup.readiness import (
+    announced_boundary,
+    announced_side,
+    boundary_announcement,
+    ready_announcement,
+    READY_TOKEN,
+)
 import pytest
 import yaml
 
@@ -69,6 +75,11 @@ SOURCE_ROOT = PACKAGE.parent
 #: also most of their runtime; every other side either announces at once or is
 #: released by the tripwire, so nothing else waits on it.
 CEILING_S = 10.0
+
+#: The boundary's ceiling here, shorter than the sides' because everything it
+#: covers in this file is a `python3` process that starts in milliseconds. One
+#: test below deliberately lets it expire and that expiry is the test's runtime.
+BOUNDARY_S = 5.0
 
 
 class _Log(io.StringIO):
@@ -728,3 +739,297 @@ def test_a_pair_zone_is_taken_from_the_launch_spelling_too(capsys) -> None:
     """
     parser = argparse.ArgumentParser()
     assert pair._flags(["zone:=cell_b"], parser) == ["--zone", "cell_b"]
+
+
+# --- The twin boundary, the third participant ---------------------------------
+#
+# ADR-0057. Every boundary below is a `python3` process too: what is under test
+# is the supervision - when it is started, what it is given, and what its
+# failures do to the pair - and none of that is L5. A rig that started the real
+# boundary here would need two domains and a plan that declares a counterpart,
+# and would be testing `cite_twin`.
+
+
+def _fake_boundary(script: str, *, zone: str = "cell_a") -> pair.SideSpec:
+    """A boundary that is not L5 at all, announcing on the boundary's own token."""
+    return pair.SideSpec(
+        pair.BOUNDARY_NAME,
+        (sys.executable, "-c", script),
+        announcement=announced_boundary,
+        announces=zone,
+        argument="--zone",
+        silence=pair._THE_BOUNDARY_IN_NEITHER_STATE,
+    )
+
+
+def _boundary_announces(*, zone: str = "cell_a", then: str = "") -> pair.SideSpec:
+    announcement = boundary_announcement(zone)
+    return _fake_boundary(
+        "import os, time\n"
+        "print('the boundary process is running', flush=True)\n"
+        f"print({announcement!r}, flush=True)\n" + then,
+        zone=zone,
+    )
+
+
+def _run_with_boundary(
+    specs: list[pair.SideSpec], boundary: pair.SideSpec, *, log: _Log | None = None
+) -> tuple[int, str]:
+    out = _Log() if log is None else log
+    code = pair.supervise(
+        specs,
+        boundary=boundary,
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        out=out,
+    )
+    return code, out.getvalue()
+
+
+def test_the_boundary_is_started_after_the_join_and_not_before(
+    tmp_path: Path,
+) -> None:
+    """The event ADR-0057 reuses, and the ordering is the whole decision.
+
+    A boundary started before both sides answer has nothing to connect to. The
+    supervisor is the only component that knows they have, so it starts it on
+    that fact rather than on an interval or on an operator's eye.
+
+    Read off the console rather than off a clock: the supervisor writes "the pair
+    is up" from the join before it starts anything, and the boundary's own first
+    line cannot reach the same log until it has been started. Both writes are
+    serialized by `_Log`, so their order in the text is their order in time.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the twin boundary announced", release=release)
+    held = f"while not os.path.exists({str(release)!r}):\n    time.sleep(0.02)\n"
+    code = pair.supervise(
+        [_held_until("plant", release), _held_until("counterpart", release)],
+        boundary=_boundary_announces(then=held),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        out=log,
+    )
+    text = log.getvalue()
+    assert "the pair is up" in text
+    assert "[boundary] the boundary process is running" in text
+    assert text.index("the pair is up") < text.index("[boundary] the boundary")
+    # And the boundary is a participant of the join rather than something
+    # started beside it: the pair is not reported complete until it answers too.
+    assert text.index("[boundary] the boundary") < text.index(
+        "the twin boundary announced readiness"
+    )
+    assert "boundary: ready=True" in text
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_join_that_never_completes_starts_no_boundary() -> None:
+    """The other half of "after the join": a pair that never joins starts nothing.
+
+    The strongest form of "not before", because a boundary that is never started
+    prints nothing at all - there is no ordering to get right and no window to
+    lose a race in.
+    """
+    code, text = _run_with_boundary(
+        [_announces("plant", then="time.sleep(600)\n"), _blocks("counterpart")],
+        _boundary_announces(then="time.sleep(600)\n"),
+    )
+    assert code == 1
+    assert "counterpart never announced readiness and never exited" in text
+    assert "starting the twin boundary" not in text
+    assert "[boundary]" not in text
+    # And nothing is reported about a participant that was never started.
+    assert "boundary: ready=" not in text
+
+
+def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """ADR-0057's promotion clause 3, as a test that fails if it passes more.
+
+    **Starting a process is not deciding what crosses**, and the two facts the
+    supervisor hands over are ones it already holds. `divergence_period_s` is the
+    argument this asserts the absence of by name: it is a ROS parameter, so
+    passing it would mean appending `--ros-args`, and a supervisor that stated a
+    value L5 declares would be that value in two places.
+    """
+    plan = _paired_plan(tmp_path)
+    path = tmp_path / "plan.yaml"
+    spec = pair.boundary_spec(plan, path)
+
+    assert spec.argv == (
+        "ros2",
+        "run",
+        "cite_twin",
+        "twin_boundary.py",
+        "--zone",
+        plan.zone,
+        "--plan",
+        str(path),
+    )
+    # Asserted as a set as well as a sequence, so that an added option fails here
+    # even if it is inserted where the tuple comparison above reads plausibly.
+    assert [token for token in spec.argv if token.startswith("--")] == [
+        "--zone",
+        "--plan",
+    ]
+    assert "--ros-args" not in spec.argv
+    assert "divergence_period_s" not in " ".join(spec.argv)
+    # No environment overlay: a side is told which domain it is on because a side
+    # is one domain. The boundary holds a context on both and resolves each from
+    # the plan, so there is no single value that would be right for it, and one
+    # set here would put it on a side.
+    assert spec.env == {}
+
+
+def _identifiers(source: str) -> set[str]:
+    """Every word the SOURCE names something with, split at underscores.
+
+    Identifiers only, and never string literals: this module's refusals are
+    written in English and say things like "set `twin: {sides: pair}` in the L0
+    model", and a scan that read those would be scanning prose. What a
+    supervisor that had started deciding would have is a name for what it was
+    deciding about.
+    """
+    words: set[str] = set()
+
+    def add(name: str | None) -> None:
+        if name:
+            words.update(name.lower().split("_"))
+
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Name):
+            add(node.id)
+        elif isinstance(node, ast.Attribute):
+            add(node.attr)
+        elif isinstance(node, ast.arg):
+            add(node.arg)
+        elif isinstance(node, ast.keyword):
+            add(node.arg)
+        elif isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            add(node.name)
+        elif isinstance(node, ast.alias):
+            add(node.asname or node.name)
+    return words
+
+
+def test_the_supervisor_gains_no_branch_on_what_crosses() -> None:
+    """The line ADR-0057 draws, checked in the source rather than promised.
+
+    The record says the supervisor "learns nothing about modes, routing, skills
+    or divergence, and gains no branch on any of them", and admits that a
+    sentence in a record is weaker than a mechanism. This is the cheapest
+    mechanism there is: the vocabulary of what crosses is not a word this module
+    names anything with. It is a scan and not a proof - a branch could be written
+    in words it does not know - but it catches the edit anybody would actually
+    make, which is a parameter or a flag named after the thing it decides.
+    """
+    named = _identifiers(SUPERVISOR.read_text())
+    forbidden = sorted(
+        named
+        & {"mode", "modes", "routing", "skill", "skills", "divergence", "custody"}
+    )
+    assert not forbidden, (
+        f"the pair supervisor now names {forbidden}. Starting a process is not "
+        "deciding what crosses (ADR-0057); a supervisor that decides is a new "
+        "decision and needs its own record."
+    )
+
+
+def test_the_vocabulary_guard_would_catch_the_edit_it_is_for() -> None:
+    """A guard that matched nothing would pass the check above on any source."""
+    assert "mode" in _identifiers("def supervise(specs, mode=None):\n    pass\n")
+    assert "divergence" in _identifiers("divergence_period_s = 1.0\n")
+    # And it is quiet on the prose the refusals above are written in.
+    assert "mode" not in _identifiers("print('set it in the L0 model')\n")
+
+
+def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary() -> None:
+    """ADR-0057's promotion clause 2, and the ceiling its correction asks for.
+
+    The join drops the sides' ceiling on the iteration it completes, so without
+    one of its own the boundary would be covered by nothing and a boundary that
+    hung would leave the supervisor waiting for ever. What it reports has to name
+    the boundary: both sides are up and working, and a diagnosis pointing at one
+    of them sends the reader to a cell that is fine.
+    """
+    code, text = _run_with_boundary(
+        [
+            _announces("plant", then="time.sleep(600)\n"),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        _fake_boundary("import time\ntime.sleep(600)\n"),
+    )
+    assert code == 1
+    assert "boundary never announced readiness and never exited" in text
+    # The sides are up, and nothing says otherwise.
+    assert "plant never announced" not in text
+    assert "counterpart never announced" not in text
+    assert "plant: ready=True" in text and "counterpart: ready=True" in text
+    # And both of them are stopped rather than left running with no boundary: a
+    # pair whose boundary is not there cannot answer for the pair at all.
+    assert "stopping plant" in text and "stopping counterpart" in text
+
+
+def test_a_boundary_that_exits_ends_the_pair_reported_as_the_boundarys() -> None:
+    """`twin_boundary` exits 0 or 2 and never 1, so nothing here reads a 1.
+
+    Every refusal it makes - a zone with one side, a plan that disagrees with
+    the zone it was given, a side carrying `use_sim_time` - is a 2. A supervisor
+    keyed on 1 would report each of them as a boundary that came up.
+    """
+    code, text = _run_with_boundary(
+        [
+            _announces("plant", then="time.sleep(600)\n"),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        _fake_boundary("raise SystemExit(2)"),
+    )
+    assert code == 1
+    assert "boundary exited 2" in text
+    assert "boundary: ready=False status=2" in text
+    assert "stopping plant" in text and "stopping counterpart" in text
+
+
+def test_a_boundary_announcing_another_zone_is_refused() -> None:
+    """The redundancy in the token, which is the same check a side's name is.
+
+    A boundary spans one zone and reads it off the plan it was handed. Handed a
+    path to another cell's plan it would come up, serve, and span a cell nobody
+    asked for - and it is the supervisor, which stated the zone, that is
+    positioned to notice.
+    """
+    announcement = boundary_announcement("cell_b")
+    # Started for `cell_a` - which is what `announces` on the spec records - and
+    # announcing `cell_b`.
+    wrong = _fake_boundary(
+        f"import time\nprint({announcement!r}, flush=True)\ntime.sleep(600)\n",
+        zone="cell_a",
+    )
+    code, text = _run_with_boundary(
+        [
+            _announces("plant", then="time.sleep(600)\n"),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        wrong,
+    )
+    assert code == 1
+    assert "announced readiness as 'cell_b'" in text
+    assert "announced readiness as" in text
+    assert "--zone" in text
+
+
+def test_the_two_tokens_are_not_one_word_in_two_places() -> None:
+    """A side's word and the boundary's, neither readable as the other.
+
+    The supervisor waits for two sides and then for one boundary, on three pipes
+    it reads at once. One token for both would make "both sides announced" and "a
+    side announced twice" the same observation at the point where the difference
+    decides whether L5 is started at all.
+    """
+    side_line = ready_announcement("plant", "cell_a")
+    boundary_line = boundary_announcement("cell_a")
+    assert announced_boundary(side_line) is None
+    assert announced_side(boundary_line) is None
+    assert announced_side(side_line) == "plant"
+    assert announced_boundary(boundary_line) == "cell_a"
