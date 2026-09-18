@@ -82,7 +82,10 @@ zones:
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
     # Single, deliberately. ADR-0056 declares `cell_b` unpaired and records that
-    # flipping it to `pair` is a separate change with its own record — nothing
-    # starts L5 today, so a pair would come up with no twin boundary.
+    # flipping it to `pair` is a separate change with its own record. The reason
+    # this comment gave until 2026-09-18 — that a pair would come up with no twin
+    # boundary — is no longer one: ADR-0057's supervisor starts the boundary on
+    # the join. What a paired zone still has no automated caller of is a SCENARIO
+    # (ADR-0057's promotion clause 4), so nothing in CI would bring one up.
     twin:
       sides: single

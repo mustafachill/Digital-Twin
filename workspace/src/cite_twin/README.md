@@ -16,8 +16,19 @@ restated here (P1).
   keeps it there — so `twin_boundary.py` **refuses to start on a clean checkout**, saying that
   the zone declares no counterpart. Its launch test drives it against a plan fabricated in
   memory from the generated one.
-- **Nothing starts it.** It is not in `simulation.launch.py`, not in `./scripts/sim`, and not
-  in any scenario. A solo bring-up is exactly what it was before this package existed.
+- **The pair supervisor starts it, and nothing else does**
+  ([ADR-0057](../../../docs/adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
+  `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
+  this program on that event — passing `--zone` and `--plan` and nothing else. It is still not
+  in `simulation.launch.py` and not in any scenario, so **a solo bring-up is exactly what it
+  was before this package existed**, and **no CI step reaches this package outside its own
+  tests**: the shipped model is unpaired, so `--pair` refuses on a clean checkout and nothing
+  automated brings a boundary up.
+- **It announces itself on standard output.** `CITE_BOUNDARY_READY zone=<zone>`, formatted by
+  `cite_bringup.readiness` — the one module that states the token, imported by the process
+  that prints it and the supervisor that reads it. It is printed from a callback the plant's
+  executor ran, so it says the endpoints below are being **served** rather than that they
+  exist, and it is on stdout rather than through the ROS logger, whose sink is stderr.
 - **A goal now crosses the boundary in an automated test, and this bullet said it could not.**
   `test/test_twin_boundary_paired_launch.py` puts each side in its own PROCESS on its own
   `ROS_DOMAIN_ID` — `test/fake_side.py`, which serves an arm's L3 action names and moves

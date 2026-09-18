@@ -82,6 +82,11 @@ from cite_bringup.plan import (
     PlanError,
     require_hardware_opt_in,
 )
+# The token, imported from the one module that states it, rather than a second
+# string literal here. The supervisor that reads it imports the same module
+# (ADR-0057), and two literals would be the P1 defect this whole join is built
+# out of avoiding.
+from cite_bringup.readiness import boundary_announcement
 from cite_facility import model_info
 from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, TwinMode
 from cite_interfaces.qos import LATCHED, STATE
@@ -201,6 +206,16 @@ NOT_COMPUTED_FIELDS: tuple[str, ...] = (
 #: no state transition waits for it (P4). It is a node parameter so a deployment
 #: can change it without a rebuild.
 DIVERGENCE_PERIOD_S = 1.0
+
+#: How soon the announcement below asks the plant's executor to call it back.
+#:
+#: **Not a wait, and nothing is sequenced on it.** The callback runs at the
+#: executor's first opportunity; this number decides only how soon the executor
+#: is asked, and the point of asking at all is that a callback which has run is
+#: proof the executor is running. A line printed beside `spin()` instead would
+#: say the endpoints exist, which is a weaker fact than the supervisor joins on
+#: (ADR-0057, promotion clause 1).
+_ANNOUNCE_PERIOD_S = 0.05
 
 
 @dataclass(frozen=True)
@@ -405,11 +420,36 @@ class TwinBoundary:
             f"{len(self._skills)} routable skill(s), "
             f"mode {MODE_NAMES[self._authority.mode]}"
         )
+        # Announced from INSIDE the executor rather than from beside it, and
+        # that is the whole meaning of the token. Every endpoint above is served
+        # by `self._plant.executor`, which is not running yet on this line: a
+        # print here would say they exist, and a print from a callback that
+        # executor ran says they are being served. The pair supervisor joins on
+        # this line (ADR-0057), and a join on "about to" is the timing guess P4
+        # forbids.
+        #
+        # **On STDOUT, and never through the logger.** `rcutils` writes every
+        # severity to stderr, and this package's own paired launch test records
+        # three assertions that failed silently on exactly that question.
+        self._announcement = self._plant.node.create_timer(
+            _ANNOUNCE_PERIOD_S, self._announce, callback_group=self._group
+        )
         try:
             self._plant.executor.spin()
         except SHUTDOWN_EXCEPTIONS as error:
             if not caused_by_shutdown(error, self._plant.node):
                 raise
+
+    def _announce(self) -> None:
+        """Say once, on standard output, that this boundary is being served.
+
+        Cancelled from inside its own callback, because what it announces
+        happens once: the executor started. It is not a heartbeat and nothing
+        re-reads it — the pair supervisor reads its first arrival and then reads
+        this pipe only to forward it.
+        """
+        self._announcement.cancel()
+        print(boundary_announcement(self._plan.zone), flush=True)
 
     def stop(self) -> None:
         for side in self._sides.values():

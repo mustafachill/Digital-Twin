@@ -65,6 +65,16 @@ decision and is recorded there under "What this costs us". Each entry names the 
 reproduces it. **No existing item was re-read on this date** and no table row below was
 re-derived, so everything else in this file still carries whatever date it already carried.
 
+**Updated 2026-09-18**, on the branch `feat/pair-boundary`, which is ahead of `main`: **six new
+items, #74 to #79**, all pre-existing L5 design rather than that branch's defects — the pair
+supervisor starting the twin boundary ([ADR-0057](adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md))
+is the first thing that puts a boundary in front of a running pair, and what it exposed is what
+the boundary already did. They are **filed rather than fixed**, deliberately: a remediation round
+scoped to one branch's findings is the wrong place to redesign an L5 command path. Each entry
+names what reproduces it and **attributes nothing beyond what was observed**. **No existing item
+was re-read on this date** and no table row below was re-derived, so everything else in this file
+still carries whatever date it already carried.
+
 **Corrected 2026-09-17, on the same branch.** Two table rows below WERE stale and are
 re-derived here rather than left, because the change that made them stale is this branch's:
 the **L0 model** row read `1 zone, 7 types, 15 assets, 5 stations, 15 files` beside a command
@@ -1636,6 +1646,140 @@ grep -c "No transition matching" <the first shell's output>
 
 **Three runs, one host, one session, nothing registered in advance. That is not a rate.**
 
+
+### #74 — No deadman on the L5 command path: if the boundary dies, dispatched goals keep running on both sides
+`cite_twin/twin_boundary.py`'s `_await_far_side_goals` states its own bound in its docstring —
+**"No deadline, deliberately … The operator's cancel is the bound, and it reaches every side"** —
+and that bound is exactly what stops existing when the boundary is the process that died. The
+goals are already accepted by each side's own L3 server; nothing on either side is watching the
+boundary, and an action server does not abort a goal because its client went away. So both arms
+finish whatever they were sent.
+
+[`docs/architecture/cross-cutting-safety.md`](architecture/cross-cutting-safety.md) requires the
+opposite in as many words: *"When the commanding node dies, the network stalls, or messages simply
+stop, motion **stops**. It does not continue on the last command. Every command path has a
+deadman"* — and its own risk table carries **"No watchdog on a command path | High"**.
+
+**The docstring's reasoning is not wrong and is why this is filed rather than patched.** ADR-0045
+records what a wall-clock deadline supervising a simulation-time process cost this project, and L5
+has two simulated clocks to be wrong about rather than one. A deadline is the wrong instrument; a
+liveness contract between the boundary and each side is a different mechanism and a decision
+nobody has taken. **Nothing here is evidence about motion**: the shipped pair is simulated on both
+sides, and no goal has ever crossed the boundary into a cell that moves.
+
+Reproduce it by reading the two documents against each other:
+
+```bash
+sed -n '/No deadline, deliberately/,/reported\./p' \
+  workspace/src/cite_twin/cite_twin/twin_boundary.py
+sed -n '/## Watchdog and communication loss/,/^## /p' docs/architecture/cross-cutting-safety.md
+```
+
+### #75 — A half-dispatched goal is reported as "no side was ever sent", and the mode interlock then sees nothing outstanding
+`_dispatch` loops over the routed sides and calls `send_goal_async` on each in turn. If a **later**
+side's `wait_for_server` times out after `SERVER_WAIT_S`, it returns a `ResultCode` — and the goal
+already sent to the earlier side is neither cancelled nor waited on. `_run_dispatched_goal` then
+aborts with `_uncommanded_result`, whose docstring says, in the tree today, *"Return the result for
+a goal no side was ever sent … this goal commanded nothing, so it took no custody"*. One side is
+running it. Under `MODE_VIRTUAL_LEAD` that side is the plant.
+
+**The second half is the sharper one.** `_run_goal` registers the goal in `self._in_flight` and
+pops it in a `finally`, so the abort clears it — and `set_mode`'s interlock
+(`outstanding = sorted(self._in_flight.values())`) reads an empty map. **A mode transition would
+therefore be accepted while that arm is still moving**, which is the one thing the interlock
+exists to refuse.
+
+`holding=false` on that result is the same statement: it is a type default asserted as a fact
+about a goal that *was* dispatched.
+
+**Nothing here is attributed and nothing has been observed firing** — it is read from the source
+on 2026-09-18, on the shipped code. What would produce it is one side serving its L3 action and
+the other not, which ADR-0047 makes an ordinary state: the two sides are brought up independently
+and neither waits on the other.
+
+```bash
+sed -n '/def _dispatch/,/return sent/p' workspace/src/cite_twin/cite_twin/twin_boundary.py
+sed -n '/def _uncommanded_result/,/return result/p' workspace/src/cite_twin/cite_twin/twin_boundary.py
+```
+
+### #76 — A stranded boundary outlives the supervisor and can serve a later run's goals
+`scripts/_lib.sh` allocates a checkout's domains by parity, so they are **the same two on every
+run from that checkout**. A boundary left behind — by the `Queue.put` deadlock `pair.py` records,
+by a `SIGKILL` to the supervisor, by anything that skips the stop path — keeps its `SetMode`
+server and its per-skill action servers advertised on both of those domains. The next
+`./scripts/sim --pair` resolves the same two and brings up a second boundary beside it, and
+**nothing detects the collision**: two action servers on one name is a legal ROS graph, a client
+binds to whichever it discovers, and there is no equivalent of a `GZ_PARTITION` clash to make it
+visible.
+
+**This is the orphan this repository already knows the cost of, one layer up** — `pair.py`'s
+`_sweep` exists for exactly the Gazebo version of it — and the difference is that an orphaned
+`gz sim` holds a transport while an orphaned boundary **commands arms**.
+
+Reproduce it:
+
+```bash
+./scripts/sim --pair --zone <a paired zone>    # then SIGKILL the supervisor, not Ctrl-C
+pgrep -af twin_boundary.py                     # still there
+./scripts/sim --pair --zone <the same zone>    # a second one, on the same two domains
+```
+
+**Not observed; read from the allocation and the stop path on 2026-09-18.**
+
+### #77 — `--pair --line` puts three commanders on the same arms
+`pair.py` forwards `line:=true` to **both** sides, so each side starts its own L4 coordinator,
+which takes exclusive hold of that side's skills — and the boundary dispatches the operator's
+goals to both sides' L3 servers at the same time. Three processes command the same arm names.
+
+**It is bounded and it is not guarded.** `cite_skills`' `exclusive_goal` gate refuses a second
+concurrent goal per arm (`skill_server.cpp`'s `claim`), so two commanders cannot overlap **within
+one goal** — but nothing owns the arm **between** L4's goals, so an operator goal lands in the gap
+between two line steps and the coordinator's next step follows it. Whether that is acceptable is a
+decision about who owns an arm in a paired line, and no record takes it.
+
+`./scripts/sim --pair --line` is reachable today (`_LAUNCH_STYLE` maps `line:=`), and **nothing
+refuses the combination**.
+
+**Not observed**: the shipped model is `single`, so the combination cannot be run on a clean
+checkout at all.
+
+### #78 — The readiness token proves the plant's executor is running, not that the pair is complete
+`twin_boundary` announces from a timer callback on **`self._plant`'s** executor, which is the
+right fact for what it claims — the endpoints are being served rather than merely created. What it
+does not cover is the **counterpart**. `SideContext` spins each side on its own thread and records
+a spin-thread failure in `self.failure`; the only thing that reads it is the `observing` property,
+consumed at one place — `message.counterpart_observed`, a field of `DivergenceMetrics`, whose
+`valid` is **false for every sample by construction** (ADR-0049 sets no `DEFICIT_BOUND_S`).
+
+So a counterpart context that died on its way up leaves the boundary announcing readiness, the
+pair supervisor reporting the pair complete, and the failure recorded in a field nothing gates on.
+
+**Read from the source on 2026-09-18; not observed.** What would settle whether it matters is a
+run in which a counterpart's spin thread fails, and no such run exists.
+
+```bash
+grep -n "self.failure" workspace/src/cite_twin/cite_twin/boundary.py
+grep -rn "observing" workspace/src/cite_twin/cite_twin/twin_boundary.py
+```
+
+### #79 — Both side contexts name their node `twin_boundary`, so one side's log cannot be attributed
+`SideContext.__init__` defaults `node_name` to `NODE_NAME`, which is `"twin_boundary"`, and the
+boundary builds one context per side. Two nodes of one name in one process: `rcl.logging_rosout`
+warns on every start, and every log line either side emits carries the same logger name, so **a
+message cannot be attributed to the side that produced it** — in the one component whose whole job
+is to hold endpoints in two domains at once.
+
+**Observed 5 times** on paired bring-ups by a `tester` on 2026-09-18 — one machine, counted from
+that run's own output, and it is a count of warnings and not a rate.
+
+The node name is the same on both sides **on purpose** at the graph level: ADR-0044 requires
+identical names per side, and the two nodes are on different domains where the collision is
+invisible. What collides is the process-global logger, which is not a domain-scoped thing. So the
+fix is not "rename a side's node", and that is why this is filed rather than patched.
+
+```bash
+grep -n "NODE_NAME\|node_name" workspace/src/cite_twin/cite_twin/boundary.py
+```
 
 ### #71 — The refusals and the verdict are tested; the join between them is not
 `./scripts/scenario --zone` gained nine shell-gate cases on 2026-09-17 covering its **refusals**

@@ -55,6 +55,7 @@ import tempfile
 import unittest
 
 from cite_bringup.plan import default_plan_path
+from cite_bringup.readiness import boundary_announcement
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_interfaces.qos import LATCHED, STATE
@@ -259,6 +260,30 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         return goal
 
     # ------------------------------------------------------------------ #
+
+    def test_the_boundary_announces_itself_on_stdout(self, proc_output):
+        """ADR-0057's promotion clause 1: the mechanism a pair supervisor joins on.
+
+        **On stdout and not through the logger**, which is why this assertion
+        can exist at all: `rcutils` writes every severity to stderr, and the
+        helper above records three assertions in this file that failed silently
+        because they looked in the wrong stream.
+
+        What the line means is stronger than "the process started": it is
+        printed from a callback the plant's executor ran, so the endpoints
+        asserted on throughout this class are being served by the time it
+        appears. Asserted here beside a `SetMode` call rather than alone,
+        because the token's whole claim is about that server.
+        """
+        proc_output.assertWaitFor(
+            expected_output=boundary_announcement(ZONE),
+            stream="stdout",
+            timeout=SETTLE_S,
+        )
+        self.assertTrue(
+            self.set_mode.wait_for_service(timeout_sec=SETTLE_S),
+            "the boundary announced and SetMode was never advertised",
+        )
 
     def test_an_accepted_transition_is_published(self):
         """Asserted here rather than on the mixed plan, where none is possible.

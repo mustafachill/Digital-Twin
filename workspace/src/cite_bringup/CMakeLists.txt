@@ -82,7 +82,15 @@ if(BUILD_TESTING)
   # is driven against here are not ROS at all, which is the record's membership
   # test executed rather than asserted, and the import-graph check is what makes
   # "holds no rclpy context" reviewable.
-  ament_add_pytest_test(pair test/test_pair.py)
+  # The timeout is stated for the same reason the sibling below states one:
+  # `ament_add_pytest_test` defaults to 60 s SILENTLY, and this file spends
+  # about 36 s of it on an idle host — four tests here deliberately let a
+  # ceiling expire, and that expiry is most of their runtime. 60% of a budget is
+  # not a margin once `colcon test` runs this beside ten other packages on a
+  # loaded machine, and the failure it produces is a bare number with no
+  # sentence in it. **Nothing under test is lengthened by this**: the ceilings
+  # those tests spend are the test file's own and are deliberately unchanged.
+  ament_add_pytest_test(pair test/test_pair.py TIMEOUT 120)
   # ADR-0047 clause 3. `endpoints()` is the definition of "this side is up", and
   # a witness whose condition is almost empty exits 0 having checked almost
   # nothing - which the launch announces and the supervisor reports as a pair.

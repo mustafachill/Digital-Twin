@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The one line a side prints when it has finished coming up, and its reader.
+"""The lines a participant prints when it has finished coming up, and their readers.
 
 ADR-0047 clause 3: a side announces its own readiness **on its own standard
 output**, and the pair supervisor's readiness fact is that line arriving on that
@@ -20,6 +20,14 @@ side's pipe. This module is the token, stated once and imported by both ends —
 the launch graph that emits it and the supervisor that reads it. Two string
 literals would be the same defect this whole design is built to avoid, in
 miniature.
+
+**Two tokens rather than one, because they are two different facts**
+(ADR-0057). A side announcing is *this cell is up*; the boundary announcing is
+*the process spanning the two cells is serving*. They are emitted by different
+programs, read at different points of the same join, and the supervisor starts
+the second only after both of the first have arrived — so a supervisor that
+accepted either word from either participant could report a pair complete on two
+copies of one announcement. The mechanism is shared and the words are not.
 
 **Standard output rather than a ready file, and the reason is this repository's
 own rig.** The second-world-cost campaign joined its two cells with ready files
@@ -73,4 +81,56 @@ def announced_side(line: str) -> str | None:
     for field in line.split():
         if field.startswith("side="):
             return field[len("side="):]
+    return None
+
+
+#: The fixed word the twin boundary's ready line begins with (ADR-0057).
+#:
+#: A word of its own rather than `READY_TOKEN` with a different field, and the
+#: reason is the join it feeds: the supervisor waits for two sides and then for
+#: one boundary, on three pipes it is reading at once. One token for both would
+#: make "both sides announced" and "a side announced twice" the same observation
+#: at the point where the difference decides whether L5 is started.
+BOUNDARY_TOKEN = "CITE_BOUNDARY_READY"
+
+
+def boundary_announcement(zone: str) -> str:
+    """Format the one line the twin boundary emits when it is being served.
+
+    The zone is named for the same reason a side's name is: the supervisor
+    already knows which zone it asked for, so a boundary announcing another one
+    is a boundary spanning a cell nobody asked for, and the supervisor is
+    positioned to catch it for free.
+
+    **This said "the one error neither argument's own reader catches" until
+    2026-09-18, and that was wrong about the reader it names.** `twin_boundary`'s
+    own `main` compares `--zone` against the zone its `--plan` declares and exits
+    2 when they disagree, so the boundary refuses that pair itself. What the
+    supervisor's check is worth is what a check on a pipe is always worth: it is
+    an independent statement, read from what the process SAID rather than from
+    what it was given, so it survives a program that ignores its arguments, that
+    resolves a different plan, or that is not the process the supervisor thinks
+    it started. Redundancy, not sole cover.
+
+    **What the line means is stronger than "the process started".** It is
+    printed from inside the executor that serves the boundary's endpoints, so it
+    says they are being served rather than that they exist. A join on "about to"
+    is the timing guess P4 forbids.
+    """
+    return f"{BOUNDARY_TOKEN} zone={zone}"
+
+
+def announced_boundary(line: str) -> str | None:
+    """Return the zone named by a boundary ready line, or ``None`` if it is not one.
+
+    Substring rather than prefix matching, for the reason
+    :func:`announced_side` gives: what a supervisor reads on a pipe has whatever
+    prefix the emitter's own framework put there, and that formatting is
+    upstream's and not ours.
+    """
+    if BOUNDARY_TOKEN not in line:
+        return None
+    for field in line.split():
+        if field.startswith("zone="):
+            return field[len("zone="):]
     return None
