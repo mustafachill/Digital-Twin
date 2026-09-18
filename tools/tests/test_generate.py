@@ -1093,8 +1093,33 @@ class TestTwinSidesAndTheGazeboPartition:
         # No artifact mentions a side the zone does not have. This is what makes
         # the `single` output the same output it was before the field existed,
         # apart from the one partition line ADR-0042 deliberately adds.
-        blob = "\n".join(artifacts(real_model).values())
-        assert "counterpart" not in blob
+        #
+        # Asked per zone, and derived from the model rather than naming one. It
+        # was one `not in` over every artifact joined together, which asserted
+        # the property AND that no shipped zone is paired at all -- and ADR-0059
+        # removed that second premise by pairing `cell_b` while the property
+        # itself held perfectly. That is exactly the breakage `per_zone` above
+        # was written for, in a fourth assertion, and the fix is the same one:
+        # take the answer from the model.
+        #
+        # It degenerates to the original assertion on an all-`single` facility,
+        # where `paired` is empty and nothing may mention a counterpart at all.
+        #
+        # Named artifact by artifact rather than by an allowlist over a paired
+        # zone's whole tree, and the difference is measured rather than stylistic:
+        # an allowlist keyed on the zone in the path admits the word into any of
+        # that zone's artifacts -- its world, its description, its controllers --
+        # and a review demonstrated exactly that by injecting it into each in
+        # turn. What is being protected is ADR-0044 clause 1: pairing emits **no
+        # per-side artifact**, so the counterpart is a bring-up fact and may
+        # appear in the bring-up plan and NOWHERE else. That is the same shape,
+        # and the same spelling, as `test_only_the_bring_up_plan_carries_a_
+        # partition` four assertions below.
+        paired = {zone.id for zone in load(real_model).zones if zone.twin.sides == "pair"}
+        mentions = sorted(
+            path for path, text in artifacts(real_model).items() if "counterpart" in text
+        )
+        assert mentions == sorted(f"bringup/{zone}_plan.yaml" for zone in paired)
 
     def test_only_the_bring_up_plan_carries_a_partition(self, real_model: Path) -> None:
         # A partition is a bring-up fact, not a description or a world fact. If

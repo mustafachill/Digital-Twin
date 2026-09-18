@@ -264,9 +264,10 @@ class TwinBoundary:
         # plan reader's own message, rather than L5 inventing a second side.
         #
         # Built one at a time and released on the way out, because the refusal
-        # is the COMMON case on this repository's own model: it ships
-        # `twin: {sides: single}`, so every ordinary run of L5 reaches the
-        # second `address()` call and raises. Constructing both in one literal
+        # is a real case on this repository's own model, not a hypothetical one:
+        # `cell_a` ships `twin: {sides: single}` while `cell_b` is paired
+        # (ADR-0059), so L5 pointed at that zone reaches the second `address()`
+        # call and raises. Constructing both in one literal
         # left the plant's `rclpy` context initialised with no reference to it
         # anywhere — `main`'s `finally` only stops a boundary that finished
         # constructing — and the process then exited with a live context.
@@ -1152,11 +1153,13 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     """Which zone, and which plan.
 
     `--plan` exists so a test can drive L5 against a plan that declares a
-    counterpart WITHOUT editing L0. The shipped model declares
-    `twin: {sides: single}` and ADR-0049 decision 4 keeps it there, so L5 cannot
-    come up against the generated plan at all: it has one side, and a boundary
-    needs two. It is not a second source of truth — the default is the generated
-    plan and nothing but a test passes anything else.
+    counterpart WITHOUT editing L0. `cell_b` declares `twin: {sides: pair}` as of
+    2026-09-18 (ADR-0059), so L5 does come up against that zone's generated plan;
+    `cell_a` stays `single`, and a boundary needs two sides, so L5 cannot come up
+    against ITS generated plan at all — which is the plan this package's launch
+    tests fabricate a counterpart onto (`docs/open-work.md` #62). It is not a
+    second source of truth — the default is the generated plan and nothing but a
+    test passes anything else.
     """
     parser = argparse.ArgumentParser(prog="cite_twin", description=__doc__)
     # NO DEFAULT (ADR-0056 decision 4). `--zone` used to default to `cell_a`,

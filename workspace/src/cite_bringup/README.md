@@ -453,19 +453,19 @@ boundary fails no gate in CI.
 ## How to run it
 
 ```bash
-./scripts/sim --headless                 # the cell, without the L4 coordinator
-./scripts/sim --headless line:=true      # with it
-./scripts/sim --pair                     # both sides of a twinned zone, and the boundary
-./scripts/scenario bringup               # headless, asserted, and a blocking CI gate
+./scripts/sim --zone cell_b --headless             # the cell, without the L4 coordinator
+./scripts/sim --zone cell_b --headless line:=true  # with it
+./scripts/sim --zone cell_b --pair                 # both sides of a twinned zone, and the boundary
+./scripts/scenario bringup                         # headless, asserted, and a blocking CI gate
 ```
 
 `--pair` implies headless and requires the zone to declare `twin: {sides: pair}` in the L0
-model; on an untwinned zone it refuses rather than inventing a second side. **The shipped
-model declares `single` on every zone**, so `--pair` refuses on a clean checkout: pairing one
-is a one-line L0 change and the project owner's to make (ADR-0056, ADR-0057). It brings up
-both sides and then the twin boundary, which serves `SetMode` — nothing here chooses a mode.
-There is still no asserted paired scenario; ADR-0057's promotion clause 4 is where that sits,
-and `./scripts/scenario` addresses the plant.
+model; on an untwinned zone it refuses rather than inventing a second side. **`cell_b`
+declares `pair` as of 2026-09-18 and `cell_a` stays `single`** (ADR-0059), so `--pair` comes
+up on `cell_b` from a clean checkout and is refused on `cell_a`. It brings up both sides and
+then the twin boundary, which serves `SetMode` — nothing here chooses a mode. **A declaration
+is not a gate**: there is still no asserted paired scenario and no CI step brings a pair up,
+which is ADR-0057's promotion clause 4, and `./scripts/scenario` addresses the plant.
 
 Invoke `./scripts/sim` rather than `ros2 launch` (CLAUDE.md §7): it routes to the right
 environment, and on a machine without ROS it re-executes itself inside the container.
@@ -502,7 +502,7 @@ Both lines appear, the driver's first, and it is the one that names the node and
 | a spawner times out on a service | usually `gz_ros2_control-system` failed to load, so no controller manager was ever created. The launch appends `GZ_SIM_SYSTEM_PLUGIN_PATH` for exactly this reason |
 | `side 'plant' would start on ROS_DOMAIN_ID=N, but the plan resolves M` | the process is not on its side's domain. Not something a user sets by hand — `scripts/_lib.sh` exports both values and the supervisor sets the child's |
 | `CITE_DOMAIN_BASE is unset` | something entered the ROS graph outside `./scripts/*` |
-| `zone 'cell_a' declares no side named 'counterpart'` | the model says `sides: single`. Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
+| `zone 'cell_a' declares no side named 'counterpart'` | that zone says `sides: single`, as `cell_a` does and `cell_b` does not (ADR-0059). Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
 | `READINESS WITNESS FAILED: side 'X' did not finish coming up within N s` | every step before it succeeded, so the servers were started and are not serving. The message names the endpoints that never answered |
 | `[pair] X never announced readiness and never exited` | the pair's ceiling. That is not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
 | `[pair] X announced readiness as 'Y'` | that participant was given the wrong `side:=` or `--zone`; the message names which |

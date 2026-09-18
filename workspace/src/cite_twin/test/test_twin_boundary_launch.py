@@ -34,11 +34,16 @@ can take. What neither rig does is bring a cell up: **a comparison over two real
 arms is still shown by nothing**, no paired scenario exists, and
 `./scripts/scenario` addresses the plant (CLAUDE.md §2).
 
-**The plan is fabricated and the shipped model is not paired.**
-`model/facility/zones.yaml` declares `twin: {sides: single}` and ADR-0049
-decision 4 keeps it there, so the generated plan has one side and L5 cannot come
-up against it — a boundary needs two. This rig therefore reads the generated
-plan and adds a counterpart to it, in memory, rather than editing L0. The
+**The plan is fabricated, and what keeps that legal is the zone this rig names.**
+`model/facility/zones.yaml` pairs `cell_b` (ADR-0059) and leaves `cell_a`
+`twin: {sides: single}`; this rig reads `cell_a`'s generated plan, which
+therefore has one side, so L5 cannot come up against it — a boundary needs two —
+and appending a counterpart in memory produces a document with exactly two
+sides. **The append is unconditional**, so it would produce two sides named
+`counterpart` on a plan that already carries one, and `cite_bringup.plan.load`
+refuses that: naming `cell_a` literally is the only thing keeping this green.
+That is `docs/open-work.md` #62, stepped around rather than fixed, and anyone
+pairing `cell_a` must fix it in the same change. The
 counterpart it adds is **mixed**: two simulated far sides and one physical one,
 which is charter §8's planned state and the case
 `cross-cutting-safety.md` insists is not an edge case. That is what lets the

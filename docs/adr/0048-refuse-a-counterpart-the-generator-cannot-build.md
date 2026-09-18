@@ -39,7 +39,10 @@
   `9233766` rather than
   taken from another record; the commands are in *Context*. In summary, at that commit:
   - `model/facility/zones.yaml` declares `twin.sides: single`, so nothing in this repository
-    is paired.
+    is paired. **[Overtaken 2026-09-18 —
+    [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs `cell_b`; `cell_a` stays
+    `single`. The reading was taken at `9233766` and is not re-taken. Clause 1 of this record
+    is what keeps both of `cell_b`'s sides simulated.]**
   - **`counterpart_backend: real` validates cleanly and produces a counterpart handed the
     plant's artifacts.** Zero referential findings; 34 artifacts either way, identical file
     set; the counterpart is given `ros2_control_plugin="gz_ros2_control/GazeboSimSystem"`,

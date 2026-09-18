@@ -118,9 +118,17 @@ def _wait_for_side(proc_output, line: str) -> None:
 
 
 def _paired_plan() -> Path:
-    """Write the generated plan, plus a counterpart the shipped model lacks.
+    """Write `cell_a`'s generated plan, plus a counterpart that zone lacks.
 
     Every far side simulated. The mixed case is the other rig's.
+
+    **`ZONE` is `cell_a` and that is load-bearing, not incidental.** The append
+    below is unconditional, so on a zone the model already pairs — `cell_b`,
+    since ADR-0059 — it would write two sides named `counterpart` and
+    `cite_bringup.plan.load` would refuse the document. `cell_a` declares one
+    side, so the append produces exactly two. See `docs/open-work.md` #62: the
+    defect is stepped around rather than fixed, and pairing `cell_a` or reading
+    the default zone here trips it immediately.
     """
     document = yaml.safe_load(default_plan_path(ZONE).read_text())
     plan = document["plan"]

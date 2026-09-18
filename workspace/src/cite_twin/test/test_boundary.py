@@ -361,9 +361,10 @@ class TestL5StartsNothingAndNothingStartsL5:
     def test_no_bring_up_starts_the_twin_boundary(self) -> None:
         """A solo bring-up must be exactly what it was before this package existed.
 
-        L5 is a paired component: it needs a zone declaring two sides, and the
-        shipped model declares one. A launch graph that started it would fail
-        every single-sided bring-up, which is every bring-up anyone runs.
+        L5 is a paired component: it needs a zone declaring two sides, and
+        `cell_a` declares one (ADR-0059 pairs `cell_b` and leaves `cell_a`
+        alone). A launch graph that started it would fail every single-sided
+        bring-up, and `simulation.launch.py` is the launch every zone uses.
         """
         launch_file = (
             Path(get_package_share_directory("cite_bringup"))

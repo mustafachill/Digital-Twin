@@ -120,9 +120,12 @@
   manager and no second set of node names, because a counterpart is the same generated
   artifacts started in a different environment. **A pair is brought up by `./scripts/sim --pair`
   as of 2026-08-30** ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md));
-  this document said "nothing brings a second side up" until then. **The shipped model is still
-  `single`**, so nothing in this repository is paired without an L0 edit that moves
-  `MODEL_HASH`. Do not read a paired model as a running pair, and
+  this document said "nothing brings a second side up" until then. **`cell_b` declares
+  `twin: {sides: pair}` as of 2026-09-18**
+  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so this repository ships one
+  paired zone and one unpaired one; `cell_a` stays `single`. This document said "the shipped
+  model is still `single`" until that date. **Do not read a paired model as a running pair** —
+  nothing automated brings one up — and
   read the emitted plan rather than this sentence for what a change produces: a list of what a
   change does not do is a claim with an expiry date.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)

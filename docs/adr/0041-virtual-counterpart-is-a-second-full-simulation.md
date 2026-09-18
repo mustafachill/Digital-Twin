@@ -119,6 +119,9 @@ rejected; the tree now contains the thing that was chosen instead of them.
 - **The shipped model is `single`.** `model/facility/zones.yaml` declares `twin: {sides: single}`,
   so a pair requires an L0 edit that moves `MODEL_HASH`. This record makes a pair the decided
   shape; it does not make the repository paired.
+  **[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs
+  `cell_b`; `cell_a` stays `single`. The repository now ships one paired zone, and nothing
+  automated brings it up.]**
 
 **How the error survived.** The same way the 2026-08-29 one did, one layer up: the branch that
 falsified this record was reviewed against [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md)
@@ -164,7 +167,10 @@ transition. [ADR-0011](0011-twin-maturity-model-and-modes.md) took the amendment
 record said it would need.
 
 **Decision 3 is met in full, all three clauses.** `model/facility/zones.yaml` carries
-`twin: {sides: single}`, required with no default in `model/schema/zones.schema.json`;
+`twin: {sides: single}`, required with no default in `model/schema/zones.schema.json`
+**[Overtaken 2026-09-18 — [ADR-0059](0059-pair-cell-b-and-leave-cell-a-single.md) pairs
+`cell_b`; `cell_a` stays `single`. The clause this sentence evidences — that the key is
+declared and required — is unaffected.]**;
 `hardware.counterpart_backend` is optional on an instance and falls back to `backend` at
 load, so writing it where it agrees and omitting it are one model and one `MODEL_HASH`; and
 the refusal is `physical-plant-on-paired-zone` in

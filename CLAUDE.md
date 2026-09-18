@@ -97,7 +97,27 @@ bullet.
   `./scripts/validate-model` diffs it against a fresh generator run *and* regenerates in a
   second interpreter under a different hash seed to prove the output is byte-identical; it
   exits 0, reporting `2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 16 file(s)` in
-  this checkout on 2026-09-16 at `0dae8a0` on `feat/cell-b-zone`.
+  this checkout on 2026-09-16 at `0dae8a0` on `feat/cell-b-zone`, **and identical again on
+  `main` on 2026-09-18 with `cell_b` declared `pair`** (ADR-0059) — which is the property to
+  carry: **pairing a zone moves none of those five numbers**, because it adds no asset, no
+  station and no file.
+  **What it does move was measured rather than described, by generating both models and
+  differencing every artifact**: exactly **two** of the 48 differ, `MODEL_HASH` and
+  `bringup/cell_b_plan.yaml`, and the plan's **15** changed lines are **all additions, with
+  nothing modified and nothing removed** — the counterpart's `sides:` entry with its partition
+  and `domain_offset`, and `counterpart_backend` / `counterpart_commands_physical_hardware`
+  with their comments. **So nothing the plant reads ABOUT ITSELF changed**, and the loose form
+  of that sentence — "nothing the plant side reads changed" — is false in two ways a reader
+  would quote: the plant reads the **whole** plan document, which is not byte-identical, and
+  `cite_facility/artifacts.py` reads `MODEL_HASH`, which `model_info` serves, so the cell
+  publishes a different model version after the flip.
+  **What actually carries "the single-side path is untouched" is the consumers, not the diff**,
+  and they were traced rather than assumed: every consumer of a side addresses it **by name** —
+  `simulation.launch.py` defaults `side:=plant` and passes the name on, `cite_bringup/gz.py`
+  addresses a side by name and records in its own docstring that `plan.sides[0]` was removed for
+  exactly this reason, `resolve_domain_id` is called per requested side,
+  `require_hardware_opt_in` iterates both sides and both are `false`, and `cite_facility` and
+  `tests/scenarios/` read no side at all.
   **It read `1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)` until that
   date, and that reading had survived four re-audits** — 2026-09-01 at `abdae38` twice,
   2026-09-08 at `df91154` and again at `6d51966` — which is what made it, until now, the one
@@ -123,9 +143,18 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1521** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, **on `main` at
-  `7c6e902`**, 2026-09-18).
+  `tools/tests/` holds **1523** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on `main`,
+  2026-09-18, with `cell_b` paired).
+  **The 1521 -> 1523 step is two `.md` files and nothing else, and it closes in two parts
+  because the two figures sit at non-adjacent commits** — which is the habit this bullet warns
+  against, so the intermediate reading was taken rather than the difference attributed.
+  Measured in a worktree at `6ae160d`, the commit before this change: **1522**. The step from
+  `7c6e902` to there is `git diff --diff-filter=A --name-only 7c6e902..6ae160d`, which lists
+  **one** file, `docs/adr/0057-…md`, with `--diff-filter=D` and `R` both **0** — and only
+  `test_interface_counts.py` counts an `.md`. This change then adds `docs/adr/0059-…md`, the
+  same +1 by the same walk. **Not one test case was added to `tools/tests` by either**, and
+  pairing a zone adds no tracked file at all.
   **The 1516 → 1521 step is tree growth alone and closes exactly**, which is worth one line
   because it is the first step in this bullet's history whose three contributors are all
   different files. `main` gained **3** tracked files over that span
@@ -357,14 +386,33 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1628 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1630 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1435 tests, 0 failures, 56
-  skipped**. Its exit status was 0. **Re-taken on `main` at `7c6e902` on 2026-09-18**, from
-  one full run, with `docker ps` confirmed empty first.
-  **The host-half tie closes exactly**: `tools/tests` collects 1521 and `tests/` **108**, and
-  1521 + 108 = 1629 = 1628 passed plus the 1 skipped.
+  first-party packages, eleven per-package summaries totalling **1448 tests, 0 failures, 56
+  skipped**. Its exit status was 0. **Re-taken on `main` on 2026-09-18 with `cell_b` paired**,
+  from one full run, with `docker ps` confirmed empty first. It read 144 / 1628 / 1435 at
+  `7c6e902`.
+  **The per-package 1435 -> 1448 step is NOT attributed and is stated as what it is**: the
+  eleven `Summary:` lines carry no package name, and the two figures sit at non-adjacent
+  commits. What is checkable is that this change adds **no** package test — its only test edit
+  is one assertion in `tools/tests/test_generate.py` — so the +13 sits in the pair-boundary
+  work merged before it, which is a reason to expect it there and **is not a measurement of
+  it**.
+  **One host test failed on the first full run of this change and was fixed rather than
+  re-run**: `test_an_untwinned_zone_says_nothing_about_a_counterpart` joined every artifact
+  into one blob and asserted `"counterpart" not in` it, which asserted the property **and**
+  that no shipped zone is paired at all — and pairing `cell_b` removed the second premise while
+  the property held perfectly. Measured before touching it: of **48** generated artifacts
+  **exactly one** mentions a counterpart, `bringup/cell_b_plan.yaml`, the paired zone's own
+  plan, and **none** of `cell_a`'s 30 do. The assertion now takes the paired set from the model
+  and degenerates to the original `not in` on an all-`single` facility; it was mutation-checked
+  by treating that set as empty, where it fires. **This is the same breakage `per_zone` in that
+  file was written for, in a fourth assertion.**
+  **The host-half tie closes exactly, and it was predicted before it was measured**:
+  `tools/tests` collects 1523 and `tests/` **108**, and 1523 + 108 = 1631 = 1630 passed plus
+  the 1 skipped. It read 1521 + 108 = 1629 = 1628 + 1 at `7c6e902`. **`tests/` did not move**,
+  collecting 108 at both.
   **The per-package total is the one figure here that was nearly published as arithmetic**, and
   the episode is worth keeping. It was reasoned about as 1432 + 3 from an earlier run, and a
   re-review caught that the newest full log on that host predated the commits it was being
@@ -632,6 +680,51 @@ bullet.
   25 CI runs against `cell_a`, and a single clean run against `cell_b` says nothing about how
   often it will. **Do not append a `cell_b` run to any count above** — those close at
   `cell_a`; this is the first row of a separate record.
+  **The pair itself has now been brought up from the committed model, which is the first time
+  any paired run recorded in this file was reproducible from a checkout.** `./scripts/sim
+  --zone cell_b --pair` on 2026-09-18, no edit to `model/`: both sides announced readiness in
+  about 15 s, the supervisor started the boundary on the join, and it printed
+  `CITE_BOUNDARY_READY zone=cell_b` after reporting `twin boundary up: plant on domain 43,
+  counterpart on domain 44, 5 routable skill(s), mode SIM`. One SIGINT tore it down in about
+  3 s, boundary first, `boundary: ready=True status=0`. **It is also the first paired run of
+  `cell_b`** — one arm, one conveyor — every earlier one having been taken on a hand-flipped
+  model whose zone this file never named. **One run, one machine, nothing registered in
+  advance. That is not a rate**, and **nothing automated brings a pair up**, which is
+  ADR-0057's unmet clause 4.
+  **`bringup` was run four times locally against a PAIRED `cell_b` on 2026-09-18, and it
+  passed 3 of the 4**, and `pick_and_place` — a **blocking** CI step on this zone — passed once
+  with the bare verdict and one genuine friction stall. That is `./scripts/sim`'s single-side
+  path — the plant alone, on a plan that now declares a counterpart — which is exactly what
+  ADR-0059 had to leave working. The passes printed the **bare** verdict, so cycle and
+  post-shutdown teardown both. **The one failure shares its assertion string with the `MoveTo`
+  failure this bullet already records as recurring, and that is all it shares**: that earlier
+  event was on `cell_a`, unpaired, weeks before this change, and **no mechanism was ever
+  attached to it**. It is reported here as a finding rather than re-run past.
+  **Its mechanism was captured and it is not what the assertion says.** The message is `the
+  MoveTo goal was never accepted`, and the goal **was** accepted: the log carries
+  `[skill_server] [rclcpp_action]: Failed to send goal response … (timeout): client will not
+  receive response` — the acceptance was sent and lost, so the client's handle stayed `None`.
+  **Read that as a lost response, not a rejection**, and note that the string appeared in **0**
+  of the three passing runs. One machine, four runs, nothing registered in advance. **That is
+  not a rate**, and **nothing here attributes the loss to pairing and nothing exonerates it**:
+  the cheapest discriminator — four `bringup` runs at the commit before the flip, for a base
+  rate to compare 1-of-4 against — **was not taken**, so 3 of 4 supports neither direction.
+  What does bear on it is structural and is in the `validate-model` bullet above: every
+  consumer of a side addresses it by name, and the counterpart's lines are purely additive.
+  **`continuous_line` was run once against the paired zone's plant side and its two questions
+  came apart.** Its **cycle passed** — `wp_000003 reached b_accumulation; 3 completed`, three of
+  three work-pieces carried end to end, `Ran 1 test in 181.359s`, with **no** `escalated to an
+  operator` line anywhere. Its **post-shutdown teardown failed**: `FAIL:
+  test_nothing_of_ours_exited_badly … AssertionError: -9 not found in [0, 130, -11] :
+  move_group-12 exited with -9`. **That is not exempted and no exemption may be widened to
+  absorb it**: the allowance covers `move_group` at **-11**, and this is **-9**, `SIGKILL`.
+  **It is recorded and not classified.** `-9` is the signal the teardown-family bullet below
+  keeps outside the set that family's split was measured over, and it has been seen there on
+  `gz` rather than on `move_group`. **Sharing a teardown and a minus sign is not evidence of
+  sharing a cause**, and one event on one machine with nothing registered in advance is not a
+  rate. **It would not have gated CI**: that step carries `continue-on-error` *and*
+  `--teardown-advisory`, so it would have printed the advisory verdict — which this local run
+  did not, because an interactive run answers the strict question.
   **The commit-message trap fired on the way to this reading and is worth one line.** A
   whole-log grep for the host test figure returns `1610` as well as `1623`, because the `Build
   image` step echoes the pushed commit bodies and those bodies quote earlier figures. Only the
@@ -830,13 +923,19 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1965 files checked, no non-English content outside 1 exemption(s)` on
-  **`main` at `7c6e902`**, 2026-09-18. **Exactly 3 of those 1965 are untracked** — the two
+  runs, and reported `1967 files checked, no non-English content outside 1 exemption(s)` on
+  `main`, 2026-09-18, with `cell_b` paired. **The 1965 -> 1967 step is +2 and both are `.md`** —
+  `docs/adr/0057-…md` and `docs/adr/0059-…md`, the same two files that moved the collection
+  above — with nothing under `docs/measurements`, which makes **six** consecutive moves with no
+  campaign in them. **Pairing a zone moves this figure not at all**: it modifies two generated
+  artifacts and adds no file. **Exactly 3 of those 1967 are untracked** — the two
   gitignored campaign binaries this bullet already records, plus
   `assets/scans/raw/scan 1 room scan.e57`, a raw capture moved out of the repository root and
   deliberately left out of git (`assets/README.md`'s storage policy) — re-derived by
   differencing `cite_tools.english.files_to_check` against `git ls-files` rather than carried
-  forward. **A clean clone of `7c6e902` therefore reports 1962.**
+  forward — re-derived again here on 2026-09-18 by differencing `files_to_check` against
+  `git ls-files`, which named the same three and no others. **A clean clone therefore reports
+  1964**, and it reported 1962 at `7c6e902`.
   **The previous reading was 1979 and it was NOT reproducible, which is why it is retired
   rather than differenced against.** It was taken while a concurrent debugging session was
   writing a `.dbg/` directory into the walk: 21 untracked, 18 of them that session's, and the
@@ -1483,9 +1582,12 @@ bullet.
   `TwinMode/MODE_VIRTUAL_LEAD = 5` in `cite_interfaces`; and, on 2026-08-30, ADR-0044 clause 4's
   domain refusal, ADR-0047's readiness witness and pair supervisor, and the `--pair` flag that
   reaches them.
-  **What a paired model is not, and this is the part to carry.** `model/facility/zones.yaml`
-  declares `sides: single` today, so nothing in this repository is paired. Set it to `pair`
-  and the generated plan gains **one more `sides:` entry — carrying the counterpart's
+  **What a paired model is not, and this is the part to carry. It said `model/facility/zones.yaml`
+  declares `sides: single` today, so nothing in this repository is paired — and that is false
+  since 2026-09-18**: `cell_b` declares `twin: {sides: pair}` (ADR-0059, the project owner's
+  decision that the target system is two digital sides with one of everything on each), and
+  `cell_a` stays `single` deliberately. What pairing a zone does to the generated tree is
+  unchanged and was re-measured at the flip: the plan gains **one more `sides:` entry — carrying the counterpart's
   partition *and* its `domain_offset` — and a `counterpart_backend:` line per controller
   manager. That is all it gains** — no second world, no second controller manager, no second
   set of node names, and **no second launch file**: a counterpart is the same
@@ -1527,9 +1629,13 @@ bullet.
   the launch inside the test process, which holds one context on one domain, so two sides cannot
   be included there, and `./scripts/scenario` addresses the plant. **So nothing automated brings
   a pair up** — a regression in the witness, the token or either side's bring-up would not fail
-  CI. And because the shipped model is `single`, as above, **`./scripts/sim --pair` refuses on a
-  clean checkout** rather than inventing a second side: reproducing the run means editing L0 and
-  regenerating, which moves `MODEL_HASH`. Two hazards are recorded in `cite_bringup/pair.py` rather than fixed — a
+  CI. **The sentence that used to close this paragraph is now false and its replacement is
+  narrower**: it said the shipped model is `single`, so `./scripts/sim --pair` refuses on a
+  clean checkout and reproducing a paired run means editing L0. Since 2026-09-18 `cell_b` is
+  paired in the model, so `./scripts/sim --zone cell_b --pair` brings a pair up from a clean
+  checkout and a paired run is reproducible by a second reader. **`cell_a` still refuses**, and
+  **nothing automated brings either up** — which is the half of the old sentence that survives
+  and the one that matters. Two hazards are recorded in `cite_bringup/pair.py` rather than fixed — a
   signal handler's `Queue.put` can deadlock the supervisor against its own join, with the ceiling
   unable to fire because the stuck call is what enforces it; and `READY_CEILING_S` is stated
   rather than derived from the ceilings a side's own gate chain carries.
@@ -1588,10 +1694,13 @@ bullet.
   **no launch file** and the generated bring-up plan still has **no entry** for it (ADR-0057
   rejects that slot for now), so `./scripts/sim` **without `--pair`** brings up no L5 at all.
   **No scenario and no CI step reaches it**: `grep -rn -- --pair tests .github` and `grep -rn
-  cite_twin tests .github scripts` both still return nothing on 2026-09-18, and **the shipped
-  model is `single`, so `--pair` refuses on a clean checkout** — so a regression in the
-  boundary, the mode gate or the monitor still fails no gate outside the package's own tests,
-  which is ADR-0057's unmet promotion clause 4 and not a detail. What holds it is those tests,
+  cite_twin tests .github scripts` both still return nothing on 2026-09-18 — so a regression in
+  the boundary, the mode gate or the monitor still fails no gate outside the package's own
+  tests, which is ADR-0057's unmet promotion clause 4 and not a detail. **This clause also read
+  "the shipped model is `single`, so `--pair` refuses on a clean checkout", and that is false
+  since `cell_b` was paired** (ADR-0059). The refusal is gone and **the missing gate is not**:
+  a pair now comes up from a checkout and still nothing in CI brings one up, which makes the
+  clause-4 gap wider rather than narrower. What holds it is those tests,
   which `./scripts/test` runs — **seven** pytest modules and two launch tests, driving the node
   against **fake sides**, which bring no cell up and move no arm. It said **five** until
   2026-09-18, and it was left stale on purpose by the branch that noticed it: that pass was told
@@ -2214,9 +2323,18 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **56 records, all indexed** on `main` at `7c6e902`, 2026-09-18 —
-    the newest being ADR-0058, which is `Proposed` with **promotion clause 1 deliberately
-    open**: nobody may write that the stall it repairs stopped reproducing, because the
+    `ADR index` line reported **58 records, all indexed** on `main`, 2026-09-18 — the newest
+    being [ADR-0059](docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md), which pairs
+    `cell_b` and keeps `cell_a` `single`, on the project owner's decision that the target
+    system is **two twin sides, both digital, each with exactly one of everything**. **It is
+    `Proposed` and it defends nothing**: what would defend it is ADR-0057's clause 4, an
+    automated paired scenario in CI, which is still unmet — so `./scripts/sim --zone cell_b
+    --pair` now works from a clean checkout and **nothing in CI brings a pair up**, which makes
+    that gap wider rather than narrower. `cell_a` stays `single` **load-bearingly**:
+    `docs/open-work.md` #62's two fixtures append a counterpart unconditionally and both name
+    `cell_a` literally, so pairing that zone fails `./scripts/test` today.
+    It read **56** at `7c6e902` with ADR-0058 newest — `Proposed` with **promotion clause 1
+    deliberately open**: nobody may write that the stall it repairs stopped reproducing, because the
     control arm of the experiment that would show it barely reproduced. It read **55** on
     2026-09-17 on `feat/cell-b-zone`, whose one added record is ADR-0056. It read **54** on 2026-09-10 at
     `523ffd9`, 53 on 2026-09-08 at `6d51966`, 52 on 2026-09-01 at
@@ -2245,8 +2363,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **57** on `main` at `7c6e902` on 2026-09-18
-    against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
+    also matches `0000-template.md`; it read **59** on `main` on 2026-09-18 against `doctor`'s
+    58, **57** at `7c6e902` that same day against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
     against `doctor`'s 55, **55** on 2026-09-10 at `523ffd9` against
     `doctor`'s 54, **54** on 2026-09-08 at `6d51966` against
     `doctor`'s 53, and **53** on 2026-09-01 at `abdae38` against

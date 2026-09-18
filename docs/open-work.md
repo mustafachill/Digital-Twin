@@ -1170,8 +1170,10 @@ gone.
 ### #40 — `test_plan.py` on a paired checkout — CLOSED 2026-09-08
 **Closed by construction at `7d7ac19`** on the branch `feat/hosted-by-derived`, **and measured
 on 2026-09-08** — the entry said the measurement had not been taken and it was two minutes
-away. The committed model stays `twin: {sides: single}`; the run below was taken in the working
-tree and reverted, and `git status` was checked clean afterwards.
+away. The committed model stayed `twin: {sides: single}`; the run below was taken in the working
+tree and reverted, and `git status` was checked clean afterwards. **[Overtaken 2026-09-18 —
+ADR-0059 pairs `cell_b`; `cell_a` stays `single`. The closure is unaffected: the guard this item
+closed on is the tree's, not the model's.]**
 
 **What the class was:** a test that reads the live generated plan instead of building its own
 document, so it asserts about whichever model the checkout happens to carry. On a checkout
@@ -1302,6 +1304,17 @@ errors at collection; it does not.
 at `e18251e`. What changed is that #40's closure was written as a repository-wide statement
 about the class while the guard that holds it parses `Path(__file__)` and reaches one file.
 
+**THIS ITEM IS NOW LOAD-BEARING RATHER THAN MERELY OPEN, AS OF 2026-09-18.** `cell_b` is paired
+in the shipped model (**ADR-0059**), and `./scripts/test` still passes, for one reason and one
+reason only: **both fixtures name `cell_a` literally** — `default_plan_path("cell_a")` in
+`test_twin_boundary_launch.py` and `ZONE = "cell_a"` in `test_twin_boundary_paired_launch.py`,
+re-measured on that date — and `cell_a` is still `single`. So the defect is **stepped around,
+not fixed**, and two ordinary changes trip it immediately: pairing `cell_a`, or making either
+fixture read the default zone the way the scenarios do. ADR-0059 records that dependency as a
+cost of pairing `cell_b`, and `model/facility/zones.yaml` states it at `cell_a`'s own `twin:`
+block so that whoever flips that line reads it first. **Anyone who does either must fix this
+item in the same change.**
+
 **The fix is one line in each**, and it is already written twice in `cite_bringup`:
 `if not any(side["name"] == "counterpart" for side in sides):` around the append, which is what
 `test_plan.py`'s `_paired_document`, `test_pair.py`'s `_paired_plan` and
@@ -1310,9 +1323,10 @@ about the class while the guard that holds it parses `Path(__file__)` and reache
 inside a plan-schema change is the blast-radius widening ADR-0048's own promotion section
 declines for the same package.
 
-**It bites the day anyone pairs the model**, which ADR-0048 clause 2 makes routine — a paired
-checkout is how a pair is brought up at all, and `./scripts/sim --pair` refuses on a clean
-checkout precisely because the shipped model is `single`. Cross-references: #40, whose class this
+**It bit on 2026-09-18, when `cell_b` was paired, and it is stepped around rather than fixed** —
+see the paragraph above for the one reason `./scripts/test` still passes.
+`./scripts/sim --zone cell_b --pair` now comes up from a clean checkout; `--pair` on `cell_a`
+refuses, because that zone alone declares one side. Cross-references: #40, whose class this
 is, and #63, which is the same fixtures counted a different way.
 
 Reported by review on 2026-09-08 (G-2) and filed rather than fixed, at the project owner's
@@ -1740,8 +1754,9 @@ decision about who owns an arm in a paired line, and no record takes it.
 `./scripts/sim --pair --line` is reachable today (`_LAUNCH_STYLE` maps `line:=`), and **nothing
 refuses the combination**.
 
-**Not observed**: the shipped model is `single`, so the combination cannot be run on a clean
-checkout at all.
+**Not observed**: the combination is runnable on a clean checkout since `cell_b` was paired
+(**ADR-0059**, 2026-09-18) — until then the model was `single` and it could not be run at all —
+and no run of it is recorded here.
 
 ### #78 — The readiness token proves the plant's executor is running, not that the pair is complete
 `twin_boundary` announces from a timer callback on **`self._plant`'s** executor, which is the

@@ -7,7 +7,9 @@
   ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)). **One machine,
   with the model flipped to `pair` for the run and reverted, no thresholds registered in
   advance, and nothing automated does it** — so what moved is that it has been run, not that
-  anything holds it.
+  anything holds it. That flip is no longer needed on `cell_b`, which the model pairs as of
+  2026-09-18 ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)); still nothing
+  automated does it.
   **Built:** one process per zone holding one `rclpy` context per side
   (`cite_twin/twin_boundary.py`), a `SetMode` server that applies the hardware opt-in **at the
   transition** and publishes `TwinMode` latched on `/cite/twin/mode`, an action server per arm
@@ -33,9 +35,13 @@
   launch file, so `simulation.launch.py` and `./scripts/sim` **without `--pair`** start no L5
   at all, and **no scenario starts one** — `launch_test` holds one context on one domain, so a
   paired scenario cannot take today's shape, which is ADR-0057's unmet promotion clause 4.
-  **Not built, and read this before believing either line above.** It **refuses to
-  start against the shipped model**, which declares `twin: {sides: single}`, so `--pair`
-  refuses on a clean checkout and **nothing automated brings a boundary up**. **No goal has
+  **Not built, and read this before believing either line above.** `cell_b` declares
+  `twin: {sides: pair}` as of 2026-09-18
+  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so a boundary now comes up
+  from a clean checkout on that zone — `cell_a` stays `single` and is refused. **A declaration
+  is not a gate**: **nothing automated brings a boundary up**, no scenario and no CI step
+  reaches one, and what CI drives on `cell_b` is the plant alone, which is ADR-0057's unmet
+  promotion clause 4 and is now a wider gap rather than a narrower one. **No goal has
   crossed the boundary into a running cell**, in any run: the rig above brings no cell up, so
   it is evidence about the boundary and about nothing that moves. **State mirroring is not
   implemented at all** — the monitor consumes each side's joint state and nothing follows

@@ -37,10 +37,18 @@ zones:
       min_m: [-1.000, -1.200, 0.000]
       max_m: [6.800, 0.800, 2.500]
     # Whether this zone is modelled as one cell or as a twinned pair (ADR-0041).
-    # `single` is Phase 1 as it stands. `pair` covers both 2.A, where the
-    # counterpart is a second simulation, and 2.B, where it is the physical cell
-    # — this line does not change when that happens; a `counterpart_backend:` on
-    # the asset that acquired hardware does.
+    # `pair` covers both 2.A, where the counterpart is a second simulation, and
+    # 2.B, where it is the physical cell — this line does not change when that
+    # happens; a `counterpart_backend:` on the asset that acquired hardware does.
+    #
+    # SINGLE, AND THE ASYMMETRY WITH `cell_b` BELOW IS DELIBERATE (ADR-0059).
+    # This is the archived three-arm showcase; the paired cell is `cell_b`.
+    # Pairing this one would ALSO break the suite today: `docs/open-work.md` #62
+    # records that `cite_twin`'s two launch fixtures append a counterpart to the
+    # live plan unconditionally, and both name `cell_a` literally, so a paired
+    # `cell_a` makes each write a document with two sides called `counterpart`
+    # and `cite_bringup.plan.load` refuses it. #62 is dormant only while this
+    # line reads `single`.
     twin:
       sides: single
 
@@ -81,11 +89,22 @@ zones:
       # the one-zone-at-a-time rule.
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
-    # Single, deliberately. ADR-0056 declares `cell_b` unpaired and records that
-    # flipping it to `pair` is a separate change with its own record. The reason
-    # this comment gave until 2026-09-18 — that a pair would come up with no twin
-    # boundary — is no longer one: ADR-0057's supervisor starts the boundary on
-    # the join. What a paired zone still has no automated caller of is a SCENARIO
-    # (ADR-0057's promotion clause 4), so nothing in CI would bring one up.
+    # PAIRED, and this is the system under construction (ADR-0059): two sides,
+    # BOTH SIMULATED, one of everything on each. It read `single` until
+    # 2026-09-18, when the project owner decided that the target is two digital
+    # twin sides rather than the three-arm cell; ADR-0056 had declared this zone
+    # unpaired and deferred the flip to a record of its own, and ADR-0059 is it.
+    #
+    # WHAT THIS LINE DOES NOT BUY, because a declaration is not a test. Nothing
+    # automated brings the pair up: ADR-0057's promotion clause 4 asks for a
+    # paired SCENARIO in CI and there is none, so a regression in the witness,
+    # the readiness token, the boundary or either side's bring-up fails no gate
+    # outside `cite_twin`'s own tests. What CI drives on this zone is still the
+    # PLANT ALONE.
+    #
+    # Both sides stay simulated by REFUSAL and not by convention: ADR-0048
+    # clause 1 makes a divergent `counterpart_backend` an ERROR at validate
+    # time, and a physical plant on a paired zone is a second ERROR, so the L5
+    # command path cannot reach a physical machine by editing this file.
     twin:
-      sides: single
+      sides: pair
