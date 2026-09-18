@@ -618,6 +618,9 @@ def supervise(
     The boundary is silent                its own ceiling fires, saying the
                                           boundary never announced and never
                                           exited
+    A side exits while the boundary       stop everything; the pair never
+    is starting                           completed, so this grades 1 and not
+                                          PAIR_ENDED - see :func:`_verdict`
     ==================================== =========================================
 
     ``boundary`` is optional, and a supervisor given none joins two sides and
@@ -911,6 +914,18 @@ def _verdict(participants: Sequence[_Side], interrupted: bool, out) -> int:
     **Nothing here keys on a participant's exit status**, and for the boundary
     that matters: `twin_boundary` exits 0 or 2 and never 1, so a verdict that
     read 1 as its failure would call every refusal it makes a success.
+
+    **The grade is over EVERY participant, so there is a window in which a side's
+    death grades 1 rather than `PAIR_ENDED`, and it is stated rather than left to
+    be discovered.** That window opens when the last side announces and closes
+    when the boundary does: a side that exits inside it leaves a participant that
+    never announced, which is "the pair never came up" and not "the pair ran and
+    lost a side". Before the boundary existed there was no such window, and this
+    is the one behaviour of a two-side pair that gaining a third participant
+    changed. It is deliberately not narrowed by grading on "every SIDE is ready":
+    a pair whose boundary never answered cannot answer `SetMode`, which is the
+    thing the pair is for, and reporting that as a pair that merely ended would
+    lose the diagnosis the line above it just printed.
     """
     for participant in participants:
         print(
@@ -994,6 +1009,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--line", action="store_true", help="Start the L4 coordinator on each side."
     )
+    # The SIDES' ceiling, and there is deliberately no option for the boundary's.
+    # `--ceiling` exists because a caller may know something about how long a
+    # cell takes to come up on a given machine; nothing comparable is knowable
+    # about the boundary, which starts no cell and whose ceiling covers a process
+    # that reads a plan and opens two contexts. An option there would be a knob
+    # for widening a ceiling to absorb a slow host, which is the one thing every
+    # ceiling in this file says never to do. A test that needs a shorter one
+    # passes `boundary_ceiling_s` to `supervise` directly.
     parser.add_argument("--ceiling", type=float, default=READY_CEILING_S)
     args = parser.parse_args(
         _flags(sys.argv[1:] if argv is None else argv, parser)
