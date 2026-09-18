@@ -1302,6 +1302,17 @@ errors at collection; it does not.
 at `e18251e`. What changed is that #40's closure was written as a repository-wide statement
 about the class while the guard that holds it parses `Path(__file__)` and reaches one file.
 
+**THIS ITEM IS NOW LOAD-BEARING RATHER THAN MERELY OPEN, AS OF 2026-09-18.** `cell_b` is paired
+in the shipped model (**ADR-0059**), and `./scripts/test` still passes, for one reason and one
+reason only: **both fixtures name `cell_a` literally** — `default_plan_path("cell_a")` in
+`test_twin_boundary_launch.py` and `ZONE = "cell_a"` in `test_twin_boundary_paired_launch.py`,
+re-measured on that date — and `cell_a` is still `single`. So the defect is **stepped around,
+not fixed**, and two ordinary changes trip it immediately: pairing `cell_a`, or making either
+fixture read the default zone the way the scenarios do. ADR-0059 records that dependency as a
+cost of pairing `cell_b`, and `model/facility/zones.yaml` states it at `cell_a`'s own `twin:`
+block so that whoever flips that line reads it first. **Anyone who does either must fix this
+item in the same change.**
+
 **The fix is one line in each**, and it is already written twice in `cite_bringup`:
 `if not any(side["name"] == "counterpart" for side in sides):` around the append, which is what
 `test_plan.py`'s `_paired_document`, `test_pair.py`'s `_paired_plan` and

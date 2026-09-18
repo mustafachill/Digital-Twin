@@ -101,6 +101,9 @@ plan:
     - name: plant
       gz_partition: cite/cell_b/plant
       domain_offset: 0
+    - name: counterpart
+      gz_partition: cite/cell_b/counterpart
+      domain_offset: 1
 
   controller_managers:
     - asset: picker
@@ -110,6 +113,18 @@ plan:
       # declares it beside the plugin string it names. This and not `backend` is
       # what the hardware opt-in decides on (ADR-0054).
       commands_physical_hardware: false
+      # What the counterpart side of this asset loads. Present only on a paired
+      # zone, and carrying the fallback already applied: an instance that writes
+      # no `counterpart_backend` in L0 loads the same plugin on both sides, so
+      # this states the backend of a side that exists rather than repeating a key
+      # the model left out (ADR-0041, Decision 3). The hardware opt-in reads
+      # every side's backend, so a physical counterpart refuses to start without
+      # it exactly as a physical plant would.
+      counterpart_backend: sim
+      # The same fact for that side, emitted exactly where its backend is, so the
+      # two accessors can never disagree about which sides this manager declares.
+      # The reader refuses a document stating one without the other (ADR-0054).
+      counterpart_commands_physical_hardware: false
       description_topic: /cite/cell_b/picker/robot_description
       joint_state_topic: /cite/cell_b/picker/joint_states
       description: package://cite_generated/description/cell_b_picker.urdf.xacro
