@@ -152,6 +152,50 @@ ADR-0056 made it.
   one teardown on one machine. A second reader should re-take both rather than cite these.
 
 ## Verification — 2026-09-18
+### One operator goal, two digital arms — 2026-09-18
+
+**This is the demonstration the project was started for, and it is hand-driven evidence, not a
+test.** `./scripts/sim --zone cell_b --pair` from the committed model, then a driver holding one
+`rclpy` context per side — plant on domain 43, counterpart on domain 44 — reading each side's
+own `/cite/cell_b/picker/joint_states` and commanding only through L5.
+
+`SetMode(VALIDATED)` was accepted, `current_mode=3`, and **one** `MoveTo` goal with
+`named_configuration: "home"` was sent to `/cite/twin/cell_b/picker/move_to`.
+
+| | plant | counterpart |
+|---|---|---|
+| **1. one goal to the boundary, common start** | moved **1.3996 rad** | moved **1.3996 rad** |
+| final positions | identical to six decimal places — disagreement **0.000000 rad** | |
+| **2. control: one goal to the PLANT's own trajectory controller, boundary bypassed** | moved **0.2971 rad** | moved **0.0000 rad** |
+| **3. one goal to the boundary, from the divergent state 2 left** | returned **0.2993 rad** | already at the target |
+| final disagreement | **0.000671 rad** | |
+
+**The control is what makes rows 1 and 3 mean anything.** Commanded directly, the plant moves
+and the counterpart does not, so the two sides are **independent simulations** and not one
+simulation observed twice — which is the objection the first row invites and cannot answer by
+itself.
+
+**Row 3 reads `both arms moved: False` from the driver and that is the instrument being wrong,
+not the system.** The counterpart was already at `home`, so "move to home" is a no-op for it.
+What was measured instead, in the pair's own log, is that it **received and executed** the goal
+both times: its `move_group` printed `started execution` and its controller `Goal reached,
+success!` on each occasion, taking **6.04 s** for the first goal and **0.104 s** for the second
+— which is what an execution that is already at its target looks like. **Assert that both sides
+acted, not that both sides moved.**
+
+**NONE OF THIS IS A FIDELITY NUMBER.** Both sides run the same L0 model, the same generated
+description and the same solver, so `0.000000` and `0.000671 rad` are what *must* happen and
+measure nothing about reality (charter §8). 2.A produces no fidelity number by construction.
+
+**Strength, stated so nobody upgrades it.** One machine, one session, three goals, nothing
+registered in advance, no directory in `docs/measurements/`. **The driver is not committed and
+nothing automated does any of this** — ADR-0057's promotion clause 4 is unmet, so a regression
+in the boundary, the routing table or either side would be caught by nobody. **That is the gap
+this record leaves open, and this demonstration does not narrow it.**
+
+The pair was then torn down by one SIGINT in about 3 s, boundary first,
+`boundary: ready=True status=0`, with **nothing exiting badly** anywhere in the run.
+
 
 **The Consequences section above says the single-side path "is verified below", and until this
 section existed there was nothing below.** That is recorded rather than quietly fixed: a record

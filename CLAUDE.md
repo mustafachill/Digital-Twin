@@ -717,6 +717,21 @@ bullet.
   model whose zone this file never named. **One run, one machine, nothing registered in
   advance. That is not a rate**, and **nothing automated brings a pair up**, which is
   ADR-0057's unmet clause 4.
+  **One operator goal has now been dispatched to two digital arms and both acted**, which is
+  what the pair is for. `SetMode(VALIDATED)` accepted, then **one** `MoveTo` to
+  `/cite/twin/cell_b/picker/move_to`: both arms moved **1.3996 rad** and finished **0.000000
+  rad** apart. **A control run is what makes that mean anything** — commanded directly through
+  the plant's own trajectory controller with the boundary bypassed, the plant moved 0.2971 rad
+  and the counterpart **0.0000**, so the two sides are independent simulations rather than one
+  observed twice. A third goal, sent from the divergent state the control left, brought them
+  back to 0.000671 rad apart. **Both sides were shown to ACT rather than to move**: the
+  counterpart's `move_group` executed on every goal, taking 6.04 s for the first and 0.104 s
+  for one it was already at.
+  **It is not a fidelity number and cannot become one**: both sides run the same model and the
+  same solver, so agreement is what must happen (charter §8). **The driver is not committed,
+  nothing automated does any of it, and ADR-0057's clause 4 is still unmet** — so none of this
+  is defended by a gate. The figures and the control are in
+  [ADR-0059](docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md) and are not copied here (P1).
   **`bringup` was run four times locally against a PAIRED `cell_b` on 2026-09-18, and it
   passed 3 of the 4**, and `pick_and_place` — a **blocking** CI step on this zone — passed once
   with the bare verdict and one genuine friction stall. That is `./scripts/sim`'s single-side
