@@ -101,6 +101,7 @@ BOUNDARY_S = 5.0
 #: whole ceiling and are not hanging when they do.
 BACKSTOP_S = 30.0
 
+
 class _Log(io.StringIO):
     """The supervisor's console, with a tripwire on one line of it.
 
@@ -165,6 +166,7 @@ def _run(specs: list[pair.SideSpec], *, log: _Log | None = None) -> tuple[int, s
     out = _Log() if log is None else log
     code = pair.supervise(specs, ceiling_s=CEILING_S, out=out)
     return code, out.getvalue()
+
 
 def _supervise_within(
     seconds: float,
@@ -876,14 +878,23 @@ def test_the_boundary_is_started_after_the_join_and_not_before(
     release = tmp_path / "joined"
     log = _Log(marker="the twin boundary announced", release=release)
     held = f"while not os.path.exists({str(release)!r}):\n    time.sleep(0.02)\n"
-    code = pair.supervise(
+    # Through the backstop, because every way this test can go wrong is a hang:
+    # all three participants are held open until a console line appears, so a
+    # supervisor that never starts the boundary, or starts it and never joins on
+    # it, releases nobody and waits for ever.
+    code, text = _supervise_within(
+        BACKSTOP_S,
         [_held_until("plant", release), _held_until("counterpart", release)],
         boundary=_boundary_announces(tmp_path, then=held),
         ceiling_s=CEILING_S,
         boundary_ceiling_s=BOUNDARY_S,
-        out=log,
+        log=log,
+        if_it_hangs=(
+            "Every participant here is held open until the supervisor prints "
+            "that the boundary announced, so this is what a boundary that is "
+            "never started, or never joined on, looks like."
+        ),
     )
-    text = log.getvalue()
     assert "the pair is up" in text
     assert "[boundary] the boundary process is running" in text
     assert text.index("the pair is up") < text.index("[boundary] the boundary")
@@ -1038,6 +1049,15 @@ def test_a_boundary_that_never_announces_fails_the_pair_naming_the_boundary(
     )
     assert code == 1
     assert "boundary never announced readiness and never exited" in text
+    # **The boundary's OWN ceiling, and this line is the only thing that says
+    # so.** Deleting `boundary_ceiling_s` entirely leaves `_join` carrying the
+    # sides' leftover ceiling into the boundary's phase, which is the state
+    # ADR-0057's correction of 2026-09-18 exists to forbid - and every other
+    # assertion in this file still passed with it deleted, because the report
+    # names the participant and the diagnosis either way. What changes is the
+    # number in it.
+    assert f"within {BOUNDARY_S:g} s" in text
+    assert f"within {CEILING_S:g} s" not in text
     # The sides are up, and nothing says otherwise.
     assert "plant never announced" not in text
     assert "counterpart never announced" not in text
@@ -1253,6 +1273,7 @@ def test_a_side_is_signalled_at_its_leader_and_the_boundary_at_its_group(
     boundary = pair.boundary_spec(plan, tmp_path / "plan.yaml")
     assert boundary.argv[:2] == ("ros2", "run")
     assert boundary.stop_reach == pair.STOP_GROUP
+
 
 def test_the_boundary_is_stopped_before_the_sides(tmp_path: Path) -> None:
     """The commanding process goes first, and the stop loop is sequential.
