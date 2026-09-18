@@ -846,8 +846,9 @@ def _managed(node: LifecycleNode, name: str) -> list:
     **So one failed transition can produce two shutdown messages**, and a reader
     who sees only one has not necessarily seen the whole of it: on the occasions
     the event does arrive, a refusal here and the driver's own non-zero exit both
-    ask the launch to stop, and the log carries whichever `Shutdown` reason landed
-    first. **The driver's is the authoritative one.** It is the observation —
+    ask the launch to stop. **Both messages appear** — each emitter pairs a
+    `LogInfo` with its `Shutdown` — and it is the recorded shutdown *reason* that
+    is whichever landed first. **The driver's is the authoritative one.** It is the observation —
     what the node answered `get_state` with — where a refusal is a broadcast that
     may or may not have been delivered, and it names the step as well as the node.
     """
@@ -1241,10 +1242,15 @@ def _motion_planning(plan: Plan) -> list:
       of `_facility` starts before the driver exits" is testable as written; a
       carve-out for move_group is a second rule nothing checks.
 
-    **The cost is real and is stated here rather than discovered.** Three
-    move_groups and their three `xacro` expansions now sit behind facility
-    activation instead of running beside it, which is roughly 1-3 s added to
-    every bring-up on this project's development host. Every scenario ceiling in
+    **The cost is real and is stated here rather than discovered.** One
+    `move_group` and one `xacro` expansion **per arm that carries MoveIt** now sit
+    behind facility activation instead of running beside it — three in `cell_a`,
+    one in `cell_b`, and **ask the plan rather than reading a number out of this
+    comment** (ADR-0027's first correction: do not state the cardinality of a
+    generated collection in prose). The added wall-clock cost is **estimated at
+    the order of a second and has not been measured** — no instrument, host or
+    trial count stands behind it, and it must not be quoted as though one did.
+    Every scenario ceiling in
     this repository is wall clock and none of them may be widened to absorb it
     (CLAUDE.md §2, the real-time-factor bullet).
 

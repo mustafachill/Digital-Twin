@@ -271,6 +271,17 @@ class LifecycleDriver(Node):
         own `rclpy.ok` check then says what happened. A shutdown landing *inside*
         a spin is not this window: the executor's own loop stops on
         `context.ok()` and the call returns normally.
+
+        **The window this check does not close, stated rather than left to be
+        inferred:** a shutdown arriving between the check and the call. It is not
+        closed, and closing it would mean holding a lock across a call that can
+        block. Its production consequence is small and is why it is accepted — a
+        signal shuts the context down at the rcl level, which raises `RCLError`,
+        and `RCLError` is already in `SHUTDOWN_EXCEPTIONS`, so the cost is
+        `main`'s generic "interrupted" diagnosis instead of this function's
+        specific one. The bare `TypeError` that escaped before these guards needs
+        Python-side `rclpy.shutdown()`, which this process reaches only after
+        `drive()` has returned.
         """
         if not rclpy.ok(context=self.context):
             return
@@ -279,8 +290,14 @@ class LifecycleDriver(Node):
     def _observed(self, state: Client) -> State | None:
         """Return what the node says it is, or None when it did not answer in a slice."""
         if not rclpy.ok(context=self.context):
-            # Before `call_async`, which needs the client's handle, and not only
-            # before the spin. `_step`'s own check turns this into the diagnosis.
+            # Deliberately redundant with `_spin`'s guard: for this interleaving
+            # either one alone closes the door, and a mutation sweep found that
+            # removing either in isolation leaves the suite green. What the test
+            # binds is the pair, and the loop-head check alone is NOT sufficient —
+            # that was measured, not reasoned about. Kept because the two cover
+            # different call shapes, and said plainly because a comment asserting
+            # a necessity nothing holds is the defect this branch already fixed
+            # once, one level up.
             return None
         future = state.call_async(GetState.Request())
         try:

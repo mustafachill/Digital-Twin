@@ -181,6 +181,12 @@ answer on the occasions they do arrive. **Nothing relies on them.**
 1. The harness that reproduces the stall today — 2 of 35 unloaded, 4 of 45 loaded — **stops
    reproducing it**, reported as counts on one host and **not as a rate**, because the
    before-figures are not one either.
+   **Read the status block above before acting on this clause.** Both halves of it have since
+   been undermined by measurement: those figures are **lower bounds** taken with a harness whose
+   own probe rescues the stall it is counting, and the harness **cannot be used as-is** against
+   this change, because `repro.launch.py` carries a private copy of `_managed` and drives the
+   superseded shape. The clause is left as written rather than re-numbered, because it is what
+   the record committed to and the correction belongs beside it, not inside it.
 2. A test drives the driver's failure path: a node that never answers `change_state`, and a node
    that answers but never reaches `active`, each producing a non-zero exit naming that node and
    that step.
@@ -254,9 +260,13 @@ dependency.
    exits"* — clause 4 of the promotion condition — stays a single rule rather than a rule with
    a carve-out for one process.
 
-**And what it costs, stated here rather than discovered later.** Three `move_group`s and their
-three `xacro` expansions move from running beside facility activation to running behind it,
-which is roughly 1-3 s added to every bring-up. Every scenario ceiling in this repository is
+**And what it costs, stated here rather than discovered later.** One `move_group` and one
+`xacro` expansion **per arm that carries MoveIt** move from running beside facility activation
+to running behind it — three in `cell_a`, one in `cell_b`, and **ask the plan rather than
+reading the number out of this record**, which is ADR-0027's first correction: do not state the
+cardinality of a generated collection in prose. The added wall-clock cost is **an estimate of
+the order of a second and has not been measured** — no instrument, no host, no trial count
+stands behind it, and it may not be quoted as though one did. Every scenario ceiling in this repository is
 wall clock, and **none of them may be widened to absorb it.**
 
 ## What this record does not decide
