@@ -1577,16 +1577,30 @@ bullet.
   `force` is read anywhere, so `force` is structurally unable to skip it. `routing.py` holds
   ADR-0050 decision 2's table and refuses to import if `TwinMode` declares a mode either table
   has not been told about. `MODE_VIRTUAL_LEAD` dispatches to both sides in that table.
-  **What L5 is not, and this is the part to carry.** **Nothing starts it.** `twin_boundary.py`
-  is installed as a program and appears in **no launch file** — `grep -rn twin_boundary
-  workspace/src` outside `cite_twin` returns nothing, and the generated bring-up plan has no
-  entry for it, so `./scripts/sim` in any form brings up no L5 at all. **No scenario and no CI
-  step reaches it**: `grep -rn -- --pair tests .github` and `grep -rn cite_twin tests .github
-  scripts` both return nothing on 2026-09-01, so a regression in the boundary, the mode gate or
-  the monitor fails no gate outside the package's own tests. What holds it is those tests, which
-  `./scripts/test` runs — five pytest modules and two launch tests, driving the node against
-  **fake sides**, which bring no cell up and move no arm. **Nothing here is evidence about
-  motion, and 2.A produces no fidelity number in any case** (charter §8).
+  **What L5 is not, and this is the part to carry. It said "**Nothing starts it**" until
+  2026-09-18, and the pair supervisor now does** (ADR-0057). `./scripts/sim --pair` starts both
+  sides, joins them on their readiness tokens, and starts `twin_boundary.py` **on that event**,
+  passing it the zone and the plan path and nothing else; the boundary announces itself on
+  **stdout** from inside the plant's executor and the supervisor joins on that line too. The
+  instrument that falsified the old sentence is the one it named: `grep -rn twin_boundary
+  workspace/src` outside `cite_twin` now reaches `cite_bringup/pair.py`, where it returned
+  nothing on 2026-09-01. **What survives of the old sentence is most of it.** It is still in
+  **no launch file** and the generated bring-up plan still has **no entry** for it (ADR-0057
+  rejects that slot for now), so `./scripts/sim` **without `--pair`** brings up no L5 at all.
+  **No scenario and no CI step reaches it**: `grep -rn -- --pair tests .github` and `grep -rn
+  cite_twin tests .github scripts` both still return nothing on 2026-09-18, and **the shipped
+  model is `single`, so `--pair` refuses on a clean checkout** — so a regression in the
+  boundary, the mode gate or the monitor still fails no gate outside the package's own tests,
+  which is ADR-0057's unmet promotion clause 4 and not a detail. What holds it is those tests,
+  which `./scripts/test` runs — driving the node against **fake sides**, which bring no cell up
+  and move no arm. **Nothing here is evidence about motion, and 2.A produces no fidelity number
+  in any case** (charter §8).
+  **A pair with a boundary has been brought up and `SetMode` called on it**, by a `tester` on
+  one machine on 2026-09-18, with the model flipped to `pair` for the run and reverted — the
+  token in about 1.5 s, `accepted=True, 'SIM -> VIRTUAL_LEAD', current_mode=5`, and the failure
+  path naming the boundary 2 of 2. **One machine, no thresholds registered in advance, no
+  directory in [`docs/measurements/`](docs/measurements/README.md), not re-taken here. That is
+  not a rate and it is not a CI gate.**
   **The divergence metric has a consumer and no producer, and that is by decision rather than
   by omission.** ADR-0050 decision 3's conjunction has five terms, and term 3 — each side's
   accumulated clock deficit, within ADR-0049's bound — is **false for every sample by

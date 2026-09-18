@@ -1,6 +1,11 @@
 # ADR-0057: Start the twin boundary from the pair supervisor, after the join
 
-- **Status:** Proposed — nothing in this record is implemented.
+- **Status:** Proposed. **The Decision is implemented** on `feat/pair-boundary`; the promotion
+  condition is **not met**, and implementation is not promotion. This line read *"nothing in
+  this record is implemented"* until 2026-09-18 and was made false by the change that
+  implements it — the same drift ADR-0058's status line records one record along, and the
+  reason charter §2's discipline is to re-run rather than to re-read. See
+  *Implemented — 2026-09-18* below for what each clause rests on.
 - **Date:** 2026-09-17
 - **Deciders:** Project owner, who chose this shape over two alternatives on 2026-09-17;
   drafted by the orchestrator against a measurement taken the same day.
@@ -200,3 +205,53 @@ token, and the clause now says so.
 `twin.sides` to `pair` moves **two** artifacts, `MODEL_HASH` and that zone's plan, with **zero**
 validator findings. The L0 half of pairing is one line; the work is entirely in who starts the
 boundary, which is what this record decides.
+
+## Implemented — 2026-09-18: four clauses met on real runs, and the fifth untouched
+
+The Decision above is in the tree. **Clauses 1, 2, 3 and 5 are met; clause 4 is not, and it is
+the one that decides promotion** — so this record stays `Proposed`, in the shape ADR-0045 and
+ADR-0046 are kept in: a mechanism that is evidenced and an outcome that is not.
+
+**The strength of what follows.** Clauses 1, 2 and 3 were exercised by a `tester` agent driving
+real paired bring-ups on one machine, with the shipped model temporarily flipped to `pair` for
+the run and reverted afterwards — **no thresholds registered in advance, no directory in
+`docs/measurements/`, and not re-taken by the pass that wrote this**. That is the size of the
+evidence, and it is not a campaign.
+
+- **Clause 1 — the token, and `SetMode` exercised rather than read off a log.** `./scripts/sim
+  --pair` brought both sides and a boundary up, and the boundary printed
+  `CITE_BOUNDARY_READY zone=<zone>` on **stdout** about **1.5 s** after it was started, against
+  the 120 s ceiling the correction below asked for. The token is built where the mechanism the
+  clause named had to be built: `cite_bringup.readiness` states both words, and
+  `twin_boundary.py` prints this one from **inside** the plant's executor, so it says the
+  endpoints are being served rather than that they exist. `SetMode` was then **called** on the
+  running boundary and answered `accepted=True`, `'SIM -> VIRTUAL_LEAD'`, `current_mode=5`.
+- **Clause 2 — a boundary that fails names the boundary.** Observed **2 of 2** on real runs, and
+  driven by tests rather than described: a boundary that exits, one that never announces, and
+  one that announces another zone each end the pair with a diagnosis naming `boundary` while
+  both sides report `ready=True`.
+- **Clause 3 — the zone and the plan path and nothing else.** A test asserts the argument vector
+  exactly and fails if anything is added, `divergence_period_s` by name; a second scans the
+  supervisor's own identifiers for the vocabulary of what crosses.
+- **Clause 5 — `validate-model` with the zone paired.** Re-measured at implementation rather
+  than quoted from the Context above: exit 0, and the generated tree moved in `MODEL_HASH` and
+  that zone's plan only.
+- **Clause 4 — untouched.** No automated paired scenario exists and none runs in CI. The shipped
+  model is `single`, so `./scripts/sim --pair` refuses on a clean checkout, and `grep -rn
+  cite_twin tests .github` still reaches nothing. **A regression in the witness, the token,
+  either side's bring-up or the boundary fails no gate**, exactly as the clause says.
+
+**The ceiling the correction below asked for is built and is its own number**
+(`BOUNDARY_CEILING_S`), not an extension of `READY_CEILING_S`, and a test asserts that the
+number the diagnosis prints is the boundary's rather than whatever the sides' ceiling had left.
+
+**Two defects on the teardown path were found in review and fixed before this was written**, and
+they are recorded here because both are consequences of the third participant this record adds.
+`ros2 run` forks and forwards nothing, so a SIGINT to the leader alone never reached the
+boundary at all: it was waited out for the full grace and then killed, and its own `stop()` and
+`rclpy` shutdown never ran. And the stop loop is sequential, so appending the boundary stopped
+**the only participant that commands anything** last — leaving it serving `SetMode` and holding
+an action client on each side for the whole of both sides' teardown. **Neither was fixed by
+moving a ceiling.** The cost this record's Consequences section states — a third participant
+extending the worst case to `3 × (90 + 30) s` — is unchanged and remains stated rather than
+measured.

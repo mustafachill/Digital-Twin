@@ -17,9 +17,20 @@
   goal had crossed "in any run or any test" and that nothing automated could show one**; the
   second half was overstated — the impossibility is about `launch_test` with
   `IncludeLaunchDescription` hosting a whole cell, not about any automated test at all.
-  **Not built, and read this before believing either line above.** **No bring-up starts it**
-  — not `simulation.launch.py`, not `./scripts/sim`, not any scenario — and it **refuses to
-  start against the shipped model**, which declares `twin: {sides: single}`. **No goal has
+  **The pair supervisor starts it, as of 2026-09-18** ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
+  `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
+  this node on that event, handing it the zone and the plan path and nothing else; it announces
+  itself on **stdout** from inside the plant's executor, and the supervisor joins on that line.
+  A tester brought a pair and a boundary up and **called** `SetMode` on it — one machine, no
+  thresholds registered in advance, not a campaign.
+  **This bullet said "No bring-up starts it — not `simulation.launch.py`, not `./scripts/sim`,
+  not any scenario" until that date, and two thirds of that is still true.** It is in **no**
+  launch file, so `simulation.launch.py` and `./scripts/sim` **without `--pair`** start no L5
+  at all, and **no scenario starts one** — `launch_test` holds one context on one domain, so a
+  paired scenario cannot take today's shape, which is ADR-0057's unmet promotion clause 4.
+  **Not built, and read this before believing either line above.** It **refuses to
+  start against the shipped model**, which declares `twin: {sides: single}`, so `--pair`
+  refuses on a clean checkout and **nothing automated brings a boundary up**. **No goal has
   crossed the boundary into a running cell**, in any run: the rig above brings no cell up, so
   it is evidence about the boundary and about nothing that moves. **State mirroring is not
   implemented at all** — the monitor consumes each side's joint state and nothing follows
