@@ -37,6 +37,7 @@ answers some interfaces and not others.
 |---|---|
 | `cite_bringup/plan.py` | reads and checks the generated plan; pure logic, no ROS runtime |
 | `cite_bringup/gz.py` | the one door that builds a Gazebo-transport process environment |
+| `cite_bringup/lifecycle_driver.py` | the process that takes the facility's managed nodes to `active`, then exits |
 | `cite_bringup/readiness.py` | the token a side announces when it has finished coming up |
 | `cite_bringup/readiness_witness.py` | the process that blocks until this side is serving, then exits |
 | `cite_bringup/pair.py` | the pair supervisor: starts both sides, joins them, owns the pair's lifetime |
@@ -58,16 +59,22 @@ The order is a real dependency chain, not a preference
    every `ros2_control` component in that model's description. With all three arms in one
    model, all three managers claimed all eighteen joints and wrote to them every cycle.
 4. The facility's managed nodes (`cite_facility`), which depend on nothing above and come up
-   alongside the simulator.
+   alongside the simulator — and, started beside them, the lifecycle driver that takes them to
+   `active`. **Everything below this point is gated on that program's exit**; see "The
+   lifecycle driver" below.
 5. Controllers, stage by stage — **one chain across every manager**, not one chain per arm.
    Three managers performing a state switch simultaneously while physics runs made bring-up
    intermittent: a scenario that passed and then failed on the very next run. The single chain
    is still entirely event-gated, so it is as fast as the machine allows; it simply no longer
    races itself.
-6. One `move_group` per arm, started unconditionally — it waits for `/joint_states` itself, and
-   gating it would add an ordering constraint the system does not have.
+6. One `move_group` per arm that carries MoveIt — ask the plan how many that is — gated on the
+   lifecycle driver and on nothing else. It waits for `/joint_states` itself, and gating it on
+   the controllers would add an ordering constraint the system does not have.
 7. One `planning_scene_loader` per arm, chained.
-8. The zone's detection server (with the facility nodes, since it commands no motion).
+8. The zone's detection server, on the same gate as the controllers and the planners. It
+   commands no motion and needs neither, and it used to start with the facility nodes; what
+   moving it behind the gate costs is a beam subscription arriving a second or two later on a
+   cell that is not running yet either way.
 9. The skill servers, and the L4 coordinator if `line:=true`.
 
 ### The bridge
@@ -258,6 +265,82 @@ counterpart's half would have had teeth, and a green refusal would have been rea
 both sides. With `CITE_DOMAIN_BASE` the two values are independently sourced and the plant's
 half can fail.
 
+## The lifecycle driver, and why a transition is asked for rather than watched
+
+`cite_bringup/lifecycle_driver.py` takes each of the facility's managed nodes through
+`configure` and then `activate` by calling that node's `change_state` service and **confirming
+each step with `get_state`**, and exits when every one of them has been observed `active`. It is
+the same shape as every other link in this chain — a process that blocks on a condition and
+exits, whose exit `_gate` consumes. It composes no name and holds no list: `_facility` returns
+the fully-qualified name of every node it started and the launch passes those on `--node`, so a
+node added there is driven without this program learning anything (P1). Its own deadline is
+measured on the wall clock and `use_sim_time` is declared `False`, for the reason the readiness
+witness gives below: one of the failures it exists to report is a cell whose simulated clock
+never starts, and a deadline in a clock that is not running cannot expire.
+
+**Why it exists, and it is a QoS defect rather than a preference.** Activation used to be
+triggered by a launch event, `OnStateTransition(configuring -> inactive)`, and `launch_ros`
+derives that event from exactly one thing: a **subscription** to `/<node>/transition_event`.
+Both endpoints are RELIABLE + VOLATILE, and reliable is a promise to *matched* subscribers. A
+node whose `on_configure` returned before that subscription had matched published into nobody;
+VOLATILE meant the sample was never re-sent; the activation never fired; the node sat in
+`inactive` publishing no TF. `wait_for_service` does not help, because it gates on the
+`change_state` service endpoints, which are a different pair discovered independently. This is
+CLAUDE.md §10's own first bullet — the one that already cost this project a belt setpoint that
+was never once delivered — this time inside `launch_ros`'s plumbing rather than ours.
+[ADR-0058](../../../docs/adr/0058-drive-lifecycle-transitions-by-request-and-confirmation.md)
+carries the proof, the options weighed and the counts; read them there rather than from here.
+
+**The confirmation is the gate, not the response.** That is the load-bearing choice rather than
+belt and braces: a service reply can be dropped exactly as a broadcast can, and one observed run
+carries both `RuntimeWarning: failed to send response (timeout)` and `Abandoning wait for the
+'.../change_state' service response`. So a lost reply is not read as a failed transition.
+`get_state` is idempotent and re-askable, asking again costs nothing but the slice it already
+spent, and what decides is what the node says it is. The same relationship one layer up is
+`cite_facility/planning_scene_loader.py`, which applies a scene and then reads it back because
+`move_group` accepts a diff it then silently drops.
+
+**Everything downstream of the facility nodes is gated on its exit**, and that is the structural
+half of the same change. `_facility` used to be spliced into the action list with nothing gated
+on it, so a node that never activated did not stop bring-up: the chain ran on and the first
+consumer to notice was `move_group`, reporting `Tf has two or more unconnected trees` and
+`Unknown frame: cite_world` — so the launch died blaming the model and the planning scene. What
+the gate buys is a failure that names the node and the step it never got an answer to, rather
+than one arriving ten seconds later (ADR-0058) and naming frames. **For `move_group` the gate
+is not an ordering dependency**, and ADR-0058's correction of 2026-09-17 is explicit that the
+reverse claim was false: `frame_server` publishes
+through a `StaticTransformBroadcaster`, which is transient-local over a message that accumulates
+every transform sent, so a `move_group` that starts late still receives the whole tree. What is
+bought is log ordering — the misdirection is no longer the first thing a reader sees — and one
+invariant, *"nothing downstream of `_facility` starts before the driver exits"*, testable as
+written rather than carrying a carve-out for one process.
+
+**The four `_refuses` handlers are kept and nothing relies on them.** They ride the same volatile
+topic, so a transition that *fails* is exactly as droppable as one that succeeded; what makes a
+failure reach a person either way is the driver observing `unconfigured` rather than `inactive`
+and saying so. They remain the better-worded answer on the occasions they do arrive — which
+means **one failed transition can produce two shutdown messages**, a refusal's and the driver's,
+and a reader who sees only one has not necessarily seen the whole of it. **The driver's is the
+authoritative one**: it is an observation of what the node answered `get_state` with, where a
+refusal is a broadcast that may or may not have been delivered, and it names the step as well as
+the node.
+
+**What is evidenced, and what is not.** ADR-0058 is `Proposed` and its promotion condition is
+**not met**: clause 1 is deliberately open, because the control arm of the experiment that would
+settle it barely reproduced the stall at all, so a clean driven arm is consistent with a working
+fix and equally consistent with a quiet afternoon. **Nobody may write that the stall stopped
+reproducing.** What is evidenced is the mechanism, and the driver's failure path induced end to
+end on a running cell: it named the node and the step, the gate fired, and nothing downstream of
+`_facility` started. The figures behind both halves stay in that record (P1).
+
+**What it is not.** It is not a protective measure. Bring-up ordering decides when a planner
+starts; it stops no arm, and nothing here is an interlock
+([`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md)). And it does
+not make every participant a managed node — the skill server and the line coordinator are plain
+nodes, which
+[`cross-cutting-lifecycle.md`](../../../docs/architecture/cross-cutting-lifecycle.md) records
+and this program does not change.
+
 ## The readiness witness, and what a side announces
 
 The chain used to end on a gate labelled "the skill servers", and that gate fired when they
@@ -369,6 +452,11 @@ environment, and on a machine without ROS it re-executes itself inside the conta
 Every refusal produces `BRING-UP FAILED: <reason>` and a `Shutdown`, rather than a partially
 started cell.
 
+The lifecycle driver is the exception in form and not in effect: it is a process, so it writes
+its own `LIFECYCLE DRIVER FAILED: <reason>` on standard error and exits non-zero, and the gate
+on its exit then produces `BRING-UP FAILED before the controllers, the planners and detection`.
+Both lines appear, the driver's first, and it is the one that names the node and the step.
+
 | Symptom | Cause |
 |---|---|
 | `no bring-up plan at <path>` | the plan is generated. Run `./scripts/validate-model --write`, then `./scripts/build` |
@@ -381,7 +469,13 @@ started cell.
 | a sensor names one topic for both its level and its events | the bridge would publish `std_msgs/Bool` on the topic a station reads `DetectionEvent` from |
 | a zone declares sensors and no `detection:` block | the beams would be bridged into ROS and read by nobody |
 | `BRING-UP FAILED before <step>: the previous step exited N` | a gated step failed. If it timed out, the node it waits on never appeared, or a controller's joint names do not match the description — run `./scripts/validate-model` |
-| `<node> could not reach 'active'` | a managed node's `on_configure` or `on_activate` returned FAILURE or raised. The node logged why immediately above; nothing downstream of it is started |
+| `` <node> could not reach `active` `` | a managed node's `on_configure` or `on_activate` returned FAILURE or raised. The node logged why immediately above; nothing downstream of it is started. This is a `_refuses` handler riding the volatile transition topic, so it may or may not arrive — the driver's diagnosis below says the same thing from an observation, both messages may appear, and the driver's is the authoritative one |
+| `LIFECYCLE DRIVER FAILED: <node> never advertised '<node>/change_state'` | the launch started that node and its lifecycle services never appeared: either the process is not running, or it is not the node this launch believes it started |
+| `LIFECYCLE DRIVER FAILED: <node> never answered '<node>/get_state', so the configure it was asked for cannot be confirmed either way` | the node advertises and does not answer. The driver re-asks rather than assuming, so this is the ceiling expiring and not one dropped reply. Read the budget clause on the same line first: it splits the ceiling between this node and the ones before it, and a short figure there means the node was reached late rather than that it was slow |
+| `LIFECYCLE DRIVER FAILED: <node> answered the activate request and is in 'inactive', not 'active'` | the transition was requested, the callback returned, and the node settled somewhere else. The node logged why immediately above; the parenthesis reports what it answered about the request, and the state is what decided |
+| `LIFECYCLE DRIVER FAILED: <node> never reached 'active' after being asked to activate` | neither the request nor the state has resolved before the ceiling. Read the state the message names: a transitional one means the node is still inside the callback, a settled one means either the request never took effect or it took effect and was refused |
+| `LIFECYCLE DRIVER FAILED: no managed node was named` | `--node` reached the driver empty. It refuses rather than exiting 0, because exiting 0 would announce an `active` it never asked about and the whole of the rest of bring-up is gated on this exit |
+| `LIFECYCLE DRIVER FAILED: the ROS context was shut down while <node> was being asked to configure` | the cell was torn down around a driver that had not finished. An interrupted run stays a failure by policy, because nothing was proven `active` |
 | a spawner times out on a service | usually `gz_ros2_control-system` failed to load, so no controller manager was ever created. The launch appends `GZ_SIM_SYSTEM_PLUGIN_PATH` for exactly this reason |
 | `side 'plant' would start on ROS_DOMAIN_ID=N, but the plan resolves M` | the process is not on its side's domain. Not something a user sets by hand — `scripts/_lib.sh` exports both values and the supervisor sets the child's |
 | `CITE_DOMAIN_BASE is unset` | something entered the ROS graph outside `./scripts/*` |
@@ -401,14 +495,23 @@ launch broadcasts SIGINT to every process in one event dispatch.
 ./scripts/test --packages-select cite_bringup
 ```
 
-The first two are pytest and start no process; they run in milliseconds. The last two are
-`launch_testing` rigs that start real nodes, and neither of them runs Gazebo.
+`test_plan.py`, `test_pair.py` and `test_simulation_launch.py` are pytest and start no process;
+they run in milliseconds. `test_lifecycle_driver.py` is pytest too and does hold a ROS context,
+in its own process and against fakes. The two `*_launch.py` modules are `launch_testing` rigs
+that start real nodes, and neither of them runs Gazebo. The list is a selection; the complete
+set is the `ament_add_pytest_test` and `add_launch_test` calls in `CMakeLists.txt`.
 
 * `test_plan.py` — the plan reader: what it accepts, and every error message it produces,
   including both refusals — the partition's and the domain's.
 * `test_pair.py` — the supervisor's failure rule and its boundary. Every side it drives the
   supervisor against is a plain `python3` process, so ADR-0047's membership test is executed
   rather than asserted, and the import-graph walk makes "reaches no `rclpy`" a fact.
+* `test_lifecycle_driver.py` — the driver's failure paths (ADR-0058, clause 2), driven against
+  fake managed nodes that advertise the two lifecycle services and answer them as the test
+  instructs. It brings nothing up: no simulator, no controller manager, no arm. The case that is
+  not a failure is the one the record is about — a node whose `change_state` reply is lost and
+  which transitioned anyway must be driven on, not reported, and that is the test a driver
+  rewritten to trust the response would fail.
 * `test_simulation_launch.py` — the launch description itself: what it refuses to start and
   what it stops on. Both halves are needed and neither substitutes for the other — **a
   perfectly correct `require_hardware_opt_in` that nothing calls is exactly the defect this
