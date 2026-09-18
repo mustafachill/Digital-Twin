@@ -1253,3 +1253,43 @@ def test_a_side_is_signalled_at_its_leader_and_the_boundary_at_its_group(
     boundary = pair.boundary_spec(plan, tmp_path / "plan.yaml")
     assert boundary.argv[:2] == ("ros2", "run")
     assert boundary.stop_reach == pair.STOP_GROUP
+
+def test_the_boundary_is_stopped_before_the_sides(tmp_path: Path) -> None:
+    """The commanding process goes first, and the stop loop is sequential.
+
+    Each participant costs its own `STOP_GRACE_S + STOP_KILL_S` before the next
+    is reached, so stopping the boundary last leaves it serving `SetMode` and
+    holding an action client on each side for the whole of both sides' teardown
+    — up to `2 * (90 + 30) s` in the worst case this module states. A goal
+    arriving in that window is dispatched to a side that is already shutting down
+    and to one that has not been signalled at all.
+
+    It is the only participant that commands anything, it starts no cell, and no
+    side's teardown consults it. **Ordering only: no ceiling moves**, and the
+    reporting order is unchanged.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the twin boundary announced", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        _joined_then_ended(tmp_path, release),
+        boundary=_boundary_announces(tmp_path, then="time.sleep(600)\n"),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        log=log,
+        if_it_hangs=(
+            "The plant and the boundary are both held open until they are "
+            "stopped, so a stop loop that never reaches one of them never "
+            "returns."
+        ),
+    )
+    assert "stopping boundary" in text and "stopping plant" in text
+    assert text.index("stopping boundary") < text.index("stopping plant"), text
+    # The counterpart ended the pair itself, so it is not stopped - which is what
+    # leaves exactly two "stopping" lines to order.
+    assert "stopping counterpart" not in text
+    # And the REPORT is still sides first, boundary last: the stop order is not
+    # the reading order and changing one did not change the other.
+    reported = [line.split(":")[0] for line in text.splitlines() if ": ready=" in line]
+    assert reported == ["[pair] plant", "[pair] counterpart", "[pair] boundary"]
+    assert code == pair.PAIR_ENDED

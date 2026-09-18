@@ -624,6 +624,9 @@ def supervise(
     stops there. That is not a mode: it is what keeps ADR-0047's membership test
     able to drive this function against two processes that are not ROS at all.
 
+    **Everything that was started is stopped, the boundary first** - see
+    :func:`_stop_order`, which is where the reason lives and is ordering alone.
+
     Nothing in here knows what a ROS domain is. It is given argument vectors and
     environment overlays, it reads pipes, and it reads exit statuses — and it
     does not know what the boundary it starts is for, which is the line ADR-0057
@@ -674,7 +677,7 @@ def supervise(
     # started and does not if the join never completed. A boundary that was never
     # started is not a process to stop, and a list built here from the specs
     # rather than from what ran would try to stop one.
-    for participant in participants:
+    for participant in _stop_order(participants, boundary):
         _stop(participant, out)
         if participant.status is None:
             participant.status = participant.process.poll()
@@ -683,6 +686,39 @@ def supervise(
     # already gone left behind, which is the half nothing else covers.
     _sweep(participants, out)
     return _verdict(participants, interrupted, out)
+
+
+def _stop_order(
+    participants: Sequence[_Side], boundary: SideSpec | None
+) -> list[_Side]:
+    """Return the participants in the order they are to be stopped: commander first.
+
+    **The stop loop is sequential and each participant costs its own ceilings**
+    (`STOP_GRACE_S` and `STOP_KILL_S`), so the order decides what is still
+    running, and still commanding, while the ones before it are being stopped.
+    Started in the order they appear, the boundary is appended last and would
+    therefore be stopped last — holding an action client on each side, and
+    answering `SetMode`, for the whole of both sides' teardown. A goal arriving
+    in that window is dispatched to a side that is already shutting down and to
+    one that has not been signalled at all.
+
+    So the boundary goes first. **It is the only participant that commands
+    anything**, it starts no cell, and nothing about its teardown is evidence
+    any side's teardown depends on — a side does not consult it, and both sides
+    were up before it existed.
+
+    **Ordering only.** No ceiling moves, no participant is skipped, and the
+    reporting order is deliberately NOT changed: :func:`_verdict` and
+    :func:`_report_ceiling` still read sides first and the boundary last, which
+    is the order a reader looks for them in.
+
+    Identity against the spec this supervisor was handed, rather than a name or a
+    kind: the caller knows which participant it asked for as the boundary, and
+    `sorted` is stable, so the sides keep the plan's order between themselves.
+    """
+    if boundary is None:
+        return list(participants)
+    return sorted(participants, key=lambda started: started.spec is not boundary)
 
 
 def _drain(events: queue.Queue) -> None:
