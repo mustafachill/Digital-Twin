@@ -726,7 +726,7 @@ Two things recorded and open: whether a friction grasp survives the cancel is un
 alone); and after a missed grasp `MoveToHome` no longer runs, so the arm stops inside the fixture
 and nothing in software reopens the jaws.
 
-### #74 — A held work-piece is attached to nothing, so the collision gate cannot see it
+### #80 — A held work-piece is attached to nothing, so the collision gate cannot see it
 `ValidateSolution` is the sole environment-collision gate, and it checks the arm's links against
 the planning scene. **It checks nothing at all against the part in the jaws.** `grep -rn
 AttachedCollisionObject workspace/src` reaches three prose mentions and **no call**; ADR-0029
@@ -750,9 +750,9 @@ work-piece ends up: if the arm knocks it off a surface, they fail.
 **The cheapest measurement that would settle it** is the minimum part-to-surface clearance over
 the transit, which is one instrument away from what
 [`2026-09-21-place-abort-and-the-held-part`](measurements/2026-09-21-place-abort-and-the-held-part/criteria.md)
-already registers. Cross-references: **#75**, which is the same arc against a different object.
+already registers. Cross-references: **#81**, which is the same arc against a different object.
 
-### #75 — ADR-0060's arc crosses the one object ADR-0027's sampling residual is about
+### #81 — ADR-0060's arc crosses the one object ADR-0027's sampling residual is about
 ADR-0027 records that `ValidateSolution` checks trajectory waypoints and **interpolates nothing
 between them**, at a sampling that works out to roughly 77 mm of tool travel per step on this
 cell — against a break-beam housing that is **40 mm** across. That residual is the record's own,
@@ -771,9 +771,9 @@ for exactly this and found no interval carrying both a large enough step and a c
 bracketing distance — but it measured **the trajectories the old branch selection produced**,
 and its own pre-registered rule refuses its silence as a clearance even for those. It does not
 transfer to paths that did not exist when it ran. **Not fixed**, for the same owner decision as
-#74; re-running that campaign's instrument against the new trajectories is what would settle it.
+#80; re-running that campaign's instrument against the new trajectories is what would settle it.
 
-### #76 — `cite_twin` compares joint angles with no angular wrap, so identical postures can read as 6.283 rad apart
+### #82 — `cite_twin` compares joint angles with no angular wrap, so identical postures can read as 6.283 rad apart
 `workspace/src/cite_twin/cite_twin/divergence.py` compares the two sides with `abs(plant - counterpart)`
 per joint and feeds `joint_error_max_rad`. Two arms in **identical** postures whose `joint1`
 happens to sit on different 2π sheets therefore report a maximum joint error of a full turn.
@@ -784,7 +784,7 @@ both sides now normalise toward their own current configuration and both start f
 hide it. The metric is a divergence instrument: a false 6.283 is exactly the reading that would
 be quoted.
 
-### #77 — Two documents say the planning scene is empty, and it has not been for some time
+### #83 — Two documents say the planning scene is empty, and it has not been for some time
 `workspace/src/cite_generated/moveit/cell_b_planning_scene.yaml` carries a comment saying
 *"Nothing reads this file yet"*, and ADR-0026's Consequences still describe planning against an
 empty scene. Both are falsified by `workspace/src/cite_bringup/launch/simulation.launch.py`,
@@ -793,8 +793,70 @@ declares.
 
 **It matters beyond tidiness.** ADR-0026 predicted that the interaction between Pilz and a
 non-empty scene *"becomes visible the moment the planning scene stops being empty"*. It has, and
-that interaction is the whole of **#74** and **#75**. A reader who trusts either sentence
+that interaction is the whole of **#80** and **#81**. A reader who trusts either sentence
 concludes the collision gate has nothing to check.
+
+### #84 — The two sides' clocks agree to 0.01% and their work does not: the lag is in planning, not in physics
+**Observed on 2026-09-21 while the project owner watched a paired `cell_b` run its line.** Both
+sides completed the cycle; neither was in error; and they visibly did not move together. The
+owner's question — if they run in the same environment on the same signal, they should be
+exactly synchronous, so why are they not — is what this item records the answer to.
+
+**The clocks are not the cause, and that is the load-bearing reading.** Sampling `/clock` on each
+side's own domain over a 60 s window with both arms idle:
+
+| side | messages | sim elapsed | wall elapsed | achieved RTF | deficit vs wall |
+|---|---|---|---|---|---|
+| plant | 57 457 | 57.456 s | 57.496 s | **0.9993** | +0.040 s |
+| counterpart | 57 542 | 59.421 s | 59.455 s | **0.9994** | +0.034 s |
+
+A rate difference of **-0.01%**, and a deficit against the wall clock of about **40 ms over
+58 s** on each side. **The two simulated clocks tick at the same speed.**
+
+**The lag concentrates in one phase, and it is the phase that plans.** Decomposing one
+pick-and-place cycle into each side's *own* interval between milestones:
+
+| segment | plant | counterpart | counterpart slower by |
+|---|---|---|---|
+| `admitted -> grasp` — detect, home, approach, descend: **all the planning** | 16.567 s | 19.986 s | **+3.419 s** |
+| `grasp -> offered` | 3.646 s | 3.785 s | +0.139 s |
+| `offered -> completed` — **the belt carries the part; pure physics** | 19.214 s | 18.810 s | **-0.403 s** |
+| whole cycle | 39.427 s | 42.582 s | +3.155 s (+8.0%) |
+
+The physics segment is **the same on both sides to within half a second, with the sign against
+the lag**. Essentially all of the divergence is in the segment that calls IK and the planner —
+which run on the CPU in wall time, outside the simulation clock, throttled by nothing.
+
+**Removing the GUIs made it worse, which kills the obvious explanation.** The same decomposition
+with both Gazebo GUIs up: `admitted -> grasp` +0.818 s, whole cycle +1.006 s over 53.224 s
+(+1.9%). Headless, the plant's cycle *fell* to 39.427 s while the counterpart's fell less, so the
+gap widened to +8.0%. **"The GUIs are eating the CPU" does not survive that.**
+
+**What is wrong with these numbers, stated rather than left to be found.**
+- **One run per condition. Nothing registered in advance. No directory in
+  `docs/measurements/`. This is an observation and it is not a rate.**
+- **The two conditions have different cycle durations** (53.2 s against 39.4 s), so the two
+  percentages are rates over unlike windows and may not be differenced.
+- **About 1.13 s of the initial offset is the instrument's, not the system's**: the spawner used
+  places the work-piece on the plant and then on the counterpart, sequentially. The *growth* from
+  admission to completion is what the table above measures, and it excludes that offset.
+- **The clock instrument's own flaw:** the two subscriptions matched at different moments, so the
+  windows differ (57.496 s against 59.455 s). The achieved RTFs are each computed within one
+  side's own window and are sound; any figure differencing the two sides' *elapsed simulated
+  time* across those unequal windows is not, and none is quoted here.
+- **The instrument is not committed.** It was written for this reading and lives outside the
+  tree, so reproducing these figures means rebuilding it.
+
+**What this bears on.** [ADR-0049](adr/0049-measure-the-real-time-floor-as-capacity.md) names the
+**accumulated clock deficit** as the quantity that must be bounded and sets no bound —
+`DEFICIT_BOUND_S` is `None` in `workspace/src/cite_twin/cite_twin/divergence.py`, which is why
+every `DivergenceMetrics` sample this project can produce has `valid: false`. These readings say
+the deficit against the wall clock is small and the deficit *between the sides* is not the
+problem; **the unmeasured quantity that matters is planning latency**, which no record names.
+
+**Nothing here is attributed.** Why the counterpart's planning is consistently slower than the
+plant's on the same host, with the same code and the same model, is **not established**. Process
+start order, CPU affinity and cache state are candidates and **were not chased**.
 
 ### #60 — `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
 **Two CI failures, on two runners nobody prepared, at two commits, with nothing registered in

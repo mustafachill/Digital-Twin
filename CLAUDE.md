@@ -934,7 +934,7 @@ bullet.
   **Two collision-coverage gaps the shorter arc newly exercises are recorded and not fixed**, by
   owner decision: the held work-piece is attached to nothing so the gate cannot see it, and the
   new arc crosses the azimuth of the 40 mm housing ADR-0027's sampling residual is about.
-  `docs/open-work.md` #74 and #75. **Neither is a predicted collision** — both are regions newly
+  `docs/open-work.md` #80 and #81. **Neither is a predicted collision** — both are regions newly
   entered and unmeasured, and what checks them today is that the scenarios assert where the
   work-piece ends up.
 - **A `Place` that aborts now says the arm is still holding the part.** `Place` opens the jaws
