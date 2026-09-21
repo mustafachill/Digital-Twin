@@ -63,6 +63,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <moveit/move_group_interface/move_group_interface.hpp>
 #include <moveit/robot_model/joint_model_group.hpp>
+#include <moveit/robot_model/revolute_joint_model.hpp>
 #include <moveit/robot_state/robot_state.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -80,6 +81,7 @@
 #include "cite_skills/approach.hpp"
 #include "cite_skills/exclusive_goal.hpp"
 #include "cite_skills/gripper.hpp"
+#include "cite_skills/joint_turn.hpp"
 #include "cite_skills/motion_end.hpp"
 #include "cite_skills/pose_goal.hpp"
 
@@ -1252,6 +1254,18 @@ private:
 
     const auto finish = [&](const ResultCode & outcome) {
         result->result = outcome;
+        // Read at every exit rather than set on the success path, exactly as
+        // `Transfer`'s lambda does below and for the same reason. A place that
+        // aborts during its descent is holding the part it was about to put
+        // down, and this action had no way of saying so: L4 read a result code,
+        // `MOTION_INTERRUPTED` already escalates, and the sentence that names a
+        // held work-piece was written only on the retry path — so for the one
+        // failure this field is for, nothing anywhere said the arm still had it.
+        //
+        // EVERY EXIT OF `execute_place` GOES THROUGH HERE, including the two
+        // refusals above the first motion, which is what makes "read at every
+        // exit" a property of the function and not of this lambda.
+        result->still_holding = holding_.load();
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
@@ -1654,6 +1668,20 @@ private:
     // planning time budget.
     const auto pass = [&](const PlannerChoice & choice) {
         select(choice);
+        //: Every joint vector this pass has already handed to the planner.
+        //:
+        //: Unwinding turns COLLAPSES BRANCHES. Seeds 1..n are random draws and
+        //: several of them routinely solve to the same arm posture differing
+        //: only in whole turns of `joint1` or `joint5`; once those turns are
+        //: taken out, the vectors are equal. Planning each of them is asking one
+        //: planner the identical question up to `ik_seeds_` times, at Pilz's
+        //: full profile-integration cost, and reporting the count as though
+        //: that many distinct branches had been explored.
+        //:
+        //: Per PASS rather than per goal, because the second pass is a different
+        //: planner (ADR-0027) and a configuration the first planner refused is a
+        //: question the second has not been asked.
+        std::vector<std::vector<double>> planned_configurations;
         const auto outcome = cite_skills::plan_to_pose(
           ik_seeds_,
           [&](int seed) {
@@ -1671,6 +1699,51 @@ private:
             if (!solution.setFromIK(group, target.pose, tip_link_, 0.0)) {
               return false;
             }
+            // TAKE THE SHORT WAY ROUND. A joint declared over more than one
+            // revolution reaches every pose at more than one angle, and the
+            // angles differ by whole turns; the solver returns whichever its
+            // seed landed near, and nothing preferred the near one. Measured on
+            // the running cell: a place pose reached at `joint1 = 5.253 rad`
+            // with the joint standing at 1.007, where `-1.030` is the identical
+            // tool pose — a 301 degree sweep in place of a 59 degree one, at
+            // full speed, through the volume in front of the cell.
+            //
+            // It is a REWRITE OF THE SOLUTION AND NOT A SECOND SOLVE, so it
+            // cannot make a reachable pose unreachable: every joint keeps an
+            // angle the solver already produced, shifted by an identity of the
+            // kinematics.
+            unwind_whole_turns(&solution, *state, group);
+
+            //: Where two IK solutions stop being two. One micro-radian is far
+            //: below anything a planner, a controller or an arm distinguishes,
+            //: and far above the rounding a whole-turn subtraction leaves.
+            constexpr double kSameConfigurationRad = 1e-6;
+            std::vector<double> configuration;
+            solution.copyJointGroupPositions(group, configuration);
+            const auto is_the_same_configuration =
+            [&configuration](const std::vector<double> & previous) {
+              if (previous.size() != configuration.size()) {
+                return false;
+              }
+              for (size_t joint = 0; joint < previous.size(); ++joint) {
+                if (std::fabs(previous[joint] - configuration[joint]) > kSameConfigurationRad) {
+                  return false;
+                }
+              }
+              return true;
+            };
+            if (std::any_of(
+                planned_configurations.begin(), planned_configurations.end(),
+                is_the_same_configuration))
+            {
+              // The seed was tried and yielded nothing NEW — which is exactly
+              // what `plan_to_pose` counts a `false` as. Returning false here
+              // leaves this seed in `seeds_tried` and out of
+              // `branches_planned`, so the numbers an operator reads keep
+              // meaning "configurations the planner was asked about".
+              return false;
+            }
+
             // Installing the target belongs to SOLVING, not to planning, and it
             // was on the wrong side of that line. `setJointValueTarget` rejects
             // a solution that falls outside the joint limits, and the planner is
@@ -1688,6 +1761,7 @@ private:
                 "discarding an IK solution that falls outside the joint limits");
               return false;
             }
+            planned_configurations.push_back(configuration);
             return true;
           },
           [&] {
@@ -1750,6 +1824,96 @@ private:
     }
 
     return execute_plan(plan, handle, on_progress);
+  }
+
+  //: How far the tool point may move while whole turns are taken out of a
+  //: solution, before the rewrite is thrown away. Metres.
+  //:
+  //: A whole turn of a revolute joint is an IDENTITY of the forward kinematics —
+  //: every link ends exactly where it started — so the only difference between
+  //: the tool pose before and after is rounding through the chain, which is
+  //: nanometres. A thousandth of a millimetre is three orders of magnitude above
+  //: that rounding and below anything this cell can measure or command.
+  static constexpr double kTurnToolDriftToleranceM = 1e-6;
+
+  /// Rewrite an IK solution to reach the same tool pose with less turning.
+  ///
+  /// A joint declared over more than one revolution — `joint1` and `joint5` on
+  /// this arm are `[-2*pi, +2*pi]` — reaches every pose at more than one angle,
+  /// and the angles differ by whole turns. `cite_skills::nearest_turn` picks the
+  /// one nearest where the joint is standing, within the joint's own limits.
+  ///
+  /// ## Why the joint TYPE is tested and not the span alone
+  ///
+  /// The span test is what makes the shift meaningful, and it lives inside
+  /// `nearest_turn`, which cannot apply it to anything but an angle. A
+  /// prismatic joint with a 6.283 m span satisfies the span test and shifting it
+  /// by `2*pi` moves the arm six metres. ADR-0026 commits this code to being
+  /// robot-agnostic, so it is asked about every joint of whatever arm is loaded,
+  /// and a rule that reads "wider than 6.283" is a rule about a number rather
+  /// than about a revolution.
+  ///
+  /// A CONTINUOUS joint is excluded for the opposite reason: it has no limits to
+  /// keep a shift inside, and MoveIt already represents its angles as equivalent,
+  /// so there is nothing here to choose.
+  ///
+  /// ## Why it verifies rather than asserts
+  ///
+  /// The reasoning above is about this arm's model, and this node is handed
+  /// whichever model the generated description declares. So the rewrite is
+  /// CHECKED against forward kinematics and thrown away whole if the tool point
+  /// moved: a joint whose type this code has misread costs a long sweep, which
+  /// is the defect being repaired, rather than costing the goal.
+  void unwind_whole_turns(
+    moveit::core::RobotState * solution,
+    const moveit::core::RobotState & reference,
+    const moveit::core::JointModelGroup * group) const
+  {
+    std::vector<double> before;
+    solution->copyJointGroupPositions(group, before);
+    solution->update();
+    const Eigen::Vector3d tip_before =
+      solution->getGlobalLinkTransform(tip_link_).translation();
+
+    bool turned = false;
+    for (const moveit::core::JointModel * joint : group->getActiveJointModels()) {
+      if (joint->getType() != moveit::core::JointModel::REVOLUTE) {
+        continue;
+      }
+      if (static_cast<const moveit::core::RevoluteJointModel *>(joint)->isContinuous()) {
+        continue;
+      }
+      const auto & bounds = joint->getVariableBounds();
+      if (bounds.size() != 1 || !bounds.front().position_bounded_) {
+        continue;
+      }
+      const double value = *solution->getJointPositions(joint);
+      const double nearest = cite_skills::nearest_turn(
+        value, *reference.getJointPositions(joint),
+        bounds.front().min_position_, bounds.front().max_position_);
+      if (nearest != value) {
+        solution->setJointPositions(joint, &nearest);
+        turned = true;
+      }
+    }
+
+    if (!turned) {
+      return;
+    }
+
+    solution->update();
+    const Eigen::Vector3d tip_after =
+      solution->getGlobalLinkTransform(tip_link_).translation();
+    if ((tip_after - tip_before).norm() > kTurnToolDriftToleranceM) {
+      RCLCPP_WARN(
+        get_logger(),
+        "discarding a whole-turn rewrite: it moved the tool point by %.6f m, so at least "
+        "one joint it turned is not a revolute joint of this arm. Planning the solver's "
+        "own configuration instead",
+        (tip_after - tip_before).norm());
+      solution->setJointGroupPositions(group, before);
+      solution->update();
+    }
   }
 
   /// Ask move_group for the pipeline and planner this choice names.
