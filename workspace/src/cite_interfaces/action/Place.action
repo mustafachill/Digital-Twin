@@ -6,6 +6,11 @@
 #
 #   * `result` is ranked by consequence over the sides, worst first, and every
 #     side is named in `detail`.
+#   * `still_holding` states CUSTODY and is the logical OR over the sides the
+#     goal was dispatched to - somebody is holding it. A dispatched side that
+#     returned no result at all counts as holding, because unknown custody has
+#     to fall on the side that makes L4 escalate rather than the side that
+#     makes it open a gripper (ADR-0038 decision 5, ADR-0046).
 #   * `release_pose` and `duration` are one side's MEASUREMENT. Two arms
 #     produce two of them and their mean is a value neither arm produced, so L5
 #     forwards the PLANT's whole - the side the operator is on (ADR-0044 clause
@@ -22,6 +27,43 @@ bool require_holding                    # fail rather than mime a place when the
 ResultCode result
 geometry_msgs/PoseStamped release_pose
 builtin_interfaces/Duration duration
+bool still_holding                      # LAST, AND NOT SECOND AS ON `Transfer`.
+                                        # Inserting a field between two existing
+                                        # ones moves both, which is the
+                                        # reordering `test_interface_contract.py`
+                                        # names as breaking every consumer already
+                                        # built against this message; appending is
+                                        # the one placement it calls safe. Reading
+                                        # order is worth less than that.
+                                        #
+                                        # Whether the arm is STILL HOLDING the
+                                        # work-piece when this result is sent.
+                                        # True on every failure before the
+                                        # release, and false after a place that
+                                        # got as far as opening the jaws.
+                                        #
+                                        # It exists because a place can abort
+                                        # WITH THE PART IN THE GRIPPER - the
+                                        # descent onto the release pose is the
+                                        # motion three CI runs died in - and
+                                        # this action had no field that could
+                                        # say so. L4 chooses a recovery from
+                                        # custody rather than from the result
+                                        # code (ADR-0046): a retry begins with
+                                        # MoveToHome and `Pick`'s first physical
+                                        # act is to open the gripper, so a wrong
+                                        # value here drops a part no planner
+                                        # knows is held (ADR-0038 decision 5).
+                                        #
+                                        # False with SUCCESS is the ordinary
+                                        # case and not a defect - a completed
+                                        # place has let go.
+                                        #
+                                        # NOTHING HERE OPENS THE JAWS on a
+                                        # failure. What to do with a held part
+                                        # is a decision for a person, and this
+                                        # field is how they are told there is
+                                        # one to make.
 ---
 uint8 PHASE_PLANNING=0
 uint8 PHASE_APPROACHING=1

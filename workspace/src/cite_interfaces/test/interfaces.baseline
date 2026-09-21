@@ -247,6 +247,7 @@ action/Place.action
   ResultCode result
   geometry_msgs/PoseStamped release_pose
   builtin_interfaces/Duration duration
+  bool still_holding
   ---
   uint8 PHASE_PLANNING=0
   uint8 PHASE_APPROACHING=1

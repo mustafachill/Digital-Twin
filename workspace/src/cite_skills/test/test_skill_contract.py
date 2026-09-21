@@ -44,7 +44,7 @@ import unittest
 
 from ament_index_python.packages import get_package_share_directory
 from builtin_interfaces.msg import Duration
-from cite_interfaces.action import Grasp, MoveTo, Transfer
+from cite_interfaces.action import Grasp, MoveTo, Place, Transfer
 from cite_interfaces.msg import ResultCode
 from control_msgs.action import GripperCommand
 from geometry_msgs.msg import PoseStamped
@@ -328,6 +328,8 @@ class Harness(RclpyNode):
                                     callback_group=self.callbacks)
         self.transfer = ActionClient(self, Transfer, f"{NAMESPACE}/transfer",
                                      callback_group=self.callbacks)
+        self.place = ActionClient(self, Place, f"{NAMESPACE}/place",
+                                  callback_group=self.callbacks)
 
     def _publish_state(self) -> None:
         message = JointState()
@@ -721,6 +723,76 @@ class TestSkillContract(unittest.TestCase):
             wrapped.result.still_holding,
             "a transfer cancelled before the release must still report the "
             "work-piece as held",
+        )
+
+    # -------------------------------------------------------------------------
+    # Place — and what it says about the part when it does not finish
+    # -------------------------------------------------------------------------
+    def test_8_a_place_that_aborts_reports_the_work_piece_as_still_held(self) -> None:
+        """A place that does not reach the release still has the part.
+
+        `Place.Result` carried no field that could say so until this change: it
+        reported a code, a release pose and a duration, and L4 was left to infer
+        custody from the code. It cannot — `MOTION_INTERRUPTED` says the arm
+        stopped part-way and says nothing about the gripper, and it is the code
+        an aborted descent onto the release pose produces.
+
+        WHERE THIS RIG STOPS, stated rather than implied. There are no
+        controllers here, so the FIRST motion of the place fails — the standoff
+        approach, not the descent the CI failures died in — and the joint state
+        never advances. That is a weaker rig than the defect deserves and it is
+        the right one for THIS assertion: what is under test is that the field
+        is filled from the gripper at every exit of `execute_place`, and an
+        approach abort and a descent abort leave by the same lambda. The descent
+        itself needs an executing controller and a way to interrupt it, which is
+        `cite_bringup`'s abort rig and not this one.
+
+        NOTHING HERE OPENS THE JAWS, and nothing is asked to. The part stays in
+        the gripper, which is ADR-0038 decision 5: what to do with it is a
+        person's decision, and this field is how they learn there is one.
+
+        It runs after the transfer block on purpose. `test_5` asserts a refusal
+        that needs an EMPTY gripper, and this leaves a full one.
+        """
+        assert self.harness.place.wait_for_server(GOAL_CEILING_S), (
+            "the skill server never advertised 'place'"
+        )
+        self.harness.hold_a_workpiece()
+
+        goal = Place.Goal()
+        # The same reachable pose the move and transfer cases use, so a failure
+        # here is the execution failing and not the arm being asked for
+        # something it cannot reach. The standoff is zero for the same reason:
+        # every millimetre of offset is a millimetre away from the pose this
+        # file has evidence about.
+        goal.target_pose = self._handoff_pose()
+        goal.approach_distance_m = 0.0
+        goal.retreat_distance_m = 0.0
+        goal.require_holding = True
+
+        handle = self.harness.wait(
+            self.harness.place.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the place never reported a result")
+
+        # It failed for want of a controller, which is what this rig produces for
+        # any motion — and NOT for want of a part or a reachable pose. Asserting
+        # the code keeps the test honest about which exit it went out of: a
+        # PRECONDITION_FAILED would mean the gripper was empty and the custody
+        # assertion below would be true for a reason that proves nothing.
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the place to plan and fail for want of a controller, got "
+            f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
+        )
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a place that aborted before the release reported the arm as empty, "
+            "which is the belief that makes L4 retry and open the gripper at the "
+            "home pose (ADR-0038 decision 5, ADR-0046)",
         )
 
 
