@@ -1154,14 +1154,33 @@ public:
     // first physical act is to open the gripper and the retry's first act is
     // `MoveToHome`, so a station that resumed while holding a part would open the
     // jaws at the home pose and drop a piece no planner knows is there.
-    std::string custody_refusal;
+    // THE SENTENCE THAT NAMES THE PART IS WRITTEN WHENEVER THERE IS A PART, and
+    // that is separate from whether a retry was refused. It used to be built
+    // inside the refusal below, so it reached the operator only on the codes the
+    // policy would have RETRIED — and `MOTION_INTERRUPTED` is not one of them. A
+    // place that aborts part-way through its descent is the failure most likely
+    // to leave an arm holding a work-piece, it escalates on its own, and for
+    // exactly that failure the reason read "result code 10: escalated to an
+    // operator" and stopped. The person who has to decide what to do with the
+    // part was not told there was one.
+    //
+    // It changes no recovery. Which answer the policy gives, and the custody
+    // refusal that overrides it below, are untouched; this decides only what the
+    // reason SAYS.
+    std::string custody_note;
+    if (!runtime.current_workpiece_id.empty()) {
+      custody_note = "the station still holds work-piece '" +
+        runtime.current_workpiece_id + "'";
+    }
+
     const bool would_retry = response == Recovery::NONE ||
       response == Recovery::RETRY_SAME ||
       response == Recovery::RETRY_DIFFERENTLY;
-    if (would_retry && !runtime.current_workpiece_id.empty()) {
-      custody_refusal = "the station still holds work-piece '" +
-        runtime.current_workpiece_id +
-        "', and the branch a retry returns to waits for a NEW piece to arrive, which "
+    if (would_retry && !custody_note.empty()) {
+      // The refusal's own half of the sentence, appended to the statement of
+      // fact above rather than restating it — one place names the work-piece.
+      custody_note +=
+        ", and the branch a retry returns to waits for a NEW piece to arrive, which "
         "nothing will bring while this one has not left. What to do with a part in a "
         "gripper is a decision for a person (ADR-0038 decision 5)";
       response = Recovery::ESCALATE;
@@ -1169,8 +1188,8 @@ public:
 
     runtime.blocked_reason = std::string("result code ") + std::to_string(code) + ": " +
       describe(response);
-    if (!custody_refusal.empty()) {
-      runtime.blocked_reason += ". " + custody_refusal;
+    if (!custody_note.empty()) {
+      runtime.blocked_reason += ". " + custody_note;
     }
     // The same fact as a value, for a consumer that has to ACT on it rather than
     // print it. `OnFault` latches this when the line stops, and a latch that

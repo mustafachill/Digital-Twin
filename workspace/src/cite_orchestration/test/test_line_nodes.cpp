@@ -939,6 +939,69 @@ TEST_F(RunningLine, AStationStillHoldingItsWorkpieceIsRefusedTheRetryAndEscalate
     << "the escalation never reached the fault branch, so nothing recorded it";
 }
 
+TEST_F(RunningLine, AnAbortedPlaceSaysTheStationIsStillHoldingThePart)
+{
+  // THE SENTENCE AN OPERATOR READS, for the failure most likely to produce it.
+  //
+  // `PlaceAt` stands below `TakeCustody` and below the handoff protocol leaves, so
+  // a station that fails there owns its work-piece and has it in the gripper —
+  // `CompleteHandoff` has not run. `MOTION_INTERRUPTED` is ADR-0037's "the arm
+  // stopped part-way and is holding a position nothing established", which is what
+  // an aborted descent onto the release pose produces.
+  //
+  // THE CODE IS DELIBERATELY ONE THE POLICY ALREADY ESCALATES, which is the whole
+  // point and the opposite of the choice
+  // `AStationStillHoldingItsWorkpieceIsRefusedTheRetryAndEscalates` makes above.
+  // ADR-0046's custody refusal only fires on a RETRY answer, so before this change
+  // the station blocked with the reason "result code 10: escalated to an operator"
+  // and stopped — every word of it true, and no word of it saying that an arm was
+  // standing over a belt with a part between its pads.
+  arm_one_->fail_place_with(ResultCode::MOTION_INTERRUPTED);
+  ASSERT_EQ(plan_.stations.front().id, "station_one");
+
+  ASSERT_TRUE(
+    run_until(
+      [this] {
+        return (*line_.stations)["station_one"].state ==
+               cite_interfaces::msg::StationState::STATE_BLOCKED;
+      }))
+    << "the station never blocked, so the aborted place did not reach the policy";
+
+  // The premise, asserted rather than assumed: a run in which the place was never
+  // attempted would reach STATE_BLOCKED by some other route and test nothing.
+  EXPECT_GE(arm_one_->place_goals(), 1)
+    << "no place goal was ever sent, so the failure under test was not the place";
+
+  const auto & runtime = (*line_.stations)["station_one"];
+  EXPECT_FALSE(runtime.current_workpiece_id.empty())
+    << "the station named no work-piece, so there was nothing for the reason to name "
+    "and this test passed for the wrong reason";
+
+  EXPECT_NE(runtime.blocked_reason.find("still holds work-piece"), std::string::npos)
+    << "a place aborted with the part in the gripper blocked without saying so: "
+    << runtime.blocked_reason;
+  EXPECT_NE(runtime.blocked_reason.find(runtime.current_workpiece_id), std::string::npos)
+    << "the reason does not name the work-piece: " << runtime.blocked_reason;
+
+  // AND IT IS THE STATEMENT OF FACT, NOT THE RETRY REFUSAL. The policy escalated on
+  // its own here, so nothing was refused a retry; a reason claiming otherwise would
+  // send a reader to ADR-0046 for a decision that was never taken. This is what
+  // keeps the two sentences separate rather than merging them into one.
+  EXPECT_EQ(runtime.blocked_reason.find("waits for a NEW piece"), std::string::npos)
+    << "the reason blames the retry precondition for an escalation the policy made "
+    "by itself: " << runtime.blocked_reason;
+
+  // NOTHING MOVED AND NOTHING OPENED. ADR-0037 decision 1 and ADR-0038 decision 5:
+  // an escalating station performs no motion, and what to do with a part in a
+  // gripper is a person's decision. `MoveToHome` is the only motion leaf on the
+  // recovery path and it is below the leaf that returned FAILURE.
+  EXPECT_EQ(arm_one_->move_to_goals(), 0)
+    << "a station holding a part it could not place was sent home anyway";
+
+  EXPECT_TRUE(line_.fault->latched)
+    << "the escalation never reached the fault branch, so nothing recorded it";
+}
+
 TEST_F(RunningLine, AStationThatFailsBeforeItTakesCustodyIsStillAllowedToRetry)
 {
   // The other answer, and the reason `ReleaseStationClaims` is on the retry path rather

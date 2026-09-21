@@ -44,7 +44,7 @@ import unittest
 
 from ament_index_python.packages import get_package_share_directory
 from builtin_interfaces.msg import Duration
-from cite_interfaces.action import Grasp, MoveTo, Transfer
+from cite_interfaces.action import Grasp, MoveTo, Place, Transfer
 from cite_interfaces.msg import ResultCode
 from control_msgs.action import GripperCommand
 from geometry_msgs.msg import PoseStamped
@@ -328,6 +328,8 @@ class Harness(RclpyNode):
                                     callback_group=self.callbacks)
         self.transfer = ActionClient(self, Transfer, f"{NAMESPACE}/transfer",
                                      callback_group=self.callbacks)
+        self.place = ActionClient(self, Place, f"{NAMESPACE}/place",
+                                  callback_group=self.callbacks)
 
     def _publish_state(self) -> None:
         message = JointState()
@@ -632,6 +634,110 @@ class TestSkillContract(unittest.TestCase):
             "an arm holding nothing must not report still_holding",
         )
 
+    def test_5b_unknown_custody_is_reported_as_still_holding_and_not_as_empty(self) -> None:
+        """After a gripper that never answered, `Place` says the arm may have it.
+
+        THE FIELD AND THE SENTENCE BESIDE IT USED TO DISAGREE. `execute_place`
+        refuses while custody is unknown and says so in the detail — "whether it
+        is holding anything is UNESTABLISHED" — and it leaves by the same
+        `finish` lambda as every other exit, which filled `still_holding` from
+        `holding_`. On this one path `holding_` is deliberately never written,
+        because writing true would claim a grasp nothing observed and writing
+        false is the claim that cost three CI runs, and an unwritten `bool`
+        reads FALSE. So the machine-readable field reported *not holding* on the
+        single exit whose whole purpose is to report that nobody knows, and the
+        field is what a consumer branches on.
+
+        UNKNOWN FALLS ON THE SIDE THAT ESCALATES. `Place.action` contracts it
+        and `cite_twin`'s `_compose_result` already applies the same rule one
+        layer up, counting a dispatched side that returned nothing as holding.
+        The cost of being wrong is asymmetric and not symmetric: reporting a
+        part that is not there costs an operator a look, and reporting no part
+        when there is one sends a retry through `MoveToHome` into `Pick`, whose
+        first physical act is to open the jaws (ADR-0038 decision 5, ADR-0046).
+
+        IT RUNS HERE, AND NOT AFTER `test_8`, BECAUSE THE GRIPPER MUST BE KNOWN
+        EMPTY FOR THE ASSERTION TO MEAN ANYTHING. `test_5` above has just shown
+        that this arm holds nothing and reports `still_holding` false for it,
+        which is this test's control: run after a work-piece is held, `holding_`
+        would be true on its own and the assertion below would pass whether or
+        not custody is consulted at all.
+
+        NOTHING HERE MOVES AND NOTHING OPENS. The refusal is the first statement
+        of `execute_place`, above the first motion and above the `require_holding`
+        test; the fake gripper is asked to close and simply never answers.
+        """
+        # A gripper that hangs, which is what this rig's default already is —
+        # `hold_a_workpiece` is what turns the stall-on-a-part behaviour on, and
+        # nothing has called it yet at this point in the sequence.
+        self.harness.gripper_stalls_on_a_part = False
+
+        grasp = Grasp.Goal()
+        grasp.width_m = 0.0
+        grasp.max_effort_n = 10.0
+        grasp.expect_object = True
+        handle = self.harness.wait(
+            self.harness.grasp.send_goal_async(grasp), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        # The server's own `gripper_result_timeout_s`, read from the plan rather
+        # than restated here, has to elapse first. `use_sim_time` is false in
+        # this rig, so it elapses on the wall clock.
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the grasp never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.TIMEOUT,
+            "the rig failed to produce a gripper that never answered, so the state "
+            "under test was never entered: "
+            f"{wrapped.result.result.code} {wrapped.result.result.detail}",
+        )
+
+        goal = Place.Goal()
+        goal.target_pose = self._handoff_pose()
+        goal.approach_distance_m = 0.0
+        goal.retreat_distance_m = 0.0
+        # False on purpose. `require_holding=True` would be refused by the test
+        # BELOW the custody one as well, so the exit taken would be ambiguous;
+        # with it false, the custody refusal is the only thing that can produce
+        # a PRECONDITION_FAILED here.
+        goal.require_holding = False
+
+        handle = self.harness.wait(
+            self.harness.place.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        placed = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(placed, "the place never reported a result")
+
+        self.assertEqual(
+            placed.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"expected the custody refusal, got {placed.result.result.code}: "
+            f"{placed.result.result.detail}",
+        )
+        # The exit is named by its own words, so that a future refusal added
+        # above this one cannot quietly take the assertion below with it.
+        self.assertIn(
+            "UNESTABLISHED",
+            placed.result.result.detail,
+            f"the refusal taken was not the custody one: {placed.result.result.detail}",
+        )
+        self.assertTrue(
+            placed.result.still_holding,
+            "a place refused because custody is UNKNOWN reported the arm as empty. "
+            "That is the one exit this field exists for, and `false` there is the "
+            "belief that sends a retry through MoveToHome into a Pick that opens "
+            "the jaws on a part nobody knows is held",
+        )
+
+        # Leave the rig where the tests below expect to find it. `Grasp` is the
+        # one skill custody does not refuse, precisely because it is the way out
+        # of this state — asserting that it clears the latch is the other half
+        # of the contract, and it is what makes the rest of this file able to
+        # run after this test at all.
+        self.harness.hold_a_workpiece()
+
     def test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out(self) -> None:
         """A hold this arm cannot complete is refused before it moves.
 
@@ -721,6 +827,76 @@ class TestSkillContract(unittest.TestCase):
             wrapped.result.still_holding,
             "a transfer cancelled before the release must still report the "
             "work-piece as held",
+        )
+
+    # -------------------------------------------------------------------------
+    # Place — and what it says about the part when it does not finish
+    # -------------------------------------------------------------------------
+    def test_8_a_place_that_aborts_reports_the_work_piece_as_still_held(self) -> None:
+        """A place that does not reach the release still has the part.
+
+        `Place.Result` carried no field that could say so until this change: it
+        reported a code, a release pose and a duration, and L4 was left to infer
+        custody from the code. It cannot — `MOTION_INTERRUPTED` says the arm
+        stopped part-way and says nothing about the gripper, and it is the code
+        an aborted descent onto the release pose produces.
+
+        WHERE THIS RIG STOPS, stated rather than implied. There are no
+        controllers here, so the FIRST motion of the place fails — the standoff
+        approach, not the descent the CI failures died in — and the joint state
+        never advances. That is a weaker rig than the defect deserves and it is
+        the right one for THIS assertion: what is under test is that the field
+        is filled from the gripper at every exit of `execute_place`, and an
+        approach abort and a descent abort leave by the same lambda. The descent
+        itself needs an executing controller and a way to interrupt it, which is
+        `cite_bringup`'s abort rig and not this one.
+
+        NOTHING HERE OPENS THE JAWS, and nothing is asked to. The part stays in
+        the gripper, which is ADR-0038 decision 5: what to do with it is a
+        person's decision, and this field is how they learn there is one.
+
+        It runs after the transfer block on purpose. `test_5` asserts a refusal
+        that needs an EMPTY gripper, and this leaves a full one.
+        """
+        assert self.harness.place.wait_for_server(GOAL_CEILING_S), (
+            "the skill server never advertised 'place'"
+        )
+        self.harness.hold_a_workpiece()
+
+        goal = Place.Goal()
+        # The same reachable pose the move and transfer cases use, so a failure
+        # here is the execution failing and not the arm being asked for
+        # something it cannot reach. The standoff is zero for the same reason:
+        # every millimetre of offset is a millimetre away from the pose this
+        # file has evidence about.
+        goal.target_pose = self._handoff_pose()
+        goal.approach_distance_m = 0.0
+        goal.retreat_distance_m = 0.0
+        goal.require_holding = True
+
+        handle = self.harness.wait(
+            self.harness.place.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the place never reported a result")
+
+        # It failed for want of a controller, which is what this rig produces for
+        # any motion — and NOT for want of a part or a reachable pose. Asserting
+        # the code keeps the test honest about which exit it went out of: a
+        # PRECONDITION_FAILED would mean the gripper was empty and the custody
+        # assertion below would be true for a reason that proves nothing.
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the place to plan and fail for want of a controller, got "
+            f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
+        )
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a place that aborted before the release reported the arm as empty, "
+            "which is the belief that makes L4 retry and open the gripper at the "
+            "home pose (ADR-0038 decision 5, ADR-0046)",
         )
 
 

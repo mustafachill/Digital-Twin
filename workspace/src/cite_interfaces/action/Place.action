@@ -6,6 +6,11 @@
 #
 #   * `result` is ranked by consequence over the sides, worst first, and every
 #     side is named in `detail`.
+#   * `still_holding` states CUSTODY and is the logical OR over the sides the
+#     goal was dispatched to - somebody is holding it. A dispatched side that
+#     returned no result at all counts as holding, because unknown custody has
+#     to fall on the side that makes L4 escalate rather than the side that
+#     makes it open a gripper (ADR-0038 decision 5, ADR-0046).
 #   * `release_pose` and `duration` are one side's MEASUREMENT. Two arms
 #     produce two of them and their mean is a value neither arm produced, so L5
 #     forwards the PLANT's whole - the side the operator is on (ADR-0044 clause
@@ -22,6 +27,81 @@ bool require_holding                    # fail rather than mime a place when the
 ResultCode result
 geometry_msgs/PoseStamped release_pose
 builtin_interfaces/Duration duration
+bool still_holding                      # LAST, AND NOT SECOND AS ON `Transfer`.
+                                        # Inserting a field between two existing
+                                        # ones moves both, which is the
+                                        # reordering `test_interface_contract.py`
+                                        # names as breaking every consumer already
+                                        # built against this message; appending is
+                                        # the one placement it calls safe. Reading
+                                        # order is worth less than that.
+                                        #
+                                        # Whether the arm may STILL BE HOLDING
+                                        # the work-piece when this result is
+                                        # sent. Said exactly, because "true on
+                                        # every failure before the release" was
+                                        # written here and is wrong on two of
+                                        # this action's exits:
+                                        #
+                                        #   * True whenever the arm is holding
+                                        #     the part, which is every failure
+                                        #     before the release that did not
+                                        #     begin with an empty gripper.
+                                        #   * True whenever CUSTODY IS UNKNOWN -
+                                        #     the refusal after a gripper
+                                        #     command whose result never
+                                        #     arrived. Nothing observed the
+                                        #     jaws, so this is not a report
+                                        #     about them; it is unknown custody
+                                        #     falling on the side that escalates
+                                        #     rather than the side that opens a
+                                        #     gripper (ADR-0038 decision 5,
+                                        #     ADR-0046). The `detail` said
+                                        #     "unestablished" while this field
+                                        #     said "empty" for as long as it was
+                                        #     filled from the gripper flag
+                                        #     alone.
+                                        #   * FALSE when the arm is known to
+                                        #     hold nothing - the refusal of a
+                                        #     `require_holding` place with an
+                                        #     empty gripper is a failure before
+                                        #     the release that reports false,
+                                        #     correctly.
+                                        #
+                                        # It exists because a place can abort
+                                        # WITH THE PART IN THE GRIPPER - the
+                                        # descent onto the release pose is the
+                                        # motion three CI runs died in - and
+                                        # this action had no field that could
+                                        # say so.
+                                        #
+                                        # WHO READS IT TODAY, stated as what is
+                                        # built rather than as what it is for
+                                        # (P7): L5 aggregates it, in
+                                        # `cite_twin`'s `_compose_result`, by
+                                        # the rule at the top of this file. NO
+                                        # L4 CONSUMER READS IT AT ALL - the
+                                        # coordinator keys its recovery on
+                                        # `current_workpiece_id`. The intent is
+                                        # that a recovery choose on custody
+                                        # rather than on the result code
+                                        # (ADR-0046), because a retry begins
+                                        # with MoveToHome and `Pick`'s first
+                                        # physical act is to open the gripper,
+                                        # so a wrong value here would drop a
+                                        # part no planner knows is held. Until
+                                        # something up there reads it, that is
+                                        # an intent and not a mechanism.
+                                        #
+                                        # False with SUCCESS is the ordinary
+                                        # case and not a defect - a completed
+                                        # place has let go.
+                                        #
+                                        # NOTHING HERE OPENS THE JAWS on a
+                                        # failure. What to do with a held part
+                                        # is a decision for a person, and this
+                                        # field is how they are told there is
+                                        # one to make.
 ---
 uint8 PHASE_PLANNING=0
 uint8 PHASE_APPROACHING=1

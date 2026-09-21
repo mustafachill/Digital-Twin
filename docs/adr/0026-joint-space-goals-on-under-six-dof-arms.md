@@ -1,7 +1,11 @@
 # ADR-0026: Plan to joint-space goals obtained by solving IK on the exact pose
 
-- **Status:** Accepted (corrected 2026-08-27) — **the decision stands in full and nothing in
-  it is withdrawn.** What is corrected is a *follow-up this record described as open*: the
+- **Status:** Accepted (corrected 2026-08-27, amended 2026-09-21) — **the decision stands in
+  full and nothing in it is withdrawn.** One stated *cost* has since been changed rather than
+  withdrawn: the choice among configurations that differ by whole turns is no longer a bias,
+  it is a guarantee (ADR-0060). See the Amendment section immediately below.
+  What the 2026-08-27 **correction** covers is separate and older: a *follow-up this record
+  described as open*, the
   reachability result code. It is closed, and it was closed in a way this record did not
   anticipate — the local alias was **deleted** rather than repointed. See the section
   "Correction — 2026-08-27: the reachability follow-up is closed, and the alias was deleted
@@ -10,6 +14,43 @@
 - **Deciders:** Phase 1.C review fan-out (debugger measurement, architect and reviewer findings), remediated in `cite_skills`
 - **Related:** [ADR-0006](0006-moveit2-motion-planning.md), [ADR-0010](0010-typed-ros-interfaces.md), [L2](../architecture/L2-control-and-hal.md), [L3](../architecture/L3-capabilities.md), CLAUDE.md §3 (P2, P5, P9)
 - **See also:** [ADR-0027](0027-pilz-planning-pipeline.md) on the planning *pipeline* — station-to-station motion moves to the Pilz Industrial Motion Planner, with OMPL retained as a fallback. That is a separate decision, taken separately, and this record does not depend on it. The two are easy to confuse and should be read together.
+
+## Amendment — 2026-09-21: the branch policy this record claims is changed, and the rest stands
+
+**The decision is untouched.** Plan to joint-space goals obtained by solving IK on the exact
+pose; seed 0 remains the arm's current state; `plan_to_pose`'s contract, the multi-seed retry,
+the reachability split and the action interfaces are all exactly as this record left them.
+
+**What changes is one sentence in "What this costs us", and this record is where it was
+claimed.** That bullet reads:
+
+> **The seed order is a behavioural choice.** Seeding from the current state biases towards
+> the nearest branch, which is usually what an operator expects and is not always the branch
+> with the shortest path. It is a policy, and it is now ours rather than MoveIt's.
+
+It was right, and the policy has been exercised.
+[ADR-0060](0060-take-the-ik-solution-nearest-the-arm.md) changes it: an IK solution is now
+taken to the turn nearest the configuration the arm is standing in before it is offered to the
+planner. **A bias became a guarantee**, for turns and for turns only.
+
+**Why it had to change, measured rather than argued.** The bias this record describes is
+weaker than the sentence suggests. Seed 0 is the current state, but seeds 1..n are
+`setToRandomPositions`, uniform over the declared limits — and `KDLKinematicsPlugin` performs
+its own random restarts inside its solver timeout, so **even seed 0 can return a wound
+configuration**. With `joint1` and `joint5` declared over ±2π, the project owner watched the
+arm reach a place pose at **301°** where the same tool pose is reachable at **-59°**.
+
+**What is now guaranteed, stated precisely so it is not read as more.** Per-move minimal
+travel among configurations that differ by whole turns. It is **not** a guarantee that the arm
+is never wound: a cell whose stations all sat at negative arm-frame angles could keep an arm
+wound indefinitely with every individual move still minimal. What unwinds this cell's arm is
+`MoveTo{named_configuration: "home"}` — `joint1 = 0`, absolute, never routed through IK — which
+the station tree runs at both ends of every cycle.
+
+**What this amendment does not touch.** The choice among genuinely *different* branches — the
+elbow flip, the `joint1 + π` shoulder flip — is still the first-plannable seed's, and it is
+still this record's policy. Those branches are **π** apart, not 2π, and ADR-0060 does not reach
+them. The sentence above remains true of them, which is why it is marked rather than struck.
 
 ## Correction — 2026-08-27: the reachability follow-up is closed, and the alias was deleted rather than repointed
 
@@ -246,6 +287,9 @@ reachable. It was never the constraint, and its comment must not be carried forw
 - **The seed order is a behavioural choice.** Seeding from the current state biases towards
   the nearest branch, which is usually what an operator expects and is not always the
   branch with the shortest path. It is a policy, and it is now ours rather than MoveIt's.
+  **[Amended 2026-09-21 — see the Amendment section above: the turn half of this policy is now
+  a guarantee rather than a bias (ADR-0060). The branch half, which is what this sentence is
+  about for the elbow and shoulder flips, is untouched.]**
 - **Goal tolerance stops absorbing pose error.** A pose goal accepts anything inside its
   tolerance; a joint goal reproduces the IK solution. Any error between the requested pose
   and the reached pose is now the IK solver's residual, which is why `MoveTo` reports

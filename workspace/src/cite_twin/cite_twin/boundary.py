@@ -144,7 +144,7 @@ if set(SKILL_ACTION_TYPES) != _DECLARED:
 CUSTODY_FIELDS: Mapping[str, tuple[str, ...]] = {
     "move_to": (),
     "pick": ("holding",),
-    "place": (),
+    "place": ("still_holding",),
     "grasp": ("holding",),
     "transfer": ("still_holding",),
 }

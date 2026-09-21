@@ -35,8 +35,19 @@ builtin_interfaces/Duration hold_timeout  # bounded, with a defined outcome: on
                                         # result is TIMEOUT, never a silent drop
 ---
 ResultCode result
-bool still_holding                      # true after a TIMEOUT — the upstream
-                                        # robot retains ownership
+bool still_holding                      # true after a TIMEOUT - the upstream
+                                        # robot retains ownership - and true
+                                        # whenever CUSTODY IS UNKNOWN, which is
+                                        # the refusal after a gripper command
+                                        # whose result never arrived. That
+                                        # second case is not a report about the
+                                        # jaws: nothing observed them. It is
+                                        # unknown custody falling on the side
+                                        # that escalates rather than the side
+                                        # that opens a gripper, the same rule
+                                        # and the same wording as
+                                        # `Place.action`, which carries the full
+                                        # statement of it (P1).
 builtin_interfaces/Duration duration
 ---
 uint8 PHASE_PLANNING=0

@@ -143,7 +143,7 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1523** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1531** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on `main`,
   2026-09-18, with `cell_b` paired).
   **The 1521 -> 1523 step is two `.md` files and nothing else, and it closes in two parts
@@ -386,10 +386,10 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1630 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1638 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1448 tests, 0 failures, 56
+  first-party packages, eleven per-package summaries totalling **1481 tests, 0 failures, 59
   skipped**. Its exit status was 0. **Re-taken on `main` on 2026-09-18 with `cell_b` paired**,
   from one full run, with `docker ps` confirmed empty first. It read 144 / 1628 / 1435 at
   `7c6e902`.
@@ -410,8 +410,15 @@ bullet.
   by treating that set as empty, where it fires. **This is the same breakage `per_zone` in that
   file was written for, in a fourth assertion.**
   **The host-half tie closes exactly, and it was predicted before it was measured**:
-  `tools/tests` collects 1523 and `tests/` **108**, and 1523 + 108 = 1631 = 1630 passed plus
-  the 1 skipped. It read 1521 + 108 = 1629 = 1628 + 1 at `7c6e902`. **`tests/` did not move**,
+  `tools/tests` collects 1531 and `tests/` **108**, and 1531 + 108 = 1639 = 1638 passed plus
+  the 1 skipped.
+  **The 1523 -> 1531 step is +8, it is tree growth alone, and it closes exactly.** This branch
+  adds **5** tracked files and no case to `tools/tests`: two `.md` — a campaign `criteria.md` and
+  ADR-0060 — which only `test_interface_counts.py` counts, at +1 each; and three `.hpp`/`.cpp`
+  under `workspace/`, which `test_superseded_real_time_requirement.py` counts by suffix and
+  `test_a_removed_plan_key_stays_removed.py` counts by tree, at +3 each. 2 + 3 + 3 = 8.
+  **The two 3s are the same three files and are not one quantity counted twice** — one walk
+  selects by suffix and the other by tree. It read 1521 + 108 = 1629 = 1628 + 1 at `7c6e902`. **`tests/` did not move**,
   collecting 108 at both.
   **The per-package total is the one figure here that was nearly published as arithmetic**, and
   the episode is worth keeping. It was reasoned about as 1432 + 3 from an earlier run, and a
@@ -903,6 +910,45 @@ bullet.
   fact that no error code tells a collision refusal from a geometric one are in
   [ADR-0027](docs/adr/0027-pilz-planning-pipeline.md)'s 2026-08-27 correction; the gate's own
   residual is in the gap list below.
+- **The arm takes the short way round to a pose, and it did not before**
+  ([ADR-0060](docs/adr/0060-take-the-ik-solution-nearest-the-arm.md), 2026-09-21). `joint1` and
+  `joint5` are declared over ±2π, so every reachable pose has a **wound twin 360° away and both
+  are legal** — legal in the model, to `setFromIK`, to `setJointValueTarget` and to the runtime
+  limiter. `plan_to_pose` returned on the **first seed that planned** and compared nothing, and
+  `KDLKinematicsPlugin` restarts randomly inside its own timeout, so even the current-state seed
+  could come back wound. **Nothing anywhere preferred the nearer of two identical postures.**
+  The project owner watched the consequence: the arm picked a box off the table and handed it to
+  the belt by swinging almost all the way round the back, standing at `joint1 = 5.253 rad`
+  (**301°**) at a pose reachable at **-59°**.
+  An IK solution is now shifted by whole turns toward the configuration the arm stands in, inside
+  that joint's own declared limits, and verified to be a whole multiple of 2π.
+  **Measured after, on a running cell**: over a full pick-and-place cycle sampled at the
+  joint-state topic, 20 626 samples, `picker_joint1` spans **[-59.0°, +57.7°]**, a range of
+  **116.8°** — and those two extremes are the azimuths L0 puts the pick table and the belt at, so
+  the arm crosses directly between them. The widest excursion of any joint from zero was 147.7°,
+  inside half a turn. **One run, one machine, nothing registered in advance. That is not a rate.**
+  **It guarantees per-move minimal travel and NOT an unwound arm**, and the difference matters:
+  a cell whose stations all sat at negative arm-frame angles could keep an arm wound indefinitely
+  with every individual move still minimal. What unwinds this cell's arm is `MoveToHome` —
+  `joint1 = 0`, absolute, never routed through IK — at both ends of every cycle.
+  **Two collision-coverage gaps the shorter arc newly exercises are recorded and not fixed**, by
+  owner decision: the held work-piece is attached to nothing so the gate cannot see it, and the
+  new arc crosses the azimuth of the 40 mm housing ADR-0027's sampling residual is about.
+  `docs/open-work.md` #74 and #75. **Neither is a predicted collision** — both are regions newly
+  entered and unmeasured, and what checks them today is that the scenarios assert where the
+  work-piece ends up.
+- **A `Place` that aborts now says the arm is still holding the part.** `Place` opens the jaws
+  at a step *after* the descent, so a descent that aborts leaves them shut — and until
+  2026-09-21 nothing could say so: `Place.Result` had no custody field where `Transfer` and
+  `Pick` both do, and L4's "still holds work-piece" sentence sat behind a `would_retry` test
+  that is **false** for `MOTION_INTERRUPTED`, because that code already escalates. So for the
+  one failure it was written for, the sentence was never written. `Place.Result.still_holding`
+  is now filled at every exit and is **true when custody is unknown**, which is the direction
+  the field's own contract demands; the blocked reason names the held piece whatever the
+  recovery; and `Transfer` carried the identical defect and was fixed with it.
+  **Nothing opens the jaws, and nothing decides what to do with a held part** — that is
+  ADR-0038 decision 5 and it stays open. **The failure this was built for is `docs/open-work.md`
+  #60**, which now records a third occurrence, on `cell_b`, kept apart from the `cell_a` counts.
 - **A mistracked trajectory is now detected at execution, and the detector's own values are
   copied rather than measured.** Every generated `JointTrajectoryController` carries a
   `constraints:` block — `goal_time`, and per-joint `trajectory` and `goal` tolerances —
@@ -964,7 +1010,7 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1967 files checked, no non-English content outside 1 exemption(s)` on
+  runs, and reported `1972 files checked, no non-English content outside 1 exemption(s)` on
   `main`, 2026-09-18, with `cell_b` paired. **The 1965 -> 1967 step is +2 and both are `.md`** —
   `docs/adr/0057-…md` and `docs/adr/0059-…md`, the same two files that moved the collection
   above — with nothing under `docs/measurements`, which makes **six** consecutive moves with no
@@ -2364,7 +2410,11 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **58 records, all indexed** on `main`, 2026-09-18 — the newest
+    `ADR index` line reported **59 records, all indexed** on 2026-09-21, the newest being
+    [ADR-0060](docs/adr/0060-take-the-ik-solution-nearest-the-arm.md) — take the IK solution
+    nearest the arm rather than the first one that plans, `Proposed`, and the record that amends
+    ADR-0026's branch policy. It read **58 records, all indexed** on `main`, 2026-09-18 — then the
+    newest
     being [ADR-0059](docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md), which pairs
     `cell_b` and keeps `cell_a` `single`, on the project owner's decision that the target
     system is **two twin sides, both digital, each with exactly one of everything**. **It is
@@ -2404,7 +2454,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **59** on `main` on 2026-09-18 against `doctor`'s
+    also matches `0000-template.md`; it read **60** on 2026-09-21 against `doctor`'s 59, **59**
+    on `main` on 2026-09-18 against `doctor`'s
     58, **57** at `7c6e902` that same day against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
     against `doctor`'s 55, **55** on 2026-09-10 at `523ffd9` against
     `doctor`'s 54, **54** on 2026-09-08 at `6d51966` against

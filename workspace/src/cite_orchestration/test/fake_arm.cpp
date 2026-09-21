@@ -255,6 +255,8 @@ int FakeArm::detect_cancellations() const {return servers_->detect.cancelled();}
 
 void FakeArm::fail_pick_with(uint8_t code) {servers_->pick.set_code(code);}
 
+void FakeArm::fail_place_with(uint8_t code) {servers_->place.set_code(code);}
+
 void FakeArm::fail_move_to_with(uint8_t code) {servers_->move_to.set_code(code);}
 
 void FakeArm::fail_detect_with(uint8_t code) {servers_->detect.set_code(code);}

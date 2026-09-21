@@ -22,6 +22,7 @@ add_executable(skill_server
   src/skill_server.cpp
   src/approach.cpp
   src/gripper.cpp
+  src/joint_turn.cpp
   src/pose_goal.cpp
 )
 target_include_directories(skill_server PRIVATE include)
@@ -112,6 +113,23 @@ if(BUILD_TESTING)
   # and the robot replaced by callables that record what was asked of them.
   ament_add_gtest(test_pose_goal test/test_pose_goal.cpp src/pose_goal.cpp)
   target_include_directories(test_pose_goal PRIVATE include)
+
+  # Choosing between joint angles that are the SAME tool pose. `joint1` and
+  # `joint5` are declared over two revolutions, so every reachable pose has a
+  # wound twin 360 degrees away and IK returns whichever its seed landed near —
+  # measured on the running cell as a 301 degree sweep where 59 would have done.
+  #
+  # Tested here because the rule is arithmetic over four doubles and the two
+  # ways of getting it wrong are both invisible from a running cell: a version
+  # that only tests `+/- 2*pi` once leaves the far branch wound, and one that
+  # normalises into `[-pi, pi]` hands the planner an angle outside the joint's
+  # declared limit. The second is the dangerous one, and a scenario would show
+  # it as an unexplained planning refusal.
+  #
+  # NO ROS RUNTIME AND NO MOVEIT LIBRARY — the signature is plain doubles for
+  # exactly this reason, the same bargain `test_motion_end` makes below.
+  ament_add_gtest(test_joint_turn test/test_joint_turn.cpp src/joint_turn.cpp)
+  target_include_directories(test_joint_turn PRIVATE include)
 
   # Gripper arithmetic: metres against the drive joint's own units, where the pad
   # face sits on the tool axis, and what a `Pick` closes to when the goal leaves

@@ -87,6 +87,16 @@ public:
   /// branch, and what the branch does on an ESCALATE was evidenced by nothing.
   void fail_pick_with(uint8_t code);
 
+  /// Make every subsequent `place` goal come back with `code` instead of SUCCESS.
+  ///
+  /// The same shape as `fail_pick_with` above, and it reaches a different half of
+  /// the station tree. `PlaceAt` stands BELOW `TakeCustody` and below the handoff
+  /// protocol leaves, so a station that fails here owns its work-piece, has it in
+  /// the gripper, and has not yet reached `CompleteHandoff` — which is the state
+  /// the three silent CI failures ended in, and the one an operator has to be
+  /// told about by name.
+  void fail_place_with(uint8_t code);
+
   /// What this arm's `MoveTo` server answers from now on.
   ///
   /// It is how a station subtree is driven to FAILURE **without** anything
