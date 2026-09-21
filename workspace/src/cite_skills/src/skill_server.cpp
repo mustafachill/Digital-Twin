@@ -1028,6 +1028,32 @@ private:
   /// `Grasp` is deliberately NOT refused: it is the only skill that commands the
   /// gripper and reports what came back, so it is the way out of this state. See
   /// where the latch is cleared, in `command_gripper`.
+  /// What `still_holding` says, INCLUDING when nobody knows.
+  ///
+  /// `holding_` is a two-state fact and custody has three states, so a result
+  /// field filled from `holding_` alone reports "not holding" on the one exit
+  /// whose entire purpose is to say that nobody knows — after a gripper command
+  /// whose result never arrived, `custody_unknown_` latches and `holding_` is
+  /// deliberately left unwritten, and an unwritten `bool` reads false. The
+  /// detail string said "unestablished" while the machine-readable field beside
+  /// it said "empty", and the field is the one a consumer branches on.
+  ///
+  /// UNKNOWN CUSTODY FALLS ON THE SIDE THAT MAKES A CONSUMER ESCALATE, never on
+  /// the side that makes it open a gripper (ADR-0038 decision 5, ADR-0046).
+  /// That is the same rule `cite_twin`'s `_compose_result` already applies one
+  /// layer up, where a dispatched side that returned no result at all counts as
+  /// holding, and `Place.action` already contracts it in those words.
+  ///
+  /// `holding_` ITSELF IS NOT WRITTEN, here or anywhere on this path. Writing it
+  /// true would claim a grasp nothing observed, and writing it false is the
+  /// claim that cost three CI runs; the refusals in `custody_refusal` are what
+  /// stop this node acting on either. This says what the arm may be holding, not
+  /// what it is known to hold.
+  bool still_holding_now() const
+  {
+    return holding_.load() || custody_unknown_.load();
+  }
+
   ResultCode custody_refusal(const std::string & what) const
   {
     return make_result(
@@ -1265,7 +1291,11 @@ private:
         // EVERY EXIT OF `execute_place` GOES THROUGH HERE, including the two
         // refusals above the first motion, which is what makes "read at every
         // exit" a property of the function and not of this lambda.
-        result->still_holding = holding_.load();
+        //
+        // `still_holding_now()` and not `holding_`: see that function for the
+        // exit this field used to be wrong on, which is the custody-unknown one
+        // it exists for.
+        result->still_holding = still_holding_now();
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
@@ -1437,10 +1467,14 @@ private:
         result->result = outcome;
         // Read at every exit rather than set on the success path, so that a
         // cancel, a planning failure and a refusal all report the truth about who
-        // has the work-piece. `still_holding` is the field L4 chooses a recovery
-        // from: wrong here, the line either abandons a part it still holds or
-        // goes looking for one it let go of.
-        result->still_holding = holding_.load();
+        // has the work-piece. Wrong here, a consumer either abandons a part the
+        // arm still holds or goes looking for one it let go of.
+        //
+        // `still_holding_now()` and not `holding_`, for the reason that function
+        // gives. `Transfer` reaches the custody-unknown refusal below by exactly
+        // the route `Place` does, and reported "not holding" out of it by
+        // exactly the same mechanism.
+        result->still_holding = still_holding_now();
         result->duration = now() - started;
         terminate(handle, result, outcome);
       };
@@ -1673,10 +1707,20 @@ private:
         //: Unwinding turns COLLAPSES BRANCHES. Seeds 1..n are random draws and
         //: several of them routinely solve to the same arm posture differing
         //: only in whole turns of `joint1` or `joint5`; once those turns are
-        //: taken out, the vectors are equal. Planning each of them is asking one
-        //: planner the identical question up to `ik_seeds_` times, at Pilz's
-        //: full profile-integration cost, and reporting the count as though
-        //: that many distinct branches had been explored.
+        //: taken out, the vectors are equal.
+        //:
+        //: What skipping the duplicate saves depends on the planner, and the
+        //: two are not the same saving. For a DETERMINISTIC planner — Pilz,
+        //: which is the preferred one — the second ask is the identical question
+        //: with the identical answer, at full profile-integration cost, counted
+        //: as though a second branch had been explored. For the RANDOMIZED
+        //: fallback it is not identical: each `plan()` is an independent trial,
+        //: so two wound twins used to give OMPL two attempts at that posture and
+        //: now give it one. That is a REDUCTION IN RETRIES rather than a
+        //: duplicate removed, and it is accepted here — a retry that is
+        //: indistinguishable from its predecessor in every log and every count
+        //: is not a branch, and the pass-level message below says when a pass
+        //: came down to one posture.
         //:
         //: Per PASS rather than per goal, because the second pass is a different
         //: planner (ADR-0027) and a configuration the first planner refused is a
@@ -1768,6 +1812,32 @@ private:
             return move_group_->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
           },
           [&] {return cancelled(handle);}, &this_pass);
+
+        // WHEN EVERY SEED COLLAPSED ONTO ONE CONFIGURATION, SAY SO ONCE.
+        //
+        // The dedupe above is silent by design, and with the short-way-round
+        // rewrite in front of it a pass can now end having asked the planner
+        // about a single arm posture however many seeds were drawn — the
+        // rewrite is what makes the wound twins equal, so the twin that used to
+        // be a second branch is no longer there to be one. An operator reading
+        // "the planner found no path to any of them" cannot tell ONE BRANCH,
+        // REFUSED from EIGHT BRANCHES, ALL REFUSED, and the two call for
+        // different next moves: the first says this pose has one posture and
+        // something is in the way of it, the second says the arm cannot get
+        // there from where it stands.
+        //
+        // Reported and not acted on. Nothing here changes which failure
+        // `plan_to_pose` returns, what it counts, or how `NoIkSolution` and
+        // `NoPlan` divide — L4's ESCALATE-versus-RETRY rests on that division.
+        if (planned_configurations.size() == 1U && this_pass.seeds_tried > 1) {
+          RCLCPP_INFO(
+            get_logger(),
+            "%s planned ONE distinct configuration from %d seeds: the other seeds solved to "
+            "the same arm posture up to whole turns and were collapsed onto it. A refusal "
+            "from this pass is one posture refused, not %d",
+            describe(choice).c_str(), this_pass.seeds_tried, this_pass.seeds_tried);
+        }
+
         attempts = attempts + this_pass;
         return outcome;
       };
@@ -1826,15 +1896,22 @@ private:
     return execute_plan(plan, handle, on_progress);
   }
 
-  //: How far the tool point may move while whole turns are taken out of a
-  //: solution, before the rewrite is thrown away. Metres.
+  //: How far a rewritten joint angle may sit from a WHOLE number of turns away
+  //: from the angle the solver produced, before the rewrite is thrown away.
+  //: Radians.
   //:
-  //: A whole turn of a revolute joint is an IDENTITY of the forward kinematics —
-  //: every link ends exactly where it started — so the only difference between
-  //: the tool pose before and after is rounding through the chain, which is
-  //: nanometres. A thousandth of a millimetre is three orders of magnitude above
-  //: that rounding and below anything this cell can measure or command.
-  static constexpr double kTurnToolDriftToleranceM = 1e-6;
+  //: This is the quantity the rewrite's whole claim rests on. A shift of a whole
+  //: turn is an identity of the forward kinematics of any revolute joint — every
+  //: link ends exactly where it started — so IF every joint moved by a whole
+  //: number of turns, the arm is in the same posture and the tool is at the same
+  //: pose, by construction and for any robot model. What has to be verified is
+  //: therefore the WHOLE-TURN part, which is arithmetic on the joint values
+  //: themselves and needs no kinematics at all.
+  //:
+  //: A microradian is four orders of magnitude above the rounding that
+  //: subtracting a few multiples of 2*pi from an angle of a few radians leaves,
+  //: and far below anything a planner, a controller or this arm distinguishes.
+  static constexpr double kWholeTurnResidualRad = 1e-6;
 
   /// Rewrite an IK solution to reach the same tool pose with less turning.
   ///
@@ -1857,13 +1934,28 @@ private:
   /// keep a shift inside, and MoveIt already represents its angles as equivalent,
   /// so there is nothing here to choose.
   ///
-  /// ## Why it verifies rather than asserts
+  /// ## Why it verifies, and why NOT against forward kinematics
   ///
   /// The reasoning above is about this arm's model, and this node is handed
   /// whichever model the generated description declares. So the rewrite is
-  /// CHECKED against forward kinematics and thrown away whole if the tool point
-  /// moved: a joint whose type this code has misread costs a long sweep, which
-  /// is the defect being repaired, rather than costing the goal.
+  /// checked and thrown away whole if it is not what it claims to be: a rewrite
+  /// this code got wrong costs a long sweep, which is the defect being repaired,
+  /// rather than costing the goal.
+  ///
+  /// **The check used to compare the tool point's translation before and after,
+  /// and that check COULD NOT FAIL FOR ANY MODEL.** A whole turn of a revolute
+  /// joint is an exact identity of the forward kinematics — that is the entire
+  /// premise of this function — so the quantity being compared is one the
+  /// rewrite is incapable of moving, and a guard that cannot fire defends
+  /// nothing while reading as though it defends everything. On `joint5` it was
+  /// blind twice over: that joint's axis passes through the tool point, so
+  /// rotating it by ANY angle, right or wrong, leaves the compared translation
+  /// unchanged to the bit.
+  ///
+  /// What the rewrite actually claims is that **every joint it touched moved by
+  /// a whole number of turns**. That is what is checked, per joint, exactly:
+  /// it costs no kinematics, it holds for whatever model is loaded, and unlike
+  /// the tool point it can fire — on the wrist as readily as on the base.
   void unwind_whole_turns(
     moveit::core::RobotState * solution,
     const moveit::core::RobotState & reference,
@@ -1871,9 +1963,6 @@ private:
   {
     std::vector<double> before;
     solution->copyJointGroupPositions(group, before);
-    solution->update();
-    const Eigen::Vector3d tip_before =
-      solution->getGlobalLinkTransform(tip_link_).translation();
 
     bool turned = false;
     for (const moveit::core::JointModel * joint : group->getActiveJointModels()) {
@@ -1887,13 +1976,49 @@ private:
       if (bounds.size() != 1 || !bounds.front().position_bounded_) {
         continue;
       }
+      const double lower = bounds.front().min_position_;
+      const double upper = bounds.front().max_position_;
       const double value = *solution->getJointPositions(joint);
-      const double nearest = cite_skills::nearest_turn(
-        value, *reference.getJointPositions(joint),
-        bounds.front().min_position_, bounds.front().max_position_);
+      const double standing = *reference.getJointPositions(joint);
+      const double nearest = cite_skills::nearest_turn(value, standing, lower, upper);
       if (nearest != value) {
         solution->setJointPositions(joint, &nearest);
         turned = true;
+        continue;
+      }
+
+      // SAY WHY NOTHING HAPPENED, when something nearly did. "The rule did not
+      // apply to this joint" and "the rule applied and this joint's declared
+      // limits refused the nearer answer" are the same silence from outside, and
+      // the second one is a long sweep an operator is given no account of.
+      //
+      // Reported from HERE and not from `nearest_turn`, which is pure, links no
+      // ROS and is unit-tested without either — the adapter is the layer that
+      // knows what it asked for and what came back, so the sentence belongs to
+      // it. Both halves of what the message says are tested before it is
+      // emitted: that the whole-turn angle nearest where the joint stands is
+      // genuinely nearer, and that it genuinely falls outside the bounds. A
+      // joint with no room for a second solution at all reaches this by the same
+      // route and the sentence is just as true of it.
+      const double unbounded = value + cite_skills::kWholeTurnRad *
+        std::round((standing - value) / cite_skills::kWholeTurnRad);
+      const bool would_be_nearer =
+        std::fabs(unbounded - standing) < std::fabs(value - standing);
+      // Split in two because a single `a < b || a > c` reads to uncrustify as a
+      // template argument list and it reformats it into nonsense. Both halves
+      // are the point either way: a whole-turn angle is refused by whichever
+      // limit it passes, and testing one of them is the defect `nearest_turn`
+      // itself carried.
+      const bool below_the_limit = unbounded < lower;
+      const bool above_the_limit = unbounded > upper;
+      const bool outside = below_the_limit || above_the_limit;
+      if (would_be_nearer && outside) {
+        RCLCPP_DEBUG(
+          get_logger(),
+          "%s stays at %.3f rad and sweeps from %.3f: the whole-turn angle at %.3f rad is "
+          "the identical tool pose and stands nearer, and it falls outside this joint's "
+          "declared [%.3f, %.3f]. There is no shorter way round",
+          joint->getName().c_str(), value, standing, unbounded, lower, upper);
       }
     }
 
@@ -1901,19 +2026,28 @@ private:
       return;
     }
 
-    solution->update();
-    const Eigen::Vector3d tip_after =
-      solution->getGlobalLinkTransform(tip_link_).translation();
-    if ((tip_after - tip_before).norm() > kTurnToolDriftToleranceM) {
+    std::vector<double> after;
+    solution->copyJointGroupPositions(group, after);
+    const std::vector<std::string> & names = group->getVariableNames();
+    for (size_t index = 0; index < before.size(); ++index) {
+      const double shift = after[index] - before[index];
+      const double residual =
+        std::fabs(shift - cite_skills::kWholeTurnRad *
+        std::round(shift / cite_skills::kWholeTurnRad));
+      if (residual <= kWholeTurnResidualRad) {
+        continue;
+      }
       RCLCPP_WARN(
         get_logger(),
-        "discarding a whole-turn rewrite: it moved the tool point by %.6f m, so at least "
-        "one joint it turned is not a revolute joint of this arm. Planning the solver's "
-        "own configuration instead",
-        (tip_after - tip_before).norm());
+        "discarding a whole-turn rewrite: it moved %s by %.6f rad, which is %.9f rad away "
+        "from any whole number of turns, so the rewrite is not the identity of the "
+        "kinematics it claims to be. Planning the solver's own configuration instead",
+        index < names.size() ? names[index].c_str() : "an unnamed joint", shift, residual);
       solution->setJointGroupPositions(group, before);
       solution->update();
+      return;
     }
+    solution->update();
   }
 
   /// Ask move_group for the pipeline and planner this choice names.

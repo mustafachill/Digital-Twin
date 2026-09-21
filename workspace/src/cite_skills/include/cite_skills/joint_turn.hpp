@@ -28,6 +28,17 @@
 namespace cite_skills
 {
 
+//: One whole revolution, in radians. The quantity a revolute joint may be
+//: shifted by without moving any link it carries.
+//:
+//: Exposed rather than kept private to the implementation because the adapter
+//: in the skill server needs the same quantity to VERIFY a rewrite — every
+//: joint it changed must have moved by a whole number of these — and to say in
+//: a log line which whole-turn angle the bounds refused. Two statements of a
+//: turn would be a value written twice (P1), and the one that drifted would be
+//: the one nothing runs.
+constexpr double kWholeTurnRad = 2.0 * 3.14159265358979323846;
+
 /// `value` shifted by whole turns to sit as near `reference` as the bounds allow.
 ///
 /// ## What this is for
@@ -49,24 +60,37 @@ namespace cite_skills
 ///
 /// ## Three properties that are the whole of it
 ///
-/// * **THE BOUNDS ARE NEVER LEFT.** A nearer angle outside `[lower, upper]` is
-///   refused, not clamped. This is the safety invariant: the interval is the
-///   joint's declared limit, and an angle outside it is one the planner rejects
-///   and the hardware would refuse — or worse, one nothing checks.
+/// * **THIS FUNCTION NEVER PUTS AN ANGLE OUTSIDE `[lower, upper]`.** A nearer
+///   angle outside the interval is refused, not clamped. This is the safety
+///   invariant: the interval is the joint's declared limit, and an angle
+///   outside it is one the planner rejects and the hardware would refuse — or
+///   worse, one nothing checks.
+///
+///   Stated that precisely because the shorter wording — *the bounds are never
+///   left* — was **false as written**, and it stood here unqualified while an
+///   input more than a whole turn outside the interval came back with an
+///   out-of-bounds answer. Exactly: **every return is either `value` itself or
+///   a whole-turn shift of `value` that lies inside `[lower, upper]`.** A
+///   `value` handed in already outside the interval — `setFromIK` can produce
+///   one — comes back either unchanged or pulled INTO the interval, never
+///   pushed further out and never clamped to a limit.
 /// * **A span of `2*pi` or less is inert**, whatever the inputs. There is no
 ///   second solution inside such an interval, so shifting could only leave it.
 ///   That is also why the caller does not have to test the span itself.
-/// * **It loops.** A `[-2*pi, +2*pi]` joint admits `k` in `{-2, -1, 0, 1, 2}`,
-///   and the nearest in-bounds shift can be two turns away. A single `+/- 2*pi`
-///   comparison gets the common case right and the far one wrong.
+/// * **IT REACHES PAST THE FIRST TURN.** A `[-2*pi, +2*pi]` joint admits `k` in
+///   `{-2, -1, 0, 1, 2}`, and the nearest in-bounds shift can be two turns
+///   away. A single `+/- 2*pi` comparison gets the common case right and the
+///   far one wrong. It does not WALK there: the shift is computed, so no input
+///   makes the search long and none makes it fail to end.
 ///
 /// Ties go to the smaller shift, so `value` itself wins every tie it is in and
 /// a joint is never turned to buy nothing. `nearest_turn` is idempotent: its own
 /// output is already the nearest in-bounds member of the family.
 ///
 /// Non-finite bounds are treated as no bounds at all and the value is returned
-/// unchanged, because the search below walks outwards until it leaves the
-/// interval and an infinite interval is never left.
+/// unchanged. An interval nobody stated is not a licence to shift: the interval
+/// is the whole of what makes a shift safe, and a joint that genuinely has none
+/// is a CONTINUOUS one, whose second solution is the same solution.
 double nearest_turn(double value, double reference, double lower, double upper);
 
 }  // namespace cite_skills

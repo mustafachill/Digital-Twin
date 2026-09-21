@@ -21,6 +21,7 @@ testing yesterday's cell.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -137,6 +138,27 @@ PLACE_HEIGHT_TOLERANCE_M = 0.05
 
 #: How often the work-piece's height is sampled while the cycle runs.
 SAMPLE_PERIOD_S = 2.0
+
+#: How far any joint of the acting arm may turn from zero, over the whole run.
+#: Radians.
+#:
+#: HALF A TURN, and the claim is exactly "the arm never winds past half a turn".
+#: `joint1` and `joint5` on this arm are declared over TWO revolutions, so every
+#: reachable tool pose has a wound twin a whole turn away and an IK solver is
+#: free to return either. Measured on the running cell: a place pose reached at
+#: `joint1 = 5.253 rad` with the joint standing at 1.007 - a 301 degree sweep in
+#: place of a 59 degree one, at full speed, through the volume in front of the
+#: cell - and `joint5` at -5.743 in the same run. Both are past this bound and
+#: neither is past a joint LIMIT, so nothing in the stack refused either and no
+#: gate in this repository could see them.
+#:
+#: This is a CONSTRAINT and not a trajectory, which is what ADR-0006 permits a
+#: scenario to assert: it survives a layout change, a different planner and a
+#: different seed, because what it says is that a pose is reached the short way
+#: round and not which angles reach it. Half a turn is the bound that separates
+#: the two - a wound twin is a whole turn away, so it cannot sit inside this
+#: band while its unwound partner also does.
+WOUND_PAST_RAD = math.pi
 
 #: The seed `./scripts/scenario` exports. It is recorded in the failure report
 #: below so that a report names the conditions it was produced under — NOT
@@ -267,6 +289,9 @@ class TestPickAndPlace(unittest.TestCase):
         # yet", which had stopped being true.
         cls.skills = managers[cls.arm].skills
         assert cls.skills is not None, f"the plan declares no skill actions for {cls.arm}"
+        # Where this arm reports its joints, per the plan. Read and not composed
+        # from the zone and the asset, for the reason everything else here is.
+        cls.joint_state_topic = managers[cls.arm].joint_state_topic
 
         # The Gazebo model name of the part, DERIVED rather than written. It was
         # `WORKPIECE = "workpiece"` under a comment arguing that the name is a
@@ -448,6 +473,43 @@ class TestPickAndPlace(unittest.TestCase):
             "the skill server, and therefore the whole stack beneath it",
         )
 
+        # 1b. Watch every joint angle for the rest of the run, so that HOW the
+        #     arm reached each pose can be asserted on and not only WHERE it
+        #     ended up. Nothing in this repository could see a 301 degree sweep:
+        #     it violates no joint limit, produces no error, and leaves the part
+        #     in exactly the right place, so every assertion below passes while
+        #     the arm swings the long way round through the front of the cell.
+        #
+        #     FROM THE TOPIC AND NOT FROM THE SAMPLING LOOP BELOW. That loop
+        #     turns once per `SAMPLE_PERIOD_S`, and a sweep out and back takes a
+        #     few seconds, so a poll at that period can land either side of an
+        #     excursion and see neither end of it. A subscription callback sees
+        #     every message the executor delivers, and the extremes are folded
+        #     in as they arrive.
+        from cite_interfaces.qos import STATE
+        from sensor_msgs.msg import JointState
+
+        self._extremes: dict[str, tuple[float, float]] = {}
+
+        def record(message: JointState) -> None:
+            # `strict=False`: a length mismatch here would be a malformed
+            # message, and raising for it inside a subscription callback would
+            # propagate out of `rclpy.spin_once` in `_run_cycle` and end the run
+            # with a bare traceback - the exact failure mode that method's
+            # docstring records having removed. The emptiness check at the
+            # assertion is what catches a watch that saw nothing.
+            for name, position in zip(message.name, message.position, strict=False):
+                low, high = self._extremes.get(name, (position, position))
+                self._extremes[name] = (min(low, position), max(high, position))
+
+        # Explicit profile, matching the broadcaster's. An incompatible one
+        # connects silently and delivers nothing, which here would look exactly
+        # like an arm that never wound (CLAUDE.md section 10) - which is what the
+        # emptiness check at the assertion is for.
+        self._joint_watch = self.node.create_subscription(
+            JointState, self.joint_state_topic, record, STATE
+        )
+
         # 2. Ask the running system where the station's frames are. These come
         #    from the L0 model through the generated static transform table, so a
         #    layout change moves the test with it and the belt's working height is
@@ -600,6 +662,44 @@ class TestPickAndPlace(unittest.TestCase):
             f"{expected_z:.3f} m ({vertical:.3f} m away). Higher than expected "
             "means it was never released; lower means it did not stay on the "
             "belt.\n" + context,
+        )
+
+        # HOW THE ARM GOT THERE, which every assertion above is blind to. A part
+        # picked and placed by an arm that took the long way round satisfies all
+        # three of them, and that is not hypothetical - it is what this cell did
+        # until the IK solution was rewritten to the near branch.
+        #
+        # The emptiness check first, and it is not a formality: this assertion is
+        # over what ARRIVED, so a subscription that matched nothing - a renamed
+        # topic, an incompatible profile, a controller that never activated -
+        # would otherwise report an arm that never wound past anything. A silence
+        # is not a clearance.
+        self.assertTrue(
+            self._extremes,
+            f"no message arrived on {self.joint_state_topic} for the whole cycle, so "
+            "nothing here observed the arm at all and the constraint below was "
+            "never evaluated.\n" + context,
+        )
+        wound = {
+            name: (low, high)
+            for name, (low, high) in sorted(self._extremes.items())
+            if low < -WOUND_PAST_RAD or high > WOUND_PAST_RAD
+        }
+        self.assertFalse(
+            wound,
+            "a joint wound past half a turn while reaching a pose it could have "
+            "reached the short way round: "
+            + ", ".join(
+                f"{name} spanned [{low:.3f}, {high:.3f}] rad" for name, (low, high) in wound.items()
+            )
+            + f", against a bound of +/-{WOUND_PAST_RAD:.3f}. This breaks no joint limit "
+            "and produces no error anywhere in the stack, which is why it needs its own "
+            "assertion: the sweep is at full speed, through the volume in front of the "
+            "cell, and the part still arrives. If this fires on a motion that genuinely "
+            "had no shorter representative - the arm already standing past half a turn "
+            "when the next pose was solved - the finding is about this bound and not "
+            "about the arm, and it is a project decision rather than one to widen "
+            "here.\n" + context,
         )
 
     def _run_cycle(

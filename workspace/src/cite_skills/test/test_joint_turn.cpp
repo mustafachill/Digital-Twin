@@ -117,7 +117,7 @@ TEST(JointTurn, AJointSpanningOneTurnOrLessIsInert)
 }
 
 // -----------------------------------------------------------------------------
-// It loops
+// It reaches past the first turn
 // -----------------------------------------------------------------------------
 
 TEST(JointTurn, WalksPastTheFirstTurnWhenTheSecondIsNearer)
@@ -133,7 +133,7 @@ TEST(JointTurn, WalksPastTheFirstTurnWhenTheSecondIsNearer)
 
 TEST(JointTurn, StopsAtTheBoundWhileWalking)
 {
-  // The walk and the bounds together, which is where an off-by-one turn hides:
+  // The reach and the bounds together, which is where an off-by-one turn hides:
   // 6.0 - 2*pi is -0.283 and in bounds, 6.0 - 4*pi is -6.566 and is NOT — it is
   // 0.283 rad below the limit. The nearer of the two legal answers wins.
   EXPECT_NEAR(
@@ -198,4 +198,95 @@ TEST(JointTurn, DoesNotInventAnAnswerForANonNumber)
   const double nan = std::numeric_limits<double>::quiet_NaN();
   EXPECT_TRUE(std::isnan(cite_skills::nearest_turn(nan, 0.0, kWideLower, kWideUpper)));
   EXPECT_NEAR(cite_skills::nearest_turn(5.253, nan, kWideLower, kWideUpper), 5.253, kTolerance);
+}
+
+// -----------------------------------------------------------------------------
+// A value that arrives ALREADY outside the interval
+// -----------------------------------------------------------------------------
+//
+// The one input class this file did not cover, and the defect it was hiding was
+// the safety invariant itself. The two walks this function used to do each
+// stopped on the bound they were walking TOWARDS and never tested the other, so
+// an input more than a whole turn outside the interval could be answered with a
+// candidate that was outside it too — `nearest_turn(20.0, 13.7, -2*pi, +2*pi)`
+// returned 13.716815 against an upper bound of 6.283185.
+//
+// It is reachable: `setFromIK` is under no obligation to respect joint limits,
+// which is exactly why the call site tests the solution it gets back with
+// `setJointValueTarget`. That test is downstream, in another library, and was
+// the only thing standing between this and a joint target outside its declared
+// limit. The header promised the invariant unconditionally; nothing checked it.
+
+TEST(JointTurn, NeverAnswersAnOutOfBoundsInputWithAnOutOfBoundsAngle)
+{
+  // 20.0 is more than two turns above the upper limit. Every member of its
+  // family that is IN bounds — 1.150 and -5.133 — stands further from the
+  // reference than 20.0 itself does, so there is nothing to gain and the value
+  // comes back untouched. Untouched is always allowed; a DIFFERENT angle that
+  // is still out of bounds is not, and 13.716815 was what used to be returned.
+  EXPECT_NEAR(cite_skills::nearest_turn(20.0, 13.7, kWideLower, kWideUpper), 20.0, kTolerance);
+  // The mirror. Bounds are two numbers and this function got both of them
+  // wrong in the same way, once per direction.
+  EXPECT_NEAR(
+    cite_skills::nearest_turn(-20.0, -13.7, kWideLower, kWideUpper), -20.0, kTolerance);
+}
+
+TEST(JointTurn, PullsAnOutOfBoundsInputINTOTheIntervalWhenThatIsNearer)
+{
+  // The control for the pair above, and it is what stops them being satisfied
+  // by a function that gave up on every out-of-bounds input. 8.0 is above the
+  // limit; 8.0 - 2*pi is 1.717, inside it, and nearer to the reference. So the
+  // shift is taken and the answer is IN bounds — the refusals above are the
+  // interval doing work rather than the input's position doing it.
+  EXPECT_NEAR(
+    cite_skills::nearest_turn(8.0, 0.0, kWideLower, kWideUpper), 8.0 - kTurn, kTolerance);
+}
+
+TEST(JointTurn, ReturnsTheInputOrAnInBoundsAngleOverEveryValueSwept)
+{
+  // The invariant as a property rather than as three examples, because the
+  // examples are where it was already believed and the sweep is where it was
+  // broken. Every return must be either the input untouched or a whole-turn
+  // shift of it that lies inside the interval. Deliberately swept well past
+  // both limits: inside them the old implementation was right.
+  for (double value = -30.0; value <= 30.0; value += 0.013) {
+    for (double reference = -8.0; reference <= 8.0; reference += 0.37) {
+      const double answer = cite_skills::nearest_turn(value, reference, kWideLower, kWideUpper);
+      if (answer == value) {
+        continue;
+      }
+      EXPECT_GE(answer, kWideLower) << "value " << value << " reference " << reference;
+      EXPECT_LE(answer, kWideUpper) << "value " << value << " reference " << reference;
+      // And it really is a member of the family, not a clamp to the limit.
+      const double turns = (answer - value) / kTurn;
+      EXPECT_NEAR(turns, std::round(turns), 1e-9)
+        << "value " << value << " reference " << reference;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// It ends, whatever it is given
+// -----------------------------------------------------------------------------
+
+TEST(JointTurn, EndsOnAJointWhoseSpanNoWalkCouldCross)
+{
+  // Two ways the walk this replaced did not end, and neither needs a wrong
+  // input to reach — only a wide one.
+  //
+  // Above roughly 2^53 turns a subtraction of 2*pi ROUNDS TO A NO-OP, so the
+  // walk stepped for ever without moving: `1e18 - 2*M_PI == 1e18` is true. And
+  // below that it cost one iteration per turn of declared span, so a joint
+  // stated over +/-1e7 rad cost about 3.2 million iterations PER SEED.
+  //
+  // The assertion is deliberately not a value. At 1e18 the spacing between
+  // representable doubles is larger than a turn, so no exact answer is
+  // meaningful; what is asserted is that the call RETURNS and honours the
+  // invariant. A test that hangs reports nothing at all.
+  const double answer = cite_skills::nearest_turn(1e18, 0.0, -2e18, 2e18);
+  EXPECT_TRUE(answer == 1e18 || (answer >= -2e18 && answer <= 2e18));
+
+  const double wide = cite_skills::nearest_turn(1.0e7 + 0.3, 0.0, -1.0e8, 1.0e8);
+  EXPECT_NEAR(std::round((wide - (1.0e7 + 0.3)) / kTurn), (wide - (1.0e7 + 0.3)) / kTurn, 1e-6);
+  EXPECT_LE(std::fabs(wide), 1.0e8);
 }

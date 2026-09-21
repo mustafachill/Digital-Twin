@@ -208,10 +208,19 @@ consequences name the measurement that would settle it. The launch test's fake g
 
 **And the report is not the only thing that changes on a timeout: a custody-unknown latch is
 set, and L3 acts on it itself.** `holding_` unwritten reads as `false` to every consumer —
-`Place`'s `require_holding` test, `Transfer`'s refusal, `Transfer.Result.still_holding` — so
-silence is not neutrality, it is the same wrong claim one layer down. While the latch is set,
-`Pick`, `Place` and `Transfer` all refuse with `PRECONDITION_FAILED` naming the unestablished
-custody. **`Grasp` is deliberately not refused**: it is the skill that commands the gripper
+`Place`'s `require_holding` test, `Transfer`'s refusal, and until this branch the
+`still_holding` field of both results — so silence is not neutrality, it is the same wrong
+claim one layer down. While the latch is set, `Pick`, `Place` and `Transfer` all refuse with
+`PRECONDITION_FAILED` naming the unestablished custody.
+
+**The refusal alone left one of those consumers wrong, and it was the machine-readable one.**
+Both refusals leave through the same `finish` lambda every other exit uses, and that lambda
+filled `still_holding` from `holding_` — so a refusal whose `detail` said custody was
+UNESTABLISHED carried a boolean beside it saying the arm was empty, on the one exit that
+exists to say nobody knows. `still_holding_now()` is what those lambdas read now: holding, or
+custody unknown. **`holding_` itself is still never written on this path** — unknown custody
+is reported, not resolved — and the direction is the one in `Place.action`: unknown falls on
+the side that escalates, never on the side that opens a gripper. **`Grasp` is deliberately not refused**: it is the skill that commands the gripper
 and reports what came back, so it is the way out, and a result arriving is what clears the
 latch. The interlock is here rather than in L4 because `pick` is a **public action** whose
 first physical act is to open the jaws — ADR-0046's coordinator rule keeps the line out of
