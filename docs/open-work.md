@@ -726,6 +726,76 @@ Two things recorded and open: whether a friction grasp survives the cancel is un
 alone); and after a missed grasp `MoveToHome` no longer runs, so the arm stops inside the fixture
 and nothing in software reopens the jaws.
 
+### #74 — A held work-piece is attached to nothing, so the collision gate cannot see it
+`ValidateSolution` is the sole environment-collision gate, and it checks the arm's links against
+the planning scene. **It checks nothing at all against the part in the jaws.** `grep -rn
+AttachedCollisionObject workspace/src` reaches three prose mentions and **no call**; ADR-0029
+removed the simulation-side attachment as well, so friction alone holds the part and MoveIt does
+not know it exists. A 50 mm cube hangs roughly 25 mm below the fingertip plane, so a plan that
+clears a surface at the fingers can drag the part through it.
+
+**Pre-existing, and newly exercised by ADR-0060.** Before that record the transit from the pick
+to the place swung the long way round, through an azimuth sector where this cell's planning
+scene contains nothing within reach — an unmodelled payload swept over nothing costs nothing.
+The short arc crosses the infeed table and the belt. **Nothing here is a predicted collision**:
+what is established is that the gate is blind to the payload and that the traffic has moved.
+Whether any real interpolation brings the part within reach of a surface is **unmeasured**.
+
+**Not fixed, by the project owner's decision on 2026-09-21** — *"do not build a simulation that
+depends on a simulation"*. Attaching the part for the duration of custody is the fix that would
+make the gate honest for **every** held motion, and it is a decision of its own, not a detail of
+ADR-0060. What checks this today is that `pick_and_place` and `continuous_line` assert where the
+work-piece ends up: if the arm knocks it off a surface, they fail.
+
+**The cheapest measurement that would settle it** is the minimum part-to-surface clearance over
+the transit, which is one instrument away from what
+[`2026-09-21-place-abort-and-the-held-part`](measurements/2026-09-21-place-abort-and-the-held-part/criteria.md)
+already registers. Cross-references: **#75**, which is the same arc against a different object.
+
+### #75 — ADR-0060's arc crosses the one object ADR-0027's sampling residual is about
+ADR-0027 records that `ValidateSolution` checks trajectory waypoints and **interpolates nothing
+between them**, at a sampling that works out to roughly 77 mm of tool travel per step on this
+cell — against a break-beam housing that is **40 mm** across. That residual is the record's own,
+and it is unchanged by ADR-0060.
+
+**What changed is the traffic.** `infeed_beam` sits at azimuth **130.8°** from the arm base at
+radius **0.727 m**, in a height band that overlaps the tool's transit height. The old wound arc
+spanned [147.7°, 391°] and did not cross it; the short arc spans [31°, 147.7°] and does.
+**This is a region newly entered, not a predicted strike** — both arc endpoints sit at radius
+≈ 0.56–0.60 m, so reaching the housing needs the interpolation to bulge outward by about 0.13 m,
+and **nobody has measured whether it does**.
+
+**Why the existing campaign does not answer it.**
+[`2026-09-04-waypoint-clearance`](measurements/2026-09-04-waypoint-clearance/ANALYSIS.md) looked
+for exactly this and found no interval carrying both a large enough step and a close enough
+bracketing distance — but it measured **the trajectories the old branch selection produced**,
+and its own pre-registered rule refuses its silence as a clearance even for those. It does not
+transfer to paths that did not exist when it ran. **Not fixed**, for the same owner decision as
+#74; re-running that campaign's instrument against the new trajectories is what would settle it.
+
+### #76 — `cite_twin` compares joint angles with no angular wrap, so identical postures can read as 6.283 rad apart
+`workspace/src/cite_twin/cite_twin/divergence.py` compares the two sides with `abs(plant - counterpart)`
+per joint and feeds `joint_error_max_rad`. Two arms in **identical** postures whose `joint1`
+happens to sit on different 2π sheets therefore report a maximum joint error of a full turn.
+
+**It is pre-existing and ADR-0060 does not fix it** — it makes the coincidence rarer, because
+both sides now normalise toward their own current configuration and both start from `joint1 = 0`.
+**Filed separately and deliberately not folded into that change**, because folding it in would
+hide it. The metric is a divergence instrument: a false 6.283 is exactly the reading that would
+be quoted.
+
+### #77 — Two documents say the planning scene is empty, and it has not been for some time
+`workspace/src/cite_generated/moveit/cell_b_planning_scene.yaml` carries a comment saying
+*"Nothing reads this file yet"*, and ADR-0026's Consequences still describe planning against an
+empty scene. Both are falsified by `workspace/src/cite_bringup/launch/simulation.launch.py`,
+which spawns a `planning_scene_loader.py` per arm, and by the six bodies the generated file
+declares.
+
+**It matters beyond tidiness.** ADR-0026 predicted that the interaction between Pilz and a
+non-empty scene *"becomes visible the moment the planning scene stops being empty"*. It has, and
+that interaction is the whole of **#74** and **#75**. A reader who trusts either sentence
+concludes the collision gate has nothing to check.
+
 ### #60 — `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
 **Two CI failures, on two runners nobody prepared, at two commits, with nothing registered in
 advance. The physical cause is unestablished and nothing here attributes one.** The runs are
@@ -789,6 +859,31 @@ any kind. **So the abort has not been reproduced by the closest instrument that 
 trials, on a developer host rather than on a CI runner. What that harness never varied is the
 **absence** of the part on this frame, and it reports the peak following error in flight rather
 than the terminal error at the goal — which is where the two additions above go.
+
+**A THIRD OCCURRENCE, ON `cell_b`, OBSERVED LOCALLY ON 2026-09-21 — and it is kept apart from
+the two above rather than appended to them.** Watching a paired `cell_b` run its line, the
+project owner saw one side's box sit on the belt while the other's was carried away. Measured:
+`Place` aborted with `State tolerances failed for joint 2, Position Error 0.022293 vs Tolerance
+0.010000` then `goal_time_tolerance exceeding by 0.506378 s` — against `0.506172 s` and
+`0.506390 s` in the two `cell_a` CI runs. The station escalated, `StopAll` set the belt to 0.0,
+and **the arm was left with its gripper clamped on the part** at `picker_drive_joint = +0.4088
+rad`, because `Place` opens the jaws at a step the aborted descent never reached. The healthy
+twin finished the same job with the gripper at 0.0000.
+
+**This is a different cell, a different asset and a developer host**, so it is not appended to
+the `cell_a` counts, which close where they are. What is shared is the assertion and the
+mechanism; **sharing a signature is not sharing a cause**, and the physical cause of all three
+remains unestablished. One event, one machine, nothing registered in advance. **That is not a
+rate.** The campaign registered at
+[`2026-09-21-place-abort-and-the-held-part`](measurements/2026-09-21-place-abort-and-the-held-part/criteria.md)
+is what would turn it into a measurement, and its own rule 1 says that if the abort does not
+reproduce, its silence evidences nothing.
+
+**What the arm being left clamped now produces, which it did not before.** `Place.Result` carries
+`still_holding`, filled at every exit and true when custody is unknown, and L4's blocked reason
+names the held work-piece whatever the recovery — where before, `MOTION_INTERRUPTED` escalating
+on its own meant the sentence was never written. **Nothing opens the jaws**: what to do with a
+held part is ADR-0038 decision 5 and stays open.
 
 **One observation, recorded as an observation and not as a decision.** The controller's per-joint
 abort threshold (`goal: 0.01`, `workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml`)
