@@ -1,0 +1,844 @@
+{
+ "campaign": "2026-09-22-is-a-run-reproducible",
+ "label": "A_05",
+ "arm": "A",
+ "is_shakedown": false,
+ "trial_index": 5,
+ "seed_requested": 20260824,
+ "x_offset_m": 0.0,
+ "iterations_requested": 15000,
+ "zone": "cell_b",
+ "probe_world_name": "cite_probe",
+ "probe_body": "probe_body",
+ "probe_pose_nominal": {
+  "x": 0.0,
+  "y": 0.0,
+  "z": 0.5,
+  "roll": 0.6,
+  "pitch": 0.7,
+  "yaw": 0.8
+ },
+ "at_rest_rule": {
+  "min_gap_s": 1.0,
+  "tolerance_m": 1e-09,
+  "ceiling_s": 120.0
+ },
+ "git_open": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_open": [
+  0.47509765625,
+  0.4013671875,
+  0.32666015625
+ ],
+ "host": {
+  "uname_m": "x86_64",
+  "uname_a": "Linux ec250c9df48f 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+  "gz_sim_version": "Gazebo Sim, version 8.15.0\nCopyright (C) 2018 Open Source Robotics Foundation.\nReleased under the Apache 2.0 License.",
+  "gz_help_lists_seed": true,
+  "gz_help_lists_iterations": true,
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+ },
+ "docker_ps": "<error FileNotFoundError: [Errno 2] No such file or directory: 'docker'>",
+ "started_wall": 1790096389.9846287,
+ "instrument_loss": false,
+ "instrument_loss_reason": null,
+ "world_path": "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/A_05.world.sdf",
+ "world_sha256": "1d9dbc4509f5fcff2d0742d4cc2ab299a52cafbc329ec48d8d9290937eea1e44",
+ "v_physics": {
+  "zone": "cell_b",
+  "installed_world": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "probe_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "installed_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "probe_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "agree": true
+ },
+ "pose_topic": "/world/cite_probe/dynamic_pose/info",
+ "gz_partition": "cite/cell_b/plant",
+ "argv": [
+  "gz",
+  "sim",
+  "-s",
+  "-r",
+  "--iterations",
+  "15000",
+  "--seed",
+  "20260824",
+  "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/A_05.world.sdf"
+ ],
+ "seed_from_argv": 20260824,
+ "server_pid": 49,
+ "seed_from_proc": 20260824,
+ "seed_from_proc_source": "/proc/49/cmdline",
+ "seed_readback_is_independent": true,
+ "seed_matches_request": true,
+ "server_launched_wall": 1790096390.2186792,
+ "first_snapshot_wall": 1790096392.427993,
+ "first_snapshot_after_s": 2.2093138694763184,
+ "first_position": [
+  1.919037845299343e-17,
+  1.2908887995273944e-17,
+  0.4624856
+ ],
+ "at_rest": {
+  "reached": true,
+  "reason": null,
+  "sample_a": {
+   "wall": 1790096393.6288073,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "sample_b": {
+   "wall": 1790096394.6296833,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "gap_s": 1.0008759498596191,
+  "max_delta_m": 0.0,
+  "closest_pair_max_delta_m": 0.0
+ },
+ "samples": [
+  {
+   "wall": 1790096392.4279969,
+   "position": [
+    1.919037845299343e-17,
+    1.2908887995273944e-17,
+    0.4624856
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096392.6281416,
+   "position": [
+    4.798678815420843e-16,
+    -6.306912034048954e-17,
+    0.08363719999999966
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096392.8282676,
+   "position": [
+    0.004198652294731998,
+    0.01987864725399059,
+    0.03430178463402696
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096393.0283914,
+   "position": [
+    0.01685840225394331,
+    0.02566549628464761,
+    0.02498237676286867
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096393.228544,
+   "position": [
+    0.016869883866482308,
+    0.025672429344542766,
+    0.024997653507273468
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096393.4286654,
+   "position": [
+    0.016871394239935087,
+    0.025673340396276396,
+    0.024999664298697735
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096393.6288073,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096393.8289523,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.0291812,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.2293377,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.4295557,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.6296833,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.6297224,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096394.829798,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096395.0298922,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096395.2300005,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096395.4301074,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096395.6302536,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096395.8303826,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096396.0304842,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096396.2306004,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096396.4307024,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096396.6308672,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096396.8310118,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096397.031155,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096397.231263,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096397.4314184,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096397.6315658,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096397.8317041,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096398.0318704,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096398.231971,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096398.43212,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096398.6322887,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096398.832365,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096399.0325131,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096399.23267,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096399.4328275,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096399.6329687,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096399.8331032,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096400.0332634,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096400.2333813,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096400.4334836,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096400.6335883,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096400.833686,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096401.033781,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096401.2339642,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096401.4340432,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096401.6341186,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096401.834195,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096402.0343118,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096402.2343905,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096402.434493,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096402.6345901,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096402.8346648,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096403.0347524,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096403.234943,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096403.4350853,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096403.635228,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096403.8353882,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096404.0355258,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096404.2356417,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096404.4357698,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096404.635878,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096404.8359463,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096405.036028,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096405.2361186,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096405.4362252,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096405.6363256,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096405.8364108,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096406.0364947,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096406.2365716,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096406.4366395,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096406.6367054,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096406.8367634,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096407.0368583,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096407.2369528,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  }
+ ],
+ "server_ran_to_completion": true,
+ "server_exit_status": 0,
+ "final_position": [
+  0.0168715895203964,
+  0.025673458188742015,
+  0.024999924270428752
+ ],
+ "final_read_wall": 1790096407.4372444,
+ "final_agrees_with_at_rest": true,
+ "final_vs_at_rest_max_delta_m": 0.0,
+ "server_status_at_teardown": 0,
+ "verdict": "COLLECTED",
+ "git_close": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_close": [
+  0.4765625,
+  0.40771484375,
+  0.33056640625
+ ],
+ "ended_wall": 1790096407.4460638,
+ "exit_code": 0
+}

@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<!-- Test apparatus for the rigid grasp hold plugin (ADR-0061). Deliberately NOT
+     the CITE cell: round synthetic numbers, a fixed "wrist" with one revolute
+     "jaw" joint driven directly, and two boxes — one within the declared
+     attach radius, one well outside it. Copying cell_b's coordinates into it
+     would put those coordinates in a second place (P1) for a mechanism this
+     file exercises by shape, not by floor plan.
+
+     Gravity is off. Nothing here needs to rest on anything: the jaw joint is
+     driven directly by the test through JointVelocityCmd, exactly as a real
+     controller's command interface would drive it, and the boxes have nowhere
+     they need to fall to. -->
+<sdf version="1.9">
+  <world name="hold">
+    <gravity>0 0 0</gravity>
+    <physics name="default" type="ignored">
+      <!-- The same step the generated world uses. -->
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+
+    <!-- wrist stands at (0, 0, 0.5) in the world and never moves — pinned to
+         the world by a fixed joint, exactly as `picker_mount_world_anchor`
+         pins the generated arm's own base. jaw hangs off it on one revolute
+         joint, driven directly by the test rather than by any controller: what
+         is under test is what this plugin does with a joint's position and
+         velocity, not how a controller produces them. -->
+    <model name="rig">
+      <pose>0 0 0.5 0 0 0</pose>
+      <link name="wrist">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.01</iyy><iyz>0</iyz>
+            <izz>0.01</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <link name="jaw">
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>0.0001</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.0001</iyy><iyz>0</iyz>
+            <izz>0.0001</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <joint name="world_anchor" type="fixed">
+        <parent>world</parent>
+        <child>wrist</child>
+      </joint>
+      <joint name="jaw_joint" type="revolute">
+        <parent>wrist</parent>
+        <child>jaw</child>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-0.2</lower><upper>2.5</upper><effort>10</effort><velocity>10</velocity></limit>
+        </axis>
+      </joint>
+    </model>
+
+    <!-- 0.2 m from wrist — inside the 0.5 m attach_radius_m the plugin below
+         declares. -->
+    <model name="box">
+      <pose>0.2 0 0.5 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.00004</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.00004</iyy><iyz>0</iyz>
+            <izz>0.00004</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 2.0 m from wrist — well outside the radius. Declared graspable exactly
+         like `box`, so the test that nothing ever attaches to it is a test of
+         the radius and not of the <graspable> list. -->
+    <model name="box_far">
+      <pose>2.0 0 0.5 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.00004</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.00004</iyy><iyz>0</iyz>
+            <izz>0.00004</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- hold_position_min_rad/hold_position_max_rad stand in for the
+         generation-time part-width window this apparatus has no L0 model to
+         derive one from: [0.3, 0.6] rad, comfortably inside the declared
+         stroke [0.0, 1.0] and comfortably clear of both rails, exactly the
+         relationship the real window has to the real stroke. -->
+    <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
+      <attach_link>wrist</attach_link>
+      <drive_joint>jaw_joint</drive_joint>
+      <stall_velocity_threshold>0.05</stall_velocity_threshold>
+      <stall_timeout_s>0.05</stall_timeout_s>
+      <detach_margin_rad>0.02</detach_margin_rad>
+      <open_position>0.0</open_position>
+      <closed_position>1.0</closed_position>
+      <attach_radius_m>0.5</attach_radius_m>
+      <hold_position_min_rad>0.3</hold_position_min_rad>
+      <hold_position_max_rad>0.6</hold_position_max_rad>
+      <graspable>box</graspable>
+      <graspable>box_far</graspable>
+    </plugin>
+  </world>
+</sdf>

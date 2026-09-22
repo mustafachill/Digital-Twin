@@ -41,7 +41,18 @@ target_link_libraries(cite_break_beam
   gz-msgs::core
 )
 
-install(TARGETS cite_conveyor cite_break_beam
+# The rigid grasp hold (ADR-0061): a world system for the reason the module's
+# own generator docstring gives — it has to reach across two independently
+# spawned models, the arm and the work-piece, exactly as the belt and the beam
+# already do.
+add_library(cite_grasp_hold SHARED src/grasp_hold.cpp)
+target_include_directories(cite_grasp_hold PRIVATE include)
+target_link_libraries(cite_grasp_hold
+  gz-sim::core
+  gz-plugin::register
+)
+
+install(TARGETS cite_conveyor cite_break_beam cite_grasp_hold
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -104,6 +115,25 @@ if(BUILD_TESTING)
       gz-msgs::core
     )
     add_dependencies(test_conveyor_carry cite_conveyor cite_break_beam)
+  endif()
+
+  # The rigid grasp hold's decision — stalled, clear of both rails, and a
+  # graspable model within radius — against a real physics step. The drive
+  # joint here is driven directly by the test through `JointVelocityCmd`
+  # rather than by a controller manager; see the file's own header for why
+  # that is the right substitute.
+  ament_add_gtest(test_grasp_hold test/test_grasp_hold.cpp
+    TIMEOUT 120
+    ENV "GZ_SIM_SYSTEM_PLUGIN_PATH=${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  if(TARGET test_grasp_hold)
+    target_compile_definitions(test_grasp_hold PRIVATE
+      CITE_HOLD_WORLD="${CMAKE_CURRENT_SOURCE_DIR}/test/worlds/hold.sdf")
+    target_link_libraries(test_grasp_hold
+      gz-sim::core
+      gz-math::core
+    )
+    add_dependencies(test_grasp_hold cite_grasp_hold)
   endif()
 endif()
 

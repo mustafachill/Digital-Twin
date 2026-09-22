@@ -1,10 +1,17 @@
 # ADR-0029: Rest simulated grasping on friction, and remove the attachment plugin
 
-- **Status:** Accepted (corrected 2026-08-26) — the decision stands and the open debt it
-  records stands. Two supporting claims about *why* the part turns are false and are marked
-  where they stand; nothing that was decided is withdrawn. See the section
-  "Correction — 2026-08-26: what the twist was attributed to, and what it is not", immediately
-  after this block.
+- **Status:** Accepted (corrected 2026-08-26 and 2026-09-22) — the decision stands and the open
+  debt it records stands. Three supporting claims are false and are marked where they stand;
+  nothing that was decided is withdrawn.
+  The **2026-09-22** correction is the newer and the smaller: finding 1 says
+  `CITE_PHYSICS_SEED` *"reaches nothing"*, and the seed had reached `gz sim --seed` since the
+  day before this record was written. What that finding needed — that the seed does not make
+  these trials reproducible — survives in full. See the section
+  "Correction — 2026-09-22: `CITE_PHYSICS_SEED` does not reach nothing, and it did not when
+  this was written", immediately after this block.
+  The **2026-08-26** correction, on two claims about *why* the part turns, follows it and is
+  left exactly as it stood. See the section
+  "Correction — 2026-08-26: what the twist was attributed to, and what it is not".
   **Decided, and the removal is not yet in the tree.** Written before
   the implementation, as CLAUDE.md §12 requires. At the time of writing
   `workspace/src/cite_simulation/src/grasp_attachment.cpp` still exists and every generated
@@ -23,6 +30,57 @@
   [L2](../architecture/L2-control-and-hal.md),
   [cross-cutting-testing.md](../architecture/cross-cutting-testing.md)
 - **Evidence:** [`docs/measurements/2026-08-25-friction-grasp/`](../measurements/2026-08-25-friction-grasp/results.md)
+
+## Correction — 2026-09-22: `CITE_PHYSICS_SEED` does not reach nothing, and it did not when this was written
+
+**This is the second correction on this record. The first — on what the twist was attributed
+to — is immediately below this section and is left exactly as it stands.** The decision is
+untouched: grasping rests on friction, the plugin goes, and the open debt about orientation
+stands in full. What is wrong is one clause of one finding.
+
+**What was written.** Finding 1 reads *"These are rates over independent samples, not
+determinism claims: `CITE_PHYSICS_SEED` reaches nothing
+([ADR-0027](0027-pilz-planning-pipeline.md))."*
+
+**What is true.** The seed had a consumer before this record was committed.
+`cite_bringup/launch/simulation.launch.py` reads `CITE_PHYSICS_SEED` and appends
+`gz sim --seed <value>`; that plumbing landed at `e929795` on 2026-08-24 at 23:26, and this
+record was committed at `6fd5e68` on 2026-08-25 at 13:24 — **about fourteen hours later**
+(`git log --date=iso` on each, read 2026-09-22). `gz sim --seed` reaches
+`gz::math::Rand`, which sensor noise and the comms systems draw from. So the seed reaches
+something, and **the record this sentence cites is the record that says so**: ADR-0027's
+section *"What `CITE_PHYSICS_SEED` does and does not buy"* states the whole path.
+
+**What survives, and it is the whole of what finding 1 needed.** The seed does **not** reach
+the physics solver, does **not** reach OMPL, and does **not** make a scenario reproducible —
+so the 84 trials behind this record are still rates over samples and still not a determinism
+claim. Write it as *"the seed does not make these trials reproducible"*, which is what was
+meant, and never as *"reaches nothing"*, which is a claim about plumbing and is false.
+
+**And a campaign has since measured the behavioural half of that, at last.**
+[`docs/measurements/2026-09-22-is-a-run-reproducible/`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md)
+ran one scenario twice under one seed at one commit and the work-piece ended up **in two
+places** — two runs on one machine, which is not a rate. **It is forbidden to read anything
+further into it**: its own control did not clear, so whether the physics engine reproduces and
+whether the seed changes a physical outcome are **NOT ADMISSIBLE** there, and where the
+irreproducibility enters is **UNRESOLVED**. Nothing here may be written as *"the seed was shown
+to do nothing"*.
+
+**Four frozen campaign files carry the same clause and are deliberately not touched** —
+`2026-08-25-friction-grasp/{results,criteria}.md`,
+`2026-08-25-grasp-plane-offset/criteria.md` and
+`2026-08-26-conveyor-yaw-transfer/{criteria,ANALYSIS}.md`. A published campaign is frozen once
+its first trial has run ([`../measurements/README.md`](../measurements/README.md)), and a
+stale sentence inside one is a fact about when the measurement was taken. Read this correction
+beside them.
+
+**How the error survived.** The clause cites the very record that contradicts it, and nobody
+followed the link: ADR-0027 was written the same week and says in plain words what the flag
+reaches. Nothing in the tree checks a prose claim about what an environment variable reaches —
+it is not a count, not an interface and not a generated artifact, so no test walks it — and the
+sentence was then copied into four campaign directories, where the freeze rule makes it
+permanent. **It was found by a campaign reading the sentence's own citation**, four weeks
+later, while registering criteria against it.
 
 ## Correction — 2026-08-26: what the twist was attributed to, and what it is not
 
@@ -105,6 +163,9 @@ Four findings decide it.
    independent samples, not determinism claims: `CITE_PHYSICS_SEED` reaches nothing
    ([ADR-0027](0027-pilz-planning-pipeline.md)) and OMPL is unseeded
    ([ADR-0006](0006-moveit2-motion-planning.md)).
+   **[Corrected 2026-09-22 — see the Correction section above: the seed reaches
+   `gz::math::Rand`, and had done since the day before this record was written. What survives
+   is that it does not make these trials reproducible.]**
 2. **Friction does not hold the part in orientation, and this is timestep-sensitive by a
    factor of 24.5.** The work-piece rotates between the jaws by up to 34.3° about the
    pad-to-pad axis while the pads themselves turn 0.14°. Median twist runs 0.71° → 9.60° →

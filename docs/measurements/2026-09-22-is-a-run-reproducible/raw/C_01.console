@@ -1,0 +1,804 @@
+[34m==>[0m Not a ROS environment — running 'scenario' inside the container
+Container cite-digital-twin-3319196271-dev-run-ec5bb1ceadf9 [32mCreating[0m 
+Container cite-digital-twin-3319196271-dev-run-ec5bb1ceadf9 [32mCreated[0m 
+[34m==>[0m Running scenario 'pick_and_place' against zone 'cell_b' on DDS domain 43
+[33mwarn[0m Seed 20260824 reaches 'gz sim --seed' only — this run is not reproducible.
+[33mwarn[0m   That seeds gz::math::Rand: sensor noise and transport RNG.
+[33mwarn[0m   It does NOT seed the physics solver.
+[33mwarn[0m   Planning: what is PROVEN is that one move_group answers an identical request
+[33mwarn[0m   identically within one process (cite_skills' planning-pipeline launch test).
+[33mwarn[0m   That is repeatability, not scenario determinism, and it holds only where Pilz
+[33mwarn[0m   answered; the OMPL fallback is unseeded and unseedable (ADR-0006). Grep this
+[33mwarn[0m   run's log for 'planner fallback:' to see which motions took it, and for
+[33mwarn[0m   'planner fallback declined:' for the ones that refused a substitute.
+[INFO] [launch]: All log files can be found below /home/cite/.ros/log/2026-09-22-17-01-07-515859-7af2438e2f51-49
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [launch.user]: Bringing up zone cell_b side plant: scene plus 1 arm(s)
+[INFO] [gz-1]: process started with pid [79]
+[INFO] [parameter_bridge-2]: process started with pid [80]
+[INFO] [robot_state_publisher-3]: process started with pid [81]
+[INFO] [create-4]: process started with pid [82]
+[INFO] [robot_state_publisher-5]: process started with pid [83]
+[INFO] [create-6]: process started with pid [84]
+[INFO] [frame_server.py-7]: process started with pid [85]
+[INFO] [model_info.py-8]: process started with pid [86]
+[INFO] [topology_server.py-9]: process started with pid [87]
+[INFO] [lifecycle_driver.py-10]: process started with pid [88]
+test_the_behaviour_tree_picks_and_places_the_workpiece (pick_and_place.TestPickAndPlace.test_the_behaviour_tree_picks_and_places_the_workpiece) ... [create-6] [INFO] [1790096467.927533844] [spawn_picker]: Requesting list of world names.
+[robot_state_publisher-3] [INFO] [1790096467.935318631] [scene_description_publisher]: Robot initialized
+[robot_state_publisher-5] [INFO] [1790096467.936196271] [cite.cell_b.picker.description_publisher]: Robot initialized
+[create-4] [INFO] [1790096467.943063037] [spawn_scene]: Requesting list of world names.
+[parameter_bridge-2] [INFO] [1790096467.963286029] [gz_bridge]: Creating GZ->ROS Bridge: [/clock (gz.msgs.Clock) -> /clock (rosgraph_msgs/msg/Clock)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1790096467.964690666] [gz_bridge]: Creating ROS->GZ Bridge: [/cite/cell_b/transfer_belt/command (std_msgs/msg/Float64) -> /cite/cell_b/transfer_belt/command (gz.msgs.Double)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1790096467.966234970] [gz_bridge]: Creating GZ->ROS Bridge: [/cite/cell_b/transfer_belt/state (gz.msgs.Double) -> /cite/cell_b/transfer_belt/state (std_msgs/msg/Float64)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1790096467.966556410] [gz_bridge]: Creating GZ->ROS Bridge: [/cite/cell_b/infeed_beam/detection (gz.msgs.Boolean) -> /cite/cell_b/infeed_beam/detection (std_msgs/msg/Bool)] (Lazy 0)
+[parameter_bridge-2] [INFO] [1790096467.966956691] [gz_bridge]: Creating GZ->ROS Bridge: [/cite/cell_b/outfeed_beam/detection (gz.msgs.Boolean) -> /cite/cell_b/outfeed_beam/detection (std_msgs/msg/Bool)] (Lazy 0)
+[gz-1] [1;33m[Wrn] [conveyor.cpp:169] [0m[1;33m[cite_conveyor] belt at [0m[1;33m1.05[0m[1;33m [0m[1;33m3[0m[1;33m [0m[1;33m0.6[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m commanded on '[0m[1;33m/cite/cell_b/transfer_belt/command[0m[1;33m', reporting on '[0m[1;33m/cite/cell_b/transfer_belt/state[0m[1;33m'[0m
+[gz-1] [1;33m[Wrn] [break_beam.cpp:189] [0m[1;33m[cite_beam] beam at [0m[1;33m-0.475[0m[1;33m [0m[1;33m3.25[0m[1;33m [0m[1;33m0.63[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m reporting on '[0m[1;33m/cite/cell_b/infeed_beam/detection[0m[1;33m'[0m
+[gz-1] [1;33m[Wrn] [break_beam.cpp:189] [0m[1;33m[cite_beam] beam at [0m[1;33m1.55[0m[1;33m [0m[1;33m3.25[0m[1;33m [0m[1;33m0.63[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m [0m[1;33m0[0m[1;33m reporting on '[0m[1;33m/cite/cell_b/outfeed_beam/detection[0m[1;33m'[0m
+[lifecycle_driver.py-10] [INFO] [1790096468.226094756] [lifecycle_driver]: driving 3 managed node(s) to active
+[create-4] [INFO] [1790096468.362795267] [spawn_scene]: Waiting messages on topic [robot_description].
+[create-4] [INFO] [1790096468.462239514] [spawn_scene]: Entity creation successful.
+[create-6] [INFO] [1790096468.463215814] [spawn_picker]: Waiting messages on topic [/cite/cell_b/picker/robot_description].
+[create-6] [INFO] [1790096468.474531477] [spawn_picker]: Entity creation successful.
+[frame_server.py-7] [INFO] [1790096468.495610903] [cite.facility.frame_server]: configured with 9 static transform(s)
+[frame_server.py-7] [INFO] [1790096468.500606060] [cite.facility.frame_server]: published 9 static transform(s)
+[lifecycle_driver.py-10] [INFO] [1790096468.502047753] [lifecycle_driver]: /cite/facility/frame_server is active
+[model_info.py-8] [INFO] [1790096468.548043650] [cite.facility.model_info]: configured for model 4bac1ca64ee4
+[lifecycle_driver.py-10] [INFO] [1790096468.550884427] [lifecycle_driver]: /cite/facility/model_info is active
+[INFO] [create-4]: process has finished cleanly [pid 82]
+[INFO] [create-6]: process has finished cleanly [pid 84]
+[topology_server.py-9] [INFO] [1790096468.596963409] [cite.facility.topology_server]: configured with 3 station(s) and 2 edge(s)
+[lifecycle_driver.py-10] [INFO] [1790096468.599386739] [lifecycle_driver]: /cite/facility/topology_server is active
+[INFO] [lifecycle_driver.py-10]: process has finished cleanly [pid 88]
+[INFO] [spawner-11]: process started with pid [243]
+[INFO] [move_group-12]: process started with pid [244]
+[INFO] [detection_server-13]: process started with pid [245]
+[detection_server-13] [INFO] [1790096468.987064975] [cite.cell_b.detection.detection_server]: watching 'infeed_beam' on '/cite/cell_b/infeed_beam/detection_level', publishing events on '/cite/cell_b/infeed_beam/detection'
+[detection_server-13] [INFO] [1790096468.987447470] [cite.cell_b.detection.detection_server]: watching 'outfeed_beam' on '/cite/cell_b/outfeed_beam/detection_level', publishing events on '/cite/cell_b/outfeed_beam/detection'
+[detection_server-13] [INFO] [1790096468.989171304] [cite.cell_b.detection.detection_server]: detection for zone 'cell_b' is accepting goals over 2 sensor(s)
+[move_group-12] [WARN] [1790096469.007991051] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_b.picker.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-12] [WARN] [1790096469.012037534] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_b.picker.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-12] [INFO] [1790096469.018306622] [cite.cell_b.picker.move_group.moveit.ros.rdf_loader]: Loaded robot model in 0 seconds
+[move_group-12] [INFO] [1790096469.018368016] [cite.cell_b.picker.move_group.moveit.core.robot_model]: Loading robot model 'picker'...
+[move_group-12] [INFO] [1790096469.018377961] [cite.cell_b.picker.move_group.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[move_group-12] [INFO] [1790096469.027855210] [cite.cell_b.picker.move_group.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'picker_xarm5': 1 1 1 1 1
+[move_group-12] [INFO] [1790096469.067746646] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-12] [INFO] [1790096469.067875749] [cite.cell_b.picker.move_group.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-12] [INFO] [1790096469.068446622] [cite.cell_b.picker.move_group.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-12] [INFO] [1790096469.068762498] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_b/picker/attached_collision_object' for attached collision objects
+[move_group-12] [INFO] [1790096469.068773806] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[move_group-12] [INFO] [1790096469.068864565] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_group-12] [INFO] [1790096469.069101902] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-12] [INFO] [1790096469.069162579] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[move_group-12] [INFO] [1790096469.069670820] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Listening to '/cite/cell_b/picker/planning_scene'
+[move_group-12] [INFO] [1790096469.069682314] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-12] [INFO] [1790096469.069954037] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-12] [INFO] [1790096469.070255757] [cite.cell_b.picker.move_group.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-12] [ERROR] [1790096469.070498072] [cite.cell_b.picker.move_group.moveit.ros.occupancy_map_monitor]: No 3D sensor plugin(s) defined for octomap updates
+[move_group-12] [INFO] [1790096469.078040858] [cite.cell_b.picker.move_group.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-12] [INFO] [1790096469.079776790] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-12] [INFO] [1790096469.079792563] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-12] [INFO] [1790096469.080770664] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[move_group-12] [INFO] [1790096469.080786247] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-12] [INFO] [1790096469.081500159] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[move_group-12] [INFO] [1790096469.081514297] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-12] [INFO] [1790096469.082171678] [cite.cell_b.picker.move_group.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[move_group-12] [INFO] [1790096469.082187319] [cite.cell_b.picker.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096469.083299464] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096469.083973271] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096469.083985217] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-12] [INFO] [1790096469.084101796] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-12] [INFO] [1790096469.084112493] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-12] [INFO] [1790096469.084126967] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-12] [INFO] [1790096469.084130509] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-12] [INFO] [1790096469.084158906] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-12] [INFO] [1790096469.085263840] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-12] [INFO] [1790096469.088786289] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-12] [INFO] [1790096469.088800060] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-12] [INFO] [1790096469.756550172] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-12] [INFO] [1790096469.768111279] [cite.cell_b.picker.move_group.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[move_group-12] [INFO] [1790096469.769264369] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096469.769375101] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096469.769381053] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-12] [INFO] [1790096469.769511120] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-12] [INFO] [1790096469.769517514] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-12] [INFO] [1790096469.769532912] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-12] [INFO] [1790096469.769553693] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-12] [INFO] [1790096469.769563752] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-12] [INFO] [1790096469.770637057] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-12] [INFO] [1790096469.770914184] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-12] [INFO] [1790096469.770922277] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-12] [INFO] [1790096469.771234878] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-12] [INFO] [1790096469.771250361] [cite.cell_b.picker.move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-12] [INFO] [1790096469.771523134] [cite.cell_b.picker.move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-12] [WARN] [1790096469.772755399] [rcl.logging_rosout]: Publisher already registered for node name: 'move_group'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_b.picker.move_group' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_group-12] [INFO] [1790096469.786361591] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for picker_joint_trajectory_controller
+[move_group-12] [INFO] [1790096469.786394417] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: picker_gripper_controller will command a max effort of: 0
+[move_group-12] [INFO] [1790096469.788218397] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Added GripperCommand controller for picker_gripper_controller
+[move_group-12] [INFO] [1790096469.788339411] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096469.788360124] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096469.788636550] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Trajectory execution is not managing controllers
+[move_group-12] [INFO] [1790096469.788652158] [cite.cell_b.picker.move_group]: MoveGroup debug mode is ON
+[spawner-11] [INFO] [1790096469.795774974] [spawn_picker_stage0]: waiting for service /cite/cell_b/picker/controller_manager/list_controllers to become available...
+[move_group-12] [INFO] [1790096469.801577358] [cite.cell_b.picker.move_group.moveit.ros.move_group.executable]: 
+[move_group-12] 
+[move_group-12] ********************************************************
+[move_group-12] * MoveGroup using: 
+[move_group-12] *     - apply_planning_scene_service
+[move_group-12] *     - clear_octomap_service
+[move_group-12] *     - get_group_urdf
+[move_group-12] *     - load_geometry_from_file
+[move_group-12] *     - CartesianPathService
+[move_group-12] *     - execute_trajectory_action
+[move_group-12] *     - get_planning_scene_service
+[move_group-12] *     - kinematics_service
+[move_group-12] *     - move_action
+[move_group-12] *     - motion_plan_service
+[move_group-12] *     - query_planners_service
+[move_group-12] *     - state_validation_service
+[move_group-12] *     - save_geometry_to_file
+[move_group-12] ********************************************************
+[move_group-12] 
+[move_group-12] [INFO] [1790096469.801607988] [cite.cell_b.picker.move_group.moveit.ros.move_group.context]: MoveGroup context using pipeline pilz_industrial_motion_planner
+[move_group-12] [INFO] [1790096469.801616185] [cite.cell_b.picker.move_group.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[move_group-12] [96mLoading 'move_group/ApplyPlanningSceneService'...[0m
+[move_group-12] [96mLoading 'move_group/ClearOctomapService'...[0m
+[move_group-12] [96mLoading 'move_group/GetUrdfService'...[0m
+[move_group-12] [96mLoading 'move_group/LoadGeometryFromFileService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupCartesianPathService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupExecuteTrajectoryAction'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupGetPlanningSceneService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupKinematicsService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupMoveAction'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupPlanService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupQueryPlannersService'...[0m
+[move_group-12] [96mLoading 'move_group/MoveGroupStateValidationService'...[0m
+[move_group-12] [96mLoading 'move_group/SaveGeometryToFileService'...[0m
+[move_group-12] 
+[move_group-12] [92mYou can start planning now![0m
+[move_group-12] 
+[gz-1] [1;33mWarning [parser_urdf.cc:1170][0m multiple inconsistent <self_collide> exists due to fixed joint reduction overwriting previous value [1] with [0].
+[gz-1] [1;31m[Err] [SystemLoader.cc:92] [0m[1;31mFailed to load system plugin [[0m[1;31mlibgazebo_mimic_joint_plugin.so[0m[1;31m] : Could not find shared library.[0m[1;31m[0m
+[gz-1] [1;31m[Err] [SystemLoader.cc:92] [0m[1;31mFailed to load system plugin [[0m[1;31mlibgazebo_mimic_joint_plugin.so[0m[1;31m] : Could not find shared library.[0m[1;31m[0m
+[gz-1] [1;31m[Err] [SystemLoader.cc:92] [0m[1;31mFailed to load system plugin [[0m[1;31mlibgazebo_mimic_joint_plugin.so[0m[1;31m] : Could not find shared library.[0m[1;31m[0m
+[gz-1] [1;31m[Err] [SystemLoader.cc:92] [0m[1;31mFailed to load system plugin [[0m[1;31mlibgazebo_mimic_joint_plugin.so[0m[1;31m] : Could not find shared library.[0m[1;31m[0m
+[gz-1] [1;31m[Err] [SystemLoader.cc:92] [0m[1;31mFailed to load system plugin [[0m[1;31mlibgazebo_mimic_joint_plugin.so[0m[1;31m] : Could not find shared library.[0m[1;31m[0m
+[gz-1] [INFO] [1790096470.584758693] [cite.cell_b.picker.gz_ros_control]: [gz_ros2_control] Fixed joint ['picker_mount_world_anchor'] (Entity='74') is skipped.
+[gz-1] [INFO] [1790096470.586609706] [cite.cell_b.picker.gz_ros_control]: Loading controller_manager
+[gz-1] [INFO] [1790096470.598891379] [cite.cell_b.picker.controller_manager]: Using ROS clock for triggering controller manager cycles.
+[gz-1] [WARN] [1790096470.598912400] [cite.cell_b.picker.controller_manager]: The resource manager is not yet initialized, will wait for the robot description to initialize it..
+[gz-1] [INFO] [1790096470.604160172] [cite.cell_b.picker.controller_manager]: Subscribing to '/cite/cell_b/picker/robot_description' topic for robot description.
+[gz-1] [WARN] [1790096470.604198777] [cite.cell_b.picker.gz_ros_control]: Waiting RM to load and initialize hardware...
+[gz-1] [INFO] [1790096470.758543969] [cite.cell_b.picker.controller_manager]: Received robot description from topic.
+[gz-1] [INFO] [1790096470.758631913] [cite.cell_b.picker.controller_manager]: Enforcing command limits is enabled...
+[gz-1] [INFO] [1790096470.761195382] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_joint5' in hardware 'picker_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+[gz-1]   has velocity limits: true [3.14]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [20]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761219705] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_joint5' in hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.761234671] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_joint3' in hardware 'picker_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-3.927, 0.19198]
+[gz-1]   has velocity limits: true [3.14]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [30]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761238599] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_joint3' in hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.761243675] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_joint4' in hardware 'picker_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-1.69297, 3.14159]
+[gz-1]   has velocity limits: true [3.14]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [20]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761247719] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_joint4' in hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.761255379] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_joint2' in hardware 'picker_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-2.059, 2.0944]
+[gz-1]   has velocity limits: true [3.14]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761260422] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_joint2' in hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.761265398] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_joint1' in hardware 'picker_gz_ros2_control/GazeboSimSystem' : '  has position limits: true [-6.28319, 6.28319]
+[gz-1]   has velocity limits: true [3.14]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761268860] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_joint1' in hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.761274441] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_right_inner_knuckle_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [2]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761298323] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_right_inner_knuckle_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.761306797] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_right_finger_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [2]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761310740] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_right_finger_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.761316281] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_right_outer_knuckle_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [2]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761319832] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_right_outer_knuckle_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.761325160] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_left_inner_knuckle_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [2]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761330121] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_left_inner_knuckle_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.761336259] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_left_finger_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [2]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761340006] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_left_finger_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.761345078] [cite.cell_b.picker.gz_ros_control]: Using JointLimiter for joint 'picker_drive_joint' in hardware 'picker_XArmGripperSystem' : '  has position limits: true [0, 0.85]
+[gz-1]   has velocity limits: true [1]
+[gz-1]   has acceleration limits: false [nan]
+[gz-1]   has deceleration limits: false [nan]
+[gz-1]   has jerk limits: false [nan]
+[gz-1]   has effort limits: true [50]
+[gz-1]   angle wraparound: false'
+[gz-1] [INFO] [1790096470.761348830] [cite.cell_b.picker.gz_ros_control]: Creating JointSaturationLimiter for joint 'picker_drive_joint' in hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.764590666] [cite.cell_b.picker.gz_ros_control]: The position_proportional_gain has been set to: 0.1
+[gz-1] [INFO] [1790096470.764635359] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_joint1
+[gz-1] [INFO] [1790096470.764641681] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.764646565] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764650160] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764656920] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.764659893] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764667842] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764674480] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_joint2
+[gz-1] [INFO] [1790096470.764686910] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.764690165] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764693315] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764696076] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.764698654] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764703151] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764711370] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_joint3
+[gz-1] [INFO] [1790096470.764714423] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.764717023] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764720240] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764722877] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.764726224] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764732731] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764740638] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_joint4
+[gz-1] [INFO] [1790096470.764744063] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.764746831] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764749634] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764752308] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.764754856] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764758872] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764765458] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_joint5
+[gz-1] [INFO] [1790096470.764768451] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.764771060] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764774504] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764777289] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.764779795] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.764786642] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.764904314] [cite.cell_b.picker.controller_manager]: Initialize hardware 'picker_gz_ros2_control/GazeboSimSystem' 
+[gz-1] [WARN] [1790096470.764921051] [cite.cell_b.picker.controller_manager.hardware_component.system.picker_gz_ros2_control/GazeboSimSystem]: Executor is not available during hardware component initialization for 'picker_gz_ros2_control/GazeboSimSystem'. Skipping node creation!
+[gz-1] [INFO] [1790096470.764979450] [cite.cell_b.picker.controller_manager]: Successful initialization of hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.765156432] [cite.cell_b.picker.gz_ros_control]: The position_proportional_gain has been set to: 0.1
+[gz-1] [INFO] [1790096470.765173563] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_drive_joint
+[gz-1] [INFO] [1790096470.765183970] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765187655] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765192369] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765196608] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765199601] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765205547] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765215311] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_left_finger_joint
+[gz-1] [INFO] [1790096470.765220367] [cite.cell_b.picker.gz_ros_control]: Joint 'picker_left_finger_joint'is mimicking joint 'picker_drive_joint' with multiplier: 1 and offset: 0
+[gz-1] [INFO] [1790096470.765225129] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765230249] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765233811] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765236623] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765243910] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_left_inner_knuckle_joint
+[gz-1] [INFO] [1790096470.765255906] [cite.cell_b.picker.gz_ros_control]: Joint 'picker_left_inner_knuckle_joint'is mimicking joint 'picker_drive_joint' with multiplier: 1 and offset: 0
+[gz-1] [INFO] [1790096470.765259628] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765263843] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765268498] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765271508] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765279075] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_right_outer_knuckle_joint
+[gz-1] [INFO] [1790096470.765284713] [cite.cell_b.picker.gz_ros_control]: Joint 'picker_right_outer_knuckle_joint'is mimicking joint 'picker_drive_joint' with multiplier: 1 and offset: 0
+[gz-1] [INFO] [1790096470.765289304] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765292326] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765296738] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765300608] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765307139] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_right_finger_joint
+[gz-1] [INFO] [1790096470.765312023] [cite.cell_b.picker.gz_ros_control]: Joint 'picker_right_finger_joint'is mimicking joint 'picker_drive_joint' with multiplier: 1 and offset: 0
+[gz-1] [INFO] [1790096470.765318643] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765321549] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765325321] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765329473] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765336086] [cite.cell_b.picker.gz_ros_control]: Loading joint: picker_right_inner_knuckle_joint
+[gz-1] [INFO] [1790096470.765340150] [cite.cell_b.picker.gz_ros_control]: Joint 'picker_right_inner_knuckle_joint'is mimicking joint 'picker_drive_joint' with multiplier: 1 and offset: 0
+[gz-1] [INFO] [1790096470.765343441] [cite.cell_b.picker.gz_ros_control]: 	State:
+[gz-1] [INFO] [1790096470.765346238] [cite.cell_b.picker.gz_ros_control]: 		 position
+[gz-1] [INFO] [1790096470.765349290] [cite.cell_b.picker.gz_ros_control]: 		 velocity
+[gz-1] [INFO] [1790096470.765352235] [cite.cell_b.picker.gz_ros_control]: 	Command:
+[gz-1] [INFO] [1790096470.765373097] [cite.cell_b.picker.controller_manager]: Initialize hardware 'picker_XArmGripperSystem' 
+[gz-1] [WARN] [1790096470.765379130] [cite.cell_b.picker.controller_manager.hardware_component.system.picker_XArmGripperSystem]: Executor is not available during hardware component initialization for 'picker_XArmGripperSystem'. Skipping node creation!
+[gz-1] [INFO] [1790096470.765409403] [cite.cell_b.picker.controller_manager]: Successful initialization of hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.765480956] [cite.cell_b.picker.controller_manager]: Activating component 'picker_XArmGripperSystem'.
+[gz-1] [INFO] [1790096470.765492834] [resource_manager]: 'configure' hardware 'picker_XArmGripperSystem' 
+[gz-1] [INFO] [1790096470.765497273] [cite.cell_b.picker.gz_ros_control]: System Successfully configured!
+[gz-1] [INFO] [1790096470.765500999] [resource_manager]: Successful 'configure' of hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.765508400] [resource_manager]: 'activate' hardware 'picker_XArmGripperSystem' 
+[gz-1] [INFO] [1790096470.765522354] [resource_manager]: Successful 'activate' of hardware 'picker_XArmGripperSystem'
+[gz-1] [INFO] [1790096470.765584721] [cite.cell_b.picker.controller_manager]: Activating component 'picker_gz_ros2_control/GazeboSimSystem'.
+[gz-1] [INFO] [1790096470.765589057] [resource_manager]: 'configure' hardware 'picker_gz_ros2_control/GazeboSimSystem' 
+[gz-1] [INFO] [1790096470.765590655] [cite.cell_b.picker.gz_ros_control]: System Successfully configured!
+[gz-1] [INFO] [1790096470.765594270] [resource_manager]: Successful 'configure' of hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [INFO] [1790096470.765597296] [resource_manager]: 'activate' hardware 'picker_gz_ros2_control/GazeboSimSystem' 
+[gz-1] [INFO] [1790096470.765606126] [resource_manager]: Successful 'activate' of hardware 'picker_gz_ros2_control/GazeboSimSystem'
+[gz-1] [WARN] [1790096470.765619702] [cite.cell_b.picker.controller_manager]: Component 'picker_XArmGripperSystem' does not have read or write statistics initialized, skipping registration.
+[gz-1] [WARN] [1790096470.765624345] [cite.cell_b.picker.controller_manager]: Component 'picker_gz_ros2_control/GazeboSimSystem' does not have read or write statistics initialized, skipping registration.
+[gz-1] [INFO] [1790096470.765629137] [cite.cell_b.picker.controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[gz-1] [1;31m[Err] [Physics.cc:1906] [0m[1;31mAttempting to create a mimic constraint for joint [[0m[1;31mpicker_left_finger_joint[0m[1;31m] but the chosen physics engine does not support [0m[1;31mmimic constraints, so no constraint will be [0m[1;31mcreated.[0m[1;31m[0m
+[detection_server-13] [INFO] [1790096472.625054597] [cite.cell_b.detection.detection_server]: 'outfeed_beam' first reported CLEAR
+[detection_server-13] [INFO] [1790096472.625194080] [cite.cell_b.detection.detection_server]: 'infeed_beam' first reported CLEAR
+[gz-1] [WARN] [1790096472.626587895] [cite.cell_b.picker.gz_ros_control]:  Desired controller update period (0.00666667 s) is slower than the gazebo simulation period (0.001 s).
+[gz-1] [INFO] [1790096473.549723422] [cite.cell_b.picker.controller_manager]: Loading controller : 'picker_joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[gz-1] [INFO] [1790096473.549760152] [cite.cell_b.picker.controller_manager]: Loading controller 'picker_joint_state_broadcaster'
+[gz-1] [INFO] [1790096473.553872251] [cite.cell_b.picker.controller_manager]: Controller 'picker_joint_state_broadcaster' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_b_picker_controllers.yaml -p use_sim_time:=true --param use_sim_time:=true 
+[spawner-11] [INFO] [1790096473.570376258] [spawn_picker_stage0]: Loaded picker_joint_state_broadcaster
+[gz-1] [INFO] [1790096473.571326565] [cite.cell_b.picker.controller_manager]: Configuring controller: 'picker_joint_state_broadcaster'
+[gz-1] [INFO] [1790096473.571512044] [cite.cell_b.picker.picker_joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[gz-1] [INFO] [1790096473.584557915] [cite.cell_b.picker.controller_manager]: Activating controllers: [ picker_joint_state_broadcaster ]
+[gz-1] [INFO] [1790096473.590440390] [cite.cell_b.picker.controller_manager]: Successfully switched controllers!
+[spawner-11] [INFO] [1790096473.598633947] [spawn_picker_stage0]: Configured and activated picker_joint_state_broadcaster
+[INFO] [spawner-11]: process has finished cleanly [pid 243]
+[INFO] [spawner-14]: process started with pid [374]
+[spawner-14] [INFO] [1790096474.095201031] [spawn_picker_stage1]: waiting for service /cite/cell_b/picker/controller_manager/list_controllers to become available...
+[gz-1] [INFO] [1790096474.847092177] [cite.cell_b.picker.controller_manager]: Loading controller : 'picker_gripper_controller' of type 'position_controllers/GripperActionController'
+[gz-1] [INFO] [1790096474.847133363] [cite.cell_b.picker.controller_manager]: Loading controller 'picker_gripper_controller'
+[gz-1] [INFO] [1790096474.849735022] [cite.cell_b.picker.controller_manager]: Controller 'picker_gripper_controller' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_b_picker_controllers.yaml -p use_sim_time:=true --param use_sim_time:=true 
+[gz-1] [WARN] [1790096474.857369087] [cite.cell_b.picker.picker_gripper_controller]: [Deprecated]: the `position_controllers/GripperActionController` and `effort_controllers::GripperActionController` controllers are replaced by 'parallel_gripper_controllers/GripperActionController' controller
+[spawner-14] [INFO] [1790096474.862383956] [spawn_picker_stage1]: Loaded picker_gripper_controller
+[gz-1] [INFO] [1790096474.863168763] [cite.cell_b.picker.controller_manager]: Configuring controller: 'picker_gripper_controller'
+[gz-1] [INFO] [1790096474.863235767] [cite.cell_b.picker.picker_gripper_controller]: Action status changes will be monitored at 20.000000 Hz.
+[gz-1] [INFO] [1790096474.869240268] [cite.cell_b.picker.controller_manager]: Activating controllers: [ picker_gripper_controller ]
+[gz-1] [INFO] [1790096474.878806561] [cite.cell_b.picker.controller_manager]: Successfully switched controllers!
+[spawner-14] [INFO] [1790096474.885990272] [spawn_picker_stage1]: Configured and activated picker_gripper_controller
+[gz-1] [INFO] [1790096474.886535525] [cite.cell_b.picker.controller_manager]: Loading controller : 'picker_joint_trajectory_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[gz-1] [INFO] [1790096474.886563010] [cite.cell_b.picker.controller_manager]: Loading controller 'picker_joint_trajectory_controller'
+[gz-1] [INFO] [1790096474.889582951] [cite.cell_b.picker.controller_manager]: Controller 'picker_joint_trajectory_controller' node arguments: --ros-args --params-file /workspace/workspace/install/cite_generated/share/cite_generated/control/cell_b_picker_controllers.yaml -p use_sim_time:=true --param use_sim_time:=true 
+[spawner-14] [INFO] [1790096474.906934498] [spawn_picker_stage1]: Loaded picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096474.907154522] [cite.cell_b.picker.controller_manager]: Configuring controller: 'picker_joint_trajectory_controller'
+[gz-1] [INFO] [1790096474.907325924] [cite.cell_b.picker.picker_joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[gz-1] [INFO] [1790096474.907347794] [cite.cell_b.picker.picker_joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[gz-1] [INFO] [1790096474.907371943] [cite.cell_b.picker.picker_joint_trajectory_controller]: Using 'splines' interpolation method.
+[gz-1] [INFO] [1790096474.909528262] [cite.cell_b.picker.picker_joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[gz-1] [INFO] [1790096474.913099119] [cite.cell_b.picker.picker_joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[gz-1] [INFO] [1790096474.913117532] [cite.cell_b.picker.picker_joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[gz-1] [INFO] [1790096474.920704877] [cite.cell_b.picker.controller_manager]: Activating controllers: [ picker_joint_trajectory_controller ]
+[gz-1] [INFO] [1790096474.927243317] [cite.cell_b.picker.controller_manager]: Successfully switched controllers!
+[spawner-14] [INFO] [1790096474.934935175] [spawn_picker_stage1]: Configured and activated picker_joint_trajectory_controller
+[INFO] [spawner-14]: process has finished cleanly [pid 374]
+[INFO] [planning_scene_loader.py-15]: process started with pid [392]
+[planning_scene_loader.py-15] [INFO] [1790096476.665920061] [cite.cell_b.picker.load_planning_scene_picker]: loaded 6 collision object(s) for zone 'cell_b' in cite_world
+[INFO] [planning_scene_loader.py-15]: process has finished cleanly [pid 392]
+[INFO] [skill_server-16]: process started with pid [409]
+[INFO] [readiness_witness.py-17]: process started with pid [410]
+[skill_server-16] [WARN] [1790096477.127596607] [rcl.logging_rosout]: Publisher already registered for node name: 'skill_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'cite.cell_b.picker.skill_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[skill_server-16] [INFO] [1790096477.132993249] [cite.cell_b.picker.skill_server.moveit.ros.rdf_loader]: Loaded robot model in 0 seconds
+[skill_server-16] [INFO] [1790096477.133062881] [cite.cell_b.picker.skill_server.moveit.core.robot_model]: Loading robot model 'picker'...
+[skill_server-16] [INFO] [1790096477.133075800] [cite.cell_b.picker.skill_server.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[skill_server-16] [INFO] [1790096477.143772604] [cite.cell_b.picker.skill_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'picker_xarm5': 1 1 1 1 1
+[readiness_witness.py-17] [INFO] [1790096477.611960920] [readiness_witness]: waiting for 6 action server(s) on side 'plant'
+[skill_server-16] [INFO] [1790096480.567767987] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Ready to take commands for planning group picker_xarm5.
+[skill_server-16] [INFO] [1790096480.567800918] [cite.cell_b.picker.skill_server]: planning for group 'picker_xarm5' with end effector 'picker_link_tcp' (planning frame 'picker_mount')
+[skill_server-16] [INFO] [1790096480.567805943] [cite.cell_b.picker.skill_server]: planner: pilz_industrial_motion_planner/PTP, falling back to ompl (its own default planner) (ADR-0027)
+CITE_TIMING {"scenario": "pick_and_place", "test": "test_the_behaviour_tree_picks_and_places_the_workpiece", "what": "the skill server, and therefore the whole stack beneath it", "ceiling_s": 300.0, "elapsed_s": 12.508, "spins": 8, "monotonic_s": 606952.298}
+[skill_server-16] [INFO] [1790096480.584493932] [cite.cell_b.picker.skill_server]: skills for picker are accepting goals
+CITE_TIMING {"scenario": "pick_and_place", "test": "test_the_behaviour_tree_picks_and_places_the_workpiece", "what": "a transform from cite_world to cell_b__infeed_table__surface", "ceiling_s": 300.0, "elapsed_s": 0.011, "spins": 5, "monotonic_s": 606952.315}
+CITE_TIMING {"scenario": "pick_and_place", "test": "test_the_behaviour_tree_picks_and_places_the_workpiece", "what": "a transform from cite_world to cell_b__transfer_belt__infeed", "ceiling_s": 300.0, "elapsed_s": 0.0, "spins": 0, "monotonic_s": 606952.315}
+[readiness_witness.py-17] [INFO] [1790096480.690392300] [readiness_witness]: serving: /cite/cell_b/picker/move_to
+[readiness_witness.py-17] [INFO] [1790096480.694689144] [readiness_witness]: serving: /cite/cell_b/picker/pick
+[readiness_witness.py-17] [INFO] [1790096480.698929332] [readiness_witness]: serving: /cite/cell_b/picker/place
+[readiness_witness.py-17] [INFO] [1790096480.703295529] [readiness_witness]: serving: /cite/cell_b/picker/grasp
+[readiness_witness.py-17] [INFO] [1790096480.707876264] [readiness_witness]: serving: /cite/cell_b/picker/transfer
+[readiness_witness.py-17] [INFO] [1790096480.711993950] [readiness_witness]: serving: /cite/cell_b/detection/detect
+[INFO] [readiness_witness.py-17]: process has finished cleanly [pid 410]
+[INFO] [launch.user]: CITE_SIDE_READY side=plant zone=cell_b
+[detection_server-13] [INFO] [1790096481.049342413] [cite.cell_b.detection.detection_server]: 'infeed_beam' BLOCKED after 8.29 s
+CITE_TIMING {"scenario": "pick_and_place", "test": "test_the_behaviour_tree_picks_and_places_the_workpiece", "what": "the work-piece to settle", "ceiling_s": 60.0, "elapsed_s": 0.449, "spins": 0, "monotonic_s": 606953.543}
+[skill_server-16] [INFO] [1790096483.576523069] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096483.576939579] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-16] [INFO] [1790096483.577075102] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096483.577190026] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-12] [INFO] [1790096483.581440471] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096483.581465306] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096483.581656770] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096483.581683455] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096483.581688102] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096483.581699382] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096483.581718792] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096483.583047228] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096483.583087500] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096483.583113424] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096483.583625334] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096483.609785591] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096483.610008261] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096483.610446555] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096483.610569752] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000399301 seconds
+[move_group-12] [INFO] [1790096483.611066523] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-12] [INFO] [1790096483.611126964] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096483.611149269] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096483.611238041] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[skill_server-16] [INFO] [1790096483.611107083] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096483.616480628] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096483.616532600] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096483.616557863] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096483.616724877] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096483.617160477] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096483.617215818] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096483.617341523] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096483.617358353] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096491.447149590] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096491.467723399] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096491.468264165] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096491.468337379] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096491.468512031] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[skill_server-16] [INFO] [1790096491.469875961] [cite.cell_b.picker.skill_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[gz-1] [INFO] [1790096491.485243366] [cite.cell_b.picker.picker_gripper_controller]: Received & accepted new action goal
+[skill_server-16] [INFO] [1790096491.535654327] [cite.cell_b.picker.skill_server]: gripper: commanded 88.9 mm, reached 88.9 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-16] [INFO] [1790096491.538630977] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096491.538815791] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-16] [INFO] [1790096491.538939998] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096491.538954692] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-12] [INFO] [1790096491.539073224] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096491.539090547] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096491.539172118] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096491.539187196] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096491.539191701] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096491.539200917] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096491.539212993] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096491.539269162] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096491.539284487] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096491.539292885] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096491.539487320] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096491.558544533] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096491.558694898] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096491.558867825] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096491.559869674] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000140225 seconds
+[move_group-12] [INFO] [1790096491.560378022] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[skill_server-16] [INFO] [1790096491.560404056] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096491.560416753] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096491.560429514] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096491.560467921] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_group-12] [INFO] [1790096491.566358384] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096491.566409121] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096491.566431864] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096491.566567998] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096491.566761070] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096491.566788355] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096491.566897155] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096491.566906825] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096498.387850311] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096498.417111168] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096498.501591120] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096498.501661743] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096498.501862888] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[skill_server-16] [INFO] [1790096498.508602000] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096498.508795272] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-16] [INFO] [1790096498.508909304] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096498.508918654] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-12] [INFO] [1790096498.509019376] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096498.509034465] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096498.509128895] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096498.509142309] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096498.509145717] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096498.509153083] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096498.509164261] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096498.510736843] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096498.510765253] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096498.510774605] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096498.510902223] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096498.552155421] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096498.552305624] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096498.552491048] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096498.553119554] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 8.6516e-05 seconds
+[move_group-12] [INFO] [1790096498.553406655] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-12] [INFO] [1790096498.553439085] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[skill_server-16] [INFO] [1790096498.553425999] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096498.553452167] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096498.553486034] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_group-12] [INFO] [1790096498.557443884] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096498.557483804] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096498.557498972] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096498.557619771] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096498.557772063] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096498.557800780] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096498.557896075] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096498.557905893] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096501.282085903] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096501.308121279] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096501.310217452] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096501.310295984] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096501.310406759] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[gz-1] [INFO] [1790096501.311039587] [cite.cell_b.picker.picker_gripper_controller]: Received & accepted new action goal
+[gz-1] [ERROR] [1790096501.317130988] [cite.cell_b.picker.controller_manager]: Command of at least one joint is out of limits (throttled log). Joint: 'picker_drive_joint', (actual: [Joint: 'picker_drive_joint', position: 0.000032, velocity: -0.000538], command: [Joint: 'picker_drive_joint', position: 0.452793], limited: [Joint: 'picker_drive_joint', position: 0.006667]) with desired period : 0.006667 sec.
+[skill_server-16] [INFO] [1790096503.111360058] [cite.cell_b.picker.skill_server]: gripper: commanded 45.0 mm, reached 48.7 mm, stalled=true, reached_goal=false, effort=60.0 -> holding
+[skill_server-16] [INFO] [1790096503.116660205] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096503.116813736] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[move_group-12] [INFO] [1790096503.116936452] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[skill_server-16] [INFO] [1790096503.116921892] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096503.126599971] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096503.126636337] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096503.126728201] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096503.126741440] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096503.126745033] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096503.126752754] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096503.126764421] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096503.129006083] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096503.129033698] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096503.129043128] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096503.129177999] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096503.169030097] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096503.169142828] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096503.169297895] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096503.169332071] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 9.3049e-05 seconds
+[move_group-12] [INFO] [1790096503.169639577] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-12] [INFO] [1790096503.169674574] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096503.169687816] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096503.169726184] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[skill_server-16] [INFO] [1790096503.169647448] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096503.178636055] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096503.178685985] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096503.178702594] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096503.178824456] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096503.178977805] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096503.179002817] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096503.179104008] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096503.179116494] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[detection_server-13] [INFO] [1790096504.922648495] [cite.cell_b.detection.detection_server]: 'infeed_beam' CLEARED after 17.88 s
+[gz-1] [INFO] [1790096507.534047726] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096507.579308888] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096507.581413751] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096507.581491325] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096507.581632087] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[skill_server-16] [INFO] [1790096507.600514452] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096507.600674112] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[move_group-12] [INFO] [1790096507.600785573] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[skill_server-16] [INFO] [1790096507.600788172] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096507.609318390] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096507.609367994] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096507.609452112] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096507.609465426] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096507.609468781] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096507.609476112] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096507.609487773] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096507.610771570] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096507.610802179] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096507.610815478] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096507.611180709] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096507.636987979] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096507.637130107] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096507.637308220] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096507.637542927] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000279817 seconds
+[move_group-12] [INFO] [1790096507.637873649] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[skill_server-16] [INFO] [1790096507.637903791] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096507.637915992] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096507.637937699] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096507.638025010] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_group-12] [INFO] [1790096507.646600758] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096507.646639961] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096507.646672285] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096507.646801095] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096507.646998302] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096507.647025904] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096507.647110297] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096507.647118641] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096522.433388694] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096522.447200823] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096522.452522391] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096522.452634390] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096522.452761350] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[skill_server-16] [INFO] [1790096522.462585246] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096522.462975443] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-16] [INFO] [1790096522.463116006] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096522.463137679] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-12] [INFO] [1790096522.472547023] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096522.472587306] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096522.472711115] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096522.472732002] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096522.472737466] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096522.472749276] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096522.472766860] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096522.472876550] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096522.472898396] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096522.472909666] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096522.473031307] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096522.473532106] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096522.473598057] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096522.473738664] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096522.474281060] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 8.2007e-05 seconds
+[move_group-12] [INFO] [1790096522.474571028] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[skill_server-16] [INFO] [1790096522.474592744] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096522.474597504] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096522.474610505] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096522.474648808] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_group-12] [INFO] [1790096522.482673133] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096522.482742986] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096522.482762084] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096522.482893412] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096522.483001163] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096522.483028497] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096522.483138854] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096522.483145165] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096526.400306032] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096526.433231205] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096526.440069909] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096526.440184230] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096526.440405508] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[gz-1] [INFO] [1790096526.450134080] [cite.cell_b.picker.picker_gripper_controller]: Received & accepted new action goal
+[gz-1] [ERROR] [1790096526.460552398] [cite.cell_b.picker.controller_manager]: Command of at least one joint is out of limits (throttled log). Joint: 'picker_drive_joint', (actual: [Joint: 'picker_drive_joint', position: 0.410311, velocity: -0.016067], command: [Joint: 'picker_drive_joint', position: 0.000000], limited: [Joint: 'picker_drive_joint', position: 0.446126]) with desired period : 0.006667 sec.
+[skill_server-16] [INFO] [1790096527.300435918] [cite.cell_b.picker.skill_server]: gripper: commanded 88.9 mm, reached 88.1 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+[skill_server-16] [INFO] [1790096527.304118343] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096527.304303737] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[skill_server-16] [INFO] [1790096527.304437729] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096527.304439312] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[move_group-12] [INFO] [1790096527.304560126] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096527.304578021] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096527.304678232] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096527.304691108] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096527.304694599] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096527.304702260] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096527.304714131] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096527.304807156] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096527.304830899] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096527.304846742] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096527.304997658] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096527.305567039] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096527.305643187] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096527.305758000] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096527.306307178] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000106452 seconds
+[move_group-12] [INFO] [1790096527.306559429] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-12] [INFO] [1790096527.306588751] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096527.306602234] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096527.306636224] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[skill_server-16] [INFO] [1790096527.306581483] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096527.310862148] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096527.310906339] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096527.310922176] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096527.311047312] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096527.311190008] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096527.311214894] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096527.311303221] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096527.311312394] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096530.352064233] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096530.361553445] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096530.366194158] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096530.366278036] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096530.366401096] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+[skill_server-16] [INFO] [1790096530.375544773] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: MoveGroup action client/server ready
+[move_group-12] [INFO] [1790096530.375728198] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[move_group-12] [INFO] [1790096530.375837326] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: executing..
+[skill_server-16] [INFO] [1790096530.375848258] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request accepted
+[move_group-12] [INFO] [1790096530.380257648] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Planning request received for MoveGroup action. Forwarding to planning pipeline.
+[move_group-12] [INFO] [1790096530.380285817] [cite.cell_b.picker.move_group.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-12] [INFO] [1790096530.380376398] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-12] [INFO] [1790096530.380388421] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-12] [WARN] [1790096530.380392129] [cite.cell_b.picker.move_group.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-12] [INFO] [1790096530.380399665] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-12] [INFO] [1790096530.380410724] [cite.cell_b.picker.move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-12] [INFO] [1790096530.380496384] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-12] [INFO] [1790096530.380515967] [cite.cell_b.picker.move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-12] [INFO] [1790096530.380524751] [cite.cell_b.picker.move_group.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-12] [INFO] [1790096530.380714171] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-12] [INFO] [1790096530.381681951] [cite.cell_b.picker.move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-12] [INFO] [1790096530.381788803] [cite.cell_b.picker.move_group.moveit.ros.move_group.move_action]: Motion plan was computed successfully.
+[skill_server-16] [INFO] [1790096530.381972429] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Planning request complete!
+[skill_server-16] [INFO] [1790096530.382007572] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: time taken to generate plan: 0.000139406 seconds
+[skill_server-16] [INFO] [1790096530.382271072] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-12] [INFO] [1790096530.382271152] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-12] [INFO] [1790096530.382306735] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096530.382320987] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096530.382362104] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_group-12] [INFO] [1790096530.387328636] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-12] [INFO] [1790096530.387381560] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096530.387399080] [cite.cell_b.picker.move_group.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-12] [INFO] [1790096530.387530512] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to picker_joint_trajectory_controller
+[gz-1] [INFO] [1790096530.387707843] [cite.cell_b.picker.picker_joint_trajectory_controller]: Received new action goal
+[gz-1] [INFO] [1790096530.387741064] [cite.cell_b.picker.picker_joint_trajectory_controller]: Accepted new action goal
+[move_group-12] [INFO] [1790096530.387836111] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: picker_joint_trajectory_controller started execution
+[move_group-12] [INFO] [1790096530.387852195] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gz-1] [INFO] [1790096536.802068526] [cite.cell_b.picker.picker_joint_trajectory_controller]: Goal reached, success!
+[move_group-12] [INFO] [1790096536.837982022] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'picker_joint_trajectory_controller' successfully finished
+[move_group-12] [INFO] [1790096536.844238150] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-12] [INFO] [1790096536.844308278] [cite.cell_b.picker.move_group.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[skill_server-16] [INFO] [1790096536.844422208] [cite.cell_b.picker.skill_server.moveit.ros.move_group_interface]: Execute request success!
+CITE_TIMING {"scenario": "pick_and_place", "test": "test_the_behaviour_tree_picks_and_places_the_workpiece", "what": "the station cycle to run to completion", "ceiling_s": 420.0, "elapsed_s": 55.28, "spins": 125, "monotonic_s": 607008.824}
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 70.128s
+
+OK
+[INFO] [skill_server-16]: sending signal 'SIGINT' to process[skill_server-16]
+[INFO] [detection_server-13]: sending signal 'SIGINT' to process[detection_server-13]
+[INFO] [move_group-12]: sending signal 'SIGINT' to process[move_group-12]
+[INFO] [topology_server.py-9]: sending signal 'SIGINT' to process[topology_server.py-9]
+[INFO] [model_info.py-8]: sending signal 'SIGINT' to process[model_info.py-8]
+[INFO] [frame_server.py-7]: sending signal 'SIGINT' to process[frame_server.py-7]
+[INFO] [robot_state_publisher-5]: sending signal 'SIGINT' to process[robot_state_publisher-5]
+[INFO] [robot_state_publisher-3]: sending signal 'SIGINT' to process[robot_state_publisher-3]
+[INFO] [parameter_bridge-2]: sending signal 'SIGINT' to process[parameter_bridge-2]
+[INFO] [gz-1]: sending signal 'SIGINT' to process[gz-1]
+[skill_server-16] [INFO] [1790096538.626827945] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[move_group-12] [INFO] [1790096538.627055447] [cite.cell_b.picker.move_group.moveit.ros.trajectory_execution_manager]: Received event 'stop'
+[skill_server-16] Warning: class_loader.ClassLoader: SEVERE WARNING!!! Attempting to unload library while objects created by this loader exist in the heap! You should delete your objects before attempting to unload the library or destroying the ClassLoader. The library will NOT be unloaded.
+[skill_server-16]          at line 127 in ./src/class_loader.cpp
+[detection_server-13] [INFO] [1790096538.628378445] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[move_group-12] [INFO] [1790096538.629885119] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[topology_server.py-9] [INFO] [1790096538.632553178] [cite_runtime]: rcl reported 'failed to initialize wait set: the given context is not valid, either rcl_init() was not called or rcl_shutdown() was called., at ./src/rcl/wait.c:130' after the context was already invalid, which is the documented wait-set race in rclpy/executors.py; treating it as the shutdown it can only have been.
+[robot_state_publisher-5] [INFO] [1790096538.637429973] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-3] [INFO] [1790096538.639102019] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-2] [INFO] [1790096538.641874923] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[move_group-12] [INFO] [1790096538.652305454] [cite.cell_b.picker.move_group.moveit.ros.moveit_cpp]: Deleting MoveItCpp
+[move_group-12] Stack trace (most recent call last):
+[move_group-12] #15   Object "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2", at 0xffffffffffffffff, in 
+[move_group-12] #14   Object "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group", at 0x559c728d0a14, in _start
+[gz-1] [INFO] [1790096538.675193659] [cite.cell_b.picker.controller_manager.pal_statistics]: Async messages lost 0
+[gz-1] [INFO] [1790096538.675235779] [cite.cell_b.picker.controller_manager.pal_statistics]: publish_async_failures_ 0
+[gz-1] [INFO] [1790096538.676993614] [cite.cell_b.picker.controller_manager.pal_statistics]: Async messages lost 0
+[gz-1] [INFO] [1790096538.677016027] [cite.cell_b.picker.controller_manager.pal_statistics]: publish_async_failures_ 0
+[move_group-12] #13   Source "../csu/libc-start.c", line 360, in __libc_start_main_impl [0x7edad678d28a]
+[move_group-12] #12   Source "../sysdeps/nptl/libc_start_call_main.h", line 58, in __libc_start_call_main [0x7edad678d1c9]
+[move_group-12] #11   Object "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group", at 0x559c728cf509, in main
+[move_group-12] #10   Object "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group", at 0x559c728d2129, in 
+[move_group-12] #9    Object "/opt/ros/jazzy/lib/libmoveit_cpp.so.2.12.4", at 0x7edad711bad0, in moveit_cpp::MoveItCpp::~MoveItCpp()
+[move_group-12] #8    Object "/opt/ros/jazzy/lib/libmoveit_cpp.so.2.12.4", at 0x7edad711b989, in 
+[move_group-12] #7    Object "/opt/ros/jazzy/lib/libmoveit_trajectory_execution_manager.so.2.12.4", at 0x7edad648442a, in trajectory_execution_manager::TrajectoryExecutionManager::~TrajectoryExecutionManager()
+[move_group-12] #6    Object "/opt/ros/jazzy/lib/libmoveit_trajectory_execution_manager.so.2.12.4", at 0x7edad6496575, in 
+[move_group-12] #5    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6db4294, in rclcpp::Node::~Node()
+[move_group-12] #4    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6d5e485, in 
+[move_group-12] #3    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6db2b60, in 
+[move_group-12] #2    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6db2aa3, in rclcpp::node_interfaces::NodeBase::~NodeBase()
+[move_group-12] #1    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6d5e549, in 
+[move_group-12] #0    Object "/opt/ros/jazzy/lib/librclcpp.so", at 0x7edad6d62b19, in rclcpp::CallbackGroup::~CallbackGroup()
+[move_group-12] Segmentation fault (Address not mapped to object [0x7edaa1fc2da0])
+[INFO] [detection_server-13]: process has finished cleanly [pid 245]
+[INFO] [robot_state_publisher-5]: process has finished cleanly [pid 83]
+[INFO] [parameter_bridge-2]: process has finished cleanly [pid 80]
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 81]
+[INFO] [skill_server-16]: process has finished cleanly [pid 409]
+[INFO] [topology_server.py-9]: process has finished cleanly [pid 87]
+[INFO] [frame_server.py-7]: process has finished cleanly [pid 85]
+[INFO] [model_info.py-8]: process has finished cleanly [pid 86]
+[ERROR] [move_group-12]: process has died [pid 244, exit code -11, cmd '/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args -r __node:=move_group -r __ns:=/cite/cell_b/picker --params-file /tmp/launch_params_qjppkxqe --params-file /tmp/launch_params_ycyy1zy8 --params-file /tmp/launch_params_wn00zlfv --params-file /tmp/launch_params_aevbud8f --params-file /tmp/launch_params_kj9oilyw --params-file /tmp/launch_params_1snebr8i -r /tf:=/tf -r /tf_static:=/tf_static'].
+[INFO] [gz-1]: process has finished cleanly [pid 79]
+[INFO] [launch]: process[gz-1] was required: shutting down launched system
+[ERROR] [launch]: Caught exception in launch (see debug for traceback): Cannot shutdown a ROS adapter that is not running
+test_nothing_of_ours_exited_badly (pick_and_place.TestCleanShutdown.test_nothing_of_ours_exited_badly) ... ok
+test_report_how_often_the_planner_fell_back (pick_and_place.TestCleanShutdown.test_report_how_often_the_planner_fell_back)
+A count, not a gate — and the count is the point (ADR-0027). ... planner-fallback count: taken=0 declined=0 (ADR-0027; reported, not gated)
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+[32m  ok[0m Scenario 'pick_and_place' passed

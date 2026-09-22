@@ -1,0 +1,844 @@
+{
+ "campaign": "2026-09-22-is-a-run-reproducible",
+ "label": "B_01",
+ "arm": "B",
+ "is_shakedown": false,
+ "trial_index": 1,
+ "seed_requested": 20260825,
+ "x_offset_m": 0.0,
+ "iterations_requested": 15000,
+ "zone": "cell_b",
+ "probe_world_name": "cite_probe",
+ "probe_body": "probe_body",
+ "probe_pose_nominal": {
+  "x": 0.0,
+  "y": 0.0,
+  "z": 0.5,
+  "roll": 0.6,
+  "pitch": 0.7,
+  "yaw": 0.8
+ },
+ "at_rest_rule": {
+  "min_gap_s": 1.0,
+  "tolerance_m": 1e-09,
+  "ceiling_s": 120.0
+ },
+ "git_open": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_open": [
+  0.50244140625,
+  0.3662109375,
+  0.30810546875
+ ],
+ "host": {
+  "uname_m": "x86_64",
+  "uname_a": "Linux 3b7d78a4dc07 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+  "gz_sim_version": "Gazebo Sim, version 8.15.0\nCopyright (C) 2018 Open Source Robotics Foundation.\nReleased under the Apache 2.0 License.",
+  "gz_help_lists_seed": true,
+  "gz_help_lists_iterations": true,
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+ },
+ "docker_ps": "<error FileNotFoundError: [Errno 2] No such file or directory: 'docker'>",
+ "started_wall": 1790096255.8416283,
+ "instrument_loss": false,
+ "instrument_loss_reason": null,
+ "world_path": "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/B_01.world.sdf",
+ "world_sha256": "1d9dbc4509f5fcff2d0742d4cc2ab299a52cafbc329ec48d8d9290937eea1e44",
+ "v_physics": {
+  "zone": "cell_b",
+  "installed_world": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "probe_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "installed_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "probe_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "agree": true
+ },
+ "pose_topic": "/world/cite_probe/dynamic_pose/info",
+ "gz_partition": "cite/cell_b/plant",
+ "argv": [
+  "gz",
+  "sim",
+  "-s",
+  "-r",
+  "--iterations",
+  "15000",
+  "--seed",
+  "20260825",
+  "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/B_01.world.sdf"
+ ],
+ "seed_from_argv": 20260825,
+ "server_pid": 48,
+ "seed_from_proc": 20260825,
+ "seed_from_proc_source": "/proc/48/cmdline",
+ "seed_readback_is_independent": true,
+ "seed_matches_request": true,
+ "server_launched_wall": 1790096256.0711625,
+ "first_snapshot_wall": 1790096258.280559,
+ "first_snapshot_after_s": 2.2093966007232666,
+ "first_position": [
+  2.3960868011929648e-17,
+  9.697786092232891e-18,
+  0.446492
+ ],
+ "at_rest": {
+  "reached": true,
+  "reason": null,
+  "sample_a": {
+   "wall": 1790096259.4815683,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "sample_b": {
+   "wall": 1790096260.48253,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "gap_s": 1.0009617805480957,
+  "max_delta_m": 0.0,
+  "closest_pair_max_delta_m": 0.0
+ },
+ "samples": [
+  {
+   "wall": 1790096258.2805622,
+   "position": [
+    1.6154612370034016e-17,
+    -2.8569362519703483e-18,
+    0.42766619999999994
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096258.4807243,
+   "position": [
+    -0.00040269877145793605,
+    0.0011547108168936911,
+    0.0424562543176281
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096258.680903,
+   "position": [
+    0.0069383481280837905,
+    0.021005709961470217,
+    0.033104900042803156
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096258.8811028,
+   "position": [
+    0.016862235147347044,
+    0.025667813178886115,
+    0.024987473075443203
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096259.0811968,
+   "position": [
+    0.016870379299629083,
+    0.025672728188000118,
+    0.024998313101533054
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096259.281356,
+   "position": [
+    0.016871394239935087,
+    0.025673340396276396,
+    0.024999664298697735
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096259.4815683,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096259.681776,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096259.8819814,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.0821052,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.2823071,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.48253,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.482615,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.6827528,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096260.8829184,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096261.083029,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096261.2832072,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096261.4833627,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096261.683547,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096261.883721,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096262.0839047,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096262.284105,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096262.484286,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096262.6844935,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096262.8846838,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096263.0848823,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096263.285043,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096263.4852097,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096263.6854208,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096263.8856041,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096264.0857918,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096264.2859166,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096264.4861183,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096264.6863275,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096264.8865204,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096265.0867121,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096265.2868931,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096265.487047,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096265.6872866,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096265.8875098,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096266.0876892,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096266.287827,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096266.4879673,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096266.688146,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096266.888335,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096267.0884511,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096267.2886307,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096267.4887958,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096267.6889806,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096267.8891766,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096268.0892584,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096268.2894619,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096268.4896326,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096268.6898227,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096268.8900208,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096269.0901928,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096269.2903793,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096269.4905846,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096269.6907766,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096269.8909218,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096270.0910847,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096270.291256,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096270.4914103,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096270.691524,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096270.8917115,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096271.0918708,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096271.2920663,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096271.4922297,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096271.6923876,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096271.892552,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096272.0927298,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096272.292888,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096272.493036,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096272.6932423,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096272.8933983,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096273.0935504,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  }
+ ],
+ "server_ran_to_completion": true,
+ "server_exit_status": 0,
+ "final_position": [
+  0.0168715895203964,
+  0.025673458188742015,
+  0.024999924270428752
+ ],
+ "final_read_wall": 1790096273.2937582,
+ "final_agrees_with_at_rest": true,
+ "final_vs_at_rest_max_delta_m": 0.0,
+ "server_status_at_teardown": 0,
+ "verdict": "COLLECTED",
+ "git_close": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_close": [
+  0.390625,
+  0.34716796875,
+  0.30224609375
+ ],
+ "ended_wall": 1790096273.3024044,
+ "exit_code": 0
+}

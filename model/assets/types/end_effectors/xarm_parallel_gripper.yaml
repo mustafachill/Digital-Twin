@@ -51,17 +51,32 @@ asset_type:
   # The gripper's stroke, and what a skill commands on it. Every value below is
   # read by the L3 skill server on the simulated and the physical path alike.
   #
-  # THREE FIELDS USED TO LIVE HERE AND NO LONGER DO: `attach_link_suffix`,
-  # `closed_threshold_rad` and `open_threshold_rad`. They configured ADR-0023's
-  # contact-triggered attachment plugin, which is removed. The 84-trial campaign
-  # in `docs/measurements/2026-08-25-friction-grasp/` measured why: the plugin
+  # TWO FIELDS USED TO LIVE HERE AND NO LONGER DO: `closed_threshold_rad` and
+  # `open_threshold_rad`. They configured ADR-0023's contact-triggered
+  # attachment plugin, which is removed. The 84-trial campaign in
+  # `docs/measurements/2026-08-25-friction-grasp/` measured why: the plugin
   # armed at 0.30 rad while the pads only reach a 50 mm part at 0.4056 rad, so it
   # welded the part to a finger before any contact force existed, the jaws then
   # closed through it to 46 mm feeling nothing, and `Pick` failed 8/8 while the
   # weld carried the part 0.576 m anyway. It destroyed the stall this block
-  # exists to produce. Friction alone held in all 84 trials.
+  # exists to produce. Friction alone held in all 84 trials — and, per ADR-0061,
+  # friction alone was then found not to hold the box STILL: up to 34.3 degrees
+  # of roll between the pads over that same campaign, worsening as the physics
+  # timestep got finer. `attach_link_suffix` and `attach_radius_m` below are
+  # ADR-0061's answer, and they are declared, not code: see `GraspSpec` for both.
   grasp:
     drive_joint_suffix: drive_joint
+    # ADR-0061. `link5` is the arm's own last revolute link — not the gripper's
+    # own base link, which does not survive as an entity at all once the URDF is
+    # converted to SDF (both it and `link_tcp` are joined to `link5` by
+    # zero-offset fixed joints, and the conversion lumps a fixed-jointed body
+    # into its nearest non-fixed ancestor). See the field's own docstring in
+    # `GraspSpec` for the entity-dump evidence.
+    attach_link_suffix: link5
+    # ADR-0061. A judgement, not a derivation — see the field's own docstring
+    # for the geometry it is sized against (roughly 0.153 m nominal reach from
+    # `link5` to a held part's centre) and the margin chosen over it.
+    attach_radius_m: 0.20
     # The drive joint travels 0 rad (fully open) to 0.85 rad (fully closed).
     # GripperCommand.position is passed straight to the joint, so a skill sending
     # metres would be sending radians — and 0.085 is a valid angle, so nothing

@@ -1,0 +1,1098 @@
+{
+ "campaign": "2026-09-22-is-a-run-reproducible",
+ "label": "C_01",
+ "arm": "C",
+ "trial_index": 1,
+ "seed_requested": 20260824,
+ "zone": "cell_b",
+ "scenario": "pick_and_place",
+ "git_open": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_open": [
+  0.44482421875,
+  0.39697265625,
+  0.33056640625
+ ],
+ "host": {
+  "uname_m": "x86_64",
+  "uname_a": "Linux cite 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+  "gz_sim_version": "<error FileNotFoundError: [Errno 2] No such file or directory: 'gz'>",
+  "gz_help_lists_seed": false,
+  "gz_help_lists_iterations": false,
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+ },
+ "docker_ps_open": "",
+ "console": "/home/cite/Developer/Digital-Twin/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/C_01.console",
+ "started_wall": 1790096466.3104584,
+ "instrument_loss": false,
+ "instrument_loss_reason": null,
+ "argv": [
+  "/home/cite/Developer/Digital-Twin/scripts/scenario",
+  "pick_and_place",
+  "--zone",
+  "cell_b"
+ ],
+ "seed_readback_is_independent": false,
+ "seed_readback_note": "arm C's seed read-back is not independent: CITE_PHYSICS_SEED is set to the same value `scripts/scenario:90` defaults to, so the printed seed line agrees whether or not the variable crossed the container boundary. No conclusion may be drawn from its agreement.",
+ "pty": true,
+ "scenario_pid": 1725501,
+ "reader_started_wall": 1790096467.311526,
+ "scenario_exit_status": 0,
+ "reader_exit_status": 0,
+ "reader_stdout": " Container cite-digital-twin-3319196271-dev-run-fd59c5f7c429 Creating \n Container cite-digital-twin-3319196271-dev-run-fd59c5f7c429 Created \n{\"i3_position\": [0.49917458877176435, 2.9991366210913433, 0.624999819534483], \"i3_source\": \"triggered\", \"n_samples\": 116}\n",
+ "reader": {
+  "zone": "cell_b",
+  "log": "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/raw/C_01.console",
+  "started_wall": 1790096467.9916527,
+  "container_host_facts": {
+   "uname_m": "x86_64",
+   "uname_a": "Linux c95090a6236e 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+   "gz_sim_version": "Gazebo Sim, version 8.15.0\nCopyright (C) 2018 Open Source Robotics Foundation.\nReleased under the Apache 2.0 License.",
+   "gz_help_lists_seed": true,
+   "gz_help_lists_iterations": true,
+   "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "instrument_loss": false,
+  "instrument_loss_reason": null,
+  "world_file": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_world_path": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "plan_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "world_paths_agree": true,
+  "world": "cell_b",
+  "workpiece": "workpiece",
+  "pose_topic": "/world/cell_b/dynamic_pose/info",
+  "gz_partition": "cite/cell_b/plant",
+  "samples": [
+   {
+    "wall": 1790096481.4754431,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249951155024868
+    ]
+   },
+   {
+    "wall": 1790096481.9756567,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096482.475869,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096482.9760635,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096483.4762738,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096483.9764938,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096484.4767973,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096484.977064,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096485.4772563,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096485.977485,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096486.4777505,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096486.9779584,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096487.4781663,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096487.9784133,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096488.4786415,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096488.9788673,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096489.4790614,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096489.979262,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096490.4795442,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096490.979735,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096491.4799242,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096491.9801788,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096492.480454,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096492.980671,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096493.480852,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096493.9810443,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096494.481247,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096494.9814491,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096495.4816504,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096495.981909,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096496.4821239,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096496.9823472,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096497.4825509,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096497.982759,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096498.4829936,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096498.9832032,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096499.4834638,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096499.9836733,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096500.483851,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096500.9840577,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096501.484245,
+    "position": [
+     -0.475,
+     3.0,
+     0.6249991334852175
+    ]
+   },
+   {
+    "wall": 1790096501.9844935,
+    "position": [
+     -0.47517702355434666,
+     3.0002232734031966,
+     0.6250092684096353
+    ]
+   },
+   {
+    "wall": 1790096502.484687,
+    "position": [
+     -0.4752436887710426,
+     3.0008814928569483,
+     0.6252163757539487
+    ]
+   },
+   {
+    "wall": 1790096502.9848516,
+    "position": [
+     -0.47521278420843166,
+     3.0007002435677816,
+     0.6252078320310794
+    ]
+   },
+   {
+    "wall": 1790096503.4850547,
+    "position": [
+     -0.47528655040961293,
+     3.0006736397862475,
+     0.6256104396127854
+    ]
+   },
+   {
+    "wall": 1790096503.9853451,
+    "position": [
+     -0.4758102479396394,
+     3.000819569009706,
+     0.630532707742526
+    ]
+   },
+   {
+    "wall": 1790096504.485564,
+    "position": [
+     -0.47681530023450935,
+     3.001395227934012,
+     0.6422670879261644
+    ]
+   },
+   {
+    "wall": 1790096504.9857771,
+    "position": [
+     -0.4778440154772069,
+     3.0019980987546186,
+     0.6600747766356566
+    ]
+   },
+   {
+    "wall": 1790096505.4859982,
+    "position": [
+     -0.4783172249552142,
+     3.0022575379990446,
+     0.684131505667892
+    ]
+   },
+   {
+    "wall": 1790096505.9862018,
+    "position": [
+     -0.4778495406025331,
+     3.001923462215167,
+     0.7060918849345132
+    ]
+   },
+   {
+    "wall": 1790096506.4863913,
+    "position": [
+     -0.47683221694583044,
+     3.0012418404114483,
+     0.7239435191656514
+    ]
+   },
+   {
+    "wall": 1790096506.9866018,
+    "position": [
+     -0.47573621452747644,
+     3.000523397868545,
+     0.7368954921518706
+    ]
+   },
+   {
+    "wall": 1790096507.4868183,
+    "position": [
+     -0.4750725736522458,
+     3.000107040807163,
+     0.7434518711186683
+    ]
+   },
+   {
+    "wall": 1790096507.9870255,
+    "position": [
+     -0.4750113546166623,
+     3.0006257778395504,
+     0.7442854397636418
+    ]
+   },
+   {
+    "wall": 1790096508.4872699,
+    "position": [
+     -0.4708871301288476,
+     3.007419862355296,
+     0.744140453443846
+    ]
+   },
+   {
+    "wall": 1790096508.9874785,
+    "position": [
+     -0.4613103564015587,
+     3.022284201279421,
+     0.7440156503083216
+    ]
+   },
+   {
+    "wall": 1790096509.4877427,
+    "position": [
+     -0.44922207766032113,
+     3.039653094444447,
+     0.743891721591666
+    ]
+   },
+   {
+    "wall": 1790096509.9879458,
+    "position": [
+     -0.4316366156292989,
+     3.062623512506448,
+     0.7436596384275418
+    ]
+   },
+   {
+    "wall": 1790096510.4882023,
+    "position": [
+     -0.404296228347555,
+     3.0940086532018944,
+     0.7434076224116458
+    ]
+   },
+   {
+    "wall": 1790096510.9884386,
+    "position": [
+     -0.36892538870209346,
+     3.1285245689580963,
+     0.7430569476910903
+    ]
+   },
+   {
+    "wall": 1790096511.488658,
+    "position": [
+     -0.3291713395247516,
+     3.1609484252364726,
+     0.7428024790366174
+    ]
+   },
+   {
+    "wall": 1790096511.9888525,
+    "position": [
+     -0.2847296054514735,
+     3.1907653414806476,
+     0.7425473963897293
+    ]
+   },
+   {
+    "wall": 1790096512.4890423,
+    "position": [
+     -0.24191630141953013,
+     3.214196135370341,
+     0.7423252012294164
+    ]
+   },
+   {
+    "wall": 1790096512.9892576,
+    "position": [
+     -0.19883523442890752,
+     3.2332304943871795,
+     0.7420720002170135
+    ]
+   },
+   {
+    "wall": 1790096513.4894629,
+    "position": [
+     -0.15750880474806858,
+     3.2476625628390052,
+     0.7418481630080858
+    ]
+   },
+   {
+    "wall": 1790096513.9896643,
+    "position": [
+     -0.10865871397657229,
+     3.260321842505707,
+     0.7415515995413651
+    ]
+   },
+   {
+    "wall": 1790096514.4899192,
+    "position": [
+     -0.05862116303824457,
+     3.268634766263038,
+     0.7412498808890923
+    ]
+   },
+   {
+    "wall": 1790096514.990192,
+    "position": [
+     -0.007418667701328794,
+     3.27248664386936,
+     0.7409805220559572
+    ]
+   },
+   {
+    "wall": 1790096515.4904344,
+    "position": [
+     0.04131081435306593,
+     3.271899040479778,
+     0.7407021633641296
+    ]
+   },
+   {
+    "wall": 1790096515.9906747,
+    "position": [
+     0.09238820613944691,
+     3.266786384323245,
+     0.7403935484790075
+    ]
+   },
+   {
+    "wall": 1790096516.4908822,
+    "position": [
+     0.14129933439596185,
+     3.2574941055381816,
+     0.7400214268412755
+    ]
+   },
+   {
+    "wall": 1790096516.9911516,
+    "position": [
+     0.18362311775743853,
+     3.245845097596932,
+     0.7397950832755222
+    ]
+   },
+   {
+    "wall": 1790096517.4913597,
+    "position": [
+     0.23052006698590166,
+     3.228664282668244,
+     0.7394933848128157
+    ]
+   },
+   {
+    "wall": 1790096517.9916027,
+    "position": [
+     0.27743271048315055,
+     3.2066203185595112,
+     0.7392191439353202
+    ]
+   },
+   {
+    "wall": 1790096518.4918327,
+    "position": [
+     0.32072454535924955,
+     3.1813900788690743,
+     0.7389380060705506
+    ]
+   },
+   {
+    "wall": 1790096518.9920647,
+    "position": [
+     0.35999725301250146,
+     3.1538027031076603,
+     0.7386264978627802
+    ]
+   },
+   {
+    "wall": 1790096519.4922771,
+    "position": [
+     0.39972946104103807,
+     3.120433292594617,
+     0.7383154773698862
+    ]
+   },
+   {
+    "wall": 1790096519.9924853,
+    "position": [
+     0.43584342505960516,
+     3.084164309700792,
+     0.7380465866537067
+    ]
+   },
+   {
+    "wall": 1790096520.4927397,
+    "position": [
+     0.4590110466895676,
+     3.0571316064177863,
+     0.7378701984779462
+    ]
+   },
+   {
+    "wall": 1790096520.9929366,
+    "position": [
+     0.4749330569054663,
+     3.036434961489057,
+     0.7376979617891377
+    ]
+   },
+   {
+    "wall": 1790096521.4931297,
+    "position": [
+     0.4882667852627762,
+     3.0174970082377186,
+     0.7375029019328461
+    ]
+   },
+   {
+    "wall": 1790096521.9933307,
+    "position": [
+     0.4962978062558603,
+     3.005248135032496,
+     0.7373673839249507
+    ]
+   },
+   {
+    "wall": 1790096522.4935718,
+    "position": [
+     0.49937707702193446,
+     3.0003627198865495,
+     0.7373170189747218
+    ]
+   },
+   {
+    "wall": 1790096522.9938095,
+    "position": [
+     0.4995467855804236,
+     3.0005193256619163,
+     0.7349599841625208
+    ]
+   },
+   {
+    "wall": 1790096523.4940472,
+    "position": [
+     0.5002560150966935,
+     3.0009134516990446,
+     0.7254785906475083
+    ]
+   },
+   {
+    "wall": 1790096523.9942641,
+    "position": [
+     0.5010745282685537,
+     3.0013813266788283,
+     0.7107004387206457
+    ]
+   },
+   {
+    "wall": 1790096524.4944894,
+    "position": [
+     0.5015792583611345,
+     3.001622509112727,
+     0.6910171990511392
+    ]
+   },
+   {
+    "wall": 1790096524.9947016,
+    "position": [
+     0.5013206198884728,
+     3.00137173800764,
+     0.6680064147490106
+    ]
+   },
+   {
+    "wall": 1790096525.494871,
+    "position": [
+     0.5005276005012329,
+     3.000840079041311,
+     0.6508578895080855
+    ]
+   },
+   {
+    "wall": 1790096525.9950802,
+    "position": [
+     0.49979292570861455,
+     3.000354270063663,
+     0.6403841931805069
+    ]
+   },
+   {
+    "wall": 1790096526.4952729,
+    "position": [
+     0.49950034157711654,
+     3.00019454607562,
+     0.6368242526167016
+    ]
+   },
+   {
+    "wall": 1790096526.995486,
+    "position": [
+     0.4991744377189411,
+     2.9991366762185456,
+     0.6249991959422901
+    ]
+   },
+   {
+    "wall": 1790096527.4956772,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096527.9959662,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096528.496168,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096528.9963827,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096529.4966056,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096529.9968383,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096530.4970455,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096530.997283,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096531.4974926,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096531.9976983,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096532.4978504,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096532.9980412,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096533.498253,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096533.9984746,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096534.4986887,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096534.9989052,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096535.499098,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096535.9993093,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096536.4994946,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096536.9996948,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096537.4999285,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096538.0001647,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096538.5004163,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   },
+   {
+    "wall": 1790096539.0007107,
+    "position": [
+     0.49917458877176435,
+     2.9991366210913433,
+     0.624999819534483
+    ]
+   }
+  ],
+  "n_samples": 116,
+  "verdict_lines": [
+   "Scenario 'pick_and_place' passed"
+  ],
+  "verdict_line": "Scenario 'pick_and_place' passed",
+  "verdict_is_terminal": true,
+  "triggered": {
+   "wall": 1790096538.500625,
+   "position": [
+    0.49917458877176435,
+    2.9991366210913433,
+    0.624999819534483
+   ],
+   "marker_line": "Ran 1 test in 70.128s"
+  },
+  "triggered_position": [
+   0.49917458877176435,
+   2.9991366210913433,
+   0.624999819534483
+  ],
+  "last_seen_position": [
+   0.49917458877176435,
+   2.9991366210913433,
+   0.624999819534483
+  ],
+  "last_seen_wall": 1790096539.0007107,
+  "i3_position": [
+   0.49917458877176435,
+   2.9991366210913433,
+   0.624999819534483
+  ],
+  "i3_source": "triggered",
+  "triggered_vs_last_max_delta_m": 0.0,
+  "fallback_tail": null,
+  "ended_wall": 1790096539.0010893
+ },
+ "i3_position": [
+  0.49917458877176435,
+  2.9991366210913433,
+  0.624999819534483
+ ],
+ "i3_source": "triggered",
+ "triggered_position": [
+  0.49917458877176435,
+  2.9991366210913433,
+  0.624999819534483
+ ],
+ "last_seen_position": [
+  0.49917458877176435,
+  2.9991366210913433,
+  0.624999819534483
+ ],
+ "triggered_vs_last_max_delta_m": 0.0,
+ "fallback_tail": null,
+ "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+ "plan_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+ "world_paths_agree": true,
+ "reader_verdict_line": "Scenario 'pick_and_place' passed",
+ "wall_duration_s": 73.01589131355286,
+ "verdict_lines": [
+  "Scenario 'pick_and_place' passed"
+ ],
+ "verdict_line": "Scenario 'pick_and_place' passed",
+ "verdict_lines_agree": true,
+ "unittest_summaries": [
+  "Ran 1 test in 70.128s",
+  "Ran 2 tests in 0.000s"
+ ],
+ "scenario_reported_seconds": [
+  70.128,
+  0.0
+ ],
+ "scenario_cycle_seconds": 70.128,
+ "seed_line": "warn Seed 20260824 reaches 'gz sim --seed' only \u2014 this run is not reproducible.",
+ "planner_fallback_count": 0,
+ "planner_fallback_declined_count": 0,
+ "planner_fallback_count_raw_whole_log": 1,
+ "planner_fallback_declined_count_raw_whole_log": 1,
+ "planner_fallback_count_region_unprefixed": 0,
+ "planner_scan_anchor": "launch banner",
+ "planner_scan_region_chars": 101892,
+ "planner_scan_log_chars": 102907,
+ "ompl_answered_a_motion": false,
+ "verdict": "COLLECTED",
+ "git_close": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/C_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/C_01.reader.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_close": [
+  1.2802734375,
+  0.6943359375,
+  0.44189453125
+ ],
+ "docker_ps_close": "",
+ "ended_wall": 1790096539.3441715,
+ "exit_code": 0
+}

@@ -57,7 +57,7 @@ is stamped with:
 | Facility model version | A run against yesterday's layout is not comparable to today's |
 | Software version | Behaviour changes between commits |
 | Operating mode | It determines what the numbers in the bag **are** — which side was commanded, which side actuated, and whether divergence was defined at all. **Never read it as a maturity level**: a mode is not a level, and a bag whose metadata is read as one is a maturity claim made by a file ([ADR-0011](../adr/0011-twin-maturity-model-and-modes.md), amended 2026-08-29). |
-| Physics seed (simulation) | Reproducibility |
+| Physics seed (simulation) | **What the run was given — not a reproducibility guarantee.** The seed reaches `gz::math::Rand`, and not the physics solver and not the planner; the argument is [ADR-0027](../adr/0027-pilz-planning-pipeline.md)'s and is not restated here (P1). **A run of this cell has been measured not to reproduce under one seed** — [`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md), two runs on one machine, which is not a rate, and which says nothing about *why*. Record the field so that a bag states what it was given; **never read it as a promise that the bag can be reproduced.** Note also that `./scripts/sim` passes no seed at all, so an interactively launched run has none |
 | Registration transform (hardware) | Divergence is meaningless without it |
 
 This is the mechanism that makes "compare this week's cycle time to last month's" a valid

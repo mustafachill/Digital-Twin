@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!-- The probe world for docs/measurements/2026-09-22-is-a-run-reproducible.
+
+     NOT a generated artifact and not part of the cell. It is a measurement
+     instrument, it lives under docs/measurements/ and nothing in workspace/,
+     model/ or tools/ reads it. It is a template: `common.build_probe_world`
+     substitutes the at-sign-delimited placeholders and writes one concrete world per
+     trial into that trial's own output area, whose SHA-256 goes onto the
+     record (criteria.md V3).
+
+     WHAT IS IN HERE AND WHY, clause by clause.
+
+     `<physics>` is COPIED VERBATIM from the generated world
+     workspace/src/cite_generated/worlds/cell_b.sdf, at commit f79ee02 - the
+     commit that file last landed at. It is a copy and not a reference: no
+     campaign imports from the tree it measures, and a probe that read the
+     world's physics at run time could not be compared against it. What makes
+     the copy honest is criteria.md V-physics, which `common.physics_agreement`
+     evaluates against the INSTALLED world before the first trial and which
+     refuses to run when the two disagree. Nothing here may be edited to make
+     that check pass; if it fires, the tree moved and the campaign says so.
+
+     NO `<gravity>` ELEMENT, deliberately, for the same reason. The generated
+     world declares none either, so both take SDFormat's default of
+     0 0 -9.8 m/s^2. Declaring it here would state a value the cell does not,
+     and V-physics does not look at it.
+
+     TWO PLUGINS AND NO MORE. `gz-sim-physics-system` is the thing under test.
+     `gz-sim-scene-broadcaster-system` is what publishes
+     /world/<name>/dynamic_pose/info, which instrument I1
+     (`cite_bringup.gz.ModelPoses`) subscribes to - without it there is no pose
+     topic at all and the probe has no instrument. The generated world loads two
+     more, `gz-sim-user-commands-system` and `gz-sim-contact-system`, and they
+     are deliberately absent: UserCommands exists to serve /world/<name>/create
+     and nothing here spawns anything, and Contact has no reader in this
+     repository at all (the generated world's own comment says so). A plugin
+     that nothing asks a question of is a process the arm was built to have
+     none of.
+
+     ONE BODY, DECLARED IN THE WORLD, OFF EQUILIBRIUM AT STEP 0. Nothing spawns
+     it. `ros2 run ros_gz_sim create` would put an asynchronous process inside
+     the arm whose whole purpose is to have none - which is arm C's question,
+     not arm A's. The body's mass, its computed inertia and its `<mu>` are
+     copied from `_workpiece_sdf` in tests/scenarios/pick_and_place.py at commit
+     ee85e39, so that the thing tumbling here is the thing the cell carries
+     (criteria.md section 5).
+
+     THE INITIAL POSE IS A PARAMETER AND NOT A LITERAL, because arm A' differs
+     from arm A in exactly that and in nothing else. See `common.PROBE_POSE`.
+-->
+<sdf version="1.9">
+  <world name="@WORLD_NAME@">
+
+    <physics name="default" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+
+    <!-- Static, so it never appears in a dynamic_pose/info snapshot and cannot
+         be mistaken for the body. -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>100 100</size></plane>
+          </geometry>
+          <surface>
+            <friction><ode><mu>@MU@</mu><mu2>@MU@</mu2></ode></friction>
+          </surface>
+        </collision>
+      </link>
+    </model>
+
+    <model name="@BODY_NAME@">
+      <pose>@X@ @Y@ @Z@ @ROLL@ @PITCH@ @YAW@</pose>
+      <link name="link">
+        <inertial>
+          <mass>@MASS@</mass>
+          <inertia>
+            <ixx>@INERTIA@</ixx><iyy>@INERTIA@</iyy><izz>@INERTIA@</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>@SIDE@ @SIDE@ @SIDE@</size></box></geometry>
+          <surface>
+            <friction><ode><mu>@MU@</mu><mu2>@MU@</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>@SIDE@ @SIDE@ @SIDE@</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

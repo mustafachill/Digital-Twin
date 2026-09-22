@@ -203,7 +203,23 @@ protected:
         record(ResultCode::PRECONDITION_FAILED);
         return BT::NodeStatus::FAILURE;
       }
-      result_future_ = client_->async_get_result(handle_);
+      // The result-side wake is registered on THIS call and not earlier, in
+      // `dispatch`'s `SendGoalOptions` — that was tried and is what
+      // `rclcpp_action::Client::async_send_goal` calls "inconsistent
+      // behaviour" in its own doc comment: a `result_callback` set there makes
+      // it call `make_result_aware` (and therefore request the result)
+      // immediately on acceptance, a whole poll early. Against a real
+      // executor that measurably beat this leaf back to its own next tick —
+      // `test_skill_goals` and `test_line_nodes` both threw
+      // `UnknownGoalHandleError` on every case — because the client erases a
+      // goal from its own bookkeeping the instant the result lands, and
+      // `async_get_result` throws exactly that for a goal it no longer knows.
+      // Registered HERE instead, this is the exact call that already made the
+      // client result-aware before this leaf ever woke early; adding a
+      // callback to it changes nothing about WHEN that happens, only that
+      // this leaf hears about it promptly rather than on the next 10 ms tick.
+      result_future_ = client_->async_get_result(
+        handle_, [this](const WrappedResult &) {this->emitWakeUpSignal();});
     }
 
     if (!ready(result_future_)) {
@@ -286,7 +302,24 @@ private:
     // second would make a slow-to-discover server look like one that refused to
     // answer.
     started_at_ = now();
-    goal_future_ = client_->async_send_goal(goal);
+
+    // Wake the tree's tick loop on acceptance, instead of leaving it to notice
+    // up to 10 ms of WALL CLOCK later on a cell running SIMULATED time (see the
+    // comment at `tree.tickWhileRunning()` in `line_coordinator.cpp`). The
+    // result-side wake is registered separately, in `poll()` below — see the
+    // note there for why the two are not registered together here, which was
+    // tried and is not cosmetic.
+    //
+    // ONLY THE WAKE CROSSES THREADS HERE. This callback runs on the executor
+    // thread, `poll()` runs on the tick thread, and `emitWakeUpSignal` is the
+    // one piece of `TreeNode` built for a call from another thread — a
+    // mutex-guarded condition variable (`BT::WakeUpSignal`). Nothing else
+    // about this leaf's state is touched from a callback: `poll()` stays the
+    // only thing that reads `goal_future_` / `result_future_` and decides,
+    // exactly as before this change.
+    typename rclcpp_action::Client<ActionT>::SendGoalOptions options;
+    options.goal_response_callback = [this](GoalHandle) {this->emitWakeUpSignal();};
+    goal_future_ = client_->async_send_goal(goal, options);
     return BT::NodeStatus::RUNNING;
   }
 

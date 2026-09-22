@@ -581,6 +581,62 @@ margin. Nothing in `workspace/`, `tools/`, `tests/` or `scripts/` measures eithe
 during a run — the only instrument is a frozen campaign harness no bring-up, scenario or CI step
 reaches.
 
+### #85 — The cell does not reproduce under one seed, and where that enters is UNRESOLVED
+**Opened 2026-09-22, on a published campaign:**
+[`2026-09-22-is-a-run-reproducible`](measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md),
+criteria frozen before its harness existed, harness frozen before its first trial, machine
+named. **Cite the directory; its figures are not copied here (P1), and nothing here proposes a
+fix** — that campaign's §0 reserves every consequence of it to the project owner.
+
+**What is established.** Two runs of `./scripts/scenario pick_and_place --zone cell_b`, **same
+seed, same world, same commit, minutes apart**, put the work-piece in two different places,
+three orders of magnitude outside the threshold registered in advance, and differed in cycle
+duration by several seconds. **Both runs passed**, printing the bare verdict, and both were
+answered by Pilz alone — so no unseedable OMPL motion is inside the result. That is the point
+worth carrying out of the campaign: **a scenario passing is not a statement that the run
+reproduces.** **Two runs, one machine, one commit. That is not a rate**, and nothing was
+registered about how often it happens.
+
+**What is open, and it is the whole of this item.** **Q4 — where the irreproducibility enters —
+is UNRESOLVED**, and it may not be answered out of that directory. The campaign's control did
+not clear: a 1e-6 m perturbation passed through at unit gain and missed the sensitivity
+threshold, so its rule N fired and **the two questions that would have localised the divergence
+are NOT ADMISSIBLE**. **Nobody may write that the physics engine was shown to reproduce, that
+`gz sim --seed` was shown not to reach it, or that the divergence sits in the solver, the
+coupling or the planner.** The underlying figures are published in that directory, labelled as
+figures and not as verdicts, and may be cited only that way.
+
+**What a future campaign has to do differently, in that campaign's own words and not as a
+proposal.** Its deviation D1 records that the threshold was **unsatisfiable by construction**:
+the probe world's ground plane is infinite and centred, so the dynamics are exactly
+translation-equivariant in x and a perturbation along x can only ever return the perturbation
+back. The rig could have read SENSITIVE only by a floating-point rounding bit. **A control that
+tests this metric must perturb an axis the dynamics are not equivariant in, or perturb a
+rotation, and state the gain it expects before the first trial.** Whether such a campaign runs
+is the project owner's decision and none is proposed here.
+
+**Two facts this campaign wrote down that stand on their own, independent of every verdict
+above.**
+- **The physics stack has a generator and nothing in this tree seeds it.** The symbol scan
+  ADR-0027 rests on now exists on x86_64, with its command and output committed, and it
+  **confirms** that record — no gz-physics plugin references `gz::math::Rand`. It also shows
+  `libdart` defining its own `dart::math::Random::setSeed`/`getSeed` and ODE's `dRand*` beside
+  it. `gz sim --seed` does not reach any of them. **An undefined `rand` symbol is a link and not
+  a call site**, so this says nothing by itself about what a run does; it is kept here because
+  *"the physics is unseeded because there is nothing there to seed"* is no longer available as a
+  reading. [ADR-0027](adr/0027-pilz-planning-pipeline.md)'s amendment of 2026-09-22 carries it.
+- **`./scripts/sim` passes no seed at all.** `grep -rn CITE_PHYSICS_SEED scripts` reaches
+  `scripts/scenario` and nothing else, and the launch file omits `--seed` entirely when the
+  variable is unset. So every `./scripts/sim` and `./scripts/sim --pair` run is unseeded,
+  whatever the flag does or does not buy — including the paired runs that prompted the campaign.
+
+**Cross-references, none of them an attribution.** **#84** is the other half of the owner's
+question and was measured separately: two paired sides whose clocks agree to 0.01 % and whose
+work does not, with the lag concentrated in the phase that plans. **#60** is an intermittent
+`continuous_line` failure whose physical cause is unestablished; a cell that does not reproduce
+against itself is the background any such failure sits against, and **that is a reason to be
+careful with both, not a link between them.**
+
 ---
 
 ## 2. Known defects

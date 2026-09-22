@@ -1,0 +1,23 @@
+# ---- campaign environment, recorded by run_campaign.sh ----
+recorded_at=2026-09-22T16:57:09Z
+host_uname=Linux cite 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+host_uptime= 11:57:09 up 7 days, 31 min,  1 user,  load average: 0.02, 0.27, 0.28
+host_loadavg=0.02 0.27 0.28 2/1247 1718116
+git_head=deb2911666938df6cfc73daa7b5ebce3613b6ea3
+git_status_porcelain<<EOF
+?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt
+EOF
+base_commit_is_ancestor=true
+criteria_sha256=de7d614cba7552293a1072e754f8b51bbac9cc9dd38ee3213fe1ef2532f91350
+probe_template_sha256=4ae9e6a47d16d6abdbfd825238b3be28715fc6e4e61450516360e8abf4ee363d
+vendor_pin_manifest=3dc2b5e8294758d96b54b15fa5920d581b7cbb3d
+seed_a=20260824
+seeds_b=20260825 20260826 20260827 20260828 20260829
+perturbation_m=1e-06
+probe_iterations=15000
+docker_ps_at_start<<EOF
+EOF
+# ---- ./scripts/build ----
+started_at=2026-09-22T16:57:09Z
+Summary: 23 packages finished [2.92s]
+build_exit=0

@@ -143,9 +143,21 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1531** tests, counted by collection rather than by a run
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on `main`,
-  2026-09-18, with `cell_b` paired).
+  `tools/tests/` holds **1542** tests, counted by collection rather than by a run
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on
+  `measure/is-a-run-reproducible`, 2026-09-22). It read **1531** on `main` on 2026-09-18 with
+  `cell_b` paired.
+  **The 1531 -> 1542 step is +11, it is tree growth alone, and it was predicted before it was
+  measured.** The branch publishes a campaign and adds **61** tracked files
+  (`git diff --diff-filter=A --name-only 79b1acd..HEAD`, with `--diff-filter=D` and `R` both
+  **0**), of which **4** are `.md` — `test_interface_counts.py` +4 — and **7** carry one of
+  `test_superseded_real_time_requirement.py`'s seven suffixes, being 5 `.py` and 2 `.sh`, so +7.
+  4 + 7 = 11. **`test_a_removed_plan_key_stays_removed.py` did not move at all**, and that is
+  the property worth stating: its walk is over **seven trees** — `workspace`, `tools`, `tests`,
+  `scripts`, `model`, `.github`, `infra` — and **`docs/` is not one of them**, so the other 50
+  files, every `.json`, `.console`, `.sdf` and `.txt` of a published campaign's raw records,
+  move this figure not at all. **A campaign is the one kind of change that moves the `lint` walk
+  far more than it moves this count**, and the bullet below is where that shows.
   **The 1521 -> 1523 step is two `.md` files and nothing else, and it closes in two parts
   because the two figures sit at non-adjacent commits** — which is the habit this bullet warns
   against, so the intermediate reading was taken rather than the difference attributed.
@@ -386,13 +398,20 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1638 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1649 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
   first-party packages, eleven per-package summaries totalling **1481 tests, 0 failures, 59
-  skipped**. Its exit status was 0. **Re-taken on `main` on 2026-09-18 with `cell_b` paired**,
-  from one full run, with `docker ps` confirmed empty first. It read 144 / 1628 / 1435 at
-  `7c6e902`.
+  skipped**. Its exit status was 0. **Re-taken on `measure/is-a-run-reproducible` on
+  2026-09-22**, from one full run, with `docker ps` confirmed empty first and empty again
+  after. It read 144 / 1638 / 1481 on `main` on 2026-09-18 with `cell_b` paired, and
+  144 / 1628 / 1435 at `7c6e902`.
+  **Only the host half moved, and the other two not moving is the property worth stating.** The
+  shell gate is untouched because the change adds no script; the per-package total is untouched
+  because it adds **no package test at all** — its whole content is one published campaign under
+  `docs/measurements`, which `./scripts/test` does not execute. **So a campaign is visible to
+  `lint` and to the `tools/tests` collection and invisible to the eleven packages**, and that is
+  a statement about what each instrument walks rather than about coverage.
   **The per-package 1435 -> 1448 step is NOT attributed and is stated as what it is**: the
   eleven `Summary:` lines carry no package name, and the two figures sit at non-adjacent
   commits. What is checkable is that this change adds **no** package test — its only test edit
@@ -409,9 +428,12 @@ bullet.
   and degenerates to the original `not in` on an all-`single` facility; it was mutation-checked
   by treating that set as empty, where it fires. **This is the same breakage `per_zone` in that
   file was written for, in a fourth assertion.**
-  **The host-half tie closes exactly, and it was predicted before it was measured**:
-  `tools/tests` collects 1531 and `tests/` **108**, and 1531 + 108 = 1639 = 1638 passed plus
-  the 1 skipped.
+  **The host-half tie closes exactly, and it was predicted before it was measured** —
+  **the fourth time that has been done here, and the prediction was written into the session
+  before the run was started**: `tools/tests` collects 1542 and `tests/` **108**, and
+  1542 + 108 = 1650 = **1649** passed plus the 1 skipped. It read 1531 + 108 = 1639 = 1638 plus
+  the 1 skipped on `main` on 2026-09-18.
+  **`tests/` did not move**, collecting 108 at both, because the change adds no file under it.
   **The 1523 -> 1531 step is +8, it is tree growth alone, and it closes exactly.** This branch
   adds **5** tracked files and no case to `tools/tests`: two `.md` — a campaign `criteria.md` and
   ADR-0060 — which only `test_interface_counts.py` counts, at +1 each; and three `.hpp`/`.cpp`
@@ -1010,8 +1032,24 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `1972 files checked, no non-English content outside 1 exemption(s)` on
-  `main`, 2026-09-18, with `cell_b` paired. **The 1965 -> 1967 step is +2 and both are `.md`** —
+  runs, and reported `2033 files checked, no non-English content outside 1 exemption(s)` on
+  `measure/is-a-run-reproducible`, 2026-09-22. It read **1972** on `main` on 2026-09-18 with
+  `cell_b` paired.
+  **The 1972 -> 2033 step is +61 and closes exactly, and it is the first move in six to have a
+  campaign in it.** `git diff --diff-filter=A --name-only 79b1acd..HEAD` counts **61** tracked
+  files added, with `--diff-filter=D` and `--diff-filter=R` both **0**, and **all 61 are under
+  `docs/measurements`** — one published campaign's criteria, harness, write-up and raw records,
+  and nothing else. **That figure was written here as "57 of the 61" and corrected on the same
+  pass by running the grep**, which is this section's own rule working at the scale of one
+  clause. The same **3** untracked files are still on disk and are the same three as before,
+  re-derived here by differencing `cite_tools.english.files_to_check` against `git ls-files`
+  rather than carried forward. **A clean clone therefore reports 2030.**
+  **This is the arithmetic demonstration this bullet exists for**, from the sharpest direction
+  it has had: the same change moves this walk by **61** and the `tools/tests` collection above
+  by **11**, because 50 of the files are raw records under `docs/`, which the collection's tree
+  walk does not reach and this one does. **It measures how much evidence is committed and is
+  not a measure of coverage.**
+  It said `1972 files checked` until 2026-09-22. **The 1965 -> 1967 step is +2 and both are `.md`** —
   `docs/adr/0057-…md` and `docs/adr/0059-…md`, the same two files that moved the collection
   above — with nothing under `docs/measurements`, which makes **six** consecutive moves with no
   campaign in them. **Pairing a zone moves this figure not at all**: it modifies two generated
@@ -2144,12 +2182,41 @@ bullet.
     with no confirmation path, "commanded" and "running" were indistinguishable from inside the
     system. A publisher of `ConveyorState` — in the simulation plugin and on the hardware drive,
     which is L1/L2 work — is what closes it.
-  - **Scenarios are not deterministic.** `CITE_PHYSICS_SEED` still reaches only
-    `gz sim --seed`, which seeds sensor noise and **not the physics solver**. What changed is
-    which part is stochastic: planning is no longer it wherever Pilz answers, and physics still
-    is. The OMPL fallback remains unseeded and unseedable. See
-    `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing anything about
-    determinism, and do not upgrade the claim on the strength of the planner alone.
+  - **Scenarios are not deterministic, and since 2026-09-22 that is measured rather than
+    reasoned.** `CITE_PHYSICS_SEED` still reaches only `gz sim --seed`, which seeds sensor noise
+    and **not the physics solver**. What changed is which part is stochastic: planning is no
+    longer it wherever Pilz answers, and physics still is. The OMPL fallback remains unseeded
+    and unseedable. See `docs/architecture/cross-cutting-testing.md` and ADR-0027 before writing
+    anything about determinism, and do not upgrade the claim on the strength of the planner
+    alone.
+    **The cell has now been run twice under one seed and did not reproduce** —
+    [`docs/measurements/2026-09-22-is-a-run-reproducible/`](docs/measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md),
+    criteria frozen before its harness existed and harness frozen before its first trial.
+    `pick_and_place` on `cell_b`, one seed, one commit, minutes apart: the work-piece ended up
+    **0.763 mm** apart against a **1e-6 m** threshold, and the two cycles differed by
+    **4.687 s**. **Both runs passed, and both were answered by Pilz alone**, so no unseedable
+    OMPL motion is inside it. **Two runs on one machine. That is not a rate.** Until this, the
+    only behavioural evidence was a four-run observation taken **before** the seed was plumbed
+    and flagged as not repeated since the planner changed.
+    **What that campaign is FORBIDDEN to say, and nobody may write on its strength.** Its
+    control did not clear — a 1e-6 m perturbation passed through at unit gain and missed the
+    sensitivity threshold by 1.17e-16 m — so its rule N fired and **two of its three questions
+    are NOT ADMISSIBLE**. **Nobody may write that the physics engine was shown to reproduce,
+    that `gz sim --seed` was shown not to reach it, or that the divergence sits in the solver,
+    the coupling or the planner.** Where it enters is **UNRESOLVED**; `docs/open-work.md` #85
+    owns it. The underlying figures are published there, labelled as figures and not as
+    verdicts, and may be cited only that way.
+    **Two facts that campaign wrote down which stand on their own.** First, **`./scripts/sim`
+    passes no seed at all** — `grep -rn CITE_PHYSICS_SEED scripts` reaches `scripts/scenario`
+    and nothing else, and the launch file omits `--seed` entirely when the variable is unset —
+    so every `./scripts/sim` and `./scripts/sim --pair` run is unseeded, **including the paired
+    runs that prompted the campaign**. Second, the symbol scan ADR-0027 rests on **had no
+    recorded command anywhere until that campaign ran it**, and the `nm` recipe this project
+    remembers it by belongs to the adjacent OMPL check on an **arm64** image; run on **x86_64**
+    with its output committed, it **confirms** that record — no gz-physics plugin references
+    `gz::math::Rand` — and shows that **`libdart` defines its own generator with its own seed
+    setter**, which `gz sim --seed` does not reach. So *"the physics is unseeded because there
+    is nothing there to seed"* is no longer an available reading.
   - **Twelve links per arm collided against their visual mesh until 2026-09-01. They now
     collide against derived convex hulls, and what is open is the residuals promotion did
     not close.** §10 below names the defect class. **Do not state how many residuals there are

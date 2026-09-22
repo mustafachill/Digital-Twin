@@ -417,6 +417,58 @@ outside it.
   path to a larger step that section names. Nothing here closes it, narrows it or costs it
   anything; [`docs/open-work.md`](../open-work.md) #17 remains open on the campaign's own words.
 
+## Amendment — 2026-09-22: the symbol scan behind this record now exists, on this architecture, and it narrows the implication rather than the sentence
+
+**This is an amendment and not a correction. Nothing in this record was measured false, no
+section is rewritten, the `Status:` line does not move, and no fix is proposed.** What it adds
+is an instrument and a narrowing, both to the section "What `CITE_PHYSICS_SEED` does and does
+not buy", which is left exactly as it stands.
+
+The campaign is
+[`docs/measurements/2026-09-22-is-a-run-reproducible/`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md),
+criteria frozen before its harness existed and harness frozen before its first trial. **Cite the
+directory; its figures are not copied here** (P1).
+
+- **Until now the claim had no recorded instrument, and that was found by the campaign reading
+  this record rather than by anyone re-running it.** The sentence *"neither `gz_physics_vendor`
+  nor `gz_dartsim_vendor` references it"* appears in exactly two places in this repository —
+  the section below and [`docs/reference/toolchain.md`](../reference/toolchain.md)'s
+  *"`gz sim --seed` — what it actually seeds"* table — and **neither recorded a command, a tool,
+  a library list or an output**. The `nm -D -u … | c++filt` recipe this project remembers the
+  claim by belongs to the **adjacent** OMPL block in that same file, whose `aarch64-linux-gnu`
+  path shows it was run on an **arm64** image. So the architecture behind this claim was
+  attributed by proximity and not by record.
+- **The scan now exists, on x86_64, with its command, its library list and its full output
+  committed** to that campaign's `raw/symbol_scan.txt`, and **it confirms this record.** No
+  gz-physics plugin references `gz::math::Rand` — including
+  `libgz-physics7-dartsim-plugin.so.7.8.0`, the plugin that is actually loaded.
+- **What it narrows is the implication, not the sentence.** `libdart.so.6.13.2` **defines its
+  own generator**, with its own seed setter — `dart::math::Random::setSeed`, `getSeed`,
+  `generateSeed`, `getGenerator` — `libdart-external-odelcpsolver.so` defines ODE's `dRand`,
+  `dRandSetSeed` and `dRandGetSeed`, and `libdart.so` carries undefined references to `dRandInt`
+  and to three `std::random_device` symbols. **So the physics stack is not free of randomness;
+  it has a generator that nothing in this tree seeds.** The section below says the seed does not
+  reach the physics solver, and that stands. What may no longer be read into it is *"and
+  therefore the physics is unseeded because there is nothing there to seed"*.
+- **The scan cannot by itself say what a run does, and the campaign refuses to let it.** An
+  undefined `rand` symbol is a link and not a call site, and a fixed-step integrator can be
+  perfectly deterministic while drawing from no generator at all. **T6 is reported with no
+  pass/fail**, and the campaign's own rule N makes its two behavioural questions — whether the
+  physics engine reproduces, and whether `gz sim --seed` changes a physical outcome — **NOT
+  ADMISSIBLE**. **Nobody may write that the seed was behaviourally shown to do nothing.**
+- **What the campaign does establish bears on this record's last sentence and confirms it.**
+  Two runs of one scenario under one seed, at one commit, minutes apart, put the work-piece in
+  two places — so *"does not make a scenario reproducible"* now has a measurement of the cell's
+  behaviour behind it and not only this section's reading of what the flag reaches. **Two runs
+  on one machine is not a rate**, and **where the irreproducibility enters is UNRESOLVED**: no
+  localisation to the solver, the coupling or the planner may be read out of that directory,
+  or out of this one.
+- **One fact about this project's own use of the flag, read at the campaign's base commit and
+  independent of every verdict above:** `./scripts/sim` sets no seed at all.
+  `grep -rn CITE_PHYSICS_SEED scripts` reaches `scripts/scenario` and nothing else, and
+  `simulation.launch.py` omits `--seed` entirely when the variable is unset — so every
+  `./scripts/sim` and `./scripts/sim --pair` run is unseeded, whatever the flag does.
+
 ## Context
 
 ### Scenario determinism was documented as a fact and was never real

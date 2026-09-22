@@ -1,0 +1,129 @@
+# arm S -- docs/measurements/2026-09-22-is-a-run-reproducible, instrument I5
+# T6: reported, no pass/fail. This is an instrument being written down.
+recorded_at=2026-09-22T17:03:31Z
+uname_m=x86_64
+uname_a=Linux 42b190dbc8e2 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+image=cite-digital-twin:dev
+gz_sim_version=Gazebo Sim, version 8.15.0
+nm=/usr/bin/nm
+cxxfilt=/usr/bin/c++filt
+git_head=deb2911666938df6cfc73daa7b5ebce3613b6ea3
+command_per_library=nm -D -u <lib> | c++filt | grep -i rand
+vendor_roots=/opt/ros/jazzy/opt/gz_physics_vendor /opt/ros/jazzy/opt/gz_dartsim_vendor
+
+## the roots, and whether each one exists
+  present  /opt/ros/jazzy/opt/gz_physics_vendor
+  present  /opt/ros/jazzy/opt/gz_dartsim_vendor
+vendor_roots_present=2 of 2
+
+## the library list, in full
+library_count=17
+find_stderr=<empty>
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-bullet.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-ode.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-lodepng.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-odelcpsolver.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils-urdf.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils.so.6.13.2
+  /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart.so.6.13.2
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-dartsim-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-tpe-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-dartsim-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpe-plugin.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpelib.so.7.8.0
+  /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7.so.7.8.0
+
+## the scan, per library, COMPLETE -- including the empty answers
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-bullet.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-ode.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-lodepng.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-odelcpsolver.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils-urdf.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils.so.6.13.2
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart.so.6.13.2
+                 U dart::external::ode::dRandInt(int)
+                 U std::random_device::_M_fini()@GLIBCXX_3.4.18
+                 U std::random_device::_M_init(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)@GLIBCXX_3.4.21
+                 U std::random_device::_M_getval()@GLIBCXX_3.4.18
+     (grep status 0; matched)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-dartsim-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-tpe-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-dartsim-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpe-plugin.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpelib.so.7.8.0
+     (grep status 1; no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7.so.7.8.0
+     (grep status 1; no match)
+
+## the same scan over DEFINED symbols, for context only
+## (nm -D --defined-only; NOT part of I5, which registers -u. It is
+##  here because an undefined-only answer cannot distinguish a library
+##  that defines its own generator from one that uses none.)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-bullet.so.6.13.2
+     (no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-collision-ode.so.6.13.2
+     (no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-lodepng.so.6.13.2
+     (no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-external-odelcpsolver.so.6.13.2
+0000000000008ba0 T dart::external::ode::dRandGetSeed()
+0000000000008bb0 T dart::external::ode::dRandSetSeed(unsigned long)
+0000000000008e90 T dart::external::ode::dMakeRandomMatrix(double*, int, int, double)
+0000000000008e30 T dart::external::ode::dMakeRandomVector(double*, int, double)
+0000000000008b80 T dart::external::ode::dRand()
+0000000000008c50 T dart::external::ode::dRandInt(int)
+0000000000008d20 T dart::external::ode::dRandReal()
+0000000000008bc0 T dart::external::ode::dTestRand()
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils-urdf.so.6.13.2
+     (no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart-utils.so.6.13.2
+     (no match)
+---- /opt/ros/jazzy/opt/gz_dartsim_vendor/lib/libdart.so.6.13.2
+00000000001ac230 T dart::math::Random::generateSeed(bool)
+00000000001ac3d0 T dart::math::Random::getGenerator()
+00000000001ac330 T dart::math::Random::getSeedMutable()
+00000000001ac3b0 T dart::math::Random::getSeed()
+00000000001ac150 T dart::math::Random::setSeed(unsigned int)
+00000000001beb20 T dart::optimizer::GradientDescentSolver::randomizeConfiguration(Eigen::Matrix<double, -1, 1, 0, -1, 1>&)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-bullet-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-dartsim-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/gz-physics-7/engine-plugins/libgz-physics7-tpe-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-featherstone-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-bullet-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-dartsim-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpe-plugin.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7-tpelib.so.7.8.0
+     (no match)
+---- /opt/ros/jazzy/opt/gz_physics_vendor/lib/libgz-physics7.so.7.8.0
+     (no match)

@@ -590,8 +590,17 @@
     },
     "GraspSpec": {
       "additionalProperties": false,
-      "description": "How this end effector grasps: the stroke it has, and what a skill commands.\n\nOne audience, on both paths. Every value here is read by the L3 skill server\nin simulation and on hardware alike; none of it is simulation-only. That is a\nchange from what this block used to be. It also carried\n`attach_link_suffix`, `closed_threshold_rad` and `open_threshold_rad`, which\nexisted solely to configure the contact-triggered attachment plugin ADR-0023\nintroduced. That plugin is gone — superseded on the evidence of the 84-trial\nfriction campaign in `docs/measurements/2026-08-25-friction-grasp/`, which\nmeasured it firing at first pad contact and destroying the very stall this\nblock exists to produce — so the fields that fed it are gone with it.\n\nWhat remains is one stroke described once: where the joint travels, how fast,\nhow its angle maps to a pad opening, and how wide to close by default. A\ngrasp is now evidenced the way ADR-0022 always said it was — the pads meet\nthe part, the joint stops short of its command, and the controller reports a\nstall.",
+      "description": "How this end effector grasps: the stroke it has, and what a skill commands.\n\nOne audience, on both paths. Every value here is read by the L3 skill server\nin simulation and on hardware alike; none of it is simulation-only. That is a\nchange from what this block used to be. It also carried\n`attach_link_suffix`, `closed_threshold_rad` and `open_threshold_rad`, which\nexisted solely to configure the contact-triggered attachment plugin ADR-0023\nintroduced. That plugin is gone — superseded on the evidence of the 84-trial\nfriction campaign in `docs/measurements/2026-08-25-friction-grasp/`, which\nmeasured it firing at first pad contact and destroying the very stall this\nblock exists to produce — so the fields that fed it are gone with it.\n\n`attach_link_suffix` IS BACK, under ADR-0061, and it is not the same field.\nADR-0023's version named a link to weld the box to and the box followed\nwhichever link that was — a finger, which stopped being the obstacle the jaws\nwere stopping against the instant it moved with them. This one is read by a\n*different* plugin (`cite_simulation::GraspHold`, a world system, never a\nmodel plugin) and its whole job is to name a link that does **not** move\nwhen the jaws close. `closed_threshold_rad` and `open_threshold_rad` stay\ngone: ADR-0061 triggers on the drive joint's *velocity*, the same stall the\n`GripperActionController` already detects, not on a position threshold.\n\nWhat remains from before is one stroke described once: where the joint\ntravels, how fast, how its angle maps to a pad opening, and how wide to close\nby default. A grasp is still evidenced the way ADR-0022 always said it was —\nthe pads meet the part, the joint stops short of its command, and the\ncontroller reports a stall. ADR-0061 does not touch that signal; it only\nstops the box being twisted or dragged once the stall has already happened.",
       "properties": {
+        "attach_link_suffix": {
+          "title": "Attach Link Suffix",
+          "type": "string"
+        },
+        "attach_radius_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Attach Radius M",
+          "type": "number"
+        },
         "closed_position": {
           "default": 0.85,
           "title": "Closed Position",
@@ -650,6 +659,8 @@
       },
       "required": [
         "drive_joint_suffix",
+        "attach_link_suffix",
+        "attach_radius_m",
         "max_drive_rate_rad_s",
         "follower_max_rate_rad_s",
         "linkage",

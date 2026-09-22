@@ -136,6 +136,15 @@ int main(int argc, char ** argv)
   auto tree = factory.createTreeFromFile(tree_path, blackboard);
   RCLCPP_INFO(node->get_logger(), "running station cycle for %s", asset.c_str());
 
+  // The default 10 ms argument is a wall-clock sleep between ticks, and this
+  // cell runs on simulated time — so left unqualified it is exactly the
+  // sleep-used-to-sequence prohibition (CLAUDE.md P4/§4). It is no longer a
+  // schedule: `SkillNode::dispatch` (skill_nodes.hpp) now registers
+  // `rclcpp_action` response and result callbacks that call
+  // `emitWakeUpSignal()`, so a leaf's tree wakes the instant the executor
+  // thread sees the goal accepted or finished. What is left of the sleep is a
+  // ceiling on a failure — a tree with no outstanding wake-up ticks again
+  // within 10 ms regardless — never a duration anything here waits out.
   const auto status = tree.tickWhileRunning();
   RCLCPP_INFO(
     node->get_logger(), "station cycle finished: %s",

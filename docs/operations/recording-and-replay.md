@@ -43,7 +43,7 @@ the bag:
 | Facility model version | A run against yesterday's layout is not comparable to today's |
 | Software version (commit) | Behaviour changes between commits |
 | Operating mode | It determines what the numbers in the bag **are**, and it is not a maturity level. The reason is stated once, in [L6](../architecture/L6-data-and-telemetry.md), and cited here rather than repeated. |
-| Physics seed (simulation) | Reproducibility |
+| Physics seed (simulation) | What the run was given. **It is not a reproducibility guarantee**, and the reason is stated once, in [L6](../architecture/L6-data-and-telemetry.md), on [ADR-0027](../adr/0027-pilz-planning-pipeline.md) and a campaign, and cited here rather than repeated. `./scripts/sim` passes no seed, so a bag from an interactive run has none to record |
 | Registration transform (hardware) | Divergence is meaningless without it |
 
 This is what makes "compare this week's cycle time to last month's" a valid question rather
