@@ -274,3 +274,35 @@ This record stays `Proposed` until all of:
    seed, and the box's final-position spread is reported against the 0.763 mm and 0.331 mm
    already measured, **whichever way it goes**.
 3. `pick_and_place` and `continuous_line` pass, still asserting where the box ends up.
+
+## Clause 2, measured 2026-09-22
+
+**Clause 2 is met, and the figures are here rather than in a campaign directory** — this is a
+decision's evidence, not a campaign: two runs on one machine at one commit, with nothing
+registered in advance. **That is not a rate.**
+
+Same instrument as the two readings it is compared against: two runs of
+`./scripts/scenario pick_and_place --zone cell_b` under seed `20260824`, the box's final
+position read through `cite_bringup.gz.ModelPoses`, and every commanded motion compared by
+shape and by dispatch instant.
+
+| | first measured | after the tick and settle fixes | **after this record** |
+|---|---|---|---|
+| box's final position, largest coordinate spread | **0.763 mm** | 0.331 mm | **0.201 mm** |
+| drift at the transition out of the grasp | — | **+343 ms** | **+7 ms** |
+| worst dispatch drift anywhere in the cycle | — | +343 ms | **-28 ms** |
+
+Per axis, this record's pair: x **2.66e-5 m**, y **2.01e-4 m**, z **1.33e-8 m**.
+
+**The commanded trajectories after the grasp — the motions that carry the box — are what moved
+most**, which is what the mechanism predicts, since those are the motions whose start state the
+grasp decides. Shape delta per motion, first measurement against this one: motion 3
+6.31e-5 → **1.43e-8**, motion 4 3.97e-4 → **1.57e-5**, motion 5 1.45e-4 → **6.80e-6**, motion 7
+2.85e-4 → **4.01e-5**. All eight motions have identical durations and identical joint travel in
+both runs, as they did before.
+
+**What this does not say.** 0.201 mm is still **twice** the ±0.1 mm a real xArm 5 repeats to, so
+the gap this record opens with is narrowed and not closed. Nothing here localises the remaining
+0.201 mm, and the campaign that measured the original 0.763 mm answered that question
+UNRESOLVED — a verdict this record may not quietly improve on. **Two runs before and two runs
+after is four runs.**
