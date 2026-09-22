@@ -1,0 +1,844 @@
+{
+ "campaign": "2026-09-22-is-a-run-reproducible",
+ "label": "A_04",
+ "arm": "A",
+ "is_shakedown": false,
+ "trial_index": 4,
+ "seed_requested": 20260824,
+ "x_offset_m": 0.0,
+ "iterations_requested": 15000,
+ "zone": "cell_b",
+ "probe_world_name": "cite_probe",
+ "probe_body": "probe_body",
+ "probe_pose_nominal": {
+  "x": 0.0,
+  "y": 0.0,
+  "z": 0.5,
+  "roll": 0.6,
+  "pitch": 0.7,
+  "yaw": 0.8
+ },
+ "at_rest_rule": {
+  "min_gap_s": 1.0,
+  "tolerance_m": 1e-09,
+  "ceiling_s": 120.0
+ },
+ "git_open": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_open": [
+  0.43212890625,
+  0.38134765625,
+  0.3173828125
+ ],
+ "host": {
+  "uname_m": "x86_64",
+  "uname_a": "Linux 5fea0121ec53 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+  "gz_sim_version": "Gazebo Sim, version 8.15.0\nCopyright (C) 2018 Open Source Robotics Foundation.\nReleased under the Apache 2.0 License.",
+  "gz_help_lists_seed": true,
+  "gz_help_lists_iterations": true,
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+ },
+ "docker_ps": "<error FileNotFoundError: [Errno 2] No such file or directory: 'docker'>",
+ "started_wall": 1790096351.4690928,
+ "instrument_loss": false,
+ "instrument_loss_reason": null,
+ "world_path": "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/A_04.world.sdf",
+ "world_sha256": "1d9dbc4509f5fcff2d0742d4cc2ab299a52cafbc329ec48d8d9290937eea1e44",
+ "v_physics": {
+  "zone": "cell_b",
+  "installed_world": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "probe_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "installed_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "probe_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "agree": true
+ },
+ "pose_topic": "/world/cite_probe/dynamic_pose/info",
+ "gz_partition": "cite/cell_b/plant",
+ "argv": [
+  "gz",
+  "sim",
+  "-s",
+  "-r",
+  "--iterations",
+  "15000",
+  "--seed",
+  "20260824",
+  "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/A_04.world.sdf"
+ ],
+ "seed_from_argv": 20260824,
+ "server_pid": 50,
+ "seed_from_proc": 20260824,
+ "seed_from_proc_source": "/proc/50/cmdline",
+ "seed_readback_is_independent": true,
+ "seed_matches_request": true,
+ "server_launched_wall": 1790096351.7019448,
+ "first_snapshot_wall": 1790096353.9111521,
+ "first_snapshot_after_s": 2.20920729637146,
+ "first_position": [
+  2.3960868011929648e-17,
+  9.697786092232891e-18,
+  0.446492
+ ],
+ "at_rest": {
+  "reached": true,
+  "reason": null,
+  "sample_a": {
+   "wall": 1790096355.112171,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "sample_b": {
+   "wall": 1790096356.11308,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  "gap_s": 1.0009090900421143,
+  "max_delta_m": 0.0,
+  "closest_pair_max_delta_m": 0.0
+ },
+ "samples": [
+  {
+   "wall": 1790096353.9111562,
+   "position": [
+    1.6154612370034016e-17,
+    -2.8569362519703483e-18,
+    0.42766619999999994
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096354.111261,
+   "position": [
+    -0.00040269877145793605,
+    0.0011547108168936911,
+    0.0424562543176281
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096354.3114254,
+   "position": [
+    0.0069383481280837905,
+    0.021005709961470217,
+    0.033104900042803156
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096354.5116327,
+   "position": [
+    0.016862235147347044,
+    0.025667813178886115,
+    0.024987473075443203
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096354.7117982,
+   "position": [
+    0.016870379299629083,
+    0.025672728188000118,
+    0.024998313101533054
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096354.9119978,
+   "position": [
+    0.016871394239935087,
+    0.025673340396276396,
+    0.024999664298697735
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096355.112171,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096355.3123162,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096355.512542,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096355.7126973,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096355.9129224,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.11308,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.1131673,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.3133976,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.5135632,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.7137702,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096356.9139247,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096357.114061,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096357.3141716,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096357.514302,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096357.7144895,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096357.9146276,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096358.1147747,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096358.3149767,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096358.5151799,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096358.7153878,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096358.9155343,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096359.1157155,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096359.3158755,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096359.5160813,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096359.716273,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096359.9164627,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096360.1166725,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096360.3168674,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096360.5170653,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096360.7171795,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096360.9173753,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096361.1175406,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096361.3177495,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096361.5179565,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096361.7181733,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096361.9183078,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096362.1185186,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096362.3187265,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096362.5189464,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096362.7190664,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096362.9192483,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096363.1194522,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096363.3196373,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096363.519774,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096363.7198749,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096363.9200346,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096364.1201937,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096364.3203936,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096364.5205557,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096364.720716,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096364.920875,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096365.121029,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096365.3211143,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096365.5212724,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096365.7214274,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096365.9215872,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096366.1217508,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096366.3219266,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096366.5220985,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096366.722251,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096366.9224327,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096367.122544,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096367.3227115,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096367.5228758,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096367.723038,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096367.923198,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096368.1232967,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096368.3234613,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096368.5235353,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096368.723693,
+   "position": [
+    0.0168715895203964,
+    0.025673458188742015,
+    0.024999924270428752
+   ],
+   "server_alive": true
+  }
+ ],
+ "server_ran_to_completion": true,
+ "server_exit_status": 0,
+ "final_position": [
+  0.0168715895203964,
+  0.025673458188742015,
+  0.024999924270428752
+ ],
+ "final_read_wall": 1790096368.9239957,
+ "final_agrees_with_at_rest": true,
+ "final_vs_at_rest_max_delta_m": 0.0,
+ "server_status_at_teardown": 0,
+ "verdict": "COLLECTED",
+ "git_close": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_close": [
+  0.490234375,
+  0.39599609375,
+  0.3232421875
+ ],
+ "ended_wall": 1790096368.9327884,
+ "exit_code": 0
+}

@@ -1,0 +1,844 @@
+{
+ "campaign": "2026-09-22-is-a-run-reproducible",
+ "label": "Aprime_02",
+ "arm": "Aprime",
+ "is_shakedown": false,
+ "trial_index": 2,
+ "seed_requested": 20260824,
+ "x_offset_m": 1e-06,
+ "iterations_requested": 15000,
+ "zone": "cell_b",
+ "probe_world_name": "cite_probe",
+ "probe_body": "probe_body",
+ "probe_pose_nominal": {
+  "x": 0.0,
+  "y": 0.0,
+  "z": 0.5,
+  "roll": 0.6,
+  "pitch": 0.7,
+  "yaw": 0.8
+ },
+ "at_rest_rule": {
+  "min_gap_s": 1.0,
+  "tolerance_m": 1e-09,
+  "ceiling_s": 120.0
+ },
+ "git_open": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_open": [
+  0.31103515625,
+  0.37158203125,
+  0.32080078125
+ ],
+ "host": {
+  "uname_m": "x86_64",
+  "uname_a": "Linux e62039a00f48 7.0.0-31-generic #31~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Aug 10 09:38:02 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+  "gz_sim_version": "Gazebo Sim, version 8.15.0\nCopyright (C) 2018 Open Source Robotics Foundation.\nReleased under the Apache 2.0 License.",
+  "gz_help_lists_seed": true,
+  "gz_help_lists_iterations": true,
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+ },
+ "docker_ps": "<error FileNotFoundError: [Errno 2] No such file or directory: 'docker'>",
+ "started_wall": 1790096448.6395214,
+ "instrument_loss": false,
+ "instrument_loss_reason": null,
+ "world_path": "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/Aprime_02.world.sdf",
+ "world_sha256": "14231c52777f10dd39217ffbc369ffb3bbbf68e77333de244f1f556f2c9e56a3",
+ "v_physics": {
+  "zone": "cell_b",
+  "installed_world": "/workspace/workspace/install/cite_generated/share/cite_generated/worlds/cell_b.sdf",
+  "installed_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "probe_physics_raw": "<physics name=\"default\" type=\"ignored\">\n      <max_step_size>0.001</max_step_size>\n      <real_time_factor>1</real_time_factor>\n    </physics>",
+  "installed_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "probe_physics": {
+   "tag": "physics",
+   "attrib": {
+    "name": "default",
+    "type": "ignored"
+   },
+   "children": {
+    "max_step_size": "0.001",
+    "real_time_factor": "1"
+   }
+  },
+  "installed_world_sha256": "5ebcaee99322371d2e236acc9b1d80bdf9a8a7166e76ee3344e63c9135d7ed1e",
+  "agree": true
+ },
+ "pose_topic": "/world/cite_probe/dynamic_pose/info",
+ "gz_partition": "cite/cell_b/plant",
+ "argv": [
+  "gz",
+  "sim",
+  "-s",
+  "-r",
+  "--iterations",
+  "15000",
+  "--seed",
+  "20260824",
+  "/workspace/docs/measurements/2026-09-22-is-a-run-reproducible/harness/../raw/Aprime_02.world.sdf"
+ ],
+ "seed_from_argv": 20260824,
+ "server_pid": 49,
+ "seed_from_proc": 20260824,
+ "seed_from_proc_source": "/proc/49/cmdline",
+ "seed_readback_is_independent": true,
+ "seed_matches_request": true,
+ "server_launched_wall": 1790096448.8728006,
+ "first_snapshot_wall": 1790096451.081577,
+ "first_snapshot_after_s": 2.2087764739990234,
+ "first_position": [
+  1.0000000000239608e-06,
+  9.697786092232891e-18,
+  0.446492
+ ],
+ "at_rest": {
+  "reached": true,
+  "reason": null,
+  "sample_a": {
+   "wall": 1790096452.2826633,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  "sample_b": {
+   "wall": 1790096453.2836258,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  "gap_s": 1.000962495803833,
+  "max_delta_m": 0.0,
+  "closest_pair_max_delta_m": 0.0
+ },
+ "samples": [
+  {
+   "wall": 1790096451.0815806,
+   "position": [
+    1.0000000000161546e-06,
+    -2.8569362519703483e-18,
+    0.42766619999999994
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096451.281732,
+   "position": [
+    -0.00040169877145793603,
+    0.001154710816893691,
+    0.0424562543176281
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096451.481948,
+   "position": [
+    0.0069393481280837065,
+    0.021005709961470193,
+    0.03310490004280318
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096451.6821167,
+   "position": [
+    0.016863235147346927,
+    0.025667813178886077,
+    0.024987473075443304
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096451.8822846,
+   "position": [
+    0.016871379299628966,
+    0.02567272818800008,
+    0.024998313101533155
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096452.0824494,
+   "position": [
+    0.01687239423993497,
+    0.02567334039627636,
+    0.024999664298697835
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096452.2826633,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096452.4829056,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096452.6830413,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096452.8832312,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.083438,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.2836258,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.283711,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.48384,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.6840434,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096453.8841243,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096454.0843067,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096454.2845142,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096454.4846683,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096454.6848655,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096454.8849537,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096455.0850644,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096455.2852366,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096455.4853966,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096455.6856012,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096455.8857918,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096456.0860107,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096456.2862046,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096456.486364,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096456.6865585,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096456.8867388,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096457.0869293,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096457.2871177,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096457.487229,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096457.687433,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096457.887616,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096458.0877645,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096458.2879589,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096458.4880538,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096458.6882398,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096458.888436,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096459.0885797,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096459.2887292,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096459.4889185,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096459.6891348,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096459.8893375,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096460.0894632,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096460.2896376,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096460.4898036,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096460.6899877,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096460.8901253,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096461.0902162,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096461.2903616,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096461.4904735,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096461.6906729,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096461.8908563,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096462.0910587,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096462.2911758,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096462.4913325,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096462.6915343,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096462.8916492,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096463.0918608,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096463.2920659,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096463.4921575,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096463.692352,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096463.8925025,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096464.0927048,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096464.2929306,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096464.493123,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096464.6933498,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096464.8935058,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096465.093625,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096465.2938282,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096465.4939525,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096465.6941516,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  },
+  {
+   "wall": 1790096465.8942323,
+   "position": [
+    0.016872589520396282,
+    0.025673458188741977,
+    0.024999924270428853
+   ],
+   "server_alive": true
+  }
+ ],
+ "server_ran_to_completion": true,
+ "server_exit_status": 0,
+ "final_position": [
+  0.016872589520396282,
+  0.025673458188741977,
+  0.024999924270428853
+ ],
+ "final_read_wall": 1790096466.0945318,
+ "final_agrees_with_at_rest": true,
+ "final_vs_at_rest_max_delta_m": 0.0,
+ "server_status_at_teardown": 0,
+ "verdict": "COLLECTED",
+ "git_close": {
+  "head": "deb2911666938df6cfc73daa7b5ebce3613b6ea3",
+  "porcelain": "?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/A_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/Aprime_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_01.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_02.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_03.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_04.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.console\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.json\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/B_05.world.sdf\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/logs/\n?? docs/measurements/2026-09-22-is-a-run-reproducible/raw/provenance.txt",
+  "base_commit": "79b1acd",
+  "base_commit_is_ancestor": true
+ },
+ "load_close": [
+  0.44482421875,
+  0.39697265625,
+  0.33056640625
+ ],
+ "ended_wall": 1790096466.1030862,
+ "exit_code": 0
+}
