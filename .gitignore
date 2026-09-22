@@ -42,6 +42,3 @@ rosbag2_*/
 # --- OS ---
 .DS_Store
 Thumbs.db
-
-# Scratch for an in-flight investigation; removed when it ends.
-.cite_dbg/
