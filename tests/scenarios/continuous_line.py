@@ -1402,9 +1402,19 @@ def _workpiece_sdf(name: str) -> str:
     """A plain box, named as the generated world says the belts carry.
 
     Its inertia is computed rather than guessed — a wrong tensor makes the pick
-    behave oddly for reasons that look like a controller fault (L1) — and `<mu>`
-    is the only thing holding the part once it is grasped: the grasp is friction,
-    measured over 84 trials in `docs/measurements/2026-08-25-friction-grasp/`.
+    behave oddly for reasons that look like a controller fault (L1).
+
+    `<mu>` no longer describes the whole of what holds the box once it is
+    grasped. Friction alone stops the jaws in the right place — the pads meet
+    the part, the drive joint stalls, and `cite_skills::gripper_is_holding`
+    reads that — but ADR-0029 measured it unable to keep the box STILL once
+    gripped, up to 34.3 degrees of roll between the pads. ADR-0061's
+    `cite_simulation::GraspHold`, a world plugin, now fixes the box rigidly to
+    the arm's own wrist link for exactly as long as the drive joint reads
+    stalled on it, and releases it the instant the jaws are commanded open
+    again; it never touches this collision or its friction. `<mu>` stays,
+    unchanged, because it still governs everything ADR-0061 does not: the box
+    resting and sliding on the pick table and the belts.
     """
     mass = 0.2
     side = WORKPIECE_SIZE

@@ -212,9 +212,19 @@ def _workpiece_sdf(name: str) -> str:
     reader: `GraspAttachment::FindGraspable` iterated every `ContactSensorData`
     in the world, and no pad link declares a sensor, so without one here the
     attachment plugin could not fire at all. That plugin is removed, so the
-    sensor has no reader and is gone with it. `<mu>` stays and is now the only
-    thing holding the part: the grasp is friction, measured over 84 trials in
-    `docs/measurements/2026-08-25-friction-grasp/`."""
+    sensor has no reader and is gone with it.
+
+    `<mu>` no longer describes the whole of what holds the box in the jaws.
+    Friction alone stops the jaws in the right place — the pads meet the part,
+    the drive joint stalls, and `cite_skills::gripper_is_holding` reads that —
+    but ADR-0029 measured it also unable to keep the box STILL once gripped, up
+    to 34.3 degrees of roll between the pads. ADR-0061's `cite_simulation::
+    GraspHold`, a world plugin, now fixes the box rigidly to the arm's own
+    wrist link for exactly as long as the drive joint reads stalled on it, and
+    releases it the instant the jaws are commanded open again; it never touches
+    this collision or its friction. `<mu>` stays, unchanged, because it still
+    governs everything ADR-0061 does not: the box resting and sliding on the
+    pick table and the belt."""
     mass = 0.2
     side = WORKPIECE_SIZE
     inertia = mass * (side * side + side * side) / 12.0
