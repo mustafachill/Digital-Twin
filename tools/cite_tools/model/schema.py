@@ -807,14 +807,70 @@ class GraspSpec(Strict):
     measured it firing at first pad contact and destroying the very stall this
     block exists to produce — so the fields that fed it are gone with it.
 
-    What remains is one stroke described once: where the joint travels, how fast,
-    how its angle maps to a pad opening, and how wide to close by default. A
-    grasp is now evidenced the way ADR-0022 always said it was — the pads meet
-    the part, the joint stops short of its command, and the controller reports a
-    stall.
+    `attach_link_suffix` IS BACK, under ADR-0061, and it is not the same field.
+    ADR-0023's version named a link to weld the box to and the box followed
+    whichever link that was — a finger, which stopped being the obstacle the jaws
+    were stopping against the instant it moved with them. This one is read by a
+    *different* plugin (`cite_simulation::GraspHold`, a world system, never a
+    model plugin) and its whole job is to name a link that does **not** move
+    when the jaws close. `closed_threshold_rad` and `open_threshold_rad` stay
+    gone: ADR-0061 triggers on the drive joint's *velocity*, the same stall the
+    `GripperActionController` already detects, not on a position threshold.
+
+    What remains from before is one stroke described once: where the joint
+    travels, how fast, how its angle maps to a pad opening, and how wide to close
+    by default. A grasp is still evidenced the way ADR-0022 always said it was —
+    the pads meet the part, the joint stops short of its command, and the
+    controller reports a stall. ADR-0061 does not touch that signal; it only
+    stops the box being twisted or dragged once the stall has already happened.
     """
 
     drive_joint_suffix: str
+    #: The arm link the box is fixed to while the jaws hold it, as ADR-0061's
+    #: `cite_simulation::GraspHold` reads it — a suffix, combined with the arm's
+    #: own asset id exactly as `ids.link` does everywhere else (P1).
+    #:
+    #: MUST NOT MOVE WHEN THE DRIVE JOINT DOES, and that rules out every link this
+    #: gripper's own description names. `xarm_gripper_base_link` and `link_tcp`
+    #: both sound right and are both wrong for a second reason: converting the
+    #: URDF to SDF lumps every body joined by a FIXED joint into its nearest
+    #: ancestor with a non-fixed one, so neither survives as its own entity —
+    #: confirmed against a running cell's own entity dump
+    #: (`docs/measurements/2026-08-26-conveyor-yaw-transfer/raw/graspyaw_entities.txt`
+    #: lists `arm_1_link5` and every finger and knuckle link, and lists no
+    #: `arm_1_link_eef`, `arm_1_xarm_gripper_base_link` or `arm_1_link_tcp` at
+    #: all). What is left standing, fixed to it at zero offset through
+    #: `joint_eef` and `gripper_fix` (both `xyz="0 0 0" rpy="0 0 0"` in the
+    #: vendor xacro), is the arm's own last revolute link — `link5` here, one
+    #: fixed-joint hop from where the gripper's own base would have been. The
+    #: value is therefore an ARM fact wearing a GRASP-block home: it is declared
+    #: here, beside the linkage it is fixed to, rather than on `Kinematics`,
+    #: because nothing else in this model has ever needed to name it and a
+    #: robot-type field with one use and one value would be schema for its own
+    #: sake. If a future end effector attaches to something other than the last
+    #: kinematic link, this stops being derivable by eye and needs its own
+    #: record — see ADR-0061.
+    attach_link_suffix: str
+    #: How close a declared graspable model's own origin must stand to
+    #: `attach_link_suffix`'s origin, in metres, before a stalled drive joint is
+    #: read as "holding that part" rather than "stalled on something else
+    #: nearby" (ADR-0061).
+    #:
+    #: A JUDGEMENT, NOT A DERIVATION, and said so rather than dressed as one. The
+    #: nearest thing to a derivation is the linkage above: at the default 45 mm
+    #: command the pad face centre sits `pad_plane_offset(0.4528) ≈ 0.0186 m`
+    #: proximal of `link_tcp`, i.e. about `0.172 - 0.0186 ≈ 0.153 m` from this
+    #: link's own origin along the tool axis (`joint_eef` and `gripper_fix` carry
+    #: zero offset, so that origin is also `link5`'s). A held box's centre sits
+    #: close to that plane, so the radius has to clear roughly 0.153 m with room
+    #: for the part not being perfectly centred on the axis. 0.20 m is chosen for
+    #: that margin — about 47 mm of slack over the nominal reach — while staying
+    #: well inside the separation between this cell's stations, so a stall over
+    #: one station's box cannot be read as a grasp of a different one sitting
+    #: elsewhere in the cell. Nothing in this repository has measured where the
+    #: flip actually falls; a tester re-running ADR-0061's promotion clause 1 is
+    #: what would.
+    attach_radius_m: Annotated[float, Field(gt=0.0)]
     #: The drive joint's own units at each end of its travel, and the opening
     #: those correspond to.
     #:

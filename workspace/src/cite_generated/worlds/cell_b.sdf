@@ -91,6 +91,45 @@
       <watch>workpiece</watch>
     </plugin>
 
+    <!-- picker — rigid grasp hold (ADR-0061).
+
+         A world system for the reason the module docstring gives, not the one
+         the belt and the beam have: it reaches across two independently
+         spawned models, the arm and the work-piece, exactly as they do.
+
+         MECHANISM. While picker_drive_joint's own velocity has not exceeded
+         stall_velocity_threshold for stall_timeout_s of SIMULATED time — the
+         identical rule GripperActionController already applies, read from the
+         same controller configuration rather than restated (P1) — and the
+         joint is not resting at either declared end of its stroke, a declared
+         graspable model within attach_radius_m of picker_link5's own
+         origin is fixed to it. It is released the instant the joint moves back
+         past the position it was holding at by more than detach_margin_rad, in
+         the direction that opens the jaws.
+
+         It touches no controller and no command interface. The jaws still
+         close, still meet the part, still stop at its width and still report a
+         stall — that signal is what `cite_skills::gripper_is_holding` reads and
+         this plugin never sees it. The one thing this changes is that the box,
+         having stopped the jaws, can no longer be twisted or dragged by them
+         afterwards (ADR-0061).
+
+         Nothing above ros2_control knows this exists. It speaks Gazebo
+         transport only — it does not even speak that much, since it neither
+         publishes nor subscribes — and it is absent from the hardware path,
+         where a real gripper needs no help holding what it has clamped. -->
+    <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
+      <attach_link>picker_link5</attach_link>
+      <drive_joint>picker_drive_joint</drive_joint>
+      <stall_velocity_threshold>0.05</stall_velocity_threshold>
+      <stall_timeout_s>0.3</stall_timeout_s>
+      <detach_margin_rad>0.01</detach_margin_rad>
+      <open_position>0</open_position>
+      <closed_position>0.85</closed_position>
+      <attach_radius_m>0.2</attach_radius_m>
+      <graspable>workpiece</graspable>
+    </plugin>
+
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <diffuse>0.8 0.8 0.8 1</diffuse>

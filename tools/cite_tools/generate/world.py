@@ -17,6 +17,16 @@ scene would see the scene's origin instead of the belt's. Both aids are therefor
 world systems, and both receive the pose the generator resolved from the same L0
 frame that positions their geometry — so a belt's carry volume and the belt a
 station reaches for cannot describe different places.
+
+A third aid, the rigid grasp hold (ADR-0061), is declared here for a different
+reason: it is not forced the way the other two are — an arm's own last link
+survives the URDF-to-SDF conversion as its own entity (it is joined to its
+neighbours by revolute joints, not fixed ones), so a *model* plugin on the arm
+could in principle reach it. It is a world system anyway, for the reason ADR-0061
+itself gives rather than a geometric one: it has to reach across two
+independently spawned models — the arm and the work-piece — exactly as the belt
+and the beam already do, and putting it anywhere else would make "a simulation
+aid lives in the generated world" a rule with one exception instead of a rule.
 """
 
 from __future__ import annotations
@@ -87,6 +97,20 @@ AID_PUBLISH_PERIOD_S = 0.1
 #: that has to be an error with a sentence rather than an empty element.
 CONVEYOR_SURFACE_FRAME = "surface"
 
+#: The end effector's own gripper controller, by the suffix its type declares
+#: (`xarm_parallel_gripper.yaml`'s `controllers:` block). Named here rather than
+#: guessed at the template for the same reason `CONVEYOR_SURFACE_FRAME` is: a
+#: grasp-hold plugin with no controller to read a stall threshold from cannot be
+#: parametrised and that has to be an error with a sentence.
+#:
+#: The literal is not a second statement of a value (P1) — it names *which*
+#: controller to read, the same way `resolve.py`'s `_joint_names` names the
+#: drive joint's own suffix as `"drive_joint"` rather than deriving it. Only the
+#: numbers behind the name are facts; this spelling is how both this module and
+#: `cite_bringup/plan.py`'s generator find them (see `_controller_parameter`
+#: there for the identical pattern).
+GRIPPER_CONTROLLER_SUFFIX = "gripper_controller"
+
 
 class WorldError(Exception):
     """The model describes something the world generator cannot express."""
@@ -115,6 +139,30 @@ class _BeamView:
     beam_width_m: float
     beam_offset_m: float
     detection_topic: str
+
+
+@dataclass(frozen=True)
+class _GraspHoldView:
+    asset: str
+    #: `<asset>_<attach_link_suffix>` — the link the box is fixed to. Never a
+    #: finger (ADR-0061); see `GraspSpec.attach_link_suffix` for why the arm's
+    #: own last link is what survives as an entity at all.
+    attach_link: str
+    #: `<asset>_drive_joint` — the joint whose velocity this plugin watches.
+    drive_joint: str
+    stall_velocity_threshold: float
+    stall_timeout_s: float
+    #: Reused from the gripper controller's own `goal_tolerance` rather than
+    #: declared a third time (P1): it is already "how close counts as the same
+    #: position" for that controller's own success check, and a stall's release
+    #: needs exactly that same question asked of the drive joint's position.
+    detach_margin_rad: float
+    #: The two ends of the stroke, so the plugin can refuse to call a joint
+    #: resting AT either one "stalled". Both already exist in `GraspSpec`
+    #: (`open_position`, `closed_position`); nothing new is declared for them.
+    open_position: float
+    closed_position: float
+    attach_radius_m: float
 
 
 #: Which component of a mounting offset lies along each beam axis.
@@ -273,6 +321,72 @@ def _beams(cell: ResolvedCell) -> tuple[_BeamView, ...]:
     return tuple(views)
 
 
+def _gripper_controller_parameter(asset: ResolvedAsset, key: str) -> float:
+    """One parameter of ``asset``'s gripper controller, read from L0 exactly once.
+
+    The identical pattern `cite_bringup`'s bring-up-plan generator uses for the
+    same reason (see its own ``_controller_parameter``): a value that configures
+    a *controller* — here, the stall threshold and timeout the
+    `GripperActionController` already applies — must reach a second consumer by
+    being READ from the one place it is declared, never restated (P1). Raises
+    rather than returning ``None``: unlike the bring-up plan, which carries a
+    grasp block only for arms that have one, this function is called only after
+    `_grasp_holds` has already confirmed the arm fits an end effector with a
+    grasp specification — and that type's `controllers:` block declares
+    `gripper_controller` unconditionally beside its `grasp:` block, so a miss
+    here means the model and the generator have come apart, not that the value
+    is legitimately absent.
+    """
+    name = ids.controller(asset.id, GRIPPER_CONTROLLER_SUFFIX)
+    for controller in asset.controllers:
+        if controller.name != name:
+            continue
+        value = controller.parameters.get(key)
+        if value is not None:
+            return float(value)
+    raise WorldError(
+        f"arm {asset.id!r} fits an end effector with a grasp specification, but its "
+        f"{GRIPPER_CONTROLLER_SUFFIX!r} controller declares no {key!r}. The grasp-hold "
+        "plugin reads this from the same controller configuration the gripper's own "
+        "GripperActionController loads, so the two can never disagree (P1)."
+    )
+
+
+def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
+    """One rigid-hold plugin declaration per arm that fits a grasping gripper.
+
+    Skips an arm with no end effector, and one whose end effector declares no
+    `grasp` specification, exactly as `generate.description._end_effector_drive_rate`
+    and `generate.bringup._grasp` already do for the same absence — a vacuum
+    end effector has nothing here to hold rigidly, and that is a real state
+    rather than an error.
+    """
+    views: list[_GraspHoldView] = []
+    for asset in cell.of_category("robot"):
+        if asset.instance.end_effector is None:
+            continue
+        effector = cell.end_effector_type(asset.instance.end_effector.type)
+        if effector is None or effector.grasp is None:
+            continue
+        grasp = effector.grasp
+        views.append(
+            _GraspHoldView(
+                asset=asset.id,
+                attach_link=ids.link(asset.id, grasp.attach_link_suffix),
+                drive_joint=ids.joint(asset.id, grasp.drive_joint_suffix),
+                stall_velocity_threshold=_gripper_controller_parameter(
+                    asset, "stall_velocity_threshold"
+                ),
+                stall_timeout_s=_gripper_controller_parameter(asset, "stall_timeout"),
+                detach_margin_rad=_gripper_controller_parameter(asset, "goal_tolerance"),
+                open_position=grasp.open_position,
+                closed_position=grasp.closed_position,
+                attach_radius_m=grasp.attach_radius_m,
+            )
+        )
+    return tuple(views)
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     text = (
         environment()
@@ -285,6 +399,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             publish_period_s=AID_PUBLISH_PERIOD_S,
             conveyors=_conveyors(cell),
             beams=_beams(cell),
+            grasp_holds=_grasp_holds(cell),
             workpieces=cell.workpiece_models,
         )
     )
