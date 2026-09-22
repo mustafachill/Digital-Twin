@@ -101,6 +101,19 @@ CYCLE_CEILING_S = 420.0
 #: which is also 60.0 and bounds something else entirely.
 SETTLE_CEILING_S = 60.0
 
+#: How close two consecutive readings of the work-piece's position must be to
+#: count as "at rest", in metres.
+#:
+#: `_workpiece_xyz` answers as soon as the model EXISTS, not once it has
+#: stopped moving, so the settle wait below has to ask a second question of its
+#: own: not "is there a pose" but "has the pose stopped changing". A JUDGEMENT,
+#: not a derivation from any physical constant — small enough that a part still
+#: settling from its ~5 mm drop (`SPAWN_DROP_M`) will not read as still twice in
+#: a row, and well inside every tolerance this scenario actually asserts on
+#: (`PLACE_TOLERANCE_M`, `PLACE_HEIGHT_TOLERANCE_M`), so tightening it further
+#: could only ever cost time, never coverage.
+SETTLE_TOLERANCE_M = 1e-4
+
 #: How far the work-piece must rise above its resting height to count as picked.
 #: Larger than any settling or contact jitter, smaller than the retreat distance,
 #: so it cannot pass by the box merely being nudged.
@@ -554,9 +567,27 @@ class TestPickAndPlace(unittest.TestCase):
         self.assertEqual(created.returncode, 0, created.stderr)
 
         try:
-            resting = self._spin_until(
-                lambda: self._workpiece_xyz(), SETTLE_CEILING_S, "the work-piece to settle"
-            )
+            # A pose EXISTING and a pose AT REST are different questions, and
+            # `_workpiece_xyz` only answers the first — so waiting on it alone
+            # starts the cycle at whatever point of the drop this run happens to
+            # sample, which is exactly the kind of run-to-run difference in
+            # initial state a reproducibility measurement would (and did) catch.
+            # `last_pose` is this closure's own memory between polls of the
+            # SAME `_spin_until` loop; it is not read or written anywhere else.
+            last_pose: list[tuple[float, float, float] | None] = [None]
+
+            def settled() -> tuple[float, float, float] | None:
+                current = self._workpiece_xyz()
+                previous, last_pose[0] = last_pose[0], current
+                if current is None or previous is None:
+                    return None
+                if any(
+                    abs(a - b) > SETTLE_TOLERANCE_M for a, b in zip(current, previous, strict=True)
+                ):
+                    return None
+                return current
+
+            resting = self._spin_until(settled, SETTLE_CEILING_S, "the work-piece to settle")
         except AssertionError as exc:
             # A missing work-piece is a setup failure, not a result. Say which,
             # with the evidence, rather than leaving the reader to guess whether
