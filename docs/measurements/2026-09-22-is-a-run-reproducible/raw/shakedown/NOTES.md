@@ -39,9 +39,11 @@ in that file. This is it. Nothing in it may be quoted as a result of this campai
 ## What it did NOT do
 
 - It changed no threshold and no constant. **`../../criteria.md` was not touched.**
-- It found no defect in the harness, so the committed harness **is** byte-identical to the
-  one that produced this record — unlike the 2026-09-04 campaign, whose shakedown forced
-  two fixes.
+- It found no defect, so **every file that produced this record — `common.py`,
+  `trial_probe.py`, `probe.sdf.in` — is byte-identical to the committed one**, unlike the
+  2026-09-04 campaign, whose shakedown forced two fixes. (`trial_cell.py` gained one
+  guard after this record was written, from a code read rather than from this run. It is
+  arm C's file and it took no part in this trial.)
 - It says nothing about arms B, A', C or S: it is one trial of arm A's shape.
 - It is **not** a trial of anything. Its numbers appear in no figure and settle no
   question.

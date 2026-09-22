@@ -220,8 +220,16 @@ def main() -> int:
             if not chunk:
                 break
             text = chunk.decode("utf-8", errors="replace")
-            console.write(text)
-            console.flush()
+            try:
+                console.write(text)
+                console.flush()
+            except ValueError:
+                # The main thread closed the log because this thread's join
+                # timed out while it was blocked in `read`. One more chunk
+                # arriving after that is the end of the run, not a fault, and
+                # an unhandled exception on a daemon thread would print a
+                # traceback that reads like a failure of the trial.
+                break
             if not entered.is_set():
                 seen = (seen + ANSI.sub("", text))[-8192:]
                 if ENTERED_MARKER.search(seen):
