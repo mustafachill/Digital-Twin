@@ -344,13 +344,28 @@ protected:
   /// A budget on ticks, not a wait on a duration: it exists so a test that will
   /// never finish reports rather than hangs, and nothing in the line is sequenced
   /// by it.
+  ///
+  /// `tickExactlyOnce()`, NOT `tickOnce()`. `SkillNode::dispatch`/`poll` now call
+  /// `emitWakeUpSignal()` on their leaf when a goal is accepted or finishes, so
+  /// `tree_` can carry a pending wake-up the instant an async response lands —
+  /// and `tickOnce()`'s own documented contract is to keep re-ticking the root
+  /// internally for as long as one is pending, before returning. `observe()`
+  /// below samples ownership once per call to THIS function, so a burst of
+  /// several root ticks hidden inside one `tickOnce()` is a real state this test
+  /// would never see — measured directly: with `tickOnce()`, the very first
+  /// sample already read `"station_one"`, and the `"<none>"` state the sequence
+  /// assertion below requires had already been ticked past. `tickExactlyOnce()`
+  /// keeps this loop's own step the unit of observation, exactly as it was
+  /// before a leaf ever had a wake-up to emit; the coordinator's tick loop
+  /// (`line_orchestrator.cpp`) is not this loop, still uses `tickOnce()`, and is
+  /// unaffected by this file's choice here.
   bool run_until(const std::function<bool()> & done, int budget = 4000)
   {
     for (int tick = 0; tick < budget; ++tick) {
       if (done()) {
         return true;
       }
-      const auto status = tree_->tickOnce();
+      const auto status = tree_->tickExactlyOnce();
       maintenance_->run();
       if (report_every_tick_) {
         report_the_line();
@@ -492,9 +507,13 @@ protected:
   /// `run_until` hides the status because most tests are about what the line did;
   /// this exposes it, because the fault branch's central property is that the
   /// root goes on returning RUNNING after a station has escalated.
+  ///
+  /// `tickExactlyOnce()` for the same reason `run_until` uses it: this method's
+  /// own name is the contract, and `tickOnce()` would not keep it once a leaf had
+  /// a wake-up to emit.
   BT::NodeStatus tick_once()
   {
-    const auto status = tree_->tickOnce();
+    const auto status = tree_->tickExactlyOnce();
     maintenance_->run();
     observe();
     return status;
