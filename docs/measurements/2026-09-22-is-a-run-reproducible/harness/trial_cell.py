@@ -35,10 +35,24 @@ allocates a terminal when its stdin is one, and Python line-buffers to a
 terminal. The fallback is a plain pipe, recorded on the record as
 `pty` false -- and the reader's registered fallback reading covers it.
 
-V-PLANNER. The run log is scanned for `planner fallback:` and
-`planner fallback declined:` (`scripts/scenario:188-190`). A trial in which
-OMPL answered any motion is FLAGGED on the record and reported separately by
-`analyse.py`. It is NEVER dropped and never pooled with a Pilz-only trial.
+V-PLANNER, AND THE REGION THE SCAN IS RESTRICTED TO. The run log is scanned for
+the skill server's own `planner fallback:` and `planner fallback declined:`
+lines. **`scripts/scenario:189-190` prints both strings itself**, in its pre-run
+advice block, so a whole-log count of either returns at least 1 on every run and
+would have flagged every arm-C trial. The scan is restricted to the region after
+the cell's output starts and requires the emitting logger's prefix; the raw
+whole-log counts go onto the record beside the restricted ones so the difference
+is visible. `common.planner_counts` holds all of it (P1), with the reasoning and
+the CLAUDE.md section 2 precedent beside the patterns. A flagged trial is NEVER
+dropped and never pooled with a Pilz-only trial.
+
+V2 FOR ARM C IS NOT AN INDEPENDENT READ-BACK, AND THE RECORD SAYS SO. The seed
+is handed across as `CITE_PHYSICS_SEED` and `scripts/scenario:186` prints the
+value it used -- but `common.SEED_A` is `scripts/scenario:90`'s OWN default, so
+that line reads `Seed 20260824 ...` whether or not the variable crossed the
+boundary. There is no cheap independent source on this side, and a field that
+looks like a passed check when nothing was checked is worse than an absent one,
+so the record carries `seed_readback_is_independent: false` and the reason.
 """
 
 from __future__ import annotations
@@ -165,10 +179,22 @@ def main() -> int:
     ]
     record["argv"] = argv
     environment = dict(os.environ)
-    # V2 in arm C's shape: the value is set here and read back off the record
-    # of what was set, and `scripts/scenario` prints the seed it used on every
-    # run -- which `analyse.py` cross-checks against this field.
     environment["CITE_PHYSICS_SEED"] = str(arguments.seed)
+    # V2 in arm C's shape, stated as what it is. `scripts/scenario:186` prints
+    # the seed it used, and `analyse.py` checks the requested value appears in
+    # that line -- but `common.SEED_A` IS `scripts/scenario:90`'s own default,
+    # so the printed line is identical whether or not this variable crossed the
+    # container boundary. That check can therefore only ever confirm, which is
+    # the thing `../criteria.md` section 10 opens by forbidding. The probe arms
+    # read their seed back off `/proc/<pid>/cmdline`; there is no equivalently
+    # cheap independent source here, so this is RECORDED rather than dressed up.
+    record["seed_readback_is_independent"] = False
+    record["seed_readback_note"] = (
+        "arm C's seed read-back is not independent: CITE_PHYSICS_SEED is set to "
+        "the same value `scripts/scenario:90` defaults to, so the printed seed "
+        "line agrees whether or not the variable crossed the container boundary. "
+        "No conclusion may be drawn from its agreement."
+    )
 
     console = console_path.open("w")
     try:
@@ -311,6 +337,13 @@ def main() -> int:
         record["triggered_position"] = reading.get("triggered_position")
         record["last_seen_position"] = reading.get("last_seen_position")
         record["triggered_vs_last_max_delta_m"] = reading.get("triggered_vs_last_max_delta_m")
+        record["fallback_tail"] = reading.get("fallback_tail")
+        # V3 for arm C, lifted onto the trial record so that `analyse.py` reads
+        # one shape per row rather than reaching into the reader's own file.
+        record["installed_world_sha256"] = reading.get("installed_world_sha256")
+        record["plan_world_sha256"] = reading.get("plan_world_sha256")
+        record["world_paths_agree"] = reading.get("world_paths_agree")
+        record["reader_verdict_line"] = reading.get("verdict_line")
         if reading.get("instrument_loss"):
             record["instrument_loss"] = True
             record["instrument_loss_reason"] = (
@@ -326,32 +359,41 @@ def main() -> int:
 
     # ---- I3's other three fields, from the log ----------------------------
     log = ANSI.sub("", console_path.read_text(errors="replace"))
+    # THE HARNESS'S OWN WALL CLOCK, AND IT IS NOT WHAT T4 QUOTES. It is taken
+    # after the `finally` block above, which waits on the reader with two 60 s
+    # bounds of its own, so it carries up to about two minutes of the rig's
+    # teardown. It stays on the record as a separate field; the duration T4
+    # quotes is `scenario_cycle_seconds` below, which the scenario measured.
     record["wall_duration_s"] = time.time() - record["started_wall"]
 
-    verdicts = [
-        match.group(0).strip()
-        for match in common.VERDICT_LINE.finditer(log)
-        if f"'{common.SCENARIO_NAME}'" in match.group(0)
-    ]
+    verdicts, verdict_line = common.terminal_verdict(log)
     record["verdict_lines"] = verdicts
-    record["verdict_line"] = verdicts[-1] if verdicts else None
+    record["verdict_line"] = verdict_line
+    # The reader reads the same file for the same string; if the two disagree,
+    # one of them was looking at a truncated log and the row says so rather than
+    # carrying two answers to one question.
+    record["verdict_lines_agree"] = (
+        record.get("reader_verdict_line") is None
+        or record["reader_verdict_line"] == verdict_line
+    )
     ran = common.CYCLE_DONE_MARKER.findall(log)
     record["unittest_summaries"] = ran
+    # The scenario's OWN duration. `launch_test` prints one summary for
+    # the pre-shutdown tests and one for the post-shutdown tests; the first is
+    # the boundary I3 names and is the leg T4 compares, so it is the one quoted.
+    seconds = [float(value) for value in common.CYCLE_DONE_SECONDS.findall(log)]
+    record["scenario_reported_seconds"] = seconds
+    record["scenario_cycle_seconds"] = seconds[0] if seconds else None
     record["seed_line"] = next(
         (line.strip() for line in log.splitlines() if "reaches 'gz sim --seed'" in line),
         None,
     )
 
-    # V-planner, counted rather than judged.
-    declined = log.count(common.PLANNER_FALLBACK_DECLINED)
-    total = log.count(common.PLANNER_FALLBACK)
-    record["planner_fallback_declined_count"] = declined
-    # `planner fallback declined:` contains `planner fallback` but not
-    # `planner fallback:` -- the colon is what separates them. Counted
-    # separately anyway, and both reported, because a prefix that matches two
-    # strings is how this repository has miscounted a verdict before.
-    record["planner_fallback_count"] = total
-    record["ompl_answered_a_motion"] = total > 0
+    # V-planner, counted rather than judged, and counted over the region the
+    # CELL wrote rather than over the whole console -- `scripts/scenario` prints
+    # both marker strings itself. See `common.planner_counts`.
+    record.update(common.planner_counts(log))
+    record["ompl_answered_a_motion"] = record["planner_fallback_count"] > 0
 
     if record["verdict_line"] is None:
         record["instrument_loss"] = True

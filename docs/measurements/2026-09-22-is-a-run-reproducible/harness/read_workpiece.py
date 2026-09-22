@@ -44,6 +44,13 @@ reading is chosen after the data:
     stationary conveyor from the `PlaceAt` until teardown. `analyse.py` prints
     the distance between the two readings for every trial, so a trial where
     that assumption failed is visible rather than assumed away.
+  - `fallback_tail`: the spread of the trailing samples, recorded ONLY on the
+    rows that took the fallback -- because those are exactly the rows on which
+    `triggered_vs_last_max_delta_m` is `None` and the at-rest assumption above
+    is therefore checked by nothing else.
+  - `installed_world_sha256` and `plan_world_sha256`: V3 for arm C. Two trials
+    with different world hashes are not comparable and are not compared, and
+    T4 is the comparison V3 was written for.
 """
 
 from __future__ import annotations
@@ -62,6 +69,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common  # noqa: E402
 
 _STOP = {"now": False}
+
+#: How many trailing samples the at-rest cross-check spreads over when the
+#: REGISTERED FALLBACK reading is used. UNSETTLED BY CRITERIA, and it enters no
+#: rule: it is a reported number.
+#:
+#: Why it exists. `triggered_vs_last_max_delta_m` is the distance between the
+#: two readings, and it is `None` in exactly the case the fallback was taken --
+#: there is no triggered reading to difference. So the one trial where the "the
+#: part is at rest from the `PlaceAt` until teardown" assumption most needs
+#: checking is the one where nothing checked it. This spreads the last N
+#: samples instead, so the assumption is MEASURED on that row rather than
+#: asserted. At `CELL_SAMPLE_PERIOD_S` of 0.5 s, ten samples is about 5 s.
+FALLBACK_SPREAD_SAMPLES = 10
+
+
+def max_coordinate_spread(positions: list[list[float]]) -> float | None:
+    """The largest |delta| over every coordinate of every pair. Never rounded."""
+    worst = None
+    for index, first in enumerate(positions):
+        for second in positions[index + 1:]:
+            for a, b in zip(first, second, strict=True):
+                delta = abs(a - b)
+                worst = delta if worst is None else max(worst, delta)
+    return worst
 
 
 def _stop(_signum: int, _frame: object) -> None:
@@ -128,6 +159,38 @@ def main() -> int:
     plan = gz.plan_for(arguments.zone)
     world = Path(plan.world)
     record["world_file"] = str(world)
+
+    # ---- V3, arm C's half --------------------------------------------------
+    # "Each trial records the SHA-256 of the world file it launched. Two trials
+    # with different world hashes are not comparable and are not compared." No
+    # arm-C record carried a hash at all until this was added, so V3 skipped the
+    # arm and T4 -- the comparison V3 was written for -- had no hash guard where
+    # T1 and T2 both have one.
+    #
+    # BOTH PATHS ARE HASHED AND COMPARED. `installed_world_path` asks
+    # `ros2 pkg prefix cite_generated` the question V-physics asks of the probe
+    # arms, and `plan.world` is what the launch actually hands `gz sim`. They
+    # should be the same file; recording one and assuming the other is how this
+    # repository has published figures from a build that was not the build being
+    # described.
+    try:
+        installed = common.installed_world_path(arguments.zone)
+        record["installed_world_path"] = str(installed)
+        record["installed_world_sha256"] = common.sha256_text(installed.read_text())
+    except Exception as exc:  # noqa: BLE001 - provenance, reported not raised
+        record["installed_world_path"] = None
+        record["installed_world_sha256"] = None
+        record["installed_world_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        record["plan_world_sha256"] = common.sha256_text(world.read_text())
+    except OSError as exc:
+        record["plan_world_sha256"] = None
+        record["plan_world_error"] = f"{type(exc).__name__}: {exc}"
+    record["world_paths_agree"] = bool(
+        record.get("installed_world_sha256")
+        and record["installed_world_sha256"] == record.get("plan_world_sha256")
+    )
+
     try:
         record["world"] = world_name(world)
         record["workpiece"] = workpiece_name(world)
@@ -147,9 +210,18 @@ def main() -> int:
 
     samples: list[dict] = []
     triggered: dict | None = None
-    verdict_line: str | None = None
+    verdict_lines: list[str] = []
+    terminal_verdict: str | None = None
     log_path = Path(arguments.log)
     consumed = 0
+    # A LINE SPLIT ACROSS TWO POLLS IS CARRIED, NOT DROPPED. `read()` returns
+    # whatever the writer has flushed, which ends mid-line as often as not, and
+    # `tell()` then advances past that fragment -- so a marker straddling a poll
+    # boundary was consumed as two halves and matched by neither. The host-side
+    # pump in `trial_cell.py` already keeps a running buffer for exactly this
+    # reason; this is the same guard on the reading side. The fragment is held
+    # here and prepended to the next read.
+    pending = ""
     ansi = re.compile(r"\x1b\[[0-9;]*m")
     deadline = time.monotonic() + arguments.ceiling
 
@@ -167,7 +239,9 @@ def main() -> int:
                     handle.seek(consumed)
                     fresh = handle.read()
                     consumed = handle.tell()
-                for raw in fresh.splitlines():
+                chunks = (pending + fresh).split("\n")
+                pending = chunks.pop()
+                for raw in chunks:
                     line = ansi.sub("", raw).rstrip("\r")
                     if triggered is None and common.CYCLE_DONE_MARKER.search(line):
                         # I3's boundary, taken as an EVENT the moment it is
@@ -180,9 +254,19 @@ def main() -> int:
                         }
                     match = common.VERDICT_LINE.search(line)
                     if match and f"'{common.SCENARIO_NAME}'" in match.group(0):
-                        verdict_line = match.group(0).strip()
+                        seen = match.group(0).strip()
+                        verdict_lines.append(seen)
+                        # ONLY A TERMINAL VERDICT ENDS THE READ, and the LAST
+                        # one is the verdict of record -- which is what
+                        # `trial_cell.py` takes. This used to break on the FIRST
+                        # line of verdict SHAPE, and on the advisory branch that
+                        # is `scripts/scenario:220`'s warning rather than the
+                        # verdict: the two records then carried two different
+                        # strings for the same field.
+                        if common.VERDICT_TERMINAL.fullmatch(seen):
+                            terminal_verdict = seen
 
-            if verdict_line is not None:
+            if terminal_verdict is not None:
                 break
             if _STOP["now"]:
                 record["stopped_by_signal"] = True
@@ -200,7 +284,11 @@ def main() -> int:
 
     record["samples"] = samples
     record["n_samples"] = len(samples)
-    record["verdict_line"] = verdict_line
+    record["verdict_lines"] = verdict_lines
+    record["verdict_line"] = terminal_verdict or (
+        verdict_lines[-1] if verdict_lines else None
+    )
+    record["verdict_is_terminal"] = terminal_verdict is not None
     record["triggered"] = triggered
     record["triggered_position"] = (triggered or {}).get("position")
     last = samples[-1] if samples else None
@@ -222,6 +310,8 @@ def main() -> int:
             + "; I1 returned no position for the work-piece at any point in the run"
         ).lstrip("; ")
 
+    record["triggered_vs_last_max_delta_m"] = None
+    record["fallback_tail"] = None
     if record["triggered_position"] and record["last_seen_position"]:
         record["triggered_vs_last_max_delta_m"] = max(
             abs(a - b)
@@ -229,6 +319,22 @@ def main() -> int:
                 record["triggered_position"], record["last_seen_position"], strict=True
             )
         )
+    elif samples:
+        # THE ASSUMPTION IS CHECKED HERE OR NOWHERE. The registered fallback
+        # rests on `station_cycle.xml` commanding no belt, so the part is at
+        # rest from the `PlaceAt` until teardown -- and the number that would
+        # have shown otherwise, the triggered-against-last distance, does not
+        # exist on exactly the rows that took the fallback. The spread of the
+        # trailing samples stands in for it. It is REPORTED and enters no rule.
+        tail = samples[-FALLBACK_SPREAD_SAMPLES:]
+        record["fallback_tail"] = {
+            "n_samples": len(tail),
+            "wall_span_s": (tail[-1]["wall"] - tail[0]["wall"]) if len(tail) > 1 else None,
+            "max_coordinate_spread_m": max_coordinate_spread(
+                [sample["position"] for sample in tail]
+            ),
+            "requested_samples": FALLBACK_SPREAD_SAMPLES,
+        }
 
     print(json.dumps({k: record[k] for k in ("i3_position", "i3_source", "n_samples")}))
     return seal(0)

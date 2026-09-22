@@ -68,12 +68,48 @@ mkdir -p "$RAW"
     echo "vendor_roots=${VENDOR_ROOTS[*]}"
     echo ""
 
+    # EACH ROOT AND WHETHER IT EXISTS, BEFORE THE `find` THAT WALKS THEM.
+    # `find` writes "No such file or directory" to stderr and that was sent to
+    # /dev/null, so a vendor tree that had moved produced `library_count=0` --
+    # indistinguishable from a scan that walked both trees and found nothing.
+    # This arm exists because the claim it re-takes has NO RECORDED INSTRUMENT
+    # (`../criteria.md` section 2); an instrument that cannot tell "I looked and
+    # saw nothing" from "I looked in the wrong place" is the same gap again.
+    echo "## the roots, and whether each one exists"
+    ROOTS_PRESENT=0
+    for root in "${VENDOR_ROOTS[@]}"; do
+        if [ -d "$root" ]; then
+            echo "  present  $root"
+            ROOTS_PRESENT=$((ROOTS_PRESENT + 1))
+        else
+            echo "  ABSENT   $root"
+        fi
+    done
+    echo "vendor_roots_present=${ROOTS_PRESENT} of ${#VENDOR_ROOTS[@]}"
+    echo ""
+
     echo "## the library list, in full"
     LIBS=()
+    FIND_ERRORS="$(mktemp)"
     while IFS= read -r lib; do
         [ -n "$lib" ] && LIBS+=("$lib")
-    done < <(find "${VENDOR_ROOTS[@]}" -name '*.so*' -type f 2>/dev/null | sort)
+    done < <(find "${VENDOR_ROOTS[@]}" -name '*.so*' -type f 2>"$FIND_ERRORS" | sort)
     echo "library_count=${#LIBS[@]}"
+    # `find`'s own complaint, reported rather than discarded -- and kept OUT of
+    # the list above, which is why it goes to a file and not to the pipeline.
+    if [ -s "$FIND_ERRORS" ]; then
+        echo "find_stderr<<EOF"
+        cat "$FIND_ERRORS"
+        echo "EOF"
+    else
+        echo "find_stderr=<empty>"
+    fi
+    rm -f "$FIND_ERRORS"
+    if [ "$ROOTS_PRESENT" -ne "${#VENDOR_ROOTS[@]}" ]; then
+        echo "# WARNING: a vendor root is missing, so the count above is NOT a"
+        echo "#          measurement of what this image contains. T6 reports; it"
+        echo "#          does not pass or fail, and this line is part of the report."
+    fi
     for lib in "${LIBS[@]}"; do
         echo "  $lib"
     done

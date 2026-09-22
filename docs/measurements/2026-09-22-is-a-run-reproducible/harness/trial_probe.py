@@ -57,9 +57,14 @@ ARMS = ("A", "B", "Aprime")
 
 
 def seed_from_argv(argv: list[str]) -> int | None:
-    """V2 -- the seed THE COMMAND LINE carries, not the one we meant to pass.
+    """The seed a token list carries. NOT on its own a read-back -- see below.
 
-    Read back off the argv that was launched, so that a record states what ran.
+    Applied to the list this file has just built, this function confirms that
+    `list.append` works and nothing else: it parses the argv the same block
+    assembled moments earlier, so it cannot fail. `../criteria.md` section 10
+    opens *"a rule that only ever confirms is not a rule"*, and that is what
+    this was. It is kept because it is what `seed_from_proc` is compared
+    against, and the two now come from different places.
     """
     for index, token in enumerate(argv):
         if token == "--seed" and index + 1 < len(argv):
@@ -68,6 +73,29 @@ def seed_from_argv(argv: list[str]) -> int | None:
             except ValueError:
                 return None
     return None
+
+
+def seed_from_proc(pid: int) -> tuple[int | None, str]:
+    """V2 -- the seed READ FROM A SOURCE THIS HARNESS DID NOT WRITE.
+
+    `/proc/<pid>/cmdline` is the kernel's NUL-separated copy of what the server
+    process was EXECed with, so it is independent of the list this file built.
+    `subprocess.Popen` returns only after the child's exec has succeeded -- it
+    waits on the error pipe closing -- so by the time this is called the entry
+    is the server's own argv and not the forked interpreter's.
+
+    Returns the seed and the source, and the source is on the record: a reading
+    that could not be taken must not be indistinguishable from one that agreed.
+    """
+    path = Path(f"/proc/{pid}/cmdline")
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        return None, f"<unreadable {type(exc).__name__}: {exc}>"
+    tokens = [token for token in raw.decode("utf-8", "replace").split("\0") if token]
+    if not tokens:
+        return None, "<empty; the process was already gone>"
+    return seed_from_argv(tokens), f"/proc/{pid}/cmdline"
 
 
 def agree(first: tuple, second: tuple, tolerance: float) -> bool:
@@ -195,9 +223,9 @@ def main() -> int:
         str(world_path),
     ]
     record["argv"] = argv
-    # V2: read back off the command line that was launched.
+    # Recorded for the reader, and explicitly NOT the read-back: this parses the
+    # list built four lines above it.
     record["seed_from_argv"] = seed_from_argv(argv)
-    record["seed_matches_request"] = record["seed_from_argv"] == arguments.seed
 
     console = out_dir.joinpath(f"{label}.console").open("w")
     server = subprocess.Popen(
@@ -206,6 +234,12 @@ def main() -> int:
         env=environment, start_new_session=True,
     )
     record["server_pid"] = server.pid
+    # V2, taken here because it has to be taken while the process exists.
+    seed_seen, seed_source = seed_from_proc(server.pid)
+    record["seed_from_proc"] = seed_seen
+    record["seed_from_proc_source"] = seed_source
+    record["seed_readback_is_independent"] = seed_seen is not None
+    record["seed_matches_request"] = seed_seen == arguments.seed
     launched_wall = time.time()
     record["server_launched_wall"] = launched_wall
 
@@ -346,19 +380,32 @@ def main() -> int:
         )
     finally:
         poses.close()
+        # THE STOP IS CONDITIONAL ON THE SERVER STILL EXISTING, AND THE
+        # UNCONDITIONAL `killpg` THAT USED TO FOLLOW IT IS GONE. A process group
+        # id is its leader's pid; once `wait` has reaped the leader that number
+        # is free for the kernel to reuse, and `killpg` on it is then a SIGKILL
+        # aimed at whatever group has since been given it. In the normal case --
+        # `gz sim` running its registered iteration count and exiting 0 -- the
+        # leader is reaped by `poll()` in the sampling loop above, so the removed
+        # call fired on a reaped pid on EVERY healthy trial.
         if server.poll() is None:
             try:
                 server.send_signal(signal.SIGINT)
                 server.wait(timeout=common.STOP_GRACE_S)
-            except (subprocess.TimeoutExpired, ProcessLookupError):
+            except ProcessLookupError:
+                pass
+            except subprocess.TimeoutExpired:
+                # Still alive after the grace period, so the group demonstrably
+                # still exists and killing it cannot land on a stranger.
                 try:
                     os.killpg(server.pid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
-        try:
-            os.killpg(server.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
+                try:
+                    server.wait(timeout=common.STOP_GRACE_S)
+                except subprocess.TimeoutExpired:
+                    record["server_would_not_stop"] = True
+        record["server_status_at_teardown"] = server.poll()
         console.close()
 
     record["verdict"] = "INSTRUMENT_LOSS" if record["instrument_loss"] else "COLLECTED"

@@ -78,6 +78,12 @@ PROBE_BODY = "probe_body"
 PROBE_SIDE_M = 0.05
 PROBE_MASS_KG = 0.2
 PROBE_INERTIA = PROBE_MASS_KG * (PROBE_SIDE_M * PROBE_SIDE_M * 2.0) / 12.0
+#: Both surfaces' Coulomb friction, `<mu>` and `<mu2>`, on the ground plane and
+#: on the body. It is SUBSTITUTED into `probe.sdf.in` at all four sites and is
+#: not merely stated here: a constant whose edit changes nothing is a constant
+#: that lies about what the rig runs, and this one was exactly that until the
+#: pre-first-trial review found it. `repr(1.0)` is `'1.0'`, which is what the
+#: template carried literally, so wiring it changes no world byte.
 PROBE_MU = 1.0
 
 #: The initial pose of the probe body: x, y, z, roll, pitch, yaw. It is a
@@ -199,12 +205,68 @@ CYCLE_DONE_MARKER = re.compile(r"Ran \d+ tests? in [0-9.]+s")
 #: here too: `passed` is a prefix of `passed its cycle assertions`.
 VERDICT_LINE = re.compile(r"Scenario '[a-z_]+'[^\n]*")
 
-#: V-planner. `scripts/scenario:188-190` names both strings; `skill_server.cpp`
-#: emits them at lines 2098 and 2112 (read at `6c66cb9`). A trial in which OMPL
-#: answered any motion is FLAGGED and reported separately, never dropped and
-#: never pooled.
+#: The subset of `VERDICT_LINE` that is a TERMINAL verdict -- one of the three
+#: strings `scripts/scenario` exits on (lines 201, 232 and 235, read at HEAD).
+#:
+#: THERE IS A FOURTH MATCHING STRING AND IT IS NOT A VERDICT. On the advisory
+#: branch `scripts/scenario:220` prints `Scenario 'X': the cycle passed and the
+#: post-shutdown check did not.` as a `warn` BEFORE the `ok` verdict, so an
+#: advisory run emits two `VERDICT_LINE` matches and the FIRST of them is the
+#: warning. CLAUDE.md section 2 records the same two-string hazard from the CI
+#: side. The colon after the closing quote is what separates them: a terminal
+#: verdict has a space and then `passed` or `failed`.
+VERDICT_TERMINAL = re.compile(r"Scenario '[a-z_]+' (?:passed|failed)\b[^\n]*")
+
+#: The seconds figure inside the `launch_test` summary `CYCLE_DONE_MARKER`
+#: finds. It is the scenario's OWN measurement of how long its tests took, and
+#: it is what T4 quotes: the harness's `wall_duration_s` is taken after a
+#: `finally` block that waits on a reader with its own 60 s bounds, so it
+#: carries up to about two minutes of teardown that is the rig's and not the
+#: cell's. Both go onto the record; only this one is quoted as the run's
+#: duration.
+CYCLE_DONE_SECONDS = re.compile(r"Ran \d+ tests? in ([0-9.]+)s")
+
+#: V-planner, and the instrument-scope correction it needed.
+#:
+#: **`scripts/scenario:189-190` PRINTS BOTH OF THESE STRINGS ITSELF**,
+#: unconditionally, in its pre-run `warn` block, before `launch_test` is
+#: started: it tells the reader to grep the run log for them. A whole-log
+#: `str.count` of either therefore returns at least 1 on EVERY run, which would
+#: have made `ompl_answered_a_motion` true for every arm-C trial and T4's
+#: headline read as planner-contaminated on a cell that may have been Pilz-only.
+#:
+#: **This is the same defect class CLAUDE.md section 2 records for a whole-log
+#: grep counting a verdict string out of a commit body echoed in CI's `Build
+#: image` step**: the instrument counts the text ABOUT the thing as the thing.
+#: The remedy there is the remedy here -- restrict the region to what the
+#: emitter wrote, and match the emitter's own prefix instead of a bare string.
+#:
+#: `skill_server.cpp:2098` and `:2112` emit these with `RCLCPP_WARN(get_logger(),
+#: ...)` from a node named `skill_server` (`skill_server.cpp:177`) that
+#: `simulation.launch.py:970-972` namespaces per arm, so rcl's logger name ends
+#: in `skill_server` and the console prefix ends `skill_server]:`. Launch's own
+#: process prefix `[skill_server-N] ` does not match, because a space and not a
+#: colon follows its bracket.
+#:
+#: Both the restricted counts and the raw whole-log counts go onto every record,
+#: so the difference between them is visible rather than asserted.
 PLANNER_FALLBACK = "planner fallback:"
 PLANNER_FALLBACK_DECLINED = "planner fallback declined:"
+PLANNER_FALLBACK_LINE = re.compile(r"\[[^\[\]]*skill_server\]:\s*planner fallback:")
+PLANNER_FALLBACK_DECLINED_LINE = re.compile(
+    r"\[[^\[\]]*skill_server\]:\s*planner fallback declined:"
+)
+
+#: The two anchors that separate `scripts/scenario`'s own pre-run output from
+#: the cell's. The first is the LAST line of the advice block
+#: (`scripts/scenario:190`), printed immediately before `launch_test` is
+#: invoked; the second is what `launch` prints as its first act. Whichever is
+#: found LAST is the cut, and the record says which one it was -- so a reader
+#: can tell a restricted count from an unrestricted one instead of assuming.
+SCENARIO_ADVICE_LAST = (
+    "'planner fallback declined:' for the ones that refused a substitute."
+)
+LAUNCH_BANNER = "[INFO] [launch]: All log files can be found below"
 
 #: How long arm C's reader keeps sampling before giving up, if nothing ends it.
 #: The scenario's own ceilings are 300 s of bring-up plus 420 s of cycle
@@ -214,6 +276,84 @@ CELL_CEILING_S = 1500.0
 
 #: How often arm C's reader samples the work-piece. UNSETTLED BY CRITERIA.
 CELL_SAMPLE_PERIOD_S = 0.5
+
+
+def cell_region(log: str) -> tuple[str, str]:
+    """The part of an arm-C console log THE CELL wrote, and which anchor cut it.
+
+    Returns ``(region, anchor)``. Both anchors are searched and the later
+    position wins; when neither is present the whole log comes back and the
+    anchor says so, because a restricted count and an unrestricted one must not
+    be indistinguishable on the record.
+    """
+    cut, anchor = -1, ""
+    for name, needle in (
+        ("scenario advice block (scripts/scenario:190)", SCENARIO_ADVICE_LAST),
+        ("launch banner", LAUNCH_BANNER),
+    ):
+        where = log.rfind(needle)
+        if where >= 0 and where + len(needle) > cut:
+            cut, anchor = where + len(needle), name
+    if cut < 0:
+        return log, "NONE FOUND -- the whole log was counted"
+    return log[cut:], anchor
+
+
+def planner_counts(log: str) -> dict:
+    """V-planner's counts, restricted and raw, from one arm-C console log.
+
+    ONE PLACE (P1), because `trial_cell.py` records these and `analyse.py`
+    reports them and two implementations of the same count is how this
+    repository has miscounted a string before.
+    """
+    region, anchor = cell_region(log)
+    return {
+        # What V-planner's flag is computed from: emitted by the skill server,
+        # after the cell's output started.
+        "planner_fallback_count": len(PLANNER_FALLBACK_LINE.findall(region)),
+        "planner_fallback_declined_count": len(
+            PLANNER_FALLBACK_DECLINED_LINE.findall(region)
+        ),
+        # The defect this correction is about, kept on the record so the
+        # difference is visible: a whole-log count of the bare string, which
+        # `scripts/scenario`'s own advice block guarantees is at least 1.
+        "planner_fallback_count_raw_whole_log": log.count(PLANNER_FALLBACK),
+        "planner_fallback_declined_count_raw_whole_log": log.count(
+            PLANNER_FALLBACK_DECLINED
+        ),
+        # The middle reading: restricted region, bare string, no logger prefix.
+        # It tells a region that was cut wrongly apart from a console format
+        # this pattern does not know, which the two figures either side cannot.
+        "planner_fallback_count_region_unprefixed": region.count(PLANNER_FALLBACK),
+        "planner_scan_anchor": anchor,
+        "planner_scan_region_chars": len(region),
+        "planner_scan_log_chars": len(log),
+    }
+
+
+def terminal_verdict(log: str) -> tuple[list[str], str | None]:
+    """Every `Scenario '<name>' ...` line in ``log``, and the verdict of record.
+
+    ONE PLACE (P1). `trial_cell.py` and `read_workpiece.py` both read this
+    string out of the same file and had two different answers for it: one took
+    the FIRST match and one the LAST, so on the advisory branch -- where
+    `scripts/scenario` prints a warning of the same shape before the verdict --
+    one record carried the warning and the other the verdict.
+
+    The verdict of record is the LAST TERMINAL match; when no terminal match is
+    present the last match of any shape is returned, so a truncated log still
+    states what it saw.
+    """
+    lines = [
+        match.group(0).strip()
+        for match in VERDICT_LINE.finditer(log)
+        if f"'{SCENARIO_NAME}'" in match.group(0)
+    ]
+    terminal = [line for line in lines if VERDICT_TERMINAL.fullmatch(line)]
+    if terminal:
+        return lines, terminal[-1]
+    return lines, (lines[-1] if lines else None)
+
 
 # ---------------------------------------------------------------------------
 # Thresholds, restated here ONLY so that `analyse.py` has one place to read them
@@ -444,6 +584,7 @@ def build_probe_world(x_offset: float) -> str:
         "@MASS@": repr(PROBE_MASS_KG),
         "@INERTIA@": repr(PROBE_INERTIA),
         "@SIDE@": repr(PROBE_SIDE_M),
+        "@MU@": repr(PROBE_MU),
     }
     for token, value in substitutions.items():
         text = text.replace(token, value)

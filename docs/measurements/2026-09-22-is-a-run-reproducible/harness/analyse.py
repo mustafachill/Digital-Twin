@@ -70,23 +70,37 @@ DEVIATIONS: tuple[tuple[str, str], ...] = ()
 #: Each names the clause it makes concrete and the direction the choice leans.
 #: **None of them moves a threshold**, and every one of them was fixed before
 #: any trial ran.
+#:
+#: **THE BOUNDARY, AND IT BINDS EVERY ENTRY BELOW.** An interpretation may make
+#: a SILENT clause concrete; it may not override a clause that is executable as
+#: written, nor change which rows are admitted relative to the literal reading.
+#: An unregistered exclusion criterion is precisely what V8 and V9 exist to
+#: forbid, and "applied literally" has to mean literally. Where this file has
+#: something to say about a row that the registered rule does not exclude on, it
+#: says it as a FLAG printed beside the row -- never as a drop.
 INTERPRETATIONS: tuple[tuple[str, str], ...] = (
     (
         "V1 scope",
-        "V1 requires `git status --porcelain` at both ends of every block and says "
-        "the analyser drops any row without them. Taken as *the porcelain must be "
-        "empty*, V1 would drop EVERY row of this campaign by construction: the "
-        "campaign writes its own records into `raw/`, which is untracked, so the "
-        "porcelain is non-empty from the first trial onwards. `v1_clean` is "
-        "therefore the conjunction of (a) both readings present, (b) the same HEAD "
-        "at both ends, (c) `git merge-base --is-ancestor 79b1acd HEAD` true at both "
-        "ends, and (d) NO porcelain entry at either end touching the trees this "
-        "campaign may not edit -- `model/`, `workspace/`, `tools/`, `tests/`, "
-        "`scripts/`, `assets/`, `external/`, `.github/`. The raw porcelain of both "
-        "ends is on every record, so the stricter reading is recoverable by any "
-        "reader. The clause this implements is the one the 2026-09-04 campaign "
-        "states in its own words: a concurrent agent editing those trees mid-block "
-        "discards the block."
+        "V1, verbatim: \"`git rev-parse HEAD` and `git status --porcelain` taken "
+        "at **both ends** of every block and written **into the record as "
+        "fields**. The analyser drops any row without them. `git merge-base "
+        "--is-ancestor 79b1acd HEAD` must succeed.\" **The operative sentence is "
+        "about the FIELDS**: *them* is the two readings, so the drop condition is "
+        "a row missing a `head` or a `porcelain` at either end. That is executable "
+        "as written, and `v1` implements exactly it and nothing more. Read instead "
+        "as *the porcelain must be empty*, V1 would drop every row of this "
+        "campaign by construction -- the campaign writes its own untracked records "
+        "into `raw/` -- but that reading is not what the clause says and it is not "
+        "applied. THREE FURTHER CONDITIONS ARE EVALUATED AND PRINTED AS FLAGS ON "
+        "THE ROW, AND NONE OF THEM EXCLUDES ANYTHING: HEAD equal at both ends, "
+        "`--is-ancestor` true at both ends, and no porcelain entry at either end "
+        "touching `model/`, `workspace/`, `tools/`, `tests/`, `scripts/`, "
+        "`assets/`, `external/` or `.github/`. They were drop conditions in a "
+        "draft of this file; a pre-first-trial review found that made the "
+        "implementation stricter than the frozen rule, which is an unregistered "
+        "exclusion criterion (V8, V9), and they were demoted to flags. A flagged "
+        "row is reported and admitted; `ANALYSIS.md` is where a reader decides "
+        "what a flag is worth."
     ),
     (
         "V3 and T3",
@@ -233,9 +247,19 @@ def by_arm(rows: list[dict]) -> dict[str, list[dict]]:
 
 
 def porcelain_touches_protected(porcelain: str) -> list[str]:
-    """Which protected trees a `git status --porcelain` reading names."""
+    """Which protected trees a `git status --porcelain` reading names.
+
+    A READING THAT IS AN ERROR SENTINEL IS NOT A CLEAN TREE. `common.git`
+    returns `"<error rc=...>"` when the command failed, and that string has no
+    lines beginning with a protected prefix -- so it used to come back as an
+    empty hit list and read exactly like a checkout with nothing modified. The
+    sentinel is now its own hit, named as one.
+    """
+    text = porcelain or ""
+    if text.startswith("<error"):
+        return [f"THE PORCELAIN READING IS AN ERROR SENTINEL, NOT A TREE: {text}"]
     hits = []
-    for line in (porcelain or "").splitlines():
+    for line in text.splitlines():
         path = line[3:].strip().strip('"')
         # A rename prints `old -> new`; both halves count.
         for candidate in re.split(r"\s+->\s+", path):
@@ -246,100 +270,173 @@ def porcelain_touches_protected(porcelain: str) -> list[str]:
 
 
 def v1(rows: list[dict]) -> tuple[list[dict], list[dict]]:
-    """V1 -- clean tree, at both ends, with the ancestry clause.
+    """V1 -- the two git readings, at both ends, applied literally.
 
-    Drops rows. See INTERPRETATIONS["V1 scope"] for what `clean` is taken to
-    mean and why the literal reading would drop every row of this campaign.
+    **IT DROPS A ROW FOR ONE THING ONLY**: a missing `head` or `porcelain` at
+    either end. That is what the frozen clause says -- *"the analyser drops any
+    row without **them**"*, where *them* is the two recorded fields.
+
+    The ancestry clause, HEAD equality across the two ends and the
+    protected-tree porcelain filter are all evaluated and PRINTED AS FLAGS. They
+    are not drop conditions, because V1 does not make them ones, and an
+    exclusion criterion this file invented would be the unregistered exclusion
+    V8 and V9 exist to forbid. See INTERPRETATIONS["V1 scope"].
     """
     kept, dropped = [], []
     for row in rows:
         opening, closing = row.get("git_open"), row.get("git_close")
-        reasons = []
-        if not opening or not closing:
-            reasons.append("a git reading is missing at one end")
-        else:
+        missing = []
+        flags = []
+        for end, reading in (("open", opening), ("close", closing)):
+            if not reading:
+                missing.append(f"the {end} git reading is absent")
+                continue
+            for field in ("head", "porcelain"):
+                if reading.get(field) is None:
+                    missing.append(f"the {end} reading has no `{field}` field")
+        if opening and closing:
             if opening.get("head") != closing.get("head"):
-                reasons.append(
+                flags.append(
                     f"HEAD moved during the trial: {opening.get('head')} -> "
                     f"{closing.get('head')}"
                 )
             if not (opening.get("base_commit_is_ancestor")
                     and closing.get("base_commit_is_ancestor")):
-                reasons.append(
+                flags.append(
                     f"{common.BASE_COMMIT} is not an ancestor of HEAD at both ends"
                 )
             for end, reading in (("open", opening), ("close", closing)):
                 hits = porcelain_touches_protected(reading.get("porcelain", ""))
                 if hits:
-                    reasons.append(
-                        f"the {end} porcelain names protected tree(s): {hits}"
-                    )
-        row["_v1_clean"] = not reasons
-        row["_v1_reasons"] = reasons
-        (kept if not reasons else dropped).append(row)
-    fired = bool(dropped)
+                    flags.append(f"the {end} porcelain names protected tree(s): {hits}")
+        row["_v1_present"] = not missing
+        row["_v1_missing"] = missing
+        row["_v1_flags"] = flags
+        (kept if not missing else dropped).append(row)
+    flagged = [row for row in kept if row["_v1_flags"]]
     say(
-        "V1 clean tree",
-        fired,
-        f"{len(kept)} row(s) kept, {len(dropped)} dropped. V1 takes "
-        "`git rev-parse HEAD` and `git status --porcelain` at BOTH ends of every "
-        "block and writes them into the record as fields; the analyser drops any "
-        "row without them, and `git merge-base --is-ancestor "
-        f"{common.BASE_COMMIT} HEAD` must succeed.",
+        "V1 the two git readings",
+        bool(dropped),
+        f"{len(kept)} row(s) kept, {len(dropped)} dropped, {len(flagged)} of the "
+        "kept rows FLAGGED. V1, verbatim: `git rev-parse HEAD` and `git status "
+        "--porcelain` taken at both ends of every block and written into the "
+        "record as fields; THE ANALYSER DROPS ANY ROW WITHOUT THEM; `git "
+        f"merge-base --is-ancestor {common.BASE_COMMIT} HEAD` must succeed. A "
+        "missing field is the only drop condition, because it is the only one "
+        "the clause states. The ancestry clause, HEAD equality and the "
+        "protected-tree filter are evaluated and printed below as flags on rows "
+        "that remain ADMITTED -- this file does not invent an exclusion "
+        "criterion (V8, V9).",
     )
     for row in dropped:
-        print(f"    dropped {row.get('label')}: {row['_v1_reasons']}")
+        print(f"    dropped {row.get('label')}: {row['_v1_missing']}")
+    for row in flagged:
+        print(f"    FLAGGED (admitted) {row.get('label')}: {row['_v1_flags']}")
+    if not flagged:
+        print("    no kept row carries a V1 flag.")
     return kept, dropped
 
 
 def v2(rows: list[dict]) -> None:
-    """V2 -- the thing that actually ran: the seed, read back off the argv."""
+    """V2 -- the thing that actually ran: the seed, read from an independent source.
+
+    THE PROBE ARMS' READ-BACK IS INDEPENDENT AND ARM C'S IS NOT, and this
+    prints the difference rather than presenting both as checks. The probe
+    reads `/proc/<pid>/cmdline` -- the kernel's copy of what was EXECed. Arm C
+    has no equivalently cheap independent source: `common.SEED_A` is
+    `scripts/scenario:90`'s own default, so the printed seed line is identical
+    whether or not `CITE_PHYSICS_SEED` crossed the container boundary, and its
+    agreement therefore means nothing. `../criteria.md` section 10 opens *"a
+    rule that only ever confirms is not a rule"*.
+    """
     disagreements = []
+    not_independent = []
     for row in rows:
         if row.get("arm") == "C":
-            # Arm C's seed is an environment variable, and `scripts/scenario`
-            # prints the value it used on every run. That printed line is the
-            # read-back.
             line = row.get("seed_line") or ""
-            if str(row.get("seed_requested")) not in line:
-                disagreements.append(
-                    (row.get("label"), row.get("seed_requested"), line or "<no seed line>")
-                )
+            not_independent.append(
+                (row.get("label"), line or "<no seed line>",
+                 str(row.get("seed_requested")) in line)
+            )
             continue
-        if row.get("seed_from_argv") != row.get("seed_requested"):
+        if row.get("seed_from_proc") is None:
             disagreements.append(
-                (row.get("label"), row.get("seed_requested"), row.get("seed_from_argv"))
+                (row.get("label"), "no independent read-back",
+                 row.get("seed_from_proc_source"))
+            )
+        elif row.get("seed_from_proc") != row.get("seed_requested"):
+            disagreements.append(
+                (row.get("label"), row.get("seed_requested"), row.get("seed_from_proc"))
             )
     say(
         "V2 the seed that actually ran",
         bool(disagreements),
-        "Each trial records the seed it was given, READ BACK from the command "
-        "line it launched (probe arms) or from the line `scripts/scenario` printed "
-        "(arm C), and not from the value it intended to pass. "
-        f"{len(disagreements)} disagreement(s).",
+        "Each trial records the seed it was given, read back from a source the "
+        "harness did not write. Probe arms: `/proc/<pid>/cmdline` of the started "
+        "server, compared against the requested value -- an argv list parsed out "
+        "of the argv list this harness has just built would only ever confirm. "
+        f"{len(disagreements)} probe disagreement(s) or unreadable source(s).",
     )
     for item in disagreements:
         print(f"    {item}")
+    print("")
+    print(wrap(
+        "ARM C'S FIELD IS NOT A PASSED CHECK. The seed line is printed below "
+        "with whether the requested value appears in it; the value is "
+        "`scripts/scenario`'s own default, so it appears either way. Nothing is "
+        "concluded from it."
+    ))
+    for label, line, appears in not_independent:
+        print(f"    {label}: appears_in_line={appears}  {line!r}")
+    if not not_independent:
+        print("    no arm-C row.")
+
+
+def world_hash(row: dict) -> str:
+    """The SHA-256 of the world file a row's trial launched, whatever its arm.
+
+    The probe arms write their own world and hash the bytes they wrote. Arm C
+    launches the INSTALLED generated world, and `read_workpiece.py` hashes it
+    through `ros2 pkg prefix cite_generated` -- the same door V-physics uses.
+    """
+    if row.get("arm") == "C":
+        return str(row.get("installed_world_sha256"))
+    return str(row.get("world_sha256"))
 
 
 def v3(rows: list[dict]) -> dict[str, set[str]]:
-    """V3 -- the world that actually ran. Returns the hash set per arm."""
+    """V3 -- the world that actually ran. Returns the hash set per arm.
+
+    ARM C IS INCLUDED, AND WAS NOT UNTIL A PRE-FIRST-TRIAL REVIEW. No arm-C
+    record carried a world hash, this rule skipped the arm, and T4 -- the
+    comparison V3's own sentence is about -- had no hash guard where T1 and T2
+    both have one.
+    """
     hashes: dict[str, set[str]] = {}
     for row in rows:
-        if row.get("arm") == "C":
-            continue
-        hashes.setdefault(str(row.get("arm")), set()).add(str(row.get("world_sha256")))
+        hashes.setdefault(str(row.get("arm")), set()).add(world_hash(row))
     split = {arm: value for arm, value in hashes.items() if len(value) != 1}
+    unhashed = [
+        row.get("label") for row in rows if world_hash(row) in ("None", "")
+    ]
     say(
         "V3 the world that actually ran",
-        bool(split),
+        bool(split) or bool(unhashed),
         "Each trial records the SHA-256 of the world file it launched. Two trials "
         "with different world hashes are not comparable and are not compared -- "
-        "which is enforced in T1 and T2 below. An arm whose own trials do not "
-        "share one hash is reported here.",
+        "which is enforced in T1, T2 and T4 below. An arm whose own trials do not "
+        f"share one hash is reported here. Rows carrying no hash at all: "
+        f"{unhashed}.",
     )
     for arm in sorted(hashes):
         print(f"    {arm}: {sorted(hashes[arm])}")
+    for row in rows:
+        if row.get("arm") == "C":
+            print(
+                f"    {row.get('label')} installed={row.get('installed_world_sha256')} "
+                f"plan={row.get('plan_world_sha256')} "
+                f"agree={row.get('world_paths_agree')}"
+            )
     return hashes
 
 
@@ -372,8 +469,10 @@ def v5(rows: list[dict]) -> None:
         bool(evidence),
         "One checkout, one writer, for the length of a block. It is not directly "
         "observable, so what stands for it is V1's own evidence: a protected tree "
-        "changing between the two ends of a trial is a second writer. Rows so "
-        f"affected were already dropped by V1. {len(evidence)} occurrence(s): "
+        "changing between the two ends of a trial is a second writer. **ROWS SO "
+        "AFFECTED ARE FLAGGED BY V1 AND ARE NOT DROPPED BY IT** -- V1's drop "
+        "condition is a missing field and nothing else -- so a row listed here is "
+        f"a row still in every figure below. {len(evidence)} occurrence(s): "
         f"{evidence}.",
     )
 
@@ -565,12 +664,33 @@ def v_planner(grouped: dict[str, list[dict]]) -> list[dict]:
         "separately, because an unseedable planner would confound Q3 with a "
         "question this campaign is not asking. It is NOT silently pooled with a "
         f"Pilz-only trial and it is NOT dropped. {len(flagged)} of {len(rows)} "
-        "arm-C trial(s) flagged.",
+        "arm-C trial(s) flagged.\n"
+        "THE COUNT IS RESTRICTED AND THE RAW WHOLE-LOG COUNT IS PRINTED BESIDE "
+        "IT. `scripts/scenario:189-190` prints both marker strings itself, in its "
+        "pre-run advice block, so a whole-log count of either is at least 1 on "
+        "every run and would flag every trial. The flag is computed from lines "
+        "the skill server emitted, after the cell's output starts; the raw "
+        "figures below are the defective instrument, kept visible. This is the "
+        "same defect class CLAUDE.md section 2 records for a whole-log grep "
+        "counting a verdict string out of a commit body echoed by CI.",
     )
     for row in rows:
         print(
             f"    {row.get('label')}: fallback={row.get('planner_fallback_count')} "
-            f"declined={row.get('planner_fallback_declined_count')}"
+            f"declined={row.get('planner_fallback_declined_count')} "
+            f"flagged={bool(row.get('ompl_answered_a_motion'))}"
+        )
+        print(
+            f"        raw whole-log: fallback="
+            f"{row.get('planner_fallback_count_raw_whole_log')} "
+            f"declined={row.get('planner_fallback_declined_count_raw_whole_log')}"
+            f"   region-unprefixed fallback="
+            f"{row.get('planner_fallback_count_region_unprefixed')}"
+        )
+        print(
+            f"        anchor={row.get('planner_scan_anchor')!r} "
+            f"region={row.get('planner_scan_region_chars')} of "
+            f"{row.get('planner_scan_log_chars')} chars"
         )
     return flagged
 
@@ -614,11 +734,40 @@ def cross_spread(left: list[list[float]], right: list[list[float]]) -> list[floa
     ]
 
 
+def sample_motion(row: dict) -> tuple[int | None, float | None, float | None]:
+    """Distinct sampled positions, the wall time of the LAST change, and the
+    gap between that change and the last sample taken.
+
+    WHY THIS IS PRINTED. I2 compares two samples a registered gap apart and
+    calls them rest when they agree. It cannot tell a body at rest from a
+    FROZEN SUBSCRIPTION: `ModelPoses` keeps only its newest snapshot and returns
+    it forever, and `position()` discards the `Pose_V` header stamp, so a
+    publisher that stopped and a body that stopped read identically. **I2 is
+    registered and is applied literally; this changes nothing about it.** What
+    it adds is the two numbers that make a frozen tail visible -- a trial whose
+    last change is far behind its last sample was reading a snapshot nobody
+    refreshed, and a reader can see that rather than having to trust it.
+    """
+    samples = row.get("samples") or []
+    positions = [tuple(sample.get("position") or ()) for sample in samples]
+    if not positions:
+        return None, None, None
+    distinct = len(set(positions))
+    last_change_wall = samples[0].get("wall")
+    for index in range(1, len(positions)):
+        if positions[index] != positions[index - 1]:
+            last_change_wall = samples[index].get("wall")
+    last_wall = samples[-1].get("wall")
+    quiet = None
+    if isinstance(last_wall, (int, float)) and isinstance(last_change_wall, (int, float)):
+        quiet = last_wall - last_change_wall
+    return distinct, last_change_wall, quiet
+
+
 def positions_table(name: str, rows: list[dict]) -> None:
     print(f"\n    {name}, at full double precision:")
     for row in rows:
         value = outcome(row)
-        extra = ""
         if row.get("arm") != "C":
             extra = (
                 f"  at_rest={row.get('at_rest', {}).get('reached')}"
@@ -626,12 +775,46 @@ def positions_table(name: str, rows: list[dict]) -> None:
                 f"  iters_done={row.get('server_ran_to_completion')}"
             )
         else:
+            # The per-trial V-planner flag is stated BESIDE the position
+            # it belongs to, because V-planner's paragraph is elsewhere in this
+            # print and a reader comparing two positions needs to know which of
+            # them OMPL touched without scrolling.
             extra = (
                 f"  i3_source={row.get('i3_source')}"
                 f"  trig_vs_last={row.get('triggered_vs_last_max_delta_m')}"
-                f"  wall={row.get('wall_duration_s')}"
+                f"  V-planner_flagged={bool(row.get('ompl_answered_a_motion'))}"
+                f"  cycle_s={row.get('scenario_cycle_seconds')}"
+                f"  harness_wall_s={row.get('wall_duration_s')}"
             )
         print(f"      {row.get('label')}  seed={row.get('seed_requested')}  {value!r}{extra}")
+        if row.get("arm") != "C":
+            # THE LOADED INITIAL POSE, PRINTED BESIDE THE OUTCOME. Arm A'
+            # is the only arm whose job is to MOVE the metric and its
+            # perturbation is the only thing that makes T3 mean anything; if the
+            # 1e-6 m offset failed to load, T3 would read INSENSITIVE, rule N
+            # would fire, and the campaign would publish a rigorous-looking
+            # UNRESOLVED for an INSTRUMENT FAILURE. A first position whose x is
+            # at the 1e-17 level is an unperturbed world; a live perturbation is
+            # eleven orders larger and unmistakable at this precision.
+            print(
+                f"        first_position={row.get('first_position')!r}"
+                f"  x_offset_requested={row.get('x_offset_m')!r}"
+            )
+            distinct, last_change, quiet = sample_motion(row)
+            print(
+                f"        distinct sampled positions={distinct}"
+                f"  last change at wall={last_change!r}"
+                f"  quiet for {quiet!r} s before the last sample"
+            )
+        elif row.get("triggered_vs_last_max_delta_m") is None:
+            # `trig_vs_last` is None exactly when the registered fallback
+            # was used, which is the one case where the "the part is at rest
+            # from the PlaceAt until teardown" assumption is checked by nothing
+            # else. The tail spread stands in for it.
+            print(
+                f"        FALLBACK READING USED; trailing-sample spread instead: "
+                f"{row.get('fallback_tail')!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -661,6 +844,7 @@ def t3(grouped: dict[str, list[dict]], hashes: dict[str, set[str]]) -> str:
     deltas = sorted(cross_spread(p_rows_positions(p_rows), p_rows_positions(a_rows)))
     every = all(delta > common.T3_TOL_M for delta in deltas)
     result = "SENSITIVE" if every else "INSENSITIVE"
+    ratios = [delta / common.PERTURBATION_M for delta in deltas]
     verdict(
         "T3 the control",
         result,
@@ -681,6 +865,23 @@ def t3(grouped: dict[str, list[dict]], hashes: dict[str, set[str]]) -> str:
         ),
     )
     print(f"    all {len(deltas)} pairwise maxima: {deltas!r}")
+    print("")
+    print(wrap(
+        "THE RATIO delta / perturbation, PAIR BY PAIR. **A RATIO AT OR NEAR "
+        "1.000000 IS PASS-THROUGH AND NOT SENSITIVITY.** The threshold T3 "
+        "compares against is the perturbation's own value, and the probe world's "
+        "ground plane is infinite and centred, so the dynamics are "
+        "translation-equivariant in x: a system that AMPLIFIES NOTHING returns "
+        "exactly 1e-6 m, and the verdict then turns on the last bits of the base "
+        "coordinate rather than on any property of the solver. **T3 IS FROZEN AND "
+        "IS APPLIED LITERALLY (V9)** -- the threshold is not moved and this "
+        "instrument does not change the verdict. If the ratios land at 1.0, that "
+        "is a NUMBERED DEVIATION for `ANALYSIS.md`, applied to data already "
+        "collected, and NOT a re-run. A ratio far above 1 is amplification; a "
+        "ratio far below 1 is a metric that damped the perturbation away."
+    ))
+    for delta, ratio in zip(deltas, ratios, strict=True):
+        print(f"      delta={delta!r}  delta/perturbation={ratio!r}")
     return result
 
 
@@ -759,6 +960,13 @@ def t2(grouped: dict[str, list[dict]], sensitivity: str, hashes: dict[str, set[s
         return "NOT EVALUABLE"
     deltas = sorted(cross_spread(p_rows_positions(b_rows), p_rows_positions(a_rows)))
     within_b = coordinate_spread(p_rows_positions(b_rows))
+    # THE WITHIN-A SPREAD IS PRINTED BESIDE IT, and it is the number a reader
+    # needs to discount a T2 positive. A cross-arm difference above the
+    # threshold means "the seed reaches a physical outcome" only if arm A --
+    # five trials at ONE seed -- agreed with itself below it. If arm A's own
+    # spread is the same size, what T2 measured is arm A failing to reproduce,
+    # which is T1's question and not T2's.
+    within_a = coordinate_spread(p_rows_positions(a_rows))
     reaches = deltas[-1] > common.T2_TOL_M
     result = (
         "THE SEED REACHES A PHYSICAL OUTCOME" if reaches else "NO EFFECT DETECTED"
@@ -770,7 +978,10 @@ def t2(grouped: dict[str, list[dict]], sensitivity: str, hashes: dict[str, set[s
         result,
         f"Arm B's set compared against arm A's: {len(deltas)} pairs, largest "
         f"coordinate |delta| max={deltas[-1]!r} min={deltas[0]!r}; within arm B "
-        f"the spread is {within_b!r}. Any difference above {common.T2_TOL_M:g} m "
+        f"the spread is {within_b!r} and WITHIN ARM A -- five trials at ONE seed "
+        f"-- it is {within_a!r}. A cross-arm difference no larger than arm A's "
+        "own spread is arm A failing to reproduce, which is T1's question and "
+        f"not this one. Any difference above {common.T2_TOL_M:g} m "
         "means the seed reaches a physical outcome and ADR-0027:480 is wrong on "
         "this host. No difference means NO EFFECT DETECTED, which is NOT the "
         "sentence \"the seed does nothing\" and may not be written as one unless "
@@ -786,12 +997,15 @@ def t2(grouped: dict[str, list[dict]], sensitivity: str, hashes: dict[str, set[s
 
 
 def t4(grouped: dict[str, list[dict]], loss_over: dict[str, bool],
-       flagged: list[dict]) -> str:
+       flagged: list[dict], hashes: dict[str, set[str]]) -> str:
     """T4 -- Q3. Is a run of the whole cell reproducible?"""
     rows = healthy(grouped.get("C", []))
     positions_table("arm C work-piece positions", rows)
     for row in grouped.get("C", []):
-        print(f"      {row.get('label')} verdict line: {row.get('verdict_line')!r}")
+        print(
+            f"      {row.get('label')} verdict line: {row.get('verdict_line')!r}"
+            f"  reader agrees={row.get('verdict_lines_agree')}"
+        )
     if len(rows) < 2:
         verdict(
             "T4 Q3", "NOT EVALUABLE",
@@ -802,29 +1016,56 @@ def t4(grouped: dict[str, list[dict]], loss_over: dict[str, bool],
     if loss_over.get("C"):
         verdict("T4 Q3", "NOT ADMISSIBLE", "V11: arm C's loss fraction is above 20 %.")
         return "NOT ADMISSIBLE"
+    # V3, THE GUARD T1 AND T2 BOTH HAVE AND THIS ONE DID NOT. "Two trials with
+    # different world hashes are not comparable and are not compared." T4 is
+    # the comparison that clause is about: two runs of the whole cell, which
+    # load the installed generated world rather than one this harness wrote.
+    if len(hashes.get("C", set())) != 1 or "None" in hashes.get("C", set()):
+        verdict(
+            "T4 Q3", "NOT EVALUABLE",
+            "V3: arm C's trials do not share one world hash, or a trial recorded "
+            "none, so they are not comparable and are not compared. "
+            f"{sorted(hashes.get('C', []))}",
+        )
+        return "NOT EVALUABLE"
     positions = p_rows_positions(rows)
     worst = coordinate_spread(positions)
-    durations = [row.get("wall_duration_s") for row in rows]
+    # T4 QUOTES THE SCENARIO'S OWN DURATION. `wall_duration_s` is taken
+    # after a `finally` block that waits on the reader with two 60 s bounds, so
+    # it includes up to about two minutes of the rig's teardown and is not a
+    # measurement of the run. Both are printed; only one is quoted.
+    durations = [row.get("scenario_cycle_seconds") for row in rows]
+    harness_walls = [row.get("wall_duration_s") for row in rows]
     reproduces = worst is not None and worst < common.T4_TOL_M
     result = "THE CELL REPRODUCES" if reproduces else "THE CELL DOES NOT REPRODUCE"
     spread = (
         max(durations) - min(durations)
-        if all(isinstance(d, (int, float)) for d in durations) else None
+        if durations and all(isinstance(d, (int, float)) for d in durations) else None
     )
+    flagged_labels = [row.get("label") for row in flagged]
     verdict(
         "T4 Q3 is a run of the whole cell reproducible",
         result,
         f"Arm C's work-piece positions must agree to better than "
         f"{common.T4_TOL_M:g} m. The largest coordinate |delta| is {worst!r} m. "
-        f"Wall durations: {durations!r}; their difference is {spread!r} s. "
-        "REPORTED AS TWO VALUES OVER TWO RUNS AND NEVER AS A RATE. The "
+        f"Durations, as the scenario itself measured them (`Ran N tests in Xs`): "
+        f"{durations!r}; their difference is {spread!r} s. REPORTED AS TWO VALUES "
+        "OVER TWO RUNS AND NEVER AS A RATE. The harness's own wall figures are "
+        f"{harness_walls!r} s and are NOT what is quoted here -- they are taken "
+        "after the reader teardown and carry up to about two minutes of it. The "
         f"{common.T4_TOL_M:g} m is three orders below the 50 mm part and is a "
         "judgement."
         + (
-            f" {len(flagged)} of these trials is FLAGGED under V-planner -- OMPL "
-            "answered a motion in it -- and is reported separately rather than "
-            "pooled."
-            if flagged else " Neither trial is flagged under V-planner."
+            f" V-PLANNER: {len(flagged_labels)} of these trials is flagged -- "
+            f"{flagged_labels} -- meaning OMPL answered at least one motion in it. "
+            "THE |delta| ABOVE WAS COMPUTED OVER BOTH TRIALS TOGETHER, so a "
+            "flagged trial is inside this verdict; which trials carry the flag is "
+            "stated per row in the table above and in V-planner's own block. "
+            "V-planner drops nothing, and this sentence says what happened rather "
+            "than that the flagged trial was held out."
+            if flagged_labels
+            else " V-PLANNER: no arm-C trial is flagged, so no OMPL motion is "
+            "inside this verdict."
         ),
     )
     return result
@@ -984,7 +1225,7 @@ def main() -> int:
     t2_result = t2(grouped, t3_result, hashes, loss_over)
 
     heading("T4 -- Q3")
-    t4_result = t4(grouped, loss_over, flagged)
+    t4_result = t4(grouped, loss_over, flagged, hashes)
 
     heading("T5 -- Q4")
     t5(t1_result, t3_result, t4_result)

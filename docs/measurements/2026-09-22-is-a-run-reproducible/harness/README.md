@@ -20,10 +20,14 @@ is, where each came from, and **what the rig cannot do**.
 - **`harness/` is frozen once the first trial has run, and `raw/` with it**
   (rule 2). It is the code that produced the data, so editing it makes it no
   longer that.
-- **One writer in this checkout** (V5). `v1_clean` is a conjunction of two `git`
-  readings taken at both ends of every trial, so a concurrent agent editing
-  `model/`, `workspace/`, `tools/`, `tests/`, `scripts/`, `assets/`, `external/`
-  or `.github/` mid-trial **discards that row**.
+- **One writer in this checkout** (V5). Two `git` readings are taken at both
+  ends of every trial, and a concurrent agent editing `model/`, `workspace/`,
+  `tools/`, `tests/`, `scripts/`, `assets/`, `external/` or `.github/` mid-trial
+  **flags that row**. It does **not** discard it: V1's drop condition is a
+  missing recorded field and nothing else, which is what the clause says, and an
+  exclusion criterion the analyser invented would be the unregistered exclusion
+  V8 and V9 exist to forbid. `analyse.py` prints every flag beside the row it
+  belongs to and `ANALYSIS.md` is where a reader decides what one is worth.
 - **`docker ps` must be empty before every block** (V-container).
   `run_campaign.sh` **refuses** rather than warning. CLAUDE.md §2 records a
   whole `./scripts/test` reading lost to a `dev` container that was already up:
@@ -95,8 +99,8 @@ convention about which directory the operator redirected into:
 | `probe.sdf.in` | The probe world, as a template. Two plugins, a ground plane, one 50 mm box off equilibrium at step 0, and the `<physics>` block copied verbatim from the generated world. The initial pose is a parameter, because A' varies it and nothing else. |
 | `common.py` | Every registered constant with the `../criteria.md` clause that registers it; the two-ended `git` reading (V1); the load reading (V7); `physics_agreement` (V-physics); `build_probe_world`; the record writer. |
 | `trial_probe.py` | One probe trial — arm A, B or A'. Runs inside the container. V-physics before the server starts, `ModelPoses` subscribed before it starts (V4), I2's at-rest rule applied literally, one JSON record out. |
-| `trial_cell.py` | One arm-C trial. Runs **on the host**: it starts `./scripts/scenario pick_and_place --zone cell_b` through a pty and starts the I1 reader in a container of its own. Scrapes the verdict line, the wall duration and V-planner's fallback counts. |
-| `read_workpiece.py` | Arm C's instrument. Holds the **same** `ModelPoses` subscription arms A/B/A' use, beside a running cell, and takes I3 on the event of `launch_test` printing its pre-shutdown summary. |
+| `trial_cell.py` | One arm-C trial. Runs **on the host**: it starts `./scripts/scenario pick_and_place --zone cell_b` through a pty and starts the I1 reader in a container of its own. Scrapes the verdict line, the scenario's own `Ran N tests in Xs` duration, the harness wall duration beside it, and V-planner's fallback counts **restricted to the region the cell wrote**. |
+| `read_workpiece.py` | Arm C's instrument. Holds the **same** `ModelPoses` subscription arms A/B/A' use, beside a running cell, and takes I3 on the event of `launch_test` printing its pre-shutdown summary. Also records V3's world hash for arm C, and the trailing-sample spread on the rows that took the registered fallback. |
 | `scan_symbols.sh` | Arm S. `nm -D -u <lib> \| c++filt \| grep -i rand` over every shared object under both vendor trees, with the command, the list and `uname -m`. Reported; no pass/fail (T6). |
 | `run_campaign.sh` | The registered order, the `docker ps` refusal, `build_once` (V6), `record_environment`, and the skip that makes it resumable (V8). |
 | `analyse.py` | `../criteria.md` §7 and §10 applied to `raw/`. One function per registered rule; **every rule prints whether or not it fires**; `DEVIATIONS` at module top, printed on every run. |
@@ -163,7 +167,7 @@ of the body moves that lever arm. `mu` 1.0 on both surfaces means the corner
 skid. **Whether that is enough sensitivity is not assumed — it is arm A's
 control question, T3 measures it, and rule N fires if it is not.**
 
-## Eleven things this rig cannot do, recorded here rather than discovered later
+## Twelve things this rig cannot do, recorded here rather than discovered later
 
 1. **It cannot see orientation.** I1 returns position only
    (`../criteria.md` §4). A tumbling box's orientation is the more sensitive
@@ -183,37 +187,61 @@ control question, T3 measures it, and rule N fires if it is not.**
    `<physics>` block.** V-physics compares that block and nothing else. Gravity,
    the engine choice and the solver are compared by the fact that neither world
    declares them, which is an argument and not a measurement.
-6. **It cannot reproduce arm C's schedule.** `gz_ros2_control` runs the
+6. **The contact pair is not the cell's, and T5's sentence is the reason this
+   matters.** The probe's box strikes an **infinite ground plane** and nothing
+   else. The cell's box is carried by two **gripper pads**, set on a **table**
+   and placed on a **conveyor** — four contacts, on moving bodies, with the
+   arm's own dynamics behind them. Limit 5 above covers the `<physics>` block;
+   this is a different statement, about what the solver is asked to solve.
+   **T5's permitted sentence localises the irreproducibility to "the
+   asynchronous coupling" and away from "the solver" on the strength of arm A
+   reproducing — and arm A has never touched a single one of the cell's
+   contacts.** A solver that is deterministic on one plane contact and not on a
+   four-body grasp would produce exactly the combination T5 permits, and this
+   rig cannot tell that apart from the coupling. Whoever writes `ANALYSIS.md`
+   carries this sentence into it beside the verdict.
+7. **It cannot reproduce arm C's schedule.** `gz_ros2_control` runs the
    controller managers inside the server process while `move_group` and the
    skill server are separate asynchronous processes; when a trajectory lands
    relative to a physics step is not under this rig's control and is not
    measured by it.
-7. **Its arm-C reading depends on a log line arriving in time.** `launch_test`
+8. **Its arm-C reading depends on a log line arriving in time.** `launch_test`
    writes to whatever `./scripts/scenario` hands it, and `exec_in_container`
    forwards only `CITE_*` and `ROS_DOMAIN_ID`, so `PYTHONUNBUFFERED` cannot be
    handed across. A pty is opened for that reason, and the registered fallback
    reading covers the case where it still misses. **`i3_source` says which
    reading was used on every row.**
-8. **It cannot rule out the arm-C reader's own container being a confound.** The
+9. **It cannot rule out the arm-C reader's own container being a confound.** The
    reader is a second container on a host-networked machine. It speaks Gazebo
    transport only and starts no ROS node, but it is a process this campaign
    added beside a run it is measuring, and that is stated rather than dismissed.
-9. **It cannot measure a rate.** Five trials, five trials, two, two and one
+10. **It cannot measure a rate.** Five trials, five trials, two, two and one
    scan, on one machine at one commit (§11). Every number is a count or a value
    over the trials that ran.
-10. **It cannot say anything about `cell_a`, about a pair, about hardware, or
+11. **It cannot say anything about `cell_a`, about a pair, about hardware, or
     about any host but the one §9 names.**
-11. **It cannot make a null into a clearance.** Rule N is implemented as a gate
+12. **It cannot make a null into a clearance.** Rule N is implemented as a gate
     in `analyse.py`, and if arm A' does not move the metric then T1 and T2 print
     NOT ADMISSIBLE rather than passing. This is the rule most likely to fire.
 
 ## Recorded limitations, carried rather than fixed
 
-- **V1's cleanliness is scoped to the protected trees.** Taken as *the porcelain
-  must be empty*, V1 would drop every row of this campaign by construction: the
-  campaign writes its own untracked records into `raw/`. `analyse.py` prints
-  that interpretation at the top of every run, under `INTERPRETATIONS`, and both
-  ends' raw porcelain is on every record so the stricter reading is recoverable.
+- **V1 drops a row for a missing field and for nothing else, and the other three
+  conditions are flags.** Its operative sentence is *"the analyser drops any row
+  without **them**"* — *them* being the two recorded readings — and that is
+  executable as written, so it is applied as written. HEAD equality across the
+  two ends, the `--is-ancestor` clause and the protected-tree porcelain filter
+  are all evaluated and **printed as flags on rows that stay admitted**. They
+  were drop conditions in a draft of `analyse.py`; a pre-first-trial review
+  found that made the implementation stricter than the frozen rule, which is an
+  unregistered exclusion criterion, and they were demoted. `analyse.py` prints
+  the whole interpretation at the top of every run, under `INTERPRETATIONS`, and
+  both ends' raw porcelain is on every record so any stricter reading is
+  recoverable by a reader who wants it.
+- **`INTERPRETATIONS` has a boundary and it is stated in the code.** An
+  interpretation may make a **silent** clause concrete; it may not override a
+  clause that is executable as written, nor change which rows are admitted
+  relative to the literal reading.
 - **V3 and T3 pull in opposite directions and `analyse.py` says so.** V3 refuses
   to compare two trials with different world hashes; T3 *requires* comparing arm
   A' against arm A, whose worlds differ by construction because the perturbation
@@ -227,6 +255,39 @@ control question, T3 measures it, and rule N fires if it is not.**
   — two git readings, a world hash, a partition string, a boolean — so
   re-deriving is re-reading, not re-measuring. Nothing is recomputed from a tree
   or from a cell.
+- **T3's threshold is the perturbation's own value, and that is a real edge.**
+  T3 declares SENSITIVE when a 1e-6 m offset moves the outcome by *more than*
+  1e-6 m, and the probe's ground plane is infinite and centred, so the dynamics
+  are translation-equivariant in x: a rig that amplifies **nothing** returns
+  exactly 1e-6 m and the verdict turns on the last bits of the base coordinate.
+  **T3 is frozen and is applied literally (V9); nothing here moves it.**
+  `analyse.py` prints `delta / perturbation` beside every pair, so a
+  pass-through at ≈1.000000 is visibly distinct from amplification, and says in
+  the verdict that landing there is a **numbered deviation for `ANALYSIS.md`**
+  and not a re-run.
+- **I2 cannot tell a body at rest from a frozen subscription.** `ModelPoses`
+  keeps only its newest snapshot and returns it forever, and `position()`
+  discards the `Pose_V` header stamp, so a publisher that stopped and a body
+  that stopped read identically under the at-rest rule. **I2 is unchanged.**
+  `analyse.py` prints, per probe row, the count of **distinct** sampled
+  positions and the wall time of the **last change**, so a frozen tail is
+  visible rather than counted as rest.
+- **V-planner's counts are restricted, because the instrument counted the
+  advice.** `scripts/scenario:189-190` prints both `planner fallback:` strings
+  itself, in its pre-run block, telling the reader to grep for them — so a
+  whole-log count is at least 1 on every run and would have flagged **every**
+  arm-C trial. The flag is computed from lines carrying the skill server's own
+  logger prefix, after the cell's output starts; the raw whole-log counts stay
+  on the record and are printed beside the restricted ones. Same defect class as
+  the whole-log grep CLAUDE.md §2 records counting a verdict out of a commit
+  body echoed by CI.
+- **Arm C's seed read-back is not independent and the record says so.**
+  `common.SEED_A` is `scripts/scenario:90`'s own default, so the seed line the
+  scenario prints is identical whether or not `CITE_PHYSICS_SEED` crossed the
+  container boundary. The probe arms read `/proc/<pid>/cmdline`; arm C has no
+  equivalently cheap independent source, so its row carries
+  `seed_readback_is_independent: false` rather than a field that reads like a
+  passed check.
 - **`scan_symbols.sh` also prints a defined-symbol scan that I5 does not
   register.** It is labelled as context in the output and is not part of arm S's
   registered instrument. It is there because an undefined-only answer cannot
