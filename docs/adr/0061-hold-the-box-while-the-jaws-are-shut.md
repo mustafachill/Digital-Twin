@@ -306,3 +306,51 @@ the gap this record opens with is narrowed and not closed. Nothing here localise
 0.201 mm, and the campaign that measured the original 0.763 mm answered that question
 UNRESOLVED — a verdict this record may not quietly improve on. **Two runs before and two runs
 after is four runs.**
+
+## Clauses 1 and 3, measured 2026-09-22 — and why the status has not moved
+
+**All three clauses are now met.** They were re-taken at `79dc9e1`, against the part-width
+window, because the readings that preceded it were taken at `d936115` with the rail exclusion
+the Correction above retired — **a verification of code that is no longer shipped is not a
+verification.**
+
+**Clause 1, both directions.** On a live `cell_b`, driving the actions directly rather than
+reading a scenario's verdict:
+
+```
+on the box:    commanded 45.0 mm, reached 49.6 mm, stalled=true,  reached_goal=false -> holding
+on empty air:  commanded 45.0 mm, reached 46.0 mm, stalled=false, reached_goal=true  -> empty
+```
+
+The reached width lands at the box's declared 50 mm and not at the 45 mm commanded, which is
+what the clause asks for. **The kill switch did not fire.**
+
+**The case the window exists for, tested physically rather than by log.** A box was placed so
+that its minimum separation from `picker_link5` was **0.178 m** — measured, inside the plugin's
+0.20 m `attach_radius_m`, so the proximity condition was genuinely satisfied. The jaws were then
+closed on nothing, coming to rest at 46.0 mm, outside the window. A full `MoveTo` home followed.
+The box's pose was **identical before and after**, to every printed digit. **What refused the
+attach was the window and not the radius**, which is the whole point of the Correction.
+
+**Clause 3.** `continuous_line` on `cell_b` printed the bare `Scenario 'continuous_line' passed`
+— cycle and post-shutdown teardown both — carrying **3 of 3** work-pieces with three genuine
+stalls and **zero** `escalated to an operator` lines, in 123.766 s. `pick_and_place` printed the
+bare verdict on both runs of the clause-2 measurement.
+
+**Two instrument facts recorded because they cost real time to learn.**
+
+- **A log line's position is not evidence about this plugin.** `gz sim` block-buffers its own
+  stdout while `rclcpp` nodes line-buffer, so `[cite_grasp_hold] attached …` can sit unflushed
+  until container teardown — **minutes** after the physical event — and appear in a merged log
+  earlier or later than it happened. Two separate testers drew a wrong conclusion from line
+  order and both corrected it the same way. **Only a direct pose query settles a causal claim
+  here.**
+- **The jaws reach further than the rail width suggests.** Building a clean near-miss took a
+  **0.12 m** lateral offset; at 0.065–0.09 m the fingers still caught the box and moved it by up
+  to 31 mm. Anyone constructing a miss for this plugin needs that number.
+
+**The status stays `Proposed` even though the condition is met, and that is deliberate.** Every
+figure above is **one machine, one commit, a handful of runs, with nothing registered in
+advance** — and **no CI run has ever brought a cell up with this plugin in the world.**
+Promotion is the project owner's, on a second reader's run or on CI, exactly as
+[ADR-0060](0060-take-the-ik-solution-nearest-the-arm.md) left it.
