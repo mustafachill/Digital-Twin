@@ -157,12 +157,45 @@ class _GraspHoldView:
     #: position" for that controller's own success check, and a stall's release
     #: needs exactly that same question asked of the drive joint's position.
     detach_margin_rad: float
-    #: The two ends of the stroke, so the plugin can refuse to call a joint
-    #: resting AT either one "stalled". Both already exist in `GraspSpec`
-    #: (`open_position`, `closed_position`); nothing new is declared for them.
+    #: The two ends of the stroke. Kept for `open_direction_` — which way, in
+    #: this joint's own units, is towards open — and no longer for excluding a
+    #: rest position: see `hold_position_min_rad`/`hold_position_max_rad`
+    #: below, ADR-0061's 2026-09-22 correction is why. Both already exist in
+    #: `GraspSpec` (`open_position`, `closed_position`); nothing new is
+    #: declared for them.
     open_position: float
     closed_position: float
     attach_radius_m: float
+    #: The drive-joint position window a genuine stall on a declared part rests
+    #: inside, resolved HERE rather than left to the plugin (ADR-0061's
+    #: 2026-09-22 correction).
+    #:
+    #: `cite_simulation` does not link against `cite_skills`, so the width
+    #: arithmetic `cite_skills::gripper_width_for` and
+    #: `cite_skills::gripper_position_for` do cannot be shared with the plugin
+    #: by calling it — only by computing it once, here, from the same L0
+    #: values, and delivering the answer as two joint-position radians. That is
+    #: the identical inversion `GripperLinkage.position_for` already performs
+    #: for `cite_tools.validate.physical`'s discrimination check (ADR-0052
+    #: §A.7's "one policy, two languages, one derivation"), applied to the
+    #: FACILITY's declared part interval widened by the stall band, which is
+    #: exactly the window `cite_skills::gripper_is_holding` judges a stall
+    #: inside (ADR-0052 option F) — so the plugin's rest-position test and the
+    #: skill server's stall test can never disagree about what counts as a
+    #: grasp.
+    #:
+    #: WHY NOT A RAIL EXCLUSION. The rail exclusion this replaced assumed a
+    #: stall on a real part always lands strictly between `open_position` and
+    #: `closed_position`, and that jaws closing on nothing always settle AT one
+    #: of the two rails. Neither holds: the ordinary close target,
+    #: `gripper_default_grasp_width_m`, is mid-stroke, nowhere near either
+    #: rail, and a tester measured jaws closing on empty air coming to rest
+    #: mid-stroke too — `reached 46.0 mm` against a part window of
+    #: `[47.615, 52.385] mm`, 1.6 mm outside it. The window this field carries
+    #: is the test the rest of the system already makes, so it rejects that
+    #: rest position on the same grounds `gripper_is_holding` would.
+    hold_position_min_rad: float
+    hold_position_max_rad: float
 
 
 #: Which component of a mounting offset lies along each beam axis.
@@ -352,6 +385,31 @@ def _gripper_controller_parameter(asset: ResolvedAsset, key: str) -> float:
     )
 
 
+def _hold_position_window(cell: ResolvedCell, grasp) -> tuple[float, float]:
+    """The drive-joint position window a genuine stall on a declared part rests
+    inside, as two radians (min, max).
+
+    The width window is `cite_skills::gripper_is_holding`'s own — the facility's
+    declared part interval, widened by the stall band at each edge (ADR-0052
+    option F) — inverted through the SAME linkage `GraspSpec.linkage` declares,
+    via `GripperLinkage.position_for`, the identical inversion
+    `cite_tools.validate.physical`'s discrimination check already performs
+    (ADR-0052 §A.7). Resolved here rather than in the plugin: `cite_simulation`
+    does not link against `cite_skills`, and reimplementing the linkage's
+    trigonometry in the plugin would be a second place for it to be wrong (P1).
+
+    `GripperLinkage.opening_m` is monotonically decreasing over the stroke this
+    gripper uses — more closed is narrower — so which width bound maps to the
+    smaller position is not assumed; both are resolved and sorted.
+    """
+    parts = cell.workpiece_widths
+    narrow_m = parts.narrowest_m - grasp.stall_band_narrow_m
+    wide_m = parts.widest_m + grasp.stall_band_wide_m
+    at_narrow = grasp.linkage.position_for(narrow_m)
+    at_wide = grasp.linkage.position_for(wide_m)
+    return min(at_narrow, at_wide), max(at_narrow, at_wide)
+
+
 def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
     """One rigid-hold plugin declaration per arm that fits a grasping gripper.
 
@@ -369,6 +427,7 @@ def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
         if effector is None or effector.grasp is None:
             continue
         grasp = effector.grasp
+        hold_min, hold_max = _hold_position_window(cell, grasp)
         views.append(
             _GraspHoldView(
                 asset=asset.id,
@@ -382,6 +441,8 @@ def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
                 open_position=grasp.open_position,
                 closed_position=grasp.closed_position,
                 attach_radius_m=grasp.attach_radius_m,
+                hold_position_min_rad=hold_min,
+                hold_position_max_rad=hold_max,
             )
         )
     return tuple(views)

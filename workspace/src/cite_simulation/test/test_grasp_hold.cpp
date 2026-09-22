@@ -15,19 +15,22 @@
 // Does the rigid grasp hold actually hold, and does it actually let go?
 // (ADR-0061)
 //
-// WHY THIS FILE EXISTS. `grasp_hold.cpp`'s decision — stalled, away from both
-// rails, and a graspable model within radius — is stateful over simulated time
-// and reads three ECM components together, so it does not factor into a
-// `zone_rules`-style pure function the way the belt's and the beam's geometry
-// do. This is that decision exercised against a real physics step through
-// `gz::sim::TestFixture`, exactly as `test_conveyor_carry.cpp` exercises the
-// belt.
+// WHY THIS FILE EXISTS. `grasp_hold.cpp`'s decision — stalled, resting inside
+// the declared hold-position window, and a graspable model within radius — is
+// stateful over simulated time and reads three ECM components together, so it
+// does not factor into a `zone_rules`-style pure function the way the belt's
+// and the beam's geometry do. This is that decision exercised against a real
+// physics step through `gz::sim::TestFixture`, exactly as
+// `test_conveyor_carry.cpp` exercises the belt.
 //
 // The drive joint here is driven directly by the test, through
 // `JointVelocityCmd`, rather than by a `GripperActionController` — there is no
 // controller manager in this fixture and none is needed: what is under test is
 // what this plugin does with a joint's own position and velocity, not how a
-// controller produces them. `test/worlds/hold.sdf` has the full layout.
+// controller produces them. `test/worlds/hold.sdf` has the full layout, with
+// `hold_position_min_rad`/`hold_position_max_rad` standing in for the window a
+// real cell resolves from L0 at generation time (ADR-0061's 2026-09-22
+// correction).
 
 #include <chrono>
 #include <cmath>
@@ -68,8 +71,8 @@ constexpr double kDriveRadS = 1.0;
 constexpr uint64_t kSettleSteps = 200;  // 0.2 s at the world's 1 ms step
 
 //: How long to drive the joint before settling it, and how far that moves it —
-//: comfortably clear of both declared rails (0.0 and 1.0) and of
-//: <detach_margin_rad> (0.02) either side.
+//: 0.4 rad, comfortably inside the declared hold-position window
+//: ([0.3, 0.6]) and clear of both declared rails (0.0 and 1.0).
 constexpr uint64_t kDriveSteps = 400;  // 0.4 s * 1.0 rad/s = 0.4 rad
 
 /// The whole apparatus: the world and a sampler of what the plugin did to it.
@@ -199,10 +202,14 @@ private:
 
 /// A joint that has never moved, resting exactly at `open_position`, must
 /// never be read as a stall — however long it sits there and however close a
-/// graspable model stands. THE REGRESSION THIS LOCKS DOWN: without the rail
-/// exclusion, a `Place` that opens the jaws to release a part would have this
-/// plugin re-attach the very box it was just told to let go of, the instant
-/// the joint finished opening and settled at zero.
+/// graspable model stands. THE REGRESSION THIS LOCKS DOWN: a `Place` that
+/// opens the jaws to release a part would otherwise have this plugin
+/// re-attach the very box it was just told to let go of, the instant the
+/// joint finished opening and settled at zero. `open_position` (0.0) sits
+/// outside the declared hold-position window ([0.3, 0.6] here), so this is
+/// the window test rejecting it, not a rail exclusion — see
+/// `RestingMidStrokeButOutsideTheWindowIsNeverAStallEither` below for the case
+/// a rail exclusion could not reject at all.
 TEST(GraspHold, RestingAtTheOpenRailIsNeverAStall)
 {
   Cell cell;
@@ -216,18 +223,46 @@ TEST(GraspHold, RestingAtTheOpenRailIsNeverAStall)
 }
 
 
-/// The whole mechanism, end to end: drive the jaw off the open rail, let it
-/// settle mid-stroke, and require BOTH the near box to be picked up and the
-/// far one to be left alone — proving the radius discriminates and not merely
-/// that a stall does something.
+/// THE REGRESSION THIS LOCKS DOWN (ADR-0061's 2026-09-22 correction). A rail
+/// exclusion — refusing only a joint resting AT `open_position` or
+/// `closed_position` — does not reject a rest position that is mid-stroke but
+/// still outside the declared part window: exactly the shape of a `Grasp` on
+/// empty air, whose ordinary close target is itself mid-stroke. This drives
+/// the jaw to 0.15 rad — clear of the open rail's own `detach_margin_rad`
+/// (0.02) and clear of the declared window's own lower edge (0.3) — with the
+/// near box still well inside `attach_radius_m`, and requires nothing to
+/// attach. `AttachesTheNearBoxAndNeverTheFarOne` below is the same rig driven
+/// to a position INSIDE the window, where it must attach; the two together
+/// are what proves the window, not the rails, decides.
+TEST(GraspHold, RestingMidStrokeButOutsideTheWindowIsNeverAStallEither)
+{
+  Cell cell;
+  cell.Drive(kDriveRadS, 150);  // 0.15 s * 1.0 rad/s = 0.15 rad
+  ASSERT_TRUE(cell.JawPosition().has_value());
+  const double held_at = *cell.JawPosition();
+  ASSERT_GT(held_at, 0.02) << "the joint never left the open rail's own margin";
+  ASSERT_LT(held_at, 0.3) << "the joint drifted into the declared hold-position window";
+
+  cell.Drive(0.0, kSettleSteps);
+  EXPECT_EQ(cell.AttachedCount(), 0)
+    << "the joint sat still for longer than stall_timeout_s, well clear of both "
+    << "rails but outside the declared hold-position window, with a graspable box "
+    << "well inside attach_radius_m — and it attached anyway";
+}
+
+
+/// The whole mechanism, end to end: drive the jaw into the declared
+/// hold-position window, let it settle there, and require BOTH the near box
+/// to be picked up and the far one to be left alone — proving the radius
+/// discriminates and not merely that a stall does something.
 TEST(GraspHold, AttachesTheNearBoxAndNeverTheFarOne)
 {
   Cell cell;
   cell.Drive(kDriveRadS, kDriveSteps);
   ASSERT_TRUE(cell.JawPosition().has_value());
   const double held_at = *cell.JawPosition();
-  ASSERT_GT(held_at, 0.02) << "the joint never left the open rail's own margin";
-  ASSERT_LT(held_at, 0.98) << "the joint reached the closed rail instead of stalling mid-stroke";
+  ASSERT_GT(held_at, 0.3) << "the joint never reached the declared hold-position window";
+  ASSERT_LT(held_at, 0.6) << "the joint overshot the declared hold-position window";
 
   cell.Drive(0.0, kSettleSteps);
   EXPECT_EQ(cell.AttachedCount(), 1)

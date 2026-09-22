@@ -1,6 +1,12 @@
 # ADR-0061: Hold the box still while the jaws are shut on it
 
-- **Status:** Proposed
+- **Status:** Proposed (corrected 2026-09-22) — **the Decision is unchanged**: the box is
+  still held rigidly while the drive joint is stalled on it, and released when the jaws are
+  commanded open. What was wrong is one supporting sentence under "It cannot fire on empty
+  air", which claimed a mechanism (a rail exclusion) that does not actually keep the empty-air
+  case out. See the section "Correction — 2026-09-22: the rail exclusion does not reject a
+  mid-stroke free-air rest, and the implementation has been changed to a part-width window",
+  immediately after this block.
 - **Date:** 2026-09-22
 - **Deciders:** Project owner, on a measured divergence and on what the real gripper does
 - **Related:** [ADR-0003](0003-gazebo-harmonic.md),
@@ -10,6 +16,73 @@
   [ADR-0029](0029-simulated-grasping-by-friction.md) (superseded by this record),
   [ADR-0051](0051-restate-the-hull-grasp-gate.md),
   [ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md), CLAUDE.md §3 (P1, P2, P4)
+
+## Correction — 2026-09-22: the rail exclusion does not reject a mid-stroke free-air rest, and the implementation has been changed to a part-width window
+
+The Decision is unchanged: the mechanism is still "hold the box rigidly while the drive
+joint is stalled on it, release on command open." Only the **test that gates it** changed.
+
+### What was written
+
+Under "It cannot fire on empty air": *"Jaws closing on nothing never stall — they arrive
+where they were sent and report `reached_goal=true`. So the empty case needs no code at
+all."* **[Corrected 2026-09-22 — see the Correction section above.]**
+
+That sentence described the `GripperActionController`'s own report, which is true and is
+not what the implementation actually tested. `cite_simulation::GraspHold` cannot see
+`reached_goal` — it is a Gazebo-transport-side plugin with no controller-manager connection
+at all — so its own stall test read only the drive joint's raw position and velocity, and
+excluded a rest position from triggering an attach solely by checking whether it sat at
+either declared rail (`open_position` / `closed_position`). The reasoning behind that
+exclusion, also in the same section, was that "a genuine stall on a part always settles
+STRICTLY BETWEEN [the rails], because nothing this cell commands the jaws to ever asks for
+exactly `open_position` or `closed_position` while something is actually between the pads" —
+true, but it says nothing about where a close on **empty air** settles, and nothing in the
+implementation established that such a rest is confined to the rails either.
+
+### What is true
+
+Jaws closing on empty air do come to rest, and where they come to rest is **wherever the
+close was commanded to** — for this end effector's ordinary close, `gripper_default_grasp_width_m`
+(0.045 m), that is **mid-stroke**, nowhere near either rail. A tester drove a `Grasp` on
+empty air and the controller reported:
+
+```
+gripper: commanded 45.0 mm, reached 46.0 mm, stalled=false, reached_goal=true, effort=60.0 -> empty
+```
+
+46.0 mm is well clear of both `open_position` (≈ 88.9 mm of opening) and `closed_position`
+(≈ 1.6 mm of opening), so the rail exclusion admitted it. Whether the plugin would then have
+attached depended only on a declared graspable model standing within `attach_radius_m` — a
+condition ordinary proximity to a work-piece satisfies routinely. One deliberate attempt
+placing a box inside the capture radius and closing on nothing did not reproduce a false
+attach; that is one trial, not a proof, and does not rescue the reasoning above.
+
+### How it was found
+
+A review read the plugin's source against its own header comment and noticed the rail
+exclusion's premise — "closing on air can settle mid-stroke too, but that case is already
+handled by condition 2 below finding nothing to attach to" — assumed away exactly the
+gripper's ordinary operating point without checking it. A tester then measured the free-air
+rest position directly, against the shipped `default_grasp_width_m`, and confirmed the rail
+exclusion does not reject it.
+
+### What replaces it
+
+The attach test is now a **window**, not a rail exclusion: the drive joint's own position
+must lie inside `[hold_position_min_rad, hold_position_max_rad]`, the two joint positions
+`tools/cite_tools/generate/world.py` resolves at generation time from the facility's declared
+part interval widened by the stall band at each edge — exactly the width window
+`cite_skills::gripper_is_holding` already judges a stall inside (ADR-0052 option F) — inverted
+through the end effector's own linkage (`GripperLinkage.position_for`, the same inversion
+`cite_tools.validate.physical`'s discrimination check performs, ADR-0052 §A.7). On the shipped
+model that window is **[47.615, 52.385] mm** of opening; the measured 46.0 mm free-air rest
+falls **1.6 mm outside** its narrow edge, and a real grasp (49.3–49.9 mm, per the friction
+campaign) falls inside it. `open_position` and `closed_position` are kept in the generated
+world only for the release direction (`open_direction_`), which the window does not decide.
+
+This is not a new mechanism and not a new fidelity claim: it is the same test the rest of the
+system already makes, applied where the rail exclusion used to stand.
 
 ## Context
 
@@ -109,6 +182,7 @@ The cost that killed Option A is not present here.
 
 Jaws closing on nothing never stall — they arrive where they were sent and report
 `reached_goal=true`. **So the empty case needs no code at all.**
+**[Corrected 2026-09-22 — see the Correction section above.]**
 
 This is the exact failure that killed [ADR-0023](0023-simulated-grasping-via-attachment.md).
 Its weld fired at first pad contact, *"before any contact force develops"*, and the record of

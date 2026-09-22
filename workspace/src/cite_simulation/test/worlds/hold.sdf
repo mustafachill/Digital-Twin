@@ -108,6 +108,11 @@
       </link>
     </model>
 
+    <!-- hold_position_min_rad/hold_position_max_rad stand in for the
+         generation-time part-width window this apparatus has no L0 model to
+         derive one from: [0.3, 0.6] rad, comfortably inside the declared
+         stroke [0.0, 1.0] and comfortably clear of both rails, exactly the
+         relationship the real window has to the real stroke. -->
     <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
       <attach_link>wrist</attach_link>
       <drive_joint>jaw_joint</drive_joint>
@@ -117,6 +122,8 @@
       <open_position>0.0</open_position>
       <closed_position>1.0</closed_position>
       <attach_radius_m>0.5</attach_radius_m>
+      <hold_position_min_rad>0.3</hold_position_min_rad>
+      <hold_position_max_rad>0.6</hold_position_max_rad>
       <graspable>box</graspable>
       <graspable>box_far</graspable>
     </plugin>

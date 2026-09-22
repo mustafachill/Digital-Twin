@@ -37,32 +37,50 @@
 // else — no contact sensor, no ROS, no Gazebo transport in or out:
 //
 //   1. `drive_joint_`'s own velocity has not exceeded `stall_velocity_threshold_`
-//      for `stall_timeout_s_` of SIMULATED time, and the joint is not resting at
-//      either declared end of its stroke. The first half is the identical rule
-//      `GripperActionController::checkForSuccess` already applies — read from
-//      the same controller configuration rather than restated (P1), so the two
-//      can never disagree about what "stalled" means. The second half is NOT
-//      in the controller and is the one thing this plugin has to add for
-//      itself, and the reason is a case the controller handles that this
-//      plugin otherwise could not tell apart from a real grasp: a `Place` that
-//      opens the jaws to release a part leaves the joint's velocity sitting at
-//      zero at `open_position_` with the just-released box still standing
-//      well within `attach_radius_m_` of the gripper — the box is right where
-//      it was put down. Read on velocity alone, that is indistinguishable from
-//      a stall on that same box, and the plugin would re-attach the part it was
-//      just told to let go of. Excluding both rails is cheap and sufficient: a
-//      genuine stall on a part always settles STRICTLY BETWEEN them, because
-//      nothing this cell commands the jaws to ever asks for exactly
-//      `open_position_` or `closed_position_` while something is actually
-//      between the pads.
+//      for `stall_timeout_s_` of SIMULATED time, and the joint's own position
+//      lies inside [`hold_position_min_rad_`, `hold_position_max_rad_`]. The
+//      first half is the identical rule `GripperActionController::checkForSuccess`
+//      already applies — read from the same controller configuration rather
+//      than restated (P1), so the two can never disagree about what "stalled"
+//      means.
+//
+//      THIS USED TO BE A RAIL EXCLUSION — refusing a joint resting AT either
+//      declared end of its stroke — rather than a window, on the reasoning
+//      that a genuine stall always settles strictly between the two rails and
+//      that jaws closing on empty air always settle AT one of them. Both
+//      halves of that reasoning were wrong, and a tester's measurement is what
+//      found it: this gripper's ordinary close target,
+//      `gripper_default_grasp_width_m`, is mid-stroke, nowhere near either
+//      rail, and a `Grasp` on empty air was observed settling mid-stroke too
+//      — `commanded 45.0 mm, reached 46.0 mm, stalled=false, reached_goal=true`
+//      — which the rail exclusion did not reject. The window this plugin now
+//      tests against is the one `cite_skills::gripper_is_holding` already
+//      judges a stall inside (ADR-0052 option F): the facility's declared part
+//      interval, widened by the stall band at each edge, inverted through the
+//      end effector's own linkage into two drive-joint positions AT
+//      GENERATION TIME — `cite_simulation` does not link against
+//      `cite_skills`, so the width arithmetic is resolved once, in
+//      `tools/cite_tools/generate/world.py`, and delivered here as radians
+//      rather than reimplemented. On the shipped model the window rejects the
+//      measured 46.0 mm free-air rest position by 1.6 mm of margin.
+//
+//      This still needs a case the controller does not decide for this
+//      plugin: a `Place` that opens the jaws to release a part leaves the
+//      joint's velocity sitting at zero at `open_position_`. That position is
+//      the gripper's own fully-open rest — the widest opening it reaches —
+//      which is wider than any declared part's window, or the gripper could
+//      never close past a released part on its way to the next one; likewise
+//      `closed_position_` is narrower than the window, or a part in that
+//      window could never be gripped at all. Neither rail is declared to be
+//      outside the window; both are outside it because the window is a part
+//      of the stroke a graspable part occupies and the rails are its two
+//      ends. So a release is rejected by the SAME test a stall on a part
+//      passes, and needs no test of its own.
 //
 //   2. A declared graspable model's own origin lies within `attach_radius_m_`
 //      of `attach_link_`'s own origin. This is what keeps a stall from some
 //      unrelated cause — the arm wedged against a fixture, say — from
-//      attaching a box sitting elsewhere in the cell, and it is what makes
-//      closing on EMPTY AIR need no code of its own: the jaws arrive at
-//      whatever they were sent to and settle there with nothing nearby to
-//      satisfy this test, so condition 1 can hold with nothing for it to do.
+//      attaching a box sitting elsewhere in the cell.
 //
 // Both together, on the SAME step, are what triggers an attach. Neither alone
 // does. This is deliberately not the trigger ADR-0023 used and is not a milder
@@ -158,6 +176,14 @@ public:
     open_position_ = sdf->Get<double>("open_position", open_position_).first;
     closed_position_ = sdf->Get<double>("closed_position", closed_position_).first;
     attach_radius_m_ = sdf->Get<double>("attach_radius_m", attach_radius_m_).first;
+    // The drive-joint position window a genuine stall on a declared part rests
+    // inside — resolved from L0's part interval and the end effector's own
+    // linkage at generation time, never here (ADR-0061's 2026-09-22
+    // correction; see the file header).
+    hold_position_min_rad_ =
+      sdf->Get<double>("hold_position_min_rad", hold_position_min_rad_).first;
+    hold_position_max_rad_ =
+      sdf->Get<double>("hold_position_max_rad", hold_position_max_rad_).first;
 
     if (attach_link_.empty() || drive_joint_.empty()) {
       gzerr << "[cite_grasp_hold] <attach_link> and <drive_joint> are both required; "
@@ -172,8 +198,13 @@ public:
     }
     if (open_position_ == closed_position_) {
       gzerr << "[cite_grasp_hold] <open_position> and <closed_position> are equal ("
-            << open_position_ << "); a gripper with no stroke has no rails to exclude and "
-            << "nothing to hold\n";
+            << open_position_ << "); a gripper with no stroke has nothing to hold\n";
+      return;
+    }
+    if (hold_position_min_rad_ >= hold_position_max_rad_) {
+      gzerr << "[cite_grasp_hold] <hold_position_min_rad> (" << hold_position_min_rad_
+            << ") is not below <hold_position_max_rad> (" << hold_position_max_rad_
+            << "); the window a genuine stall must rest inside is empty or inverted\n";
       return;
     }
 
@@ -252,16 +283,14 @@ public:
     if (now - *last_moving_s_ < stall_timeout_s_) {
       return;
     }
-    // Resting at either declared rail is the controller's own success case —
-    // reached, not stalled — and is excluded here for the reason the header
-    // comment gives: closing on air can settle mid-stroke too (the default
-    // grasp width is not either rail), but that case is already handled by
-    // condition 2 below finding nothing to attach to. This exclusion is the
-    // one that matters: it is what stops a `Place` release from being read as
-    // a fresh grasp of the box just set down.
-    if (std::abs(q - open_position_) <= detach_margin_rad_ ||
-      std::abs(q - closed_position_) <= detach_margin_rad_)
-    {
+    // The joint's own position must lie inside the part window — the reason
+    // is the file header's, not "resting at a rail": a rail exclusion is
+    // neither necessary nor sufficient, since the ordinary close target is
+    // mid-stroke and a measured free-air rest position is too. This is what
+    // stops a `Place` release from being read as a fresh grasp of the box
+    // just set down (`open_position_` sits outside the window by
+    // construction) exactly as it rejects a stall on empty air.
+    if (q < hold_position_min_rad_ || q > hold_position_max_rad_) {
       return;
     }
 
@@ -397,6 +426,13 @@ private:
   double open_position_{0.0};
   double closed_position_{0.0};
   double attach_radius_m_{0.0};
+
+  //: The drive-joint position window a genuine stall on a declared part rests
+  //: inside — resolved from L0's part interval, the stall band and the end
+  //: effector's own linkage at generation time, never here (ADR-0061's
+  //: 2026-09-22 correction). Neither is a rail: see the file header.
+  double hold_position_min_rad_{0.0};
+  double hold_position_max_rad_{0.0};
 
   //: Which way, in the drive joint's own units, is towards `open_position_`.
   //: +1 or -1, resolved once the two rails are known.

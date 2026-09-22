@@ -253,6 +253,57 @@ class TestGraspHoldReadsTheGripperControllerRatherThanRestatingIt:
         )
 
 
+class TestGraspHoldWindowReplacesTheRailExclusion:
+    """ADR-0061's 2026-09-22 correction. A joint's rest position is judged
+    against the facility's declared part window (`cite_skills::gripper_is_holding`'s
+    own, ADR-0052 option F), not against whether it rests at either declared
+    rail — the rail exclusion admitted a mid-stroke rest position closing on
+    empty air can and does reach.
+    """
+
+    def test_the_window_is_narrower_than_the_full_declared_stroke(self, cell) -> None:
+        effector = cell.end_effector_type("xarm_parallel_gripper")
+        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
+        low = float(value(plugin, "hold_position_min_rad"))
+        high = float(value(plugin, "hold_position_max_rad"))
+        assert low < high
+        # Both rails must sit outside the window, or a release, or a stroke
+        # that never touched a part at all, would be read as a stall on one.
+        assert not low <= effector.grasp.open_position <= high
+        assert not low <= effector.grasp.closed_position <= high
+
+    def test_the_window_matches_the_declared_part_interval_through_the_linkage(self, cell) -> None:
+        # The SAME inversion `cite_tools.validate.physical`'s discrimination
+        # check performs (ADR-0052 §A.7), computed here independently of
+        # `world.py`'s own private helper — a check on the wiring, not a
+        # restatement of it.
+        effector = cell.end_effector_type("xarm_parallel_gripper")
+        grasp = effector.grasp
+        widths = cell.workpiece_widths
+        narrow_m = widths.narrowest_m - grasp.stall_band_narrow_m
+        wide_m = widths.widest_m + grasp.stall_band_wide_m
+        at_narrow = grasp.linkage.position_for(narrow_m)
+        at_wide = grasp.linkage.position_for(wide_m)
+        expected_low, expected_high = min(at_narrow, at_wide), max(at_narrow, at_wide)
+
+        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
+        assert float(value(plugin, "hold_position_min_rad")) == pytest.approx(expected_low)
+        assert float(value(plugin, "hold_position_max_rad")) == pytest.approx(expected_high)
+
+    def test_the_measured_free_air_rest_position_falls_outside_the_window(self, cell) -> None:
+        # A tester drove a `Grasp` on empty air at this end effector's default
+        # 45 mm command and measured the controller settle at 46.0 mm — a rest
+        # position the rail exclusion this window replaced did not reject,
+        # because 46.0 mm is mid-stroke and nowhere near either rail.
+        effector = cell.end_effector_type("xarm_parallel_gripper")
+        free_air_position = effector.grasp.linkage.position_for(0.046)
+
+        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
+        low = float(value(plugin, "hold_position_min_rad"))
+        high = float(value(plugin, "hold_position_max_rad"))
+        assert not low <= free_air_position <= high
+
+
 class TestTheGeneratorRefusesRatherThanGuesses:
     def test_a_conveyor_with_no_surface_frame_is_an_error(self, cell) -> None:
         # Silently emitting an origin pose would put the carry volume at the
