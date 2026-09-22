@@ -114,7 +114,9 @@ launched. Export `ROS_DOMAIN_ID` to override it and join someone else's cell del
 They are not, and the gap is load-bearing enough to state plainly:
 
 `./scripts/scenario` decides `CITE_PHYSICS_SEED` once per run, and
-`cite_bringup/launch/simulation.launch.py` now passes it as `gz sim --seed`. **That is less
+`cite_bringup/launch/simulation.launch.py` now passes it as `gz sim --seed`. **`./scripts/sim`
+decides none**, and the launch file omits `--seed` entirely when the variable is unset — so an
+interactively launched cell, paired or not, is unseeded. **That is less
 than it sounds and must not be read as more.** `gz sim --seed N` reaches
 `ServerConfig::SetSeed()`, whose body is `math::Rand::Seed(_seed)` — so it seeds
 `gz::math::Rand`, which is what sensor noise and the comms systems draw from. It does not
@@ -123,6 +125,20 @@ references `gz::math::Rand` at all. And it reaches no planner at all. Measured b
 seed was plumbed, and **not repeated since the planner changed**: `pick_and_place` run four
 times under an identical seed produced **two distinct failure modes**, each twice, both
 under domain isolation.
+
+**It has now been repeated, under Pilz, with thresholds registered before the first trial, and
+the cell did not reproduce.**
+[`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md)
+ran `pick_and_place` on `cell_b` twice under one seed, at one commit, minutes apart, and the
+work-piece ended up in two different places — **while both runs passed**, both answered by Pilz
+alone with no OMPL motion in either. So *"scenarios are not deterministic"* is no longer only a
+reading of what the seed reaches; there is a measurement of what the cell does. **Read it at the
+size of its evidence — two runs on one machine, which is not a rate** — and **do not read a
+cause into it**: the campaign's own control did not clear, so where the irreproducibility enters
+is **UNRESOLVED** there and may not be attributed to the solver, to the coupling or to the
+planner from here. Its figures stay in that directory (P1). The same campaign is the first
+record of the symbol scan ADR-0027's seed argument rests on, run on x86_64, which confirms that
+record and narrows it; ADR-0027's amendment of 2026-09-22 is where that is kept.
 
 **Which part is stochastic has changed; that scenarios are not reproducible has not.**
 [ADR-0027](../adr/0027-pilz-planning-pipeline.md) is the single record of both — the
@@ -285,7 +301,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
 | Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes and gates the build (`pick_and_place` carries no `continue-on-error` in `ci.yml`, checked 2026-08-27), and the three-arm line has been reported completing its milestone ladder but **does not gate** and has not carried every piece in every run. Both are reported from runs rather than from a campaign. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
-| Scenario determinism | Same seed, same outcome — **not met today, and moving to Pilz did not meet it.** One `move_group` returns a byte-identical trajectory to an identical request; nothing has measured same seed, same trajectory across runs, and physics is unseeded either way. See Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
+| Scenario determinism | Same seed, same outcome — **not met today, and moving to Pilz did not meet it. Since 2026-09-22 the outcome half is measured rather than inferred**: two runs of one scenario under one seed put the part in two different places, and both passed ([`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md) — two runs on one machine, not a rate, and **where it comes from is UNRESOLVED**). One `move_group` returns a byte-identical trajectory to an identical request; **same seed, same *trajectory* across runs is still unmeasured** — that campaign recorded final positions and durations, not trajectories — and physics is unseeded either way. See Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
 ## What tests are not allowed to do
 
