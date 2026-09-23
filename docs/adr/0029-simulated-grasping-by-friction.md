@@ -1,8 +1,17 @@
 # ADR-0029: Rest simulated grasping on friction, and remove the attachment plugin
 
-- **Status:** Accepted (corrected 2026-08-26 and 2026-09-22) — the decision stands and the open
-  debt it records stands. Three supporting claims are false and are marked where they stand;
-  nothing that was decided is withdrawn.
+- **Status:** Superseded by [ADR-0061](0061-hold-the-box-while-the-jaws-are-shut.md) — the
+  *decision* is reversed, not merely corrected: simulated grasping no longer rests on friction.
+  The box is held rigidly in the gripper frame while the jaws are stalled on it. **Nothing below
+  is rewritten and nothing below binds any longer.** Read ADR-0061 for what does.
+  **What this record MEASURED is untouched and is why it was superseded**: its 84 trials found
+  friction stopping the jaws in the right place 68/68 and holding orientation not at all — up to
+  34.3° of roll, worsening by a factor of 24.5 as the timestep improves. Those numbers are the
+  evidence ADR-0061 rests on, not evidence against this record.
+  **[Replaced 2026-09-23, kept for the record:]** *"Accepted (corrected 2026-08-26 and
+  2026-09-22) — the decision stands and the open debt it records stands. Three supporting claims
+  are false and are marked where they stand; nothing that was decided is withdrawn."*
+  The two corrections below stand as they were written and are still worth reading.
   The **2026-09-22** correction is the newer and the smaller: finding 1 says
   `CITE_PHYSICS_SEED` *"reaches nothing"*, and the seed had reached `gz sim --seed` since the
   day before this record was written. What that finding needed — that the seed does not make

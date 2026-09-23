@@ -637,6 +637,45 @@ work does not, with the lag concentrated in the phase that plans. **#60** is an 
 against itself is the background any such failure sits against, and **that is a reason to be
 careful with both, not a link between them.**
 
+### #86 — The box still lands 0.201 mm apart, and where that comes from is unestablished
+**Opened 2026-09-23, on the measurement in
+[ADR-0061](adr/0061-hold-the-box-while-the-jaws-are-shut.md)'s "Clause 2" section.** Cite that
+record; the figures are not copied here (P1).
+
+**What is established.** Two runs of `pick_and_place` on `cell_b` under one seed, at one commit,
+put the box **0.201 mm** apart — down from 0.763 mm before any of this work and 0.331 mm after
+the tick and settle fixes. The drift at the transition out of the grasp fell from **+343 ms** to
+**+7 ms**, and the commanded trajectories that carry the box tightened by one to four orders of
+magnitude. **Two runs before and two after is four runs**, on one machine, with nothing
+registered in advance. That is not a rate.
+
+**What is open, and it is the whole of this item.** A real xArm 5 repeats a taught position to
+**±0.1 mm**. The simulation is still at twice that, in a cell with no wind, no thermal drift, no
+backlash and no wear to spend it on. **Nothing here localises the remaining 0.201 mm.** It is
+not attributed to the solver, the coupling, the planner or the grasp, and the campaign that
+measured the original 0.763 mm
+([`2026-09-22-is-a-run-reproducible`](measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md))
+answered that question **UNRESOLVED** — a verdict this item does not quietly improve on.
+
+**What the spread looks like, because the shape is a clue and is recorded rather than read
+into.** The three axes are not alike: x **2.66e-5 m**, y **2.01e-4 m**, z **1.33e-8 m**. Almost
+all of it is in **one horizontal axis**, and the vertical is gone entirely. Nothing here says
+why, and a reader should resist the first explanation that fits.
+
+**What would move it, stated as work rather than as a plan.** The instrument already exists and
+is cheap — two runs, one seed, the commanded motions compared by shape and the box's final
+position by a pose query. What it cannot do today is say *where* the difference enters, because
+it samples the box only at rest. Sampling the box's pose **through the carry**, at matched
+simulated times, would say whether the two runs part company at the grasp, during the transfer,
+or at the release. **Whether that is worth building is the project owner's decision and none is
+proposed here.**
+
+**Cross-references, none of them an attribution.** **#85** is the unresolved localisation
+question this item inherits. **#60** is an intermittent `continuous_line` failure whose physical
+cause is unestablished; a cell that does not reproduce exactly against itself is the background
+any such failure sits against, and **that is a reason to be careful with both, not a link
+between them.**
+
 ---
 
 ## 2. Known defects

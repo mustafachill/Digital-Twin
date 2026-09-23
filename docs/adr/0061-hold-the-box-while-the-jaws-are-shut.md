@@ -1,6 +1,11 @@
 # ADR-0061: Hold the box still while the jaws are shut on it
 
-- **Status:** Proposed (corrected 2026-09-22) — **the Decision is unchanged**: the box is
+- **Status:** Accepted 2026-09-23 (corrected 2026-09-22) — **promoted by the project owner**,
+  on all three clauses of the promotion condition being met and on the first CI run ever to
+  bring a cell up with this plugin in the world. **[Replaced 2026-09-23, kept for the record:]**
+  *"Proposed (corrected 2026-09-22)"*. See "Promotion — 2026-09-23" at the end of this record
+  for what promotion rests on and the four things it does not establish.
+  The correction below is untouched: **the Decision is unchanged**: the box is
   still held rigidly while the drive joint is stalled on it, and released when the jaws are
   commanded open. What was wrong is one supporting sentence under "It cannot fire on empty
   air", which claimed a mechanism (a rail exclusion) that does not actually keep the empty-air
@@ -354,3 +359,44 @@ figure above is **one machine, one commit, a handful of runs, with nothing regis
 advance** — and **no CI run has ever brought a cell up with this plugin in the world.**
 Promotion is the project owner's, on a second reader's run or on CI, exactly as
 [ADR-0060](0060-take-the-ik-solution-nearest-the-arm.md) left it.
+
+## Promotion — 2026-09-23
+
+**Promoted by the project owner.** All three clauses are met, each recorded above with its
+figures, and a CI run has since brought a cell up with this plugin in the world for the first
+time.
+
+**CI run `35785593501` at `0842fd8`**, read with the instrument CLAUDE.md §2 mandates — the
+whole verdict string, anchored at both ends, restricted to the three `Simulation-in-the-loop`
+step columns, because a `continue-on-error` step reports `success` whether it passed or failed:
+
+```
+2 Scenario 'bringup' passed
+1 Scenario 'continuous_line' passed
+1 Scenario 'pick_and_place' passed
+```
+
+**All four invocations printed the BARE verdict**, which `scripts/scenario` emits only when
+`launch_test` itself exited 0 — so cycle **and** post-shutdown teardown passed in all four.
+`continuous_line` carried **3 of 3** work-pieces to `b_accumulation` with **zero**
+`escalated to an operator` lines, and **nothing exited badly anywhere in the run**.
+
+**One number in that log is the plugin's own gate, checked rather than assumed: 11 genuine
+stalls against 11 `cite_grasp_hold` events.** Every real grasp triggered a hold, and no hold
+fired without one. That is clause 1's property observed on a runner nobody prepared, rather
+than on the machine that wrote the code.
+
+### What promotion does NOT establish
+
+- **It is not a rate.** One CI run. `continuous_line` failed **7 of 25** CI runs against
+  `cell_a`; a single clean run says nothing about how often the next one will pass, and no
+  count here may be appended to those.
+- **It does not close the gap this record opens with.** The box's spread is **0.201 mm**
+  against a real xArm 5's **±0.1 mm** — still twice it. **Where the remaining 0.201 mm comes
+  from is unestablished**, and [`docs/open-work.md`](../open-work.md) #86 is where that is kept.
+- **It says nothing about a physical arm.** None exists. Phase 2.B is where this plugin's
+  absence on the hardware path gets tested against a real clamp.
+- **It does not revisit ADR-0029's assertion restriction.** *"No scenario may assert how a part
+  is oriented in the jaws"* still stands in the code; a rigidly held box cannot twist, so the
+  restriction is now conservative rather than necessary, and lifting it is a separate decision
+  nobody has taken.
