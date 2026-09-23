@@ -161,6 +161,14 @@ project has already paid for.
 
 ### It does not touch the joint
 
+**[Amended 2026-09-23 — see [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md).]** The
+plugin now stops the drive joint at the box's width. The property this section bought is
+kept — the stall the cell reads is still the controller's, still at the box's width, and
+every consumer of it is still untouched — but it is now deterministic rather than produced
+by the contact solver. What forced the change is measured: the close duration is drawn
+from a distribution with no upper bound, and it is where the two sides of a pair part
+company, by 1.34 s.
+
 The jaws still close, still meet the box's collision, still stop at its width, and still report
 `stalled=true, reached_goal=false` with `position` at the box's width. **The signal the cell
 reads is untouched — and it is the same signal the physical arm produces**, which is what makes
