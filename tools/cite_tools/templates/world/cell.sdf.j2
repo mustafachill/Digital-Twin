@@ -86,9 +86,24 @@
          joint's own position lies inside [hold_position_min_rad,
          hold_position_max_rad], a declared graspable model within
          attach_radius_m of {{ hold.attach_link }}'s own origin is fixed to it.
-         It is released the instant the joint moves back past the position it
-         was holding at by more than detach_margin_rad, in the direction that
-         opens the jaws.
+         It is released once BOTH hold: the joint has moved back past the
+         position it was holding at by more than detach_margin_rad, in the
+         direction that opens the jaws, AND the jaws stand at least as wide as
+         the open end of that same [hold_position_min_rad,
+         hold_position_max_rad] window (ADR-0064).
+
+         THE SECOND CONDITION IS THERE BECAUSE THE FIRST ANSWERS THE WRONG
+         QUESTION. detach_margin_rad is the controller's own goal_tolerance,
+         which asks "has this joint moved meaningfully?"; what has to be asked
+         before letting go is "have the pads let go of the part?", and a
+         fraction of a millimetre past the grasp they have not. Releasing there
+         made the part a free body while a pad was still against it, and an
+         opening pad then struck it: measured across three paired runs, one
+         side of each fell 0.003 mm sideways and the other about a millimetre,
+         with which side stayed clean flipping between runs. The window's open
+         end is wider than any opening gripper_is_holding would call a grasp,
+         so no pad can reach the part there — and it is a number this file
+         already emits, rather than a new one declared for the purpose.
 
          THE WINDOW, NOT THE RAILS (ADR-0061's 2026-09-22 correction). A rail
          exclusion — refusing a joint resting at open_position or
