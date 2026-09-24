@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Does the rigid grasp hold actually hold, and does it actually let go?
-// (ADR-0061)
+// Does the rigid grasp hold actually hold, and does it actually let go at the
+// right moment? (ADR-0061, ADR-0064)
 //
 // WHY THIS FILE EXISTS. `grasp_hold.cpp`'s decision — stalled, resting inside
 // the declared hold-position window, and a graspable model within radius — is
@@ -75,6 +75,13 @@ constexpr uint64_t kSettleSteps = 200;  // 0.2 s at the world's 1 ms step
 //: ([0.3, 0.6]) and clear of both declared rails (0.0 and 1.0).
 constexpr uint64_t kDriveSteps = 400;  // 0.4 s * 1.0 rad/s = 0.4 rad
 
+//: <hold_position_min_rad> and <detach_margin_rad> in the world. This gripper
+//: opens towards SMALLER joint values (<open_position> 0.0, <closed_position>
+//: 1.0), exactly as the shipped one does, so the window's OPEN end is its
+//: minimum — which is what the release now has to be driven past (ADR-0064).
+constexpr double kWindowOpenEnd = 0.3;
+constexpr double kDetachMarginRad = 0.02;
+
 /// The whole apparatus: the world and a sampler of what the plugin did to it.
 class Cell
 {
@@ -134,6 +141,25 @@ public:
     return attached_child_ == name;
   }
 
+  /// Whether the count has ever fallen back to zero since the first attach —
+  /// sampled every step, on every step, rather than read at the moments a test
+  /// happens to look.
+  ///
+  /// WHY THIS EXISTS RATHER THAN A COUNT AT THE END. A release puts the box
+  /// back inside the plugin's own attach conditions: the joint is still inside
+  /// the hold-position window and the box is still within the attach radius,
+  /// so a wrong release is followed by a fresh attach as soon as the joint has
+  /// been still for `stall_timeout_s` again. `AttachedCount()` then reads 1 at
+  /// the end of a settle having been 0 in the middle, and a test asserting only
+  /// on the end cannot tell "never let go" from "let go and grabbed it back".
+  /// That is not hypothetical: it is exactly what the pre-ADR-0064 condition
+  /// does to this rig, and it made the first draft of
+  /// `OpeningPastTheMarginButNotPastTheWindowDoesNotRelease` pass against the
+  /// very code it exists to reject. In the cell the box would have been a free
+  /// body for that interval with a pad still against it, which is the whole
+  /// defect.
+  bool EverReleased() const {return ever_released_;}
+
   std::optional<double> JawPosition() const {return jaw_position_;}
 
 private:
@@ -183,6 +209,11 @@ private:
       });
     attached_count_ = count;
     attached_child_ = child_name;
+    if (count > 0) {
+      ever_attached_ = true;
+    } else if (ever_attached_) {
+      ever_released_ = true;
+    }
   }
 
   static constexpr const char * kWorldPath = CITE_HOLD_WORLD;
@@ -195,6 +226,8 @@ private:
 
   int attached_count_{0};
   std::string attached_child_;
+  bool ever_attached_{false};
+  bool ever_released_{false};
 };
 
 }  // namespace
@@ -291,22 +324,85 @@ TEST(GraspHold, ClosingFurtherAfterTheStallDoesNotRelease)
 }
 
 
-/// Detach: commanding the jaws back open past `held_position + detach_margin_rad`
-/// releases whatever was attached — and settling at `open_position` afterwards
-/// does not grab it straight back.
-TEST(GraspHold, OpeningReleasesAndSettlingAtOpenStaysReleased)
+/// THE REGRESSION THIS LOCKS DOWN (ADR-0064). Moving the joint by more than
+/// `detach_margin_rad` used to be the WHOLE release test, and that number is
+/// the gripper controller's own `goal_tolerance`: it answers "has this joint
+/// moved meaningfully?", not "have the pads let go of the part?". At that much
+/// past the grasp the jaws are still against the part, so the box became a
+/// free body while a pad was still touching it and the opening pad flicked it
+/// sideways — about a millimetre during its fall, on one side of every paired
+/// run, against the 0.003 mm an undisturbed body travels (ADR-0064).
+///
+/// This drives the jaw back past `detach_margin_rad` several times over while
+/// stopping SHORT of the window's open end, which is where the pads become
+/// clear, and requires the box to still be held. Both preconditions are
+/// asserted rather than assumed, so a rig that stopped somewhere else fails
+/// loudly instead of passing for the wrong reason.
+TEST(GraspHold, OpeningPastTheMarginButNotPastTheWindowDoesNotRelease)
+{
+  Cell cell;
+  cell.Drive(kDriveRadS, kDriveSteps);
+  cell.Drive(0.0, kSettleSteps);
+  ASSERT_EQ(cell.AttachedCount(), 1) << "the setup for this test did not attach";
+  ASSERT_TRUE(cell.JawPosition().has_value());
+  const double held_at = *cell.JawPosition();
+
+  // Halfway back to the window's open end: far enough past the margin that the
+  // old single condition would fire, not far enough for a pad to be clear.
+  const double part_way = 0.5 * (held_at + kWindowOpenEnd);
+  cell.DriveTo(part_way, -kDriveRadS);
+  cell.Drive(0.0, kSettleSteps);
+
+  ASSERT_TRUE(cell.JawPosition().has_value());
+  const double opened_to = *cell.JawPosition();
+  ASSERT_GT(held_at - opened_to, kDetachMarginRad)
+    << "this rig never moved the joint past detach_margin_rad, so it cannot "
+    << "distinguish the two conditions at all";
+  ASSERT_GT(opened_to, kWindowOpenEnd)
+    << "this rig opened the jaws past the hold-position window's open end, "
+    << "where a release is correct — it is asserting nothing";
+
+  EXPECT_FALSE(cell.EverReleased())
+    << "the jaws opened by " << (held_at - opened_to) << " rad, past "
+    << "detach_margin_rad but only to " << opened_to << " rad — still inside the "
+    << "hold-position window, so still on the part — and the box was let go anyway";
+  EXPECT_EQ(cell.AttachedCount(), 1) << "the box is not held at the end of the move";
+  EXPECT_TRUE(cell.IsAttached(kNearBox)) << "the held box changed identity mid-grasp";
+}
+
+
+/// Detach: commanding the jaws back open past the hold-position window's own
+/// open end — where no pad can still reach the part — releases whatever was
+/// attached, and settling at `open_position` afterwards does not grab it
+/// straight back.
+///
+/// THIS WAS `OpeningReleasesAndSettlingAtOpenStaysReleased`, which drove the
+/// joint back a fixed 0.1 rad from a grasp at about 0.4 rad and so landed
+/// exactly ON the window's open end (0.3). Under ADR-0064's two conditions
+/// that is the boundary itself rather than a case, so the travel is now
+/// expressed as a position clear of that end rather than as a duration, and
+/// the name says which of the two conditions it pins. Its second half — that a
+/// release followed by a settle at `open_position` does not re-attach — is
+/// unchanged and is still the regression it always was.
+TEST(GraspHold, OpeningPastTheWindowReleasesAndSettlingAtOpenStaysReleased)
 {
   Cell cell;
   cell.Drive(kDriveRadS, kDriveSteps);
   cell.Drive(0.0, kSettleSteps);
   ASSERT_EQ(cell.AttachedCount(), 1) << "the setup for this test did not attach";
 
-  // <detach_margin_rad> is 0.02; this moves the joint back about 0.1 rad, five
-  // times over, well clear of rounding.
-  cell.Drive(-kDriveRadS, 100);
+  // Clear of the window's open end by more than a physics step's worth of
+  // travel, so which side of it the joint stopped on is never a rounding
+  // question.
+  const double clear_of_the_part = kWindowOpenEnd - 0.05;
+  cell.DriveTo(clear_of_the_part, -kDriveRadS);
+  ASSERT_TRUE(cell.JawPosition().has_value());
+  ASSERT_LT(*cell.JawPosition(), kWindowOpenEnd)
+    << "this rig never opened the jaws past the hold-position window's open end";
   EXPECT_EQ(cell.AttachedCount(), 0)
-    << "the joint moved back " << (kDriveRadS * 0.1)
-    << " rad towards open and the box was still attached";
+    << "the jaws opened to " << *cell.JawPosition() << " rad — past both "
+    << "detach_margin_rad and the hold-position window's open end, so wider than "
+    << "any opening the grasp predicate would call a grasp — and the box was still attached";
 
   // Keep going all the way to open_position, exactly as `Place` would, and
   // let it settle there. THE REGRESSION THIS LOCKS DOWN: a plugin that read

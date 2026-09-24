@@ -111,11 +111,36 @@
 // DETACH. While attached, the joint's position is compared against
 // `held_position_` — the position it was AT when the attach happened, not
 // either declared rail. The jaws move back towards `open_position_` from
-// there; the instant that movement exceeds `detach_margin_rad_`, the joint is
+// there; once that movement exceeds `detach_margin_rad_` AND the jaws stand at
+// least as wide as the open end of the hold-position window, the joint is
 // released. `detach_margin_rad_` is `goal_tolerance` from the SAME gripper
 // controller — not a value invented for this plugin, but the one number that
 // controller already treats as "close enough to be the same position", asked
 // here of the same joint for the same reason.
+//
+// THE SECOND CONDITION IS NEW (ADR-0064) and the first alone used to be
+// the whole test. `detach_margin_rad_` answers "has this joint moved
+// meaningfully?" — which is the controller's own question about its own
+// joint, and asking it here was deliberate and reasonable. The question
+// this plugin needs answered is a different one: "have the pads let go of
+// the part?" At `goal_tolerance` past the grasp the jaws have opened by a
+// fraction of a millimetre and are still against the part, so the box
+// became a free body while a pad was still touching it and the opening
+// pad then flicked it sideways. The measured consequence, over three
+// paired runs: during the box's own fall onto the belt, one side of every
+// run travelled sideways by 0.003 mm — what an undisturbed body does —
+// and the other by about a millimetre, with WHICH side is clean flipping
+// between runs. ADR-0064 has the tables; they are not restated here (P1).
+//
+// `hold_position_min_rad_` is REUSED rather than a new number declared:
+// it is already the open end of the part-width window
+// `cite_skills::gripper_is_holding` judges a stall inside, so jaws wider
+// than it are wider than any opening that predicate would call a grasp,
+// and no pad can still be on the part. Nothing was added to the L0 model,
+// the generator, the template or any generated world. `detach_margin_rad_`
+// is kept as a floor rather than deleted — it is still what stops joint
+// jitter from reading as a release, and still the controller's own number
+// for exactly that.
 //
 // THE PROPERTY THAT MUST NOT BE ERODED: nothing above ros2_control knows this
 // exists. The jaws still close, still meet the part's collision, still stop at
@@ -147,8 +172,8 @@ namespace cite_simulation
 {
 
 /// Rigidly attach a graspable model to an arm's own wrist while its gripper's
-/// drive joint is stalled on it, and let go the instant that joint is
-/// commanded back open (ADR-0061).
+/// drive joint is stalled on it (ADR-0061), and let go once that joint has
+/// opened past the point where a pad could still be on the part (ADR-0064).
 class GraspHold
   : public gz::sim::System,
   public gz::sim::ISystemConfigure,
@@ -273,7 +298,25 @@ public:
       // further CLOSED than the held position is not a release and is not
       // tested for: a stall that tightens further is still the same grasp.
       const double opened_by = (q - held_position_) * open_direction_;
-      if (opened_by > detach_margin_rad_) {
+      // And how far past the OPEN end of the hold-position window the jaws
+      // now stand. Which end of that window is the open one is derived from
+      // `open_direction_` and never from the two fields' names: this gripper
+      // opens towards SMALLER joint values (`open_position` 0, `closed_position`
+      // 0.85, so `open_direction_` is -1) and `hold_position_min_rad_` is
+      // therefore its open end, but a gripper whose rails run the other way
+      // has its open end at `hold_position_max_rad_`, and
+      // `_hold_position_window` only promises min <= max, not which is which.
+      // Both differences are scaled by `open_direction_` for the same reason,
+      // so both read as "further open by" in the joint's own units whichever
+      // way its stroke runs.
+      const double window_open_end =
+        open_direction_ > 0.0 ? hold_position_max_rad_ : hold_position_min_rad_;
+      const double opened_past_window = (q - window_open_end) * open_direction_;
+      // Both, on the same step (ADR-0064). The first says the joint has
+      // genuinely moved rather than jittered; the second says the pads are
+      // clear of the part, which is the question a release actually asks and
+      // the first cannot answer — see the file header.
+      if (opened_by > detach_margin_rad_ && opened_past_window >= 0.0) {
         Detach(ecm);
       }
       return;
