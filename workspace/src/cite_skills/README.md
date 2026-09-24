@@ -164,6 +164,7 @@ refuses to start without the names. Use the launch.
 | a `Pick` warns that no grasp width reached the node | `grasp_width_m` was 0 and no `gripper_default_grasp_width_m` was delivered, so the gripper closes against its effort limit. The end-effector type declares one and the plan carries it |
 | `Pick` or `Grasp` returns `TIMEOUT` "the gripper's controller never reported a result" | the controller did not terminate the goal within `gripper_result_timeout_s` of THIS NODE'S clock (ADR-0045). A cancel has been **sent** for it and not awaited, so whether it was served is unknown. **It is not a report about the jaws** — the arm may be holding the work-piece, and the detail says so; nothing may recover from it as an empty gripper |
 | `Pick`, `Place` or `Transfer` returns `PRECONDITION_FAILED` "WHETHER IT IS HOLDING ANYTHING IS UNESTABLISHED" | the latch below. The last gripper command ended without an answer, so this server refuses every skill whose next physical act assumes a known gripper. Send a `Grasp` to establish what the jaws hold; that is the only thing that clears it |
+| `Place`/`Transfer` returns `EXECUTION_FAILED` "commanded the jaws fully open and they still read as holding the part" | the release was commanded and did not happen. `GripperActionController` SUCCEEDS a command it has declared stalled, so `result.code` cannot see this and `release_jaws` confirms the outcome with `gripper_is_holding` instead. **The arm has not moved and must not be made to**: retreating from here carries the part off the place pose and drops it wherever the retreat reached — measured at **39 mm above the belt**, 74.68 mm apart between two sides of a pair ([ADR-0063](../../../docs/adr/0063-the-drive-joint-may-not-be-clamped.md)). `still_holding` is true and the custody latch below is set, so this escalates rather than being retried. **Operator action:** the jaws are left commanded FULLY OPEN at the configured effort and that command persists — the detail string says so — so free the part with that in mind, then send a `Grasp` to re-establish what the gripper holds |
 | `Place`/`Transfer` returns `PRECONDITION_FAILED` "not holding anything" | refused rather than mimed — the failure would otherwise surface at the receiving station, which is much harder to attribute |
 | `Transfer` returns `PRECONDITION_FAILED` "no rendezvous token" | L4 issues one for every handoff it has negotiated, so an empty token is a caller that skipped the two-party confirmation |
 | `Detect` returns `PRECONDITION_FAILED` on a zero-sized region | a default-constructed goal has one, and an empty result from it would read as "nothing is on the belt" — a wrong answer that looks exactly like a right one |
@@ -218,7 +219,16 @@ Both refusals leave through the same `finish` lambda every other exit uses, and 
 filled `still_holding` from `holding_` — so a refusal whose `detail` said custody was
 UNESTABLISHED carried a boolean beside it saying the arm was empty, on the one exit that
 exists to say nobody knows. `still_holding_now()` is what those lambdas read now: holding, or
-custody unknown. **`holding_` itself is still never written on this path** — unknown custody
+custody unknown.
+
+**The release step participates in that same field, and it is the one place the latch is set
+without a missing answer.** A `Place` or `Transfer` whose release is commanded and not
+confirmed leaves through the same lambda with `still_holding` true, because `release_jaws`
+latches custody-unknown on its give-up exit: the controller answered, so what is unknown is
+not whether it spoke but **what is between the pads** — the jaws read as holding something
+this node has no record of taking, and a caller that passed `require_holding=false` would
+otherwise be handed `still_holding` false beside a detail saying the part was not released.
+`Grasp` is the way out of this latch exactly as it is out of the other. **`holding_` itself is still never written on this path** — unknown custody
 is reported, not resolved — and the direction is the one in `Place.action`: unknown falls on
 the side that escalates, never on the side that opens a gripper. **`Grasp` is deliberately not refused**: it is the skill that commands the gripper
 and reports what came back, so it is the way out, and a result arriving is what clears the

@@ -160,7 +160,10 @@ if(BUILD_TESTING)
   # action server. The control and the defect are two `Place` goals in ONE rig,
   # differing in nothing but what the gripper reports, so the timeout is the
   # abort rig's rather than the parametrized one's: still no Gazebo, but two
-  # grasps, two places and three millimetre-scale motions apiece.
+  # grasps, two places and FOUR millimetre-scale motions in the control — the
+  # `MoveTo home` each case plans from, then `Place`'s approach, descent and
+  # retreat. The defect case makes three of the four: it fails at the release, so
+  # the retreat it must not make is never planned.
   add_launch_test(test/test_release_confirmation_launch.py TIMEOUT 600)
 endif()
 

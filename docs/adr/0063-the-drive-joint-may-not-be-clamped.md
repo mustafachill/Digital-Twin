@@ -1,12 +1,99 @@
 # ADR-0063: The gripper's drive joint may not be clamped
 
-- **Status:** Accepted
+- **Status:** Accepted — **the Decision is unchanged and binds exactly as written**: the
+  simulation may not stop, limit or otherwise take hold of the gripper's drive joint. Two
+  sections follow this block and must be read before the body. "Amendment — 2026-09-24: Option
+  A's two halves are separable, and the L3 confirmation ships without the clamp" splits an
+  option this record rejected as one thing; "Correction — 2026-09-24: the 116 commands are both
+  sides of a pair" repairs a figure that does not reconcile as the body states it. Neither
+  touches the Decision, the clamp, or any of the four measured arms.
 - **Date:** 2026-09-24
 - **Deciders:** Project owner, on the measurement below
 - **Related:** [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md) (superseded by this record),
   [ADR-0061](0061-hold-the-box-while-the-jaws-are-shut.md) (restored intact),
   [ADR-0023](0023-simulated-grasping-via-attachment.md),
   [ADR-0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md), CLAUDE.md §3 (P2)
+
+## Amendment — 2026-09-24: Option A's two halves are separable, and the L3 confirmation ships without the clamp
+
+**What this record rejected, and what it did not.** Option A below is one line — *"keep the
+clamp and teach L3 to wait for the release"* — and it was rejected as one thing. It is two
+things, and only the first is closed:
+
+- **The clamp stays rejected, permanently and without qualification.** The Decision is
+  untouched. Nothing in the simulation may constrain that drive joint, and any future argument
+  for it owes its own measurement, exactly as the Decision says.
+- **An L3 confirmation of the release ships, WITHOUT the clamp**, in the commit after this
+  record. `SkillServer::release_jaws` commands the jaws fully open, reads the outcome back
+  through `cite_skills::gripper_is_holding`, and fails if they still read as holding.
+
+**Why the measurement does not carry over.** The third arm of the table below is *"the clamp,
+plus an L3 confirmation of the release"* — the confirmation **against the clamp**, which is
+gone. Its 116 commands and zero releases measure what re-asking buys while a second mechanism
+holds the joint shut; they measure nothing about a cell where nothing holds it. Reading that
+row as a verdict on confirming a release is reading a control arm as a treatment.
+
+**And the half of Option A that measurement actually condemned is not what ships.** What the
+third arm did was **re-ask**: it re-commanded the open until a deadline expired. That loop is
+**removed**. What ships is one command, one answer, and a failure if the answer says the jaws
+are still on the part. There is no second deadline, no poll interval and no iteration cap
+anywhere on the path; a single command's own answer is already bounded by the declared
+`gripper_result_timeout_` inside `command_gripper`, counted in the node's own clock (ADR-0045).
+
+The loop was removed for reasons of its own, independent of anything here, and they are
+recorded so nobody rebuilds it:
+
+- It **could not be cancelled**. `command_gripper`'s wait breaks on a ready future before it
+  tests for cancellation, so against a controller answering in about 1.3 ms the 20 ms
+  cancellation poll never ran. L4's fault branch waits on the goal *ending*, so the belts of an
+  escalating station kept running for the whole window.
+- Its bound was **twice** the declared timeout, because the condition was evaluated after each
+  command.
+- It read `result_timeout_s` as *"how slow a release may be"*, which that value's own L0 block
+  forbids in capitals: the time a stall takes to be declared has no upper bound, so no value
+  there can mean "too slow".
+
+**A residual this record must carry, because it is what an operator meets.** On the confirmed
+failure the skill stops and escalates — into [ADR-0038](0038-stop-the-line-without-ending-the-process.md)'s
+`AwaitReset`, which waits for a person with no deadline — and **the jaws are left commanded
+fully open at the configured effort, and that command persists**. Nothing further is sent. When
+whatever is binding the jaws lets go, the part falls, with nobody expecting it. **What is
+commanded there is deliberately not changed here**: drop-safe versus hold-safe is a
+project-owner decision and this record does not take it. What the change does is **say so** —
+the failure's own detail string names the state the gripper is left in, so the person walking
+up to the cell is told rather than surprised.
+
+**What is NOT established, and the confirmation is explicitly unimplemented on hardware.** What
+produces `stalled` on the physical path is unknown in this repository. L0 says twice that the
+physical gripper is driven through the SDK's service layer and has **no
+`GripperActionController` at all**, and that *"nothing here should be read as claiming the two
+paths detect a stall alike, because they do not."* The *check* is backend-agnostic — it reads a
+reported outcome against the facility's declared part interval, not a controller's internal
+rule — but its *input* on hardware has no established producer. A physical server that never
+sets `stalled` makes this confirmation a permanent no-op there, which is P2 broken in the
+direction that matters. It is marked unimplemented (Definition of Done item 5) rather than
+claimed as parity.
+
+## Correction — 2026-09-24: the 116 commands are both sides of a pair, not one
+
+**What was written.** *"116 commands, zero releases"*, under "Asking again makes it worse",
+with no scope.
+
+**What is true.** That figure is **both sides of a pair together** — about **58 each** — which
+is how [`../open-work.md`](../open-work.md) #87 states the same measurement, and the scope was
+dropped on the way into this record.
+
+**Why it matters rather than being pedantry.** Read as one side it does not reconcile with
+anything else in this record. Upstream cannot terminate a goal that never reaches its command
+sooner than `stall_timeout` after `accepted_callback`, and `stall_timeout` is **0.3 s**, so one
+side's ceiling over a 20 s window is about **66**. 116 on one side is impossible; 116 over two
+is ordinary. A reader checking the arithmetic finds a contradiction and has no way to tell
+whether the figure, the timeout or the window is wrong.
+
+**How the error survived.** The figure was carried from the investigation into two documents and
+only one of them kept the scope. Nothing checks a number quoted in two places against itself,
+and the arithmetic that falsifies the one-sided reading needs an upstream constant that is in
+neither document.
 
 ## Context
 
@@ -58,7 +145,9 @@ differs between the two sides. That is the 74.68 mm.
 
 **Asking again makes it worse, which is what settles the mechanism.** With `Place` confirming
 the release and re-commanding until the declared `gripper_result_timeout_` expired: **116
-commands, zero releases**. Each fresh goal restarts the controller driving the joint, and the
+commands, zero releases**. **[Corrected 2026-09-24 — see the Correction section above.]** The
+116 is both sides of a pair together, about 58 each; one side's ceiling over that window is
+about 66. Each fresh goal restarts the controller driving the joint, and the
 joint stays pinned for the whole window. A travel limit and `gz_ros2_control`'s command on the
 same joint are in conflict.
 
@@ -76,6 +165,9 @@ Implemented and measured: the third row above. It converts *"the box is dropped 
 place"* into *"the box is never released"*, which is safer and still not a working cell. It also
 means teaching the capability layer to work around a simulation plugin's grip on a joint, which
 is a P2 hazard in its own right: no physical gripper has this conflict.
+**[Amended 2026-09-24 — see the Amendment section above.]** This option is two things and only
+the clamp half is closed. An L3 confirmation of the release ships without the clamp, and
+without the re-asking this row measured.
 
 ### Option B — keep the early attach and drop the clamp
 Implemented and measured: the fourth row above. A real grasp is reported empty. Rejected by

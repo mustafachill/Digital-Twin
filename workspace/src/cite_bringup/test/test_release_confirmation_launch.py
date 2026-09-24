@@ -30,13 +30,15 @@ pair, which is the 74.68 mm that record quotes.
 their code could not make — *"The jaws did not open, so the part is still between
 them"* — while branching on `gripper.result.code`, which is `SUCCESS` on exactly
 that path. `SkillServer::release_jaws` is the confirmation that makes the comment
-true: it commands the jaws fully open and re-asks while
-`cite_skills::gripper_is_holding` still reads them as holding, bounded by the
-declared `gripper_result_timeout_` (ADR-0045).
+true: it commands the jaws fully open ONCE and then asks
+`cite_skills::gripper_is_holding` whether they opened, failing if they still read
+as holding. One command, one answer, and no re-asking — the bound on that one
+answer is `gripper_result_timeout_` inside `command_gripper` (ADR-0045) and there
+is no second deadline anywhere on the path.
 
 ## What is asserted, and why each half needs the other
 
-Three facts, and no two of them are satisfiable by one defect:
+Four facts, and no two of them are satisfiable by one defect:
 
   * **A release that did not happen fails, and says the arm still has the part.**
     The fake gripper below succeeds an opening command while reporting the jaws
@@ -54,6 +56,13 @@ Three facts, and no two of them are satisfiable by one defect:
     width the jaws reached, so that a future change which makes `Place` fail for
     an unrelated reason — an unreachable pose, a planning refusal, a cancelled
     goal — does not keep this file green.
+  * **Each release sends EXACTLY ONE command, in both cases.** Re-asking is the
+    shape this function had first and may not have again: `command_gripper`'s wait
+    breaks on a ready future before it tests for cancellation, so a loop here is
+    uncancellable for its whole window while L4's fault branch waits on the goal
+    ending. It is also the only assertion of the four that sees the obvious
+    mutant — a holding check moved out of a loop and tested after it leaves every
+    other assertion green while the control burns a whole deadline.
 
 ## Every number is read, never written here
 
@@ -76,9 +85,11 @@ the generated controller configuration, a real `move_group`, the real skill
 server, and the parameters the production launch file builds.
 
 Because the plant is mock hardware, this says NOTHING about what a real gripper
-does, how long a real stall takes, or whether a jammed gripper ever opens on a
-re-ask. ADR-0063 measured 116 re-commands and zero releases against a clamped
-joint; this rig cannot and does not speak to that.
+does, how long a real stall takes, or what a physical server puts in `stalled` —
+which `release_jaws`'s own header records as unestablished and therefore as an
+unimplemented hardware path. ADR-0063 measured 116 commands and zero releases
+against a clamped joint, over both sides of a pair; this rig cannot and does not
+speak to that, and the re-asking that measurement condemned is not what ships.
 
 ## What this does NOT evidence
 
@@ -141,11 +152,14 @@ GOAL_CEILING_S = 180.0
 
 #: The deadline this rig gives the skill server, in seconds of the node's clock.
 #: THE RIG'S NUMBER AND NOT THE CELL'S, for the same reason
-#: `test_gripper_deadline_launch.py` overrides it: `release_jaws` re-asks for the
-#: whole of this window before it gives up, and spending the cell's declared 20 s
-#: would buy nothing — what is under test is that the confirmation is made at all,
-#: not how long it is given. That the L0 value reaches this node under this name is
-#: a different claim and is already held by `test_plan.py`.
+#: `test_gripper_deadline_launch.py` overrides it. It bounds how long the node
+#: waits for the fake to ANSWER a command at all, which is the only thing
+#: `gripper_result_timeout_` bounds on this path; the fake answers immediately, so
+#: a working implementation never approaches it and a hung one fails here rather
+#: than spending the cell's declared 20 s. Nothing under test is measured against
+#: it: the confirmation compares reported widths and re-asks nothing. That the L0
+#: value reaches this node under this name is a different claim and is already
+#: held by `test_plan.py`.
 RELEASE_CEILING_S = 3.0
 
 
@@ -561,6 +575,7 @@ class ReleaseConfirmationTest(unittest.TestCase):
         # ---- The control: the jaws open, and `Place` completes ----------------
         self.gripper.set_mode(_FakeGripper.JAWS_OPEN)
         self._grasp()
+        before_control = len(self.gripper.commanded_widths())
         control = self._place()
         self.assertEqual(
             control.result.code, ResultCode.SUCCESS,
@@ -572,6 +587,13 @@ class ReleaseConfirmationTest(unittest.TestCase):
         self.assertFalse(
             control.still_holding,
             'a completed place reported that the arm is still holding the part',
+        )
+        self.assertEqual(
+            len(self.gripper.commanded_widths()) - before_control, 1,
+            f'the release sent '
+            f'{len(self.gripper.commanded_widths()) - before_control} gripper '
+            f'command(s) where it must send exactly one. See the defect case below '
+            f'for why the count is asserted and not merely observed.',
         )
 
         # ---- The defect: the jaws stay shut, and `Place` must say so -----------
@@ -614,15 +636,25 @@ class ReleaseConfirmationTest(unittest.TestCase):
             f'{outcome.result.detail!r}',
         )
 
-        # The confirmation ASKED AGAIN, which is what separates it from a single
-        # command whose answer was merely read more carefully. Evidence rather than
-        # a threshold: how many times is the deadline's business, not this file's.
+        # ---- EXACTLY ONE COMMAND, AND THIS IS THE ASSERTION THAT PINS THE SHAPE --
+        #
+        # Not a count for its own sake. Re-asking is what this function used to do
+        # and what it may not do again: `command_gripper`'s wait breaks on a ready
+        # future before it tests for cancellation, so a loop here is uncancellable
+        # for its whole window while L4's fault branch waits on the goal ending —
+        # and ADR-0063 measured 116 such commands buying zero releases.
+        #
+        # It is also the assertion that kills the mutant the four above survive.
+        # Move the holding check out of a loop and test it afterwards and every
+        # other assertion in this method stays green while the control case burns a
+        # whole deadline; the command count is the only thing that sees it.
         asked = len(self.gripper.commanded_widths()) - before
-        self.assertGreater(
+        self.assertEqual(
             asked, 1,
-            f'the release sent {asked} command(s). A fully-open command is idempotent '
-            f'and the deadline is what bounds the re-asking, so a confirmation that '
-            f'asks once has given up before the gripper had a chance to answer twice.',
+            f'the release sent {asked} gripper command(s) where it must send exactly '
+            f'one. A fully-open command is idempotent, which is what makes re-asking '
+            f'look free, and it is not: the re-ask cannot be cancelled and the '
+            f'measurement in ADR-0063 that condemned it was taken against 116 of them.',
         )
 
     def _grasp(self):

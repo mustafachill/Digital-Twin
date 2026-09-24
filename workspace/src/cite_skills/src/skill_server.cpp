@@ -2569,7 +2569,7 @@ private:
     return outcome;
   }
 
-  /// Open the jaws fully and CONFIRM they opened, re-asking until they have.
+  /// Open the jaws fully and CONFIRM they opened. ONE command, one answer.
   ///
   /// `GripperActionController` SUCCEEDS a command it has declared stalled: the
   /// stall is a field in the result, never the goal's status. So a release that
@@ -2581,33 +2581,93 @@ private:
   /// part was carried off the place pose and dropped 39 mm above the belt,
   /// wherever the retreat had got to. The two sides dropped it 74.68 mm apart.
   ///
-  /// THE CONFIRMATION IS THE GATE, NOT THE RESPONSE — ADR-0058's rule, one layer
-  /// up, for the same reason. A fully-open command is idempotent, so asking
-  /// again is free and correct. Each round trip is an action result and not a
-  /// sleep (P4), and the bound is `gripper_result_timeout_`, the same declared
-  /// number a single command already waits on, counted in the same clock
-  /// (ADR-0045) — not a second duration invented here.
+  /// THE CONFIRMATION IS THE GATE, AND ASKING AGAIN IS NOT PART OF IT. This reads
+  /// the answer it already has. The first shape of this function re-commanded
+  /// while the jaws still read as holding, bounded by a second deadline of its
+  /// own, and every part of that was wrong:
   ///
-  /// NOT A SIMULATION WORKAROUND, WHICH IS WHY IT BELONGS HERE. A physical
-  /// gripper also takes time to open, and a physical `GripperActionController`
-  /// also reports a stall when the joint has not moved within its own timeout.
-  /// An arm that retreats while the part is still between its pads is the same
-  /// defect on both backends, so the fix is the same on both (P2).
+  ///   * IT COULD NOT BE CANCELLED. `command_gripper`'s wait breaks on a ready
+  ///     future BEFORE it tests `cancelled(handle)`, so against a controller that
+  ///     answers inside the 20 ms poll — about 1.3 ms here — that test never runs
+  ///     at all. The re-asking therefore spun uncancellable for the whole window
+  ///     while L4's fault branch waits on the goal ENDING, which left the belts
+  ///     running after a station had already escalated. That is the defect class
+  ///     `cite_skills/test/test_skill_contract.py` records for `Grasp`.
+  ///   * IT DID NOT TERMINATE WITHOUT A CLOCK. The window was counted in this
+  ///     node's clock, so a stalled `/clock` made the loop unbounded — and
+  ///     `shutdown()` joins the worker with no deadline of its own.
+  ///   * THE BOUND WAS TWICE WHAT IT CLAIMED. The condition was evaluated after
+  ///     each command, so a final iteration beginning at `deadline - eps` then
+  ///     waited a whole `gripper_result_timeout_` of its own.
+  ///   * IT READ `result_timeout_s` AS "HOW SLOW A RELEASE MAY BE", which is the
+  ///     one reading that value's own L0 block forbids in capitals: the time a
+  ///     stall takes to be declared has NO UPPER BOUND, so no value there can
+  ///     mean "too slow".
+  ///   * AND IT BOUGHT NOTHING WHERE IT WAS MEASURED. ADR-0063's third arm is
+  ///     this loop against a clamped drive joint: 116 commands, zero releases.
+  ///
+  /// So there is no second deadline here, and none may be added — no poll
+  /// interval, no iteration cap. One command's own answer is already bounded by
+  /// `gripper_result_timeout_` inside `command_gripper`, counted in this node's
+  /// clock (ADR-0045), which is what that value is declared for.
+  ///
+  /// WHAT IS BACKEND-AGNOSTIC HERE IS THE CHECK AND NOT THE DETECTOR, and the
+  /// distinction is Definition of Done item 5 rather than a nicety. This reads a
+  /// REPORTED OUTCOME — the width the jaws reached, judged against the facility's
+  /// declared part interval by `gripper_is_holding` — and not any controller's
+  /// internal rule, so the question it asks is askable of any server that answers
+  /// `GripperCommand`.
+  ///
+  /// WHAT PRODUCES `stalled` ON THE PHYSICAL PATH IS NOT ESTABLISHED IN THIS
+  /// REPOSITORY, so this confirmation's HARDWARE BEHAVIOUR IS EXPLICITLY
+  /// UNIMPLEMENTED. L0 says so twice and emphatically: the physical gripper is
+  /// driven through the SDK's service layer and has **no
+  /// `GripperActionController` at all**, and "nothing here should be read as
+  /// claiming the two paths detect a stall alike, because they do not"
+  /// (`model/assets/types/end_effectors/xarm_parallel_gripper.yaml`, under
+  /// `result_timeout_s` and `stall_velocity_threshold`). Which of two opposite
+  /// things happens there is UNKNOWN:
+  ///
+  ///   * a hardware server that reports a jammed open the way this one does makes
+  ///     this check work there unchanged; or
+  ///   * a hardware server that never sets `stalled` makes `gripper_is_holding`
+  ///     read "not holding" on every release, and this check a PERMANENT NO-OP on
+  ///     the physical arm. That is P2 broken in the direction that matters: the
+  ///     simulated cell would catch a failed release the real one retreats from.
+  ///
+  /// Nothing in this tree distinguishes them, and measuring it is work against
+  /// the SDK interface. Do not read any of this as parity.
   template<typename Handle>
   GripperOutcome release_jaws(double max_effort_n, const Handle & handle)
   {
-    const rclcpp::Time deadline = now() + gripper_result_timeout_;
-    GripperOutcome outcome;
-    do {
-      outcome = command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort_n, handle);
-      if (outcome.result.code != ResultCode::SUCCESS || !outcome.holding) {
-        return outcome;
-      }
-    } while (now() < deadline);
+    auto outcome =
+      command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort_n, handle);
+    if (outcome.result.code != ResultCode::SUCCESS || !outcome.holding) {
+      return outcome;
+    }
 
     // `holding_` is deliberately left unwritten: the part is still between the
     // pads, so the caller's `still_holding` must stay true and L4 must get the
     // stuck-gripper recovery rather than the completed-handoff one.
+    //
+    // AND `custody_unknown_` IS LATCHED, WHICH IS A DIFFERENT STATEMENT AND NOT A
+    // BELT AND BRACES. Leaving `holding_` alone is sufficient only where it was
+    // already true, which is every call L4 makes (`skill_nodes.hpp` always sends
+    // `require_holding = true`). A direct L3 caller that passed
+    // `require_holding=false` — after a `Grasp` that read the gripper empty, say —
+    // reaches here with `holding_` FALSE, and `still_holding_now()` would then
+    // report an empty gripper beside a detail saying the part was not released:
+    // exactly the "unknown custody reported as empty" direction ADR-0046 and
+    // `Place.action`'s own contract forbid.
+    //
+    // WHAT IS UNKNOWN HERE IS NOT WHETHER THE CONTROLLER ANSWERED — it answered —
+    // but WHAT IS BETWEEN THE PADS. The jaws read as holding something this node
+    // has no record of taking, which is the third state `holding_` cannot carry,
+    // so it is stored where the third state lives. From here `Pick`, `Place` and
+    // `Transfer` refuse until a `Grasp` observes the gripper again, which is the
+    // same way out `command_gripper`'s timeout latch has.
+    custody_unknown_.store(true);
+
     std::ostringstream detail;
     // Fixed at a tenth of a millimetre, the same as `describe_empty_grasp` and the
     // gripper log line above. Left to the default `%g` this printed "50" where its
@@ -2616,12 +2676,15 @@ private:
     // to notice that they are the same number.
     detail.setf(std::ios::fixed);
     detail.precision(1);
-    detail << "commanded the jaws fully open and they still read as holding the part "
-           << gripper_result_timeout_.seconds() << " s later, at "
+    detail << "commanded the jaws fully open and they still read as holding the part, at "
            << outcome.reached_width_m * 1000.0 << " mm against a commanded "
            << outcome.commanded_width_m * 1000.0 << " mm. The part was NOT released and "
            << "this arm has not moved: retreating on this would carry it off the place "
-           << "pose and drop it wherever the retreat reached";
+           << "pose and drop it wherever the retreat reached. WHAT THE GRIPPER IS LEFT "
+           << "COMMANDED TO, BECAUSE WHOEVER WALKS UP TO THIS CELL NEEDS IT: fully open "
+           << "at " << max_effort_n << " N, and that command PERSISTS — nothing further "
+           << "is sent from here. The moment whatever is binding the jaws lets go they "
+           << "will open and the part will fall, with nobody expecting it";
     outcome.result = make_result(ResultCode::EXECUTION_FAILED, detail.str());
     return outcome;
   }
