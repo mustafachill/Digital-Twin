@@ -143,9 +143,24 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1542** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1564** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on
-  `measure/is-a-run-reproducible`, 2026-09-22). It read **1531** on `main` on 2026-09-18 with
+  `feat/clamp-the-box` at `50a51a9`, 2026-09-24).
+  **The 1560 -> 1564 step is +4, it is tree growth alone, and every term of it was MEASURED on
+  both sides rather than attributed** — `main`'s figures were taken in a worktree at `main` the
+  same day, not differenced from an earlier reading. The branch adds exactly **3** tracked files
+  (`git diff --diff-filter=A --name-only main..HEAD`, with `--diff-filter=D` and `--diff-filter=R`
+  both **0**): two `.md`, ADR-0062 and ADR-0063, and one `.py`,
+  `workspace/src/cite_bringup/test/test_release_confirmation_launch.py`. Per file:
+  `test_interface_counts.py` 171 -> **173**, the two `.md`;
+  `test_superseded_real_time_requirement.py` 418 -> **419**, the one `.py` carrying one of its
+  seven suffixes; `test_a_removed_plan_key_stays_removed.py` 386 -> **387**, that same `.py`
+  under `workspace/`. 2 + 1 + 1 = 4. **Not one test case was added to `tools/tests`**, and the
+  two 1s are one file counted by two walks rather than one quantity counted twice.
+  **The previous reading here was 1542 and it is NOT differenced against.** It was taken on
+  `measure/is-a-run-reproducible` and this is `main` plus four commits; the two are not adjacent,
+  and attributing a step across them is the habit this bullet spends most of its length warning
+  about. It read **1542** on that branch on 2026-09-22 and **1531** on `main` on 2026-09-18 with
   `cell_b` paired.
   **The 1531 -> 1542 step is +11, it is tree growth alone, and it was predicted before it was
   measured.** The branch publishes a campaign and adds **61** tracked files
@@ -398,13 +413,29 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1649 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1671 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1481 tests, 0 failures, 59
-  skipped**. Its exit status was 0. **Re-taken on `measure/is-a-run-reproducible` on
-  2026-09-22**, from one full run, with `docker ps` confirmed empty first and empty again
-  after. It read 144 / 1638 / 1481 on `main` on 2026-09-18 with `cell_b` paired, and
+  first-party packages, eleven per-package summaries totalling **1499 tests, 61 skipped**.
+  **Re-taken on `feat/clamp-the-box` at `50a51a9` on 2026-09-24**, from full runs with
+  `docker ps` confirmed empty first and empty again after.
+  **TWO full runs were taken back to back and THEY DID NOT AGREE ON THEIR EXIT STATUS.** The
+  first exited 0. The second exited **1**, on `test_skill_cancellation (Timeout)` — 1 of 17 in
+  `cite_orchestration`, the **ctest** timeout, not an assertion. Re-run alone it passes in
+  **4.23 s**, which is the identical figure this bullet already records for that test at
+  `b072bfa`, so this is a **third** occurrence of a signature that is **attributed to nothing**.
+  This branch does not touch that package at all — `git diff --stat main..HEAD --
+  workspace/src/cite_orchestration` is empty. **The confound is named rather than left out**:
+  two full suites were run back to back on this host with several container starts between
+  them, and this bullet's own earlier entry for this signature carries the same kind of
+  confound.
+  **The failure also cost the third figure its instrument, which is worth one line.**
+  `scripts/test` prints the eleven per-package summaries in a loop AFTER
+  `colcon test --return-code-on-test-failure`, so a run that fails exits before reaching them
+  and prints none; the 1499 was reproduced by running that same loop by hand. The 61 skipped and
+  the 1 failure are that loop's, and the eleven summaries add to 1499 exactly.
+  It read 144 / 1649 / 1481 on `measure/is-a-run-reproducible` on 2026-09-22,
+  144 / 1638 / 1481 on `main` on 2026-09-18 with `cell_b` paired, and
   144 / 1628 / 1435 at `7c6e902`.
   **Only the host half moved, and the other two not moving is the property worth stating.** The
   shell gate is untouched because the change adds no script; the per-package total is untouched
@@ -430,9 +461,19 @@ bullet.
   file was written for, in a fourth assertion.**
   **The host-half tie closes exactly, and it was predicted before it was measured** —
   **the fourth time that has been done here, and the prediction was written into the session
-  before the run was started**: `tools/tests` collects 1542 and `tests/` **108**, and
-  1542 + 108 = 1650 = **1649** passed plus the 1 skipped. It read 1531 + 108 = 1639 = 1638 plus
-  the 1 skipped on `main` on 2026-09-18.
+  before the run was started**: `tools/tests` collects **1564** and `tests/` **108**, and
+  1564 + 108 = 1672 = **1671** passed plus the 1 skipped, on `feat/clamp-the-box` at `50a51a9`,
+  2026-09-24 — and it closed identically on **both** of that day's full runs, including the one
+  that exited 1 on a package test.
+  **One reading of this figure was taken against a tree that did not yet contain its own new
+  file, and the +2 it was missing is exactly this tie's arithmetic working.** A host half of
+  1669 + 1 was reported before
+  `workspace/src/cite_bringup/test/test_release_confirmation_launch.py` was tracked; once it
+  was, `test_superseded_real_time_requirement.py` and `test_a_removed_plan_key_stays_removed.py`
+  each gained one, 1670 + 2 = 1672. The figure was never wrong — it belonged to a different
+  tree, which is the distinction this whole section is about.
+  It read 1542 + 108 = 1650 = 1649 plus the 1 skipped on 2026-09-22, and 1531 + 108 = 1639 =
+  1638 plus the 1 skipped on `main` on 2026-09-18.
   **`tests/` did not move**, collecting 108 at both, because the change adds no file under it.
   **The 1523 -> 1531 step is +8, it is tree growth alone, and it closes exactly.** This branch
   adds **5** tracked files and no case to `tools/tests`: two `.md` — a campaign `criteria.md` and
@@ -1032,9 +1073,23 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `2033 files checked, no non-English content outside 1 exemption(s)` on
-  `measure/is-a-run-reproducible`, 2026-09-22. It read **1972** on `main` on 2026-09-18 with
-  `cell_b` paired.
+  runs, and reported `2040 files checked, no non-English content outside 1 exemption(s)` on
+  `feat/clamp-the-box` at `50a51a9`, 2026-09-24.
+  **The 2034 -> 2040 figure is NOT a +6 step and must not be read as one**, which is the whole
+  reason this bullet distinguishes what is on disk from what is committed. `main`'s clean-clone
+  walk is **2034**, measured the same day in a worktree; this branch adds **3** tracked files, so
+  a clean clone of it reports **2037**; and this checkout reports 2040 because the same **3**
+  untracked files this bullet already records are still on disk — the two gitignored campaign
+  binaries and `assets/scans/raw/scan 1 room scan.e57`. 2037 + 3 = 2040. Both ends were derived
+  by differencing `cite_tools.english.files_to_check` against `git ls-files` rather than carried
+  forward.
+  **A 32-file scratch directory was in this walk earlier the same day and had to be moved out
+  before the figure could be taken.** `tools/cite_tools/tree.py`'s `SKIP_NAMES` holds exactly
+  `.git`, so `.git/info/exclude` keeps a directory out of git and **not** out of `lint`; the
+  first reading of this branch was 2072 and it was wrong by exactly those 32. That is the second
+  time this has happened here, and the first is recorded three paragraphs down.
+  It read **2033** on `measure/is-a-run-reproducible` on 2026-09-22 and **1972** on `main` on
+  2026-09-18 with `cell_b` paired.
   **The 1972 -> 2033 step is +61 and closes exactly, and it is the first move in six to have a
   campaign in it.** `git diff --diff-filter=A --name-only 79b1acd..HEAD` counts **61** tracked
   files added, with `--diff-filter=D` and `--diff-filter=R` both **0**, and **all 61 are under
@@ -2477,7 +2532,24 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **59 records, all indexed** on 2026-09-21, the newest being
+    `ADR index` line reported **62 records, all indexed** on 2026-09-24 on
+    `feat/clamp-the-box` at `50a51a9`, the newest being
+    [ADR-0063](docs/adr/0063-the-drive-joint-may-not-be-clamped.md) — **the gripper's drive
+    joint may not be clamped**, `Accepted`, and the record that supersedes
+    [ADR-0062](docs/adr/0062-the-clamp-is-modelled-end-to-end.md) one day after it was written.
+    It publishes four measured arms so the door stays shut, and **what it does not buy is stated
+    in it**: the paired box spread is back at 2.418 mm against a real xArm's ±0.1 mm, the
+    divergence is still born at first jaw contact, and `DetachableJointInfo` carries no pose
+    field — so what decides where the box sits in the gripper is still the contact solve.
+    **Its own amendment of the same date is the part a reader must not miss**: ADR-0062's
+    rejected Option A was *"keep the clamp AND teach L3 to wait for the release"*, and only the
+    clamp half is shut — an L3 confirmation of the release ships in the same branch, without the
+    clamp and without the re-asking the 116-commands-zero-releases measurement condemned.
+    **The step from 59 is +3 and NOT from 2026-09-21's tree**: `main` already held **60** before
+    this branch, because ADR-0061's merge moved no count here, and the branch adds ADR-0062 and
+    ADR-0063. That staleness was this file's, not the branch's, and it is the fifth time a
+    figure in this section has been found stale by somebody re-running rather than reading.
+    It read **59 records, all indexed** on 2026-09-21, the newest being
     [ADR-0060](docs/adr/0060-take-the-ik-solution-nearest-the-arm.md) — take the IK solution
     nearest the arm rather than the first one that plans, `Proposed`, and the record that amends
     ADR-0026's branch policy. It read **58 records, all indexed** on `main`, 2026-09-18 — then the
@@ -2521,7 +2593,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **60** on 2026-09-21 against `doctor`'s 59, **59**
+    also matches `0000-template.md`; it read **63** on 2026-09-24 against `doctor`'s 62,
+    **60** on 2026-09-21 against `doctor`'s 59, **59**
     on `main` on 2026-09-18 against `doctor`'s
     58, **57** at `7c6e902` that same day against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
     against `doctor`'s 55, **55** on 2026-09-10 at `523ffd9` against
