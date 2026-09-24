@@ -1369,8 +1369,9 @@ private:
     result->release_pose = current_pose();
 
     report(Place::Feedback::PHASE_RELEASING, 0.7);
-    const auto gripper =
-      command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort, handle);
+    // `release_jaws` and not `command_gripper`: a stalled open SUCCEEDS, so the
+    // release has to be confirmed rather than assumed. See that function.
+    const auto gripper = release_jaws(max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
       finish(gripper.result);
       return;
@@ -1589,8 +1590,10 @@ private:
     const auto release_pose = current_pose();
 
     report(Transfer::Feedback::PHASE_RELEASING);
-    const auto gripper =
-      command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort, handle);
+    // `release_jaws` and not `command_gripper`: this branch's own comment below
+    // describes a test `result.code` cannot make, because a stalled open
+    // SUCCEEDS. See that function.
+    const auto gripper = release_jaws(max_effort, handle);
     if (gripper.result.code != ResultCode::SUCCESS) {
       // The jaws did not open, so the part is still between them. Reported as
       // held rather than as transferred: L4's recovery for a stuck gripper and
@@ -2563,6 +2566,63 @@ private:
     }
 
     outcome.result = make_result(ResultCode::SUCCESS);
+    return outcome;
+  }
+
+  /// Open the jaws fully and CONFIRM they opened, re-asking until they have.
+  ///
+  /// `GripperActionController` SUCCEEDS a command it has declared stalled: the
+  /// stall is a field in the result, never the goal's status. So a release that
+  /// did not happen comes back `SUCCESS`, `result.code` alone cannot see it, and
+  /// only `gripper_is_holding` can. Measured on this cell on 2026-09-24, both
+  /// sides of a pair and again single-sided: an open commanded onto a held part
+  /// returned `commanded 88.9 mm, reached 50.0 mm, stalled=true -> holding`
+  /// while the jaws were still shut; `Place` retreated on that success and the
+  /// part was carried off the place pose and dropped 39 mm above the belt,
+  /// wherever the retreat had got to. The two sides dropped it 74.68 mm apart.
+  ///
+  /// THE CONFIRMATION IS THE GATE, NOT THE RESPONSE — ADR-0058's rule, one layer
+  /// up, for the same reason. A fully-open command is idempotent, so asking
+  /// again is free and correct. Each round trip is an action result and not a
+  /// sleep (P4), and the bound is `gripper_result_timeout_`, the same declared
+  /// number a single command already waits on, counted in the same clock
+  /// (ADR-0045) — not a second duration invented here.
+  ///
+  /// NOT A SIMULATION WORKAROUND, WHICH IS WHY IT BELONGS HERE. A physical
+  /// gripper also takes time to open, and a physical `GripperActionController`
+  /// also reports a stall when the joint has not moved within its own timeout.
+  /// An arm that retreats while the part is still between its pads is the same
+  /// defect on both backends, so the fix is the same on both (P2).
+  template<typename Handle>
+  GripperOutcome release_jaws(double max_effort_n, const Handle & handle)
+  {
+    const rclcpp::Time deadline = now() + gripper_result_timeout_;
+    GripperOutcome outcome;
+    do {
+      outcome = command_gripper(cite_skills::gripper_max_width_m(travel_), max_effort_n, handle);
+      if (outcome.result.code != ResultCode::SUCCESS || !outcome.holding) {
+        return outcome;
+      }
+    } while (now() < deadline);
+
+    // `holding_` is deliberately left unwritten: the part is still between the
+    // pads, so the caller's `still_holding` must stay true and L4 must get the
+    // stuck-gripper recovery rather than the completed-handoff one.
+    std::ostringstream detail;
+    // Fixed at a tenth of a millimetre, the same as `describe_empty_grasp` and the
+    // gripper log line above. Left to the default `%g` this printed "50" where its
+    // neighbours print "50.0 mm", so one gripper width was rendered two ways in one
+    // log — and a reader comparing a failure against the line that produced it has
+    // to notice that they are the same number.
+    detail.setf(std::ios::fixed);
+    detail.precision(1);
+    detail << "commanded the jaws fully open and they still read as holding the part "
+           << gripper_result_timeout_.seconds() << " s later, at "
+           << outcome.reached_width_m * 1000.0 << " mm against a commanded "
+           << outcome.commanded_width_m * 1000.0 << " mm. The part was NOT released and "
+           << "this arm has not moved: retreating on this would carry it off the place "
+           << "pose and drop it wherever the retreat reached";
+    outcome.result = make_result(ResultCode::EXECUTION_FAILED, detail.str());
     return outcome;
   }
 
