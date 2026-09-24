@@ -678,6 +678,47 @@ between them.**
 
 ---
 
+### #87 — A clamped drive joint sits dead for ~0.3 s and then moves at a saturated rate, and why is unestablished
+**Opened 2026-09-24, on the measurement in
+[ADR-0063](adr/0063-the-drive-joint-may-not-be-clamped.md).** Cite that record; the arms are not
+copied here (P1).
+
+**What is established.** With `gz::sim::Joint::SetPositionLimits` tightening the gripper's
+drive-joint travel limit to the position it was stopped at, an open command from
+`GripperActionController` produces **no joint motion at all for the controller's own
+`stall_timeout` of 0.3 s** — long enough for it to declare a stall and return
+`reached 50.0 mm, stalled=true, reached_goal=false` — and the joint then moves at a **saturated
+2.0 rad/s**, with no acceleration ramp. The control arm, same cycle, same host, same commit
+minus the travel limit, opens promptly and peaks at **0.952 rad/s**, the declared
+`gripper_max_drive_rate_rad_s`. Both readings are from one single-side run each, recorded off
+`/cite/cell_b/picker/joint_states` on a host confirmed empty of containers first.
+
+**Repeated commands make it worse rather than better**, which is the part that rules out "the
+command simply arrives late": with `Place` re-commanding the open until the declared
+`gripper_result_timeout_` expired, the joint stayed pinned for the whole window — **116
+commands, zero releases**, both sides of a pair.
+
+**What is NOT established, and nothing here attributes it.** Why the joint is dead for that
+window. Two readings are consistent with it and neither is tested: a command the joint-limit
+enforcement holds back, and a controller whose own abort path is what finally lets the command
+through. **The saturated 2.0 rad/s is a clue and not an explanation** — it is not the declared
+drive rate, so whatever produced it bypassed the rate the close obeyed.
+
+**The cheapest measurement that would settle it.** Record the drive joint's **command
+interface** alongside its position through an open, on a cell with the travel limit in force —
+`/dynamic_joint_states` carries command values where the hardware exports them, and the joint
+trace already exists as scratch tooling. If the command is present and the joint is not moving,
+it is the limit; if the command is absent until the controller aborts, it is the controller.
+**One run answers it, and this item is not worth more than that** unless somebody proposes
+constraining that joint again — which [ADR-0063](adr/0063-the-drive-joint-may-not-be-clamped.md)
+forbids.
+
+**Cross-references, neither of them an attribution.** **#86** is the residual paired spread this
+work was chasing when it found this, and **#85** is the unresolved localisation question behind
+both. Sharing a session is not sharing a cause.
+
+---
+
 ## 2. Known defects
 
 ### #36 — The grasp predicate: decided, specified, implemented; the gate is not fully cleared

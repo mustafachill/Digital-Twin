@@ -146,6 +146,25 @@ if(BUILD_TESTING)
   # from the description and no goal can move it. Hence a timeout of twice the
   # one above; still no Gazebo.
   add_launch_test(test/test_grasp_predicate_launch.py TIMEOUT 1200)
+
+  # `GripperActionController` SUCCEEDS a command it has declared stalled, so an
+  # open commanded onto a part that does not let go comes back SUCCESS and `Place`
+  # retreated on it — dropping the box 39 mm above the belt, at a different point
+  # on each side of a pair (ADR-0063's measurement table). `release_jaws` confirms
+  # the release with the grasp predicate instead of reading the result code, and
+  # this drives that through the real skill server against a fake gripper that
+  # answers the way the real controller does.
+  #
+  # The same shape of rig as the three above — generated description on mock
+  # hardware, a real move_group, the real skill server — with one arm and one fake
+  # action server. The control and the defect are two `Place` goals in ONE rig,
+  # differing in nothing but what the gripper reports, so the timeout is the
+  # abort rig's rather than the parametrized one's: still no Gazebo, but two
+  # grasps, two places and FOUR millimetre-scale motions in the control — the
+  # `MoveTo home` each case plans from, then `Place`'s approach, descent and
+  # retreat. The defect case makes three of the four: it fails at the release, so
+  # the retreat it must not make is never planned.
+  add_launch_test(test/test_release_confirmation_launch.py TIMEOUT 600)
 endif()
 
 ament_package()

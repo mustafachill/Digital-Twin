@@ -1,10 +1,18 @@
 # ADR-0061: Hold the box still while the jaws are shut on it
 
-- **Status:** Accepted 2026-09-23 (corrected 2026-09-22) — **promoted by the project owner**,
+- **Status:** Accepted 2026-09-23 (corrected 2026-09-22, amended 2026-09-23 and 2026-09-24) —
+  **promoted by the project owner**,
   on all three clauses of the promotion condition being met and on the first CI run ever to
   bring a cell up with this plugin in the world. **[Replaced 2026-09-23, kept for the record:]**
   *"Proposed (corrected 2026-09-22)"*. See "Promotion — 2026-09-23" at the end of this record
   for what promotion rests on and the four things it does not establish.
+  **Two amendments have since been made to one section and they cancel out**, and the section
+  "Amendments — 2026-09-23 and 2026-09-24: the drive joint was clamped and then unclamped",
+  immediately after this block, is what states that in one place. [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md)
+  amended "It does not touch the joint"; [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md)
+  superseded ADR-0062, reverted its implementation in full, and **withdrew that amendment**. So
+  the section's own text stands again exactly as written and this plugin does not touch the
+  joint.
   The correction below is untouched: **the Decision is unchanged**: the box is
   still held rigidly while the drive joint is stalled on it, and released when the jaws are
   commanded open. What was wrong is one supporting sentence under "It cannot fire on empty
@@ -20,7 +28,49 @@
   [ADR-0023](0023-simulated-grasping-via-attachment.md),
   [ADR-0029](0029-simulated-grasping-by-friction.md) (superseded by this record),
   [ADR-0051](0051-restate-the-hull-grasp-gate.md),
-  [ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md), CLAUDE.md §3 (P1, P2, P4)
+  [ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md),
+  [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md) (amended this record 2026-09-23,
+  superseded by 0063),
+  [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md) (withdrew that amendment 2026-09-24 and
+  restored this record intact), CLAUDE.md §3 (P1, P2, P4)
+
+## Amendments — 2026-09-23 and 2026-09-24: the drive joint was clamped and then unclamped
+
+**Net effect: none. This record stands exactly as it was written**, and the two in-place
+markers under "It does not touch the joint" are kept because how that happened is the part
+that transfers.
+
+**2026-09-23, by [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md).** That record amended
+this one's "It does not touch the joint": the plugin was to stop the drive joint at the box's
+declared width, so that the capture instant stopped being decided by the contact solver. The
+property this section bought — the stall the cell reads is still the controller's, at the box's
+width, with every consumer untouched — was to be kept and made deterministic.
+
+**2026-09-24, by [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md).** ADR-0062 was
+implemented, measured and refuted in one day. Clamping the joint puts a second mechanism on a
+joint `GripperActionController` already owns through `gz_ros2_control`, and the cell could not
+let go: the release happened 0.3 s after the controller had already aborted it, `Place`
+retreated on that success, and the box was dropped 39 mm above the belt, 74.68 mm apart between
+two sides of a pair. ADR-0063 supersedes ADR-0062, **reverts its implementation in full**, and
+**withdraws the 2026-09-23 amendment**. The simulation may not stop, limit or otherwise take
+hold of that joint.
+
+**What survives of the amendment, and it is why it is not deleted.** What ADR-0062 was written
+for is still open, and one thing it established is kept: the capture instant *can* be made
+deterministic — both sides captured the box at exactly `0.405605 rad` in every run of every arm
+that used its crossing detector. What remains contact-decided is **where the box sits in the
+gripper**, which ADR-0063 hands to its own successor.
+
+**What stands, plainly.** The Decision of this record is unchanged and binds: while the drive
+joint is stalled the box is held rigidly in the gripper frame, released when the jaws are
+commanded open, and **the plugin does not touch the joint**.
+
+**How the markers came to need this section.** Both amendments were written as in-place markers
+alone, with no section, no mention in the status line and no `Related:` entry — so a reader
+meeting this record's `Accepted` status had no way to know that a section of it had been
+amended twice by two records, one of which superseded the other. A marker says *this sentence
+was changed*; only a section can say *what stands now*. That is rule 3 under "In-place markers"
+in [`README.md`](README.md), and it was not followed.
 
 ## Correction — 2026-09-22: the rail exclusion does not reject a mid-stroke free-air rest, and the implementation has been changed to a part-width window
 
@@ -169,6 +219,22 @@ this a change to the plant and not to the contract. `cite_skills::gripper_is_hol
 
 The one thing that changes is that the box, having stopped the jaws, can no longer be twisted or
 dragged by them afterwards.
+
+**[Amended 2026-09-24 — see [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md).]** The
+amendment below is itself withdrawn: ADR-0062 was implemented, measured, and superseded, and
+the drive joint may not be clamped at all. **The section's own text, under the amendment,
+stands again exactly as written** — this plugin does not touch the joint. The amendment is
+left where it is rather than deleted, because what it was written for is still open: the
+capture instant WAS shown to be makeable deterministic, and what remains contact-decided is
+where the box sits in the gripper, which ADR-0063 hands to its own successor.
+
+**[Amended 2026-09-23 — see [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md).]** The
+plugin now stops the drive joint at the box's width. The property this section bought is
+kept — the stall the cell reads is still the controller's, still at the box's width, and
+every consumer of it is still untouched — but it is now deterministic rather than produced
+by the contact solver. What forced the change is measured: the close duration is drawn
+from a distribution with no upper bound, and it is where the two sides of a pair part
+company, by 1.34 s.
 
 ### It needs no contact sensors
 
