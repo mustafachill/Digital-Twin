@@ -1,6 +1,6 @@
 # ADR-0062: The clamp is modelled end to end — the jaws stop at the box
 
-- **Status:** Proposed
+- **Status:** Superseded by 0063
 - **Date:** 2026-09-23
 - **Deciders:** Project owner, as the final decision maker, in those words
 - **Related:** [ADR-0061](0061-hold-the-box-while-the-jaws-are-shut.md) (amended by this record),

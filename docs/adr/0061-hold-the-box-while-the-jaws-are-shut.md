@@ -161,6 +161,14 @@ project has already paid for.
 
 ### It does not touch the joint
 
+**[Amended 2026-09-24 — see [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md).]** The
+amendment below is itself withdrawn: ADR-0062 was implemented, measured, and superseded, and
+the drive joint may not be clamped at all. **The section's own text, under the amendment,
+stands again exactly as written** — this plugin does not touch the joint. The amendment is
+left where it is rather than deleted, because what it was written for is still open: the
+capture instant WAS shown to be makeable deterministic, and what remains contact-decided is
+where the box sits in the gripper, which ADR-0063 hands to its own successor.
+
 **[Amended 2026-09-23 — see [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md).]** The
 plugin now stops the drive joint at the box's width. The property this section bought is
 kept — the stall the cell reads is still the controller's, still at the box's width, and
