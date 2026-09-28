@@ -104,6 +104,45 @@ Chosen.
   leaves the jaws with a sideways kick once the cell owns the timing, that is a separate
   question and it is still open.
 
+## Measurement — 2026-09-28: the sideways push is gone, and two of three runs meet the bar
+
+Three paired runs on this branch, one machine, `docker ps` confirmed empty before each.
+Each box read at its own events, so the two worlds' clock phase cancels.
+
+| | final spread | plant sideways | counterpart sideways |
+|---|---|---|---|
+| ADR-0061, the stall trigger | 1.150 / 1.116 / 1.269 mm | 0.003 / 0.003 / 1.341 mm | 0.882 / 1.257 / 0.003 mm |
+| ADR-0064, a second threshold | 0.728 / 0.513 / 1.225 mm | 0.656 / 1.309 / 1.073 mm | 0.808 / 0.740 / 0.001 mm |
+| **this record, told by the cell** | **0.412 / 0.048 / 0.054 mm** | **0.000 mm** | **0.000 mm** |
+
+**Clause 1 is met and it is the load-bearing one.** It said this change is refuted if a side
+still travels a millimetre during the fall. **No side travels anything at all** — six sides,
+three runs, 0.000 mm. The push that both superseded records were written to chase does not
+occur.
+
+**Clause 2 is met.** Empty air `commanded 88.9 mm, reached 88.9 mm, stalled=false,
+reached_goal=true -> empty`; the box `commanded 45.0 mm, reached 49.7 mm, stalled=true,
+reached_goal=false -> holding`, identical on both sides and contact-determined, not modelled.
+**Clause 4 is met**: both scenarios printed the bare verdict on `cell_b`, `continuous_line`
+carrying 3 of 3 with three attaches and three releases against three genuine friction stalls.
+
+**What is NOT met is the project owner's bar, which is a different bar.** It is the ±0.1 mm a
+real xArm 5 repeats a taught position to, and it requires **all three** runs. Two are — 0.048 mm
+and 0.054 mm. One is 0.412 mm.
+
+**Where that one differs is measured, not guessed, and it is not the grasp.** Its two sides
+began **2.010 s** apart in simulated time, against 0.001 s and 0.040 s for the two runs that
+met the bar, and its spread is born in the grasp-and-carry phase rather than at the release —
+0.180 mm at first movement, 0.392 mm by the peak, and 0.412 mm at rest, with the release adding
+0.024 mm. **Three points are three points**; the correlation is stated as what it is and
+attributed to nothing.
+
+**It may be the harness rather than the cell.** The rig spawns the two boxes sequentially and
+waits a fixed interval before driving the cycle, and it does not check that both have come to
+rest — which is the same defect a scenario had before a settle gate was added to it. Whether
+the outlier survives a two-sided settle gate is the next measurement and it touches no
+production code.
+
 ## Promotion condition
 
 1. **Three paired runs**, reported whatever they say: the final spread and the sideways travel

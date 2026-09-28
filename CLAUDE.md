@@ -143,9 +143,23 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1564** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1569** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on
-  `feat/clamp-the-box` at `50a51a9`, 2026-09-24).
+  `feat/let-go-when-clear`, 2026-09-28).
+  **The 1564 -> 1569 step is +5 and it is the first in this bullet's recent history that is NOT
+  tree growth alone** — it is tree growth **minus** a deletion, and both halves were measured on
+  both sides in a worktree at `main` rather than differenced. The branch adds **5** tracked files
+  (`git diff --diff-filter=A --name-only main..HEAD`, with `--diff-filter=D` and `R` both **0**):
+  two `.md`, ADR-0064 and ADR-0065, and three `.py` — the simulation-only grasp-hold bridge and
+  its two guards. Per file: `test_superseded_real_time_requirement.py` 419 -> **422**, the three
+  `.py`; `test_a_removed_plan_key_stays_removed.py` 387 -> **390**, the same three under
+  `workspace/`; `test_interface_counts.py` 173 -> **175**, the two `.md`. That is +8. Against it,
+  `test_generate_world.py` 29 -> **26**: ADR-0065 removes eight world parameters the plugin no
+  longer reads, and the tests asserting them went with them. 8 - 3 = 5.
+  **A deletion in this figure is worth one line, because the bullet's whole argument is that it
+  measures the size of the trees and not coverage.** Eight assertions left the suite and the
+  number still rose.
+  It read **1564** on `feat/clamp-the-box` at `50a51a9`, 2026-09-24.
   **The 1560 -> 1564 step is +4, it is tree growth alone, and every term of it was MEASURED on
   both sides rather than attributed** — `main`'s figures were taken in a worktree at `main` the
   same day, not differenced from an earlier reading. The branch adds exactly **3** tracked files
@@ -413,12 +427,14 @@ bullet.
   branch's second remediation round — which is what
   it takes: a
   `--host-only` run cannot refresh the third at all. `144 passed, 0 failed
-  (shell gate self-tests)`; `1671 passed, 1 skipped` for the host half, which walks `tools/`
+  (shell gate self-tests)`; `1676 passed, 1 skipped` for the host half, which walks `tools/`
   **and**
   `tests/`, so it is larger than the `tools/tests` collection above; and, over the eleven
-  first-party packages, eleven per-package summaries totalling **1499 tests, 61 skipped**.
-  **Re-taken on `feat/clamp-the-box` at `50a51a9` on 2026-09-24**, from full runs with
-  `docker ps` confirmed empty first and empty again after.
+  first-party packages, eleven per-package summaries totalling **1523 tests, 0 failures, 61
+  skipped**. Its exit status was 0 and all eleven packages reported `100% tests passed`.
+  **Re-taken on `feat/let-go-when-clear` on 2026-09-28**, from one full run with `docker ps`
+  confirmed empty first and empty again after; `test_skill_cancellation` did not fire.
+  It read 144 / 1671 / 1499 on `feat/clamp-the-box` at `50a51a9` on 2026-09-24.
   **TWO full runs were taken back to back and THEY DID NOT AGREE ON THEIR EXIT STATUS.** The
   first exited 0. The second exited **1**, on `test_skill_cancellation (Timeout)` — 1 of 17 in
   `cite_orchestration`, the **ctest** timeout, not an assertion. Re-run alone it passes in
@@ -461,10 +477,11 @@ bullet.
   file was written for, in a fourth assertion.**
   **The host-half tie closes exactly, and it was predicted before it was measured** —
   **the fourth time that has been done here, and the prediction was written into the session
-  before the run was started**: `tools/tests` collects **1564** and `tests/` **108**, and
-  1564 + 108 = 1672 = **1671** passed plus the 1 skipped, on `feat/clamp-the-box` at `50a51a9`,
-  2026-09-24 — and it closed identically on **both** of that day's full runs, including the one
-  that exited 1 on a package test.
+  before the run was started**: `tools/tests` collects **1569** and `tests/` **108**, and
+  1569 + 108 = 1677 = **1676** passed plus the 1 skipped, on `feat/let-go-when-clear`,
+  2026-09-28. It closed the same way at 1564 + 108 = 1672 on `feat/clamp-the-box` at `50a51a9`
+  on 2026-09-24, on **both** of that day's full runs, including the one that exited 1 on a
+  package test.
   **One reading of this figure was taken against a tree that did not yet contain its own new
   file, and the +2 it was missing is exactly this tie's arithmetic working.** A host half of
   1669 + 1 was reported before
@@ -1073,8 +1090,10 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `2040 files checked, no non-English content outside 1 exemption(s)` on
-  `feat/clamp-the-box` at `50a51a9`, 2026-09-24.
+  runs, and reported `2045 files checked, no non-English content outside 1 exemption(s)` on
+  `feat/let-go-when-clear`, 2026-09-28 — **+5, the same five tracked files the collection above
+  reconciles**, with the same 3 untracked still on disk, so a clean clone reports **2042**.
+  It read `2040 files checked` on `feat/clamp-the-box` at `50a51a9`, 2026-09-24.
   **The 2034 -> 2040 figure is NOT a +6 step and must not be read as one**, which is the whole
   reason this bullet distinguishes what is on disk from what is committed. `main`'s clean-clone
   walk is **2034**, measured the same day in a worktree; this branch adds **3** tracked files, so
@@ -2532,8 +2551,22 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **62 records, all indexed** on 2026-09-24 on
-    `feat/clamp-the-box` at `50a51a9`, the newest being
+    `ADR index` line reported **64 records, all indexed** on 2026-09-28 on
+    `feat/let-go-when-clear`, the newest being
+    [ADR-0065](docs/adr/0065-the-cell-says-what-it-holds.md) — **the cell says what it holds and
+    the simulation is told**, `Proposed`, written after two records were refuted in five days
+    and **both were the same mistake**: ADR-0062 and
+    [ADR-0064](docs/adr/0064-let-go-once-the-pads-are-clear.md) each guessed, from the drive
+    joint's position, something `cite_skills::gripper_is_holding` already decides. The plugin is
+    now told over a topic — Harmonic's own `DetachableJoint` shape — by a **simulation-only**
+    bridge fed by L3's first-ever `RobotState` publisher, a contract this repository declared and
+    never wired. **Measured: the sideways push both superseded records chased is gone** — 0.000 mm
+    on six sides across three paired runs — and the box spread reads 0.412 / 0.048 / 0.054 mm
+    against 1.150 / 1.116 / 1.269 before. **Two of three meet the ±0.1 mm a real xArm repeats to
+    and one does not**, and the outlier's two sides began 2.010 s apart in simulated time against
+    0.001 s and 0.040 s for the two that did. Three runs, one machine, nothing registered in
+    advance — **not a rate**. It read **62 records** on 2026-09-24 on
+    `feat/clamp-the-box` at `50a51a9`, the newest then being
     [ADR-0063](docs/adr/0063-the-drive-joint-may-not-be-clamped.md) — **the gripper's drive
     joint may not be clamped**, `Accepted`, and the record that supersedes
     [ADR-0062](docs/adr/0062-the-clamp-is-modelled-end-to-end.md) one day after it was written.
@@ -2593,7 +2626,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **63** on 2026-09-24 against `doctor`'s 62,
+    also matches `0000-template.md`; it read **65** on 2026-09-28 against `doctor`'s 64,
+    **63** on 2026-09-24 against `doctor`'s 62,
     **60** on 2026-09-21 against `doctor`'s 59, **59**
     on `main` on 2026-09-18 against `doctor`'s
     58, **57** at `7c6e902` that same day against `doctor`'s 56, **56** on 2026-09-17 on `feat/cell-b-zone`
