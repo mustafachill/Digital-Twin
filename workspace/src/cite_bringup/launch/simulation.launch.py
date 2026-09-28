@@ -322,7 +322,10 @@ def _bring_up(context: LaunchContext) -> list:
             OnProcessExit(
                 target_action=last_step,
                 on_exit=_gate(
-                    _skills(plan) + (_line(plan) if line else []) + [witness],
+                    _skills(plan)
+                    + _grasp_hold_bridges(plan, side, gz_env)
+                    + (_line(plan) if line else [])
+                    + [witness],
                     "the skill servers",
                 ),
             )
@@ -987,6 +990,76 @@ def _skills(plan: Plan) -> list:
                 # nothing else notices: the action server simply stops existing,
                 # and the next goal waits out its client's deadline.
                 on_exit=_fatal_on_exit(f"the {manager.asset} skill server"),
+                sigterm_timeout=TEARDOWN_SIGTERM_S,
+                sigkill_timeout=TEARDOWN_SIGKILL_S,
+            )
+        )
+    return actions
+
+
+def _grasp_hold_bridges(plan: Plan, side: str, gz_env: dict[str, str]) -> list:
+    """One simulation-only bridge per arm, telling the world what that arm holds.
+
+    THE ONLY SIMULATION-ONLY NODE THIS REPOSITORY STARTS, and its presence here
+    and nowhere else is ADR-0065's third promotion clause. L3 publishes custody
+    identically on both backends — a physical arm saying what it holds is wanted
+    for its own sake — and this turns that fact into an attach or a detach on the
+    grasp-hold plugin's own Gazebo-transport topics. There is no plugin on the
+    hardware path and nothing that needs one, because a real gripper holds what
+    it has clamped.
+
+    In the arm's own namespace, so it subscribes to the `state` its skill server
+    publishes without anyone assembling that name — the same arrangement
+    `_skills` and `_planning_scene` already have. The two Gazebo topics come from
+    the plan, which generated them from the same `ids.interface` calls the world
+    generator used for the plugin's own declaration, so nothing here builds a
+    name (P1, CLAUDE.md §8).
+
+    Gated with the skill servers rather than before them, and that is safe rather
+    than lucky: the state topic is LATCHED, so a bridge that starts after its
+    server is told the value that is already current instead of waiting for the
+    next change.
+
+    An arm whose end effector declares no grasp gets no plugin in the world and
+    no entry in the plan, so it gets no bridge here either — one condition, three
+    consumers.
+    """
+    by_asset = {hold.asset: hold for hold in plan.grasp_holds}
+    actions: list = []
+    for manager in plan.controller_managers:
+        hold = by_asset.get(manager.asset)
+        if hold is None:
+            continue
+        actions.append(
+            Node(
+                package="cite_bringup",
+                executable="grasp_hold_bridge.py",
+                name="grasp_hold_bridge",
+                namespace=manager.node.rsplit("/", 1)[0],
+                parameters=[
+                    {
+                        "zone": plan.zone,
+                        "side": side,
+                        "attach_topic": hold.attach_topic,
+                        "detach_topic": hold.detach_topic,
+                        # It reads no clock — it acts on messages and waits for
+                        # nothing — and is declared anyway, so that every node in
+                        # this launch answers the question the same way.
+                        "use_sim_time": True,
+                    }
+                ],
+                # It speaks the Gazebo transport, so it carries this side's
+                # partition like every other process in this launch that does
+                # (ADR-0042). The node also sets it on its own transport options
+                # from the same door; both, because a partition that reaches only
+                # one of the two fails silently.
+                additional_env=gz_env,
+                output="screen",
+                # A bridge that dies leaves the arm reporting grasps that the
+                # simulation never hears about: the box stays on friction alone,
+                # the cell looks like it is working, and the measurement it was
+                # built for is wrong rather than absent.
+                on_exit=_fatal_on_exit(f"the {manager.asset} grasp-hold bridge"),
                 sigterm_timeout=TEARDOWN_SIGTERM_S,
                 sigkill_timeout=TEARDOWN_SIGKILL_S,
             )

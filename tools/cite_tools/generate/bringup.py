@@ -147,6 +147,29 @@ class _ConveyorView:
 
 
 @dataclass(frozen=True)
+class _GraspHoldView:
+    """Where the simulation-only grasp-hold bridge tells one arm's plugin to
+    take hold and to let go (ADR-0065).
+
+    In the plan rather than left to the launch file for the reason a belt's
+    command topic is: these are Gazebo-transport names, `generate.world` emits
+    the same two into the plugin's own declaration from the same
+    `ids.interface` calls, and a launch file assembling either of them would be
+    a second place the name is made (P1, CLAUDE.md §8).
+
+    THE ARM'S OWN STATE TOPIC IS NOT HERE, and its absence is deliberate. The
+    bridge is started in that arm's namespace, exactly as its skill server and
+    its planning-scene loader are, so it subscribes to the relative name the
+    skill server publishes on. A third statement of `/cite/<zone>/<asset>/state`
+    would be a name made where one already resolves.
+    """
+
+    asset: str
+    attach_topic: str
+    detach_topic: str
+
+
+@dataclass(frozen=True)
 class _SensorView:
     asset: str
     detection_topic: str
@@ -217,6 +240,20 @@ def _planning_link(asset: ResolvedAsset, which: str) -> str | None:
         return None
     suffix = planning.tip_link_suffix if which == "tip" else kinematics.base_link_suffix
     return ids.link(asset.id, suffix)
+
+
+def _has_a_grasp_specification(cell: ResolvedCell, asset: ResolvedAsset) -> bool:
+    """Whether this asset fits an end effector that declares how it grasps.
+
+    The identical condition `generate.world._grasp_holds` applies, because the
+    two answer one question: an arm gets a grasp-hold plugin exactly when it gets
+    a bridge to drive it, and an arm with a bridge and no plugin would publish
+    attach messages into a partition where nothing listens.
+    """
+    if asset.instance.end_effector is None:
+        return False
+    effector = cell.end_effector_type(asset.instance.end_effector.type)
+    return effector is not None and effector.grasp is not None
 
 
 def _grasp(cell: ResolvedCell, asset: ResolvedAsset, field: str) -> float | None:
@@ -464,6 +501,17 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
         if asset.instance.configuration is not None
     )
 
+    grasp_holds = tuple(
+        _GraspHoldView(
+            asset=asset.id,
+            # The same two calls `generate.world` makes for the same two names.
+            attach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_ATTACH),
+            detach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_DETACH),
+        )
+        for asset in cell.of_category("robot")
+        if _has_a_grasp_specification(cell, asset)
+    )
+
     sensors = tuple(
         _SensorView(
             asset=asset.id,
@@ -490,6 +538,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             sides=cell.sides,
             managers=managers,
             conveyors=conveyors,
+            grasp_holds=grasp_holds,
             sensors=sensors,
             detection=_detection(cell),
         )

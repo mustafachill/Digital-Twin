@@ -297,6 +297,34 @@ plan:
       installed_speed_mps: {{ conveyor.installed_speed_mps | m }}
 {% endfor %}
 
+  # Where the SIMULATION-ONLY grasp-hold bridge tells one arm's world plugin to
+  # take hold of a work-piece and to let go of it (ADR-0065).
+  #
+  # Gazebo-transport names, carrying the empty message Harmonic's own
+  # `DetachableJoint` takes on the same two element names. They are in the plan
+  # for the reason a belt's command topic is: `generate/world.py` emits the same
+  # two into the plugin's own declaration from the same `ids.interface` calls, so
+  # what the bridge publishes to and what the plugin listens on come from one
+  # place. A launch file assembling either would be a second place the name is
+  # made.
+  #
+  # THE ARM'S OWN `state` TOPIC IS DELIBERATELY NOT HERE. The bridge runs in that
+  # arm's namespace, exactly as its skill server does, and subscribes to the
+  # relative name the server publishes on — so the name resolves rather than
+  # being stated a third time.
+  #
+  # ONE ENTRY PER ARM THAT FITS A GRASPING END EFFECTOR, which is the identical
+  # condition the world generator emits a plugin under: an entry with no plugin
+  # behind it would publish into a partition where nothing listens. A zone whose
+  # arms grasp nothing carries an empty list, and the hardware launch reads this
+  # section not at all.
+  grasp_holds:
+{% for hold in grasp_holds %}
+    - asset: {{ hold.asset }}
+      attach_topic: {{ hold.attach_topic }}
+      detach_topic: {{ hold.detach_topic }}
+{% endfor %}
+
   # A break beam has TWO topics and they are deliberately not the same name.
   #
   #   detection_topic — the TYPED `DetectionEvent`. The name a station's trigger

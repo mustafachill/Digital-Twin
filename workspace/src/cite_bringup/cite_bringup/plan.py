@@ -567,6 +567,29 @@ class Conveyor:
 
 
 @dataclass(frozen=True)
+class GraspHold:
+    """Where the simulation-only grasp-hold bridge drives one arm's world plugin.
+
+    Two Gazebo-transport topics, generated per arm from the L0 asset id and
+    emitted into the plugin's own declaration from the same calls (ADR-0065).
+    Nothing in this package builds either of them.
+
+    ONE ARM'S STATE TOPIC IS NOT HERE. The bridge runs in that arm's namespace and
+    subscribes to the relative name its skill server publishes on, which is how
+    the skill server and the planning-scene loader already resolve theirs.
+
+    READ BY THE SIMULATED LAUNCH AND BY NOTHING ELSE. An entry here does not
+    start anything by itself; `simulation.launch.py` is the only place in this
+    repository that reads it, and a guard in this package's tests fails if that
+    stops being true.
+    """
+
+    asset: str
+    attach_topic: str
+    detach_topic: str
+
+
+@dataclass(frozen=True)
 class Sensor:
     """One break beam: where its level arrives, and where its events go.
 
@@ -634,6 +657,9 @@ class Plan:
     sides: tuple[Side, ...]
     controller_managers: tuple[ControllerManager, ...]
     conveyors: tuple[Conveyor, ...]
+    #: One per arm that fits a grasping end effector. Empty on a zone whose arms
+    #: grasp nothing, and read by the simulated launch alone (ADR-0065).
+    grasp_holds: tuple[GraspHold, ...]
     sensors: tuple[Sensor, ...]
     #: `None` when the zone declares no sensors, which is a real state and not a
     #: fault: a cell with no beams has nothing for a detection server to watch,
@@ -752,6 +778,27 @@ def load(path: Path) -> Plan:
         for index, entry in enumerate(_sequence(plan, "conveyors"))
     )
 
+    # `_optional`, and the default is an empty list rather than a refusal: a zone
+    # whose arms grasp nothing declares none, and a plan written before this
+    # section existed must load rather than be rejected — the same rule the
+    # removed-key test in this package states for the other direction.
+    grasp_holds = tuple(
+        GraspHold(
+            asset=_require(entry, "asset", f"grasp hold {index}"),
+            attach_topic=_require(entry, "attach_topic", f"grasp hold {index}"),
+            detach_topic=_require(entry, "detach_topic", f"grasp hold {index}"),
+        )
+        for index, entry in enumerate(_optional(plan, "grasp_holds", []) or [])
+    )
+
+    for hold in grasp_holds:
+        if hold.attach_topic == hold.detach_topic:
+            raise PlanError(
+                f"grasp hold {hold.asset!r} names one topic for both taking hold and "
+                f"letting go ({hold.attach_topic}). The plugin would attach and detach "
+                "on the same message and the box would be taken and dropped at random."
+            )
+
     sensors = tuple(
         Sensor(
             asset=_require(entry, "asset", f"sensor {index}"),
@@ -795,6 +842,7 @@ def load(path: Path) -> Plan:
         sides=sides,
         controller_managers=managers,
         conveyors=conveyors,
+        grasp_holds=grasp_holds,
         sensors=sensors,
         detection=detection,
         workpieces=_workpieces(_optional(plan, "workpieces")),

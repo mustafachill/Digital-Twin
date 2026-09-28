@@ -131,6 +131,25 @@ def interface(zone: str, asset_id: str, name: str) -> str:
     return f"{namespace(zone, asset_id)}/{name}"
 
 
+#: The two interfaces the simulated grasp hold is driven on (ADR-0065).
+#:
+#: Stated here rather than at each call site because two generators emit them —
+#: `generate.world` into the plugin's own SDF declaration, `generate.bringup`
+#: into the bring-up plan the bridge reads — and a leaf spelled twice is a name
+#: made in two places whichever file holds the spelling. They are leaves and not
+#: whole names: :func:`interface` is still what builds the name, from the zone
+#: and the asset id, exactly as it does for a belt's command and state topics.
+#:
+#: NOT ROS TOPICS. Both are Gazebo transport, carrying the empty message
+#: Harmonic's own `DetachableJoint` takes on its `<attach_topic>` and
+#: `<detach_topic>`, and both are prefixed by the side's `GZ_PARTITION` at
+#: runtime. They are formed here anyway, for the reason :func:`partition` is: a
+#: transport this project addresses is a namespace like any other, and a
+#: hand-typed one fails silently.
+GRASP_ATTACH = "grasp/attach"
+GRASP_DETACH = "grasp/detach"
+
+
 def scope(reserved: str, name: str) -> str:
     """`/cite/<reserved>/<name>` — facility-, twin-, or line-scope state."""
     if reserved not in RESERVED_SCOPES:

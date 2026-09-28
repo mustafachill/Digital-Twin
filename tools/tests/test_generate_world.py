@@ -104,6 +104,33 @@ class TestTheNamesAgreeWithThePlan:
         emitted = {value(p, "state_topic") for p in plugins(world_xml(cell), "cite_break_beam")}
         assert emitted == declared
 
+    def test_grasp_hold_topics_match_the_bring_up_plan(self, cell) -> None:
+        # The cell's bridge reads the plan; the plugin reads the world. If these
+        # two came apart the bridge would publish attach messages into a topic
+        # nothing listens on, and the arm would carry the box on friction alone
+        # while every layer above reported a grasp — silently, because a
+        # gz-transport publication with no subscriber reports nothing.
+        plan = yaml.safe_load(bringup.generate(cell)[0].content)["plan"]
+        declared = {(entry["attach_topic"], entry["detach_topic"]) for entry in plan["grasp_holds"]}
+        emitted = {
+            (value(p, "attach_topic"), value(p, "detach_topic"))
+            for p in plugins(world_xml(cell), "cite_grasp_hold")
+        }
+        assert emitted == declared
+        assert len(declared) == 3
+
+    def test_every_arm_with_a_plugin_has_a_plan_entry_and_the_reverse(self, cell) -> None:
+        # One condition, two generators. An arm with an entry and no plugin gets a
+        # bridge publishing into an empty partition; an arm with a plugin and no
+        # entry gets a plugin nothing can ever tell to take hold.
+        plan = yaml.safe_load(bringup.generate(cell)[0].content)["plan"]
+        assert {entry["asset"] for entry in plan["grasp_holds"]} == {
+            "arm_1",
+            "arm_2",
+            "arm_3",
+        }
+        assert len(plugins(world_xml(cell), "cite_grasp_hold")) == len(plan["grasp_holds"])
+
     def test_only_declared_workpieces_are_carried_or_watched(self, cell) -> None:
         # A belt that carried whatever entered its volume would drag the gripper
         # reaching into it; a beam that noticed every model would be broken by
@@ -193,10 +220,50 @@ class TestGraspHoldAidIsInstantiated:
         attach_links = {value(p, "attach_link") for p in plugins(root, "cite_grasp_hold")}
         assert attach_links == {"arm_1_link5", "arm_2_link5", "arm_3_link5"}
 
-    def test_the_drive_joint_matches_the_one_the_gripper_controller_commands(self, cell) -> None:
+    def test_the_topics_are_generated_per_arm_from_the_asset_id(self, cell) -> None:
+        # The names the cell's own bridge publishes to (ADR-0065). Built by the
+        # SAME `ids.interface` calls the bring-up plan makes, which is what stops
+        # the plugin listening on one name and the bridge publishing to another
+        # — and asserted here rather than in one place, because a plugin nobody
+        # can reach is a plugin that never attaches and never says so.
         root = world_xml(cell)
-        drive_joints = {value(p, "drive_joint") for p in plugins(root, "cite_grasp_hold")}
-        assert drive_joints == {"arm_1_drive_joint", "arm_2_drive_joint", "arm_3_drive_joint"}
+        assert {value(p, "attach_topic") for p in plugins(root, "cite_grasp_hold")} == {
+            "/cite/cell_a/arm_1/grasp/attach",
+            "/cite/cell_a/arm_2/grasp/attach",
+            "/cite/cell_a/arm_3/grasp/attach",
+        }
+        assert {value(p, "detach_topic") for p in plugins(root, "cite_grasp_hold")} == {
+            "/cite/cell_a/arm_1/grasp/detach",
+            "/cite/cell_a/arm_2/grasp/detach",
+            "/cite/cell_a/arm_3/grasp/detach",
+        }
+
+    def test_taking_hold_and_letting_go_are_never_one_topic(self, cell) -> None:
+        for plugin in plugins(world_xml(cell), "cite_grasp_hold"):
+            assert value(plugin, "attach_topic") != value(plugin, "detach_topic")
+
+    def test_the_plugin_is_told_nothing_it_would_have_to_judge_with(self, cell) -> None:
+        # ADR-0065's decision, as a check. Every parameter below let this plugin
+        # re-derive `cite_skills::gripper_is_holding`'s verdict for itself, which
+        # is the defect ADR-0062 and ADR-0064 were both refuted attempts to tune.
+        # Emitting any of them again would not fail anything else here — the
+        # plugin would simply ignore it — so the absence is asserted directly.
+        judged_here = (
+            "drive_joint",
+            "stall_velocity_threshold",
+            "stall_timeout_s",
+            "detach_margin_rad",
+            "open_position",
+            "closed_position",
+            "hold_position_min_rad",
+            "hold_position_max_rad",
+        )
+        for plugin in plugins(world_xml(cell), "cite_grasp_hold"):
+            emitted = [tag for tag in judged_here if plugin.find(tag) is not None]
+            assert not emitted, (
+                f"the world hands the grasp-hold plugin {emitted}, which is what it used "
+                "to decide a grasp with. The cell decides that now (ADR-0065)."
+            )
 
     def test_only_declared_workpieces_are_graspable(self, cell) -> None:
         root = world_xml(cell)
@@ -204,46 +271,20 @@ class TestGraspHoldAidIsInstantiated:
             assert [e.text for e in plugin.findall("graspable")] == list(cell.workpiece_models)
 
 
-class TestGraspHoldReadsTheGripperControllerRatherThanRestatingIt:
-    """P1: the stall threshold and timeout are the SAME number the
-    `GripperActionController` loads, read from the generated controller
-    configuration rather than a second copy declared for this plugin.
+class TestGraspHoldStillDiscriminatesWhichPartIsInTheJaws:
+    """The one question the cell cannot answer, and therefore the only judgement
+    left in this plugin (ADR-0065, decision 3): WHICH declared graspable is in
+    the jaws.
+
+    THIS CLASS USED TO BE `TestGraspHoldReadsTheGripperControllerRatherThanRestatingIt`,
+    and beside it `TestGraspHoldWindowReplacesTheRailExclusion`. Between them
+    they held that the plugin's stall threshold, stall timeout, release margin,
+    rails and part-width window were the same numbers the controller and
+    `cite_skills::gripper_is_holding` use. Not one of those reaches the plugin
+    any more — the cell publishes its verdict and the plugin is told — so the
+    tests are deleted rather than adapted: a test kept against a parameter that
+    is gone asserts its own fixture.
     """
-
-    def test_stall_velocity_threshold_matches_the_gripper_controller(self, cell) -> None:
-        controllers = {c.name: c for c in cell.asset("arm_1").controllers}
-        controller = controllers["arm_1_gripper_controller"]
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        assert float(value(plugin, "stall_velocity_threshold")) == pytest.approx(
-            controller.parameters["stall_velocity_threshold"]
-        )
-
-    def test_stall_timeout_matches_the_gripper_controller(self, cell) -> None:
-        controllers = {c.name: c for c in cell.asset("arm_1").controllers}
-        controller = controllers["arm_1_gripper_controller"]
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        assert float(value(plugin, "stall_timeout_s")) == pytest.approx(
-            controller.parameters["stall_timeout"]
-        )
-
-    def test_detach_margin_matches_the_gripper_controller_s_goal_tolerance(self, cell) -> None:
-        # Reused rather than declared a third time (P1): it is already "how
-        # close counts as the same position" for that controller's own success
-        # check.
-        controllers = {c.name: c for c in cell.asset("arm_1").controllers}
-        controller = controllers["arm_1_gripper_controller"]
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        assert float(value(plugin, "detach_margin_rad")) == pytest.approx(
-            controller.parameters["goal_tolerance"]
-        )
-
-    def test_the_rails_match_the_end_effector_s_declared_stroke(self, cell) -> None:
-        effector = cell.end_effector_type("xarm_parallel_gripper")
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        assert float(value(plugin, "open_position")) == pytest.approx(effector.grasp.open_position)
-        assert float(value(plugin, "closed_position")) == pytest.approx(
-            effector.grasp.closed_position
-        )
 
     def test_the_radius_matches_the_declared_grasp_specification(self, cell) -> None:
         effector = cell.end_effector_type("xarm_parallel_gripper")
@@ -251,57 +292,6 @@ class TestGraspHoldReadsTheGripperControllerRatherThanRestatingIt:
         assert float(value(plugin, "attach_radius_m")) == pytest.approx(
             effector.grasp.attach_radius_m
         )
-
-
-class TestGraspHoldWindowReplacesTheRailExclusion:
-    """ADR-0061's 2026-09-22 correction. A joint's rest position is judged
-    against the facility's declared part window (`cite_skills::gripper_is_holding`'s
-    own, ADR-0052 option F), not against whether it rests at either declared
-    rail — the rail exclusion admitted a mid-stroke rest position closing on
-    empty air can and does reach.
-    """
-
-    def test_the_window_is_narrower_than_the_full_declared_stroke(self, cell) -> None:
-        effector = cell.end_effector_type("xarm_parallel_gripper")
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        low = float(value(plugin, "hold_position_min_rad"))
-        high = float(value(plugin, "hold_position_max_rad"))
-        assert low < high
-        # Both rails must sit outside the window, or a release, or a stroke
-        # that never touched a part at all, would be read as a stall on one.
-        assert not low <= effector.grasp.open_position <= high
-        assert not low <= effector.grasp.closed_position <= high
-
-    def test_the_window_matches_the_declared_part_interval_through_the_linkage(self, cell) -> None:
-        # The SAME inversion `cite_tools.validate.physical`'s discrimination
-        # check performs (ADR-0052 §A.7), computed here independently of
-        # `world.py`'s own private helper — a check on the wiring, not a
-        # restatement of it.
-        effector = cell.end_effector_type("xarm_parallel_gripper")
-        grasp = effector.grasp
-        widths = cell.workpiece_widths
-        narrow_m = widths.narrowest_m - grasp.stall_band_narrow_m
-        wide_m = widths.widest_m + grasp.stall_band_wide_m
-        at_narrow = grasp.linkage.position_for(narrow_m)
-        at_wide = grasp.linkage.position_for(wide_m)
-        expected_low, expected_high = min(at_narrow, at_wide), max(at_narrow, at_wide)
-
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        assert float(value(plugin, "hold_position_min_rad")) == pytest.approx(expected_low)
-        assert float(value(plugin, "hold_position_max_rad")) == pytest.approx(expected_high)
-
-    def test_the_measured_free_air_rest_position_falls_outside_the_window(self, cell) -> None:
-        # A tester drove a `Grasp` on empty air at this end effector's default
-        # 45 mm command and measured the controller settle at 46.0 mm — a rest
-        # position the rail exclusion this window replaced did not reject,
-        # because 46.0 mm is mid-stroke and nowhere near either rail.
-        effector = cell.end_effector_type("xarm_parallel_gripper")
-        free_air_position = effector.grasp.linkage.position_for(0.046)
-
-        plugin = plugins(world_xml(cell), "cite_grasp_hold")[0]
-        low = float(value(plugin, "hold_position_min_rad"))
-        high = float(value(plugin, "hold_position_max_rad"))
-        assert not low <= free_air_position <= high
 
 
 class TestTheGeneratorRefusesRatherThanGuesses:

@@ -185,174 +185,186 @@
       <watch>workpiece</watch>
     </plugin>
 
-    <!-- arm_1 — rigid grasp hold (ADR-0061).
+    <!-- arm_1 — rigid grasp hold (ADR-0061), told what to hold by the
+         cell (ADR-0065).
 
          A world system for the reason the module docstring gives, not the one
          the belt and the beam have: it reaches across two independently
          spawned models, the arm and the work-piece, exactly as they do.
 
-         MECHANISM. While arm_1_drive_joint's own velocity has not exceeded
-         stall_velocity_threshold for stall_timeout_s of SIMULATED time — the
-         identical rule GripperActionController already applies, read from the
-         same controller configuration rather than restated (P1) — and the
-         joint's own position lies inside [hold_position_min_rad,
-         hold_position_max_rad], a declared graspable model within
-         attach_radius_m of arm_1_link5's own origin is fixed to it.
-         It is released the instant the joint moves back past the position it
-         was holding at by more than detach_margin_rad, in the direction that
-         opens the jaws.
+         MECHANISM. The arm's L3 skill server publishes what it holds, on
+         `/cite/cell_a/arm_1/state`; a simulation-only bridge in
+         `cite_bringup` turns each change of that fact into a message here.
+         attach_topic takes hold of the nearest declared graspable model within
+         attach_radius_m of arm_1_link5's own origin; detach_topic lets
+         go. Both carry the empty message Harmonic's own DetachableJoint takes
+         on the same two element names, because this is that system's shape and
+         not a protocol invented here.
 
-         THE WINDOW, NOT THE RAILS (ADR-0061's 2026-09-22 correction). A rail
-         exclusion — refusing a joint resting at open_position or
-         closed_position — assumed a stall on a real part always lands
-         strictly between the two and that jaws closing on nothing always
-         settle at one of them. Neither holds: the ordinary close target is
-         mid-stroke, and a tester measured jaws closing on empty air settling
-         mid-stroke too. hold_position_min_rad/hold_position_max_rad are the
-         drive-joint positions the facility's declared part interval — widened
-         by the stall band at each edge — maps to through the end effector's
-         own linkage, resolved at generation time rather than in this plugin
-         (`cite_simulation` does not link against `cite_skills`). It is the
-         identical window `cite_skills::gripper_is_holding` judges a stall
-         inside (ADR-0052 option F), so the two can never disagree about what
-         counts as a grasp.
+         WHAT WAS REMOVED, AND WHY IT IS THE DECISION RATHER THAN A TIDY-UP.
+         This plugin used to decide for itself that a grasp had begun — the
+         drive joint still for the controller's own stall_timeout, resting
+         inside the part-width window, a graspable within radius — and that it
+         had ended, from a release margin and that same window. Every one of
+         those re-derived `cite_skills::gripper_is_holding`, which is the one
+         place this project decided what separates a grasp from a stall on
+         nothing (ADR-0052). Two thresholds in two packages answering one
+         question is what P1 forbids, and tuning them cost two decisions inside
+         a week: ADR-0062 clamped the drive joint and was refuted by a paired
+         spread of 74.68 mm, ADR-0064 moved the release threshold to the
+         window's open end and was refuted by its own promotion condition. The
+         cell already knows the answer; it now says so, and this plugin is told.
+         Neither record's tables are restated here (P1) — read them.
 
-         It touches no controller and no command interface. The jaws still
-         close, still meet the part, still stop at its width and still report a
-         stall — that signal is what `cite_skills::gripper_is_holding` reads and
-         this plugin never sees it. The one thing this changes is that the box,
-         having stopped the jaws, can no longer be twisted or dragged by them
-         afterwards (ADR-0061).
+         WHAT IT KEEPS is the one question the cell cannot answer: WHICH
+         declared graspable is in the jaws. That is attach_radius_m and the
+         <graspable> list, and it is a fact about the world rather than about
+         the gripper. The weld still goes to arm_1_link5, the arm's own
+         last link, and never to a finger — a finger-borne box stops being the
+         obstacle the jaws stall against and they close straight through it,
+         which is ADR-0023's measured failure (ADR-0061).
 
-         Nothing above ros2_control knows this exists. It speaks Gazebo
-         transport only — it does not even speak that much, since it neither
-         publishes nor subscribes — and it is absent from the hardware path,
-         where a real gripper needs no help holding what it has clamped. -->
+         IT NOW SPEAKS GAZEBO TRANSPORT, WHICH IT DELIBERATELY DID NOT. The
+         claim that used to stand here — that it neither publishes nor
+         subscribes, and reads the ECM alone — is retired, and the cost is
+         stated where the property was claimed: a subscription can miss a
+         message, where a plugin reading the ECM every step could not. That is
+         the trade ADR-0065 takes knowingly, and it is why the state topic this
+         chain starts from is latched rather than volatile.
+
+         It still touches no controller and no command interface. The jaws
+         close, meet the part, stop at its width and report a stall exactly as
+         before; this plugin reads none of that and writes none of it, and the
+         drive joint has one owner (ADR-0063). Nothing above ros2_control knows
+         it exists, and it is absent from the hardware path, where a real
+         gripper needs no help holding what it has clamped. -->
     <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
       <attach_link>arm_1_link5</attach_link>
-      <drive_joint>arm_1_drive_joint</drive_joint>
-      <stall_velocity_threshold>0.05</stall_velocity_threshold>
-      <stall_timeout_s>0.3</stall_timeout_s>
-      <detach_margin_rad>0.01</detach_margin_rad>
-      <open_position>0</open_position>
-      <closed_position>0.85</closed_position>
       <attach_radius_m>0.2</attach_radius_m>
-      <hold_position_min_rad>0.382862254</hold_position_min_rad>
-      <hold_position_max_rad>0.428190715</hold_position_max_rad>
+      <attach_topic>/cite/cell_a/arm_1/grasp/attach</attach_topic>
+      <detach_topic>/cite/cell_a/arm_1/grasp/detach</detach_topic>
       <graspable>workpiece</graspable>
     </plugin>
 
-    <!-- arm_2 — rigid grasp hold (ADR-0061).
+    <!-- arm_2 — rigid grasp hold (ADR-0061), told what to hold by the
+         cell (ADR-0065).
 
          A world system for the reason the module docstring gives, not the one
          the belt and the beam have: it reaches across two independently
          spawned models, the arm and the work-piece, exactly as they do.
 
-         MECHANISM. While arm_2_drive_joint's own velocity has not exceeded
-         stall_velocity_threshold for stall_timeout_s of SIMULATED time — the
-         identical rule GripperActionController already applies, read from the
-         same controller configuration rather than restated (P1) — and the
-         joint's own position lies inside [hold_position_min_rad,
-         hold_position_max_rad], a declared graspable model within
-         attach_radius_m of arm_2_link5's own origin is fixed to it.
-         It is released the instant the joint moves back past the position it
-         was holding at by more than detach_margin_rad, in the direction that
-         opens the jaws.
+         MECHANISM. The arm's L3 skill server publishes what it holds, on
+         `/cite/cell_a/arm_2/state`; a simulation-only bridge in
+         `cite_bringup` turns each change of that fact into a message here.
+         attach_topic takes hold of the nearest declared graspable model within
+         attach_radius_m of arm_2_link5's own origin; detach_topic lets
+         go. Both carry the empty message Harmonic's own DetachableJoint takes
+         on the same two element names, because this is that system's shape and
+         not a protocol invented here.
 
-         THE WINDOW, NOT THE RAILS (ADR-0061's 2026-09-22 correction). A rail
-         exclusion — refusing a joint resting at open_position or
-         closed_position — assumed a stall on a real part always lands
-         strictly between the two and that jaws closing on nothing always
-         settle at one of them. Neither holds: the ordinary close target is
-         mid-stroke, and a tester measured jaws closing on empty air settling
-         mid-stroke too. hold_position_min_rad/hold_position_max_rad are the
-         drive-joint positions the facility's declared part interval — widened
-         by the stall band at each edge — maps to through the end effector's
-         own linkage, resolved at generation time rather than in this plugin
-         (`cite_simulation` does not link against `cite_skills`). It is the
-         identical window `cite_skills::gripper_is_holding` judges a stall
-         inside (ADR-0052 option F), so the two can never disagree about what
-         counts as a grasp.
+         WHAT WAS REMOVED, AND WHY IT IS THE DECISION RATHER THAN A TIDY-UP.
+         This plugin used to decide for itself that a grasp had begun — the
+         drive joint still for the controller's own stall_timeout, resting
+         inside the part-width window, a graspable within radius — and that it
+         had ended, from a release margin and that same window. Every one of
+         those re-derived `cite_skills::gripper_is_holding`, which is the one
+         place this project decided what separates a grasp from a stall on
+         nothing (ADR-0052). Two thresholds in two packages answering one
+         question is what P1 forbids, and tuning them cost two decisions inside
+         a week: ADR-0062 clamped the drive joint and was refuted by a paired
+         spread of 74.68 mm, ADR-0064 moved the release threshold to the
+         window's open end and was refuted by its own promotion condition. The
+         cell already knows the answer; it now says so, and this plugin is told.
+         Neither record's tables are restated here (P1) — read them.
 
-         It touches no controller and no command interface. The jaws still
-         close, still meet the part, still stop at its width and still report a
-         stall — that signal is what `cite_skills::gripper_is_holding` reads and
-         this plugin never sees it. The one thing this changes is that the box,
-         having stopped the jaws, can no longer be twisted or dragged by them
-         afterwards (ADR-0061).
+         WHAT IT KEEPS is the one question the cell cannot answer: WHICH
+         declared graspable is in the jaws. That is attach_radius_m and the
+         <graspable> list, and it is a fact about the world rather than about
+         the gripper. The weld still goes to arm_2_link5, the arm's own
+         last link, and never to a finger — a finger-borne box stops being the
+         obstacle the jaws stall against and they close straight through it,
+         which is ADR-0023's measured failure (ADR-0061).
 
-         Nothing above ros2_control knows this exists. It speaks Gazebo
-         transport only — it does not even speak that much, since it neither
-         publishes nor subscribes — and it is absent from the hardware path,
-         where a real gripper needs no help holding what it has clamped. -->
+         IT NOW SPEAKS GAZEBO TRANSPORT, WHICH IT DELIBERATELY DID NOT. The
+         claim that used to stand here — that it neither publishes nor
+         subscribes, and reads the ECM alone — is retired, and the cost is
+         stated where the property was claimed: a subscription can miss a
+         message, where a plugin reading the ECM every step could not. That is
+         the trade ADR-0065 takes knowingly, and it is why the state topic this
+         chain starts from is latched rather than volatile.
+
+         It still touches no controller and no command interface. The jaws
+         close, meet the part, stop at its width and report a stall exactly as
+         before; this plugin reads none of that and writes none of it, and the
+         drive joint has one owner (ADR-0063). Nothing above ros2_control knows
+         it exists, and it is absent from the hardware path, where a real
+         gripper needs no help holding what it has clamped. -->
     <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
       <attach_link>arm_2_link5</attach_link>
-      <drive_joint>arm_2_drive_joint</drive_joint>
-      <stall_velocity_threshold>0.05</stall_velocity_threshold>
-      <stall_timeout_s>0.3</stall_timeout_s>
-      <detach_margin_rad>0.01</detach_margin_rad>
-      <open_position>0</open_position>
-      <closed_position>0.85</closed_position>
       <attach_radius_m>0.2</attach_radius_m>
-      <hold_position_min_rad>0.382862254</hold_position_min_rad>
-      <hold_position_max_rad>0.428190715</hold_position_max_rad>
+      <attach_topic>/cite/cell_a/arm_2/grasp/attach</attach_topic>
+      <detach_topic>/cite/cell_a/arm_2/grasp/detach</detach_topic>
       <graspable>workpiece</graspable>
     </plugin>
 
-    <!-- arm_3 — rigid grasp hold (ADR-0061).
+    <!-- arm_3 — rigid grasp hold (ADR-0061), told what to hold by the
+         cell (ADR-0065).
 
          A world system for the reason the module docstring gives, not the one
          the belt and the beam have: it reaches across two independently
          spawned models, the arm and the work-piece, exactly as they do.
 
-         MECHANISM. While arm_3_drive_joint's own velocity has not exceeded
-         stall_velocity_threshold for stall_timeout_s of SIMULATED time — the
-         identical rule GripperActionController already applies, read from the
-         same controller configuration rather than restated (P1) — and the
-         joint's own position lies inside [hold_position_min_rad,
-         hold_position_max_rad], a declared graspable model within
-         attach_radius_m of arm_3_link5's own origin is fixed to it.
-         It is released the instant the joint moves back past the position it
-         was holding at by more than detach_margin_rad, in the direction that
-         opens the jaws.
+         MECHANISM. The arm's L3 skill server publishes what it holds, on
+         `/cite/cell_a/arm_3/state`; a simulation-only bridge in
+         `cite_bringup` turns each change of that fact into a message here.
+         attach_topic takes hold of the nearest declared graspable model within
+         attach_radius_m of arm_3_link5's own origin; detach_topic lets
+         go. Both carry the empty message Harmonic's own DetachableJoint takes
+         on the same two element names, because this is that system's shape and
+         not a protocol invented here.
 
-         THE WINDOW, NOT THE RAILS (ADR-0061's 2026-09-22 correction). A rail
-         exclusion — refusing a joint resting at open_position or
-         closed_position — assumed a stall on a real part always lands
-         strictly between the two and that jaws closing on nothing always
-         settle at one of them. Neither holds: the ordinary close target is
-         mid-stroke, and a tester measured jaws closing on empty air settling
-         mid-stroke too. hold_position_min_rad/hold_position_max_rad are the
-         drive-joint positions the facility's declared part interval — widened
-         by the stall band at each edge — maps to through the end effector's
-         own linkage, resolved at generation time rather than in this plugin
-         (`cite_simulation` does not link against `cite_skills`). It is the
-         identical window `cite_skills::gripper_is_holding` judges a stall
-         inside (ADR-0052 option F), so the two can never disagree about what
-         counts as a grasp.
+         WHAT WAS REMOVED, AND WHY IT IS THE DECISION RATHER THAN A TIDY-UP.
+         This plugin used to decide for itself that a grasp had begun — the
+         drive joint still for the controller's own stall_timeout, resting
+         inside the part-width window, a graspable within radius — and that it
+         had ended, from a release margin and that same window. Every one of
+         those re-derived `cite_skills::gripper_is_holding`, which is the one
+         place this project decided what separates a grasp from a stall on
+         nothing (ADR-0052). Two thresholds in two packages answering one
+         question is what P1 forbids, and tuning them cost two decisions inside
+         a week: ADR-0062 clamped the drive joint and was refuted by a paired
+         spread of 74.68 mm, ADR-0064 moved the release threshold to the
+         window's open end and was refuted by its own promotion condition. The
+         cell already knows the answer; it now says so, and this plugin is told.
+         Neither record's tables are restated here (P1) — read them.
 
-         It touches no controller and no command interface. The jaws still
-         close, still meet the part, still stop at its width and still report a
-         stall — that signal is what `cite_skills::gripper_is_holding` reads and
-         this plugin never sees it. The one thing this changes is that the box,
-         having stopped the jaws, can no longer be twisted or dragged by them
-         afterwards (ADR-0061).
+         WHAT IT KEEPS is the one question the cell cannot answer: WHICH
+         declared graspable is in the jaws. That is attach_radius_m and the
+         <graspable> list, and it is a fact about the world rather than about
+         the gripper. The weld still goes to arm_3_link5, the arm's own
+         last link, and never to a finger — a finger-borne box stops being the
+         obstacle the jaws stall against and they close straight through it,
+         which is ADR-0023's measured failure (ADR-0061).
 
-         Nothing above ros2_control knows this exists. It speaks Gazebo
-         transport only — it does not even speak that much, since it neither
-         publishes nor subscribes — and it is absent from the hardware path,
-         where a real gripper needs no help holding what it has clamped. -->
+         IT NOW SPEAKS GAZEBO TRANSPORT, WHICH IT DELIBERATELY DID NOT. The
+         claim that used to stand here — that it neither publishes nor
+         subscribes, and reads the ECM alone — is retired, and the cost is
+         stated where the property was claimed: a subscription can miss a
+         message, where a plugin reading the ECM every step could not. That is
+         the trade ADR-0065 takes knowingly, and it is why the state topic this
+         chain starts from is latched rather than volatile.
+
+         It still touches no controller and no command interface. The jaws
+         close, meet the part, stop at its width and report a stall exactly as
+         before; this plugin reads none of that and writes none of it, and the
+         drive joint has one owner (ADR-0063). Nothing above ros2_control knows
+         it exists, and it is absent from the hardware path, where a real
+         gripper needs no help holding what it has clamped. -->
     <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
       <attach_link>arm_3_link5</attach_link>
-      <drive_joint>arm_3_drive_joint</drive_joint>
-      <stall_velocity_threshold>0.05</stall_velocity_threshold>
-      <stall_timeout_s>0.3</stall_timeout_s>
-      <detach_margin_rad>0.01</detach_margin_rad>
-      <open_position>0</open_position>
-      <closed_position>0.85</closed_position>
       <attach_radius_m>0.2</attach_radius_m>
-      <hold_position_min_rad>0.382862254</hold_position_min_rad>
-      <hold_position_max_rad>0.428190715</hold_position_max_rad>
+      <attach_topic>/cite/cell_a/arm_3/grasp/attach</attach_topic>
+      <detach_topic>/cite/cell_a/arm_3/grasp/detach</detach_topic>
       <graspable>workpiece</graspable>
     </plugin>
 

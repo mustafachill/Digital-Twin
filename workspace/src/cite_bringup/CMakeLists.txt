@@ -23,9 +23,16 @@ ament_python_install_package(${PROJECT_NAME})
 # Both are installed as PROGRAMS and both therefore need their executable bit in
 # the tree - `test_every_installed_program_is_executable_in_the_tree` checks it,
 # because a program that cannot exec produces no launch event at all.
+# ADR-0065's grasp-hold bridge. The cell says what it holds and the simulation is
+# told: it subscribes to one arm's `RobotState` and turns each change of custody
+# into an attach or a detach on that arm's grasp-hold plugin, over the Gazebo
+# transport. SIMULATION-ONLY - `simulation.launch.py` is the only thing in this
+# repository that starts it, and `test_the_bridge_is_simulation_only.py` fails if
+# that stops being true.
 install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
   ${PROJECT_NAME}/lifecycle_driver.py
+  ${PROJECT_NAME}/grasp_hold_bridge.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -78,6 +85,17 @@ if(BUILD_TESTING)
   # on. A correct check that nothing calls is the defect this catches, and it is
   # the one that was there.
   ament_add_pytest_test(simulation_launch test/test_simulation_launch.py)
+  # ADR-0065 clause 3: a source check that the grasp-hold bridge is reachable
+  # from no launch but the simulated one. It is the only simulation-only NODE
+  # this repository starts, and nothing but a scan of the tree can say that it
+  # stays that way - a launch file is data, and a reviewer reading one file
+  # cannot see the other.
+  ament_add_pytest_test(bridge_is_simulation_only
+    test/test_the_bridge_is_simulation_only.py)
+  # ADR-0065 clause 2 and CLAUDE.md §10: which transition produces which message,
+  # and that a repeat produces none. Driven against a fake gz publisher, so it
+  # brings no simulator up and needs no partition.
+  ament_add_pytest_test(grasp_hold_bridge test/test_grasp_hold_bridge.py)
   # ADR-0047. The pair supervisor's failure rule and its boundary. The sides it
   # is driven against here are not ROS at all, which is the record's membership
   # test executed rather than asserted, and the import-graph check is what makes

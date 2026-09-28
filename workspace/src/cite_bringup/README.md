@@ -41,6 +41,7 @@ answers some interfaces and not others.
 | `cite_bringup/readiness.py` | the token a side announces when it has finished coming up |
 | `cite_bringup/readiness_witness.py` | the process that blocks until this side is serving, then exits |
 | `cite_bringup/pair.py` | the pair supervisor: starts both sides, joins them, owns the pair's lifetime |
+| `cite_bringup/grasp_hold_bridge.py` | **simulation-only**: turns one arm's published custody into an attach or a detach on that arm's grasp-hold plugin (ADR-0065) |
 | `launch/simulation.launch.py` | the launch description built from that plan |
 
 The split is so the plan reader can be unit-tested. A launch file is awkward to test; a
@@ -97,6 +98,17 @@ both.
 
 This package advertises nothing of its own. Its interface is the launch arguments and the
 plan.
+
+**One exception, and it is simulation-only.** `grasp_hold_bridge.py` subscribes to one arm's
+`RobotState` — which L3 publishes identically on both backends, because a physical arm saying
+what it holds is wanted for its own sake — and publishes an empty message on that arm's
+grasp-hold topics over the **Gazebo** transport, in the shape Harmonic's own `DetachableJoint`
+uses. Both of those names come from the plan; it builds neither. It exists because the plugin
+used to decide for itself when a grasp began and ended, which was a second copy of
+`cite_skills::gripper_is_holding`'s judgement and cost two decisions in a week (ADR-0062,
+ADR-0064). It is started by `simulation.launch.py` and by nothing else, and
+`test/test_the_bridge_is_simulation_only.py` fails if that stops being true — a ROS node, unlike
+a Gazebo system plugin, has no structural reason it cannot reach the hardware path.
 
 | Launch argument | Default | Meaning |
 |---|---|---|
