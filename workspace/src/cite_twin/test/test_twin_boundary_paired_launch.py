@@ -421,6 +421,37 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             "a belt command crossed the boundary in SIM",
         )
 
+    def test_a_belt_stop_crosses_in_every_mode(self, proc_output):
+        """ADR-0066: a zero setpoint is never gated, and leaving a mode stops its belts.
+
+        Counted as exact lines, because `0` is a prefix of every other value
+        this class sends. VALIDATED -> SIM must send exactly one zero to each
+        side on its own; only then is an operator's zero sent in SIM, so the
+        second zero on each side can have come from nothing but that.
+        """
+        def zeros(side: str) -> int:
+            line = f"{side}: belt {BELT} 0"
+            return sum(1 for text in _stdout(proc_output).splitlines() if text == line)
+
+        sides = ("plant", "counterpart")
+        self._spin_until(
+            lambda: self.node.count_subscribers(TWIN_BELT) > 0, "L5 subscribed to the belt"
+        )
+        self._enter_validated()
+        before = {side: zeros(side) for side in sides}
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "leaving VALIDATED").accepted)
+        for side in sides:
+            self._spin_until(
+                lambda side=side: zeros(side) == before[side] + 1,
+                f"leaving VALIDATED stopped the {side}'s belt",
+            )
+        stop = Float64(data=0.0)
+        for side in sides:
+            self._spin_until(
+                lambda side=side: self.belt.publish(stop) or zeros(side) >= before[side] + 2,
+                f"a stop sent in SIM reached the {side}",
+            )
+
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""
         self._enter_validated()

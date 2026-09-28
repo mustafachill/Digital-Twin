@@ -396,8 +396,9 @@ class TwinBoundary:
         # 4. The belt command (ADR-0066). One operator endpoint per conveyor,
         # on the plant's domain beside the skills, forwarded in memory to each
         # side's own command topic under the same routing table: refused in
-        # SIM, sent to both in VALIDATED and VIRTUAL_LEAD. Nothing crosses in
-        # the other direction; the belt's own state stays on its own side.
+        # SIM, sent to both in VALIDATED and VIRTUAL_LEAD — except a stop, which
+        # crosses in every mode. Nothing crosses in the other direction; the
+        # belt's own state stays on its own side.
         self._belt_publishers = {
             (side_name, conveyor.command_topic): side.node.create_publisher(
                 Float64, conveyor.command_topic, COMMAND
@@ -492,7 +493,9 @@ class TwinBoundary:
         The decision is `cite_twin.mode`'s; this method is the boundary between
         a service call and that decision. It does not start, stop or
         instantiate anything — ADR-0050 decision 4 and ADR-0047 clause 2 — so
-        there is nothing to wait for and the answer is immediate.
+        there is nothing to wait for and the answer is immediate. The one thing
+        a transition sends is a zero setpoint to the belts of any side the new
+        mode no longer commands (ADR-0066), which is published and not awaited.
         """
         with self._lock:
             before = self._authority.mode
@@ -517,6 +520,8 @@ class TwinBoundary:
                 ]:
                     del self._operands[key]
                 self._publish_mode()
+        if changed:
+            self._stop_belts_the_mode_does_not_command(verdict.mode)
 
         response.accepted = verdict.accepted
         response.result = ResultCode(code=verdict.code, detail=verdict.detail)
@@ -697,10 +702,18 @@ class TwinBoundary:
     def _on_belt_command(self, topic: str, message: Float64) -> None:
         """Forward one belt setpoint to the sides the mode routes a command to.
 
-        A topic has no result to carry a refusal, so a command refused by the
-        mode is dropped and said in the log, which is the only place a caller
-        of a topic can be told.
+        **A stop is never gated.** Zero goes to every side in every mode: a
+        physical belt is a drive whose setpoint persists (ADR-0038), and a mode
+        that refused a stop would leave running the belt it was set to protect.
+
+        A topic has no result to carry a refusal, so a non-zero command refused
+        by the mode is dropped and said in the log, which is the only place a
+        caller of a topic can be told.
         """
+        if message.data == 0.0:
+            for side_name in self._sides:
+                self._belt_publishers[(side_name, topic)].publish(message)
+            return
         with self._lock:
             mode = self._authority.mode
         chosen = route(mode)
@@ -713,6 +726,19 @@ class TwinBoundary:
             return
         for side_name in chosen.sides:
             self._belt_publishers[(side_name, topic)].publish(message)
+
+    def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
+        """Command to zero every belt on a side ``mode`` no longer routes to.
+
+        A setpoint sent in the old mode persists on its side, and in the new one
+        no operator command can reach that side except a stop; so the transition
+        itself sends the stop rather than leaving a belt nobody may command.
+        """
+        chosen = route(mode)
+        commanded = set(chosen.sides) if chosen.accepted else set()
+        for (side_name, _topic), publisher in self._belt_publishers.items():
+            if side_name not in commanded:
+                publisher.publish(Float64(data=0.0))
 
     def _forward_feedback(self, goal_handle, message) -> None:
         """Pass the PLANT's feedback through to the operator, unchanged.
