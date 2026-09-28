@@ -12,44 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Does the rigid grasp hold actually hold, and does it actually let go at the
-// right moment? (ADR-0061, ADR-0064)
+// Does the rigid grasp hold take hold of the right thing when it is told to,
+// and let go when it is told to? (ADR-0061, ADR-0065)
 //
-// WHY THIS FILE EXISTS. `grasp_hold.cpp`'s decision — stalled, resting inside
-// the declared hold-position window, and a graspable model within radius — is
-// stateful over simulated time and reads three ECM components together, so it
-// does not factor into a `zone_rules`-style pure function the way the belt's
-// and the beam's geometry do. This is that decision exercised against a real
-// physics step through `gz::sim::TestFixture`, exactly as
-// `test_conveyor_carry.cpp` exercises the belt.
+// WHAT THIS FILE USED TO TEST, AND WHY IT DOES NOT ANY MORE. Until ADR-0065 the
+// plugin decided for itself that a grasp had begun — the drive joint still for
+// the gripper controller's own `stall_timeout`, resting inside the declared
+// part-width window, a graspable within radius — and that it had ended, from a
+// release margin and that window's open end. Most of this file was that
+// decision: an apparatus that drove the jaw joint directly through
+// `JointVelocityCmd` and asserted on where the joint came to rest. Every one of
+// those thresholds re-derived `cite_skills::gripper_is_holding`, tuning them
+// refuted two decisions in a week, and none of them exists now. Tests that drove
+// a joint to a position and asserted on what the plugin made of it are therefore
+// not adapted, they are DELETED — a test kept alive against a mechanism that is
+// gone asserts its own apparatus. The implementation report for ADR-0065 names
+// each one and the property it held.
 //
-// The drive joint here is driven directly by the test, through
-// `JointVelocityCmd`, rather than by a `GripperActionController` — there is no
-// controller manager in this fixture and none is needed: what is under test is
-// what this plugin does with a joint's own position and velocity, not how a
-// controller produces them. `test/worlds/hold.sdf` has the full layout, with
-// `hold_position_min_rad`/`hold_position_max_rad` standing in for the window a
-// real cell resolves from L0 at generation time (ADR-0061's 2026-09-22
-// correction).
+// WHAT IS LEFT IS WHAT THE PLUGIN STILL DECIDES, which is the one question the
+// cell cannot answer: WHICH declared graspable is in the jaws, and what it is
+// welded to. That is exercised here against a real physics step through
+// `gz::sim::TestFixture`, exactly as `test_conveyor_carry.cpp` exercises the
+// belt, with the attach and detach driven over the same Gazebo transport the
+// generated world names — because that, since ADR-0065, is the only thing that
+// makes this plugin do anything at all.
+//
+// `test/worlds/hold.sdf` has the full layout: a fixed wrist with a jaw hanging
+// off it, and three boxes — one declared and in reach, one NEARER and not
+// declared, one declared and out of reach.
+
+#include <gz/msgs/empty.pb.h>
 
 #include <chrono>
-#include <cmath>
 #include <cstdint>
-#include <optional>
+#include <set>
 #include <string>
+#include <thread>
 
-#include <gz/math/Vector3.hh>
 #include <gz/sim/Entity.hh>
 #include <gz/sim/EntityComponentManager.hh>
 #include <gz/sim/Server.hh>
 #include <gz/sim/TestFixture.hh>
 #include <gz/sim/Util.hh>
 #include <gz/sim/components/DetachableJoint.hh>
-#include <gz/sim/components/Joint.hh>
-#include <gz/sim/components/JointPosition.hh>
-#include <gz/sim/components/JointVelocityCmd.hh>
 #include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Name.hh>
+#include <gz/transport/Node.hh>
 
 #include "gtest/gtest.h"
 
@@ -57,78 +65,98 @@ namespace
 {
 
 // --- What test/worlds/hold.sdf describes. One place, so a test cannot assert
-// --- against a joint or a radius the world does not have.
-constexpr const char * kJawJoint = "jaw_joint";
+// --- against a topic, a link or a model the world does not have.
+constexpr const char * kAttachTopic = "/test/hold/grasp/attach";
+constexpr const char * kDetachTopic = "/test/hold/grasp/detach";
+constexpr const char * kAttachLink = "wrist";
+constexpr const char * kJawLink = "jaw";
 constexpr const char * kNearBox = "box";
+constexpr const char * kNearerUndeclaredBox = "box_undeclared";
 constexpr const char * kFarBox = "box_far";
 
-//: Comfortably above <stall_velocity_threshold> (0.05 rad/s) and comfortably
-//: below the joint's own 10 rad/s limit.
-constexpr double kDriveRadS = 1.0;
+//: How long to let the world run while requiring that NOTHING happens. Long
+//: enough that any timer, stall clock or settling rule the plugin might still
+//: have would have expired several times over.
+constexpr uint64_t kQuietSteps = 2000;  // 2 s at the world's 1 ms step
 
-//: <stall_timeout_s> in the world, plus margin: how long to hold a commanded
-//: velocity of zero before asserting on whether a stall was recognised.
-constexpr uint64_t kSettleSteps = 200;  // 0.2 s at the world's 1 ms step
+//: A cap on a bounded wait, never a schedule (P4). Every wait below ends on the
+//: event it is waiting for; this only stops a broken build from hanging.
+constexpr uint64_t kWaitStepCap = 5000;
 
-//: How long to drive the joint before settling it, and how far that moves it —
-//: 0.4 rad, comfortably inside the declared hold-position window
-//: ([0.3, 0.6]) and clear of both declared rails (0.0 and 1.0).
-constexpr uint64_t kDriveSteps = 400;  // 0.4 s * 1.0 rad/s = 0.4 rad
+//: How often a wait for gz-transport discovery looks again. A poll period on an
+//: event — the publisher reporting a connection — and not a guess at how long
+//: discovery takes.
+constexpr std::chrono::milliseconds kDiscoveryPoll{1};
+constexpr int kDiscoveryPolls = 5000;
 
-//: <hold_position_min_rad> and <detach_margin_rad> in the world. This gripper
-//: opens towards SMALLER joint values (<open_position> 0.0, <closed_position>
-//: 1.0), exactly as the shipped one does, so the window's OPEN end is its
-//: minimum — which is what the release now has to be driven past (ADR-0064).
-constexpr double kWindowOpenEnd = 0.3;
-constexpr double kDetachMarginRad = 0.02;
-
-/// The whole apparatus: the world and a sampler of what the plugin did to it.
+/// The whole apparatus: the world, the two topics that drive it, and a sampler
+/// of what the plugin did.
 class Cell
 {
 public:
   Cell()
   : fixture_(kWorldPath)
   {
-    fixture_.OnPreUpdate(
-      [this](const gz::sim::UpdateInfo &, gz::sim::EntityComponentManager & ecm) {
-        this->DriveJoint(ecm);
-      });
     fixture_.OnPostUpdate(
       [this](const gz::sim::UpdateInfo &, const gz::sim::EntityComponentManager & ecm) {
         this->Sample(ecm);
       });
     fixture_.Finalize();
+    attach_ = node_.Advertise<gz::msgs::Empty>(kAttachTopic);
+    detach_ = node_.Advertise<gz::msgs::Empty>(kDetachTopic);
   }
 
   /// Advance an exact number of physics steps.
   void Step(uint64_t steps) {fixture_.Server()->Run(true, steps, false);}
 
-  /// Hold a commanded joint velocity for `steps`, then leave it commanded.
-  void Drive(double velocity, uint64_t steps)
+  /// Whether both publishers have reached the plugin's subscribers.
+  ///
+  /// Waited for rather than assumed. gz-transport discovery is asynchronous, and
+  /// a message published before the plugin's subscription is matched reaches
+  /// nobody — the same class of silence CLAUDE.md §10 records for ROS QoS, and
+  /// the reason the cell's own state topic is latched. A test that published
+  /// into that gap would fail for a reason that has nothing to do with the
+  /// plugin.
+  bool Connected()
   {
-    commanded_velocity_ = velocity;
-    Step(steps);
+    for (int i = 0; i < kDiscoveryPolls; ++i) {
+      if (attach_.HasConnections() && detach_.HasConnections()) {
+        return true;
+      }
+      std::this_thread::sleep_for(kDiscoveryPoll);
+    }
+    return false;
   }
 
-  /// Drive at `velocity` one step at a time until the joint reaches `target`,
-  /// then command zero. Bounded rather than open-ended — `max_steps` is a
-  /// safety cap on a broken build, never a schedule (P4): every step this
-  /// actually takes is a function of `target`, `velocity` and the physics step,
-  /// not of a guessed duration.
-  void DriveTo(double target, double velocity, uint64_t max_steps = 5000)
+  /// Tell the plugin to take hold, and step until it has (or give up).
+  bool TellItToTakeHold()
   {
-    commanded_velocity_ = velocity;
-    for (uint64_t i = 0; i < max_steps; ++i) {
+    if (!attach_.Publish(gz::msgs::Empty())) {
+      return false;
+    }
+    return StepUntil([this] {return attached_count_ > 0;});
+  }
+
+  /// Tell the plugin to let go, and step until it has (or give up).
+  bool TellItToLetGo()
+  {
+    if (!detach_.Publish(gz::msgs::Empty())) {
+      return false;
+    }
+    return StepUntil([this] {return attached_count_ == 0;});
+  }
+
+  /// Step one at a time until `done`, bounded by `kWaitStepCap`.
+  template<typename Predicate>
+  bool StepUntil(Predicate done)
+  {
+    for (uint64_t i = 0; i < kWaitStepCap; ++i) {
       Step(1);
-      if (jaw_position_.has_value() &&
-        ((velocity > 0.0 && *jaw_position_ >= target) ||
-        (velocity < 0.0 && *jaw_position_ <= target)))
-      {
-        break;
+      if (done()) {
+        return true;
       }
     }
-    commanded_velocity_ = 0.0;
-    Step(1);
+    return false;
   }
 
   /// How many `DetachableJoint` entities exist right now. Zero, one, or (were
@@ -136,79 +164,72 @@ public:
   int AttachedCount() const {return attached_count_;}
 
   /// Whether `name`'s model is the child of a `DetachableJoint` right now.
-  bool IsAttached(const std::string & name) const
-  {
-    return attached_child_ == name;
-  }
+  bool IsAttached(const std::string & name) const {return attached_child_ == name;}
+
+  /// The name of the link the weld's PARENT side is on. This is the property
+  /// ADR-0023's failure is about: a box welded to a finger follows the finger,
+  /// stops being the obstacle the jaws stall against, and the jaws close
+  /// straight through it while the weld carries it anyway.
+  std::string AttachedTo() const {return attached_parent_;}
 
   /// Whether the count has ever fallen back to zero since the first attach —
-  /// sampled every step, on every step, rather than read at the moments a test
-  /// happens to look.
-  ///
-  /// WHY THIS EXISTS RATHER THAN A COUNT AT THE END. A release puts the box
-  /// back inside the plugin's own attach conditions: the joint is still inside
-  /// the hold-position window and the box is still within the attach radius,
-  /// so a wrong release is followed by a fresh attach as soon as the joint has
-  /// been still for `stall_timeout_s` again. `AttachedCount()` then reads 1 at
-  /// the end of a settle having been 0 in the middle, and a test asserting only
-  /// on the end cannot tell "never let go" from "let go and grabbed it back".
-  /// That is not hypothetical: it is exactly what the pre-ADR-0064 condition
-  /// does to this rig, and it made the first draft of
-  /// `OpeningPastTheMarginButNotPastTheWindowDoesNotRelease` pass against the
-  /// very code it exists to reject. In the cell the box would have been a free
-  /// body for that interval with a pad still against it, which is the whole
-  /// defect.
+  /// sampled every step, rather than read at the moments a test happens to look.
+  /// A test asserting only at the end cannot tell "never let go" from "let go
+  /// and took it back".
   bool EverReleased() const {return ever_released_;}
 
-  std::optional<double> JawPosition() const {return jaw_position_;}
+  /// Which model this plugin is holding, by name, or empty. Reported alongside
+  /// the assertions that name a different one, so a failure says what was taken.
+  std::string AttachedChild() const {return attached_child_;}
 
-private:
-  void DriveJoint(gz::sim::EntityComponentManager & ecm)
+  /// Whether a model of this name is in the world at all. Asserted rather than
+  /// assumed by the discrimination tests: a rig that renamed a box would make
+  /// "it never took the far one" true for the wrong reason.
+  ///
+  /// Answered from the same post-update sampler everything else here is, because
+  /// that is the one place this apparatus is allowed to read the ECM.
+  bool HasModel(const std::string & name)
   {
-    if (jaw_joint_ == gz::sim::kNullEntity) {
-      jaw_joint_ = ecm.EntityByComponents(
-        gz::sim::components::Joint(), gz::sim::components::Name(kJawJoint));
-      if (jaw_joint_ == gz::sim::kNullEntity) {
-        return;
-      }
-      ecm.CreateComponent(jaw_joint_, gz::sim::components::JointVelocityCmd({0.0}));
-    }
-    auto * cmd = ecm.Component<gz::sim::components::JointVelocityCmd>(jaw_joint_);
-    if (cmd != nullptr && !cmd->Data().empty()) {
-      cmd->Data()[0] = commanded_velocity_;
-    }
+    Step(1);
+    return models_.count(name) > 0;
   }
 
+private:
   void Sample(const gz::sim::EntityComponentManager & ecm)
   {
-    if (jaw_joint_ != gz::sim::kNullEntity) {
-      const auto * position =
-        ecm.Component<gz::sim::components::JointPosition>(jaw_joint_);
-      if (position != nullptr && !position->Data().empty()) {
-        jaw_position_ = position->Data().front();
-      }
-    }
-
     int count = 0;
     std::string child_name;
+    std::string parent_name;
     ecm.Each<gz::sim::components::DetachableJoint>(
       [&](const gz::sim::Entity &, const gz::sim::components::DetachableJoint * joint) -> bool {
         ++count;
-        const auto * name = ecm.Component<gz::sim::components::Name>(joint->Data().childLink);
-        if (name != nullptr) {
-          // The child link's own name is "link" (both boxes share it) — read
-          // the MODEL's name instead, which is what `<graspable>` and this
-          // test's assertions both address.
-          const auto model = gz::sim::topLevelModel(joint->Data().childLink, ecm);
-          const auto * model_name = ecm.Component<gz::sim::components::Name>(model);
-          if (model_name != nullptr) {
-            child_name = model_name->Data();
-          }
+        // The child link's own name is "link" (every box shares it) — read the
+        // MODEL's name instead, which is what `<graspable>` and this test's
+        // assertions both address. The PARENT side is a link of the rig and is
+        // read as a link, because which link it is is the whole point.
+        const auto model = gz::sim::topLevelModel(joint->Data().childLink, ecm);
+        const auto * model_name = ecm.Component<gz::sim::components::Name>(model);
+        if (model_name != nullptr) {
+          child_name = model_name->Data();
+        }
+        const auto * link_name =
+        ecm.Component<gz::sim::components::Name>(joint->Data().parentLink);
+        if (link_name != nullptr) {
+          parent_name = link_name->Data();
         }
         return true;
       });
     attached_count_ = count;
     attached_child_ = child_name;
+    attached_parent_ = parent_name;
+
+    models_.clear();
+    ecm.Each<gz::sim::components::Model, gz::sim::components::Name>(
+      [&](const gz::sim::Entity &, const gz::sim::components::Model *,
+      const gz::sim::components::Name * name) -> bool {
+        models_.insert(name->Data());
+        return true;
+      });
     if (count > 0) {
       ever_attached_ = true;
     } else if (ever_attached_) {
@@ -219,13 +240,14 @@ private:
   static constexpr const char * kWorldPath = CITE_HOLD_WORLD;
 
   gz::sim::TestFixture fixture_;
-
-  gz::sim::Entity jaw_joint_{gz::sim::kNullEntity};
-  double commanded_velocity_{0.0};
-  std::optional<double> jaw_position_;
+  gz::transport::Node node_;
+  gz::transport::Node::Publisher attach_;
+  gz::transport::Node::Publisher detach_;
 
   int attached_count_{0};
+  std::set<std::string> models_;
   std::string attached_child_;
+  std::string attached_parent_;
   bool ever_attached_{false};
   bool ever_released_{false};
 };
@@ -233,184 +255,134 @@ private:
 }  // namespace
 
 
-/// A joint that has never moved, resting exactly at `open_position`, must
-/// never be read as a stall — however long it sits there and however close a
-/// graspable model stands. THE REGRESSION THIS LOCKS DOWN: a `Place` that
-/// opens the jaws to release a part would otherwise have this plugin
-/// re-attach the very box it was just told to let go of, the instant the
-/// joint finished opening and settled at zero. `open_position` (0.0) sits
-/// outside the declared hold-position window ([0.3, 0.6] here), so this is
-/// the window test rejecting it, not a rail exclusion — see
-/// `RestingMidStrokeButOutsideTheWindowIsNeverAStallEither` below for the case
-/// a rail exclusion could not reject at all.
-TEST(GraspHold, RestingAtTheOpenRailIsNeverAStall)
+/// THE PROPERTY ADR-0065 IS ABOUT. The plugin decides nothing on its own any
+/// more: with a declared graspable box sitting well inside the attach radius and
+/// nothing said to it, it must take nothing, for as long as the world runs.
+///
+/// THE REGRESSION THIS LOCKS DOWN is every threshold that used to be here. A
+/// stall clock, a part-width window or any other rule that fired on the world's
+/// own state would fire in this test, because the box is in reach the whole
+/// time and the only thing missing is the message.
+TEST(GraspHold, NothingIsTakenUntilTheCellSaysSo)
 {
   Cell cell;
-  cell.Step(1);
-  ASSERT_TRUE(cell.JawPosition().has_value()) << "the jaw joint was never found in the world";
-  cell.Step(5 * kSettleSteps);
-  EXPECT_NEAR(*cell.JawPosition(), 0.0, 1e-6)
-    << "the joint moved on its own with nothing driving it";
+  ASSERT_TRUE(cell.HasModel(kNearBox)) << "the rig has no '" << kNearBox << "' to take";
+  cell.Step(kQuietSteps);
   EXPECT_EQ(cell.AttachedCount(), 0)
-    << "a joint that has sat at open_position since the world started was read as a stall";
+    << "a declared graspable stood inside the attach radius for " << kQuietSteps
+    << " steps with nothing published, and the plugin took hold of it anyway";
 }
 
 
-/// THE REGRESSION THIS LOCKS DOWN (ADR-0061's 2026-09-22 correction). A rail
-/// exclusion — refusing only a joint resting AT `open_position` or
-/// `closed_position` — does not reject a rest position that is mid-stroke but
-/// still outside the declared part window: exactly the shape of a `Grasp` on
-/// empty air, whose ordinary close target is itself mid-stroke. This drives
-/// the jaw to 0.15 rad — clear of the open rail's own `detach_margin_rad`
-/// (0.02) and clear of the declared window's own lower edge (0.3) — with the
-/// near box still well inside `attach_radius_m`, and requires nothing to
-/// attach. `AttachesTheNearBoxAndNeverTheFarOne` below is the same rig driven
-/// to a position INSIDE the window, where it must attach; the two together
-/// are what proves the window, not the rails, decides.
-TEST(GraspHold, RestingMidStrokeButOutsideTheWindowIsNeverAStallEither)
+/// An attach message takes the nearest DECLARED graspable within the radius, and
+/// neither of the two boxes that fail one of those two tests.
+///
+/// Both negatives are needed and they fail different rules. `box_far` is
+/// declared and out of reach, so it tests `attach_radius_m`.
+/// `box_undeclared` is NEARER than the box that must be taken, so it tests the
+/// `<graspable>` list and nothing else: a plugin that had stopped reading the
+/// list would take it in preference, because it is closer.
+TEST(GraspHold, AnAttachMessageTakesTheNearestDeclaredGraspable)
 {
   Cell cell;
-  cell.Drive(kDriveRadS, 150);  // 0.15 s * 1.0 rad/s = 0.15 rad
-  ASSERT_TRUE(cell.JawPosition().has_value());
-  const double held_at = *cell.JawPosition();
-  ASSERT_GT(held_at, 0.02) << "the joint never left the open rail's own margin";
-  ASSERT_LT(held_at, 0.3) << "the joint drifted into the declared hold-position window";
+  ASSERT_TRUE(cell.HasModel(kNearBox));
+  ASSERT_TRUE(cell.HasModel(kNearerUndeclaredBox))
+    << "the rig has no undeclared box, so this test cannot tell the <graspable> "
+    << "list from the radius";
+  ASSERT_TRUE(cell.HasModel(kFarBox));
+  ASSERT_TRUE(cell.Connected()) << "the plugin never subscribed to " << kAttachTopic;
 
-  cell.Drive(0.0, kSettleSteps);
-  EXPECT_EQ(cell.AttachedCount(), 0)
-    << "the joint sat still for longer than stall_timeout_s, well clear of both "
-    << "rails but outside the declared hold-position window, with a graspable box "
-    << "well inside attach_radius_m — and it attached anyway";
-}
-
-
-/// The whole mechanism, end to end: drive the jaw into the declared
-/// hold-position window, let it settle there, and require BOTH the near box
-/// to be picked up and the far one to be left alone — proving the radius
-/// discriminates and not merely that a stall does something.
-TEST(GraspHold, AttachesTheNearBoxAndNeverTheFarOne)
-{
-  Cell cell;
-  cell.Drive(kDriveRadS, kDriveSteps);
-  ASSERT_TRUE(cell.JawPosition().has_value());
-  const double held_at = *cell.JawPosition();
-  ASSERT_GT(held_at, 0.3) << "the joint never reached the declared hold-position window";
-  ASSERT_LT(held_at, 0.6) << "the joint overshot the declared hold-position window";
-
-  cell.Drive(0.0, kSettleSteps);
-  EXPECT_EQ(cell.AttachedCount(), 1)
-    << "the joint sat still for longer than stall_timeout_s with box well inside "
-    << "attach_radius_m, and nothing attached";
+  EXPECT_TRUE(cell.TellItToTakeHold())
+    << "the cell said it was holding and the plugin took nothing";
+  EXPECT_EQ(cell.AttachedCount(), 1);
   EXPECT_TRUE(cell.IsAttached(kNearBox))
-    << "something attached, but it was not '" << kNearBox << "'";
+    << "something was taken, and it was '" << cell.AttachedChild() << "' rather than '"
+    << kNearBox << "'";
+  EXPECT_FALSE(cell.IsAttached(kNearerUndeclaredBox))
+    << "'" << kNearerUndeclaredBox << "' is nearer than '" << kNearBox
+    << "' and is not a declared graspable, and it was taken anyway";
   EXPECT_FALSE(cell.IsAttached(kFarBox))
     << "'" << kFarBox << "' is 2.0 m from the attach link against a 0.5 m radius, "
-    << "and it was attached anyway";
+    << "and it was taken anyway";
 }
 
 
-/// Continuing to close further must not detach — a stall that tightens is
-/// still the same grasp, and only movement back towards OPEN counts.
-TEST(GraspHold, ClosingFurtherAfterTheStallDoesNotRelease)
+/// THE REGRESSION THIS LOCKS DOWN (ADR-0023, ADR-0061). The weld's parent side
+/// must be the declared `attach_link` — the arm's own last link, which nothing
+/// this plugin does moves — and never a finger. ADR-0023 welded the box to a
+/// finger: the box followed that finger, stopped being the obstacle the jaws
+/// were stopping against, and the jaws closed through it to the commanded width
+/// while the weld carried it 0.576 m anyway, with `Pick` reporting
+/// `EXECUTION_FAILED` 8 times out of 8.
+TEST(GraspHold, TheWeldGoesToTheAttachLinkAndNeverAJaw)
 {
   Cell cell;
-  cell.Drive(kDriveRadS, kDriveSteps);
-  cell.Drive(0.0, kSettleSteps);
-  ASSERT_EQ(cell.AttachedCount(), 1) << "the setup for this test did not attach";
+  ASSERT_TRUE(cell.Connected());
+  ASSERT_TRUE(cell.TellItToTakeHold()) << "the setup for this test did not attach";
 
-  cell.Drive(kDriveRadS, 50);
-  EXPECT_EQ(cell.AttachedCount(), 1)
-    << "driving the joint further CLOSED released the box; only opening should";
+  EXPECT_EQ(cell.AttachedTo(), kAttachLink)
+    << "the box is welded to '" << cell.AttachedTo() << "' rather than to the declared "
+    << "attach link '" << kAttachLink << "'";
+  EXPECT_NE(cell.AttachedTo(), kJawLink)
+    << "the box is welded to the jaw, which is ADR-0023's measured failure";
 }
 
 
-/// THE REGRESSION THIS LOCKS DOWN (ADR-0064). Moving the joint by more than
-/// `detach_margin_rad` used to be the WHOLE release test, and that number is
-/// the gripper controller's own `goal_tolerance`: it answers "has this joint
-/// moved meaningfully?", not "have the pads let go of the part?". At that much
-/// past the grasp the jaws are still against the part, so the box became a
-/// free body while a pad was still touching it and the opening pad flicked it
-/// sideways — about a millimetre during its fall, on one side of every paired
-/// run, against the 0.003 mm an undisturbed body travels (ADR-0064).
+/// A detach message releases, and nothing takes the box back afterwards.
 ///
-/// This drives the jaw back past `detach_margin_rad` several times over while
-/// stopping SHORT of the window's open end, which is where the pads become
-/// clear, and requires the box to still be held. Both preconditions are
-/// asserted rather than assumed, so a rig that stopped somewhere else fails
-/// loudly instead of passing for the wrong reason.
-TEST(GraspHold, OpeningPastTheMarginButNotPastTheWindowDoesNotRelease)
+/// The second half is the regression: the box is still exactly where it was, in
+/// reach and declared, so a plugin with any rule of its own left in it would
+/// pick it straight back up. Only another message may.
+TEST(GraspHold, ADetachMessageReleasesAndNothingTakesItBack)
 {
   Cell cell;
-  cell.Drive(kDriveRadS, kDriveSteps);
-  cell.Drive(0.0, kSettleSteps);
-  ASSERT_EQ(cell.AttachedCount(), 1) << "the setup for this test did not attach";
-  ASSERT_TRUE(cell.JawPosition().has_value());
-  const double held_at = *cell.JawPosition();
+  ASSERT_TRUE(cell.Connected());
+  ASSERT_TRUE(cell.TellItToTakeHold()) << "the setup for this test did not attach";
 
-  // Halfway back to the window's open end: far enough past the margin that the
-  // old single condition would fire, not far enough for a pad to be clear.
-  const double part_way = 0.5 * (held_at + kWindowOpenEnd);
-  cell.DriveTo(part_way, -kDriveRadS);
-  cell.Drive(0.0, kSettleSteps);
+  EXPECT_TRUE(cell.TellItToLetGo()) << "the cell said it had let go and the plugin held on";
+  EXPECT_EQ(cell.AttachedCount(), 0);
+  EXPECT_TRUE(cell.EverReleased());
 
-  ASSERT_TRUE(cell.JawPosition().has_value());
-  const double opened_to = *cell.JawPosition();
-  ASSERT_GT(held_at - opened_to, kDetachMarginRad)
-    << "this rig never moved the joint past detach_margin_rad, so it cannot "
-    << "distinguish the two conditions at all";
-  ASSERT_GT(opened_to, kWindowOpenEnd)
-    << "this rig opened the jaws past the hold-position window's open end, "
-    << "where a release is correct — it is asserting nothing";
+  cell.Step(kQuietSteps);
+  EXPECT_EQ(cell.AttachedCount(), 0)
+    << "the box was released and then taken back with nothing published; the plugin "
+    << "still has a rule of its own";
+}
 
-  EXPECT_FALSE(cell.EverReleased())
-    << "the jaws opened by " << (held_at - opened_to) << " rad, past "
-    << "detach_margin_rad but only to " << opened_to << " rad — still inside the "
-    << "hold-position window, so still on the part — and the box was let go anyway";
-  EXPECT_EQ(cell.AttachedCount(), 1) << "the box is not held at the end of the move";
+
+/// A second attach message while already holding changes nothing. It must not
+/// weld a second body to the same wrist, and it must not swap the part.
+///
+/// This is not hypothetical: the cell republishes its state on every change of
+/// custody, and custody becoming unknown and then established again while a part
+/// is in the jaws produces exactly this sequence.
+TEST(GraspHold, ASecondAttachMessageWhileHoldingChangesNothing)
+{
+  Cell cell;
+  ASSERT_TRUE(cell.Connected());
+  ASSERT_TRUE(cell.TellItToTakeHold()) << "the setup for this test did not attach";
+  ASSERT_TRUE(cell.IsAttached(kNearBox));
+
+  ASSERT_TRUE(cell.TellItToTakeHold()) << "the second message was never served";
+  cell.Step(kQuietSteps);
+  EXPECT_EQ(cell.AttachedCount(), 1) << "a second attach welded a second body to one wrist";
   EXPECT_TRUE(cell.IsAttached(kNearBox)) << "the held box changed identity mid-grasp";
+  EXPECT_FALSE(cell.EverReleased()) << "a second attach let go of the part first";
 }
 
 
-/// Detach: commanding the jaws back open past the hold-position window's own
-/// open end — where no pad can still reach the part — releases whatever was
-/// attached, and settling at `open_position` afterwards does not grab it
-/// straight back.
-///
-/// THIS WAS `OpeningReleasesAndSettlingAtOpenStaysReleased`, which drove the
-/// joint back a fixed 0.1 rad from a grasp at about 0.4 rad and so landed
-/// exactly ON the window's open end (0.3). Under ADR-0064's two conditions
-/// that is the boundary itself rather than a case, so the travel is now
-/// expressed as a position clear of that end rather than as a duration, and
-/// the name says which of the two conditions it pins. Its second half — that a
-/// release followed by a settle at `open_position` does not re-attach — is
-/// unchanged and is still the regression it always was.
-TEST(GraspHold, OpeningPastTheWindowReleasesAndSettlingAtOpenStaysReleased)
+/// A detach message with nothing held is harmless, and the plugin still works
+/// afterwards. `Place` and `Transfer` both report "not holding" on paths where
+/// nothing was ever held, so the bridge sends this on an ordinary cycle.
+TEST(GraspHold, ADetachMessageWithNothingHeldIsHarmless)
 {
   Cell cell;
-  cell.Drive(kDriveRadS, kDriveSteps);
-  cell.Drive(0.0, kSettleSteps);
-  ASSERT_EQ(cell.AttachedCount(), 1) << "the setup for this test did not attach";
+  ASSERT_TRUE(cell.Connected());
+  ASSERT_TRUE(cell.TellItToLetGo()) << "a detach with nothing held did not settle at zero";
+  EXPECT_EQ(cell.AttachedCount(), 0);
+  EXPECT_FALSE(cell.EverReleased()) << "nothing was ever held, so nothing can have been released";
 
-  // Clear of the window's open end by more than a physics step's worth of
-  // travel, so which side of it the joint stopped on is never a rounding
-  // question.
-  const double clear_of_the_part = kWindowOpenEnd - 0.05;
-  cell.DriveTo(clear_of_the_part, -kDriveRadS);
-  ASSERT_TRUE(cell.JawPosition().has_value());
-  ASSERT_LT(*cell.JawPosition(), kWindowOpenEnd)
-    << "this rig never opened the jaws past the hold-position window's open end";
-  EXPECT_EQ(cell.AttachedCount(), 0)
-    << "the jaws opened to " << *cell.JawPosition() << " rad — past both "
-    << "detach_margin_rad and the hold-position window's open end, so wider than "
-    << "any opening the grasp predicate would call a grasp — and the box was still attached";
-
-  // Keep going all the way to open_position, exactly as `Place` would, and
-  // let it settle there. THE REGRESSION THIS LOCKS DOWN: a plugin that read
-  // every mid-stroke stop as a stall would grab the box back the moment the
-  // joint next stopped moving, wherever that was; only rest AT the rail is
-  // excluded, so this drives all the way there rather than stopping partway.
-  cell.DriveTo(0.0, -kDriveRadS);
-  cell.Drive(0.0, kSettleSteps);
-  EXPECT_EQ(cell.AttachedCount(), 0)
-    << "the joint settled at open_position after a release and re-attached the same box";
+  EXPECT_TRUE(cell.TellItToTakeHold())
+    << "a detach with nothing held left the plugin unable to take hold afterwards";
+  EXPECT_TRUE(cell.IsAttached(kNearBox));
 }

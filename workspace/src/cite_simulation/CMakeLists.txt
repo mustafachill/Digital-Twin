@@ -45,11 +45,18 @@ target_link_libraries(cite_break_beam
 # own generator docstring gives — it has to reach across two independently
 # spawned models, the arm and the work-piece, exactly as the belt and the beam
 # already do.
+#
+# It links gz-transport and gz-msgs since ADR-0065, and it did not before: the
+# cell now tells it when to take hold and when to let go, on the two topics the
+# generated world names, instead of deciding for itself from the drive joint.
 add_library(cite_grasp_hold SHARED src/grasp_hold.cpp)
 target_include_directories(cite_grasp_hold PRIVATE include)
 target_link_libraries(cite_grasp_hold
   gz-sim::core
   gz-plugin::register
+  gz-math::core
+  gz-transport::core
+  gz-msgs::core
 )
 
 install(TARGETS cite_conveyor cite_break_beam cite_grasp_hold
@@ -117,11 +124,11 @@ if(BUILD_TESTING)
     add_dependencies(test_conveyor_carry cite_conveyor cite_break_beam)
   endif()
 
-  # The rigid grasp hold's decision — stalled, clear of both rails, and a
-  # graspable model within radius — against a real physics step. The drive
-  # joint here is driven directly by the test through `JointVelocityCmd`
-  # rather than by a controller manager; see the file's own header for why
-  # that is the right substitute.
+  # The rigid grasp hold, against a real physics step: what it does when it is
+  # TOLD to take hold and to let go (ADR-0065). It decides neither for itself any
+  # more, so the apparatus publishes on the same two Gazebo-transport topics the
+  # generated world names, and no joint is driven at all — which is why this test
+  # links gz-transport and gz-msgs and did not before.
   ament_add_gtest(test_grasp_hold test/test_grasp_hold.cpp
     TIMEOUT 120
     ENV "GZ_SIM_SYSTEM_PLUGIN_PATH=${CMAKE_CURRENT_BINARY_DIR}"
@@ -132,6 +139,8 @@ if(BUILD_TESTING)
     target_link_libraries(test_grasp_hold
       gz-sim::core
       gz-math::core
+      gz-transport::core
+      gz-msgs::core
     )
     add_dependencies(test_grasp_hold cite_grasp_hold)
   endif()

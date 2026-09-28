@@ -97,20 +97,6 @@ AID_PUBLISH_PERIOD_S = 0.1
 #: that has to be an error with a sentence rather than an empty element.
 CONVEYOR_SURFACE_FRAME = "surface"
 
-#: The end effector's own gripper controller, by the suffix its type declares
-#: (`xarm_parallel_gripper.yaml`'s `controllers:` block). Named here rather than
-#: guessed at the template for the same reason `CONVEYOR_SURFACE_FRAME` is: a
-#: grasp-hold plugin with no controller to read a stall threshold from cannot be
-#: parametrised and that has to be an error with a sentence.
-#:
-#: The literal is not a second statement of a value (P1) — it names *which*
-#: controller to read, the same way `resolve.py`'s `_joint_names` names the
-#: drive joint's own suffix as `"drive_joint"` rather than deriving it. Only the
-#: numbers behind the name are facts; this spelling is how both this module and
-#: `cite_bringup/plan.py`'s generator find them (see `_controller_parameter`
-#: there for the identical pattern).
-GRIPPER_CONTROLLER_SUFFIX = "gripper_controller"
-
 
 class WorldError(Exception):
     """The model describes something the world generator cannot express."""
@@ -148,54 +134,28 @@ class _GraspHoldView:
     #: finger (ADR-0061); see `GraspSpec.attach_link_suffix` for why the arm's
     #: own last link is what survives as an entity at all.
     attach_link: str
-    #: `<asset>_drive_joint` — the joint whose velocity this plugin watches.
-    drive_joint: str
-    stall_velocity_threshold: float
-    stall_timeout_s: float
-    #: Reused from the gripper controller's own `goal_tolerance` rather than
-    #: declared a third time (P1): it is already "how close counts as the same
-    #: position" for that controller's own success check, and a stall's release
-    #: needs exactly that same question asked of the drive joint's position.
-    detach_margin_rad: float
-    #: The two ends of the stroke. Kept for `open_direction_` — which way, in
-    #: this joint's own units, is towards open — and no longer for excluding a
-    #: rest position: see `hold_position_min_rad`/`hold_position_max_rad`
-    #: below, ADR-0061's 2026-09-22 correction is why. Both already exist in
-    #: `GraspSpec` (`open_position`, `closed_position`); nothing new is
-    #: declared for them.
-    open_position: float
-    closed_position: float
+    #: Which declared graspable is in the jaws is the one question the cell
+    #: cannot answer for the simulator, so it stays here (ADR-0065, decision 3).
     attach_radius_m: float
-    #: The drive-joint position window a genuine stall on a declared part rests
-    #: inside, resolved HERE rather than left to the plugin (ADR-0061's
-    #: 2026-09-22 correction).
+    #: Where the cell tells this plugin to take hold and to let go (ADR-0065).
     #:
-    #: `cite_simulation` does not link against `cite_skills`, so the width
-    #: arithmetic `cite_skills::gripper_width_for` and
-    #: `cite_skills::gripper_position_for` do cannot be shared with the plugin
-    #: by calling it — only by computing it once, here, from the same L0
-    #: values, and delivering the answer as two joint-position radians. That is
-    #: the identical inversion `GripperLinkage.position_for` already performs
-    #: for `cite_tools.validate.physical`'s discrimination check (ADR-0052
-    #: §A.7's "one policy, two languages, one derivation"), applied to the
-    #: FACILITY's declared part interval widened by the stall band, which is
-    #: exactly the window `cite_skills::gripper_is_holding` judges a stall
-    #: inside (ADR-0052 option F) — so the plugin's rest-position test and the
-    #: skill server's stall test can never disagree about what counts as a
-    #: grasp.
+    #: EVERY OTHER PARAMETER THIS VIEW USED TO CARRY IS GONE, and its absence is
+    #: the decision rather than a tidy-up. The plugin had the stall threshold and
+    #: timeout the `GripperActionController` loads, the drive joint to watch, the
+    #: two rails, the controller's `goal_tolerance` as a release margin, and the
+    #: drive-joint window `cite_skills::gripper_is_holding` judges a stall inside.
+    #: Together those let it decide on its own that a grasp had begun and ended —
+    #: a re-derivation of a judgement `cite_skills` already makes, which ADR-0062
+    #: and ADR-0064 were both refuted attempts to tune. The cell answers that
+    #: question once and says so on these two topics.
     #:
-    #: WHY NOT A RAIL EXCLUSION. The rail exclusion this replaced assumed a
-    #: stall on a real part always lands strictly between `open_position` and
-    #: `closed_position`, and that jaws closing on nothing always settle AT one
-    #: of the two rails. Neither holds: the ordinary close target,
-    #: `gripper_default_grasp_width_m`, is mid-stroke, nowhere near either
-    #: rail, and a tester measured jaws closing on empty air coming to rest
-    #: mid-stroke too — `reached 46.0 mm` against a part window of
-    #: `[47.615, 52.385] mm`, 1.6 mm outside it. The window this field carries
-    #: is the test the rest of the system already makes, so it rejects that
-    #: rest position on the same grounds `gripper_is_holding` would.
-    hold_position_min_rad: float
-    hold_position_max_rad: float
+    #: Built by `ids.interface` from the zone and the asset id, the same call the
+    #: bring-up plan makes for the same two names, so the topics the plugin
+    #: listens on and the topics the bridge publishes to come from one place and
+    #: cannot drift (P1) — exactly the arrangement a belt's command topic already
+    #: has.
+    attach_topic: str
+    detach_topic: str
 
 
 #: Which component of a mounting offset lies along each beam axis.
@@ -354,62 +314,6 @@ def _beams(cell: ResolvedCell) -> tuple[_BeamView, ...]:
     return tuple(views)
 
 
-def _gripper_controller_parameter(asset: ResolvedAsset, key: str) -> float:
-    """One parameter of ``asset``'s gripper controller, read from L0 exactly once.
-
-    The identical pattern `cite_bringup`'s bring-up-plan generator uses for the
-    same reason (see its own ``_controller_parameter``): a value that configures
-    a *controller* — here, the stall threshold and timeout the
-    `GripperActionController` already applies — must reach a second consumer by
-    being READ from the one place it is declared, never restated (P1). Raises
-    rather than returning ``None``: unlike the bring-up plan, which carries a
-    grasp block only for arms that have one, this function is called only after
-    `_grasp_holds` has already confirmed the arm fits an end effector with a
-    grasp specification — and that type's `controllers:` block declares
-    `gripper_controller` unconditionally beside its `grasp:` block, so a miss
-    here means the model and the generator have come apart, not that the value
-    is legitimately absent.
-    """
-    name = ids.controller(asset.id, GRIPPER_CONTROLLER_SUFFIX)
-    for controller in asset.controllers:
-        if controller.name != name:
-            continue
-        value = controller.parameters.get(key)
-        if value is not None:
-            return float(value)
-    raise WorldError(
-        f"arm {asset.id!r} fits an end effector with a grasp specification, but its "
-        f"{GRIPPER_CONTROLLER_SUFFIX!r} controller declares no {key!r}. The grasp-hold "
-        "plugin reads this from the same controller configuration the gripper's own "
-        "GripperActionController loads, so the two can never disagree (P1)."
-    )
-
-
-def _hold_position_window(cell: ResolvedCell, grasp) -> tuple[float, float]:
-    """The drive-joint position window a genuine stall on a declared part rests
-    inside, as two radians (min, max).
-
-    The width window is `cite_skills::gripper_is_holding`'s own — the facility's
-    declared part interval, widened by the stall band at each edge (ADR-0052
-    option F) — inverted through the SAME linkage `GraspSpec.linkage` declares,
-    via `GripperLinkage.position_for`, the identical inversion
-    `cite_tools.validate.physical`'s discrimination check already performs
-    (ADR-0052 §A.7). Resolved here rather than in the plugin: `cite_simulation`
-    does not link against `cite_skills`, and reimplementing the linkage's
-    trigonometry in the plugin would be a second place for it to be wrong (P1).
-
-    `GripperLinkage.opening_m` is monotonically decreasing over the stroke this
-    gripper uses — more closed is narrower — so which width bound maps to the
-    smaller position is not assumed; both are resolved and sorted.
-    """
-    parts = cell.workpiece_widths
-    narrow_m = parts.narrowest_m - grasp.stall_band_narrow_m
-    wide_m = parts.widest_m + grasp.stall_band_wide_m
-    at_narrow = grasp.linkage.position_for(narrow_m)
-    at_wide = grasp.linkage.position_for(wide_m)
-    return min(at_narrow, at_wide), max(at_narrow, at_wide)
-
-
 def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
     """One rigid-hold plugin declaration per arm that fits a grasping gripper.
 
@@ -427,22 +331,16 @@ def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
         if effector is None or effector.grasp is None:
             continue
         grasp = effector.grasp
-        hold_min, hold_max = _hold_position_window(cell, grasp)
         views.append(
             _GraspHoldView(
                 asset=asset.id,
                 attach_link=ids.link(asset.id, grasp.attach_link_suffix),
-                drive_joint=ids.joint(asset.id, grasp.drive_joint_suffix),
-                stall_velocity_threshold=_gripper_controller_parameter(
-                    asset, "stall_velocity_threshold"
-                ),
-                stall_timeout_s=_gripper_controller_parameter(asset, "stall_timeout"),
-                detach_margin_rad=_gripper_controller_parameter(asset, "goal_tolerance"),
-                open_position=grasp.open_position,
-                closed_position=grasp.closed_position,
                 attach_radius_m=grasp.attach_radius_m,
-                hold_position_min_rad=hold_min,
-                hold_position_max_rad=hold_max,
+                # The same two calls the bring-up plan makes, so the name the
+                # plugin listens on and the name the bridge publishes to come
+                # from one place and cannot drift (P1).
+                attach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_ATTACH),
+                detach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_DETACH),
             )
         )
     return tuple(views)

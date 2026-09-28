@@ -16,8 +16,21 @@ and P2 intact. On hardware the physical world does these jobs and no plugin is l
 |---|---|---|---|
 | `cite_conveyor` | world (one per belt) | transporting a part by belt friction | header of `src/conveyor.cpp` |
 | `cite_break_beam` | world (one per sensor) | an optical through-beam | header of `src/break_beam.cpp` |
+| `cite_grasp_hold` | world (one per grasping arm) | a clamped part staying still in the jaws | header of `src/grasp_hold.cpp` |
 
-There was a third, `cite_grasp_attachment`, which welded a work-piece to a finger with a
+**`cite_grasp_hold` is the one plugin here that is told rather than deciding**, and it is the
+one exception to the "Gazebo transport only, in neither direction" property stated above: it
+subscribes to two Gazebo topics and publishes nothing. The cell decides whether the jaws are
+holding — once, in `cite_skills::gripper_is_holding` (ADR-0052) — L3 publishes that verdict,
+and a **simulation-only** bridge in `cite_bringup` turns each change of it into an attach or a
+detach here. The plugin used to derive it for itself from the drive joint's own position; that
+was a second copy of one judgement, and tuning it refuted two records in a week (ADR-0062,
+ADR-0064). ADR-0065 is the decision and `src/grasp_hold.cpp`'s header is the account.
+**Nothing above `ros2_control` is affected**: the jaws still close, meet the part, stop at its
+width and report a stall exactly as before, and nothing here writes to the drive joint, which
+has one owner (ADR-0063).
+
+There was another, `cite_grasp_attachment`, which welded a work-piece to a finger with a
 `DetachableJoint` instead of letting friction hold it. It is **removed** by
 [ADR-0029](../../../docs/adr/0029-simulated-grasping-by-friction.md), which supersedes
 ADR-0023. The 84-trial campaign in
@@ -25,8 +38,16 @@ ADR-0023. The 84-trial campaign in
 measured it firing at first pad contact, before any contact force could develop, so the jaws
 then closed through the part feeling nothing and `Pick` failed while the weld carried the
 part anyway. In the friction arm of the same campaign the gripper stalled on the part and
-held it every time it was asked to. **Grasping in this cell is now plain friction, with no
-simulation-side aid at all.** The figures are in `results.md` and are not restated here (P1).
+held it every time it was asked to. The figures are in `results.md` and are not restated
+here (P1).
+
+**This README said until now that "grasping in this cell is now plain friction, with no
+simulation-side aid at all", and it has been false since ADR-0061.** What that campaign
+established is narrower and still stands: friction stops the jaws in the right place, and the
+trigger ADR-0023 used — first pad contact, before any force develops — is the thing that must
+not come back. What the same campaign also measured is that friction cannot keep the box
+STILL, up to 34.3 degrees of roll between the pads, which is what `cite_grasp_hold` is for and
+what it is bounded to.
 
 The belts and the beams are **world** systems rather than model plugins, and that is
 forced rather than chosen: every authored body in the scene is joined to the cell root by
