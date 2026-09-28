@@ -36,6 +36,7 @@ import launch_testing.markers
 import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup import workpiece
 from cite_bringup.gz import run as gz_run
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
@@ -54,7 +55,13 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from _cell import acting_station, carried_models, cell, zone  # noqa: E402  (insert first)
+from _cell import (  # noqa: E402  (insert first)
+    acting_station,
+    carried_models,
+    cell,
+    tie_the_work_piece_size,
+    zone,
+)
 
 #: The cell this scenario drives, resolved once at load.
 #:
@@ -66,6 +73,10 @@ from _cell import acting_station, carried_models, cell, zone  # noqa: E402  (ins
 #: <name> --zone <zone>` overrides it for one run.
 ZONE = zone()
 
+#: The reference work-piece's edge length. The SAME QUANTITY as
+#: `cite_bringup.workpiece.SIDE_M`, which is what the spawned model is actually
+#: built from. The two are tied at run time by `_cell.tie_the_work_piece_size`,
+#: called from `setUpClass`, rather than by an import — that function says why.
 WORKPIECE_SIZE = 0.05
 
 #: Height above the pick surface the work-piece is released from. Small enough
@@ -203,56 +214,6 @@ def generate_test_description() -> LaunchDescription:
     )
 
 
-def _workpiece_sdf(name: str) -> str:
-    """A plain box. Its inertia is computed, not guessed — a wrong tensor here
-    would make the pick behave oddly for reasons that look like a controller
-    fault (L1).
-
-    It used to carry a `<sensor type="contact">`, which existed for exactly one
-    reader: `GraspAttachment::FindGraspable` iterated every `ContactSensorData`
-    in the world, and no pad link declares a sensor, so without one here the
-    attachment plugin could not fire at all. That plugin is removed, so the
-    sensor has no reader and is gone with it.
-
-    `<mu>` no longer describes the whole of what holds the box in the jaws.
-    Friction alone stops the jaws in the right place — the pads meet the part,
-    the drive joint stalls, and `cite_skills::gripper_is_holding` reads that —
-    but ADR-0029 measured it also unable to keep the box STILL once gripped, up
-    to 34.3 degrees of roll between the pads. ADR-0061's `cite_simulation::
-    GraspHold`, a world plugin, now fixes the box rigidly to the arm's own
-    wrist link for exactly as long as the drive joint reads stalled on it, and
-    releases it the instant the jaws are commanded open again; it never touches
-    this collision or its friction. `<mu>` stays, unchanged, because it still
-    governs everything ADR-0061 does not: the box resting and sliding on the
-    pick table and the belt."""
-    mass = 0.2
-    side = WORKPIECE_SIZE
-    inertia = mass * (side * side + side * side) / 12.0
-    return f"""<?xml version="1.0"?>
-<sdf version="1.9">
-  <model name="{name}">
-    <link name="link">
-      <inertial>
-        <mass>{mass}</mass>
-        <inertia>
-          <ixx>{inertia}</ixx><iyy>{inertia}</iyy><izz>{inertia}</izz>
-          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
-        </inertia>
-      </inertial>
-      <collision name="collision">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
-      </collision>
-      <visual name="visual">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <material><ambient>0.8 0.3 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material>
-      </visual>
-    </link>
-  </model>
-</sdf>
-"""
-
-
 class CycleOutcome(NamedTuple):
     """What the coordinator process did, for the failure message to quote.
 
@@ -288,6 +249,7 @@ class TestPickAndPlace(unittest.TestCase):
         rclpy.init()
         cls.node = Node("scenario_pick_and_place")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
+        tie_the_work_piece_size(WORKPIECE_SIZE)
 
         # The station this scenario drives, and the arm that serves it, read off
         # the generated topology in flow order rather than named. The rule is
@@ -553,7 +515,7 @@ class TestPickAndPlace(unittest.TestCase):
             pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M,
         )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
-        sdf_path.write_text(_workpiece_sdf(self.workpiece))
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
         created = gz_run(
             [
                 "ros2",

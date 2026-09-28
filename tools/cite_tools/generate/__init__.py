@@ -51,6 +51,12 @@ def model_hash(model: FacilityModel) -> str:
     for part in (
         model.facility.model_dump_json(),
         *[z.model_dump_json() for z in model.zones],
+        # The material library. Included for the reason everything else here is:
+        # it reaches a generated artifact, so a recording stamped with this hash
+        # must be able to say which cell it was taken from — including what that
+        # cell looked like. Its arrival moved the hash once, on 2026-09-28, which
+        # is correct and is what the check exists to show.
+        *[m.model_dump_json() for m in model.materials],
         *[t.model_dump_json() for t in model.types],
         *[a.model_dump_json() for a in model.assets],
         *[s.model_dump_json() for s in model.stations],
@@ -68,6 +74,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         control,
         description,
         frames,
+        materials,
         moveit,
         package,
         planning_scene,
@@ -89,6 +96,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         artifacts += frames.generate(cell)
         artifacts += topology.generate(model, cell)
         artifacts += bringup.generate(cell)
+    artifacts += materials.generate(model)
     artifacts += package.generate(model)
     artifacts = sorted(artifacts, key=lambda a: a.path)
     _refuse_self_collision_under_derived_geometry(model, artifacts)

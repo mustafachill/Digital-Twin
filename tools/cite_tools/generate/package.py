@@ -22,6 +22,7 @@ DIRECTORIES = (
     "control",
     "description",
     "frames",
+    "materials",
     "moveit",
     "topology",
     "worlds",

@@ -69,6 +69,12 @@ if(BUILD_TESTING)
   # which is why it drives the generator through the repository virtualenv in a
   # subprocess. It brings nothing up.
   ament_add_pytest_test(reproduction_refused test/test_the_reproduction_is_refused.py)
+  # The one statement of the model a work-piece is spawned as. It was two — a
+  # hand-written SDF string in each of the two scenarios that spawn one — and the
+  # colour in it was authored in neither L0 nor anywhere else, which is half of
+  # why the cell rendered black. Pure string building over a YAML document, so it
+  # brings nothing up.
+  ament_add_pytest_test(workpiece test/test_workpiece.py)
   # ADR-0042 obliged every path that starts a Gazebo process to carry the
   # partition, and the promotion covered only the launch graph. The scenario
   # harness starts its own, and until this module existed they carried nothing

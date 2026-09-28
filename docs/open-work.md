@@ -999,6 +999,44 @@ both sides now normalise toward their own current configuration and both start f
 hide it. The metric is a divergence instrument: a false 6.283 is exactly the reading that would
 be quoted.
 
+### #90 — Every GUI run in this project rendered in software until 2026-09-28, and nothing said so
+
+`gz sim gui` had no GPU. The container's `gui` service passes no `/dev/dri` device and
+`NVIDIA_VISIBLE_DEVICES` does nothing unless the NVIDIA container runtime is the one in use; Mesa
+reached for the Intel driver and for a device node that was not there, failed, and fell back to
+llvmpipe — painting a 3D scene on the CPU. **The only thing that ever said so was two lines in the
+launch log that read like warnings**: `failed to load driver: iris` and `egl: failed to create dri2
+screen`.
+
+**What it cost, measured on 2026-09-28 on this 16-core host.** A paired run with one window per
+side drove the load average to **22.74**; the counterpart's arm fell **29.7 degrees** behind its
+own commanded trajectory on `picker_joint1` and **35.3** on `picker_joint3` against a `0.01` rad
+tolerance; the trajectory controller aborted with `GOAL_TOLERANCE_VIOLATED`, `Pick` returned result
+code 10, and L4 stopped the line and asked for an operator — ADR-0036, ADR-0037 and ADR-0038 all
+behaving exactly as specified. The plant side, on the same commands and commit, completed its whole
+cycle. The same run **headless** carried both boxes end to end with zero tolerance failures.
+
+**The fix, and what it is evidenced by.** `scripts/sim` now exports `__NV_PRIME_RENDER_OFFLOAD` and
+`__GLX_VENDOR_LIBRARY_NAME` for a windowed run, **guarded on `libGLX_nvidia.so.0` existing inside
+the container**, so a host without one falls through untouched. After it, `nvidia-smi` names both
+`gz sim gui` processes holding **293** and **295 MiB** of VRAM at 30% utilisation, the load average
+reads **3.91**, and a two-window paired run carried both boxes to the end of the belt with
+**zero** `tolerances` lines, **zero** `code 10` and **zero** escalations.
+
+**What this is not.** One run per configuration on one machine, nothing registered in advance. It
+is a discriminator on the one variable that changed and it is **not a rate**, and it sets **no
+threshold**: nothing here says how much machine a windowed pair needs, only that this one has
+enough once the GPU is doing the drawing. **No tolerance and no ceiling was widened**, and none may
+be — the tolerance is a detector and it did its job.
+
+**What stays open, and it is the reason this entry is not simply closed.** Every GUI observation
+this project has ever made was taken on a software-rendered, CPU-starved cell, and **nothing has
+been re-taken**. Nothing is known to be wrong: the findings that came out of watching the window
+are about planning and geometry, which software rendering does not touch. But an aborted arm, a
+slow cycle or a teardown timeout observed in a GUI run before this date may have had a cause that
+is now gone, and **a reader must not treat those observations as having been taken on the cell that
+ships today**. The cheapest thing that would settle any one of them is to re-run it.
+
 ### #83 — Two documents say the planning scene is empty, and it has not been for some time
 `workspace/src/cite_generated/moveit/cell_b_planning_scene.yaml` carries a comment saying
 *"Nothing reads this file yet"*, and ADR-0026's Consequences still describe planning against an

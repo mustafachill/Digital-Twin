@@ -33,6 +33,8 @@ from cite_tools.model.schema import (
     FacilityDocument,
     Flow,
     FlowDocument,
+    Material,
+    MaterialsDocument,
     Station,
     StationsDocument,
     Zone,
@@ -55,6 +57,9 @@ class FacilityModel:
 
     facility: Facility
     zones: tuple[Zone, ...]
+    #: The facility's material library, by name. Empty where the model declares
+    #: none, which is legal exactly as long as no body names one.
+    materials: tuple[Material, ...]
     types: tuple[AssetType, ...]
     assets: tuple[AssetInstance, ...]
     stations: tuple[Station, ...]
@@ -63,6 +68,9 @@ class FacilityModel:
 
     def zone(self, zone_id: str) -> Zone | None:
         return next((z for z in self.zones if z.id == zone_id), None)
+
+    def material(self, material_id: str) -> Material | None:
+        return next((m for m in self.materials if m.id == material_id), None)
 
     def asset_type(self, type_id: str) -> AssetType | None:
         return next((t for t in self.types if t.id == type_id), None)
@@ -117,6 +125,7 @@ def load(root: Path) -> FacilityModel:
     """Load and schema-validate every model file under ``root``."""
     facility: Facility | None = None
     zones: list[Zone] = []
+    materials: list[Material] = []
     types: list[AssetType] = []
     assets: list[AssetInstance] = []
     stations: list[Station] = []
@@ -145,6 +154,8 @@ def load(root: Path) -> FacilityModel:
             facility = document.facility
         elif isinstance(document, ZonesDocument):
             zones.extend(document.zones)
+        elif isinstance(document, MaterialsDocument):
+            materials.extend(document.materials)
         elif isinstance(document, AssetTypeDocument):
             types.append(document.asset_type)
         elif isinstance(document, AssetInstancesDocument):
@@ -165,6 +176,7 @@ def load(root: Path) -> FacilityModel:
     return FacilityModel(
         facility=facility,
         zones=tuple(sorted(zones, key=lambda z: z.id)),
+        materials=tuple(sorted(materials, key=lambda m: m.id)),
         types=tuple(sorted(types, key=lambda t: t.id)),
         assets=tuple(sorted(assets, key=lambda a: a.id)),
         stations=tuple(sorted(stations, key=lambda s: s.id)),

@@ -128,7 +128,8 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 > step does, and what CI drives on `cell_b` is the plant alone.
 
 ```bash
-./scripts/sim --zone cell_b --pair             # implies headless; both sides, under the supervisor
+./scripts/sim --zone cell_b --pair             # both sides, under the supervisor
+./scripts/sim --zone cell_b --pair --headless  # the same, with no windows
 ./scripts/sim --zone cell_b --pair line:=true  # and let L4 drive every station, on both sides
 ```
 

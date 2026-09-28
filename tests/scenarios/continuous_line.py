@@ -81,6 +81,7 @@ import launch_testing.markers
 import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup import workpiece
 from cite_bringup.gz import ModelPoses
 from cite_bringup.gz import run as gz_run
 from cite_interfaces.msg import DetectionEvent, LineState, StationState
@@ -103,7 +104,13 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from _cell import carried_models, cell, world_root, zone  # noqa: E402  (insert first)
+from _cell import (  # noqa: E402  (insert first)
+    carried_models,
+    cell,
+    tie_the_work_piece_size,
+    world_root,
+    zone,
+)
 
 #: The cell this scenario drives, resolved once at load. Its only cell-specific
 #: fact: everything else — the milestone ladder, the work-piece name, the world
@@ -128,6 +135,11 @@ WORKPIECES = int(os.environ.get("CITE_LINE_WORKPIECES", "3"))
 #: The reference work-piece, whose geometry `pick_and_place` uses and around whose
 #: dimensions the beam offsets in `model/assets/instances/sensors.yaml` are
 #: chosen. Its NAME is not written here — see `carried_models`.
+#:
+#: The SAME QUANTITY as `cite_bringup.workpiece.SIDE_M`, which is what the spawned
+#: model is actually built from. The two are tied at run time by
+#: `_cell.tie_the_work_piece_size`, called from `setUpClass`, rather than by an
+#: import — that function says why.
 WORKPIECE_SIZE = 0.05
 
 #: Height above the pick surface the work-piece is released from: small enough to
@@ -518,6 +530,7 @@ class TestContinuousLine(unittest.TestCase):
         rclpy.init()
         cls.node = Node("scenario_continuous_line")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
+        tie_the_work_piece_size(WORKPIECE_SIZE)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -1093,7 +1106,7 @@ class TestContinuousLine(unittest.TestCase):
 
     def _spawn_workpiece(self, at: tuple[float, float, float]) -> None:
         sdf_path = Path(f"/tmp/cite_{self.workpiece}.sdf")
-        sdf_path.write_text(_workpiece_sdf(self.workpiece))
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
         created = gz_run(
             [
                 "ros2",
@@ -1396,55 +1409,6 @@ class TestContinuousLine(unittest.TestCase):
         else:
             lines.append("the work-piece was never located in the simulator")
         return "\n".join(lines)
-
-
-def _workpiece_sdf(name: str) -> str:
-    """A plain box, named as the generated world says the belts carry.
-
-    Its inertia is computed rather than guessed — a wrong tensor makes the pick
-    behave oddly for reasons that look like a controller fault (L1).
-
-    `<mu>` no longer describes the whole of what holds the box once it is
-    grasped. Friction alone stops the jaws in the right place — the pads meet
-    the part, the drive joint stalls, and `cite_skills::gripper_is_holding`
-    reads that — but ADR-0029 measured it unable to keep the box STILL once
-    gripped, up to 34.3 degrees of roll between the pads. ADR-0061's
-    `cite_simulation::GraspHold`, a world plugin, now fixes the box rigidly to
-    the arm's own wrist link for exactly as long as the CELL says the jaws are
-    holding it (ADR-0065) — L3 publishes that verdict and a simulation-only
-    bridge tells the plugin — and it never touches this collision or its
-    friction. It used to decide that for itself from the drive joint's own
-    position, which was a second copy of `cite_skills::gripper_is_holding`'s
-    judgement and cost two decisions before it was removed. `<mu>` stays,
-    unchanged, because it still governs everything ADR-0061 does not: the box
-    resting and sliding on the pick table and the belts.
-    """
-    mass = 0.2
-    side = WORKPIECE_SIZE
-    inertia = mass * (side * side + side * side) / 12.0
-    return f"""<?xml version="1.0"?>
-<sdf version="1.9">
-  <model name="{name}">
-    <link name="link">
-      <inertial>
-        <mass>{mass}</mass>
-        <inertia>
-          <ixx>{inertia}</ixx><iyy>{inertia}</iyy><izz>{inertia}</izz>
-          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
-        </inertia>
-      </inertial>
-      <collision name="collision">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
-      </collision>
-      <visual name="visual">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <material><ambient>0.8 0.3 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material>
-      </visual>
-    </link>
-  </model>
-</sdf>
-"""
 
 
 @launch_testing.post_shutdown_test()

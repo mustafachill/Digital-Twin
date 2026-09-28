@@ -5,6 +5,10 @@
 #   ./scripts/sim --zone cell_b --headless   no GUI — the form used by CI and by the tester agent
 #   ./scripts/sim --zone cell_b --pair       both sides of a twin pair, under the pair supervisor
 #
+# A pair takes --headless like a single side does, and without it opens one
+# window per side. The two windows are not distinguishable by their titles,
+# because both sides of a pair carry byte-identical names (ADR-0044, clause 1).
+#
 # --zone IS REQUIRED AND HAS NO DEFAULT (ADR-0056). The facility declares two
 # cells: `cell_b`, the one-arm cell this project works on, and `cell_a`, the
 # three-arm cell Phase 1 closed on, which is kept as a showcase and is brought up
@@ -90,13 +94,24 @@ if [ -z "$ZONE" ]; then
   Exactly one zone runs at a time; see ADR-0056."
 fi
 
-# A pair is headless, and there is no other form of it to offer. Two windows of a
-# cell whose names are byte-identical on both sides would be indistinguishable
-# (ADR-0044, clause 1), and the compose service that carries a display carries
-# one. Inspect either side with Foxglove on that side's domain instead.
-if [ "$PAIR" -eq 1 ]; then
-    HEADLESS=1
-fi
+# A PAIR USED TO BE FORCED HEADLESS HERE, AND IS NOT ANY MORE. The reason given
+# was that two windows of a cell whose names are byte-identical on both sides
+# would be indistinguishable (ADR-0044, clause 1), and that the compose service
+# carrying a display carries one. The first is a usability cost, not a
+# technical block; the second is not a constraint on a pair at all, because both
+# sides run inside the ONE container the supervisor is started in, so one display
+# passthrough serves both. ADR-0044 clause 1 is about names in the ROS graph and
+# says nothing about windows.
+#
+# What the cost actually is, so nobody rediscovers it: the two windows carry the
+# same world name and cannot be told apart by their titles. The supervisor prints
+# which side it started first; beyond that, tell them apart by what you do to
+# them, or run --headless and inspect a side with Foxglove on its own domain.
+#
+# What it buys is the only way to WATCH a pair, which is what ./scripts/demo is
+# for. Two simulators and two GUIs on one machine is a real load — see CLAUDE.md
+# §2 on the real-time factor under CPU starvation before reading anything into
+# how fast it runs.
 
 # GUI needs display passthrough, which is a different compose service.
 if [ "$HEADLESS" -eq 0 ] && ! in_container; then
@@ -119,6 +134,61 @@ source_overlay
 # under `set -o pipefail` that turns a *successful* match into a failed pipeline.
 # The visible effect was this script reporting that cite_bringup is not built
 # whenever it was.
+# THE WINDOW GETS THE GPU, AND UNTIL 2026-09-28 IT NEVER HAD.
+#
+# Measured on this host that day: `gz sim gui` was rendering in SOFTWARE, and
+# nothing said so except two lines nobody read — `failed to load driver: iris`
+# and `egl: failed to create dri2 screen`. Mesa was reaching for the Intel
+# driver and for `/dev/dri/card1`, which the container does not have; it then
+# fell back to llvmpipe and painted a 3D scene on the CPU. The cost was not
+# cosmetic: a paired run with a window per side drove this 16-core host to a
+# load average of 22.74, the counterpart's arm fell 29.7 degrees behind its own
+# commanded trajectory, the controller aborted on GOAL_TOLERANCE_VIOLATED and
+# L4 stopped the line. With the two variables below set, the same host runs one
+# windowed cell at a load average of 0.80, and a PAIR with a window on each side
+# at 3.91 with both `gz sim gui` processes holding 293 and 295 MiB of VRAM at 30%
+# GPU utilisation — read from `nvidia-smi` rather than inferred, and the paired
+# figure measured because the paired case is the one that broke.
+#
+# BOTH SIDES HAD FALLEN BACK, NOT JUST THE SECOND, and that is what rules out
+# "one GPU cannot serve two" as the explanation: the pre-fix log carries four
+# `iris`/`dri` failures under EACH side's prefix. Neither window ever had the
+# GPU.
+#
+# WHY IT IS HERE AND NOT IN THE COMPOSE FILE. `__GLX_VENDOR_LIBRARY_NAME=nvidia`
+# names a vendor library, and on a host without it libglvnd would look for a
+# library that is not there. The compose file cannot ask that question; this can,
+# because by here we are inside the container looking at its own filesystem. The
+# NVIDIA container runtime injects both the device nodes and these libraries when
+# it is the runtime in use, so their presence IS the condition. A host with no
+# NVIDIA GPU falls through untouched and renders exactly as it did before.
+#
+# Both are honoured if the caller already set them, so a person debugging a
+# rendering problem can force either without editing this file.
+#
+# THE NEGATIVE BRANCH WARNS AND DOES NOT PASS IN SILENCE. A guard whose failure
+# mode is silence is the first failure class CLAUDE.md section 10 names, and here
+# the silent case IS the measured-bad one: a host without this library renders
+# both windows in software, which is the configuration that aborted an arm. It
+# warns rather than refusing, because a machine with an AMD or Intel GPU properly
+# passed through is fine and this test cannot see that — what it can say is that
+# the one path known to be fast was not taken.
+if [ "$HEADLESS" -eq 0 ]; then
+    if [ -e /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0 ]; then
+        export __NV_PRIME_RENDER_OFFLOAD="${__NV_PRIME_RENDER_OFFLOAD:-1}"
+        export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
+        info "GPU rendering: PRIME offload onto the NVIDIA vendor library"
+    else
+        warn "No NVIDIA GLX vendor library in this container, so this window is"
+        warn "  rendered by whatever GLX the container already resolves — which on"
+        warn "  the machine that measured this was llvmpipe, on the CPU. Check with"
+        warn "  nvidia-smi, or your GPU's equivalent, that the window is on the GPU."
+        warn "  Software rendering has been measured to starve this host badly"
+        warn "  enough to leave an arm 29.7 degrees behind its own trajectory and"
+        warn "  stop the line (docs/open-work.md #90). --headless avoids it entirely."
+    fi
+fi
+
 PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
 if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
     warn "cite_bringup is not built yet — there is nothing to launch."
@@ -132,7 +202,14 @@ if [ "$PAIR" -eq 1 ]; then
     # and the pair's lifetime, and a shell that started two launches would leave
     # nothing computing "the pair is up" and nothing stopping a half-pair
     # (ADR-0047, Option A).
-    exec python3 -m cite_bringup.pair --headless "zone:=${ZONE}" "${PASSTHROUGH[@]}"
+    # Written as an `if` rather than `[ ... ] && ...` on purpose: this file runs
+    # under `set -e`, where a trailing test that is merely FALSE is a failing
+    # command, and the GUI case is exactly the false one.
+    PAIR_ARGS=("zone:=${ZONE}" "${PASSTHROUGH[@]}")
+    if [ "$HEADLESS" -eq 1 ]; then
+        PAIR_ARGS=(--headless "${PAIR_ARGS[@]}")
+    fi
+    exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
 fi
 
 info "Launching the simulated cell (zone=${ZONE}, headless=${HEADLESS})"

@@ -28,6 +28,48 @@
        below is expressed relative to it. -->
   <link name="cite_world"/>
 
+  <!-- The appearances the bodies below wear, defined once each and referenced by
+       name. Every value is resolved from the facility's material library in L0;
+       nothing here is authored.
+
+       WHY THESE EXIST AT ALL. Until 2026-09-28 every visual in this file was a
+       bare <geometry> and the cell rendered black, while L0 had carried a
+       material name on each of those bodies the whole time and nothing resolved
+       it.
+
+       DEFINED HERE AND REFERENCED BELOW, rather than repeated inside each
+       <visual>. urdfdom resolves a name-only <material> against the robot-scope
+       map, so this is the form in which one colour is written once per document
+       — and repeating a definition makes urdfdom warn that the material is not
+       unique and keep whichever it saw first.
+
+       ONE COLOUR, WHERE L0 DECLARES TWO, AND THE DIFFUSE IS THE ONE THAT SURVIVES.
+       URDF has a single <color> per material and no ambient term. Measured in
+       this project's container on 2026-09-28 with `gz sdf -p` over a probe URDF:
+       sdformat copies this rgba onto BOTH the SDF ambient and the SDF diffuse,
+       after multiplying the three colour components by 1.25 and clamping each at
+       1.0, with alpha untouched. So the declared ambient reaches nothing on this
+       path and the declared diffuse is shown 25% brighter.
+
+       That is recorded and NOT compensated for. Dividing by 1.25 here would put
+       an undeclared constant in this template that tracks an upstream
+       implementation detail, and what it would buy is cosmetic — nothing in this
+       repository measures a colour. What the library does instead is keep every
+       component a scene body wears at or under 0.8, where the multiply cannot
+       clip; the reason is stated on the library itself. -->
+  <material name="conveyor_frame">
+    <color rgba="0.28 0.34 0.42 1"/>
+  </material>
+  <material name="pedestal_steel">
+    <color rgba="0.52 0.53 0.56 1"/>
+  </material>
+  <material name="sensor_housing">
+    <color rgba="0.78 0.62 0.1 1"/>
+  </material>
+  <material name="table_top">
+    <color rgba="0.58 0.38 0.2 1"/>
+  </material>
+
   <!-- infeed_beam — break_beam -->
   <link name="infeed_beam_base_link">
     <inertial>
@@ -44,6 +86,7 @@
     <visual>
       <origin xyz="0 0 0.06" rpy="0 0 0"/>
       <geometry><box size="0.04 0.04 0.12"/></geometry>
+      <material name="sensor_housing"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.06" rpy="0 0 0"/>
@@ -78,6 +121,7 @@
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
       <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <material name="table_top"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
@@ -112,6 +156,7 @@
     <visual>
       <origin xyz="0 0 0.06" rpy="0 0 0"/>
       <geometry><box size="0.04 0.04 0.12"/></geometry>
+      <material name="sensor_housing"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.06" rpy="0 0 0"/>
@@ -146,6 +191,7 @@
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
       <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <material name="table_top"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
@@ -180,6 +226,7 @@
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
       <geometry><box size="0.3 0.3 0.6"/></geometry>
+      <material name="pedestal_steel"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
@@ -214,6 +261,7 @@
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
       <geometry><box size="1.2 0.4 0.6"/></geometry>
+      <material name="conveyor_frame"/>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>

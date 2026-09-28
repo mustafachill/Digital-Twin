@@ -25,6 +25,7 @@ from cite_tools.model.schema import (
     PARAMS_BINDING_PREFIX,
     PLUGIN_BINDING,
     Body,
+    Material,
     xacro_would_evaluate,
 )
 from cite_tools.model.units import fmt, fmt_triple
@@ -55,6 +56,11 @@ class _BodyView:
     visual_xml: str
     collision_xml: str
     named_frames: tuple[_Frame, ...]
+    #: The appearance this body wears, or ``None`` where L0 declares none.
+    #: Resolved here so the template performs no lookup: a template that joined a
+    #: name against a library would be a second place names are resolved, and the
+    #: one that already exists is tested.
+    material: Material | None = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +91,7 @@ def _attr(value: str) -> str:
     return f'"{value}"'
 
 
-def _body_view(asset: ResolvedAsset) -> _BodyView:
+def _body_view(asset: ResolvedAsset, cell: ResolvedCell) -> _BodyView:
     body = asset.asset_type.description.body
     assert body is not None  # callers filter on provider == "body"
 
@@ -137,6 +143,7 @@ def _body_view(asset: ResolvedAsset) -> _BodyView:
         visual_xml=_geometry_xml(body.visual),
         collision_xml=_geometry_xml(body.collision),
         named_frames=frames,
+        material=None if body.material is None else cell.material(body.material),
     )
 
 
@@ -448,10 +455,31 @@ def body_views(cell: ResolvedCell) -> tuple[_BodyView, ...]:
     simulator's.
     """
     return tuple(
-        _body_view(a)
+        _body_view(a, cell)
         for a in cell.assets
         if a.asset_type.description.provider == "body" and a.asset_type.description.body
     )
+
+
+def scene_materials(bodies: tuple[_BodyView, ...]) -> tuple[Material, ...]:
+    """The appearances this cell's bodies wear, each once, in a stable order.
+
+    THE ONES WORN, NOT THE WHOLE LIBRARY. A material no body in this zone wears
+    would be a definition in a document that never references it — noise in a
+    diff, and a reader's first question about a scene should not be why it
+    declares a colour nothing is painted with. The library itself is emitted
+    whole, once, by `generate.materials`, which is where a consumer outside the
+    generated tree reads it.
+
+    DE-DUPLICATED BECAUSE URDF REQUIRES IT: urdfdom keeps the first definition of
+    a repeated material name and warns, so two tables wearing `table_top` must
+    produce one definition and two references, not two of each.
+    """
+    seen: dict[str, Material] = {}
+    for body in bodies:
+        if body.material is not None:
+            seen[body.material.id] = body.material
+    return tuple(seen[name] for name in sorted(seen))
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
@@ -463,7 +491,10 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
         Artifact(
             f"description/{cell.zone}_scene.urdf.xacro",
             env.get_template("description/scene.urdf.xacro.j2").render(
-                cell=cell, world_frame=ids.WORLD_FRAME, bodies=bodies
+                cell=cell,
+                world_frame=ids.WORLD_FRAME,
+                bodies=bodies,
+                materials=scene_materials(bodies),
             ),
         )
     ]
