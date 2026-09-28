@@ -63,6 +63,7 @@ question — whether the message was *received* — which nothing here can obser
 
 from __future__ import annotations
 
+import os
 import sys
 
 from cite_bringup.gz import gz_environment, plan_for
@@ -76,6 +77,35 @@ from rclpy.node import Node
 
 class BridgeError(Exception):
     """The bring-up plan did not deliver something this node may not invent."""
+
+
+def _stop_this_directory_shadowing_gz() -> None:
+    """Drop this file's own directory from `sys.path`, before `gz` is imported.
+
+    THE DEFECT THIS EXISTS FOR, AND IT STOPPED THE WHOLE CELL. This file is
+    installed as a PROGRAM and `./scripts/build` uses `--symlink-install`, so the
+    installed path is a symlink back into `src/cite_bringup/cite_bringup/`. Python
+    puts the RESOLVED script directory at `sys.path[0]`, and that directory holds
+    `gz.py` — this package's own Gazebo-environment door. It shadows the `gz`
+    namespace package that ships `gz.transport13`, and the import dies with
+    `ModuleNotFoundError: No module named 'gz.transport13'; 'gz' is not a package`.
+
+    Found by `./scripts/scenario pick_and_place --zone cell_b`, which is the only
+    thing that runs this file the way the cell does: every unit test IMPORTS the
+    module, where `cite_bringup` is reached through `PYTHONPATH` and its directory
+    is never `sys.path[0]`. `readiness_witness.py` and `lifecycle_driver.py` sit in
+    the same directory and never noticed, because neither imports `gz`.
+
+    Removing the entry rather than renaming `gz.py`: that module is the one door
+    ADR-0042 designates for a Gazebo-transport environment, it is named in this
+    package's README and in the scenario guard, and moving it to dodge a path
+    collision would cost more than it buys. Nothing here needs that entry —
+    `cite_bringup` itself is on `PYTHONPATH`.
+    """
+    ours = os.path.dirname(os.path.realpath(__file__))
+    sys.path[:] = [
+        entry for entry in sys.path if os.path.realpath(entry or ".") != ours
+    ]
 
 
 class Custody:
@@ -124,6 +154,18 @@ class GraspHoldBridge(Node):
         self.declare_parameter("attach_topic", "")
         self.declare_parameter("detach_topic", "")
 
+        # Imported here and not at module scope, the same way `cite_bringup.gz`
+        # defers it: importing this module must not cost a transport node in a
+        # process — a test — that has no use for one.
+        #
+        # ABOVE THE PARAMETER CHECK, DELIBERATELY. It is the statement the call
+        # above exists for, and a refusal that ran first would make the cheapest
+        # test of that call — start the program with no parameters and require the
+        # refusal rather than a traceback — pass without ever reaching the import.
+        _stop_this_directory_shadowing_gz()
+        from gz.transport13 import AdvertiseMessageOptions, Node as GzNode, NodeOptions
+        from gz.msgs10.empty_pb2 import Empty
+
         zone = self.get_parameter("zone").value
         side = self.get_parameter("side").value
         self._attach_topic = self.get_parameter("attach_topic").value
@@ -141,16 +183,9 @@ class GraspHoldBridge(Node):
                     "would put it in a second place."
                 )
 
-        # Imported here and not at module scope, the same way `cite_bringup.gz`
-        # defers it: importing this module must not cost a transport node in a
-        # process — a launch file, a test — that has no use for one.
-        from gz.transport13 import AdvertiseMessageOptions, Node as GzNode, NodeOptions
-
         options = NodeOptions()
         options.partition = gz_environment(plan_for(zone), side)[GZ_PARTITION_ENV]
         self._gz = GzNode(options)
-        from gz.msgs10.empty_pb2 import Empty
-
         self._empty = Empty
         #: One publisher per topic, keyed by the topic itself, so that the rule
         #: below can decide in names and this class only has to look one up.

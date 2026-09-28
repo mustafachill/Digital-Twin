@@ -23,8 +23,12 @@ change of custody onto a topic name.
 
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
+from ament_index_python.packages import get_package_prefix
 from cite_bringup.grasp_hold_bridge import Custody, GraspHoldBridge
 
 ATTACH = "/cite/cell_b/picker/grasp/attach"
@@ -111,3 +115,42 @@ def test_on_state_publishes_nothing_at_all_when_custody_has_not_moved() -> None:
     fake._custody.topic_for(True)
     fake._publish = refuse
     GraspHoldBridge._on_state(fake, SimpleNamespace(gripper_holding=True))
+
+
+def test_the_installed_program_can_reach_gz_transport() -> None:
+    """THE REGRESSION THIS LOCKS DOWN, and nothing above could have caught it.
+
+    `./scripts/build` installs this program as a SYMLINK back into
+    `src/cite_bringup/cite_bringup/`, Python puts the resolved script directory at
+    `sys.path[0]`, and that directory holds `gz.py` — this package's own
+    Gazebo-environment door. It shadowed the `gz` namespace package, and the
+    bridge died at start-up with `ModuleNotFoundError: No module named
+    'gz.transport13'; 'gz' is not a package`, which stopped the whole cell.
+
+    Every other test in this file IMPORTS the module, where `cite_bringup` is
+    reached through `PYTHONPATH` and its directory is never `sys.path[0]`. Only
+    running the installed program the way the launch runs it can see this, so
+    that is what this does. It is started with no parameters, so it refuses —
+    and the refusal is raised BELOW the gz import for exactly this reason.
+    """
+    program = (
+        Path(get_package_prefix("cite_bringup")) / "lib" / "cite_bringup"
+        / "grasp_hold_bridge.py"
+    )
+    assert program.exists(), f"{program} is not installed, so this test checks nothing"
+
+    finished = subprocess.run(  # noqa: S603 - a program this package installs
+        [sys.executable, str(program)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    output = finished.stdout + finished.stderr
+    assert "ModuleNotFoundError" not in output, (
+        "the installed program cannot import what it needs; `sys.path[0]` is its own "
+        f"directory and something in it shadows a package:\n{output}"
+    )
+    assert "GRASP HOLD BRIDGE FAILED" in output, (
+        "the program was expected to reach its own refusal, which sits BELOW the gz "
+        f"import. It exited {finished.returncode} saying:\n{output}"
+    )
