@@ -773,6 +773,13 @@ def test_a_halt_during_the_spawn_wait_is_not_re_labelled_as_a_setup_failure(
     `module.Path` is redirected so the fabricated SDF lands in pytest's `tmp_path`
     rather than in the host's `/tmp`; `_spawn_workpiece` is the only method here
     that uses it.
+
+    `module.workpiece` is fabricated for the same reason `gz_run` is. The model a
+    work-piece is spawned as comes from `cite_bringup.workpiece`, which reads the
+    generated appearance artifact through the ament index — a workspace package,
+    so it is one of the names this suite stubs on a ROS-free host, and a stub
+    returns a stub rather than a string. What this test is about is which message
+    comes out of the halt path, and the bytes of the SDF are no part of it.
     """
     module = line_state
     ladder = _ladder(module)
@@ -792,6 +799,11 @@ def test_a_halt_during_the_spawn_wait_is_not_re_labelled_as_a_setup_failure(
 
     monkeypatch.setattr(module, "gz_run", gz_run)
     monkeypatch.setattr(module, "Path", lambda p: tmp_path / Path(p).name)
+    monkeypatch.setattr(
+        module,
+        "workpiece",
+        types.SimpleNamespace(workpiece_sdf=lambda name: f'<sdf><model name="{name}"/></sdf>'),
+    )
 
     with pytest.raises(AssertionError) as raised:
         spawn((0.0, 0.0, 1.0))

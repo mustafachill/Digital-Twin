@@ -55,7 +55,13 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from _cell import acting_station, carried_models, cell, zone  # noqa: E402  (insert first)
+from _cell import (  # noqa: E402  (insert first)
+    acting_station,
+    carried_models,
+    cell,
+    tie_the_work_piece_size,
+    zone,
+)
 
 #: The cell this scenario drives, resolved once at load.
 #:
@@ -69,8 +75,8 @@ ZONE = zone()
 
 #: The reference work-piece's edge length. The SAME QUANTITY as
 #: `cite_bringup.workpiece.SIDE_M`, which is what the spawned model is actually
-#: built from; the two are tied by an assertion in `_spawn_workpiece` rather than
-#: by an import, for the reason stated there.
+#: built from. The two are tied at run time by `_cell.tie_the_work_piece_size`,
+#: called from `setUpClass`, rather than by an import — that function says why.
 WORKPIECE_SIZE = 0.05
 
 #: Height above the pick surface the work-piece is released from. Small enough
@@ -243,6 +249,7 @@ class TestPickAndPlace(unittest.TestCase):
         rclpy.init()
         cls.node = Node("scenario_pick_and_place")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
+        tie_the_work_piece_size(WORKPIECE_SIZE)
 
         # The station this scenario drives, and the arm that serves it, read off
         # the generated topology in flow order rather than named. The rule is
@@ -506,21 +513,6 @@ class TestPickAndPlace(unittest.TestCase):
             pick[0],
             pick[1],
             pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M,
-        )
-        # The edge length this scenario measures against, and the one the spawned
-        # model is built with, are the same quantity in two modules. It cannot be
-        # imported into this one: `tests/scenarios/guards/` loads this file on a
-        # host with no ROS, where `cite_bringup` is replaced by a stub, and a
-        # module-level import would leave every guard computing with that stub
-        # instead of a number. So the two are tied here instead, at the one moment
-        # both are real — and a disagreement stops the run rather than quietly
-        # asserting the wrong height for the rest of it.
-        self.assertEqual(
-            WORKPIECE_SIZE,
-            workpiece.SIDE_M,
-            "this scenario and cite_bringup.workpiece disagree about how big the "
-            "work-piece is, so every height assertion below is about a different box "
-            "from the one that was spawned",
         )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
         sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
