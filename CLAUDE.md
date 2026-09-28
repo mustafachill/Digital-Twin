@@ -2561,17 +2561,27 @@ bullet.
     now told over a topic — Harmonic's own `DetachableJoint` shape — by a **simulation-only**
     bridge fed by L3's first-ever `RobotState` publisher, a contract this repository declared and
     never wired. **Measured: the sideways push both superseded records chased is gone** — 0.000 mm
-    on six sides across three paired runs — and the box spread reads 0.412 / 0.048 / 0.054 mm
-    against 1.150 / 1.116 / 1.269 before. **Two of three meet the ±0.1 mm a real xArm repeats to
-    and one does not**, and the outlier's two sides began 2.010 s apart in simulated time against
-    0.001 s and 0.040 s for the two that did. Three runs, one machine, nothing registered in
-    advance — **not a rate**. It read **62 records** on 2026-09-24 on
+    on **eighteen** sides across **nine** paired runs — and the box spread reads
+    0.023 / 0.048 / 0.054 / 0.096 / 0.117 / 0.199 / 0.381 / 0.412 / 0.483 mm against
+    1.150 / 1.116 / 1.269 before: mean **0.201**, sd **0.177**, highest **0.483**.
+    **The bar is 0.5 mm as of 2026-09-28 and it is bound to no gate**, on the project owner's
+    decision; the ±0.1 mm it replaces was a real arm's *run-to-run* repeatability compared
+    against a *two-replica* figure, which are different quantities, and the options that led to
+    it were the implementer's. **0.5 mm passes nine of nine and the highest of nine samples is
+    not a bound.** The distribution is **bimodal** — five below 0.12 mm, four above 0.38 mm,
+    nothing between — and **what separates them is unestablished**: a clock-offset correlation
+    held on six runs and died on nine. For scale, the one comparable published figure is
+    GPUSimBench's run-to-run divergence at fixed seed — **13.9 / 21.5 / 114.7 mm** on three
+    engines, with the ones it scores "0.00 cm" reporting to 0.1 mm and therefore unable to
+    resolve this cell's worst run. Nine runs, one machine, nothing registered in advance —
+    **not a rate**. It read **62 records** on 2026-09-24 on
     `feat/clamp-the-box` at `50a51a9`, the newest then being
     [ADR-0063](docs/adr/0063-the-drive-joint-may-not-be-clamped.md) — **the gripper's drive
     joint may not be clamped**, `Accepted`, and the record that supersedes
     [ADR-0062](docs/adr/0062-the-clamp-is-modelled-end-to-end.md) one day after it was written.
     It publishes four measured arms so the door stays shut, and **what it does not buy is stated
-    in it**: the paired box spread is back at 2.418 mm against a real xArm's ±0.1 mm, the
+    in it**: the paired box spread is back at 2.418 mm against a bar that was then a real xArm's ±0.1 mm and is
+    **0.5 mm since 2026-09-28** (ADR-0065's amendment), the
     divergence is still born at first jaw contact, and `DetachableJointInfo` carries no pose
     field — so what decides where the box sits in the gripper is still the contact solve.
     **Its own amendment of the same date is the part a reader must not miss**: ADR-0062's

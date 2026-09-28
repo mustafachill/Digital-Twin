@@ -173,6 +173,25 @@ Wilson lower bound of 0.879 is what is known."*
 
 ### Two: its 84-trial campaign measured friction doing exactly one thing well and one thing badly
 
+**[Added 2026-09-28 — WHY friction could not be tuned into working, which this record did not
+say and four records then went looking for.]** The campaign's own reading was that the
+coefficient is not the lever: at μ = 0.5 / 1.0 / 2.0 the median twist ran 29.76° / 9.60° /
+23.90°, non-monotonic. That reading was right and the mechanism is now known, read from shipped
+source rather than inferred. **`mu` and `mu2` are TRANSLATIONAL coefficients and the measured
+failure is ROTATIONAL** — roll about the pad-to-pad axis. The term that opposes exactly that
+rotation is torsional friction, and **this engine does not have it**: `gz-physics`' DART backend
+refuses it by name (`gzwarn << "DART doesn't support torsional friction setting"`,
+`dartsim/src/SimulationFeatures.cc`), its SDF parser reads no torsional element at all, and
+Gazebo's own tutorial states that torsional friction *"currently works only with the ODE physics
+engine"* while `gz-sim` defaults to DART. MuJoCo's documentation names that same term
+(`condim=4`) as what *"can substantially improve the stability of simulated grasping"*, and both
+Gymnasium-Robotics' Fetch and robosuite's Panda set it on their pads. **So nobody was failing to
+tune friction; there was nothing there to tune.** The decision below is unchanged and this
+strengthens it. [`docs/open-work.md`](../open-work.md) #88 holds the finding and the one lever
+inside Gazebo — `bullet-featherstone` parses a torsional coefficient — **as a hypothesis and not
+a recommendation**.
+
+
 - **It stops the jaws in the right place.** 68/68 held, in position.
 - **It cannot hold the box still.** Up to **34.3°** of roll between the pads while the pads
   themselves turn 0.14°, and the sensitivity runs the wrong way: median twist 0.71° → 9.60° →

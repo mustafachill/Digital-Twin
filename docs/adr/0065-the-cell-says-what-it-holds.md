@@ -1,12 +1,56 @@
 # ADR-0065: The cell says what it holds, and the simulation is told
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-09-28) — the Decision below is unchanged and its promotion clauses 1, 2 and 4 are met, reported in the Measurement section. **What changed is the bar the project is measured against**: it is 0.5 mm, bound to no gate, and the ±0.1 mm it replaces compared two different quantities. See the section *Amendment — 2026-09-28: the bar is 0.5 mm, and what it is a bar on*.
 - **Date:** 2026-09-28
 - **Deciders:** Project owner — *"let the cell say it, go that way"*
 - **Related:** [ADR-0061](0061-hold-the-box-while-the-jaws-are-shut.md) (its trigger is replaced
   by this record), [ADR-0064](0064-let-go-once-the-pads-are-clear.md),
   [ADR-0063](0063-the-drive-joint-may-not-be-clamped.md),
   [ADR-0052](0052-what-separates-a-grasp-from-a-stall-on-nothing.md), CLAUDE.md §3 (P1, P2, P3)
+
+## Amendment — 2026-09-28: the bar is 0.5 mm, and what it is a bar on
+
+**The project owner set the bar at 0.5 mm on 2026-09-28, deliberately bound to no gate.** It
+replaces the ±0.1 mm below, and the sentence below stays where it is because it was right when
+written.
+
+**Why the old bar was the wrong comparison, and the error was mine to make.** ±0.1 mm is what a
+real xArm 5 repeats a *taught position* to — **one machine, run to run**. What this record
+measures is **two replicas at one instant**. Those are different quantities, and the options
+that led the owner to pick the first as a bar on the second were written by the implementer, not
+by the owner.
+
+**What a survey of public practice found, 2026-09-28.** No published work claims, or even
+measures, sub-millimetre agreement between two contact-rich simulation replicas. The one
+comparable published figure is GPUSimBench's run-to-run divergence at fixed seed with
+randomisation disabled: **13.9 mm** (MuJoCo Playground), **21.5 mm** (MuJoCo Warp), **114.7 mm**
+(Madrona); the engines it scores at "0.00 cm" report to a precision of **0.1 mm**, so they could
+not resolve this cell's worst run. And MuJoCo's own documentation states the governing physics:
+*"Contact events have high Lyapunov exponents; this is a property of any rigid-body simulator
+(and indeed of real-world physics)."* **Non-zero divergence between two contact-rich replicas is
+the expected outcome; zero is the claim that would need evidence.**
+
+**The band the bar sits on, nine paired runs on this configuration, one machine:**
+
+| | |
+|---|---|
+| runs | 0.023, 0.048, 0.054, 0.096, 0.117, 0.199, 0.381, 0.412, 0.483 mm |
+| mean | **0.201 mm** |
+| standard deviation | **0.177 mm** |
+| median | 0.117 mm |
+| highest | **0.483 mm** |
+| sideways travel during the fall | **0.000 mm**, all eighteen sides |
+
+**0.5 mm passes nine of nine, and that is the honest limit of the claim: the highest of nine
+samples is not a bound.** A tenth run may exceed it without anything having broken. The
+distribution is also **bimodal** — five runs below 0.12 mm and four above 0.38 mm, with nothing
+between — and **what separates the two groups is not established.** A clock-offset correlation
+held on six runs and died on nine.
+
+**This bar is bound to nothing, by decision.** No scenario, no threshold and no gate reads it;
+`pick_and_place` asserts placement against `PLACE_TOLERANCE_M = 0.10`, four hundred times wider,
+and L5's `DivergenceMetrics` still cannot produce a valid sample (ADR-0049). It is a stated
+expectation, not a gate, and nothing in this repository may cite it as one.
 
 ## Context
 
@@ -129,6 +173,8 @@ carrying 3 of 3 with three attaches and three releases against three genuine fri
 **What is NOT met is the project owner's bar, which is a different bar.** It is the ±0.1 mm a
 real xArm 5 repeats a taught position to, and it requires **all three** runs. Two are — 0.048 mm
 and 0.054 mm. One is 0.412 mm.
+**[Amended 2026-09-28 — see the Amendment section above: the bar is now 0.5 mm, and the ±0.1 mm
+it replaces was a comparison between two different quantities.]**
 
 **Where that one differs is measured, not guessed, and it is not the grasp.** Its two sides
 began **2.010 s** apart in simulated time, against 0.001 s and 0.040 s for the two runs that
