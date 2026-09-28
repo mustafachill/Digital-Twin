@@ -1410,9 +1410,12 @@ def _workpiece_sdf(name: str) -> str:
     reads that — but ADR-0029 measured it unable to keep the box STILL once
     gripped, up to 34.3 degrees of roll between the pads. ADR-0061's
     `cite_simulation::GraspHold`, a world plugin, now fixes the box rigidly to
-    the arm's own wrist link for exactly as long as the drive joint reads
-    stalled on it, and releases it the instant the jaws are commanded open
-    again; it never touches this collision or its friction. `<mu>` stays,
+    the arm's own wrist link for exactly as long as the CELL says the jaws are
+    holding it (ADR-0065) — L3 publishes that verdict and a simulation-only
+    bridge tells the plugin — and it never touches this collision or its
+    friction. It used to decide that for itself from the drive joint's own
+    position, which was a second copy of `cite_skills::gripper_is_holding`'s
+    judgement and cost two decisions before it was removed. `<mu>` stays,
     unchanged, because it still governs everything ADR-0061 does not: the box
     resting and sliding on the pick table and the belts.
     """
