@@ -19,7 +19,11 @@
     --via plant      the plant's own servers only
     --dry-run        print the steps and exit
 
-Ctrl-C, or any step that does not succeed, cancels the goal in flight, stops the
+It does NOT put parts on the table: the caller supplies one per cycle, which is
+what `./scripts/program` does. It refuses to start on an arm that says it holds
+a part, because its first step opens the gripper.
+
+Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in flight, stops the
 belt and exits non-zero.
 """
 
@@ -30,7 +34,12 @@ import sys
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program.cell_b_pick_place import program, target
-from cite_bringup.program.steps import run, StepFailed
+from cite_bringup.program.steps import (
+    EXIT_INTERRUPTED,
+    install_interrupt_handlers,
+    run,
+    StepFailed,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -59,16 +68,22 @@ def main(argv: list[str] | None = None) -> int:
 
     # rclpy's own SIGINT handler shuts the context down, and then nothing could
     # cancel the goal or stop the belt. Python's default raises
-    # KeyboardInterrupt instead, which `run` turns into that cleanup.
+    # KeyboardInterrupt instead, which `run` turns into that cleanup — installed
+    # explicitly, because a process started with `&` inherits SIGINT ignored.
+    install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
         ros = RosCell(cell, args.via)
         try:
+            ros.refuse_if_holding()
             if args.via == "twin":
                 ros.enter_validated()
         except StepFailed as failure:
             print(f"FAILED before the first step: {failure}", flush=True)
             return 1
+        except KeyboardInterrupt:
+            print("interrupted before the first step", flush=True)
+            return EXIT_INTERRUPTED
         say = lambda text: print(text, flush=True)  # noqa: E731
         say(f"==> {args.zone}: {cell.arm.asset} and {cell.conveyor.asset}, via {args.via}")
         return run(steps, ros, args.cycles, say)

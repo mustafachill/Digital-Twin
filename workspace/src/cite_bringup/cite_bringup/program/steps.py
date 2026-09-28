@@ -24,9 +24,12 @@ nothing.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 import math
+import signal
+import threading
 from typing import Protocol
 
 #: A release asks for the jaws fully open. L3 clamps a width beyond the
@@ -130,9 +133,11 @@ def run(
     However it ends — the last cycle, a failed step, Ctrl-C — the active goal is
     cancelled and the belt is commanded to zero on the way out. A physical belt
     is a drive whose setpoint persists (ADR-0038), so a program that stopped
-    without saying so would leave it running.
+    without saying so would leave it running; a stop that could not be sent is
+    therefore a failure of the run, whatever the steps did.
     """
     cycle = 0
+    status = 1
     try:
         while cycles == 0 or cycle < cycles:
             cycle += 1
@@ -140,22 +145,65 @@ def run(
                 say(f"[cycle {cycle}, step {number}/{len(steps)}] {step}")
                 execute(step, cell)
         say(f"done: {cycle} cycle(s)")
-        return 0
+        status = 0
     except StepFailed as failure:
         say(f"FAILED in cycle {cycle}: {failure}")
-        return 1
+        status = 1
     except KeyboardInterrupt:
         say(f"interrupted in cycle {cycle}")
-        return EXIT_INTERRUPTED
+        status = EXIT_INTERRUPTED
     finally:
-        _stop(cell, say)
+        # A terminal's Ctrl-C reaches this process AND the script that started
+        # it, and the script forwards one more; a second KeyboardInterrupt here
+        # would abandon the cancel or the stop half-way.
+        with _interrupts_ignored():
+            stopped = _stop(cell, say)
+    if not stopped:
+        say("FAILED: the belt was NOT confirmed stopped; it may still be running")
+        return status or 1
+    return status
 
 
-def _stop(cell: Cell, say: Callable[[str], None]) -> None:
-    """Cancel whatever is in flight and stop the belt, each attempted regardless."""
-    stops = (("cancel the active goal", cell.cancel), ("stop the belt", lambda: cell.belt(0.0)))
-    for what, action in stops:
-        try:
-            action()
-        except Exception as error:  # noqa: BLE001 - reported, and the other still runs
-            say(f"could not {what}: {error}")
+def install_interrupt_handlers() -> None:
+    """Make SIGINT and SIGTERM raise KeyboardInterrupt, whatever this process inherited.
+
+    A job started with `&` by a non-interactive shell inherits SIGINT as
+    SIG_IGN, and Python then installs no handler of its own, so Ctrl-C would
+    never reach `run` and nothing would cancel the goal or stop the belt.
+    """
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+
+
+@contextmanager
+def _interrupts_ignored() -> Iterator[None]:
+    """Ignore SIGINT and SIGTERM for the duration, then restore what was there."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = {
+        number: signal.signal(number, signal.SIG_IGN)
+        for number in (signal.SIGINT, signal.SIGTERM)
+    }
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def _stop(cell: Cell, say: Callable[[str], None]) -> bool:
+    """Cancel whatever is in flight, then stop the belt, each attempted regardless.
+
+    Return whether the belt's stop was sent.
+    """
+    try:
+        cell.cancel()
+    except Exception as error:  # noqa: BLE001 - reported, and the stop still runs
+        say(f"could not cancel the active goal: {error}")
+    try:
+        cell.belt(0.0)
+    except Exception as error:  # noqa: BLE001 - reported, and made the exit status
+        say(f"could not stop the belt: {error}")
+        return False
+    return True
