@@ -246,6 +246,14 @@ plan:
         # The home configuration comes from L0: where an arm rests between cycles
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [0, -0.35, -1.05, 0, 1.4]
+        # Named joint poses a fixed program moves the arm through (ADR-0066),
+        # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
+        # and each of these.
+        poses_rad:
+          pick_above: [1.0071, 0.4035, -1.363, 0.959, 2.5778]
+          pick: [1.0075, 0.5688, -1.3065, 0.7373, 2.5783]
+          place_above: [-1.03, 0.4576, -1.4875, 1.0299, 0.5408]
+          place: [-1.0304, 0.6043, -1.4145, 0.8103, 0.5404]
         srdf: package://cite_generated/moveit/cell_b_picker.srdf.xacro
         kinematics: package://cite_generated/moveit/cell_b_picker_kinematics.yaml
         planning_pipelines: package://cite_generated/moveit/cell_b_picker_planning_pipelines.yaml
