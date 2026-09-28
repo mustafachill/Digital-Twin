@@ -46,7 +46,15 @@ TOKEN = "grasp_hold_bridge"
 TREES = ("workspace", "tools", "tests", "scripts", ".github", "model")
 
 #: Directories that hold build output or caches rather than source.
-PRUNED = {"build", "install", "log", "__pycache__", ".git", ".venv"}
+#:
+#: The dot-prefixed rule is not tidiness: this guard's first run reported
+#: `tools/.pytest_cache/v/cache/nodeids`, which names the bridge because pytest
+#: records the node ids of the tests IT RAN. A cache of a test run is not a place
+#: anything is started from, and a guard that fails on one teaches a reader to
+#: add entries to `PERMITTED` to make it quiet — which is how a guard stops
+#: guarding. `.github` is kept, because a workflow genuinely could start a node.
+PRUNED = {"build", "install", "log", "__pycache__"}
+KEPT_DOT_DIRECTORIES = {".github"}
 
 #: Every file in those trees that may name the bridge, and why.
 #:
@@ -61,6 +69,7 @@ PERMITTED = {
     ),
     "workspace/src/cite_bringup/test/test_grasp_hold_bridge.py": "its unit tests",
     "workspace/src/cite_bringup/test/test_the_bridge_is_simulation_only.py": "this guard",
+    "workspace/src/cite_bringup/README.md": "says what it is, and that it is simulation-only",
 }
 
 
@@ -80,7 +89,12 @@ def files_naming_the_bridge() -> set[str]:
         for path in base.rglob("*"):
             if not path.is_file() or path.is_symlink():
                 continue
-            if PRUNED & set(path.relative_to(root).parts):
+            parts = set(path.relative_to(root).parts)
+            if PRUNED & parts:
+                continue
+            if any(
+                part.startswith(".") and part not in KEPT_DOT_DIRECTORIES for part in parts
+            ):
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
