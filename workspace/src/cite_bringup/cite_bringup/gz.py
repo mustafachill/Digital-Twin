@@ -146,9 +146,20 @@ def process_environment(
 
 
 def run(
-    argv: Sequence[str], *, zone: str, timeout: float, **kwargs: object
+    argv: Sequence[str],
+    *,
+    zone: str,
+    timeout: float,
+    side: str = PLANT_SIDE,
+    **kwargs: object,
 ) -> subprocess.CompletedProcess:
     """Run a Gazebo-transport command in ``zone``'s partition and capture it.
+
+    ``side`` names which side's partition, BY NAME, for the same reason
+    `gz_environment` takes it that way: a paired zone has two worlds, and a
+    caller that wants the counterpart has to be able to say so through this door
+    rather than around it. It defaults to the plant, which is the side every
+    scenario and `./scripts/sim` without `--pair` addresses.
 
     The single door every such call goes through. `capture_output` and `text`
     are fixed rather than offered: every caller reads what the command printed —
@@ -163,7 +174,7 @@ def run(
     """
     return subprocess.run(
         list(argv),
-        env=process_environment(plan_for(zone)),
+        env=process_environment(plan_for(zone), side=side),
         capture_output=True,
         text=True,
         timeout=timeout,
