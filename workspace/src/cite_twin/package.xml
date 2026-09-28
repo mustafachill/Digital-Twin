@@ -50,6 +50,7 @@
   <!-- The reverse state flow: an arm's joint state, consumed by the divergence
        monitor and republished nowhere. -->
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <exec_depend>cite_generated</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

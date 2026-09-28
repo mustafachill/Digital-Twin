@@ -89,7 +89,7 @@ from cite_bringup.plan import (
 from cite_bringup.readiness import boundary_announcement
 from cite_facility import model_info
 from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, TwinMode
-from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
@@ -121,6 +121,7 @@ from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalRespons
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.task import Future
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64
 
 #: How long L5 waits for a side's L3 action server to appear before it reports
 #: that the goal cannot be dispatched, in seconds of the WALL clock.
@@ -388,6 +389,29 @@ class TwinBoundary:
                     model_info.TOPIC,
                     partial(self._on_model_version, side_name),
                     LATCHED,
+                    callback_group=self._group,
+                )
+            )
+
+        # 4. The belt command (ADR-0066). One operator endpoint per conveyor,
+        # on the plant's domain beside the skills, forwarded in memory to each
+        # side's own command topic under the same routing table: refused in
+        # SIM, sent to both in VALIDATED and VIRTUAL_LEAD. Nothing crosses in
+        # the other direction; the belt's own state stays on its own side.
+        self._belt_publishers = {
+            (side_name, conveyor.command_topic): side.node.create_publisher(
+                Float64, conveyor.command_topic, COMMAND
+            )
+            for side_name, side in self._sides.items()
+            for conveyor in plan.conveyors
+        }
+        for conveyor in plan.conveyors:
+            self._subscriptions.append(
+                self._plant.node.create_subscription(
+                    Float64,
+                    operator_endpoint(conveyor.command_topic),
+                    partial(self._on_belt_command, conveyor.command_topic),
+                    COMMAND,
                     callback_group=self._group,
                 )
             )
@@ -669,6 +693,26 @@ class TwinBoundary:
                 goal_handle.request, feedback_callback=feedback
             )
         return sent
+
+    def _on_belt_command(self, topic: str, message: Float64) -> None:
+        """Forward one belt setpoint to the sides the mode routes a command to.
+
+        A topic has no result to carry a refusal, so a command refused by the
+        mode is dropped and said in the log, which is the only place a caller
+        of a topic can be told.
+        """
+        with self._lock:
+            mode = self._authority.mode
+        chosen = route(mode)
+        if not chosen.accepted:
+            self._log.warning(
+                f"{operator_endpoint(topic)} = {message.data:g} dropped in "
+                f"{MODE_NAMES.get(mode, mode)}: {chosen.detail}",
+                throttle_duration_sec=5.0,
+            )
+            return
+        for side_name in chosen.sides:
+            self._belt_publishers[(side_name, topic)].publish(message)
 
     def _forward_feedback(self, goal_handle, message) -> None:
         """Pass the PLANT's feedback through to the operator, unchanged.

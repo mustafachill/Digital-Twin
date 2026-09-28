@@ -51,6 +51,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -188,6 +189,12 @@ public:
     declare_parameter("tip_link", "");
     declare_parameter("gripper_action", "");
     declare_parameter("home_rad", std::vector<double>{});
+    // Named joint poses beside `home`, from L0's `poses_rad` (ADR-0066). Two
+    // parallel parameters because a ROS parameter cannot be a map: the i-th name
+    // owns values [i * dof, (i + 1) * dof) of the flat array. Empty on an arm
+    // that declares none, which leaves `home` the only named configuration.
+    declare_parameter("pose_names", std::vector<std::string>{});
+    declare_parameter("pose_values_rad", std::vector<double>{});
     declare_parameter("planning_time_s", 5.0);
     declare_parameter("planning_attempts", 10);
     // Which MoveIt pipeline this arm's motions are planned with, and which one a
@@ -368,6 +375,8 @@ public:
     tip_link_ = get_parameter("tip_link").as_string();
     gripper_action_ = get_parameter("gripper_action").as_string();
     home_ = get_parameter("home_rad").as_double_array();
+    pose_names_ = get_parameter("pose_names").as_string_array();
+    pose_values_ = get_parameter("pose_values_rad").as_double_array();
 
     for (const auto & [name, value] :
       {std::pair{"asset_id", asset_id_}, std::pair{"zone", zone_},
@@ -611,6 +620,30 @@ public:
         "disagree.",
         home_.size(), planning_group_.c_str(), group->getVariableCount());
       return false;
+    }
+    // Same reason, for the named poses: a flat array that does not divide into
+    // one configuration per name would silently shift every pose after the
+    // first short one onto the next joint.
+    const std::size_t dof = group->getVariableCount();
+    if (pose_values_.size() != pose_names_.size() * dof) {
+      RCLCPP_ERROR(
+        get_logger(),
+        "pose_values_rad has %zu values for %zu pose name(s), but planning group '%s' "
+        "has %zu joints, so it should have %zu. The poses come from L0 `poses_rad`.",
+        pose_values_.size(), pose_names_.size(), planning_group_.c_str(), dof,
+        pose_names_.size() * dof);
+      return false;
+    }
+    for (std::size_t i = 0; i < pose_names_.size(); ++i) {
+      if (pose_names_[i] == "home" || poses_.count(pose_names_[i]) != 0) {
+        RCLCPP_ERROR(
+          get_logger(), "pose name '%s' is 'home' or is declared twice",
+          pose_names_[i].c_str());
+        return false;
+      }
+      poses_[pose_names_[i]] = std::vector<double>(
+        pose_values_.begin() + static_cast<std::ptrdiff_t>(i * dof),
+        pose_values_.begin() + static_cast<std::ptrdiff_t>((i + 1) * dof));
     }
 
     RCLCPP_INFO(
@@ -915,13 +948,24 @@ private:
     apply_scaling(goal->velocity_scaling, goal->acceleration_scaling);
 
     if (!goal->named_configuration.empty()) {
-      if (goal->named_configuration != "home") {
+      // `home` plus the arm's L0 named poses (ADR-0066). Every one of them takes
+      // the same path below, so a named pose is planned, collision-checked and
+      // executed under the same tolerances as `home`.
+      const std::string & name = goal->named_configuration;
+      const auto named = poses_.find(name);
+      if (name != "home" && named == poses_.end()) {
+        std::string known = "'home'";
+        for (const auto & [pose, values] : poses_) {
+          known += ", '" + pose + "'";
+        }
         finish(make_result(
           ResultCode::PRECONDITION_FAILED,
-          "the only named configuration is 'home', which comes from the L0 model"));
+          "no named configuration '" + name + "'; this arm knows " + known +
+          ", all from the L0 model"));
         return;
       }
-      if (home_.empty()) {
+      const std::vector<double> & target = name == "home" ? home_ : named->second;
+      if (target.empty()) {
         finish(make_result(
           ResultCode::PRECONDITION_FAILED,
           "no home configuration was delivered for this arm"));
@@ -929,11 +973,11 @@ private:
       }
       // Checked: on a size mismatch this returns false AND leaves the previous
       // target installed, so an unchecked call plans somewhere unrelated.
-      if (!move_group_->setJointValueTarget(home_)) {
+      if (!move_group_->setJointValueTarget(target)) {
         finish(make_result(
           ResultCode::PRECONDITION_FAILED,
-          "the home configuration was refused by the planning group; it is out of "
-          "bounds or does not match the group's joints"));
+          "the configuration '" + name + "' was refused by the planning group; it is "
+          "out of bounds or does not match the group's joints"));
         return;
       }
 
@@ -941,7 +985,7 @@ private:
       if (!plan_installed_target(plan)) {
         finish(make_result(
           ResultCode::PLANNING_FAILED,
-          "no path was found from the current state to the home configuration"));
+          "no path was found from the current state to the configuration '" + name + "'"));
         return;
       }
       finish(execute_plan(plan, handle, {}));
@@ -2830,6 +2874,9 @@ private:
   std::string tip_link_;
   std::string gripper_action_;
   std::vector<double> home_;
+  std::vector<std::string> pose_names_;
+  std::vector<double> pose_values_;
+  std::map<std::string, std::vector<double>> poses_;
 
   //: Whether this arm believes it is holding a work-piece. Set by Pick and Grasp,
   //: cleared by Place. It is the arm's own belief, not the line's record — L4

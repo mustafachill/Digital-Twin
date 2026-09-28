@@ -52,13 +52,14 @@ import threading
 
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import ModelVersion, ResultCode
-from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.qos import COMMAND, LATCHED, STATE
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64
 
 #: The joints this fake reports, and the only thing a divergence comparison
 #: here has to work over.
@@ -77,7 +78,9 @@ def _behaviour(text: str, side: str) -> str:
 
 
 class FakeSide(Node):
-    def __init__(self, side: str, zone: str, assets: list[str], offset: float) -> None:
+    def __init__(
+        self, side: str, zone: str, assets: list[str], offset: float, belts: list[str]
+    ) -> None:
         super().__init__("fake_side")
         self._side = side
         self._offset = offset
@@ -94,6 +97,19 @@ class FakeSide(Node):
         self._states = [
             self.create_publisher(JointState, f"/cite/{zone}/{asset}/joint_states", STATE)
             for asset in assets
+        ]
+        # Each belt command this side receives is printed, which is how the
+        # test sees a setpoint L5 forwarded onto this side's own domain.
+        self._belts = [
+            self.create_subscription(
+                Float64,
+                topic,
+                lambda message, topic=topic: print(
+                    f"{side}: belt {topic} {message.data:g}", flush=True
+                ),
+                COMMAND,
+            )
+            for topic in belts
         ]
         self._model = self.create_publisher(
             ModelVersion, "/cite/facility/model_version", LATCHED
@@ -184,11 +200,16 @@ def main() -> int:
     parser.add_argument("--zone", default="cell_a")
     parser.add_argument("--assets", default="arm_1")
     parser.add_argument("--offset", type=float, default=0.0)
+    parser.add_argument("--belts", default="", help="Belt command topics to listen on.")
     arguments, _ = parser.parse_known_args()
 
     rclpy.init()
     node = FakeSide(
-        arguments.side, arguments.zone, arguments.assets.split(","), arguments.offset
+        arguments.side,
+        arguments.zone,
+        arguments.assets.split(","),
+        arguments.offset,
+        [topic for topic in arguments.belts.split(",") if topic],
     )
     executor = MultiThreadedExecutor()
     executor.add_node(node)
