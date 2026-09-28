@@ -713,9 +713,7 @@ def test_a_named_pose_of_the_wrong_length_is_refused(
 ) -> None:
     # The skill server can only refuse this at configure time, taking the whole
     # arm down with a message about a parameter (ADR-0066).
-    edit_yaml(
-        minimal_model / "assets/instances/cell.yaml", _set_poses({"pick": [0.0, 0.1]})
-    )
+    edit_yaml(minimal_model / "assets/instances/cell.yaml", _set_poses({"pick": [0.0, 0.1]}))
     assert "named-pose-length" in rules(minimal_model)
 
 
