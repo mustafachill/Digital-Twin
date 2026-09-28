@@ -3,14 +3,15 @@
 #
 #   ./scripts/program                  one cycle, both sides, one window each
 #   ./scripts/program --headless       the same with no windows
-#   ./scripts/program --cycles 3       three cycles (0 runs until Ctrl-C)
+#   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
 #   ./scripts/program --zone cell_b    name the zone rather than letting the model choose
 #
-# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line, puts
-# one work-piece on each side's pick table, and runs `python3 -m
-# cite_bringup.program --via twin`: ONE program, through the twin boundary, moving
-# both arms pose by pose and running both belts (ADR-0066). Then it reports where
-# each box ended and tears the pair down. Ctrl-C stops the program (goal
+# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line, and
+# for each cycle puts one work-piece on each side's pick table (taking the last
+# cycle's off the belt first) and runs `python3 -m cite_bringup.program --via
+# twin --cycles 1`: ONE program, through the twin boundary, moving both arms pose
+# by pose and running both belts (ADR-0066). Then it reports where the last box
+# ended and tears the pair down. Ctrl-C stops the program (goal
 # cancelled, belt commanded to zero) and then the pair.
 #
 # WHAT IT IS NOT. A demonstration, like ./scripts/demo: it gates nothing and is in
@@ -36,7 +37,7 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --zone|--cycles) WANT="$arg" ;;
-        -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
@@ -101,7 +102,10 @@ teardown() {
     fi
     ok "the cell is down. Its log was ${PAIR_LOG}, inside the container."
 }
-trap teardown INT TERM HUP EXIT
+# An interrupt tears down and then ENDS the script, rather than returning into
+# the cycle loop to report on a pair that is gone.
+trap 'teardown; exit 130' INT TERM HUP
+trap teardown EXIT
 
 step "Bringing up both sides of ${ZONE}, without the line"
 SIM_ARGS=(--zone "$ZONE" --pair)
@@ -123,51 +127,83 @@ kill "$TAIL_PID" 2>/dev/null || true
 TAIL_PID=""
 ok "both sides are up"
 
-step "Putting a work-piece on each side's pick table"
-# `cite_bringup.demo`'s own spawn, unchanged, so the box is the same box the
-# parked line's demonstration uses.
-python3 - "$ZONE" <<'PY' || die "a side would not take the box"
+# One box per side per cycle, and the program run one cycle at a time:
+# `python3 -m cite_bringup.program` puts no part on the table itself, so a
+# `--cycles N` run of it would reach cycle 2 with nothing to pick. The box keeps
+# the one name `workpiece`, because the belt's `<carry>` list, the beams' `<watch>`
+# list and the grasp hold all match that model name exactly (see
+# `cite_bringup.workpiece.workpiece_sdf`); a uniquely named box would ride
+# through the cell untouched. So the previous cycle's box is taken off the end
+# of the belt first, as the continuous_line scenario empties its sink.
+replace_boxes() {
+    # `cite_bringup.demo`'s own spawn, unchanged, so the box is the same box the
+    # parked line's demonstration uses.
+    python3 - "$ZONE" "$1" <<'PY'
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from cite_bringup.demo import SPAWN_DROP_M, frame, spawn
-from cite_bringup.gz import plan_for
+from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, world_name
+from cite_bringup.gz import plan_for, run
 from cite_bringup.workpiece import SIDE_M, workpiece_sdf
 
-zone = sys.argv[1]
+zone, remove_first = sys.argv[1], sys.argv[2] == "1"
+name = "workpiece"
 plan = plan_for(zone)
+world = world_name(plan.world)
 pick = frame(plan, f"{zone}__infeed_table__surface")
 at = (pick[0], pick[1], pick[2] + SIDE_M / 2.0 + SPAWN_DROP_M)
 with NamedTemporaryFile("w", suffix=".sdf", delete=False) as sdf:
-    sdf.write(workpiece_sdf("workpiece"))
+    sdf.write(workpiece_sdf(name))
 try:
     for side in plan.sides:
-        problem = spawn(zone, side.name, "workpiece", at, Path(sdf.name), timeout_s=180.0)
+        if remove_first:
+            # Queued in the world ahead of the create below, so the name is
+            # free by the time the create is processed; if it is not, the
+            # create fails and says so.
+            removed = run(
+                ["gz", "service", "-s", f"/world/{world}/remove",
+                 "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
+                 "--timeout", "5000", "--req", f'name: "{name}" type: MODEL'],
+                zone=zone, side=side.name, timeout=60,
+            )
+            if "data: true" not in removed.stdout:
+                sys.exit(f"{side.name}: could not remove the previous {name}: "
+                         f"{removed.stdout.strip()} {removed.stderr.strip()}")
+        problem = spawn(zone, side.name, name, at, Path(sdf.name), timeout_s=180.0)
         if problem is not None:
             sys.exit(f"{side.name}: {problem}")
-        print(f"  ok  {side.name}: box on the pick table")
+        print(f"  ok  {side.name}: a {name} on the pick table")
 finally:
     Path(sdf.name).unlink(missing_ok=True)
 PY
+}
 
-step "Running the fixed program through the twin boundary"
-python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles "$CYCLES" &
-PROGRAM_PID=$!
 STATUS=0
-while kill -0 "$PROGRAM_PID" 2>/dev/null; do
-    if ! kill -0 "$PAIR_PID" 2>/dev/null; then
-        err "the pair ended while the program was running. Its log is ${PAIR_LOG}."
-        STATUS=1
-        break
-    fi
-    sleep 2
-done
-WAIT_RC=0
-wait "$PROGRAM_PID" 2>/dev/null || WAIT_RC=$?
-PROGRAM_PID=""
-[ "$STATUS" -ne 0 ] || STATUS="$WAIT_RC"
+CYCLE=0
+while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]; }; do
+    CYCLE=$((CYCLE + 1))
+    step "Cycle ${CYCLE}: putting a work-piece on each side's pick table"
+    replace_boxes "$([ "$CYCLE" -gt 1 ] && echo 1 || echo 0)" \
+        || die "a side would not take the work-piece"
 
-step "Where each box ended"
+    step "Cycle ${CYCLE}: running the fixed program through the twin boundary"
+    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 &
+    PROGRAM_PID=$!
+    while kill -0 "$PROGRAM_PID" 2>/dev/null; do
+        if ! kill -0 "$PAIR_PID" 2>/dev/null; then
+            err "the pair ended while the program was running. Its log is ${PAIR_LOG}."
+            STATUS=1
+            break
+        fi
+        sleep 2
+    done
+    WAIT_RC=0
+    wait "$PROGRAM_PID" 2>/dev/null || WAIT_RC=$?
+    PROGRAM_PID=""
+    [ "$STATUS" -ne 0 ] || STATUS="$WAIT_RC"
+done
+
+step "Where the last box ended"
 # Read once, after the belt has stopped. Not a measurement of divergence: see
 # ADR-0065 for that.
 python3 - "$ZONE" <<'PY' || true
@@ -175,7 +211,7 @@ import sys
 from cite_bringup.demo import frame, world_name
 from cite_bringup.gz import ModelPoses, plan_for
 
-zone = sys.argv[1]
+zone, name = sys.argv[1], "workpiece"
 plan = plan_for(zone)
 outfeed = frame(plan, f"{zone}__{plan.conveyors[0].asset}__outfeed")
 print(f"    outfeed frame at x={outfeed[0]:+.3f}  y={outfeed[1]:+.3f}")
@@ -184,7 +220,7 @@ for side in plan.sides:
     try:
         at = None
         for _ in range(50):
-            at = poses.position("workpiece")
+            at = poses.position(name)
             if at is not None:
                 break
             __import__("time").sleep(0.2)
