@@ -1,7 +1,7 @@
 # L0 — Facility model
 
 - **Status:** `BUILT` — `model/` describes **two cells** (2 zones, 7 types, **22** assets, 8
-  stations, across 16 files) and the generators in `tools/cite_tools/generate/` emit every
+  stations, across 17 files) and the generators in `tools/cite_tools/generate/` emit every
   artifact in the table below except the last two, **once per zone**. All five validation
   levels run:
   `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
@@ -174,6 +174,7 @@ That is why it can be plain Python with no ROS dependency and run on any machine
 | Controller configurations | L2 |
 | MoveIt configuration — SRDF, kinematics, joint limits, Cartesian limits, controllers, and the planning pipelines each arm plans with ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)) | L2 / MoveIt |
 | Planning scene | L2 |
+| Facility appearance — the material library, and which body wears which entry | whatever spawns a body that is in no description; today `cite_bringup.workpiece` |
 | Launch graphs | bringup |
 | Process topology | L4 |
 | Frame and namespace plan | everything |
@@ -230,7 +231,7 @@ embed a timestamp or a random identifier, and never depend on filesystem orderin
 | Level | Catches | Where |
 |---|---|---|
 | Schema | Structural errors, missing required fields, wrong types | `jsonschema` |
-| Referential | An asset referencing a type that does not exist; duplicate IDs; a station referencing a missing asset | validator |
+| Referential | An asset referencing a type that does not exist; duplicate IDs; a station referencing a missing asset; a body naming a material the facility's library does not declare | validator |
 | Geometric | Assets overlapping; a station outside its zone; a frame outside the body it names; a station out of reach or its approach corridor obstructed; a place point too near the edge of what supports it | validator |
 | Physical | Implausible density; an inertia tensor that is not positive definite, breaks the triangle inequality, or is copied between differently sized bodies; a centre of mass outside its geometry; collision geometry reusing a visual mesh; a gripper whose stroke is zero, whose default grasp width cannot close on the narrowest part, whose mimic followers have no velocity headroom, or whose `result_timeout_s` is short enough to cut its own controller's stall search short (ADR-0045) | validator + `model-validator` |
 | Generated | Output that does not match a fresh generator run | `model-validator` |
