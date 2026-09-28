@@ -1,6 +1,6 @@
 # ADR-0064: Let go once the pads are clear of the part
 
-- **Status:** Proposed
+- **Status:** Superseded by 0065 — **refuted by its own promotion condition 1**, which said this change fails if a side still travels a millimetre during the fall. Three paired runs on 2026-09-24: 0.656/0.808, 1.309/0.740 and 1.073/0.001 mm. The final spread's mean fell from 1.178 mm to 0.822 mm and its **scatter quadrupled**, 0.153 mm to 0.712 mm. The body below stays exactly as written; [ADR-0065](0065-the-cell-says-what-it-holds.md) carries the figures and the reason this was the same mistake as [ADR-0062](0062-the-clamp-is-modelled-end-to-end.md).
 - **Date:** 2026-09-24
 - **Deciders:** Project owner — *"there is no friction: the arm clamps the box and puts it on
   the belt"*, and *"plan both and do the one that is right"*
