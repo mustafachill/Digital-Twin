@@ -159,6 +159,9 @@ class RosCell:
             except StepFailed:
                 pass
             refusal = holding_refusal(received[-1] if received else None, self._state_topic)
+            if not received:
+                publishers = self.node.count_publishers(self._state_topic)
+                refusal += f" ({publishers} publisher(s) discovered)"
         finally:
             self.node.destroy_subscription(subscription)
         if refusal is not None:
