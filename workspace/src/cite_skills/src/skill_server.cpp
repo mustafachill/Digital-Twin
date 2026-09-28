@@ -77,6 +77,8 @@
 #include <cite_interfaces/action/place.hpp>
 #include <cite_interfaces/action/transfer.hpp>
 #include <cite_interfaces/msg/result_code.hpp>
+#include <cite_interfaces/msg/robot_state.hpp>
+#include <cite_interfaces/qos.hpp>
 
 #include "cite_skills/approach.hpp"
 #include "cite_skills/exclusive_goal.hpp"
@@ -94,6 +96,7 @@ using cite_interfaces::action::Pick;
 using cite_interfaces::action::Place;
 using cite_interfaces::action::Transfer;
 using cite_interfaces::msg::ResultCode;
+using cite_interfaces::msg::RobotState;
 using GripperCommand = control_msgs::action::GripperCommand;
 using moveit::planning_interface::MoveGroupInterface;
 
@@ -621,6 +624,29 @@ public:
       gripper_client_ = rclcpp_action::create_client<GripperCommand>(self, gripper_action_);
     }
 
+    // What this arm holds and what it is doing, on `/cite/<zone>/<asset_id>/state`
+    // (ADR-0065). The name is RELATIVE, exactly as every action above and below
+    // it is: this node is started in its arm's own namespace, so `state` resolves
+    // against the same namespace `pick`, `place` and `grasp` resolve against, and
+    // no second place builds the name (P1, CLAUDE.md §8).
+    //
+    // NOT A SIMULATION AID. A physical arm saying what it holds is wanted for its
+    // own sake — `RobotState` was declared for exactly this and has never had a
+    // publisher — and nothing on this path branches on the backend. What is
+    // simulation-only is the bridge that reads this topic, and it lives in
+    // `cite_bringup` and is absent from the hardware launch.
+    //
+    // `LATCHED` — reliable, transient local, depth 1
+    // (`docs/interfaces/qos-profiles.md`; the profile is named rather than
+    // improvised, because an improvised one connects silently and delivers
+    // nothing). Custody changes a handful of times per cycle and is published on
+    // CHANGE, so a subscriber that starts between two changes — which every
+    // consumer of this topic does, since bring-up starts them after the skill
+    // servers — would otherwise wait for the next grasp to learn the present one.
+    // Transient local is what a late joiner needs and the reason this is not
+    // `STATE`: this is the current value of a fact, not a stream.
+    state_publisher_ = create_publisher<RobotState>("state", cite::qos::latched());
+
     move_to_server_ = rclcpp_action::create_server<MoveTo>(
       self, "move_to",
       [this](const rclcpp_action::GoalUUID & uuid, std::shared_ptr<const MoveTo::Goal>) {
@@ -681,6 +707,11 @@ public:
         start([this, handle] {execute_transfer(handle);});
       });
 
+    // The first value on the latched topic: idle, holding nothing. Published here
+    // rather than left until the first grasp, so that a subscriber which arrives
+    // before this arm has done anything is told so instead of being told nothing.
+    publish_state();
+
     RCLCPP_INFO(get_logger(), "skills for %s are accepting goals", asset_id_.c_str());
     return true;
   }
@@ -720,6 +751,7 @@ private:
     }
     if (gate_.claim(uuid, skill)) {
       cancel_requested_.store(false);
+      publish_state();
       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
     RCLCPP_WARN(
@@ -779,6 +811,7 @@ private:
       worker_ = std::thread([this, work] {
             work();
             gate_.release();
+            publish_state();
       });
     }
     // The previous goal has already released the gate — otherwise this one would
@@ -1002,6 +1035,7 @@ private:
     }
 
     holding_ = result->holding;
+    publish_state();
     terminate(handle, result, gripper.result);
   }
 
@@ -1052,6 +1086,71 @@ private:
   bool still_holding_now() const
   {
     return holding_.load() || custody_unknown_.load();
+  }
+
+  /// Say what this arm holds and what it is doing, when either has changed.
+  ///
+  /// PUBLISHED ON CHANGE, not on a timer. The two facts here change a handful of
+  /// times per cycle and a period would be a guessed duration in the shape of a
+  /// refresh rate (P4); the latched profile is what makes the current value
+  /// available to a subscriber that arrives between two changes.
+  ///
+  /// `gripper_holding` IS `still_holding_now()` AND NOT `holding_`, which is
+  /// ADR-0046's rule rather than a convenience: custody has three states and this
+  /// field has two, so the third — the jaws hold something this node has no
+  /// record of taking — has to fall on one side. It falls on the side that makes
+  /// a consumer escalate, the same direction `Place.Result.still_holding` and
+  /// every custody refusal in this file already take. A consumer told "not
+  /// holding" while the jaws are shut acts on a part it believes is gone; one
+  /// told "holding" while they are empty asks a question it did not need to.
+  ///
+  /// EVERY OTHER FIELD IS LEFT AT ITS DEFAULT, deliberately.
+  ///
+  ///  - `joint_positions_rad`, `joint_velocities_rad_s` and `tool_pose` stay
+  ///    empty because this node holds no `/joint_states` subscription. Adding one
+  ///    to fill a display field would make this a second publisher's-worth of
+  ///    joint state, derived from the controller's own topic, and the message's
+  ///    own header already says it is not a substitute for that topic (P1).
+  ///    `header.frame_id` stays empty with them: it is the frame `tool_pose` is
+  ///    expressed in, and there is no pose.
+  ///  - `held_workpiece_id` stays empty because no L3 action tells this server
+  ///    which work-piece it has. `Pick.Goal.workpiece_id` is an instance id
+  ///    minted by L4's registry, it names no L0 work-piece type, and `Grasp` and
+  ///    `Transfer` carry nothing of the kind — so anything written here would be
+  ///    invented.
+  ///  - `state` stays `STATE_UNKNOWN` because the enum cannot say what this node
+  ///    knows. An arm retreating with a part in the jaws is moving AND holding,
+  ///    and `STATE_MOVING` and `STATE_HOLDING` are one field; choosing between
+  ///    them would be a new judgement, which ADR-0065 says this publisher does
+  ///    not make. `gripper_holding` and `active_skill` beside it say both facts
+  ///    without collapsing them.
+  void publish_state()
+  {
+    if (!state_publisher_) {
+      return;
+    }
+    const bool holding = still_holding_now();
+    const std::string skill = gate_.skill();
+
+    // Snapshot comparison and publication under one lock. Custody is written from
+    // the goal thread and the gate from the executor's, so two callers can reach
+    // here at once; releasing the lock before publishing would let the older of
+    // two states be sent last, and on a latched topic the last one is what every
+    // future subscriber reads.
+    const std::lock_guard<std::mutex> lock(state_mutex_);
+    if (state_published_ && holding == published_holding_ && skill == published_skill_) {
+      return;
+    }
+    state_published_ = true;
+    published_holding_ = holding;
+    published_skill_ = skill;
+
+    RobotState message;
+    message.header.stamp = now();
+    message.asset_id = asset_id_;
+    message.gripper_holding = holding;
+    message.active_skill = skill;
+    state_publisher_->publish(message);
   }
 
   ResultCode custody_refusal(const std::string & what) const
@@ -1246,6 +1345,10 @@ private:
     }
     result->holding = true;
     holding_ = true;
+    // HERE AND NOT AT THE END OF THE GOAL. The retreat below carries the part,
+    // so a consumer told only when `Pick` returns learns about the grasp after
+    // the arm has already lifted with it.
+    publish_state();
 
     report(Pick::Feedback::PHASE_RETREATING, 0.8);
     auto retreat = result->grasp_pose;
@@ -1377,6 +1480,7 @@ private:
       return;
     }
     holding_ = false;
+    publish_state();
 
     report(Place::Feedback::PHASE_RETREATING, 0.9);
     auto retreat = result->release_pose;
@@ -1602,6 +1706,7 @@ private:
       return;
     }
     holding_.store(false);
+    publish_state();
 
     report(Transfer::Feedback::PHASE_RETREATING);
     // Backed out along the tool's own axis, not lifted in world Z as `Pick` and
@@ -2359,6 +2464,7 @@ private:
       // the safe side of that ambiguity costs a refusal; not latching costs a
       // `Pick` that opens the jaws on a part it did not know about.
       custody_unknown_.store(true);
+      publish_state();
       outcome.result = make_result(
         ResultCode::TIMEOUT,
         "the gripper's controller never acknowledged the command. WHETHER THE JAWS HOLD "
@@ -2499,6 +2605,7 @@ private:
       // and `Transfer` refuse until something observes the gripper again. It is
       // cleared where the observation happens, below.
       custody_unknown_.store(true);
+      publish_state();
       outcome.result = make_result(ResultCode::TIMEOUT, detail.str());
       return outcome;
     }
@@ -2511,6 +2618,7 @@ private:
     // which is what "cleared deliberately" means here — a caller has to ask the
     // gripper a question and get an answer.
     custody_unknown_.store(false);
+    publish_state();
 
     const auto wrapped = result_future.get();
     if (wrapped.result) {
@@ -2667,6 +2775,7 @@ private:
     // `Transfer` refuse until a `Grasp` observes the gripper again, which is the
     // same way out `command_gripper`'s timeout latch has.
     custody_unknown_.store(true);
+    publish_state();
 
     std::ostringstream detail;
     // Fixed at a tenth of a millimetre, the same as `describe_empty_grasp` and the
@@ -2735,6 +2844,18 @@ private:
   //: and `Transfer` refuse; see `custody_refusal` for why the refusal is L3's and
   //: not L4's.
   std::atomic<bool> custody_unknown_{false};
+
+  //: Where this arm says what it holds and what it is doing (ADR-0065). Created
+  //: in `configure`, on a name relative to this node's own namespace.
+  rclcpp::Publisher<RobotState>::SharedPtr state_publisher_;
+  //: The last values put on that topic, so that `publish_state` publishes a
+  //: CHANGE and not a repetition. Guarded rather than atomic because the three
+  //: are read, compared and replaced as one snapshot; see `publish_state` for why
+  //: the publication happens under the same lock.
+  std::mutex state_mutex_;
+  bool state_published_{false};
+  bool published_holding_{false};
+  std::string published_skill_;
 
   cite_skills::GripperTravel travel_;
   /// How wide the parts this facility handles are, from the generated plan's own

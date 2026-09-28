@@ -45,6 +45,19 @@ topic, an action or a frame name**, and a server refuses to start rather than gu
 The action shapes are in `cite_interfaces` and are not restated here (P1); read them with
 `ros2 interface show`.
 
+Each `skill_server` publishes one topic of its own: `cite_interfaces/RobotState` on
+`<namespace>/state`, carrying what this arm holds and which skill is running, on the `LATCHED`
+profile and only when one of those changes (ADR-0065). The name is **relative**, like every
+action beside it, so it resolves against the namespace the launch gave the node and is not
+assembled anywhere. `gripper_holding` is `holding_ || custody_unknown_`, because custody has
+three states and the field has two and unknown falls on the side that makes a consumer
+escalate (ADR-0046). `joint_positions_rad`, `joint_velocities_rad_s`, `tool_pose`,
+`held_workpiece_id` and `state` are left at their defaults with the reason in
+`publish_state`'s own comment — this node holds no `/joint_states` subscription and is told no
+work-piece id, and inventing either would be a value in a second place. **It is not a
+simulation aid**: it publishes identically on both backends, and what reads it in simulation
+is a bridge one layer up.
+
 `detection_server` subscribes to each beam's bridged `std_msgs/Bool` level and publishes a
 `cite_interfaces/DetectionEvent` per beam on the `EVENT` profile. The raw level and the typed
 event are two different interfaces on two different topics — see

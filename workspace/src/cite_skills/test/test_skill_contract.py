@@ -45,7 +45,8 @@ import unittest
 from ament_index_python.packages import get_package_share_directory
 from builtin_interfaces.msg import Duration
 from cite_interfaces.action import Grasp, MoveTo, Place, Transfer
-from cite_interfaces.msg import ResultCode
+from cite_interfaces.msg import ResultCode, RobotState
+from cite_interfaces.qos import latched
 from control_msgs.action import GripperCommand
 from geometry_msgs.msg import PoseStamped
 from launch import LaunchDescription
@@ -313,6 +314,23 @@ class Harness(RclpyNode):
         self.states = self.create_publisher(JointState, f"{NAMESPACE}/joint_states", 10)
         self.create_timer(0.05, self._publish_state, callback_group=self.callbacks)
 
+        #: Every `RobotState` this arm has published, in order (ADR-0065).
+        #:
+        #: Subscribed with the SAME latched profile the server publishes on, and
+        #: created here — before `wait_for_server` — deliberately: a late joiner
+        #: receiving the current value is the property `LATCHED` buys, and a
+        #: volatile subscriber would not match a transient-local publisher at all.
+        #: A test that subscribed first and then started the server could not tell
+        #: the two apart.
+        self.robot_states: list[RobotState] = []
+        self.create_subscription(
+            RobotState,
+            f"{NAMESPACE}/state",
+            self.robot_states.append,
+            latched(),
+            callback_group=self.callbacks,
+        )
+
         self.gripper = ActionServer(
             self,
             GripperCommand,
@@ -391,6 +409,20 @@ class Harness(RclpyNode):
             f"{wrapped.result.result.code} {wrapped.result.result.detail}"
         )
 
+    def wait_for_state(self, holds, timeout: float):
+        """Return the newest `RobotState` satisfying `holds`, or None.
+
+        A bounded poll on a condition, never a sleep for a guessed duration: the
+        topic is published on change, so how long a change takes to arrive is a
+        property of the run and the only thing stated here is when to give up.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.robot_states and holds(self.robot_states[-1]):
+                return self.robot_states[-1]
+            time.sleep(0.05)
+        return None
+
     @staticmethod
     def wait(future, timeout: float):
         deadline = time.time() + timeout
@@ -422,6 +454,55 @@ class TestSkillContract(unittest.TestCase):
         cls.executor.shutdown()
         cls.harness.destroy_node()
         rclpy.shutdown()
+
+    def test_0_the_arm_says_what_it_holds_and_a_late_joiner_is_told(self) -> None:
+        """ADR-0065, decision 1: `RobotState` has a publisher, and it latches.
+
+        `RobotState` was declared with `gripper_holding`, `held_workpiece_id` and
+        `active_skill` and had no publisher at all — the same shape CLAUDE.md
+        records for `ConveyorState`: a typed contract designed for exactly this
+        and left unconnected, so the information was in the system and not on the
+        wire.
+
+        THE LATCH IS WHAT THIS TEST IS FOR, and it is not a formality. The topic
+        is published on CHANGE, custody changes a handful of times per cycle, and
+        every consumer of it starts after the skill servers do. Volatile
+        durability here would leave a consumer that joined between two grasps
+        with no answer at all until the next one — and a volatile publisher and a
+        transient-local subscriber do not merely deliver late, they never match,
+        silently. This harness subscribes before the server is even up and
+        requires the value that was current before it asked.
+
+        IT IS NOT A SIMULATION AID, which is why it is asserted here rather than
+        anywhere in `cite_bringup`. There is no simulator in this rig and no
+        backend branch anywhere on this path; what reads this topic in simulation
+        is a bridge that lives above it.
+        """
+        first = self.harness.wait_for_state(lambda _state: True, STARTUP_CEILING_S)
+        self.assertIsNotNone(
+            first,
+            f"nothing was ever published on {NAMESPACE}/state. Either the server "
+            "creates no publisher, or it creates one whose durability a latched "
+            "subscriber cannot match — which delivers nothing and reports nothing",
+        )
+        self.assertEqual(
+            first.asset_id, ASSET,
+            "the arm's state does not name the arm it is about")
+        self.assertFalse(
+            first.gripper_holding,
+            "the first thing this arm said was that it is holding something, before "
+            "any goal was sent to it")
+        self.assertEqual(
+            first.active_skill, "",
+            "the arm named a running skill before any goal was sent to it")
+        # The three display fields this node does not own, left empty on purpose:
+        # it holds no `/joint_states` subscription, and inventing one to fill them
+        # would make this a second publisher's-worth of joint state (P1).
+        self.assertEqual(list(first.joint_positions_rad), [])
+        self.assertEqual(list(first.joint_velocities_rad_s), [])
+        # No L3 action tells this server which work-piece it has, so nothing may
+        # be written here (ADR-0052 A.5).
+        self.assertEqual(first.held_workpiece_id, "")
 
     def test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured(self) -> None:
         grasp = Grasp.Goal()
@@ -731,12 +812,34 @@ class TestSkillContract(unittest.TestCase):
             "the jaws on a part nobody knows is held",
         )
 
+        # AND THE TOPIC SAYS THE SAME THING (ADR-0065). `gripper_holding` is one
+        # bool and custody has three states, so unknown has to fall on one side;
+        # it falls on the side that makes a consumer escalate, which is the
+        # identical rule the result field above is asserted on. Here `holding_`
+        # is FALSE — `test_5` above established that this arm holds nothing — and
+        # only the custody latch can make this true, so a publisher filled from
+        # `holding_` alone fails exactly here.
+        state = self.harness.wait_for_state(
+            lambda published: published.gripper_holding, GOAL_CEILING_S)
+        self.assertIsNotNone(
+            state,
+            f"custody is unknown and {NAMESPACE}/state still reports an empty "
+            "gripper. A consumer branching on that field acts on a part it "
+            "believes is gone, which is the direction ADR-0046 forbids",
+        )
+
         # Leave the rig where the tests below expect to find it. `Grasp` is the
         # one skill custody does not refuse, precisely because it is the way out
         # of this state — asserting that it clears the latch is the other half
         # of the contract, and it is what makes the rest of this file able to
         # run after this test at all.
         self.harness.hold_a_workpiece()
+
+        # NO ASSERTION ON THE TOPIC AFTER THIS CALL, deliberately. That grasp
+        # clears the custody latch AND establishes a real hold, so the topic
+        # reads `holding` either way and an assertion here would pass whether or
+        # not the latch was ever consulted — the same trap this test's own
+        # docstring records for its control.
 
     def test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out(self) -> None:
         """A hold this arm cannot complete is refused before it moves.
