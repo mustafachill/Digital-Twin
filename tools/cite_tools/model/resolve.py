@@ -22,6 +22,7 @@ from cite_tools.model.schema import (
     AssetType,
     ControllerSpec,
     HardwareBackend,
+    Material,
     TrajectoryConstraints,
 )
 from cite_tools.model.workpieces import WorkpieceWidths, workpiece_types, workpiece_widths
@@ -163,6 +164,12 @@ class ResolvedCell:
     #: than standing somewhere, so it has a type but no pose.
     unplaced_types: tuple[AssetType, ...] = ()
     workpiece_models: tuple[str, ...] = ()
+    #: The facility's material library, carried whole rather than pre-joined onto
+    #: the bodies that wear it. Two generators need it and they need it in
+    #: different shapes — the scene resolves a name per body, the appearance
+    #: artifact emits the library itself — so the join happens at each emitter and
+    #: the colour is stated once here.
+    materials: tuple[Material, ...] = ()
 
     @property
     def is_paired(self) -> bool:
@@ -204,6 +211,24 @@ class ResolvedCell:
         was checked against cannot drift apart.
         """
         return workpiece_widths(self.workpiece_models, self.unplaced_types)
+
+    def material(self, material_id: str) -> Material:
+        """One entry of the material library, by the name a body carries.
+
+        Raises rather than returning ``None``: `unknown-material` runs first and
+        is an ERROR, so by the time a generator asks, the name has been checked.
+        A `None` here would be emitted as no appearance at all, which is the
+        black cell this library was written to fix — silently, and in the one
+        place that could still have said so.
+        """
+        found = next((m for m in self.materials if m.id == material_id), None)
+        if found is None:
+            raise ResolveError(
+                f"no material named {material_id!r} in the facility's library; "
+                "referential validation reports this as `unknown-material` and "
+                "must run before a generator asks"
+            )
+        return found
 
     def asset(self, asset_id: str) -> ResolvedAsset | None:
         return next((a for a in self.assets if a.id == asset_id), None)
@@ -495,4 +520,5 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         sides=sides,
         unplaced_types=tuple(sorted(model.types, key=lambda t: t.id)),
         workpiece_models=tuple(sorted(model.facility.workpiece_models)),
+        materials=model.materials,
     )

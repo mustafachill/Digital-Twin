@@ -1,0 +1,50 @@
+---
+{{ hash_banner() }}
+#
+# What every authored body in this facility looks like: the material library from
+# L0, and which entry each body wears.
+#
+# WHO READS THIS, because an artifact with no consumer is invented schema. The
+# work-piece is the one visible object in the cell that is NOT in any generated
+# description — it is spawned into a running world at the moment a scenario or a
+# demo needs one, from a model built in code — so it cannot pick its appearance
+# up from the scene the way the table, the belts and the pedestals do.
+# `cite_bringup.workpiece` builds that model and reads its colour here, which is
+# what keeps the spawned box the same orange the model declares instead of a
+# third copy of two numbers.
+#
+# A FACILITY ARTIFACT AND NOT A PER-ZONE ONE. A material is facility-scoped in
+# L0 — any type may wear any entry — and emitting a copy per zone would state the
+# same colour once per cell, which is the duplication this whole library removes.
+#
+# FACILITY-SCOPED IS ALSO WHY `bodies` IS KEYED BY TYPE. It answers "what does a
+# thing of this kind look like", which is a question about the component library
+# and not about where an instance stands. The work-piece has no instances at all
+# (ADR-0030) and still has an appearance.
+#
+# THE LIBRARY AND THE BINDING, NEVER THE JOIN. Each colour appears once, under
+# its own name; `bodies` carries names and not colours. Two types wearing one
+# material therefore cannot end up two different colours in this file, which is
+# the property the library exists for, and a consumer does the join itself.
+#
+# `ambient` is the colour in shadow, `diffuse` the colour under direct light —
+# SDF's own vocabulary, in SDF's own order, red green blue alpha.
+appearance:
+  materials:
+{% if materials %}
+{% for material in materials %}
+    {{ material.id }}:
+      ambient: [{{ material.ambient | map('f') | join(', ') }}]
+      diffuse: [{{ material.diffuse | map('f') | join(', ') }}]
+{% endfor %}
+{% else %}
+    {}
+{% endif %}
+  bodies:
+{% if bodies %}
+{% for type_id, material_id in bodies %}
+    {{ type_id }}: {{ material_id }}
+{% endfor %}
+{% else %}
+    {}
+{% endif %}

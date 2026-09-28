@@ -14,6 +14,7 @@ install(
     control
     description
     frames
+    materials
     moveit
     topology
     worlds

@@ -37,6 +37,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings: list[Finding] = []
     findings += _duplicate_ids(model)
     findings += _asset_types_exist(model)
+    findings += _materials_exist(model)
     findings += _zones_exist(model)
     findings += _pose_frames_resolve(model)
     findings += _no_pose_cycles(model)
@@ -96,6 +97,52 @@ def _asset_types_exist(model: FacilityModel) -> list[Finding]:
                     "unknown-type",
                     f"assets.{asset.id}.end_effector.type",
                     f"no component library entry named {asset.end_effector.type!r}",
+                )
+            )
+    return findings
+
+
+def _materials_exist(model: FacilityModel) -> list[Finding]:
+    """Every appearance a body names must be in the facility's material library.
+
+    THE FAILURE THIS REPORTS IS THE ONE THAT WENT UNREPORTED FOR THE WHOLE OF
+    PHASE 1. `Body.material` carried a name on every authored body in this model
+    — `table_top`, `conveyor_frame`, `pedestal_steel`, `sensor_housing`,
+    `workpiece_stock` — and there was no library for them to resolve against and
+    no rule asking. The generator dropped the field, every `<visual>` came out a
+    bare `<geometry>`, and the project owner opened the Gazebo window to a cell
+    in which the box, the table and everything else were black. Nothing anywhere
+    printed a line.
+
+    ERROR AND NOT WARNING, AND NO DEFAULT. A name that resolves to nothing is
+    exactly the state above; falling back to a stock grey would make the cell
+    look deliberate while the model said something else, which is the
+    silently-wrong-value class this whole layer exists to eliminate. A body may
+    legitimately have no appearance at all — `material` is optional and `None`
+    emits nothing — so the model can still say "I have not decided"; what it
+    cannot do is say a name nobody declared.
+
+    The unused direction is deliberately NOT checked. A library entry no body
+    wears costs nothing, is the normal state while a cell is being built up, and
+    refusing it would make adding a colour and using it two commits that must
+    land together.
+    """
+    known = {material.id for material in model.materials}
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        body = asset_type.description.body
+        if body is None or body.material is None:
+            continue
+        if body.material not in known:
+            findings.append(
+                error(
+                    "unknown-material",
+                    f"types.{asset_type.id}.description.body.material",
+                    f"no material named {body.material!r} in the facility's library",
+                    "Declare it in the `cite/materials/v1` document, or remove the key. "
+                    f"Known materials: {', '.join(sorted(known)) or '(none)'}. A name "
+                    "that resolves to nothing reaches the generator as no appearance at "
+                    "all, and a body with no appearance renders black.",
                 )
             )
     return findings

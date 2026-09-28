@@ -92,6 +92,22 @@ def fmt_triple(values: Iterable[float]) -> str:
     return " ".join(parts)
 
 
+def fmt_rgba(values: Iterable[float]) -> str:
+    """Format four floats as a space-separated colour, as URDF and SDF want.
+
+    Beside `fmt_triple` and for the same reason: every generated float goes
+    through `fmt`, so a colour cannot acquire a repr that differs between Python
+    versions and break the byte-identity check.
+
+    >>> fmt_rgba([0.28, 0.34, 0.42, 1.0])
+    '0.28 0.34 0.42 1'
+    """
+    parts = [fmt(v) for v in values]
+    if len(parts) != 4:
+        raise ValueError(f"expected exactly 4 values, got {len(parts)}")
+    return " ".join(parts)
+
+
 def degrees_for_display(radians: float) -> str:
     """Render an angle in degrees, for human-facing output only.
 

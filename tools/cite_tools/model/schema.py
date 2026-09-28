@@ -42,6 +42,16 @@ PlannerId = Annotated[str, Field(pattern=r"^[A-Za-z][A-Za-z0-9_]*$")]
 
 Triple = tuple[float, float, float]
 
+#: One colour channel, in [0, 1]. Both SDF and URDF take colours in that range and
+#: nothing converts, so the bound is declared on the field where pydantic can
+#: enforce it and the exported JSON Schema can state it.
+Channel = Annotated[float, Field(ge=0.0, le=1.0)]
+
+#: Red, green, blue, alpha. A 4-tuple rather than a mapping because this is how
+#: both target formats spell a colour, and a named-component form would be a
+#: second spelling of one value.
+Rgba = tuple[Channel, Channel, Channel, Channel]
+
 
 class Strict(BaseModel):
     """Base for every model: unknown keys are errors, instances are immutable."""
@@ -133,6 +143,52 @@ Geometry = Annotated[
 ]
 
 
+class Material(Strict):
+    """What one named appearance looks like.
+
+    WHY THIS EXISTS. ``Body.material`` has carried a name since the first
+    authored body — ``table_top``, ``conveyor_frame``, ``pedestal_steel`` — and
+    until this class existed the name resolved to nothing: no library, no rule,
+    no emitter. Every visual in the generated scene was a bare ``<geometry>``,
+    every renderer fell back to its own default, and the project owner opened the
+    GUI and reported that the box, the table and everything else were black. The
+    model already said what each thing was made of; the generator threw it away.
+
+    WHY THE VOCABULARY IS SDF'S. ``ambient`` and ``diffuse`` are the two terms
+    both artifacts that carry a visual can be made to express, and they are the
+    two a person means by "what colour is it": diffuse is the colour under direct
+    light, ambient the colour in shadow. Declaring a single colour instead and
+    deriving the pair in the generator would put a rendering policy in code that
+    someone would then want to vary per material (P5).
+
+    NO ``specular``, AND THAT IS A DECISION RATHER THAN AN OMISSION. The scene —
+    the artifact this defect is about — is a URDF, and URDF has exactly one
+    colour element per material with no specular term at all, so a declared
+    specular could be honoured by some emitters and silently dropped by the one
+    that matters. Nothing in this cell needs a highlight. Add it when something
+    does, together with the emitter that can carry it.
+
+    WHAT THE URDF CHANNEL COSTS, measured in this container on 2026-09-28 with
+    `gz sdf -p` over a probe URDF and not reasoned about: sdformat's URDF parser
+    maps ``<color rgba>`` onto **both** the SDF ambient and the SDF diffuse, after
+    multiplying the three colour components by 1.25 and clamping each at 1.0; the
+    alpha passes through untouched. So the scene renders ``diffuse`` at 1.25x and
+    ignores ``ambient`` entirely, while an artifact emitted as SDF carries both
+    verbatim. That is not compensated for here — a divide-by-1.25 in the
+    generator would be an undeclared constant tracking an upstream implementation
+    detail, and what it would buy is cosmetic. It is the reason every shipped
+    component below stays at or under 0.8: above that the scene clips and the
+    model states a colour the cell cannot show.
+    """
+
+    #: The name a ``Body.material`` carries. The reference is by name rather than
+    #: by inlining the colour on each body, because the point of a library is that
+    #: two tables are the same brown by construction.
+    id: Identifier
+    ambient: Rgba
+    diffuse: Rgba
+
+
 class Body(Strict):
     """Geometry for a part we author ourselves — a conveyor, a table, a pedestal.
 
@@ -146,7 +202,21 @@ class Body(Strict):
     visual: Geometry
     collision: Geometry
     inertial: Inertial
-    material: str | None = None
+    #: Which entry of the facility's material library this body wears, or ``None``
+    #: for a body nobody has given an appearance.
+    #:
+    #: A NAME AND NOT A COLOUR, so that two bodies made of the same thing cannot
+    #: be two different browns (P1). `Identifier` rather than a free string since
+    #: 2026-09-28: the five names authored in this model were always
+    #: lower_snake_case, and typing them as one makes a mistyped name a schema
+    #: error in an editor instead of a dangling reference found later.
+    #:
+    #: A name that no material declares is a referential ERROR
+    #: (`unknown-material`), never a warning and never a silent fall back to a
+    #: default. A dangling name here is exactly the state this field was in until
+    #: a library existed, and it rendered the whole cell black without one line of
+    #: output saying so.
+    material: Identifier | None = None
 
     @property
     def horizontal_extents_m(self) -> tuple[float, float] | None:
@@ -1717,6 +1787,25 @@ class AssetTypeDocument(Document):
     asset_type: AssetType
 
 
+class MaterialsDocument(Document):
+    """The facility's material library.
+
+    A list in one document, like `ZonesDocument`, rather than a file per material
+    like the component library: a material is a handful of numbers with no
+    behaviour, and splitting it per file would make "are these two the same grey?"
+    a question you answer by opening two files.
+
+    OPTIONAL, and the absence is meaningful rather than lax. A facility that
+    authors no body — or authors bodies and gives none of them an appearance —
+    owes no library, and requiring one would mean shipping an empty document to
+    satisfy the loader. What is NOT optional is that every name a body does carry
+    resolves; that is `unknown-material`, and it is an error.
+    """
+
+    schema_: Literal["cite/materials/v1"] = Field(alias="schema")
+    materials: list[Material] = Field(min_length=1)
+
+
 class AssetInstancesDocument(Document):
     schema_: Literal["cite/asset_instances/v1"] = Field(alias="schema")
     assets: list[AssetInstance] = Field(min_length=1)
@@ -1736,6 +1825,7 @@ DOCUMENT_TYPES: dict[str, type[Document]] = {
     "cite/facility/v1": FacilityDocument,
     "cite/zones/v1": ZonesDocument,
     "cite/asset_type/v1": AssetTypeDocument,
+    "cite/materials/v1": MaterialsDocument,
     "cite/asset_instances/v1": AssetInstancesDocument,
     "cite/stations/v1": StationsDocument,
     "cite/flow/v1": FlowDocument,

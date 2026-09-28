@@ -21,7 +21,7 @@ from xml.sax.saxutils import escape, quoteattr
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
-from cite_tools.model.units import fmt, fmt_float, fmt_triple
+from cite_tools.model.units import fmt, fmt_float, fmt_rgba, fmt_triple
 
 #: Header stamped into every generated artifact. It names the command that
 #: regenerates the file, because the most useful thing a generated file can tell
@@ -70,6 +70,7 @@ def environment() -> Environment:
     # `f` where the output is read back as a ROS parameter and the type matters.
     env.filters["f"] = fmt_float
     env.filters["triple"] = _triple
+    env.filters["rgba"] = _rgba
     # For a boolean a safety gate decides on. See `_declared_bool`.
     env.filters["declared_bool"] = _declared_bool
     env.filters["xml"] = escape
@@ -81,6 +82,10 @@ def environment() -> Environment:
 
 def _triple(values: Iterable[float]) -> str:
     return fmt_triple(values)
+
+
+def _rgba(values: Iterable[float]) -> str:
+    return fmt_rgba(values)
 
 
 def _declared_bool(value: object) -> str:

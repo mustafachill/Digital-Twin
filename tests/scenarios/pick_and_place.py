@@ -36,6 +36,7 @@ import launch_testing.markers
 import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from cite_bringup import workpiece
 from cite_bringup.gz import run as gz_run
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
@@ -66,6 +67,10 @@ from _cell import acting_station, carried_models, cell, zone  # noqa: E402  (ins
 #: <name> --zone <zone>` overrides it for one run.
 ZONE = zone()
 
+#: The reference work-piece's edge length. The SAME QUANTITY as
+#: `cite_bringup.workpiece.SIDE_M`, which is what the spawned model is actually
+#: built from; the two are tied by an assertion in `_spawn_workpiece` rather than
+#: by an import, for the reason stated there.
 WORKPIECE_SIZE = 0.05
 
 #: Height above the pick surface the work-piece is released from. Small enough
@@ -201,56 +206,6 @@ def generate_test_description() -> LaunchDescription:
             launch_testing.actions.ReadyToTest(),
         ]
     )
-
-
-def _workpiece_sdf(name: str) -> str:
-    """A plain box. Its inertia is computed, not guessed — a wrong tensor here
-    would make the pick behave oddly for reasons that look like a controller
-    fault (L1).
-
-    It used to carry a `<sensor type="contact">`, which existed for exactly one
-    reader: `GraspAttachment::FindGraspable` iterated every `ContactSensorData`
-    in the world, and no pad link declares a sensor, so without one here the
-    attachment plugin could not fire at all. That plugin is removed, so the
-    sensor has no reader and is gone with it.
-
-    `<mu>` no longer describes the whole of what holds the box in the jaws.
-    Friction alone stops the jaws in the right place — the pads meet the part,
-    the drive joint stalls, and `cite_skills::gripper_is_holding` reads that —
-    but ADR-0029 measured it also unable to keep the box STILL once gripped, up
-    to 34.3 degrees of roll between the pads. ADR-0061's `cite_simulation::
-    GraspHold`, a world plugin, now fixes the box rigidly to the arm's own
-    wrist link for exactly as long as the drive joint reads stalled on it, and
-    releases it the instant the jaws are commanded open again; it never touches
-    this collision or its friction. `<mu>` stays, unchanged, because it still
-    governs everything ADR-0061 does not: the box resting and sliding on the
-    pick table and the belt."""
-    mass = 0.2
-    side = WORKPIECE_SIZE
-    inertia = mass * (side * side + side * side) / 12.0
-    return f"""<?xml version="1.0"?>
-<sdf version="1.9">
-  <model name="{name}">
-    <link name="link">
-      <inertial>
-        <mass>{mass}</mass>
-        <inertia>
-          <ixx>{inertia}</ixx><iyy>{inertia}</iyy><izz>{inertia}</izz>
-          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
-        </inertia>
-      </inertial>
-      <collision name="collision">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
-      </collision>
-      <visual name="visual">
-        <geometry><box><size>{side} {side} {side}</size></box></geometry>
-        <material><ambient>0.8 0.3 0.1 1</ambient><diffuse>0.9 0.4 0.1 1</diffuse></material>
-      </visual>
-    </link>
-  </model>
-</sdf>
-"""
 
 
 class CycleOutcome(NamedTuple):
@@ -552,8 +507,23 @@ class TestPickAndPlace(unittest.TestCase):
             pick[1],
             pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M,
         )
+        # The edge length this scenario measures against, and the one the spawned
+        # model is built with, are the same quantity in two modules. It cannot be
+        # imported into this one: `tests/scenarios/guards/` loads this file on a
+        # host with no ROS, where `cite_bringup` is replaced by a stub, and a
+        # module-level import would leave every guard computing with that stub
+        # instead of a number. So the two are tied here instead, at the one moment
+        # both are real — and a disagreement stops the run rather than quietly
+        # asserting the wrong height for the rest of it.
+        self.assertEqual(
+            WORKPIECE_SIZE,
+            workpiece.SIDE_M,
+            "this scenario and cite_bringup.workpiece disagree about how big the "
+            "work-piece is, so every height assertion below is about a different box "
+            "from the one that was spawned",
+        )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
-        sdf_path.write_text(_workpiece_sdf(self.workpiece))
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
         created = gz_run(
             [
                 "ros2",
