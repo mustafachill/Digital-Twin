@@ -42,8 +42,17 @@ schema: cite/materials/v1
 # stating rather than trusting: the work-piece type has no instances by design
 # (see `model/assets/types/workpieces/workpiece.yaml`), so it reaches no scene;
 # its only wearer is the model a scenario spawns, which is SDF and carries both
-# values verbatim. Give that entry to a body that stands in the cell and its 0.90
-# clips.
+# values verbatim.
+#
+# THAT EXCEPTION IS HELD BY A RULE AND NOT BY THIS PARAGRAPH.
+# `scene-material-clips`, in `cite_tools.validate.physical`, is an ERROR on any
+# component above the ceiling worn by a type something in the model instantiates
+# — so giving `workpiece_stock` to a pedestal, or giving the work-piece an
+# instance, refuses at validate time. It was prose alone for one commit, which is
+# a measured constraint held by a comment, and the reviewer was right to say so:
+# the safety above is a property of today's model rather than a rule, and the
+# paragraph would have stayed true while the cell went wrong. The ceiling itself
+# is derived there from the measured 1.25 rather than written as 0.8 twice.
 #
 # `ambient` is the colour in shadow and `diffuse` the colour under direct light,
 # which is SDF's own vocabulary. Ambient is kept at roughly half of diffuse on

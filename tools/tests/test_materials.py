@@ -20,12 +20,26 @@ from cite_tools.generate import description, materials
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import ResolveError, resolve
 from cite_tools.model.schema import MaterialsDocument
-from cite_tools.validate import Severity, referential
+from cite_tools.validate import Severity, physical, referential
 
 
 def rules(path: Path) -> set[str]:
     findings = referential.check(load(path))
     return {f.rule for f in findings if f.severity is Severity.ERROR}
+
+
+def physical_findings(path: Path, rule: str) -> list:
+    """Every ERROR of one rule from the physical level, in a stable order.
+
+    The list rather than the rule names, because the interesting assertions about
+    this rule are which colour it names and what its message says — a set of rule
+    names would pass on a rule that fired for the wrong reason.
+    """
+    return [
+        finding
+        for finding in physical.check(load(path))
+        if finding.rule == rule and finding.severity is Severity.ERROR
+    ]
 
 
 def materials_file(model: Path) -> Path:
@@ -294,3 +308,162 @@ def test_a_generator_asking_for_an_undeclared_material_raises(real_model: Path) 
     cell = resolve(load(real_model), "cell_b")
     with pytest.raises(ResolveError):
         cell.material("no_such_material")
+
+
+# --------------------------------------------------------------------------- #
+# The colour a standing body wears has to survive the URDF channel
+# --------------------------------------------------------------------------- #
+def test_no_shipped_scene_material_clips(real_model: Path) -> None:
+    """The shipped library passes. Asked directly, because it is what ships."""
+    assert physical_findings(real_model, "scene-material-clips") == []
+
+
+def test_a_colour_a_standing_body_wears_may_not_exceed_the_bound(
+    real_model: Path, edit_yaml: Callable
+) -> None:
+    """The rule FIRING, on the entry a body in this cell actually wears.
+
+    `pedestal_steel` is worn by `pedestal_600`, which is instantiated in both
+    zones, so brightening it is exactly the change the bound refuses.
+    """
+    edit_yaml(
+        materials_file(real_model),
+        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+            "diffuse", [0.92, 0.53, 0.56, 1.0]
+        ),
+    )
+    findings = physical_findings(real_model, "scene-material-clips")
+    assert len(findings) == 1
+    assert findings[0].where == "materials.pedestal_steel.diffuse[0]"
+
+
+def test_the_finding_says_why_the_bound_is_what_it_is(
+    real_model: Path, edit_yaml: Callable
+) -> None:
+    """A reader must learn the multiply, not be handed a number to obey.
+
+    The gain is read from the module rather than written here: a test that spelled
+    `1.25` itself would be a second statement of a measured constant, which is the
+    duplication this rule was added to stop.
+    """
+    edit_yaml(
+        materials_file(real_model),
+        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
+            "ambient", [0.9, 0.16, 0.08, 1.0]
+        ),
+    )
+    finding = physical_findings(real_model, "scene-material-clips")[0]
+    text = f"{finding.message} {finding.hint}"
+    assert str(physical.URDF_TO_SDF_COLOUR_GAIN) in text
+    assert str(physical.MAX_SCENE_COLOUR_COMPONENT) in text
+    assert "work_table_600" in finding.message, "the body that wears it must be named"
+
+
+def test_the_bound_is_derived_from_the_measured_gain() -> None:
+    """0.8 is what reaches exactly 1.0, not a round number someone liked."""
+    assert physical.MAX_SCENE_COLOUR_COMPONENT * physical.URDF_TO_SDF_COLOUR_GAIN == 1.0
+    assert physical.MAX_SCENE_COLOUR_COMPONENT == 0.8
+
+
+def test_the_bound_is_inclusive(real_model: Path, edit_yaml: Callable) -> None:
+    """Exactly at the bound the conversion reaches 1.0 and clips nothing."""
+    edit_yaml(
+        materials_file(real_model),
+        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+            "diffuse", [physical.MAX_SCENE_COLOUR_COMPONENT, 0.53, 0.56, 1.0]
+        ),
+    )
+    assert physical_findings(real_model, "scene-material-clips") == []
+
+
+def test_alpha_is_not_bounded(real_model: Path, edit_yaml: Callable) -> None:
+    """Measured: the alpha passes through the conversion untouched.
+
+    A rule that bounded it would refuse `1.0` — which every entry in this library
+    declares, and which is shown exactly as declared.
+    """
+    edit_yaml(
+        materials_file(real_model),
+        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+            "diffuse", [0.52, 0.53, 0.56, 1.0]
+        ),
+    )
+    assert physical_findings(real_model, "scene-material-clips") == []
+
+
+def test_the_workpiece_material_is_above_the_bound_and_is_not_refused(
+    real_model: Path,
+) -> None:
+    """The shipped exception, asserted rather than trusted to prose.
+
+    `workpiece_stock` declares 0.90, which is above the bound, and is legal
+    because its type has no instances and the thing that spawns one emits SDF.
+    Both halves are checked here: if the model ever gives the work-piece an
+    instance, the test below is what says so.
+    """
+    model = load(real_model)
+    stock = next(m for m in model.materials if m.id == "workpiece_stock")
+    assert max(stock.diffuse[:3]) > physical.MAX_SCENE_COLOUR_COMPONENT
+    assert "workpiece" not in {asset.type for asset in model.assets}
+    assert physical_findings(real_model, "scene-material-clips") == []
+
+
+def test_instantiating_the_workpiece_would_refuse_that_colour(
+    real_model: Path, edit_yaml: Callable
+) -> None:
+    """The exception above is a property of the model, and the rule holds it.
+
+    This is the case the prose could not: a work-piece given an instance renders
+    through the scene URDF like anything else, and the 0.90 then clips. Nothing
+    but the rule reports it.
+
+    ONE finding and not two, which is the bound being inclusive rather than the
+    rule missing a channel: that entry's ambient is 0.80 exactly, which reaches
+    1.0 after the multiply and is shown as declared. The expectation here was
+    written as two and the rule was right.
+    """
+    edit_yaml(
+        real_model / "assets/instances/fixtures.yaml",
+        lambda d: d["assets"].append(
+            {
+                "id": "stray_block",
+                "type": "workpiece",
+                "zone": "cell_b",
+                "pose": {"frame": "cite_world", "xyz_m": [0.0, 3.0, 0.0]},
+                "hardware": {"backend": "sim"},
+            }
+        ),
+    )
+    model = load(real_model)
+    stock = next(m for m in model.materials if m.id == "workpiece_stock")
+    assert stock.ambient[0] == physical.MAX_SCENE_COLOUR_COMPONENT, "the inclusive edge"
+
+    findings = physical_findings(real_model, "scene-material-clips")
+    assert [f.where for f in findings] == ["materials.workpiece_stock.diffuse[0]"]
+    assert "stray_block" not in findings[0].message, "the TYPE is named, not the instance"
+    assert "workpiece" in findings[0].message
+
+
+def test_a_material_no_instantiated_body_wears_is_not_bounded(
+    real_model: Path, edit_yaml: Callable
+) -> None:
+    """Nothing renders it through a URDF, so nothing about it can clip."""
+    edit_yaml(
+        materials_file(real_model),
+        lambda d: d["materials"].append(
+            {"id": "unused_paint", "ambient": [1.0, 1.0, 1.0, 1.0], "diffuse": [1.0, 1.0, 1.0, 1.0]}
+        ),
+    )
+    assert physical_findings(real_model, "scene-material-clips") == []
+
+
+def test_a_dangling_material_is_reported_once_and_by_the_other_rule(
+    real_model: Path, edit_yaml: Callable
+) -> None:
+    """Two rule names for one fact would send the reader to two places."""
+    edit_yaml(
+        real_model / "assets/types/fixtures/pedestal_600.yaml",
+        lambda d: d["asset_type"]["description"]["body"].__setitem__("material", "nonexistent"),
+    )
+    assert "unknown-material" in rules(real_model)
+    assert physical_findings(real_model, "scene-material-clips") == []

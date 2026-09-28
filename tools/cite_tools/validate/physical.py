@@ -30,6 +30,32 @@ MAX_DENSITY = 12000.0
 #: someone computed by hand and wrote to four decimal places.
 TRIANGLE_TOLERANCE = 1e-6
 
+#: What sdformat's URDF parser does to a `<color rgba>` on its way into a world.
+#:
+#: MEASURED, in this project's container on 2026-09-28, with `gz sdf -p` over a
+#: probe URDF — not read out of a specification and not inferred. A declared
+#: `0.55 0.35 0.18 1` came back as `0.6875 0.4375 0.225 1` on **both** the SDF
+#: ambient and the SDF diffuse; a declared `0.9 0.5 0.1 0.5` came back as
+#: `1 0.625 0.125 0.5`. So the three colour components are multiplied by this and
+#: then clamped at 1.0, and the alpha passes through untouched.
+URDF_TO_SDF_COLOUR_GAIN = 1.25
+
+#: The largest colour component a material worn by a body standing in the cell may
+#: declare.
+#:
+#: DERIVED FROM THE GAIN ABOVE AND NOT WRITTEN AS `0.8`, so that the two cannot
+#: drift apart: the bound is exactly the value that reaches 1.0 after the multiply,
+#: and anything above it is shown clamped. A model that declares a brighter
+#: component therefore states a colour the cell cannot show — the silently-wrong-
+#: value class this whole layer exists to eliminate, in the one dimension nothing
+#: else measures.
+#:
+#: It binds only where a URDF carries the colour, which is the generated scene.
+#: An artifact emitted as SDF carries both declared components verbatim and is
+#: not bounded by this; `_scene_material_does_not_clip` is where that distinction
+#: is enforced rather than described.
+MAX_SCENE_COLOUR_COMPONENT = 1.0 / URDF_TO_SDF_COLOUR_GAIN
+
 #: The least follower headroom that has actually been measured sufficient, as a
 #: fraction of the follower joints' own velocity limit.
 #:
@@ -105,6 +131,90 @@ def check(model: FacilityModel) -> list[Finding]:
         seen_tensors.setdefault(key, []).append(asset_type.id)
 
     findings += _no_copied_placeholder_tensors(model, seen_tensors)
+    findings += _scene_material_does_not_clip(model)
+    return findings
+
+
+def _scene_material_does_not_clip(model: FacilityModel) -> list[Finding]:
+    """A colour worn by a body standing in the cell must survive the URDF channel.
+
+    WHAT THIS IS ABOUT. The cell's furniture reaches Gazebo as a **URDF**, which
+    carries one `<color rgba>` per material where SDF carries an ambient and a
+    diffuse separately. Measured rather than assumed (see
+    `URDF_TO_SDF_COLOUR_GAIN`): sdformat multiplies the three colour components by
+    1.25 on the way in and clamps each at 1.0. A component above
+    `MAX_SCENE_COLOUR_COMPONENT` is therefore shown clamped, and the model states
+    a colour the cell cannot show.
+
+    WHY IT IS A RULE AND NOT A COMMENT, which is the whole reason this function
+    exists. The bound was stated in prose on the library itself, and one shipped
+    entry — `workpiece_stock`, at 0.90 — sits above it. That entry is safe today
+    for a reason that is a property of TODAY'S MODEL rather than a rule: the
+    work-piece type has no instances by design (ADR-0030), so it reaches no scene,
+    and the only thing that spawns one emits SDF, which carries both declared
+    components verbatim. Give that material to a pedestal and the comment is
+    still true and the cell is still wrong. A measured constraint held only by a
+    comment is the shape CLAUDE.md section 4 prohibits.
+
+    WHY *PHYSICAL* AND NOT *REFERENTIAL*, since the library's other rule is over
+    there. `unknown-material` asks whether a name points at something, which is
+    what the referential level is for. This asks whether a declared number
+    survives an instrument that was measured — the same question as an implausible
+    density or a grasp width that cannot close on the narrowest part, and the same
+    shape: a threshold with a measurement behind it, enforced here and stated
+    nowhere else.
+
+    THE PREDICATE MATCHES THE EMITTER RATHER THAN PARAPHRASING IT.
+    `generate.description.body_views` selects `provider == "body"` with a `body`,
+    over the asset INSTANCES of a zone — so a type reaches a scene exactly when it
+    satisfies that filter and something in the model instantiates it. A type with
+    no instance is not bounded, which is the correct answer and not an oversight:
+    nothing renders it. The day it acquires one, this rule fires.
+
+    A material a body names but the library does not declare is skipped in
+    silence. `unknown-material` reports it, and reporting it twice under two rule
+    names would send the reader to two places for one fact.
+    """
+    instantiated = {asset.type for asset in model.assets}
+    library = {material.id: material for material in model.materials}
+
+    findings: list[Finding] = []
+    for asset_type in sorted(model.types, key=lambda t: t.id):
+        body = asset_type.description.body
+        if (
+            body is None
+            or body.material is None
+            or asset_type.description.provider != "body"
+            or asset_type.id not in instantiated
+        ):
+            continue
+        material = library.get(body.material)
+        if material is None:
+            continue
+        for channel in ("ambient", "diffuse"):
+            # Red, green and blue only. The alpha passes through the conversion
+            # untouched, measured alongside the gain, so bounding it would refuse
+            # a value that is shown exactly as declared.
+            for index, component in enumerate(getattr(material, channel)[:3]):
+                if component > MAX_SCENE_COLOUR_COMPONENT:
+                    findings.append(
+                        error(
+                            "scene-material-clips",
+                            f"materials.{material.id}.{channel}[{index}]",
+                            f"{component} is worn by {asset_type.id!r}, which stands in "
+                            f"this cell, so it reaches the simulator through the scene "
+                            f"URDF — where sdformat multiplies it by "
+                            f"{URDF_TO_SDF_COLOUR_GAIN} and clamps at 1.0, showing "
+                            f"{min(component * URDF_TO_SDF_COLOUR_GAIN, 1.0)} instead.",
+                            f"Declare at most {MAX_SCENE_COLOUR_COMPONENT}, which is the "
+                            f"component that reaches exactly 1.0 after the multiply. The "
+                            f"1.25 was measured with `gz sdf -p` over a probe URDF, not "
+                            f"read out of a specification; `URDF_TO_SDF_COLOUR_GAIN` "
+                            f"carries the measurement. A material worn by nothing that "
+                            f"stands in the cell is not bounded by this, because nothing "
+                            f"renders it through a URDF.",
+                        )
+                    )
     return findings
 
 
