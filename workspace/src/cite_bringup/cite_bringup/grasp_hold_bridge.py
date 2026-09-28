@@ -187,9 +187,15 @@ class GraspHoldBridge(Node):
         options.partition = gz_environment(plan_for(zone), side)[GZ_PARTITION_ENV]
         self._gz = GzNode(options)
         self._empty = Empty
-        #: One publisher per topic, keyed by the topic itself, so that the rule
-        #: below can decide in names and this class only has to look one up.
-        self._publishers = {
+        #: One GAZEBO publisher per topic, keyed by the topic itself, so that the
+        #: rule below can decide in names and this class only has to look one up.
+        #:
+        #: `_gz_publishers` AND NOT `_publishers`: `rclpy.node.Node.__init__` sets
+        #: an instance attribute of that name for its own ROS publishers, and
+        #: `destroy_node` walks it as a list. Shadowing it with a dict made every
+        #: teardown die with `KeyError: 0` — after a clean run — which the
+        #: scenario's post-shutdown check caught and no unit test could.
+        self._gz_publishers = {
             topic: self._gz.advertise(topic, Empty, AdvertiseMessageOptions())
             for topic in (self._attach_topic, self._detach_topic)
         }
@@ -215,7 +221,7 @@ class GraspHoldBridge(Node):
 
     def _publish(self, topic: str) -> None:
         what = "take hold" if topic == self._attach_topic else "let go"
-        publisher = self._publishers[topic]
+        publisher = self._gz_publishers[topic]
         if not publisher.has_connections():
             # Reported and still sent. A gz-transport publication with no matched
             # subscriber reaches nobody and says nothing about it — the same

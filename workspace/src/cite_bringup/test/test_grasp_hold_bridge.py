@@ -23,6 +23,8 @@ change of custody onto a topic name.
 
 from __future__ import annotations
 
+import ast
+import inspect
 from pathlib import Path
 import subprocess
 import sys
@@ -30,6 +32,8 @@ from types import SimpleNamespace
 
 from ament_index_python.packages import get_package_prefix
 from cite_bringup.grasp_hold_bridge import Custody, GraspHoldBridge
+import rclpy
+import rclpy.node
 
 ATTACH = "/cite/cell_b/picker/grasp/attach"
 DETACH = "/cite/cell_b/picker/grasp/detach"
@@ -153,4 +157,54 @@ def test_the_installed_program_can_reach_gz_transport() -> None:
     assert "GRASP HOLD BRIDGE FAILED" in output, (
         "the program was expected to reach its own refusal, which sits BELOW the gz "
         f"import. It exited {finished.returncode} saying:\n{output}"
+    )
+
+
+def test_the_bridge_shadows_no_attribute_rclpy_owns() -> None:
+    """THE REGRESSION THIS LOCKS DOWN, and it survived a whole clean run.
+
+    `GraspHoldBridge` is an `rclpy.node.Node`, and `Node.__init__` sets instance
+    attributes of its own. One of them is `_publishers`, a LIST that
+    `destroy_node` walks by index. Holding the Gazebo publishers in a dict of the
+    same name made the node work perfectly and then die at teardown with
+    `KeyError: 0` — after `pick_and_place` had picked and placed, so the cycle
+    passed and only the post-shutdown check saw it.
+
+    Compared against a real `Node`'s instance attributes rather than against a
+    remembered list: which names rclpy claims is rclpy's to change, and a list
+    written here would go stale silently in exactly the way that produced this.
+    """
+    assigned = set()
+    source = ast.parse(Path(inspect.getfile(GraspHoldBridge)).read_text())
+    for klass in ast.walk(source):
+        if not isinstance(klass, ast.ClassDef) or klass.name != "GraspHoldBridge":
+            continue
+        for node in ast.walk(klass):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"
+                ):
+                    assigned.add(target.attr)
+    assert assigned, "no `self.x = ...` was found, so this test is checking nothing"
+
+    rclpy.init()
+    try:
+        probe = rclpy.node.Node("shadowing_probe")
+        owned = set(vars(probe))
+        probe.destroy_node()
+    finally:
+        rclpy.shutdown()
+    assert "_publishers" in owned, (
+        "the probe does not carry `_publishers`, so rclpy has changed and this test "
+        "is no longer comparing against what it thinks it is"
+    )
+
+    collisions = sorted(assigned & owned)
+    assert not collisions, (
+        f"the bridge assigns {collisions}, which `rclpy.node.Node` already uses for "
+        "its own state. The node will work and then fail at teardown, or worse"
     )
