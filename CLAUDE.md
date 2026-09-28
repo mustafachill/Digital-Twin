@@ -938,7 +938,10 @@ bullet.
   under-reads a failure, here it over-reads a pass. The over-count was observed on 2026-09-08
   by the agent that read that run; the half that is re-derived here is that the string is in
   the commit body.
-  **There are three such step names, not one, and this file named only the first until
+  **There are FOUR such step names as of 2026-09-28** — the same grep on
+  `feat/fixed-program` adds `Simulation-in-the-loop scenario — program_cycle (advisory)`
+  (ADR-0066), so a restriction to the three below drops that scenario's verdict.
+  **There were three such step names, not one, and this file named only the first until
   2026-09-08.** `grep -n "Simulation-in-the-loop" .github/workflows/ci.yml`, run here on that
   date, returns `Simulation-in-the-loop scenarios` (both `bringup` invocations),
   `Simulation-in-the-loop scenario — pick_and_place` and `Simulation-in-the-loop scenario —
@@ -2557,7 +2560,11 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **64 records, all indexed** on 2026-09-28 on
+    `ADR index` line reported **65 records, all indexed** on 2026-09-28 on
+    `feat/fixed-program`, the newest being
+    [ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md) — run the cell from a fixed
+    program through the twin boundary and park the event-driven line, `Proposed`. It read
+    **64 records, all indexed** earlier on 2026-09-28 on
     `feat/let-go-when-clear`, the newest being
     [ADR-0065](docs/adr/0065-the-cell-says-what-it-holds.md) — **the cell says what it holds and
     the simulation is told**, `Proposed`, written after two records were refuted in five days

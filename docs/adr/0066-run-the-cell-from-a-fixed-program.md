@@ -56,12 +56,19 @@ runs it on the pair. Concretely:
    plan-and-execute path as `home`.
 3. **L5**: the twin boundary forwards a belt setpoint from `/cite/twin/<zone>/<belt>/command` to
    each side's own command topic under the skills' routing table: nothing in `SIM`, both sides in
-   `VALIDATED` and `VIRTUAL_LEAD`.
+   `VALIDATED` and `VIRTUAL_LEAD`. **A stop is never gated**: a zero setpoint reaches every side in
+   every mode, and a mode transition sends zero to the belts of any side the new mode no longer
+   commands, because a physical belt's setpoint persists (ADR-0038).
 4. **The program** (`cite_bringup/program/`) is a list of steps: home, open, pick_above, pick,
    grip, pick_above, place_above, place, open, place_above, home, belt on, wait, belt off. The
-   grip width, belt speed and belt run time come from the plan. It puts the twin in
-   `VALIDATED`, stops at the first step that does not succeed, and on any exit cancels the goal
-   in flight and commands the belt to zero.
+   grip width, belt speed and belt run time come from the plan. It refuses to start on an arm
+   whose latched `RobotState` says it holds a part (its first step opens the jaws), puts the
+   twin in `VALIDATED`, stops at the first step that does not succeed, and on any exit —
+   including SIGINT and SIGTERM — cancels the goal in flight, even one not yet accepted, and
+   commands the belt to zero; a stop it cannot send makes the exit status non-zero. It puts no
+   part on the table: `--cycles N` assumes the caller supplies one per cycle, and
+   `./scripts/program` does so by running it one cycle at a time, removing the last cycle's
+   box and spawning a new one under the one model name the belt, beams and grasp hold match.
 5. **The event-driven line is parked, not deleted.** Every file stays where it is, built and
    tested; `continuous_line` stays in CI; `./scripts/demo` and `line:=true` behave as before;
    the tag `event-driven-line-v1` marks the commit before this change; and
@@ -97,6 +104,40 @@ passed once with the bare verdict (cycle and teardown), the program taking 57 s.
 their belts at x = 1.529 m against an outfeed frame at 1.600 m, 1 mm apart in y. With the pair
 in `SIM`, a `MoveTo` sent to `/cite/twin/cell_b/picker/move_to` was aborted and a belt setpoint
 was dropped with the boundary's log line.
+
+After the review fixes, same machine, same day, not a rate: `./scripts/program --headless
+--cycles 2` carried a box on both sides in both cycles, the last ending at x = 1.529 / 1.530 m.
+SIGINT to the script during the belt's run printed `interrupted`, exited 130, and both sides'
+measured belt speed went from 0.150 to 0.000 within about a second; SIGINT during a motion
+exited 130 with no cancel reported as failed. **Four of about fourteen script runs never
+started**: the program's new participant had not discovered the plant's skill server's
+`RobotState` within 60 s (in one instrumented run: one publisher matched and no sample, about
+ten of the domain's nodes discovered, the twin boundary not among them), while the same read
+from another process, before or after, answered in under 2 s. The cause is unestablished and
+is not attributed to this program; the refusal says what it did not receive rather than
+assuming an empty gripper.
+
+### Must hold before a physical side
+None of these matters while both sides are simulated, and each one is open. They are recorded
+here so that pairing with hardware reopens them rather than discovering them.
+
+- **The hardware opt-in does not cover belts.** `cite_twin/mode.py`'s gate derives the
+  deployment from `controller_managers` only; a `Conveyor` declares no backend, so nothing
+  refuses routing a belt setpoint to a physical drive.
+- **The final `belt(0)` is published and not confirmed delivered** before `rclpy` shuts down,
+  and the belt is open-loop anyway (nothing publishes `ConveyorState`).
+- **Protections the parked line had and this program does not**: no arrival confirmation, no
+  stop on the accumulation beam, no `StopAll` escalation, an open-loop belt. A direct
+  `python3 -m cite_bringup.program --cycles N` pushes each finished part off the outfeed with
+  the next belt run.
+- **The poses were taught on the `PROVISIONAL` layout** and do not transfer to the building.
+- **`--via plant` bypasses the L5 mode gate by design**: it addresses the plant's own servers.
+- **Custody is read on the plant only.** Through the twin the program reads the plant arm's
+  `RobotState`; the counterpart's is on a domain the program may not open (ADR-0044 clause 3),
+  and the boundary does not route state, so a counterpart holding a part is not refused.
+- `cite_bringup.program.cell.twin_name` restates `cite_twin.boundary.operator_endpoint`'s
+  mapping, because `cite_twin` depends on `cite_bringup` and the reverse import would be an
+  upward dependency. It is kept, and the two must change together.
 
 ### What we will have to revisit
 When a joystick or teleoperation input arrives, it plugs into the parked line or into the

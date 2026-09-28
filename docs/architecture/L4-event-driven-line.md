@@ -278,8 +278,10 @@ and `scripts/demo` send no goal and no `SetMode` through `/cite/twin/...`. The t
 started, serves `SetMode` on `/cite/twin/set_mode`, and routes `move_to`, `pick`, `place`,
 `grasp` and `transfer` to both sides in `VALIDATED` and `VIRTUAL_LEAD`
 (`cite_twin/routing.py`). Nothing in the line uses it. It routes neither `Detect` nor belt
-commands. Two sides finishing alike therefore means two copies of the same program finished
-alike. It is not evidence that one command reached both.
+commands — true at tag `event-driven-line-v1`; changed by
+[ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md), after which the boundary forwards
+belt setpoints (still not `Detect`). Two sides finishing alike therefore means two copies of
+the same program finished alike. It is not evidence that one command reached both.
 
 **b. On `cell_b` the belt is never indexed on a beam edge.** `b_transfer_1`'s inbound edge is
 `via: null` (the part sits on `infeed_table`, not on a belt). So `inbound_via_asset_id` is
@@ -305,7 +307,9 @@ calls `index_on`. `detection_server` publishes `outfeed_beam` events, but L4 doe
 them. Completions are counted in `retire_at_sinks` when the arm releases the part.
 
 **e. `MoveTo` knows one named configuration.** `execute_move_to` refuses any
-`named_configuration` other than `"home"`.
+`named_configuration` other than `"home"` — true at tag `event-driven-line-v1`; changed by
+[ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md), after which it also accepts each
+pose L0 declares in `configuration.poses_rad`.
 
 ## 6. How to run it again
 
@@ -338,8 +342,7 @@ Guards:
 - The git tag `event-driven-line-v1`.
 - The CI step `Simulation-in-the-loop scenario — continuous_line (advisory)`.
 - A host test, `tools/tests/test_event_driven_line_is_kept.py`, which fails if a listed file
-  disappears. It is being added on another branch and **is not in this tree** at the time of
-  writing.
+  disappears.
 
 ## 8. Design note: where a joystick or teleop input would plug in (NOT BUILT)
 
