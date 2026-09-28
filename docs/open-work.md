@@ -719,6 +719,85 @@ both. Sharing a session is not sharing a cause.
 
 ---
 
+### #88 — DART models no torsional friction, and that is the term the friction grasp needed
+**Opened 2026-09-28, from a survey of public practice. Read from source, not from a forum.**
+
+**The finding.** `gz-physics`' DART backend refuses torsional friction by name —
+`gzwarn << "DART doesn't support torsional friction setting"` in
+`dartsim/src/SimulationFeatures.cc` — and its SDF parser reads only
+`surface/friction/ode`'s `mu`, `mu2`, `slip1`, `slip2`, `fdir1`, with no torsional element
+parsed at all. Gazebo's own torsional-friction tutorial states the same limit from the other
+side: *"Torsional friction currently works only with the ODE physics engine."* `gz-sim` defaults
+to DART (`src/systems/physics/Physics.cc`, `// 3. Use DART by default`).
+
+**Why it matters here, and it is the whole point.**
+[ADR-0029](adr/0029-simulated-grasping-by-friction.md)'s 84-trial campaign measured the friction
+grasp failing in **rotation** — up to **34.3°** of roll about the pad-to-pad axis — and measured
+that the coefficient was not the lever: at μ = 0.5 / 1.0 / 2.0 the median twist ran
+29.76° / 9.60° / 23.90°, **non-monotonic**, from which that record concluded that a grasp which
+does not improve when friction is doubled is not limited by friction. **That conclusion was
+right and now it has a mechanism**: `mu` and `mu2` are *translational* coefficients and the
+failure was *rotational*. The knob being turned was not connected to the quantity that was
+failing, because in this engine that knob does not exist.
+
+**What the field does instead.** MuJoCo's documentation names `condim=4` — torsional friction
+torque opposing rotation about the contact normal — as *"useful for modeling soft fingers"* which
+*"can substantially improve the stability of simulated grasping."* Both Gymnasium-Robotics'
+Fetch gripper and robosuite's Panda gripper set `condim="4"` on the pads.
+
+**The one lever inside Gazebo, and it is a hypothesis rather than a recommendation.**
+`gz-physics`' `bullet-featherstone` backend **does** parse `<torsional><coefficient>` and
+defaults it to 1.0 (`bullet-featherstone/src/SDFFeatures.cc`). Changing the physics engine under
+this cell is a large, unmeasured change touching every contact in it, and **nothing here says it
+would help** — what is established is only that it is the one route to the missing term without
+leaving Gazebo.
+
+**This changes no decision and nothing is proposed.** ADR-0029 is `Superseded by 0061` and stays
+exactly as written; [ADR-0061](adr/0061-hold-the-box-while-the-jaws-are-shut.md)'s rigid hold is
+what the cell runs and this finding **strengthens** its rationale rather than disturbing it. What
+is owed is that ADR-0061's context should say *why* friction could not be tuned into working,
+because the next person to ask will otherwise reach for `mu` as four records already did.
+
+---
+
+### #89 — Every trajectory is stamped zero, so every motion is phased differently against the physics
+**Opened 2026-09-28, from a survey of public practice. Source-verified, ATTRIBUTED TO NOTHING.**
+
+**The mechanism, read from shipped upstream source.** MoveIt stamps every trajectory it hands to
+a controller with time zero — `trajectory.joint_trajectory.header.stamp = rclcpp::Time(0, 0,
+RCL_ROS_TIME)` in `moveit_core/robot_trajectory/src/robot_trajectory.cpp` — and
+`ros2_controllers`' own documentation defines that as *"start now"*. The
+`joint_trajectory_controller` then pins `t = 0` to whichever control cycle first samples the
+goal (`trajectory.cpp`: `if (trajectory_start_time_.seconds() == 0.0) { trajectory_start_time_ =
+sample_time; }`), and takes **that cycle's measured joint state** as the interpolation start
+point. The goal itself is deposited from `gz_ros2_control`'s own `MultiThreadedExecutor` thread
+and picked up on the next cycle.
+
+**So a goal crossing DDS at a wall-clock instant nobody controls decides which physics step the
+whole motion is phased against**, by up to one control period, on every run.
+
+**Why it is recorded and not acted on.** It is consistent with everything
+[`#86`](open-work.md) and [ADR-0065](adr/0065-the-cell-says-what-it-holds.md) measured, and
+consistency is not attribution. A peer-reviewed competing attribution exists for Gazebo
+specifically — that non-determinism comes primarily from the physics engine, discrete-time
+integration and floating-point behaviour in the solvers — and the 2026-09-22 campaign's own
+rule N already stopped this project reading a matching story as a cause once. **Nobody may write
+that the process boundary caused this cell's divergence until physics is excluded**, and nothing
+here excludes it.
+
+**The cheapest discriminators, none of them run.** `gz-sim` runs every `ISystemPostUpdate` on its
+own worker thread by default (`SimulationRunner.hh`, `parallelPostUpdates{true}`), and
+`gz_ros2_control` puts `read()` and `update()` in `PostUpdate`; the switch
+`<gz:policies><parallel_postupdates>false</parallel_postupdates></gz:policies>` exists in this
+checkout's `gz-sim 8.15.0` (`kPoliciesTag` is in the installed headers) and is one line in the
+generated world. Separately, `<collision_detector>bullet</collision_detector>` changes the
+contact-ordering path, which DART fixed for FCL in **6.17.0** and this checkout links **6.13.2**.
+
+**Cross-reference, not an attribution.** [`#85`](open-work.md) is the unresolved localisation
+question both inherit.
+
+---
+
 ## 2. Known defects
 
 ### #36 — The grasp predicate: decided, specified, implemented; the gate is not fully cleared
