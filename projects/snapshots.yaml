@@ -28,16 +28,16 @@ snapshots:
     image: cite-digital-twin:p01-three-arm-line
     scenario: continuous_line
     scenario_args: --teardown-advisory
-    tree: 0000000000000000000000000000000000000000
+    tree: f50f126e34173515780197f85f8559e964f621be
   - name: 02-fixed-program-pair
     source: c83119b5f95063c27b40a397fd0f5094feb00ec2
     image: cite-digital-twin:p02-fixed-program
     scenario: program_cycle
     scenario_args: --teardown-advisory
-    tree: 0000000000000000000000000000000000000000
+    tree: 664aa93dc7f653b4f368da6bef5ae05f5d3d2554
   - name: 03-real-program-twin-on-track
     source: e90d230224cf66cc84eb39443676ab28d2a9ed99
     image: cite-digital-twin:p03-real-program
     scenario: program_cycle
     scenario_args: --teardown-advisory
-    tree: 0000000000000000000000000000000000000000
+    tree: 050f677c904ee07d32360b7a97910048af7a9794
