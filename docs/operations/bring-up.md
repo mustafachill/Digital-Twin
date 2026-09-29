@@ -167,32 +167,61 @@ That is a real ergonomic cost of running a pair and there is no single-stream fo
 
 ### Running the fixed program on the pair
 
-The cell's default cycle is a fixed program
-([ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md)): taught joint poses from L0 and
-a timed belt run, sent once through the twin boundary so both arms and both belts follow it.
+The cell's default cycle is the **real xArm 5's own program**
+([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md), which continues
+[ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md)). Its steps are not written in
+Python: `model/programs/xarm5_real_demo.blockly.xml`, the robot's exported UFACTORY Studio
+program, is named by the arm's `configuration.program` in L0, read strictly by
+`cite_tools.model.blockly` when the plan is generated, and arrives in the bring-up plan's
+`programs:` block. `cite_bringup/program/from_plan.py` maps each step onto a `MoveTo` to a named
+pose at the program's velocity scaling, a `Grasp` to a width, a dwell in the cell's clock, or a
+move of the linear track's carriage. The program is sent once through the twin boundary, so
+both arms and both tracks follow it.
+
+**The belt is not part of the program.** The real program has no belt block, so each side's
+belt is started on that side's own domain by `python3 -m cite_bringup.program.belt`, never
+through the twin boundary.
 
 ```bash
-./scripts/program                     # bring the pair up without the line, one box per side,
-                                      # one cycle through the twin, then tear down
+./scripts/program                     # bring the pair up without the line, start each side's
+                                      # belt on that side, one box per side, one cycle through
+                                      # the twin, report where the boxes ended, tear down
 ./scripts/program --headless --cycles 3
 ```
 
 Or by hand, on a pair that is already up (`./scripts/sim --zone cell_b --pair`, **without**
-`line:=true` — the line would command the same arms and belts):
+`line:=true`):
 
 ```bash
-./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --dry-run    # print the steps
-./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --cycles 1   # via the twin
-./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --via plant  # the plant alone
+./scripts/enter dev python3 -m cite_bringup.program.belt --zone cell_b                # every side's belt at its installed speed
+./scripts/enter dev python3 -m cite_bringup.program.belt --zone cell_b --side counterpart --stop
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --dry-run           # print the steps
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --cycles 1          # via the twin
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --via plant         # the plant alone
 ```
 
-`--via twin` (the default) first asks for `VALIDATED`; in `SIM` the boundary refuses every goal
-and drops every belt command. Any step that does not succeed stops the program; so does Ctrl-C.
-Either way the goal in flight is cancelled and the belt is commanded to zero. The poses are
-`configuration.poses_rad` on the arm in `model/assets/instances/arms.yaml`; move a station and
-they must be taught again. `./scripts/scenario program_cycle` checks one cycle on the plant.
+`python3 -m cite_bringup.program` puts no part on the table and runs no belt; supplying one
+part per cycle is the caller's job, which is why `./scripts/program` runs it one cycle at a
+time. It refuses to start on an arm whose `RobotState` says it holds a part, because the program
+opens the gripper before it closes it. `--via twin` (the default) first asks for `VALIDATED`; in
+`SIM` the boundary refuses every goal. Any step that does not succeed stops the program, and so
+does Ctrl-C: the goal in flight is cancelled, the track is held where it stands, and the exit
+status is non-zero. `./scripts/scenario program_cycle` checks one cycle on the plant.
 
-The beam-triggered line is parked beside it, unchanged: `line:=true` and `./scripts/demo`.
+**Open, and recorded in ADR-0067:** the track has no hardware path; a mode change while the
+carriages are moving drops later track commands and sends no stop, so each side finishes the
+point it already has; and through the twin the counterpart's track position and custody are
+not read back.
+
+**The beam-triggered line does not run on `cell_b`.** Since ADR-0067 its transfer station
+declares no place frame, because the belt's infeed is out of reach at track position 0, and
+`line_plan.hpp` refuses the line at plan time; `./scripts/demo` runs that line on the paired
+zone, so it cannot run it either. On the main tree the line is started single-sided on `cell_a`
+(`./scripts/sim --zone cell_a line:=true`), which is the zone `continuous_line` drives. The previous behaviour — taught poses and a timed
+belt run through the twin (ADR-0066) — is kept runnable in
+[`../../projects/02-fixed-program-pair/`](../../projects/02-fixed-program-pair/README.md), and
+the three-arm line in
+[`../../projects/01-three-arm-event-driven-line/`](../../projects/01-three-arm-event-driven-line/README.md).
 
 ### Reaching one side
 

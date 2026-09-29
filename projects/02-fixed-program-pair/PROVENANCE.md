@@ -52,7 +52,8 @@ Nothing else is edited.
 | 1 | `infra/docker/docker-compose.yml`, `scripts/_lib.sh`, `scripts/audit-deps`, `scripts/bootstrap` | The image tag `cite-digital-twin:dev` becomes `cite-digital-twin:p02-fixed-program` at every executable site. The tag was fixed, so the main tree and every snapshot on one host rebuilt and overwrote one image. Documentation that quotes `:dev` is left as it was: it records what was run at the time. |
 | 2 | `.github/` (removed) | GitHub runs workflows from the repository root only, so a nested workflow never runs; the main repository's `.github/workflows/projects.yml` builds and runs this snapshot instead. |
 | 3 | `run` (new) | The top-level entry point: a thin wrapper over `./scripts/program --zone cell_b`, every other argument passed through. |
-| 4 | `PROVENANCE.md` (new), `README.md` (replaced — pending) | This record. `README.md` is the source commit's repository README until the snapshot's own is written; when it is, the replacement is a patch and belongs in this list. |
+| 4 | `PROVENANCE.md` (new) | This record. |
+| 5 | `README.md` (replaced) | The source commit's README described the whole repository as it stood at that commit and pointed at `CLAUDE.md` and the charter, which are not in this folder. It is replaced by one describing this snapshot: what the milestone achieved, how to run and check it, how to take the folder out, and its known limits, drawn from the ADRs in `docs/adr/`. The source commit's README is still readable with `git show c83119b:README.md` in the main repository. |
 
 Not patched, checked instead: the Compose project name and `ROS_DOMAIN_ID` are both derived
 from the checkout's absolute path (`cite_project_name` and `cite_domain_id` in

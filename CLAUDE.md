@@ -82,6 +82,13 @@ stepped by one, and `test`'s host half stepped with the collection. **`./scripts
 host half and shell gate were re-run here and its per-package total was not** — see that
 bullet.
 
+- **Milestones are kept under [`projects/`](projects/README.md)** as frozen, runnable
+  snapshots ([ADR-0068](docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md),
+  `Proposed`): `01-three-arm-event-driven-line` from `b5a0bc9` (tag `event-driven-line-v1`),
+  `02-fixed-program-pair` from `c83119b` and `03-real-program-twin-on-track` from `e90d230`.
+  **Whether each builds and runs is recorded in its own `PROVENANCE.md` and is not copied
+  here.** Nothing in this section describes a snapshot, and the main tree's checks skip
+  `projects/` apart from its `README.md`.
 - **Phase 1.A is closed.** Container image, the `./scripts/*` contract, dependency
   manifests, CI, and the asset policy all exist and work. `external/cite.repos` pins
   `xarm_ros2` to a commit SHA, after the branch was built and driven against our stack
@@ -2560,7 +2567,12 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **65 records, all indexed** on 2026-09-28 on
+    `ADR index` line reported **67 records, all indexed** on 2026-09-29 on
+    `feat/projects-snapshots`, the newest being
+    [ADR-0068](docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md) — keep each proven
+    milestone as a frozen, runnable snapshot under `projects/`, `Proposed`. **No reading of 66
+    was taken**: ADR-0067 landed on `main` without this figure being re-run. It read
+    **65 records, all indexed** on 2026-09-28 on
     `feat/fixed-program`, the newest being
     [ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md) — run the cell from a fixed
     program through the twin boundary and park the event-driven line, `Proposed`. It read
@@ -2711,6 +2723,8 @@ Charter §4 carries the full reasoning.
 - A capability marked complete in documentation without a test proving it.
 - Any identifier, comment, or document not in English.
 - A value that exists in two places.
+- Copying code or values from `projects/` into the main tree — snapshots are records, not
+  sources ([ADR-0068](docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md)).
 
 ## 5. Layer stack
 
@@ -2786,11 +2800,12 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares (ADR-0028). Needs the imported vendor source, so unlike `validate-model` it does not run anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` selects the cell to drive and, unlike `./scripts/sim --zone`, HAS a default — which cell the regression suite drives is a project decision (ADR-0056 decision 5) stated once in `tests/scenarios/_cell.py`, not one each caller makes. `./scripts/scenario bringup --zone cell_a` is how the three-arm showcase is checked without a commit |
-| `./scripts/demo [--zone <name>] [--headless]` | Bring both sides of the twin pair up with the line running, put a work-piece on each side's pick table and watch it carried to the end of the belt, then tear the pair down. **One window per side by default** — watching it is the point. **A demonstration, not an instrument**: it asserts nothing, gates nothing and is in no CI step, `./scripts/scenario continuous_line` is what CHECKS this, and it deliberately prints no gap between the two sides because its two samples are taken at different instants on a moving belt. `--zone` defaults to whichever zone the model declares `twin: {sides: pair}`, read from the generated plans rather than stated here |
+| `./scripts/demo [--zone <name>] [--headless]` | Bring both sides of the twin pair up with the line running, put a work-piece on each side's pick table and watch it carried to the end of the belt, then tear the pair down. **One window per side by default** — watching it is the point. **A demonstration, not an instrument**: it asserts nothing, gates nothing and is in no CI step, `./scripts/scenario continuous_line` is what CHECKS this, and it deliberately prints no gap between the two sides because its two samples are taken at different instants on a moving belt. `--zone` defaults to whichever zone the model declares `twin: {sides: pair}`, read from the generated plans rather than stated here. **On the main tree it does not run today, and was not run to establish that — it is read from source**: on `cell_b` the line is refused at plan time, because since ADR-0067 `b_transfer_1` declares no place frame and `line_plan.hpp` refuses a transfer station without one; and `cell_a` cannot be paired, since `./scripts/sim --pair` refuses a zone declaring `sides: single`. The three-arm line runs as `projects/01-three-arm-event-driven-line/run` |
 | `./scripts/program [--zone <name>] [--headless] [--cycles N]` | Bring the twin pair up **without** the line, put a box on each side's table and run the fixed program once through the twin boundary (ADR-0066): taught L0 joint poses, a timed belt run, both arms and both belts from one client. A demonstration like `./scripts/demo`; `./scripts/scenario program_cycle` is what checks it, on the plant |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |
+| `projects/<name>/run [--headless]` | Run a frozen milestone snapshot from its own folder, which is its own repository root with its own `./scripts/*` (ADR-0068). Not a main-tree command: nothing in the main tree calls it or builds from there |
 
 Quality gate before any handoff: `./scripts/lint && ./scripts/build && ./scripts/test`.
 
