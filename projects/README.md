@@ -4,7 +4,11 @@ Each folder here is a **frozen, runnable snapshot** of this repository at a mile
 since moved past, kept so that the milestone can be handed over as one folder and shown
 running ([ADR-0068](../docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md),
 `Proposed`). Every folder is its own repository root: copy it anywhere, and `./run` from
-there.
+there — **but copy it without its `.venv/`**, for example
+`git archive HEAD:projects/<name> | tar -x -C <dest>` from this repository or
+`rsync -a --exclude .venv`. A bootstrapped `.venv/` is not relocatable: its entry points name
+the original folder in their shebang lines, so bootstrapping a `cp -a` copy re-points the
+original's environment. Each snapshot's README has the recipe.
 
 Whether each one has been verified to build and run, and when, is recorded in its own
 `PROVENANCE.md` and nowhere else.

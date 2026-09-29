@@ -102,9 +102,22 @@ passed; `passed its cycle assertions` means the teardown check failed
 
 ## Taking it out of the repository
 
-Copy this folder anywhere and run the steps above from the copy; it is its own repository
-root. The Compose project name and `ROS_DOMAIN_ID` are derived from the folder's path, so a
-copy normally gets its own. **Normally, not certainly**: the domain is a checksum of the path
+Copy this folder anywhere **without its `.venv/`** and run the steps above from the copy; it
+is its own repository root. From the main repository, the committed tree alone:
+
+```bash
+mkdir /path/to/copy && git archive HEAD:projects/01-three-arm-event-driven-line | tar -x -C /path/to/copy
+```
+
+or, from a folder you already have, `rsync -a --exclude .venv 01-three-arm-event-driven-line/ /path/to/copy/`.
+**Never `cp -a` a folder that has been bootstrapped**: `.venv/` is not relocatable — its
+`pip` and other entry points carry the absolute path of the original in their shebang lines —
+so `./scripts/bootstrap` in the copy runs the ORIGINAL's `pip` and re-points the original's
+environment rather than building the copy's own. If a copy already has a `.venv/`, delete it
+(`rm -rf .venv`) before running any script there; `./scripts/bootstrap` recreates it.
+
+The copy is then a plain folder and not a git checkout. The Compose project name and
+`ROS_DOMAIN_ID` are derived from the folder's path, so a copy normally gets its own. **Normally, not certainly**: the domain is a checksum of the path
 folded onto 50 values, so two arbitrary paths can share one. `./scripts/doctor` prints the
 domain in use; to choose one, export `ROS_DOMAIN_ID` before running any script, which the
 scripts keep rather than derive over. [`PROVENANCE.md`](PROVENANCE.md) has the detail.
