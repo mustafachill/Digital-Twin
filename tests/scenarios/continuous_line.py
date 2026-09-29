@@ -136,11 +136,11 @@ WORKPIECES = int(os.environ.get("CITE_LINE_WORKPIECES", "3"))
 #: dimensions the beam offsets in `model/assets/instances/sensors.yaml` are
 #: chosen. Its NAME is not written here — see `carried_models`.
 #:
-#: The SAME QUANTITY as `cite_bringup.workpiece.SIDE_M`, which is what the spawned
-#: model is actually built from. The two are tied at run time by
+#: The SAME QUANTITY as the part the bring-up plan states, which is what the
+#: spawned model is actually built from (ADR-0067). The two are tied at run time by
 #: `_cell.tie_the_work_piece_size`, called from `setUpClass`, rather than by an
 #: import — that function says why.
-WORKPIECE_SIZE = 0.05
+WORKPIECE_SIZE = 0.066
 
 #: Height above the pick surface the work-piece is released from: small enough to
 #: settle immediately, large enough not to be spawned interpenetrating the table,
@@ -174,8 +174,8 @@ LIFTED_M = 0.05
 #:
 #: The reasoning is `pick_and_place.PLACE_HEIGHT_TOLERANCE_M`'s, restated because
 #: the two scenarios must be free to disagree: the widest legitimate resting pose
-#: is a cube on a corner, which lifts its centre by 0.025 * (sqrt(3) - 1) =
-#: 0.018 m, and 0.05 m clears that with margin while still rejecting, by an order
+#: is a cube on a corner, which lifts its centre by 0.033 * (sqrt(3) - 1) =
+#: 0.024 m, and 0.05 m clears that with margin while still rejecting, by an order
 #: of magnitude, both a part still held in the air and a part that went over an
 #: edge onto the floor. Every check that uses it is two-sided for exactly that
 #: reason: too high means never released, too low means it did not stay on the
@@ -530,7 +530,7 @@ class TestContinuousLine(unittest.TestCase):
         rclpy.init()
         cls.node = Node("scenario_continuous_line")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
-        tie_the_work_piece_size(WORKPIECE_SIZE)
+        tie_the_work_piece_size(WORKPIECE_SIZE, ZONE)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -539,6 +539,7 @@ class TestContinuousLine(unittest.TestCase):
 
     def setUp(self) -> None:
         self.workpiece = ""
+        self.workpiece_part = None
         self.world = ""
         self.root_frame = "cite_world"
         self._frames: dict[str, tuple[float, float, float]] = {}
@@ -889,6 +890,8 @@ class TestContinuousLine(unittest.TestCase):
             "not a wider tolerance.",
         )
         self.workpiece = next(iter(names))
+        # Its box and mass, from the plan (ADR-0067).
+        self.workpiece_part = workpiece.part_of(plan, self.workpiece)
         self.world = world_name(Path(plan.world))
         # One pose subscription for the whole run, closed with the test so no
         # transport node outlives it.
@@ -1106,7 +1109,7 @@ class TestContinuousLine(unittest.TestCase):
 
     def _spawn_workpiece(self, at: tuple[float, float, float]) -> None:
         sdf_path = Path(f"/tmp/cite_{self.workpiece}.sdf")
-        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece_part))
         created = gz_run(
             [
                 "ros2",

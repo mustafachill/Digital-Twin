@@ -12,26 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The fixed program (ADR-0066), run against a fake cell: order, stop, belt off.
+"""The fixed program (ADR-0066, ADR-0067), run against a fake cell: order and stop.
 
 Nothing here moves an arm. What moves one is `tests/scenarios/program_cycle.py`.
 """
 
 from __future__ import annotations
 
-import math
 import os
 import signal
 
-from cite_bringup.demo import frame
 from cite_bringup.plan import default_plan_path, load
-from cite_bringup.program.cell import holding_refusal, RosCell, state_topic, twin_name
-from cite_bringup.program.cell_b_pick_place import program, target
+from cite_bringup.program import cell_b_pick_place
+from cite_bringup.program.cell import (
+    holding_refusal,
+    RosCell,
+    state_topic,
+    track_trajectory,
+    twin_name,
+)
+from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.steps import (
+    belt,
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
+    move,
     run,
     StepFailed,
+    wait,
 )
 from cite_interfaces.msg import RobotState
 import pytest
@@ -54,8 +62,8 @@ class FakeCell:
         if call[:2] == ("move", self._interrupt_on):
             raise KeyboardInterrupt
 
-    def move(self, pose: str) -> None:
-        self._record("move", pose)
+    def move(self, pose: str, velocity_scaling: float) -> None:
+        self._record("move", pose, velocity_scaling)
 
     def grip(self, width_m: float, expect_object: bool) -> None:
         self._record("grip", width_m, expect_object)
@@ -65,6 +73,9 @@ class FakeCell:
 
     def wait(self, seconds: float) -> None:
         self._record("wait", seconds)
+
+    def track(self, position_m: float, speed_mps: float) -> None:
+        self._record("track", position_m, speed_mps)
 
     def cancel(self) -> None:
         self._record("cancel")
@@ -79,19 +90,33 @@ def _quiet(_: str) -> None:
     pass
 
 
-def test_the_program_reads_top_to_bottom(cell) -> None:
+def test_the_program_is_the_plans_step_for_step(cell) -> None:
+    """Every step the plan states, in its order, and nothing else (ADR-0067)."""
     fake = FakeCell()
     assert run(program(cell), fake, cycles=1, say=_quiet) == 0
-    moves = [call[1] for call in fake.calls if call[0] == "move"]
-    assert moves == [
-        "home", "pick_above", "pick", "pick_above",
-        "place_above", "place", "place_above", "home",
-    ]
+    ran = [call for call in fake.calls if call[0] != "cancel"]
+    assert [call[0] for call in ran] == [step.kind for step in cell.program.steps]
+    for call, step in zip(ran, cell.program.steps, strict=True):
+        if step.kind == "move":
+            assert call[1:] == (step.pose, step.velocity_scaling)
+        elif step.kind == "track":
+            assert call[1:] == (step.position_m, step.speed_mps)
+
+
+def test_the_real_program_picks_slides_and_places(cell) -> None:
+    """The shape the real robot's program has, read through the plan."""
+    fake = FakeCell()
+    run(program(cell), fake, cycles=1, say=_quiet)
+    tracks = [call[1] for call in fake.calls if call[0] == "track"]
+    assert tracks == [0.0, 0.65, 0.0]
     grips = [call for call in fake.calls if call[0] == "grip"]
     assert [expect for _, _, expect in grips] == [False, True, False]
-    assert grips[1][1] == cell.grip_width_m
-    belts = [call[1] for call in fake.calls if call[0] == "belt"]
-    assert belts[:2] == [cell.conveyor.installed_speed_mps, 0.0]
+    assert grips[1][1] < grips[0][1], "the close is narrower than the open"
+    moves = [call for call in fake.calls if call[0] == "move"]
+    assert moves[0][1] == moves[-1][1] == "zero"
+    assert all(0.0 < scaling < 1.0 for _, _, scaling in moves)
+    # The real program has no belt block, so the runner never touches a belt.
+    assert not [call for call in fake.calls if call[0] == "belt"]
 
 
 def test_a_caller_running_one_cycle_at_a_time_numbers_them_itself(cell) -> None:
@@ -101,39 +126,28 @@ def test_a_caller_running_one_cycle_at_a_time_numbers_them_itself(cell) -> None:
     assert "done: 1 cycle(s)" in lines
 
 
-def test_the_numbers_come_from_the_plan(cell) -> None:
-    plan = load(default_plan_path(ZONE))
-    assert cell.grip_width_m == cell.arm.gripper["gripper_default_grasp_width_m"]
-    infeed = frame(plan, f"{ZONE}__{cell.conveyor.asset}__infeed")
-    outfeed = frame(plan, f"{ZONE}__{cell.conveyor.asset}__outfeed")
-    assert cell.belt_run_s == pytest.approx(
-        math.dist(infeed, outfeed) / cell.conveyor.installed_speed_mps
-    )
-    assert cell.belt_run_s > 0.0
-
-
-def test_the_first_failure_stops_the_program_and_the_belt(cell) -> None:
-    fake = FakeCell(fail_on="pick")
+def test_the_first_failure_stops_the_program(cell) -> None:
+    fake = FakeCell(fail_on="blockly_03")
     assert run(program(cell), fake, cycles=3, say=_quiet) == 1
     moves = [call[1] for call in fake.calls if call[0] == "move"]
-    assert moves == ["home", "pick_above", "pick"], "a step ran after the failure"
-    assert fake.calls[-2:] == [("cancel",), ("belt", 0.0)]
+    assert moves[-1] == "blockly_03", "a step ran after the failure"
+    assert fake.calls[-1] == ("cancel",)
 
 
-def test_ctrl_c_cancels_and_stops_the_belt(cell) -> None:
-    fake = FakeCell(interrupt_on="place")
+def test_ctrl_c_cancels(cell) -> None:
+    fake = FakeCell(interrupt_on="blockly_06")
     assert run(program(cell), fake, cycles=0, say=_quiet) == EXIT_INTERRUPTED
+    assert fake.calls[-1] == ("cancel",)
+
+
+def test_a_program_that_drives_a_belt_stops_it_on_the_way_out() -> None:
+    """ADR-0066's rule, kept for a program that has a belt step."""
+    fake = FakeCell()
+    run([belt(0.15), move("home"), wait(1.0)], fake, cycles=2, say=_quiet)
     assert fake.calls[-2:] == [("cancel",), ("belt", 0.0)]
 
 
-def test_the_belt_is_stopped_even_after_a_clean_run(cell) -> None:
-    fake = FakeCell()
-    run(program(cell), fake, cycles=2, say=_quiet)
-    assert fake.calls[-1] == ("belt", 0.0)
-    assert sum(1 for call in fake.calls if call == ("move", "pick")) == 2
-
-
-def test_a_stop_that_cannot_be_sent_fails_a_clean_run(cell) -> None:
+def test_a_stop_that_cannot_be_sent_fails_a_clean_run() -> None:
     """S-03: a belt nobody stopped is a failure, however well the steps went."""
 
     class NoBelt(FakeCell):
@@ -143,11 +157,11 @@ def test_a_stop_that_cannot_be_sent_fails_a_clean_run(cell) -> None:
                 raise StepFailed("no subscriber on the belt")
 
     said: list[str] = []
-    assert run(program(cell), NoBelt(), cycles=1, say=said.append) == 1
+    assert run([belt(0.15), move("home")], NoBelt(), cycles=1, say=said.append) == 1
     assert any("NOT confirmed stopped" in line for line in said)
 
 
-def test_a_second_interrupt_does_not_abandon_the_stop(cell) -> None:
+def test_a_second_interrupt_does_not_abandon_the_stop() -> None:
     """R-01: Ctrl-C reaches the program and the script forwards one more."""
 
     class Doubled(FakeCell):
@@ -158,7 +172,8 @@ def test_a_second_interrupt_does_not_abandon_the_stop(cell) -> None:
     install_interrupt_handlers()
     try:
         fake = Doubled(interrupt_on="pick")
-        assert run(program(cell), fake, cycles=1, say=_quiet) == EXIT_INTERRUPTED
+        steps = [belt(0.15), move("pick")]
+        assert run(steps, fake, cycles=1, say=_quiet) == EXIT_INTERRUPTED
         assert fake.calls[-2:] == [("cancel",), ("belt", 0.0)]
         assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
     finally:
@@ -185,7 +200,16 @@ def test_a_held_part_refuses_the_start() -> None:
 
 
 def test_the_state_topic_is_beside_the_skills(cell) -> None:
-    assert state_topic(cell) == cell.arm.skills.move_to.rsplit("/", 1)[0] + "/state"
+    assert state_topic(cell.arm) == cell.arm.skills.move_to.rsplit("/", 1)[0] + "/state"
+
+
+def test_a_track_move_is_one_point_at_the_programs_speed(cell) -> None:
+    """|distance| / speed seconds away, in the controller's clock (ADR-0067)."""
+    trajectory = track_trajectory(cell.track, 0.65, 6.5)
+    assert trajectory.joint_names == [cell.track.joint]
+    (point,) = trajectory.points
+    assert list(point.positions) == [0.65]
+    assert (point.time_from_start.sec, point.time_from_start.nanosec) == (6, 500_000_000)
 
 
 def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
@@ -214,6 +238,7 @@ def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
     ros = object.__new__(RosCell)
     ros.node = None
     ros._active = None
+    ros._track_target = None
     ros._sent = Done(Handle())
     ros.cancel()
     assert Handle.cancelled
@@ -252,9 +277,15 @@ def test_a_wait_for_a_condition_is_bounded_by_time_not_by_spins(monkeypatch) -> 
     assert clock["t"] > cell_module.SERVER_WAIT_S
 
 
-def test_a_cell_without_taught_poses_is_refused() -> None:
-    with pytest.raises(ValueError):
+def test_a_cell_without_a_program_is_refused() -> None:
+    with pytest.raises(ValueError, match="program"):
         target(load(default_plan_path("cell_a")))
+
+
+def test_the_adr_0066_record_refuses_todays_plan() -> None:
+    """The hand-written list is a record: its taught poses are gone from L0."""
+    with pytest.raises(ValueError, match="declares no pose"):
+        cell_b_pick_place.target(load(default_plan_path(ZONE)))
 
 
 def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:

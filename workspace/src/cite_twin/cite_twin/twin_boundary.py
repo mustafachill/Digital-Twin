@@ -122,6 +122,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.task import Future
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory
 
 #: How long L5 waits for a side's L3 action server to appear before it reports
 #: that the goal cannot be dispatched, in seconds of the WALL clock.
@@ -412,6 +413,32 @@ class TwinBoundary:
                     Float64,
                     operator_endpoint(conveyor.command_topic),
                     partial(self._on_belt_command, conveyor.command_topic),
+                    COMMAND,
+                    callback_group=self._group,
+                )
+            )
+
+        # 5. The linear track command (ADR-0067). One operator endpoint per track,
+        # beside the belt's, forwarded in memory to each side's own trajectory
+        # controller topic under the same routing table: refused in SIM, sent to
+        # both in VALIDATED and VIRTUAL_LEAD. Unlike a belt, a track holds the
+        # last position it was sent, so there is no stop to carry in every mode;
+        # a refused command is dropped and said in the log. What comes back is
+        # each side's own joint state, which this node already reads.
+        tracks = [m.track for m in plan.controller_managers if m.track is not None]
+        self._track_publishers = {
+            (side_name, track.command_topic): side.node.create_publisher(
+                JointTrajectory, track.command_topic, COMMAND
+            )
+            for side_name, side in self._sides.items()
+            for track in tracks
+        }
+        for track in tracks:
+            self._subscriptions.append(
+                self._plant.node.create_subscription(
+                    JointTrajectory,
+                    operator_endpoint(track.command_topic),
+                    partial(self._on_track_command, track.command_topic),
                     COMMAND,
                     callback_group=self._group,
                 )
@@ -726,6 +753,26 @@ class TwinBoundary:
             return
         for side_name in chosen.sides:
             self._belt_publishers[(side_name, topic)].publish(message)
+
+    def _on_track_command(self, topic: str, message: JointTrajectory) -> None:
+        """Forward one track trajectory to the sides the mode routes a command to.
+
+        The message is passed through unchanged, as a goal is: the same joint
+        name and the same point reach both sides' controllers, which is what
+        makes one signal drive both tracks (ADR-0067).
+        """
+        with self._lock:
+            mode = self._authority.mode
+        chosen = route(mode)
+        if not chosen.accepted:
+            self._log.warning(
+                f"{operator_endpoint(topic)} dropped in {MODE_NAMES.get(mode, mode)}: "
+                f"{chosen.detail}",
+                throttle_duration_sec=5.0,
+            )
+            return
+        for side_name in chosen.sides:
+            self._track_publishers[(side_name, topic)].publish(message)
 
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
         """Command to zero every belt on a side ``mode`` no longer routes to.

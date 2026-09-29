@@ -14,10 +14,11 @@
 
 """A fixed program for the cell: taught joint poses and timed belt runs (ADR-0066).
 
-The way a UFACTORY Studio Blockly program drives a real xArm: move to a taught
-pose, close the gripper, move, open it, run the belt for a while, stop it. The
-program is a readable list of steps (`cell_b_pick_place`), the steps are a small
-vocabulary (`steps`), and `python3 -m cite_bringup.program` runs it.
+The way a UFACTORY Studio Blockly program drives a real xArm — and since
+ADR-0067 it IS that program: the real xArm 5's own, read from its program file
+into the bring-up plan and mapped onto a small vocabulary (`steps`) by
+`from_plan`. `python3 -m cite_bringup.program` runs it. `cell_b_pick_place` is
+the hand-written list ADR-0066 started with, kept as that record.
 
 It is an operator-level client. Through the twin boundary (`--via twin`, the
 default) one program drives both sides of the pair; `--via plant` drives the

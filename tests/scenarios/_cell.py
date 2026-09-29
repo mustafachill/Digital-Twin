@@ -134,38 +134,35 @@ def acting_station(topology: dict) -> dict:
     return ordered[0]
 
 
-def tie_the_work_piece_size(size_m: float) -> None:
-    """Check that a scenario and `cite_bringup.workpiece` mean one box.
+def tie_the_work_piece_size(size_m: float, zone_id: str) -> None:
+    """Check that a scenario and the plan it drives mean one box.
 
-    A scenario's `WORKPIECE_SIZE` and `cite_bringup.workpiece.SIDE_M` are the
-    same quantity in two modules — the first is what the scenario measures
-    heights against, the second is what the spawned model is actually built from
-    — and a scenario cannot import the second at module scope. The guards load
-    those files on a host with no ROS, where `cite_bringup` is replaced by a
-    stub, so a module-level import would leave every guard computing with that
-    stub instead of with a number. `cite_bringup.workpiece` cannot state the
-    scenario's side either: it is a product package and must not import a test.
-
-    So the two are tied at run time instead, and this is that tie, written once
-    rather than once per scenario.
+    A scenario's `WORKPIECE_SIZE` and the part the bring-up plan states — which
+    `cite_bringup.workpiece` spawns (ADR-0067) — are the same quantity in two
+    places: the first is what the scenario measures heights against at module
+    scope, where the guards load it on a host with no ROS and no plan, and the
+    second is what is actually in the world. So the two are tied at run time
+    instead, and this is that tie, written once rather than once per scenario.
 
     CALL IT FROM `setUpClass` AND NOWHERE ELSE. It was an assertion inside
     `_spawn_workpiece` first, and the guards drive that method unbound against a
     fabricated `self` — so it fired on the stub and replaced the diagnosis a
-    guard was reading with its own. A check that masks the failure standing next
-    to it is worse than no check. `setUpClass` is reached only by a real run,
+    guard was reading with its own. `setUpClass` is reached only by a real run,
     where both values are real.
 
     Imported inside the function for the reason the module docstring gives.
     """
-    from cite_bringup.workpiece import SIDE_M
+    from cite_bringup.workpiece import part_of
 
-    if size_m != SIDE_M:
-        raise AssertionError(
-            f"this scenario measures against a {size_m} m work-piece and "
-            f"cite_bringup.workpiece spawns a {SIDE_M} m one, so every height "
-            "assertion in it is about a different box from the one in the world"
-        )
+    plan, _ = cell(zone_id)
+    for name in carried_models(Path(plan.world)):
+        part = part_of(plan, name)
+        if part.size_m != (size_m, size_m, size_m):
+            raise AssertionError(
+                f"this scenario measures against a {size_m} m work-piece and the "
+                f"{zone_id} plan spawns {name!r} as {part.size_m}, so every height "
+                "assertion in it is about a different box from the one in the world"
+            )
 
 
 def world_root(world: Path) -> ElementTree.Element:

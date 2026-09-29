@@ -15,7 +15,8 @@
 """The real `Cell`: one rclpy node, on ONE domain, calling the L3 skills.
 
 `--via twin` addresses the twin boundary's operator endpoints on the plant's
-domain, and L5 forwards each goal and each belt setpoint to both sides. The
+domain, and L5 forwards each goal, each belt setpoint and each track command to
+both sides. The
 program never opens the counterpart's domain itself: ADR-0044 clause 3 makes the
 boundary the only component with endpoints in both. `--via plant` addresses the
 plant's own servers, which is a single side.
@@ -29,18 +30,20 @@ from __future__ import annotations
 
 import time
 
-from cite_bringup.plan import resolve_uri
-from cite_bringup.program.cell_b_pick_place import Target
+from builtin_interfaces.msg import Duration
+from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
 from cite_bringup.program.steps import StepFailed
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
-from cite_interfaces.qos import COMMAND, LATCHED
+from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import SetMode
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import yaml
 
 #: The reserved twin scope, read off the one contract that states it. The
@@ -71,6 +74,11 @@ CANCEL_CEILING_S = 30.0
 WAIT_WALL_FACTOR = 50.0
 WAIT_WALL_MARGIN_S = 60.0
 
+#: How long a track is given to stop where it stands when a move is abandoned,
+#: in the cell's clock. Short, because the carriage moves at 0.1 m/s in the real
+#: program; a hold commanded with no duration would be a jump.
+TRACK_HOLD_S = 0.2
+
 
 def twin_name(name: str) -> str:
     """`/cite/cell_b/picker/move_to` -> `/cite/twin/cell_b/picker/move_to`."""
@@ -79,9 +87,25 @@ def twin_name(name: str) -> str:
     return f"{TWIN_SCOPE}{name[len(ROOT):]}"
 
 
-def state_topic(target: Target) -> str:
+def state_topic(arm: ControllerManager) -> str:
     """Return the arm's latched `RobotState` topic: `state`, in the skill server's namespace."""
-    return f"{target.arm.skills.move_to.rsplit('/', 1)[0]}/state"
+    return f"{arm.skills.move_to.rsplit('/', 1)[0]}/state"
+
+
+def track_trajectory(track: Track, position_m: float, seconds: float) -> JointTrajectory:
+    """One point, reached ``seconds`` from now in the controller's clock (ADR-0067).
+
+    The controller interpolates from where the carriage stands, so the speed of
+    the move is the distance over ``seconds``: the caller divides by the
+    program's own speed, and nothing here guesses a duration.
+    """
+    whole = int(seconds)
+    point = JointTrajectoryPoint(
+        positions=[float(position_m)],
+        velocities=[0.0],
+        time_from_start=Duration(sec=whole, nanosec=int(round((seconds - whole) * 1e9))),
+    )
+    return JointTrajectory(joint_names=[track.joint], points=[point])
 
 
 def holding_refusal(state: RobotState | None, topic: str) -> str | None:
@@ -102,30 +126,54 @@ def holding_refusal(state: RobotState | None, topic: str) -> str | None:
     return None
 
 
-def gripper_effort_n(target: Target) -> float:
+def gripper_effort_n(arm: ControllerManager) -> float:
     """Return the gripper controller's own effort ceiling, from its generated configuration."""
-    controller = target.arm.gripper_action.rsplit("/", 1)[0]
-    document = yaml.safe_load(resolve_uri(target.arm.parameters).read_text())
+    controller = arm.gripper_action.rsplit("/", 1)[0]
+    document = yaml.safe_load(resolve_uri(arm.parameters).read_text())
     return float(document[controller]["ros__parameters"]["max_effort"])
 
 
 class RosCell:
-    """Drive one arm and one belt, through the twin or on the plant alone."""
+    """Drive one arm, its track and (for the ADR-0066 record) a belt, via the twin or not."""
 
-    def __init__(self, target: Target, via: str) -> None:
-        skills = target.arm.skills
+    def __init__(
+        self,
+        arm: ControllerManager,
+        via: str,
+        *,
+        conveyor: Conveyor | None = None,
+        track: Track | None = None,
+    ) -> None:
+        skills = arm.skills
         name = twin_name if via == "twin" else (lambda plain: plain)
         self._via = via
-        self._effort_n = gripper_effort_n(target)
+        self._effort_n = gripper_effort_n(arm)
         self.node = Node(
             "fixed_program", parameter_overrides=[Parameter("use_sim_time", value=True)]
         )
         self._move_to = ActionClient(self.node, MoveTo, name(skills.move_to))
         self._grasp = ActionClient(self.node, Grasp, name(skills.grasp))
-        self._belt = self.node.create_publisher(
-            Float64, name(target.conveyor.command_topic), COMMAND
+        self._belt = (
+            None
+            if conveyor is None
+            else self.node.create_publisher(Float64, name(conveyor.command_topic), COMMAND)
         )
-        self._state_topic = state_topic(target)
+        # The track is commanded on its controller's own trajectory topic, through
+        # the boundary's endpoint for it when via the twin, and its arrival is
+        # read on this domain's joint states: the plant's, through the twin.
+        self._track = track
+        self._track_command = (
+            None
+            if track is None
+            else self.node.create_publisher(JointTrajectory, name(track.command_topic), COMMAND)
+        )
+        self._track_position: float | None = None
+        self._track_target: float | None = None
+        if track is not None:
+            self.node.create_subscription(
+                JointState, arm.joint_state_topic, self._on_joint_state, STATE
+            )
+        self._state_topic = state_topic(arm)
         self._active = None
         self._sent = None
 
@@ -169,8 +217,9 @@ class RosCell:
 
     # --------------------------------------------------------------- steps
 
-    def move(self, pose: str) -> None:
-        self._goal(self._move_to, MoveTo.Goal(named_configuration=pose), f"move to {pose}")
+    def move(self, pose: str, velocity_scaling: float = 0.0) -> None:
+        goal = MoveTo.Goal(named_configuration=pose, velocity_scaling=float(velocity_scaling))
+        self._goal(self._move_to, goal, f"move to {pose}")
 
     def grip(self, width_m: float, expect_object: bool) -> None:
         goal = Grasp.Goal(
@@ -179,6 +228,8 @@ class RosCell:
         self._goal(self._grasp, goal, "grip")
 
     def belt(self, speed_mps: float) -> None:
+        if self._belt is None:
+            raise StepFailed("this program drives no belt")
         # Asked to wait for the belt's subscriber first: a setpoint published
         # before the match reaches nobody, reliable or not (CLAUDE.md §10).
         self._until_true(
@@ -200,7 +251,52 @@ class RosCell:
                 )
             rclpy.spin_once(self.node, timeout_sec=0.1)
 
+    def track(self, position_m: float, speed_mps: float) -> None:
+        """Slide the carriage to ``position_m`` at ``speed_mps`` and wait for it.
+
+        The move is one trajectory point, ``|distance| / speed`` seconds away in
+        the controller's clock, so the program's speed is kept and nothing is
+        timed here: the step ends when the joint state reports the carriage
+        within the track's goal tolerance of the target. The wall-clock ceiling
+        bounds a stalled simulator, as `wait` does (P4).
+        """
+        if self._track is None or self._track_command is None:
+            raise StepFailed("this arm rides no track")
+        if speed_mps <= 0.0:
+            raise StepFailed(f"a track move at {speed_mps} m/s")
+        what = f"track to {position_m * 1000:.0f} mm"
+        self._until_true(
+            lambda: self._track_position is not None,
+            f"{self._track.joint} on the arm's joint states",
+        )
+        seconds = abs(position_m - self._track_position) / speed_mps
+        if seconds * speed_mps <= self._track.goal_tolerance_m:
+            return
+        self._until_true(
+            lambda: self._track_command.get_subscription_count() > 0,
+            f"a subscriber on {self._track_command.topic_name}",
+        )
+        self._track_target = position_m
+        self._track_command.publish(track_trajectory(self._track, position_m, seconds))
+        ceiling_s = WAIT_WALL_FACTOR * seconds + WAIT_WALL_MARGIN_S
+        wall_end = time.monotonic() + ceiling_s
+        while abs(self._track_position - position_m) > self._track.goal_tolerance_m:
+            if time.monotonic() > wall_end:
+                raise StepFailed(
+                    f"{what}: the carriage stands at {self._track_position * 1000:.1f} mm "
+                    f"after {ceiling_s:.0f} wall seconds; is the controller active?"
+                )
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+        self._track_target = None
+
     def cancel(self) -> None:
+        if self._track_target is not None and self._track_position is not None:
+            # Abandoned mid-move: hold the carriage where it stands, rather than
+            # leave it running to a target nobody is waiting for.
+            self._track_target = None
+            self._track_command.publish(
+                track_trajectory(self._track, self._track_position, TRACK_HOLD_S)
+            )
         handle, self._active = self._active, None
         sent, self._sent = self._sent, None
         if handle is None and sent is not None:
@@ -213,6 +309,10 @@ class RosCell:
             self._until(handle.cancel_goal_async(), "the cancel", CANCEL_CEILING_S)
 
     # --------------------------------------------------------------- mechanism
+
+    def _on_joint_state(self, message: JointState) -> None:
+        if self._track is not None and self._track.joint in message.name:
+            self._track_position = message.position[message.name.index(self._track.joint)]
 
     def _goal(self, client: ActionClient, goal, what: str) -> None:
         if not client.wait_for_server(timeout_sec=SERVER_WAIT_S):

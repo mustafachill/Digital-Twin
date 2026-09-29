@@ -61,7 +61,7 @@ from xml.etree import ElementTree
 
 from cite_bringup.gz import ModelPoses, plan_for, run
 from cite_bringup.plan import default_plan_path, Plan
-from cite_bringup.workpiece import SIDE_M, workpiece_sdf
+from cite_bringup.workpiece import part_of, workpiece_sdf
 
 import yaml
 
@@ -236,21 +236,22 @@ def main(argv: list[str] | None = None) -> int:
     sides = tuple(side.name for side in plan.sides)
     pick = frame(plan, f"{zone}__infeed_table__surface")
     outfeed = frame(plan, f"{zone}__transfer_belt__outfeed")
-    # The box's own edge length, from the one module that states it, rather than
-    # the plan's work-piece INTERVAL. Those are two different quantities: the
+    # The box's own size, from the plan's statement of the part, rather than the
+    # plan's work-piece INTERVAL. Those are two different quantities: the
     # interval is what `cite_skills::gripper_is_holding` judges a stall against
     # (ADR-0052), and the demonstration needs the size of the thing it is about
     # to spawn. They agree on today's model, which is a coincidence and not a
     # reason to read one off the other.
-    width = SIDE_M
-    release = (pick[0], pick[1], pick[2] + width / 2.0 + SPAWN_DROP_M)
+    part = part_of(plan, args.name)
+    width = part.size_m[0]
+    release = (pick[0], pick[1], pick[2] + part.size_m[2] / 2.0 + SPAWN_DROP_M)
 
     print(f"==> zone {zone}, sides {' and '.join(sides)}")
     print(f"    the box is {width * 1000:.0f} mm, released at the pick table "
           f"and carried to x={outfeed[0]:.2f} m")
 
     sdf_file = NamedTemporaryFile("w", suffix=".sdf", delete=False)
-    sdf_file.write(workpiece_sdf(args.name))
+    sdf_file.write(workpiece_sdf(part))
     sdf_file.close()
     sdf = Path(sdf_file.name)
     try:

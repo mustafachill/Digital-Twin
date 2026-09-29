@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The program: pick the part off the table, put it on the belt, run the belt.
+"""ADR-0066's hand-written program, KEPT AS A RECORD and no longer run by default.
+
+`python3 -m cite_bringup.program` runs the real robot's own program since
+ADR-0067 (`from_plan`). This list moved the arm through four poses taught in
+simulation, and the model no longer declares them: they were taught against the
+layout before the arm rode a track, so `target` below refuses today's plan and
+says which poses are missing. What it records is the shape the fixed program
+started as.
+
+The program: pick the part off the table, put it on the belt, run the belt.
 
 Read it top to bottom; that is the cell's whole cycle. Only the ORDER of the
 steps is written here. The poses are taught in L0 (`poses_rad`), and the grip
