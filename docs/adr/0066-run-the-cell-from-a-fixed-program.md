@@ -110,12 +110,23 @@ After the review fixes, same machine, same day, not a rate: `./scripts/program -
 SIGINT to the script during the belt's run printed `interrupted`, exited 130, and both sides'
 measured belt speed went from 0.150 to 0.000 within about a second; SIGINT during a motion
 exited 130 with no cancel reported as failed. **Four of about fourteen script runs never
-started**: the program's new participant had not discovered the plant's skill server's
-`RobotState` within 60 s (in one instrumented run: one publisher matched and no sample, about
-ten of the domain's nodes discovered, the twin boundary not among them), while the same read
-from another process, before or after, answered in under 2 s. The cause is unestablished and
-is not attributed to this program; the refusal says what it did not receive rather than
-assuming an empty gripper.
+started**, each reporting that no `RobotState` had arrived "within 60 s" (in one instrumented run:
+one publisher matched and no sample, about ten of the domain's nodes discovered, the twin
+boundary not among them), while the same read from another process answered in under 2 s.
+
+**Corrected 2026-09-28: the cause was the program's own wait, not discovery.** `RosCell._until_true`
+bounded its wait by a count of `rclpy.spin_once(timeout_sec=0.1)` calls (`SERVER_WAIT_S / 0.1`),
+and `spin_once` returns as soon as any callback runs. The node runs with `use_sim_time`, so it
+subscribes to `/clock`, and every sample ends a spin at once: the "60 s" was spent in about one
+to two seconds. A failed probe reported "within 60 s" after **0.74 s, 1.28 s and 1.94 s**, and
+the successful reads took up to **3.3 s** — so the wait routinely expired while discovery was
+still in progress, which is what "one publisher matched, ten nodes discovered" was a snapshot
+of. The wait is now bounded by `time.monotonic()`; `belt()`'s wait for a subscriber used the same
+loop and is fixed with it. Measured on one machine against one pair of `cell_b` brought up
+by `./scripts/sim --pair --headless`, each probe a fresh process running `refuse_if_holding`
+through the twin: **3 of 15** failed before the fix and **0 of 15** after, the slowest success
+at 3.03 s; and `./scripts/program --headless` then completed its cycle **6 of 6** times. Not a rate. The 60 s value was not changed. The regression test is
+`test_a_wait_for_a_condition_is_bounded_by_time_not_by_spins` in `cite_bringup/test/test_program.py`.
 
 ### Must hold before a physical side
 None of these matters while both sides are simulated, and each one is open. They are recorded

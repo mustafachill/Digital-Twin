@@ -237,8 +237,13 @@ class RosCell:
         return future.result()
 
     def _until_true(self, predicate, what: str) -> None:
-        for _ in range(int(SERVER_WAIT_S / 0.1)):
-            if predicate():
-                return
+        # Bounded by the WALL CLOCK, never by a count of spins. `spin_once`
+        # returns as soon as any callback runs, and this node subscribes to
+        # `/clock` (use_sim_time), so a count of 600 spins used to be spent in
+        # one to three seconds — before discovery had finished — and the program
+        # then reported "nothing within 60 s" (ADR-0066).
+        deadline = time.monotonic() + SERVER_WAIT_S
+        while not predicate():
+            if time.monotonic() > deadline:
+                raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s")
             rclpy.spin_once(self.node, timeout_sec=0.1)
-        raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s")

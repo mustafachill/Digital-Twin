@@ -213,6 +213,38 @@ def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
     assert ros._sent is None
 
 
+def test_a_wait_for_a_condition_is_bounded_by_time_not_by_spins(monkeypatch) -> None:
+    """A `spin_once` that returns at once (a `/clock` message) must not end the wait.
+
+    The wait used to be a count of spins; under use_sim_time every `/clock`
+    sample returns `spin_once` immediately, so the "60 s" wait for RobotState
+    ended in a second or two, before discovery had finished.
+    """
+    import cite_bringup.program.cell as cell_module
+
+    spins = {"n": 0}
+
+    def instant_spin(*_args, **_kwargs) -> None:
+        spins["n"] += 1
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", instant_spin)
+    ros = object.__new__(RosCell)
+    ros.node = None
+    # Far more instant spins than SERVER_WAIT_S / 0.1 before the condition holds.
+    ros._until_true(lambda: spins["n"] >= 10 * int(cell_module.SERVER_WAIT_S / 0.1), "it")
+
+    clock = {"t": 0.0}
+
+    def fake_monotonic() -> float:
+        clock["t"] += 1.0
+        return clock["t"]
+
+    monkeypatch.setattr(cell_module.time, "monotonic", fake_monotonic)
+    with pytest.raises(StepFailed):
+        ros._until_true(lambda: False, "it")
+    assert clock["t"] > cell_module.SERVER_WAIT_S
+
+
 def test_a_cell_without_taught_poses_is_refused() -> None:
     with pytest.raises(ValueError):
         target(load(default_plan_path("cell_a")))
