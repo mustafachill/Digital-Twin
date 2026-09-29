@@ -18,7 +18,10 @@
 #
 # WHAT IT IS NOT. A demonstration, like ./scripts/demo: it gates nothing and is in
 # no CI step. `./scripts/scenario program_cycle` is what CHECKS the program, on one
-# side. ./scripts/demo still runs the parked event-driven line, unchanged.
+# side. ./scripts/demo is the parked event-driven line, and read from source it
+# does not run on the main tree today: since ADR-0067 cell_b's transfer station
+# declares no place frame, which the line refuses at plan time, and cell_a is not
+# paired. The three-arm line is kept runnable under projects/ (ADR-0068).
 #
 # Read ./scripts/demo's header for the GPU and the speed of a windowed pair; all
 # of it applies here.

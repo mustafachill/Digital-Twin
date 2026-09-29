@@ -2487,12 +2487,15 @@ bullet.
     measurement. **An audit taken at a commanded value must state whether the machine ever
     reaches that value, and a promotion gate must not be written against a mechanism nothing
     has observed.**
-- **The cell runs from a fixed program, and the event-driven line is parked**
-  ([ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md), `Proposed`).
-  `python3 -m cite_bringup.program` moves the arm through taught L0 joint poses
-  (`configuration.poses_rad`) and runs the belt for its length at its speed; through the twin
-  boundary, which now also routes a belt setpoint, one program drives both sides of `cell_b`.
-  The beam-triggered line is unchanged, still tested, and tagged `event-driven-line-v1`.
+- **The cell runs the real robot's program, and the event-driven line is parked**
+  ([ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md),
+  [ADR-0067](docs/adr/0067-the-real-program-drives-the-twin-on-a-track.md), both `Proposed`).
+  ADR-0067 replaced ADR-0066's taught L0 joint poses: `python3 -m cite_bringup.program` now
+  runs the real xArm 5's own Blockly program, read from
+  `model/programs/xarm5_real_demo.blockly.xml`, through the twin boundary on both sides of
+  `cell_b`, with the arm on a linear track. ADR-0066's taught-pose runner is kept, runnable, in
+  `projects/02-fixed-program-pair` (ADR-0068). The beam-triggered line is unchanged, still
+  tested, and tagged `event-driven-line-v1`.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.
@@ -2661,7 +2664,8 @@ bullet.
     ADR-0051 as the newest while ADR-0052 was already on disk**, which is the drift the
     paragraph's own closing instruction exists to catch.
     **`ls docs/adr/[0-9]*.md` returns exactly one more than `doctor` does**, because the glob
-    also matches `0000-template.md`; it read **65** on 2026-09-28 against `doctor`'s 64,
+    also matches `0000-template.md`; it read **68** on 2026-09-29 on
+    `feat/projects-snapshots` against `doctor`'s 67, **65** on 2026-09-28 against `doctor`'s 64,
     **63** on 2026-09-24 against `doctor`'s 62,
     **60** on 2026-09-21 against `doctor`'s 59, **59**
     on `main` on 2026-09-18 against `doctor`'s
@@ -2801,7 +2805,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` selects the cell to drive and, unlike `./scripts/sim --zone`, HAS a default — which cell the regression suite drives is a project decision (ADR-0056 decision 5) stated once in `tests/scenarios/_cell.py`, not one each caller makes. `./scripts/scenario bringup --zone cell_a` is how the three-arm showcase is checked without a commit |
 | `./scripts/demo [--zone <name>] [--headless]` | Bring both sides of the twin pair up with the line running, put a work-piece on each side's pick table and watch it carried to the end of the belt, then tear the pair down. **One window per side by default** — watching it is the point. **A demonstration, not an instrument**: it asserts nothing, gates nothing and is in no CI step, `./scripts/scenario continuous_line` is what CHECKS this, and it deliberately prints no gap between the two sides because its two samples are taken at different instants on a moving belt. `--zone` defaults to whichever zone the model declares `twin: {sides: pair}`, read from the generated plans rather than stated here. **On the main tree it does not run today, and was not run to establish that — it is read from source**: on `cell_b` the line is refused at plan time, because since ADR-0067 `b_transfer_1` declares no place frame and `line_plan.hpp` refuses a transfer station without one; and `cell_a` cannot be paired, since `./scripts/sim --pair` refuses a zone declaring `sides: single`. The three-arm line runs as `projects/01-three-arm-event-driven-line/run` |
-| `./scripts/program [--zone <name>] [--headless] [--cycles N]` | Bring the twin pair up **without** the line, put a box on each side's table and run the fixed program once through the twin boundary (ADR-0066): taught L0 joint poses, a timed belt run, both arms and both belts from one client. A demonstration like `./scripts/demo`; `./scripts/scenario program_cycle` is what checks it, on the plant |
+| `./scripts/program [--zone <name>] [--headless] [--cycles N]` | Bring the twin pair up **without** the line, start each side's belt on that side, put a box on each side's table and run the real xArm 5's program once through the twin boundary (ADR-0067, which replaced ADR-0066's taught poses): both arms and both tracks from one client. A demonstration like `./scripts/demo`; `./scripts/scenario program_cycle` is what checks it, on the plant. ADR-0066's taught-pose version runs as `projects/02-fixed-program-pair/run` |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |
