@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_orchestration</name>
+  <version>0.1.0</version>
+  <description>
+    L4: behaviour trees and line coordination.
+
+    Trees rather than hand-written state machines (ADR-0007), from three failed
+    v1 attempts: state machines make asynchronous operations, cancellation and
+    recovery awkward enough that developers route around them, and offer no
+    runtime introspection that would reveal it.
+
+    L4 decides what happens next. It never plans a trajectory or commands a
+    controller — it calls L3 skills, and nothing else.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>behaviortree_cpp</depend>
+  <depend>cite_interfaces</depend>
+  <!-- L3, header-only: `cite_skills/observation.hpp` carries the rule for reading
+       the unobserved-pose convention beside the rule for writing one, and `PickAt`
+       calls it rather than restating it. L4 depending on L3 is downward and
+       therefore legal (CLAUDE.md §5); this declaration is what makes the
+       export a build fact instead of a comment about another package. -->
+  <depend>cite_skills</depend>
+  <depend>geometry_msgs</depend>
+  <!-- The belt command topic. A scalar setpoint in m/s, which is what the bridge
+       already carries in each direction; `cite_interfaces/ConveyorState` is the
+       typed contract for a belt REPORTING itself and is published by nothing at
+       this commit (ADR-0032). -->
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>cite_generated</exec_depend>
+
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       run having checked nothing. -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <!-- `test_detection_region.py` reads the generated frames and topology, which is
+       a YAML job rather than a C++ one, and pins the search region against them. -->
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>ament_index_python</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

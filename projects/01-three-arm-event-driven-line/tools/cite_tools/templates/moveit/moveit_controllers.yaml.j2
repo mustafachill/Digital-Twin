@@ -1,0 +1,33 @@
+---
+{{ hash_banner() }}
+#
+# How MoveIt reaches the controllers. These are the same controller and action
+# names ros2_control was configured with, from the same L0 model — which is what
+# stops MoveIt and the controller manager from disagreeing about what a
+# controller is called (a mismatch fails at run time naming neither).
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - {{ arm.trajectory_controller }}
+{% if arm.gripper_controller %}
+    - {{ arm.gripper_controller }}
+{% endif %}
+
+  {{ arm.trajectory_controller }}:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+{% for joint in arm.joints %}
+      - {{ joint }}
+{% endfor %}
+{% if arm.gripper_controller %}
+
+  {{ arm.gripper_controller }}:
+    type: GripperCommand
+    action_ns: gripper_cmd
+    default: true
+    joints:
+      - {{ arm.gripper_joint }}
+{% endif %}

@@ -1,0 +1,1503 @@
+"""Scenario: the line runs itself, from the pick area to accumulation.
+
+This is the test of Phase 1.D's claim, which the charter states as: *N
+work-pieces enter at the pick area and arrive at accumulation, sensor-triggered,
+with no intervention.* Each half of that sentence is asserted separately, because
+each has already been claimed here on evidence that turned out to measure
+something else:
+
+  * **arrive** is measured from the simulator — where the work-piece physically
+    is — and never from a component's report about itself. `LineState` carries a
+    `workpieces_completed` count and this scenario does NOT gate on it:
+    `line_maintenance.hpp` increments it when the last robot lets go, which is a
+    statement about a gripper and not about the accumulation end of the line. It
+    is printed as context, labelled as what it is.
+  * **sensor-triggered** is measured from the typed `DetectionEvent` stream, one
+    beam per link, in the order the L0 topology puts them. A piece that arrived
+    without every beam on the way reporting it was not carried by the line the
+    topology describes.
+
+Assertions are on outcomes and constraints, never on trajectories, because a run
+is not reproducible — see `SEED_VARIABLE` below and ADR-0027, and the warning
+`./scripts/scenario` prints on every run. So what is asserted is: every piece reached
+every milestone the topology defines, the piece never left the cell's working
+volume, no station ever reported a fault, and all of it inside a wall-clock
+ceiling.
+
+## Nothing here names a station, a belt, a beam or a coordinate
+
+The milestone ladder is *derived* from the generated process topology, the way
+`line_orchestrator` derives the line it runs, and every position it is measured
+against is resolved from TF at run time. The layout on this branch has moved
+twice and a hardcoded coordinate was wrong both times. `ZONE` and the
+work-piece's physical properties are the only cell-specific values below, and the
+work-piece's *name* is read out of the generated world rather than written.
+
+## Two things this scenario does that are the line's boundary, not intervention
+
+1. **It feeds the source.** The first station in the flow is a `source_station`
+   and the L0 model says in as many words that it is fed externally. Something
+   has to put a part on the pick table; here it is `ros_gz_sim create`, at the
+   pick frame TF reports. Its ID IS DELIBERATELY NOT WRITTEN HERE — it was
+   `station_infeed`, which is `cell_a`'s, and stayed that way after this
+   scenario was pointed at a cell that has no station of that name.
+2. **It empties the sink, and it has no choice.** The belt's `<carry>` list and
+   the beam's `<watch>` list match a Gazebo model name *exactly*
+   (`conveyor.cpp`, `break_beam.cpp`), and `facility.workpiece_models` declares
+   exactly one name, so at most one work-piece can exist that the simulation aids
+   will act on at all. The pieces therefore traverse the line one at a time and
+   the finished one is removed before the next is fed. That limitation is
+   asserted rather than assumed — see `carried_models` — so the day the model
+   declares a family of work-piece names, this scenario fails and says to make
+   itself concurrent.
+
+It supplies nothing else. It used to supply the belt setpoints too, because
+nothing in the running system commanded a conveyor; ADR-0032 gave that setpoint an
+owner in L4, so this scenario now READS the command topics and asserts the line
+started its own belts — see `_assert_the_line_started_the_belts`. A second
+publisher on a topic the system owns is a hazard, not a gap.
+
+## What this scenario cannot see
+
+Gazebo publishes no contact stream anything here reads, so "no collision" is
+asserted through the observable the system does publish: a collision that matters
+in this cell is a planning refusal or an execution fault, and an unrecoverable
+one reaches `LineState` as a faulted station. A contact that harmed nothing and
+was reported nowhere passes unnoticed, and that is stated rather than implied.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import unittest
+from pathlib import Path
+from typing import NamedTuple
+
+import launch_testing
+import launch_testing.markers
+import pytest
+import rclpy
+from ament_index_python.packages import get_package_share_directory
+from cite_bringup import workpiece
+from cite_bringup.gz import ModelPoses
+from cite_bringup.gz import run as gz_run
+from cite_interfaces.msg import DetectionEvent, LineState, StationState
+from cite_interfaces.qos import COMMAND, EVENT, STATE
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from rclpy.node import Node
+from std_msgs.msg import Float64
+
+# `tests/scenarios/` is not on `sys.path` when this file runs. `launch_test`
+# loads a scenario BY PATH — `spec_from_file_location` then `exec_module`, with
+# no `sys.modules` entry and no path entry — so a plain `from _cell import ...`
+# raises ModuleNotFoundError under the loader that actually runs this, while
+# working perfectly under `import`. Put the directory this file lives in on the
+# path first, and the sibling resolves under both loaders; the guard
+# `test_scenario_loads_by_path` is what proves that, because it uses the same
+# loader.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from _cell import (  # noqa: E402  (insert first)
+    carried_models,
+    cell,
+    tie_the_work_piece_size,
+    world_root,
+    zone,
+)
+
+#: The cell this scenario drives, resolved once at load. Its only cell-specific
+#: fact: everything else — the milestone ladder, the work-piece name, the world
+#: name and every belt footprint — is derived from the generated topology and
+#: world below.
+#:
+#: NOT A LITERAL ANY MORE. `ZONE = "cell_b"` stood in all three scenarios, which
+#: is one fact stated three times and able to disagree silently — the shape
+#: CLAUDE.md §4 prohibits — and it also made ADR-0056's own mitigation, a cheap
+#: periodic `bringup` against `cell_a`, a source edit rather than a command. The
+#: statement lives once in `tests/scenarios/_cell.py`; `./scripts/scenario
+#: <name> --zone <zone>` overrides it for one run.
+ZONE = zone()
+
+#: How many work-pieces have to traverse the line. The charter says "N"; three is
+#: the smallest N that distinguishes "the line ran once" from "the line runs",
+#: because the second piece exercises a station that has already cycled and the
+#: third exercises the one after it. Overridable so a bring-up investigation can
+#: ask for one piece without editing a test.
+WORKPIECES = int(os.environ.get("CITE_LINE_WORKPIECES", "3"))
+
+#: The reference work-piece, whose geometry `pick_and_place` uses and around whose
+#: dimensions the beam offsets in `model/assets/instances/sensors.yaml` are
+#: chosen. Its NAME is not written here — see `carried_models`.
+#:
+#: The SAME QUANTITY as the part the bring-up plan states, which is what the
+#: spawned model is actually built from (ADR-0067). The two are tied at run time by
+#: `_cell.tie_the_work_piece_size`, called from `setUpClass`, rather than by an
+#: import — that function says why.
+WORKPIECE_SIZE = 0.066
+
+#: Height above the pick surface the work-piece is released from: small enough to
+#: settle immediately, large enough not to be spawned interpenetrating the table,
+#: a penetration the physics engine resolves by launching it.
+SPAWN_DROP_M = 0.005
+
+#: Wall-clock ceilings, not schedules. Nothing is sequenced by them; they exist so
+#: a stalled line fails the run with a diagnosis instead of blocking CI.
+#:
+#: Their basis: `pick_and_place` measures one station's pick-and-place cycle
+#: against a ceiling of 420 s, chosen for the macOS development host under the
+#: condition that figure holds in — roughly one CPU core, stated once with its
+#: measurement in `docs/architecture/cross-cutting-testing.md` under "Wall-clock
+#: ceilings" and measured in
+#: `docs/measurements/2026-08-29-real-time-factor-conditions/`. A milestone here
+#: is at most one such cycle, so the same number is the right ceiling for one —
+#: and applying it per milestone
+#: rather than per piece is deliberate: a line that stalls fails at the milestone
+#: it stalled on, after one leg's worth of waiting, and the message names that
+#: milestone instead of a whole piece's budget having quietly expired.
+BRING_UP_CEILING_S = 300.0
+LEG_CEILING_S = 420.0
+
+#: How far the work-piece must rise above the frame it is picked from to count as
+#: picked. Larger than settling or contact jitter, smaller than the retreat, so a
+#: nudge cannot pass for a grasp. Same basis as `pick_and_place.LIFTED_M`.
+LIFTED_M = 0.05
+
+#: How far the work-piece's resting height may differ from a surface's and still
+#: count as resting on it.
+#:
+#: The reasoning is `pick_and_place.PLACE_HEIGHT_TOLERANCE_M`'s, restated because
+#: the two scenarios must be free to disagree: the widest legitimate resting pose
+#: is a cube on a corner, which lifts its centre by 0.033 * (sqrt(3) - 1) =
+#: 0.024 m, and 0.05 m clears that with margin while still rejecting, by an order
+#: of magnitude, both a part still held in the air and a part that went over an
+#: edge onto the floor. Every check that uses it is two-sided for exactly that
+#: reason: too high means never released, too low means it did not stay on the
+#: belt, and both keep the x and y of a correct placement.
+SURFACE_TOLERANCE_M = 0.05
+
+#: How far outside a belt's own footprint a work-piece may sit and still count as
+#: on that belt. It absorbs the difference between the work-piece's origin and its
+#: body: a cube whose centre is a little past the belt edge still rests on it.
+BELT_MARGIN_M = WORKPIECE_SIZE
+
+#: How far outside the span of the line's own frames the work-piece may travel
+#: before it has left the cell. Generous, because this is a containment check and
+#: not a placement one: its job is to catch a piece that was flung or dropped, not
+#: to grade where a station put it.
+CELL_MARGIN_M = 0.50
+
+#: How far the work-piece may sit below the lowest of the line's transport
+#: surfaces before it is no longer on any of them. A piece resting on a surface
+#: has its centre half a cube above it, so anything below the surface itself is
+#: unsupported; half a cube of slack absorbs contact penetration while a settling
+#: constraint resolves. A piece on the floor is 0.575 m below this, which is not a
+#: close call.
+DROP_MARGIN_M = WORKPIECE_SIZE / 2.0
+
+#: How often the work-piece's pose is sampled while the line runs.
+#:
+#: Chosen against the dwell time of the shortest thing sampled here, because the
+#: opposite mistake is on record: a scenario that sampled at 4 s missed every
+#: event it was written to observe, a part crossing a 0.040 m beam at 0.150 m/s
+#: being inside it for 0.27 s of simulated time.
+#:
+#: Nothing here samples for an event that short. The beam crossings arrive as
+#: `DetectionEvent`s on a keep-all subscription, which cannot miss one; what is
+#: sampled is where the piece IS, and the briefest of those is `on_link` — a
+#: 1.200 m belt at 0.150 m/s, so 8 s of simulated time, plus the margin at each
+#: end. At a real-time factor of 0.14 — the development host confined to about one
+#: CPU core, see "Wall-clock ceilings" in
+#: `docs/architecture/cross-cutting-testing.md` — that is about 57 s of wall clock
+#: and over a hundred samples; on a host running at 1.0 it is still sixteen. Both
+#: are far from a coin toss, which is what the number has to buy. This is a floor
+#: argument and a faster host only adds samples, so the condition does not disturb
+#: it.
+#:
+#: Not faster, because there is nothing left to buy above the dwell times above.
+#:
+#: Each sample used to be a `gz model -p` — a new gz-transport client process per
+#: sample. That is what the simulator's `NodeShared::RecvSrvRequest() error
+#: sending response: Host unreachable` lines were about, and it is also what hung
+#: late spawns: `gz sim` keeps a reply connection to every client address it has
+#: answered (gz-transport issue #243), so after thousands of clients a
+#: `ros_gz_sim create` given a reused port times out after 120 s (CI runs
+#: 34258470163 and 33343317444). Samples are now read from one long-lived
+#: subscription, `cite_bringup.gz.ModelPoses`; see `_workpiece_xyz`.
+SAMPLE_PERIOD_S = 0.5
+
+#: How many containment breaches are quoted in full before the rest are counted.
+#: A piece lying on the floor breaches on every sample, and quoting all of them
+#: would bury the milestone the line stopped at under a thousand copies of one
+#: fact. The assertion fires on the first; these are for the reader.
+BREACHES_REPORTED = 3
+
+#: The seed `./scripts/scenario` exports, recorded so that a report names the
+#: conditions it was produced under. It does NOT make the run reproducible: the
+#: physics solver is seeded by nothing. What it does and does not buy is stated
+#: once, in ADR-0027 § "What `CITE_PHYSICS_SEED` does and does not buy"; do not
+#: restate the argument here.
+SEED_VARIABLE = "CITE_PHYSICS_SEED"
+
+
+@pytest.mark.launch_test
+@launch_testing.markers.keep_alive
+def generate_test_description() -> LaunchDescription:
+    """The whole cell, with the L4 coordinator running the line.
+
+    `line:=true` is the difference from every other scenario. It is off by default
+    because a running coordinator holds all three arms — `simulation.launch.py`
+    says so where the argument is declared — and this is the one scenario that
+    wants exactly that: nothing here commands an arm.
+    """
+    simulation = (
+        Path(get_package_share_directory("cite_bringup")) / "launch" / "simulation.launch.py"
+    )
+    return LaunchDescription(
+        [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(str(simulation)),
+                launch_arguments={
+                    "headless": "true",
+                    "zone": ZONE,
+                    "line": "true",
+                }.items(),
+            ),
+            launch_testing.actions.ReadyToTest(),
+        ]
+    )
+
+
+# -----------------------------------------------------------------------------
+# The ladder, derived from the generated topology.
+#
+# Pure functions over generated artifacts, at module scope and free of ROS, so
+# that `tests/scenarios/guards/` can exercise them in milliseconds without a
+# simulator. `cross-cutting-testing.md` asks for exactly that: push the test down,
+# and do not spend the scenario suite on what a unit test could have caught.
+# -----------------------------------------------------------------------------
+
+
+class Milestone(NamedTuple):
+    """One step a work-piece must be observed to take.
+
+    A `NamedTuple` and deliberately not a `@dataclass`: this module has
+    `from __future__ import annotations`, and `launch_test` loads a scenario by
+    path without registering it in `sys.modules`, which makes `@dataclass` raise
+    at import time over a string annotation it cannot resolve. The full account is
+    on `pick_and_place.CycleOutcome`, and `guards/test_scenario_modules_load.py`
+    fails if a dataclass comes back.
+    """
+
+    #: `sensed` — a beam reported BLOCKED. `lifted` — the piece rose off the frame
+    #: it is picked from. `on_link` — the piece came to rest on the belt it was
+    #: placed onto. `arrived` — the sink's beam reported BLOCKED while the piece
+    #: was measured on the last link, which is both halves of the charter's
+    #: criterion in a single observation.
+    kind: str
+    #: The station this milestone belongs to, from the topology. For the report.
+    station: str
+    #: The TF frame it is measured about; empty for a purely sensed milestone.
+    frame: str
+    #: The `DetectionEvent` topic it waits on; empty for a measured milestone.
+    topic: str
+    #: The conveyor asset the piece is on; empty when there is none.
+    link: str
+
+    def describe(self) -> str:
+        where = self.frame or self.topic or self.link
+        return f"{self.kind}({self.station}: {where})"
+
+
+def flow_order(topology: dict) -> list[dict]:
+    """The stations, from source to sink, following the topology's own links.
+
+    Derived by walking `downstream`, not by sorting on a name and not by reading
+    the list in file order — the file is emitted alphabetically, which puts the
+    sink first. A branch is refused rather than guessed at, because a branch means
+    "which way did the piece go" has more than one answer and every milestone
+    below assumes it has one.
+    """
+    stations = {station["id"]: station for station in topology["stations"]}
+    sources = [s for s in stations.values() if not s.get("upstream")]
+    if len(sources) != 1:
+        raise ValueError(
+            f"the flow has {len(sources)} station(s) with no upstream, and this scenario "
+            "follows a single chain; a line that starts in more than one place needs a "
+            "scenario that says which piece went which way"
+        )
+
+    order: list[dict] = []
+    station = sources[0]
+    seen: set[str] = set()
+    while True:
+        if station["id"] in seen:
+            raise ValueError(f"the flow revisits {station['id']}; it is not a chain")
+        seen.add(station["id"])
+        order.append(station)
+        downstream = station.get("downstream") or []
+        if not downstream:
+            break
+        if len(downstream) != 1:
+            raise ValueError(
+                f"{station['id']} has {len(downstream)} downstream stations, and this "
+                "scenario follows a single chain"
+            )
+        station = stations[downstream[0]]
+    return order
+
+
+def link_between(topology: dict, upstream: str, downstream: str) -> str:
+    """The asset a piece is carried by between two stations; empty when handed over."""
+    for edge in topology["edges"]:
+        if edge["from"] == upstream and edge["to"] == downstream:
+            return edge.get("via") or ""
+    return ""
+
+
+def milestones(topology: dict) -> tuple[Milestone, ...]:
+    """What a single work-piece must be observed to do, in order.
+
+    One entry per thing the topology says happens to a piece: a beam that gates a
+    station reports before that station acts, the station's arm lifts the piece
+    off the frame it picks from, and the piece comes to rest on the link it is
+    placed onto. The sink contributes the last entry, which is its beam and the
+    piece's measured position together.
+
+    The result is the whole of what "the line ran" means here, and it contains no
+    station name, no belt and no coordinate that this file wrote.
+    """
+    order = flow_order(topology)
+    ladder: list[Milestone] = []
+    for index, station in enumerate(order):
+        topic = (station.get("trigger") or {}).get("topic", "")
+        inbound = link_between(topology, order[index - 1]["id"], station["id"]) if index else ""
+
+        if not station.get("actor"):
+            # A source has nothing to observe and nothing to do. A sink has no
+            # actor either, and its trigger is the arrival this ladder is built to
+            # reach; a sink without one observes nothing and contributes nothing,
+            # which is a gap in the model rather than something to invent here.
+            if index and topic:
+                ladder.append(Milestone("arrived", station["id"], "", topic, inbound))
+            continue
+
+        if topic:
+            ladder.append(Milestone("sensed", station["id"], "", topic, inbound))
+        ladder.append(Milestone("lifted", station["id"], station["pick_frame"], "", inbound))
+        downstream = (station.get("downstream") or [""])[0]
+        outbound = link_between(topology, station["id"], downstream)
+        if not station.get("place_frame"):
+            raise ValueError(
+                f"station {station['id']!r} has an actor and no place frame, so no line "
+                "can run here: L4 refuses it at plan time. In `cell_b` that is the model "
+                "saying its belt is out of reach until the track slides (ADR-0067); that "
+                "cell is driven by `program_cycle`"
+            )
+        ladder.append(Milestone("on_link", station["id"], station["place_frame"], "", outbound))
+    return tuple(ladder)
+
+
+def world_name(world: Path) -> str:
+    """The Gazebo world's name, for the service that removes a finished piece."""
+    element = world_root(world).find("world")
+    if element is None or not element.get("name"):
+        raise ValueError(f"{world} declares no named <world>")
+    return str(element.get("name"))
+
+
+def belt_extents(world: Path) -> dict[str, tuple[float, float]]:
+    """Each belt's length and width, keyed by the command topic that names it.
+
+    Keyed by topic because that is the one identifier the plugin element carries
+    which also appears in the bring-up plan, and the plan is what maps it back to
+    an asset id. Deriving the asset from the topic string here would be composing
+    a name this repository generates (CLAUDE.md §8).
+    """
+    extents: dict[str, tuple[float, float]] = {}
+    for plugin in world_root(world).iter("plugin"):
+        topic = plugin.findtext("command_topic")
+        length = plugin.findtext("belt_length_m")
+        width = plugin.findtext("belt_width_m")
+        if topic and length and width:
+            extents[topic.strip()] = (float(length), float(width))
+    return extents
+
+
+class Sample(NamedTuple):
+    """Where the work-piece was, and when, on the observer's WALL clock.
+
+    Wall clock, deliberately, and it is the one place in this repository where
+    that is the right answer. This node does not set `use_sim_time`, exactly as
+    `bringup` and `pick_and_place` do not: an observer whose clock is the
+    simulator's cannot time the simulator out, because a stalled `/clock` freezes
+    every deadline and the run hangs for ever instead of failing with a diagnosis.
+    Nothing under test reads this clock, and nothing is sequenced by it — every
+    deadline it feeds is a failure deadline (P4). Every node the *system* starts
+    honours `use_sim_time`; `simulation.launch.py` passes it to all of them.
+    """
+
+    seconds: float
+    x: float
+    y: float
+    z: float
+
+    def describe(self) -> str:
+        return f"t={self.seconds:.1f}s ({self.x:.3f}, {self.y:.3f}, {self.z:.3f})"
+
+
+class Beam(NamedTuple):
+    """A beam reporting that its volume became occupied."""
+
+    topic: str
+    seconds: float
+
+
+class Fault(NamedTuple):
+    """A station the coordinator reported as faulted, and the reason it gave."""
+
+    station: str
+    reason: str
+
+
+#: The `LineState` values that mean no station will act again without a person.
+#:
+#: FAULTED and BLOCKED are ADR-0038's: the coordinator no longer exits when a
+#: station escalates, so a stopped line looks exactly like a slow one from out here
+#: unless the state is read.
+#:
+#: STALLED is ADR-0039's, and it is the one this scenario produced. A station that
+#: fails its grasp is retried onto a beam the part is already breaking, so no edge
+#: can ever arrive and the belt that would bring another part is stopped. Nothing
+#: escalates, so the two above never fire — the line used to report RUNNING and this
+#: scenario spent a full leg ceiling on it before accusing the milestone it happened
+#: to be waiting for.
+#:
+#: ADR-0046 GAVE STALLED A SECOND REASON WITH NO BELT IN IT: a station waiting for
+#: work while it still holds the piece its last attempt was about. That one is
+#: derived from custody rather than from a belt setpoint, so it answers at the
+#: table-fed station where the rule above is structurally blind — which is the
+#: station three CI runs died at. Two reasons, one state; the sentence in
+#: `stall_reasons` says which.
+STOPPED_STATES = (LineState.STATE_BLOCKED, LineState.STATE_FAULTED, LineState.STATE_STALLED)
+
+STOPPED_STATE_NAMES = {
+    LineState.STATE_BLOCKED: "BLOCKED",
+    LineState.STATE_FAULTED: "FAULTED",
+    LineState.STATE_STALLED: "STALLED",
+}
+
+
+class Halt(NamedTuple):
+    """The line as a whole reporting that it has stopped, and when."""
+
+    state: int
+    reason: str
+    seconds: float
+
+    def describe(self) -> str:
+        name = STOPPED_STATE_NAMES.get(self.state, f"state={self.state}")
+        return f"{name} at {self.seconds:.1f}s: {self.reason or 'no reason published'}"
+
+
+class Journey(NamedTuple):
+    """What one work-piece was observed to do."""
+
+    piece: int
+    reached: tuple[str, ...]
+    breaches: tuple[str, ...]
+    #: How long the leg this piece stopped on actually waited, in wall-clock
+    #: seconds. It exists because the report used to state the LEG CEILING as
+    #: though it were the wait: a leg cut short after three seconds by a stopped
+    #: line was reported as having waited the full 420 s, which is false timing
+    #: evidence in the one place a reader goes for timing evidence.
+    #:
+    #: REQUIRED, not defaulted. It carried `= 0.0` and a comment saying the
+    #: default kept positional construction elsewhere working; there is no such
+    #: caller — all three construction sites pass it — and a default here is a way
+    #: to build a `Journey` stating a wait of zero it never measured, in the one
+    #: field a reader goes to for exactly that number.
+    waited_s: float
+
+
+# -----------------------------------------------------------------------------
+# The scenario
+# -----------------------------------------------------------------------------
+
+
+class TestContinuousLine(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        rclpy.init()
+        cls.node = Node("scenario_continuous_line")
+        cls.seed = os.environ.get(SEED_VARIABLE, "unset")
+        tie_the_work_piece_size(WORKPIECE_SIZE, ZONE)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.node.destroy_node()
+        rclpy.shutdown()
+
+    def setUp(self) -> None:
+        self.workpiece = ""
+        self.workpiece_part = None
+        self.world = ""
+        self.root_frame = "cite_world"
+        self._frames: dict[str, tuple[float, float, float]] = {}
+        self._belts: dict[str, tuple[float, float]] = {}
+        self._beams: list[Beam] = []
+        self._faults: list[Fault] = []
+        self._halt: Halt | None = None
+        #: The ladder and the journeys, accumulated on the instance rather than
+        #: passed to `_context`. Every failure path that raises in flight — and
+        #: `_fail_if_the_line_has_stopped` is now one of them, from every wait
+        #: in this file — has to be able to print the whole report, and a report that
+        #: exists only as two locals in the test method is a report only the
+        #: final verdict can reach. That is exactly how a run that stopped at a
+        #: known station arrived with a message about a removal wait and no
+        #: diagnostic at all.
+        self._ladder: tuple[Milestone, ...] = ()
+        self._journeys: list[Journey] = []
+        self._line_states: list[LineState] = []
+        self._samples: list[Sample] = []
+        self._subscriptions: list[object] = []
+        #: `belt asset -> the fastest setpoint anything was seen commanding it to`.
+        #: Read only, and by exactly one writer: L4 (ADR-0032).
+        self._belt_setpoints: dict[str, float] = {}
+        #: Where in `_beams` the current work-piece's own events start. Without it
+        #: the second piece inherits the first piece's beam reports and every
+        #: sensed milestone is satisfied before it has moved.
+        self._beams_from = 0
+        self._span_x = (0.0, 0.0)
+        self._lowest_surface_z: float | None = None
+
+    # -- waiting, measuring, resolving ----------------------------------------
+
+    def _now(self) -> float:
+        return self.node.get_clock().now().nanoseconds / 1e9
+
+    def _spin_until(self, predicate, ceiling_s: float, what: str):
+        """Spin until `predicate` answers with something other than None, or fail.
+
+        `is not None` rather than truthiness, for the reason `pick_and_place`
+        gives: a measurement of exactly 0.0 is a good answer, and reading it as
+        "not ready yet" produces a timeout that accuses the wrong component.
+
+        IT ALSO FAILS FAST ON A STOPPED LINE, and that half is not optional
+        (ADR-0038). The coordinator no longer exits when a station escalates — it
+        stays alive serving the reset, which is the point — so a faulted line now
+        looks exactly like a slow one from out here, and every remaining milestone
+        would wait its full ceiling before anything said why. That is a slower and
+        strictly worse signal than the exit code this scenario used to get for
+        free. The `LineState` the coordinator publishes says it in one field, so
+        the run ends on the message rather than on the budget.
+
+        On the success path it emits one `CITE_TIMING` record through
+        `_emit_timing`, saying how long the wait actually took.
+        `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md` §3
+        could reach `LEG_CEILING_S` only through a proxy, because per-milestone
+        timings were not printed.
+
+        WHAT THIS FILE COVERS, AND THE TRAP IN IT. `BRING_UP_CEILING_S` is bounded
+        here. `LEG_CEILING_S` is used in three places, and only one of them is a
+        leg: this method bounds the work-piece spawn settling on the pick surface
+        (order a second) and its removal from the simulator (order milliseconds),
+        while the interval the ceiling is actually sized for — ONE MILESTONE OF
+        THE LADDER — is the deadline loop in `_run_one_piece`, which now emits
+        too. A campaign computing a margin as `ceiling / slowest instance` over
+        the spawn and removal records alone would put `LEG_CEILING_S` hundreds of
+        times looser than the proxy it replaced. Separate them by `what`: a leg
+        reads `piece <n>: <milestone>`, and the other two name the work-piece and
+        say `to settle on the pick surface` or `to leave the simulator`. That leg
+        loop makes the same halt check this method does, in the same spin → halt →
+        predicate order, and it emits its own record on its own success path, so
+        neither the fail-fast nor the timing record is confined to `_spin_until`.
+        Both raise past `_emit_timing` when the line has stopped, and
+        `_run_one_piece` says why that omission is a decision rather than an
+        oversight. What IS confined here is the `what` grammar above, which is the
+        only thing that lets a parser tell a leg from a spawn or a removal.
+        """
+        # `time.monotonic`, never the node clock: these ceilings are wall clock by
+        # deliberate design — this observer does not set `use_sim_time`, for the
+        # reason `Sample` gives above — and a monotonic clock cannot jump
+        # backwards under a wall-clock step and report a wait that took less than
+        # no time. Do not "fix" this to the node clock.
+        started = time.monotonic()
+        end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
+        spins = 0
+        result = predicate()
+        self._fail_if_the_line_has_stopped(what)
+        while result is None and self.node.get_clock().now().nanoseconds < end:
+            rclpy.spin_once(self.node, timeout_sec=0.5)
+            spins += 1
+            self._fail_if_the_line_has_stopped(what)
+            result = predicate()
+        self.assertIsNotNone(result, f"timed out after {ceiling_s:.0f}s waiting for {what}")
+        # Success only. A timing record for a wait that timed out would be a
+        # measurement of the ceiling rather than of the milestone.
+        self._emit_timing(what, ceiling_s, time.monotonic() - started, spins)
+        return result
+
+    def _emit_timing(self, what: str, ceiling_s: float, elapsed_s: float, spins: int) -> None:
+        """Print one `CITE_TIMING` record, for a wait that ENDED IN SUCCESS.
+
+        SUCCESS EXCLUDES A LEG CUT SHORT BY A STOPPED LINE, and that is a decision
+        rather than an omission: such a record is indistinguishable from a
+        completed leg's — same `what` grammar, `spins >= 1`, a plausible
+        `elapsed_s` — so neither filter below could separate them, and a campaign
+        deriving a margin as `ceiling / slowest instance` would silently ingest
+        legs that measured a coordinator's escalation instead of the line. The
+        interval is not lost; it goes into `Journey.waited_s` and is printed by
+        `_context`, where a reader rather than a parser will see it.
+
+        The one writer of the format in this file. Every field exists because a
+        campaign re-deriving a ceiling from these records cannot do its job
+        without it:
+
+          * `spins` — how many times the wait went round its loop before the thing
+            it waited for was there. A LOOP COUNT AND NOT A TIME UNIT: one spin is
+            one `rclpy.spin_once` timeout, every emitting loop sets that quantum
+            for itself, and the loops that emit these records do not all agree on
+            it — `pick_and_place._run_cycle` spins on that file's own
+            `SAMPLE_PERIOD_S`, which is not the quantum the `_spin_until` waits
+            use. So `spins` may never be multiplied into a duration, and may not
+            be read as a sampling density across one table either, because the
+            three scenarios are parsed as one table and their quanta differ.
+            `elapsed_s` is the only time field.
+            `_spin_until` tests its predicate once before spinning at all, so
+            `spins: 0` means the predicate answered on its first evaluation and
+            the record is NOT a measurement of a milestone. THIS is the field to
+            filter on, and `elapsed_s` is not: a zero-spin record usually reads
+            near 0.000 s, but not always — `pick_and_place`'s work-piece predicate
+            shells out to `gz model -p`, and one evaluation of a subprocess can
+            cost an appreciable fraction of a second, which measures that
+            subprocess and nothing this project sets a ceiling on. How much it
+            costs is unpublished — no directory under `docs/measurements/` stands
+            behind any figure for it — which is exactly why the rule is structural:
+            discard zero-spin records by rule; do not eyeball the elapsed times. The ladder loop in
+            `_run_one_piece` differs, and the difference matters to a parser: it
+            tests the milestone only AFTER a spin, so its floor is `spins: 1` and
+            it can never report zero.
+          * `test` — the test method that produced the record. This file runs one
+            test today, so it disambiguates nothing here; it is emitted because
+            the three scenarios write one format and a campaign parses them as one
+            table, and in `bringup` it is what separates a real bring-up wait from
+            the near-zero ones every test after the first records.
+          * `monotonic_s` — this process's clock at the moment of printing, so
+            records can be ordered and lined up against the launch log. It is also
+            what puts a piece's ten leg records in order without parsing `what`.
+
+        The keys are asserted by `tests/scenarios/guards/test_timing_records.py`,
+        which loads all three scenarios and requires them to agree. `flush=True`
+        because `launch_test` captures this stream and can tear the process down
+        with a buffered line still sitting in it.
+        """
+        print(
+            "CITE_TIMING "
+            + json.dumps(
+                {
+                    "scenario": Path(__file__).stem,
+                    "test": self._testMethodName,
+                    "what": what,
+                    "ceiling_s": float(ceiling_s),
+                    "elapsed_s": round(elapsed_s, 3),
+                    "spins": int(spins),
+                    "monotonic_s": round(time.monotonic(), 3),
+                }
+            ),
+            flush=True,
+        )
+
+    def _fail_if_the_line_has_stopped(self, what: str) -> None:
+        """End the run now if the coordinator has published a stopped line.
+
+        BLOCKED, FAULTED and STALLED alike, because all three mean the same thing to
+        this scenario: no station will act again without a person, so nothing this
+        run is waiting for can happen. The distinctions between them belong
+        elsewhere — BLOCKED and FAULTED to the reset service, which decides what may
+        be cleared and by whom, and STALLED to nobody yet, because the re-arm path
+        that would clear one is deliberately not built (ADR-0038 decision 5).
+
+        BOTH MESSAGES CARRY THE WHOLE REPORT. This raise is now the way a stopped
+        run usually ends — it fires from the leg loop as well as from
+        `_spin_until` — so it is the message a reader will have, and it used to
+        carry one sentence about whichever wait happened to be in flight. The run
+        that motivated this ended on the removal wait, named it, and printed
+        nothing about the station that had actually stopped. `_context` is
+        deliberately argument-free so that this method can reach it.
+        """
+        if self._halt is None:
+            return
+        if self._halt.state == LineState.STATE_STALLED:
+            self.fail(
+                f"the line stalled while waiting for {what}. {self._halt.describe()}\n"
+                "Nothing escalated and there is nothing for /cite/line/reset_station to "
+                "clear: a station was returned to a trigger nothing can produce. READ THE "
+                "STALL REASON ABOVE FOR WHICH KIND, because there are two and they need "
+                "different things. Either the belt that would carry it work is stopped "
+                "(ADR-0039), or the station is still holding the work-piece it is waiting "
+                "for a replacement of (ADR-0046) — that one names no belt and happens at "
+                "stations no belt feeds. The re-arm path that would clear either is "
+                "deliberately not built — see ADR-0038 decision 5 before reaching for a "
+                "belt restart, which drops the part the gripper is still holding."
+                f"\n{self._context()}"
+            )
+        self.fail(
+            f"the line stopped while waiting for {what}. {self._halt.describe()}\n"
+            "The coordinator is still running and still serving "
+            "/cite/line/reset_station — a stopped line no longer ends the process "
+            "(ADR-0038), which is why this scenario has to read the state rather than "
+            "wait for an exit."
+            f"\n{self._context()}"
+        )
+
+    def _workpiece_xyz(self) -> tuple[float, float, float] | None:
+        """Ask the simulator where the work-piece is, or None if it is not in the world.
+
+        Read from Gazebo rather than from anything the system publishes: a
+        component reporting success proves only that it thinks so, and the claim
+        under test is that an object physically moved. Read from the one
+        subscription the test opened rather than from a process per sample — see
+        `SAMPLE_PERIOD_S` for what the process per sample cost.
+        """
+        return self._poses.position(self.workpiece)
+
+    def _resolve(self, frame: str) -> tuple[float, float, float]:
+        """Where a generated frame is, in the facility root, according to the system."""
+        if frame in self._frames:
+            return self._frames[frame]
+        transform = self._spin_until(
+            lambda: (
+                self._buffer.lookup_transform(self.root_frame, frame, rclpy.time.Time())
+                if self._buffer.can_transform(self.root_frame, frame, rclpy.time.Time())
+                else None
+            ),
+            BRING_UP_CEILING_S,
+            f"a transform from {self.root_frame} to {frame}",
+        )
+        translation = transform.transform.translation
+        self._frames[frame] = (translation.x, translation.y, translation.z)
+        return self._frames[frame]
+
+    # -- milestone predicates, all measured or subscribed ---------------------
+
+    def _sensed(self, topic: str) -> bool:
+        return any(beam.topic == topic for beam in self._beams[self._beams_from :])
+
+    def _resting_on(self, sample: Sample, surface_z: float) -> bool:
+        """Is the piece sitting on a surface at `surface_z`, rather than above or below it?
+
+        Two-sided, and that is the whole value of it. `pick_and_place` records the
+        run this catches: a part welded to a gripper finger half a metre above the
+        target passed every horizontal check for months, and so would a part that
+        slid off the belt onto the floor, because both keep the x and y of a
+        correct placement.
+        """
+        return abs(sample.z - (surface_z + WORKPIECE_SIZE / 2.0)) < SURFACE_TOLERANCE_M
+
+    def _on_link(self, sample: Sample, link: str) -> bool:
+        """Is the piece resting on that belt, anywhere along it?
+
+        Along the whole belt rather than at the place frame, deliberately. The
+        belts run, so a piece placed at an infeed is carried away from it within a
+        second of simulated time, and a milestone pinned to the infeed point would
+        be a race between the sampler and the belt. "It got onto the belt" is the
+        outcome the topology cares about, and it still rejects the failure that
+        matters most here: a piece released short of the leading edge lands on the
+        floor rather than on the belt, and the height half of this check sees that.
+        """
+        if not link:
+            return False
+        centre = self._resolve(f"{ZONE}__{link}__surface")
+        length, width = self._belts[link]
+        return (
+            self._resting_on(sample, centre[2])
+            and abs(sample.x - centre[0]) <= length / 2.0 + BELT_MARGIN_M
+            and abs(sample.y - centre[1]) <= width / 2.0 + BELT_MARGIN_M
+        )
+
+    def _reached(self, milestone: Milestone, sample: Sample | None) -> bool:
+        if milestone.kind == "sensed":
+            return self._sensed(milestone.topic)
+        if sample is None:
+            return False
+        if milestone.kind == "lifted":
+            return sample.z - self._resolve(milestone.frame)[2] > LIFTED_M
+        if milestone.kind == "on_link":
+            return self._on_link(sample, milestone.link)
+        if milestone.kind == "arrived":
+            # Both halves at once: the sink's beam has reported, and the piece is
+            # measurably on the last link while it does. The beam alone is a fact
+            # about a beam — the same class of mistake as reading a belt's `state`
+            # topic, which republishes the command it was handed and measures
+            # nothing.
+            return self._sensed(milestone.topic) and self._on_link(sample, milestone.link)
+        raise AssertionError(f"unknown milestone kind {milestone.kind!r}")
+
+    def _within_the_cell(self, sample: Sample) -> str:
+        """Empty when the piece is where a work-piece may be; the complaint otherwise.
+
+        The envelope comes from the frames the ladder already names and the belts
+        it rides, all placed by TF. Nothing is written here, so a layout change
+        moves this check with the cell.
+        """
+        if self._lowest_surface_z is None:
+            return ""
+        if sample.z < self._lowest_surface_z - DROP_MARGIN_M:
+            return (
+                "fell below every transport surface in the line "
+                f"(z={sample.z:.3f} m against a lowest surface at "
+                f"{self._lowest_surface_z:.3f} m) at {sample.describe()}"
+            )
+        if not self._span_x[0] - CELL_MARGIN_M <= sample.x <= self._span_x[1] + CELL_MARGIN_M:
+            return (
+                f"left the cell along x (x={sample.x:.3f} m against a line spanning "
+                f"{self._span_x[0]:.3f}..{self._span_x[1]:.3f} m) at {sample.describe()}"
+            )
+        return ""
+
+    # -- the run --------------------------------------------------------------
+
+    def test_the_line_carries_every_workpiece_from_pick_to_accumulation(self) -> None:
+        import tf2_ros
+
+        plan, topology = cell(ZONE)
+        ladder = milestones(topology)
+        self.assertTrue(ladder, "the generated topology yields no milestones to observe")
+        self.assertEqual(
+            ladder[-1].kind,
+            "arrived",
+            f"the ladder ends at {ladder[-1].describe()} rather than at an arrival. The "
+            "sink's own trigger is what makes an arrival observed instead of inferred; "
+            "without it this scenario would be asserting that a robot let go.",
+        )
+        # On the instance from here on, so that every failure path below can
+        # print the report rather than only the verdict at the end.
+        self._ladder = ladder
+
+        # 1. The one work-piece name the simulation aids act on. Asserted, not
+        #    assumed: this is what forces the pieces through the line one at a
+        #    time, and the day the model declares a second name this fails and
+        #    says so rather than quietly testing a serial line for ever.
+        names = carried_models(Path(plan.world))
+        self.assertEqual(
+            len(names),
+            1,
+            f"the generated world declares {sorted(names)} as both carried and watched. "
+            "This scenario feeds one piece at a time because a Gazebo model name is "
+            "unique and the belt and beam plugins match it exactly, so one declared name "
+            "means one piece can be on the line at all. More than one name means the line "
+            "can be driven concurrently and this scenario should be — that is a rewrite, "
+            "not a wider tolerance.",
+        )
+        self.workpiece = next(iter(names))
+        # Its box and mass, from the plan (ADR-0067).
+        self.workpiece_part = workpiece.part_of(plan, self.workpiece)
+        self.world = world_name(Path(plan.world))
+        # One pose subscription for the whole run, closed with the test so no
+        # transport node outlives it.
+        self._poses = ModelPoses(zone=ZONE, world=self.world)
+        self.addCleanup(self._poses.close)
+
+        # 2. Belt footprints, from the generated world, keyed back to assets
+        #    through the bring-up plan the launch file reads.
+        extents = belt_extents(Path(plan.world))
+        self._belts = {
+            conveyor.asset: extents[conveyor.command_topic]
+            for conveyor in plan.conveyors
+            if conveyor.command_topic in extents
+        }
+        self.assertEqual(
+            len(self._belts),
+            len(plan.conveyors),
+            f"the plan declares {len(plan.conveyors)} conveyor(s) and the generated world "
+            f"describes {len(self._belts)} of them by command topic; the two disagree "
+            "about what this cell has",
+        )
+
+        # 3. Listen before anything moves. A subscriber created after the event it
+        #    waits for has missed it, and the EVENT profile is keep-all precisely
+        #    so that a connected reader gets every transition rather than the
+        #    latest level.
+        for topic in sorted({m.topic for m in ladder if m.topic}):
+            self._subscriptions.append(
+                self.node.create_subscription(
+                    DetectionEvent,
+                    topic,
+                    lambda message, topic=topic: self._on_detection(topic, message),
+                    EVENT,
+                )
+            )
+        self._subscriptions.append(
+            self.node.create_subscription(LineState, LineState.TOPIC, self._on_line_state, STATE)
+        )
+        # The belt setpoints, read and never written (ADR-0032). Subscribed HERE,
+        # with the rest of the listeners and before the wait for the first
+        # `LineState` below, because `run_all()` publishes once and does it before
+        # the coordinator's first tick — so a subscriber created at step 6 would
+        # have missed the very message it is looking for.
+        for conveyor in plan.conveyors:
+            self._subscriptions.append(
+                self.node.create_subscription(
+                    Float64,
+                    conveyor.command_topic,
+                    lambda message, asset=conveyor.asset: self._on_belt_command(asset, message),
+                    COMMAND,
+                )
+            )
+
+        self._buffer = tf2_ros.Buffer()
+        # Held on the instance: a listener that goes out of scope stops filling
+        # the buffer, and every later lookup fails for a reason that has nothing
+        # to do with the frames it names.
+        self._listener = tf2_ros.TransformListener(self._buffer, self.node)
+
+        # 4. The coordinator is the last thing bring-up starts and the only thing
+        #    that publishes `LineState`, so a state message means the whole stack
+        #    beneath it came up. Waiting on the message rather than on a process is
+        #    the P4 half of this: nothing here sleeps for a guessed duration.
+        self._spin_until(
+            lambda: self._line_states[-1] if self._line_states else None,
+            BRING_UP_CEILING_S,
+            "the first LineState, and so the line coordinator and the stack below it",
+        )
+
+        # 5. The cell's envelope, from the frames the ladder names and the belts it
+        #    rides, now that TF is filling.
+        self._resolve_envelope(ladder)
+
+        # 6. The belts are running, because L4 started them.
+        self._assert_the_line_started_the_belts(plan)
+
+        # 7. Feed the line, one piece at a time, and follow each one.
+        for piece in range(1, WORKPIECES + 1):
+            journey = self._run_one_piece(piece, ladder)
+            self._journeys.append(journey)
+            self._remove_workpiece()
+            if len(journey.reached) != len(ladder):
+                # A stalled line does not recover by being given another part, and
+                # feeding the rest would spend an hour proving it. What was not fed
+                # is named in the report rather than left as a silent short count.
+                break
+
+        # 8. The verdict, in three parts.
+        context = self._context()
+        complete = [len(journey.reached) == len(ladder) for journey in self._journeys]
+        self.assertEqual(
+            (sum(complete), len(complete)),
+            (WORKPIECES, WORKPIECES),
+            f"{sum(complete)} of {WORKPIECES} work-piece(s) traversed the line.\n{context}",
+        )
+        breaches = [b for journey in self._journeys for b in journey.breaches]
+        self.assertEqual(
+            breaches,
+            [],
+            "the work-piece left the cell's working volume:\n  "
+            + "\n  ".join(breaches)
+            + f"\n{context}",
+        )
+        self.assertEqual(
+            self._faults,
+            [],
+            "the coordinator reported a faulted station, which is how an unrecoverable "
+            "skill failure — a planning refusal against the collision scene included — "
+            "reaches this scenario:\n  "
+            + "\n  ".join(f"{fault.station}: {fault.reason}" for fault in self._faults)
+            + f"\n{context}",
+        )
+
+    # -- the pieces of the run ------------------------------------------------
+
+    def _on_detection(self, topic: str, message: DetectionEvent) -> None:
+        if message.state == DetectionEvent.STATE_BLOCKED:
+            self._beams.append(Beam(topic, self._now()))
+
+    def _on_line_state(self, message: LineState) -> None:
+        self._line_states.append(message)
+        if self._halt is None and message.state in STOPPED_STATES:
+            # The FIRST one. What stopped the line is what a person needs; what it
+            # went on reporting afterwards is the same fact repeated several times
+            # a second.
+            #
+            # A stall carries its reasons in a different field, because it is a
+            # different fact: `blocked_reason` is what one station's tree said, and
+            # `stall_reasons` is what the line derived about stations whose trees
+            # have said nothing (ADR-0039). Both are prose for a person and neither
+            # is parsed.
+            reason = message.blocked_reason
+            if message.state == LineState.STATE_STALLED:
+                reason = "; ".join(message.stall_reasons) or "no reason published"
+            self._halt = Halt(message.state, reason, self._now())
+        for station in message.stations:
+            if station.state != StationState.STATE_FAULTED:
+                continue
+            if any(fault.station == station.station_id for fault in self._faults):
+                continue
+            self._faults.append(Fault(station.station_id, message.blocked_reason))
+
+    def _resolve_envelope(self, ladder: tuple[Milestone, ...]) -> None:
+        """Fix the cell's boundary from the frames the ladder names and the belts it rides.
+
+        Every value comes from TF, so the envelope moves with the layout. It is
+        computed once, before the first piece is fed, because a boundary that
+        widened as the run went on would stop being a boundary.
+        """
+        heights: list[float] = []
+        edges: list[float] = []
+        for frame in [m.frame for m in ladder if m.frame]:
+            position = self._resolve(frame)
+            heights.append(position[2])
+            edges.append(position[0])
+        for link, (length, _) in self._belts.items():
+            centre = self._resolve(f"{ZONE}__{link}__surface")
+            heights.append(centre[2])
+            edges += [centre[0] - length / 2.0, centre[0] + length / 2.0]
+        self.assertTrue(heights, "no frame in the ladder or the belt set could be placed by TF")
+        self._span_x = (min(edges), max(edges))
+        self._lowest_surface_z = min(heights)
+
+    def _on_belt_command(self, asset: str, message: Float64) -> None:
+        self._belt_setpoints[asset] = max(self._belt_setpoints.get(asset, 0.0), message.data)
+
+    def _assert_the_line_started_the_belts(self, plan) -> None:
+        """The belts run because L4 ran them, and this scenario writes nothing.
+
+        THIS USED TO PUBLISH. `line_orchestrator` commanded no conveyor, the model
+        says the runtime setpoint is L4's decision rather than L0's, and so the
+        setpoint had no owner and the scenario supplied it — a gap, reported as
+        one. ADR-0032 gave it an owner: `ConveyorIndex::run_all` is called once at
+        bring-up, and the same object stops a belt on its station's trigger edge
+        and runs it again on `CompleteHandoff`.
+
+        Publishing here after that is not a leftover, it is a SECOND WRITER on a
+        command topic with one owner. Nothing arbitrates two publishers of a
+        setpoint: whichever message arrives last wins, so a belt L4 had just
+        stopped for a station to pick from could be restarted by a test harness,
+        and the work-piece would ride past the pick point while every assertion
+        in this file still passed. The right thing for a scenario to do with a
+        topic the system owns is read it.
+
+        So this reads it. A non-zero setpoint on every declared belt, observed
+        rather than assumed, is what says the owner exists and did its job — and
+        it is the check that fails if `run_all()` is ever removed, which is
+        exactly the state the deleted publisher was hiding.
+        """
+        # `True` or `None`, never `False`: `_spin_until` waits on `is not None`,
+        # so a predicate that answered `False` would be read as a good answer and
+        # would return on the first call having waited for nothing.
+        self._spin_until(
+            lambda: True
+            if all(
+                self._belt_setpoints.get(conveyor.asset, 0.0) > 0.0 for conveyor in plan.conveyors
+            )
+            else None,
+            BRING_UP_CEILING_S,
+            "L4 to command every belt to a non-zero setpoint (ADR-0032). Nothing "
+            "else publishes one: if this times out, either `run_all()` no longer "
+            "runs at bring-up or the coordinator never reached it",
+        )
+        for conveyor in plan.conveyors:
+            self.assertAlmostEqual(
+                self._belt_setpoints[conveyor.asset],
+                conveyor.installed_speed_mps,
+                places=6,
+                msg=f"L4 commanded '{conveyor.asset}' to "
+                f"{self._belt_setpoints[conveyor.asset]} m/s against the "
+                f"{conveyor.installed_speed_mps} m/s its drive is installed at. The "
+                "setpoint is L4's decision and the installed speed is the model's; a "
+                "disagreement is a number invented somewhere between them",
+            )
+
+    def _spawn_workpiece(self, at: tuple[float, float, float]) -> None:
+        sdf_path = Path(f"/tmp/cite_{self.workpiece}.sdf")
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece_part))
+        created = gz_run(
+            [
+                "ros2",
+                "run",
+                "ros_gz_sim",
+                "create",
+                "-file",
+                str(sdf_path),
+                "-name",
+                self.workpiece,
+                "-x",
+                str(at[0]),
+                "-y",
+                str(at[1]),
+                "-z",
+                str(at[2]),
+            ],
+            zone=ZONE,
+            timeout=120,
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        try:
+            self._spin_until(
+                lambda: self._workpiece_xyz(),
+                LEG_CEILING_S,
+                f"the work-piece '{self.workpiece}' to settle on the pick surface",
+            )
+        except AssertionError as exc:
+            # A STOPPED LINE IS NOT A SETUP FAILURE. `_spin_until` raises this when
+            # the coordinator has published BLOCKED, FAULTED or STALLED, with the
+            # whole report already attached; the framing below would bury that
+            # under a `gz model --list` of a work-piece that was created perfectly
+            # well, spend up to 30 s of a stopped cell's time doing it, and hand
+            # the reader a message about the spawn rather than about the station.
+            # That is the same relabelling `_context` was made argument-free to
+            # end, one frame further down.
+            if self._halt is not None:
+                raise
+            # A missing work-piece is a setup failure, not a result. Say which,
+            # with the evidence, rather than leaving the reader to decide whether
+            # the line failed or the part was never there.
+            listing = gz_run(["gz", "model", "--list"], zone=ZONE, timeout=30)
+            raise AssertionError(
+                f"{exc}\n--- create stdout ---\n{created.stdout[-2000:]}\n"
+                f"--- create stderr ---\n{created.stderr[-2000:]}\n"
+                f"--- gz model --list (rc={listing.returncode}) ---\n{listing.stdout[-2000:]}"
+            ) from exc
+
+    def _remove_workpiece(self) -> None:
+        """Take the finished piece off the line so the next one can be fed.
+
+        The sink end of a real line is emptied; here it also has to be, because a
+        Gazebo model name is unique and the belts and beams act only on the one
+        name the model declares. Waited on as a condition — the piece is gone when
+        the simulator stops reporting a pose for it — rather than slept on.
+        """
+        gz_run(
+            [
+                "gz",
+                "service",
+                "-s",
+                f"/world/{self.world}/remove",
+                "--reqtype",
+                "gz.msgs.Entity",
+                "--reptype",
+                "gz.msgs.Boolean",
+                "--timeout",
+                "5000",
+                "--req",
+                f'name: "{self.workpiece}" type: MODEL',
+            ],
+            zone=ZONE,
+            timeout=60,
+        )
+        self._spin_until(
+            lambda: True if self._workpiece_xyz() is None else None,
+            LEG_CEILING_S,
+            f"the work-piece '{self.workpiece}' to leave the simulator",
+        )
+
+    def _run_one_piece(self, piece: int, ladder: tuple[Milestone, ...]) -> Journey:
+        """Feed one work-piece and follow it up the ladder.
+
+        IT DOES NOT ASSERT ON THE LINE'S PROGRESS. A piece that stalls returns what
+        it managed, and the verdict is taken once at the end over every piece, so
+        the report names the milestone the line stopped at rather than whichever
+        assertion fired first. That is the whole of what "does not assert" means
+        here, and the docstring this replaces said it without the qualifier while
+        the method already asserted twice: `lifts` below is an assertion about the
+        topology, and `_spawn_workpiece`'s settling wait can already end the run.
+
+        A LINE THAT HAS PUBLISHED THAT IT HAS STOPPED IS AN END, NOT DATA. Nothing
+        further up the ladder can happen once the coordinator reports BLOCKED,
+        FAULTED or STALLED — no station will act again without a person — so every
+        remaining leg would measure `LEG_CEILING_S` rather than the line. Two CI
+        runs paid exactly that: the coordinator escalated and the assertion
+        arrived 417.8 s and 420.6 s later, against a 420.0 s ceiling. The checks
+        below end the run on the message instead, at the milestone in flight.
+
+        Ending there is not a weaker failure than ending at the verdict. The raise
+        carries the full report — `_fail_if_the_line_has_stopped` appends
+        `_context()` — including this piece's partial journey, which the in-loop
+        site appends before raising because the caller's append is never reached
+        from there.
+        """
+        lifts = [m for m in ladder if m.kind == "lifted"]
+        self.assertTrue(lifts, "no station in the topology picks anything up")
+        pick = self._resolve(lifts[0].frame)
+        self._beams_from = len(self._beams)
+        self._spawn_workpiece((pick[0], pick[1], pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M))
+
+        reached: list[str] = []
+        breaches: list[str] = []
+        breached = 0
+        waited_s = 0.0
+        # Mirrors `_spin_until`'s pre-loop check, and is DEFENSIVE RATHER THAN
+        # REACHED TODAY. Every path into this method that can deliver a
+        # `LineState` spins inside `_spin_until` — `_resolve` above, and
+        # `_spawn_workpiece` — and that method makes this same check before and
+        # after every spin of its own, so a halt arriving while the piece was
+        # being spawned has already ended the run before control gets here.
+        # `gz_run` and `_workpiece_xyz` execute no callbacks, so nothing between
+        # those waits can set `_halt` either. It is kept because the reachability
+        # argument is about this method's callers rather than about this method: a
+        # future one that spins without `_spin_until` would otherwise buy the full
+        # leg ceiling this file exists to stop paying. `ladder` is non-empty —
+        # `lifts` above is a subset of it and was asserted — so there is always a
+        # milestone to name.
+        self._fail_if_the_line_has_stopped(f"piece {piece}: {ladder[0].describe()}")
+        for milestone in ladder:
+            # Timed as well as bounded. This is the interval `LEG_CEILING_S` is
+            # sized for — one milestone of the ladder — and it is the only one:
+            # the ceiling's other two uses bound a spawn settling and a removal,
+            # which are shorter by orders of magnitude and would make the ceiling
+            # look absurdly loose to anyone measuring its margin from them.
+            started = time.monotonic()
+            spins = 0
+            deadline = self.node.get_clock().now().nanoseconds + int(LEG_CEILING_S * 1e9)
+            hit = False
+            while self.node.get_clock().now().nanoseconds < deadline:
+                rclpy.spin_once(self.node, timeout_sec=SAMPLE_PERIOD_S)
+                spins += 1
+                # Immediately after the spin that could have delivered the
+                # `LineState`, and BEFORE the milestone test — the same
+                # spin → halt → predicate order `_spin_until` uses. After the test
+                # instead, this file would have two different answers to "what
+                # wins when a halt and a milestone land in the same spin", and it
+                # would take one more pose sample on the way out.
+                if self._halt is not None:
+                    self._journeys.append(
+                        Journey(
+                            piece,
+                            tuple(reached),
+                            tuple(breaches),
+                            time.monotonic() - started,
+                        )
+                    )
+                    self._fail_if_the_line_has_stopped(f"piece {piece}: {milestone.describe()}")
+                    # The append above is correct only because the call above it
+                    # ends the run. A `_fail_if_the_line_has_stopped` that
+                    # returned instead — a narrowed state test, an early return —
+                    # would leave this loop spinning to its deadline appending one
+                    # more journey for this same piece on every spin, and
+                    # `_context` would then report one piece several hundred times
+                    # over. That is a corrupted verdict rather than a missed one,
+                    # so the append does not depend on the helper raising.
+                    raise AssertionError(
+                        "the line reported itself stopped and "
+                        "`_fail_if_the_line_has_stopped` returned instead of ending "
+                        f"the run: {self._halt.describe()}\n{self._context()}"
+                    )
+                position = self._workpiece_xyz()
+                sample = Sample(self._now(), *position) if position is not None else None
+                if sample is not None:
+                    self._samples.append(sample)
+                    breach = self._within_the_cell(sample)
+                    if breach:
+                        breached += 1
+                        # The first few, and then a count. Every sample of a piece
+                        # lying on the floor is a distinct breach message, and
+                        # recording all of them would bury the milestone the line
+                        # actually stopped at under a thousand lines of the same
+                        # fact. The assertion fires on one.
+                        if len(breaches) < BREACHES_REPORTED:
+                            breaches.append(
+                                f"piece {piece}, while waiting for "
+                                f"{milestone.describe()}: {breach}"
+                            )
+                if self._reached(milestone, sample):
+                    hit = True
+                    break
+            waited_s = time.monotonic() - started
+            if not hit:
+                break
+            self._emit_timing(
+                f"piece {piece}: {milestone.describe()}",
+                LEG_CEILING_S,
+                waited_s,
+                spins,
+            )
+            reached.append(milestone.describe())
+        if breached > len(breaches):
+            breaches.append(f"piece {piece}: and {breached - len(breaches)} further sample(s)")
+        return Journey(piece, tuple(reached), tuple(breaches), waited_s)
+
+    def _context(self) -> str:
+        """Everything a reader needs in order to say where the line stopped.
+
+        ARGUMENT-FREE, AND THAT IS THE POINT. It used to take the ladder and the
+        journeys as parameters, which meant only the code holding those two
+        locals — the final verdict, at the end of the test method — could call it.
+        Every path that raised earlier lost the entire report: the milestone
+        ladder, each piece's stop point, the last `LineState` with its per-station
+        detail, the halt, the sample extremes. Three CI failures at one station
+        were diagnosed from precisely that data, and the run that motivated this
+        change printed none of it. It now reads the instance, so any failure path
+        can carry it, and `_fail_if_the_line_has_stopped` does.
+
+        It must therefore be callable AT ANY MOMENT, including before step 1 has
+        resolved a work-piece name and before a single milestone has been read.
+        Nothing below may assume a field has been filled in.
+        """
+        lines = [
+            f"seed={self.seed} (a condition this run was produced under, not a "
+            "reproducibility claim — see SEED_VARIABLE and ADR-0027)",
+            # Not `self.workpiece` bare: these are empty strings until step 1 of
+            # the test method resolves them from the generated world, and this
+            # report is now reachable before that. "model '' in world ''" reads
+            # like a cell with no work-piece rather than like a report taken early.
+            f"work-piece model '{self.workpiece or 'not yet resolved'}' in world "
+            f"'{self.world or 'not yet resolved'}'",
+            f"the ladder the generated topology defines, {len(self._ladder)} milestone(s):",
+        ]
+        lines += [f"  {index + 1}. {m.describe()}" for index, m in enumerate(self._ladder)]
+        rungs = len(self._ladder)
+        for journey in self._journeys:
+            if len(journey.reached) == rungs:
+                lines.append(f"piece {journey.piece}: complete, {rungs}/{rungs}")
+                continue
+            # The next milestone is at `len(reached)` whenever there is one, and
+            # the `<` is a guard rather than a restatement of that. It does NOT
+            # guard against an over-long journey: `reached` is built from this
+            # same ladder and cannot outrun it. What it guards against is a
+            # journey and a ladder that came from different places — `self._ladder`
+            # still `()` while `self._journeys` is not empty makes the unguarded
+            # expression `()[1]` — which is reachable now that paths other than
+            # the final verdict append a partial journey themselves. An IndexError
+            # raised while formatting a failure report destroys the report it was
+            # formatting.
+            waiting = (
+                self._ladder[len(journey.reached)].describe()
+                if len(journey.reached) < rungs
+                else "nothing this ladder names"
+            )
+            lines.append(
+                f"piece {journey.piece}: STOPPED after {len(journey.reached)}/{rungs} "
+                f"milestones, waiting on {waiting} for {journey.waited_s:.1f}s "
+                f"(the leg ceiling is {LEG_CEILING_S:.0f}s)"
+            )
+        if len(self._journeys) < WORKPIECES:
+            lines.append(
+                f"pieces {len(self._journeys) + 1}..{WORKPIECES} have no journey in this "
+                "report. Usually that means they were never fed — the line had already "
+                "stopped, and another part does not restart it — but the first of them "
+                "may instead be the piece this run died on: the raises between a spawn "
+                "and the first append record no journey, so a piece can be in the "
+                "simulator and absent from this list"
+            )
+        lines.append(
+            "beams that reported BLOCKED: "
+            + (", ".join(f"{b.topic}@{b.seconds:.1f}s" for b in self._beams) or "none")
+        )
+        if self._line_states:
+            last = self._line_states[-1]
+            lines.append(
+                f"last LineState: state={last.state} "
+                f"workpieces_completed={last.workpieces_completed} (counted when the last "
+                "robot LET GO, not on arrival — see line_maintenance.hpp; context only, "
+                "never asserted on) "
+                f"blocked_reason={last.blocked_reason or 'none'} "
+                f"stall_reasons={'; '.join(last.stall_reasons) or 'none'}"
+            )
+            lines += [
+                f"  station {s.station_id} ({s.actor_asset_id or 'no actor'}): "
+                f"state={s.state} occupancy={s.buffer_occupancy}/{s.buffer_capacity} "
+                f"workpiece={s.current_workpiece_id or 'none'}"
+                for s in last.stations
+            ]
+        else:
+            lines.append("no LineState was ever received")
+        if self._halt is not None:
+            lines.append(f"the line reported itself stopped: {self._halt.describe()}")
+        if self._samples:
+            furthest = max(self._samples, key=lambda s: s.x)
+            highest = max(self._samples, key=lambda s: s.z)
+            lines.append(
+                f"work-piece samples: {len(self._samples)}, furthest {furthest.describe()}, "
+                f"highest {highest.describe()}, last {self._samples[-1].describe()}"
+            )
+        else:
+            lines.append("the work-piece was never located in the simulator")
+        return "\n".join(lines)
+
+
+@launch_testing.post_shutdown_test()
+class TestCleanShutdown(unittest.TestCase):
+    #: See the same exemption in `bringup.py` for the measurement behind it and
+    #: for why it is weak: move_group segfaults inside its own destructor —
+    #: SIGSEGV in `rclcpp::CallbackGroup::~CallbackGroup` from
+    #: `MoveItCpp::~MoveItCpp` — which a raised `sigterm_timeout` isolated at -11
+    #: on 3/3 runs with no SIGTERM escalation. It is upstream, not a race of ours.
+    #:
+    #: Kept exactly this wide: one signal, one process name. This scenario runs
+    #: longer than `pick_and_place`, and the -9/-15 family `bringup.py`
+    #: characterises correlates with run DURATION rather than with process
+    #: identity, so it will be met here more often. That is a reason to report the
+    #: rate, not a reason to widen the list: an assertion that tolerates every
+    #: signal a contended machine produces is an assertion that cannot fail.
+    UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
+
+    #: What the L3 skill server logs when the default planner refused and the
+    #: fallback was tried, and when it refused and the fallback was declined.
+    #: Matched rather than parsed: these are log lines for a person, and the only
+    #: thing taken from them is that one happened.
+    FALLBACK_TAKEN = "planner fallback:"
+    FALLBACK_DECLINED = "planner fallback declined:"
+
+    def test_report_how_often_the_planner_fell_back(self, proc_output) -> None:
+        """A count, not a gate — and the count is the point (ADR-0027).
+
+        ADR-0027 keeps OMPL as the fallback for the motions a point-to-point
+        interpolation cannot make, and says in as many words that a fallback
+        which becomes the common path is a finding about the cell's geometry
+        rather than about the planner. That is a frequency, a frequency is a
+        metric, and metrics belong to L6, which does not exist. This is not a
+        second attempt at L6: the report `scripts/scenario` already writes is
+        uploaded by CI, and printing the count here puts the number into it at
+        the cost of no new interface and no new file.
+
+        Deliberately without a threshold. Nothing has measured what a normal rate
+        is on this cell, and a limit invented here would be a pre-registered
+        claim with no campaign behind it (P8).
+        """
+        taken = 0
+        declined = 0
+        for entry in proc_output:
+            text = (
+                entry.text.decode(errors="replace")
+                if isinstance(entry.text, bytes)
+                else str(entry.text)
+            )
+            taken += text.count(self.FALLBACK_TAKEN)
+            declined += text.count(self.FALLBACK_DECLINED)
+        print(
+            f"planner-fallback count: taken={taken} declined={declined} "
+            "(ADR-0027; reported, not gated)"
+        )
+
+    def test_nothing_of_ours_exited_badly(self, proc_info) -> None:
+        """No process of ours died in a way we cannot account for.
+
+        `line_orchestrator`'s 1 IS NOT ADDED TO THE ALLOWLIST, and that is a
+        decision rather than an oversight (ADR-0038). A run in which the line
+        stopped now returns 1 from a coordinator that stayed alive, so this check
+        fails on it — a second and weaker report of a failure
+        `_fail_if_the_line_has_stopped` has already made in flight, with the
+        station and the reason named. Weaker, but not wrong: what it reports is a
+        run that really did fail, and allowing 1 here would make this check accept
+        a coordinator that failed for any reason at all, which is the one thing it
+        is for.
+
+        SO IT IS NOT PART OF THE TEARDOWN-FLAKE ACCOUNTING in CLAUDE.md §2. Those
+        are processes dying in ways nothing explains; this is a process reporting
+        a failure the scenario has already reported. If it starts to look like
+        noise, the fix is that the in-flight check ends the run before teardown,
+        not a wider allowlist here.
+        """
+        allowed = [0, launch_testing.asserts.EXIT_SIGINT]
+        for info in proc_info:
+            name = str(info.process_name)
+            expected = (
+                [*allowed, -11] if name.startswith(self.UPSTREAM_TEARDOWN_SEGFAULT) else allowed
+            )
+            self.assertIn(info.returncode, expected, f"{name} exited with {info.returncode}")

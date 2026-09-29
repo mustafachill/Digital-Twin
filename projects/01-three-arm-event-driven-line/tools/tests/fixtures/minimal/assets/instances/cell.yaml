@@ -1,0 +1,13 @@
+---
+schema: cite/asset_instances/v1
+assets:
+  - id: pedestal_1
+    zone: cell_a
+    type: pedestal
+    pose: {frame: cite_world, xyz_m: [0.0, -0.35, 0.0]}
+    hardware: {backend: sim}
+  - id: arm_1
+    zone: cell_a
+    type: xarm5
+    pose: {frame: pedestal_1/top, rpy_rad: [0.0, 0.0, 1.570796327]}
+    hardware: {backend: sim}

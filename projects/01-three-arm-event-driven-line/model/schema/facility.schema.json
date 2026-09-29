@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Facility": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "root_frame": {
+          "const": "cite_world",
+          "default": "cite_world",
+          "enum": [
+            "cite_world"
+          ],
+          "title": "Root Frame",
+          "type": "string"
+        },
+        "survey_origin": {
+          "$ref": "#/$defs/SurveyOrigin"
+        },
+        "units": {
+          "const": "si_m_rad_kg_s",
+          "default": "si_m_rad_kg_s",
+          "description": "Closed enum with one member. Its existence is a tripwire: adding a second member requires an ADR, because ADR-0020 forbids a second representation of any quantity.",
+          "enum": [
+            "si_m_rad_kg_s"
+          ],
+          "title": "Units",
+          "type": "string"
+        },
+        "workpiece_models": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Workpiece Models",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Facility",
+      "type": "object"
+    },
+    "SurveyOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "marker_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Marker Id"
+        },
+        "status": {
+          "default": "provisional",
+          "enum": [
+            "provisional",
+            "surveyed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "SurveyOrigin",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/facility/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "facility": {
+      "$ref": "#/$defs/Facility"
+    },
+    "schema": {
+      "const": "cite/facility/v1",
+      "enum": [
+        "cite/facility/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "facility"
+  ],
+  "title": "cite/facility/v1",
+  "type": "object"
+}

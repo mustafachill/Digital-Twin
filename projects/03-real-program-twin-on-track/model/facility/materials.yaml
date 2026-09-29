@@ -1,0 +1,98 @@
+---
+# yaml-language-server: $schema=../schema/materials.schema.json
+schema: cite/materials/v1
+
+# The facility's material library: what each named appearance looks like.
+#
+# WHY THIS FILE EXISTS. `Body.material` has carried a name on every authored body
+# since the component library was written — `table_top`, `conveyor_frame`,
+# `pedestal_steel`, `sensor_housing`, `workpiece_stock` — and until this file
+# existed not one of them resolved to anything. There was no library, no rule
+# requiring one, and no emitter: every `<visual>` in the generated scene was a
+# bare `<geometry>`, every renderer fell back to its own default, and the project
+# owner opened the Gazebo window and reported that the box, the table and
+# everything else were black. The model already said what each thing was made of.
+#
+# WHY IT IS HERE AND NOT UNDER `assets/`. A material is facility-scoped: any type
+# may wear any entry, and the whole value of a library is that two tables are the
+# same brown by construction. `model/assets/types/` holds one file per TYPE and a
+# material is not a type; `model/facility/` is where this model already keeps its
+# facility-wide singletons — the facility itself and the zone list — and this is a
+# third of exactly that kind. It is loaded by its own `schema:` key like every
+# other document, so the directory is a convention and not a dispatch rule.
+#
+# WHAT A COLOUR IS WORTH HERE, stated plainly so nobody reads more into it. These
+# are appearance and nothing else. No mass, no inertia, no friction coefficient
+# and no collision geometry is touched by anything in this file, and no physics
+# result anywhere in this repository depends on a value in it. What it buys is
+# that a person looking at the window can tell the parts apart.
+#
+# THE 0.8 CEILING IS A MEASUREMENT AND NOT A STYLE RULE. The cell's furniture
+# reaches Gazebo as a URDF, and URDF carries one colour per material where SDF
+# carries two. Measured in this project's container on 2026-09-28 with
+# `gz sdf -p` over a probe URDF: sdformat maps `<color rgba>` onto BOTH the SDF
+# ambient and the SDF diffuse, after multiplying each colour component by 1.25 and
+# clamping it at 1.0 — alpha passes through untouched. So a component declared
+# above 0.8 is shown clipped, and the model would state a colour the cell cannot
+# show.
+#
+# It binds on every entry worn by a body that stands in the cell, because those
+# are the ones the scene URDF carries, and all of them are at or under 0.8 below.
+# `workpiece_stock` is the ONE entry above it, and that is safe for a reason worth
+# stating rather than trusting: the work-piece type has no instances by design
+# (see `model/assets/types/workpieces/workpiece.yaml`), so it reaches no scene;
+# its only wearer is the model a scenario spawns, which is SDF and carries both
+# values verbatim.
+#
+# THAT EXCEPTION IS HELD BY A RULE AND NOT BY THIS PARAGRAPH.
+# `scene-material-clips`, in `cite_tools.validate.physical`, is an ERROR on any
+# component above the ceiling worn by a type something in the model instantiates
+# — so giving `workpiece_stock` to a pedestal, or giving the work-piece an
+# instance, refuses at validate time. It was prose alone for one commit, which is
+# a measured constraint held by a comment, and the reviewer was right to say so:
+# the safety above is a property of today's model rather than a rule, and the
+# paragraph would have stayed true while the cell went wrong. The ceiling itself
+# is derived there from the measured 1.25 rather than written as 0.8 twice.
+#
+# `ambient` is the colour in shadow and `diffuse` the colour under direct light,
+# which is SDF's own vocabulary. Ambient is kept at roughly half of diffuse on
+# every entry here: equal values render flat, and the shading is what makes an
+# edge visible.
+materials:
+  # The conveyor frame: powder-coated machine grey-blue, the colour a belt stand
+  # is usually painted. Distinctly cooler and darker than the pedestals so that
+  # the two families of steel in the cell do not read as one. The linear track's
+  # rail wears it too: it is machine, not structure.
+  - id: conveyor_frame
+    ambient: [0.12, 0.15, 0.19, 1.0]
+    diffuse: [0.28, 0.34, 0.42, 1.0]
+
+  # The arm pedestals: bare structural steel, warmer and lighter than the belt
+  # stands and plainly not the ground plane, which is a neutral grey.
+  - id: pedestal_steel
+    ambient: [0.22, 0.22, 0.24, 1.0]
+    diffuse: [0.52, 0.53, 0.56, 1.0]
+
+  # A break-beam housing: safety yellow, which is what these are on a real line
+  # and also the one thing in the cell that has to be findable at a glance when
+  # somebody is asking why a station never triggered.
+  - id: sensor_housing
+    ambient: [0.36, 0.28, 0.04, 1.0]
+    diffuse: [0.78, 0.62, 0.10, 1.0]
+
+  # The work-table top: a wood-coloured bench surface. Warm where everything else
+  # in the cell is cool, so the surface a part is picked from is unmistakable.
+  - id: table_top
+    ambient: [0.26, 0.16, 0.08, 1.0]
+    diffuse: [0.58, 0.38, 0.20, 1.0]
+
+  # The work-piece: orange, and the only saturated warm object in the cell. It is
+  # the thing a person watches, and it must be separable from the table it rests
+  # on, the belt it rides and the grey floor underneath both.
+  #
+  # These are the two values the scenarios' hand-written spawn SDF has carried
+  # since ADR-0029, moved here rather than re-chosen: the box that CI has been
+  # watching is the box this declares.
+  - id: workpiece_stock
+    ambient: [0.80, 0.30, 0.10, 1.0]
+    diffuse: [0.90, 0.40, 0.10, 1.0]

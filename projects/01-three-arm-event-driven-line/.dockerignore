@@ -1,0 +1,21 @@
+# Keep the build context small. Only requirements/ and infra/docker/ are
+# actually COPYed by the Dockerfile; everything else arrives as a bind mount at
+# run time, so shipping it to the daemon is pure cost.
+
+.git/
+.venv/
+legacy/
+workspace/build/
+workspace/install/
+workspace/log/
+workspace/src/external/
+assets/scans/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+*.mcap
+rosbag2_*/
+.DS_Store

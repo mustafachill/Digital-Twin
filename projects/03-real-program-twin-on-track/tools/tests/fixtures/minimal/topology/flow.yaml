@@ -1,0 +1,7 @@
+---
+schema: cite/flow/v1
+flow:
+  id: test_line
+  zone: cell_a
+  edges:
+    - {from: station_1, to: station_sink, buffer: 2}

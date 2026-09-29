@@ -1,0 +1,131 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# Three xArm 5 instances. They differ only in id and where they stand — the
+# component library holds everything else, which is what makes adding a fourth
+# arm a data change rather than a code change (P9).
+#
+# Each is placed against its pedestal's `top` frame and yawed +90 degrees to face
+# the belt centreline at +Y. The yaw is written in radians because ADR-0020
+# forbids a second representation of an angle; `cite-model show` renders degrees
+# for reading.
+assets:
+  - id: arm_1
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_1/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      # The vendor description builds the gripper in, so no second description
+      # is emitted for it.
+      vendor_integrated: true
+    # Required with no default: a schema default here would let an arm become
+    # `real` because someone omitted a key, and cross-cutting-safety.md is
+    # explicit that a mode must never be reachable by omission.
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      # A retracted, collision-free pose the arm returns to between cycles.
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    # Written by `cite-model register` in Phase 2, never by hand. Kept apart from
+    # `pose` so a measurement can never overwrite engineered intent.
+    registration:
+      status: unregistered
+
+  - id: arm_2
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_2/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    registration:
+      status: unregistered
+
+  - id: arm_3
+    zone: cell_a
+    type: xarm5
+    pose:
+      frame: pedestal_3/top
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, 1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+    registration:
+      status: unregistered
+
+  # ------------------------------------------------------------------------ #
+  # cell_b — the one-arm cell (ADR-0056)
+  # ------------------------------------------------------------------------ #
+  #
+  # ASSET IDS ARE FACILITY-UNIQUE, AND THAT IS THE HAZARD A NAME HAS TO CARRY.
+  # `cite_tools.model.ids` namespaces topics, actions and frames by zone, but
+  # joint, link, controller and `_mount` names are built from the ASSET ID ALONE,
+  # and `referential.py` requires asset ids to be unique across the whole
+  # facility rather than per zone. A second `arm_1` would therefore collide on
+  # every one of those, inside a generated artifact, with no finding anywhere.
+  #
+  # A ROLE NAME CARRIES IT. `picker` is unique across the facility exactly as a
+  # zone-prefixed id would be, and it says what the asset does — which is what a
+  # reader of `picker_joint3` or `picker_traj_controller` actually needs, since
+  # the zone is not a fact about the joint. The alternative was a `b_` prefix,
+  # which encodes the zone a second time in a spelling NOTHING DERIVES AND
+  # NOTHING VALIDATES: `cite_tools` never reads it, no rule requires it, and an
+  # asset moved between zones keeps the old letter and becomes a lie. It also
+  # stuttered — generated artifact names are `<zone>_<asset>`, so `b_arm_1` in
+  # `cell_b` produced `cell_b_b_arm_1.urdf.xacro`.
+  #
+  # The project owner chose consistency here on 2026-09-17, after all three
+  # variants were measured: each validates clean at all three levels for both
+  # zones and each leaves `cell_a` byte-identical, so cost was not a
+  # discriminator.
+  #
+  # Same type, same vendor-integrated gripper and same home pose as `arm_1`. It
+  # stands on the carriage of a linear track rather than on a pedestal, yawed
+  # -90 degrees so that its left is the track's direction of travel; see
+  # model/assets/instances/tracks.yaml for why, and for the layout the real
+  # program's poses put around it (ADR-0067).
+  - id: picker
+    zone: cell_b
+    type: xarm5
+    pose:
+      frame: picker_track/carriage
+      xyz_m: [0.000, 0.000, 0.000]
+      rpy_rad: [0.0, 0.0, -1.570796327]
+    end_effector:
+      type: xarm_parallel_gripper
+      vendor_integrated: true
+    # `sim` on both sides. ADR-0048 clause 1 refuses an asset whose two sides
+    # declare different backends, and ADR-0056 leaves hardware to Phase 2.B.
+    hardware:
+      backend: sim
+    configuration:
+      kind: robot
+      home_rad: [0.0, -0.35, -1.05, 0.0, 1.40]
+      # The program this arm runs: the real xArm 5's own, read from the file the
+      # robot's programming tool wrote (ADR-0067). Its poses, gripper widths,
+      # speeds and track moves all come from there; none is copied into this
+      # model. The poses ADR-0066 taught here were taught against the layout
+      # before the track and no longer describe this cell, so they are gone.
+      program: programs/xarm5_real_demo.blockly.xml
+    registration:
+      status: unregistered

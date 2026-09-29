@@ -1,0 +1,470 @@
+{
+  "$defs": {
+    "AssetInstance": {
+      "additionalProperties": false,
+      "description": "One physical thing that exists, with an identity, a pose and a zone.",
+      "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "conveyor": "#/$defs/ConveyorConfiguration",
+                  "fixture": "#/$defs/FixtureConfiguration",
+                  "robot": "#/$defs/RobotConfiguration",
+                  "sensor": "#/$defs/BreakBeamConfiguration",
+                  "work_area": "#/$defs/WorkAreaConfiguration"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ConveyorConfiguration"
+                },
+                {
+                  "$ref": "#/$defs/BreakBeamConfiguration"
+                },
+                {
+                  "$ref": "#/$defs/WorkAreaConfiguration"
+                },
+                {
+                  "$ref": "#/$defs/RobotConfiguration"
+                },
+                {
+                  "$ref": "#/$defs/FixtureConfiguration"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Configuration"
+        },
+        "end_effector": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EndEffectorSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hardware": {
+          "$ref": "#/$defs/HardwareSelection"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "pose": {
+          "$ref": "#/$defs/Pose"
+        },
+        "registration": {
+          "$ref": "#/$defs/Registration"
+        },
+        "type": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Type",
+          "type": "string"
+        },
+        "zone": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Zone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "zone",
+        "type",
+        "pose",
+        "hardware"
+      ],
+      "title": "AssetInstance",
+      "type": "object"
+    },
+    "BreakBeamConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "beam_axis": {
+          "enum": [
+            "x",
+            "y",
+            "z"
+          ],
+          "title": "Beam Axis",
+          "type": "string"
+        },
+        "beam_length_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Beam Length M",
+          "type": "number"
+        },
+        "idle_state": {
+          "default": "clear",
+          "enum": [
+            "clear",
+            "blocked"
+          ],
+          "title": "Idle State",
+          "type": "string"
+        },
+        "kind": {
+          "const": "sensor",
+          "default": "sensor",
+          "enum": [
+            "sensor"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "beam_axis",
+        "beam_length_m"
+      ],
+      "title": "BreakBeamConfiguration",
+      "type": "object"
+    },
+    "ConveyorConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "default": "forward",
+          "enum": [
+            "forward",
+            "reverse"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "installed_speed_mps": {
+          "exclusiveMinimum": 0.0,
+          "title": "Installed Speed Mps",
+          "type": "number"
+        },
+        "kind": {
+          "const": "conveyor",
+          "default": "conveyor",
+          "enum": [
+            "conveyor"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "installed_speed_mps"
+      ],
+      "title": "ConveyorConfiguration",
+      "type": "object"
+    },
+    "EndEffectorSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Type",
+          "type": "string"
+        },
+        "vendor_integrated": {
+          "default": false,
+          "description": "True when the robot type's own description already builds it in.",
+          "title": "Vendor Integrated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "EndEffectorSelection",
+      "type": "object"
+    },
+    "FixtureConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "fixture",
+          "default": "fixture",
+          "enum": [
+            "fixture"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "FixtureConfiguration",
+      "type": "object"
+    },
+    "HardwareSelection": {
+      "additionalProperties": false,
+      "description": "Which backend this instance loads. Required, with no default, on purpose.\n\nA schema default here would let an instance become ``real`` because someone\nomitted a key. `cross-cutting-safety.md` is explicit that a mode must never\nbe reachable by omission, and this is the field that decides whether a\ncommand reaches a physical arm.",
+      "properties": {
+        "backend": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Backend",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "backend"
+      ],
+      "title": "HardwareSelection",
+      "type": "object"
+    },
+    "Pose": {
+      "additionalProperties": false,
+      "description": "Where something is, relative to exactly one named frame.\n\nThere is one pose per asset instance. Task poses — where an arm picks, where\nit places — are never written here; they are named frames on assets, which a\nstation references. That is what makes v1's duplicated-and-diverged\npick/place coordinates unrepresentable.",
+      "properties": {
+        "frame": {
+          "default": "cite_world",
+          "pattern": "^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?$",
+          "title": "Frame",
+          "type": "string"
+        },
+        "rpy_rad": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rpy Rad",
+          "type": "array"
+        },
+        "xyz_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xyz M",
+          "type": "array"
+        }
+      },
+      "title": "Pose",
+      "type": "object"
+    },
+    "Registration": {
+      "additionalProperties": false,
+      "description": "What calibration measured, kept apart from what was designed.\n\nL5 writes here, never into ``pose``. Keeping them separate means a Phase 2\nmeasurement can never destroy engineered intent, and ``git diff`` shows\nexactly what calibration changed. ``correction`` is a **body-frame** delta\n(ADR-0020), which is what a touch probe or an ICP fit naturally produces.",
+      "properties": {
+        "correction": {
+          "$ref": "#/$defs/Pose"
+        },
+        "measured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Measured At"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "enum": [
+                "survey",
+                "tcp_touch_probe",
+                "scan_icp"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method"
+        },
+        "residual_rms_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Residual Rms M"
+        },
+        "status": {
+          "default": "unregistered",
+          "enum": [
+            "unregistered",
+            "measured",
+            "stale"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "survey_reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Survey Reference"
+        }
+      },
+      "title": "Registration",
+      "type": "object"
+    },
+    "RobotConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "home_rad": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Home Rad",
+          "type": "array"
+        },
+        "kind": {
+          "const": "robot",
+          "default": "robot",
+          "enum": [
+            "robot"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "RobotConfiguration",
+      "type": "object"
+    },
+    "WorkAreaConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "work_area",
+          "default": "work_area",
+          "enum": [
+            "work_area"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "source",
+            "sink",
+            "buffer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "size_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Size M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "size_m",
+        "role"
+      ],
+      "title": "WorkAreaConfiguration",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/asset_instances/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/AssetInstance"
+      },
+      "minItems": 1,
+      "title": "Assets",
+      "type": "array"
+    },
+    "schema": {
+      "const": "cite/asset_instances/v1",
+      "enum": [
+        "cite/asset_instances/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "assets"
+  ],
+  "title": "cite/asset_instances/v1",
+  "type": "object"
+}

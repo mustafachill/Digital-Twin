@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# Run the cell's fixed program on both sides of the twin pair, with the windows open.
+#
+#   ./scripts/program                  one cycle, both sides, one window each
+#   ./scripts/program --headless       the same with no windows
+#   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
+#   ./scripts/program --zone cell_b    name the zone rather than letting the model choose
+#
+# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line,
+# starts each side's belt ON THAT SIDE (the belt is not twinned, ADR-0067), and
+# for each cycle puts one work-piece on each side's pick table (taking the last
+# cycle's off first) and runs `python3 -m cite_bringup.program --via twin
+# --cycles 1`: the real xArm 5's own program, read from its program file, sent
+# ONCE through the twin boundary, moving both arms and sliding both tracks step
+# by step (ADR-0067). Then it reports where the last box ended and tears the
+# pair down. Ctrl-C stops the program (goal cancelled, track held) and then the
+# pair.
+#
+# WHAT IT IS NOT. A demonstration, like ./scripts/demo: it gates nothing and is in
+# no CI step. `./scripts/scenario program_cycle` is what CHECKS the program, on one
+# side. ./scripts/demo still runs the parked event-driven line, unchanged.
+#
+# Read ./scripts/demo's header for the GPU and the speed of a windowed pair; all
+# of it applies here.
+#
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+HEADLESS=0
+ZONE=""
+CYCLES=1
+WANT=""
+for arg in "$@"; do
+    if [ -n "$WANT" ]; then
+        case "$arg" in ""|-*|*:=*) die "${WANT} needs a value and was given '${arg}'." ;; esac
+        if [ "$WANT" = "--zone" ]; then ZONE="$arg"; else CYCLES="$arg"; fi
+        WANT=""; continue
+    fi
+    case "$arg" in
+        --headless) HEADLESS=1 ;;
+        --zone|--cycles) WANT="$arg" ;;
+        -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
+        *)          die "unknown argument '${arg}'. Try --help." ;;
+    esac
+done
+[ -z "$WANT" ] || die "${WANT} needs a value."
+case "$CYCLES" in ''|*[!0-9]*) die "--cycles needs a whole number, 0 for forever." ;; esac
+
+# ---------------------------------------------------------------- on the host
+if ! in_container; then
+    # Refused on a dirty host for the reasons ./scripts/demo gives: a cell left up
+    # answers on the same domain, and `compose exec` into a running container does
+    # not run the image's entrypoint.
+    stop_this_checkouts_containers
+    if [ "$(docker ps -q 2>/dev/null | wc -l)" -ne 0 ]; then
+        die "a container of another checkout is running, and this would share its ROS
+  domain and Gazebo partition. Stop it first:  docker ps   then   docker rm -f <id>"
+    fi
+    if [ ! -d "${REPO_ROOT}/.venv" ]; then
+        step "No environment yet — preparing one. This happens once."
+        "${REPO_ROOT}/scripts/bootstrap"
+    fi
+    if [ "$HEADLESS" -eq 0 ]; then
+        [ "$(host_os)" != "macos" ] || die "the windows need an X display. Use --headless."
+        [ -n "${DISPLAY:-}" ] || die "DISPLAY is not set. Use --headless."
+        export CITE_SERVICE=gui
+    fi
+fi
+
+require_ros_env program "$@"
+
+# ----------------------------------------------------------- in the container
+if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
+    step "Nothing is built yet — building. This happens once, and takes a while."
+    "${REPO_ROOT}/scripts/build"
+fi
+source_overlay
+
+if [ -z "$ZONE" ]; then
+    # The paired zone, as the model declares it; see ./scripts/demo.
+    ZONE="$(python3 -m cite_bringup.demo --print-zone)" \
+        || die "could not work out which zone is paired. Name one with --zone."
+fi
+
+PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
+PAIR_PID=""
+TAIL_PID=""
+PROGRAM_PID=""
+
+# Invoked by the trap below and never by name, which shellcheck cannot see.
+# shellcheck disable=SC2329
+teardown() {
+    trap - EXIT
+    trap 'warn "still stopping — the supervisor is working through its own ceilings"' INT TERM
+    if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null || true; fi
+    if [ -n "$PROGRAM_PID" ] && kill -0 "$PROGRAM_PID" 2>/dev/null; then
+        # SIGINT, so the program cancels its goal and holds the track itself.
+        kill -INT "$PROGRAM_PID" 2>/dev/null || true
+        wait "$PROGRAM_PID" 2>/dev/null || true
+    fi
+    if [ -n "$PAIR_PID" ] && kill -0 "$PAIR_PID" 2>/dev/null; then
+        step "Stopping the pair"
+        kill -INT "$PAIR_PID" 2>/dev/null || true
+        wait "$PAIR_PID" 2>/dev/null || true
+        # The supervisor's own account of the teardown, which the console stopped
+        # tailing at readiness: a side that had to be killed says so here.
+        grep -E '^\[pair\] ' "$PAIR_LOG" 2>/dev/null | tail -n 6 || true
+    fi
+    ok "the cell is down. Its log was ${PAIR_LOG}, inside the container."
+}
+# An interrupt tears down and then ENDS the script, rather than returning into
+# the cycle loop to report on a pair that is gone.
+trap 'teardown; exit 130' INT TERM HUP
+trap teardown EXIT
+
+step "Bringing up both sides of ${ZONE}, without the line"
+SIM_ARGS=(--zone "$ZONE" --pair)
+[ "$HEADLESS" -eq 0 ] || SIM_ARGS+=(--headless)
+"${REPO_ROOT}/scripts/sim" "${SIM_ARGS[@]}" > "$PAIR_LOG" 2>&1 &
+PAIR_PID=$!
+tail -n +1 -f "$PAIR_LOG" & TAIL_PID=$!
+
+# An event, not a duration (P4): the loop only polls for the supervisor's token.
+info "Waiting for both sides and the twin boundary to announce readiness"
+READY=0
+for _ in $(seq 1 180); do
+    if grep -q 'CITE_BOUNDARY_READY' "$PAIR_LOG" 2>/dev/null; then READY=1; break; fi
+    if ! kill -0 "$PAIR_PID" 2>/dev/null; then break; fi
+    sleep 2
+done
+[ "$READY" -eq 1 ] || die "the pair never announced that it was ready. Its log is ${PAIR_LOG}"
+kill "$TAIL_PID" 2>/dev/null || true
+TAIL_PID=""
+ok "both sides are up"
+
+# One box per side per cycle, and the program run one cycle at a time:
+# `python3 -m cite_bringup.program` puts no part on the table itself, so a
+# `--cycles N` run of it would reach cycle 2 with nothing to pick. The box keeps
+# the one name `workpiece`, because the belt's `<carry>` list, the beams' `<watch>`
+# list and the grasp hold all match that model name exactly (see
+# `cite_bringup.workpiece.workpiece_sdf`); a uniquely named box would ride
+# through the cell untouched. So the previous cycle's box is taken off the end
+# of the belt first, as the continuous_line scenario empties its sink.
+replace_boxes() {
+    # `cite_bringup.demo`'s own spawn, unchanged, so the box is the same box the
+    # parked line's demonstration uses.
+    python3 - "$ZONE" "$1" <<'PY'
+import sys
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, world_name
+from cite_bringup.gz import plan_for, run
+from cite_bringup.workpiece import part_of, workpiece_sdf
+
+zone, remove_first = sys.argv[1], sys.argv[2] == "1"
+name = "workpiece"
+plan = plan_for(zone)
+world = world_name(plan.world)
+pick = frame(plan, f"{zone}__infeed_table__surface")
+part = part_of(plan, name)
+at = (pick[0], pick[1], pick[2] + part.size_m[2] / 2.0 + SPAWN_DROP_M)
+with NamedTemporaryFile("w", suffix=".sdf", delete=False) as sdf:
+    sdf.write(workpiece_sdf(part))
+try:
+    for side in plan.sides:
+        if remove_first:
+            # Queued in the world ahead of the create below, so the name is
+            # free by the time the create is processed; if it is not, the
+            # create fails and says so.
+            removed = run(
+                ["gz", "service", "-s", f"/world/{world}/remove",
+                 "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
+                 "--timeout", "5000", "--req", f'name: "{name}" type: MODEL'],
+                zone=zone, side=side.name, timeout=60,
+            )
+            if "data: true" not in removed.stdout:
+                sys.exit(f"{side.name}: could not remove the previous {name}: "
+                         f"{removed.stdout.strip()} {removed.stderr.strip()}")
+        problem = spawn(zone, side.name, name, at, Path(sdf.name), timeout_s=180.0)
+        if problem is not None:
+            sys.exit(f"{side.name}: {problem}")
+        print(f"  ok  {side.name}: a {name} on the pick table")
+finally:
+    Path(sdf.name).unlink(missing_ok=True)
+PY
+}
+
+# Each side's belt, on that side's own domain and never through the boundary:
+# the real program has no belt block, so the belt is not part of the twin
+# (ADR-0067). It runs for the whole session, the way a line's belt does.
+step "Starting each side's belt, on that side"
+python3 -m cite_bringup.program.belt --zone "$ZONE" \
+    || die "a side's belt would not take its setpoint"
+
+STATUS=0
+CYCLE=0
+while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]; }; do
+    CYCLE=$((CYCLE + 1))
+    step "Cycle ${CYCLE}: putting a work-piece on each side's pick table"
+    replace_boxes "$([ "$CYCLE" -gt 1 ] && echo 1 || echo 0)" \
+        || die "a side would not take the work-piece"
+
+    step "Cycle ${CYCLE}: running the fixed program through the twin boundary"
+    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 --first-cycle "$CYCLE" &
+    PROGRAM_PID=$!
+    while kill -0 "$PROGRAM_PID" 2>/dev/null; do
+        if ! kill -0 "$PAIR_PID" 2>/dev/null; then
+            err "the pair ended while the program was running. Its log is ${PAIR_LOG}."
+            STATUS=1
+            break
+        fi
+        sleep 2
+    done
+    WAIT_RC=0
+    wait "$PROGRAM_PID" 2>/dev/null || WAIT_RC=$?
+    PROGRAM_PID=""
+    [ "$STATUS" -ne 0 ] || STATUS="$WAIT_RC"
+done
+
+step "Where the last box ended"
+# Read once, with the belts still running, so a box that was placed has been
+# carried on towards the outfeed. Not a measurement of divergence: see ADR-0065
+# for that.
+python3 - "$ZONE" <<'PY' || true
+import sys
+from cite_bringup.demo import frame, world_name
+from cite_bringup.gz import ModelPoses, plan_for
+
+zone, name = sys.argv[1], "workpiece"
+plan = plan_for(zone)
+outfeed = frame(plan, f"{zone}__{plan.conveyors[0].asset}__outfeed")
+print(f"    outfeed frame at x={outfeed[0]:+.3f}  y={outfeed[1]:+.3f}")
+for side in plan.sides:
+    poses = ModelPoses(zone=zone, world=world_name(plan.world), side=side.name)
+    try:
+        at = None
+        for _ in range(50):
+            at = poses.position(name)
+            if at is not None:
+                break
+            __import__("time").sleep(0.2)
+    finally:
+        poses.close()
+    where = "not found" if at is None else f"x={at[0]:+.3f}  y={at[1]:+.3f}  z={at[2]:+.3f}"
+    print(f"    {side.name:<12} {where}")
+PY
+
+exit "$STATUS"

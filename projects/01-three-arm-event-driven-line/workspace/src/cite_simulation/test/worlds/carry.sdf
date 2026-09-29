@@ -1,0 +1,132 @@
+<?xml version="1.0"?>
+<!-- Test apparatus for the belt and beam plugins. Deliberately NOT the CITE
+     cell: round synthetic numbers, a one-metre belt at the origin, one part.
+
+     It is written by hand and that is correct here, because it describes no part
+     of the facility. Copying cell_a's coordinates into it would put those
+     coordinates in a second place (P1) and would make the test fail whenever the
+     layout moved, for reasons that have nothing to do with the plugins. What is
+     under test is the mechanism — carry, release, detect — and a mechanism is
+     exercised by a shape, not by a floor plan. -->
+<sdf version="1.9">
+  <world name="carry">
+    <physics name="default" type="ignored">
+      <!-- The same step the generated world uses. Contact behaviour depends on
+           it, so a test that proves carrying at a different step proves it for a
+           simulator nobody runs. -->
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+
+    <!-- Belt: surface at z = 0.500, running along +x from x = -0.500 to
+         x = +0.500, one metre long and 0.4 m wide.
+
+         carry_height_m is the height of the tallest work-piece below, which is
+         what the generator derives it as. Stated here as a number because this
+         world has no L0 behind it. -->
+    <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
+      <surface_pose>0 0 0.5 0 0 0</surface_pose>
+      <belt_length_m>1.0</belt_length_m>
+      <belt_width_m>0.4</belt_width_m>
+      <carry_height_m>0.05</carry_height_m>
+      <direction>forward</direction>
+      <installed_speed_mps>0.15</installed_speed_mps>
+      <command_topic>/test/belt/command</command_topic>
+      <state_topic>/test/belt/state</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <carry>workpiece</carry>
+    </plugin>
+
+    <!-- Beam across the belt at x = +0.300, emitted from a housing standing
+         0.250 m to the +y side, exactly as the generated world places one.
+
+         beam_width_m is 0.004 — the real width of a lensed through-beam spot,
+         and what the model now derives every beam's mounting position against.
+         It was 0.040 while the plugin tested the part's model origin, purely so
+         that a part could not step across the beam between two physics frames;
+         the plugin tests the part's BODY now, which is occluded for the whole
+         50 mm length of the cube, so the inflation has no job left. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>0.3 0.25 0.53 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.004</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/test/beam/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
+    <!-- A SECOND beam, at x = -0.100 and 0.150 m above the belt surface: high
+         enough that the 50 mm cube passes completely underneath it.
+
+         It exists to prove the height half of the same defect. The beam used to
+         be a box tested against the part's ORIGIN, which gave it a window of
+         part-centre heights rather than a line — it reported a part between
+         20 mm and 100 mm tall and nothing outside that, while a physical beam is
+         broken by any body that reaches it. A beam that a part passes under must
+         stay clear, and one mounted within reach of the part must break; with a
+         window, EITHER could be true for the wrong reason. This is the one the
+         cell has no instance of, so nothing else would ever exercise it. -->
+    <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
+      <beam_pose>-0.1 0.25 0.65 0 0 0</beam_pose>
+      <beam_axis>y</beam_axis>
+      <beam_length_m>0.5</beam_length_m>
+      <beam_width_m>0.004</beam_width_m>
+      <beam_offset_m>-0.25</beam_offset_m>
+      <state_topic>/test/beam_high/detection</state_topic>
+      <publish_period_s>0.1</publish_period_s>
+      <watch>workpiece</watch>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+        </collision>
+      </link>
+    </model>
+
+    <!-- The belt's furniture, as ONE static body — which is how the cell's scene
+         arrives in the simulator once URDF fixed joints have been lumped, and the
+         arrangement the plugins have to work against. -->
+    <model name="cell_scene">
+      <static>true</static>
+      <link name="cite_world">
+        <collision name="belt">
+          <pose>0 0 0.25 0 0 0</pose>
+          <geometry><box><size>1.0 0.4 0.5</size></box></geometry>
+        </collision>
+      </link>
+    </model>
+
+    <!-- A 50 mm cube resting on the belt, near its trailing end. -->
+    <model name="workpiece">
+      <pose>-0.4 0 0.5251 0 0 0</pose>
+      <link name="body">
+        <inertial>
+          <mass>0.2</mass>
+          <inertia>
+            <ixx>0.000083333</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.000083333</iyy><iyz>0</iyz>
+            <izz>0.000083333</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

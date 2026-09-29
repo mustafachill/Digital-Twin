@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Publish which facility model this running system was generated from.
+
+L6 requires a recording to carry the model version: a bag recorded against
+yesterday's layout is not comparable to today's, and without this stamp the two
+are indistinguishable after the fact. L5 needs it too — a divergence measurement
+is only meaningful against a stated model.
+
+Published on the LATCHED profile so a node that starts later receives the current
+value immediately rather than waiting for a publication that never comes.
+"""
+
+from __future__ import annotations
+
+import os
+
+from cite_facility.artifacts import (
+    ArtifactError,
+    declared_zones,
+    generated_dir,
+    model_hash,
+    require_zones,
+)
+from cite_facility.occupancy import refusal, zones_already_on_the_graph
+from cite_interfaces.msg import ModelVersion
+from cite_interfaces.qos import LATCHED
+from cite_interfaces.srv import GetModelVersion
+from cite_runtime import runtime
+from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
+
+TOPIC = "/cite/facility/model_version"
+SERVICE = "/cite/facility/get_model_version"
+
+
+class ModelInfo(LifecycleNode):
+    def __init__(self) -> None:
+        super().__init__("model_info")
+        # No default (ADR-0056 decision 4). The list shape is already
+        # multi-zone; what it lacked was a caller obliged to fill it. An
+        # unnamed zone is refused in `on_configure` rather than published.
+        self.declare_parameter("zones", [""])
+        self._message: ModelVersion | None = None
+        self._publisher = None
+        self._service = None
+
+    def on_configure(self, state: State) -> TransitionCallbackReturn:
+        # `declared_zones()` is read in here rather than at its call site below,
+        # and the move is about the `except` and not about the value. It reaches
+        # the generated tree exactly as `model_hash()` does, so it is an
+        # `ArtifactError` waiting to happen; outside this block that exception
+        # escapes `on_configure` instead of becoming the clean FAILURE the launch
+        # knows how to report. It cannot raise TODAY — `model_hash()` above has
+        # already proved `generated_dir()` resolves — which is precisely the kind
+        # of "cannot happen yet" that stops being true without anyone editing
+        # this file.
+        #
+        # THE OTHER DIRECTION FAILS OPEN AND IS NOT FIXED HERE. A generated tree
+        # with no `bringup/` directory makes `declared_zones()` return `[]`
+        # rather than raise, and an empty declared set makes the refusal below
+        # silently inert: no zone is foreign when no zone is declared. That is a
+        # silence, not a diagnosis, and it is recorded rather than closed because
+        # closing it is a change to the occupancy rule.
+        try:
+            digest = model_hash()
+            zones = require_zones(
+                self.get_parameter("zones").get_parameter_value().string_array_value
+            )
+            declared = declared_zones()
+        except ArtifactError as exc:
+            self.get_logger().error(f"cannot configure: {exc}")
+            return TransitionCallbackReturn.FAILURE
+
+        # ADR-0056 decision 3, enforced rather than described. This node is the
+        # facility-scope one and it runs in every bring-up, so it is where the
+        # question belongs; a FAILURE here is registered by
+        # `simulation.launch.py` and stops the launch with this diagnosis, which
+        # is the same route a missing artifact already takes.
+        #
+        # Asked of the graph's own name list, so nothing waits. What this does
+        # and does not catch is in `occupancy.py` and is not restated here.
+        intruders = zones_already_on_the_graph(self.graph_names(), zones, declared)
+        if intruders:
+            self.get_logger().error(
+                refusal(intruders, zones, os.environ.get("ROS_DOMAIN_ID", "unset"))
+            )
+            return TransitionCallbackReturn.FAILURE
+
+        message = ModelVersion()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.model_hash = digest
+        message.generator_version = _generator_version()
+        message.zones = zones
+        self._message = message
+
+        # Created here, not published. `configure` may allocate and create
+        # interfaces; it must not publish (cross-cutting-lifecycle.md).
+        self._publisher = self.create_lifecycle_publisher(ModelVersion, TOPIC, LATCHED)
+        self._service = self.create_service(
+            GetModelVersion, SERVICE, self._on_request
+        )
+        self.get_logger().info(f"configured for model {digest[:12]}")
+        return TransitionCallbackReturn.SUCCESS
+
+    def graph_names(self) -> list[str]:
+        """Every topic and service name this node has discovered.
+
+        Its own method so that a test can hand the occupancy rule a graph
+        without standing two cells up to make one.
+        """
+        return [name for name, _types in self.get_topic_names_and_types()] + [
+            name for name, _types in self.get_service_names_and_types()
+        ]
+
+    def on_activate(self, state: State) -> TransitionCallbackReturn:
+        result = super().on_activate(state)
+        if self._publisher is not None and self._message is not None:
+            self._publisher.publish(self._message)
+        return result
+
+    def on_cleanup(self, state: State) -> TransitionCallbackReturn:
+        if self._publisher is not None:
+            self.destroy_lifecycle_publisher(self._publisher)
+            self._publisher = None
+        if self._service is not None:
+            self.destroy_service(self._service)
+            self._service = None
+        self._message = None
+        return TransitionCallbackReturn.SUCCESS
+
+    def _on_request(
+        self, request: GetModelVersion.Request, response: GetModelVersion.Response
+    ) -> GetModelVersion.Response:
+        if self._message is not None:
+            response.version = self._message
+        return response
+
+
+def _generator_version() -> str:
+    """Which cite_tools produced these artifacts.
+
+    Read from the generated package rather than imported: cite_tools is
+    host-agnostic tooling with no ROS dependency (ADR-0013) and is deliberately
+    not installed alongside the runtime.
+    """
+    marker = generated_dir() / "GENERATED"
+    return "cite_tools" if marker.is_file() else "unknown"
+
+
+def main() -> None:
+    runtime.init()
+    node = ModelInfo()
+    try:
+        runtime.spin(node)
+    finally:
+        runtime.shutdown(node)
+
+
+if __name__ == "__main__":
+    main()

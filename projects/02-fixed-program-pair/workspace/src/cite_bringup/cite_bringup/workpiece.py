@@ -1,0 +1,179 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""The one statement of the model a work-piece is spawned as.
+
+WHY THIS MODULE EXISTS. A work-piece has no instances in L0 by design (ADR-0030):
+where a part is at any moment is the process's business, and the layout describes
+what is bolted down. So it appears in no generated description and no generated
+world, and anything that wants one puts it into a running simulation itself. Two
+scenarios did, each from its own hand-written copy of the same SDF string — one
+model, two places, free to disagree with nothing to report it, which is the shape
+CLAUDE.md section 4 prohibits. A third caller was about to be written.
+
+WHY IT IS HERE AND NOT UNDER `tests/`. The callers are not all tests. `cite_bringup`
+is the package that already owns the one door into Gazebo transport (`gz.py`), and
+it is importable by a scenario, by a demo and by anything else that brings this
+cell up. A shared helper under `tests/scenarios/` would have been reachable by the
+scenarios alone.
+
+WHAT IS AND IS NOT DERIVED FROM L0, stated plainly because the split is not
+obvious and reading it the wrong way would be worse than not knowing.
+
+* The APPEARANCE is derived. It is read from the generated appearance artifact,
+  which the generator writes from the facility's material library, so the box is
+  the colour L0 declares and that colour is stated exactly once for the whole
+  facility.
+* The GEOMETRY, the MASS, the INERTIA and the FRICTION are not. They are the
+  literals both scenarios carried, moved here unchanged and not re-derived. L0
+  does describe this part — `model/assets/types/workpieces/workpiece.yaml` states
+  the same 50 mm box and 0.2 kg — but its declared inertia tensor is a rounded
+  0.000083333 where the value below is computed, and it declares no friction at
+  all. Sourcing them from L0 would therefore change, by a little, what the physics
+  engine sees, and every grasp figure this project has published was measured
+  against the numbers below. Closing that duplication is a change with a
+  measurement attached to it, not a tidy-up, and it is deliberately not made here.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from cite_bringup.plan import resolve_uri
+
+import yaml
+
+#: Where the generator puts the facility's appearance. Composed as a package URI
+#: rather than taken from the bring-up plan, because the plan lists what bring-up
+#: LOADS and bring-up does not load this: a plan entry for it would be a key
+#: nothing reads.
+APPEARANCE_URI = "package://cite_generated/materials/appearance.yaml"
+
+#: The reference work-piece's edge length, in metres. See the module docstring for
+#: why this is a literal here rather than read from L0.
+SIDE_M = 0.05
+
+#: Its mass, in kilograms.
+MASS_KG = 0.2
+
+#: Coulomb friction between the box and everything it touches.
+#:
+#: It no longer describes the whole of what holds the box in the jaws. Friction
+#: alone stops the jaws in the right place — the pads meet the part, the drive
+#: joint stalls, and `cite_skills::gripper_is_holding` reads that — but ADR-0029
+#: measured it also unable to keep the box STILL once gripped, up to 34.3 degrees
+#: of roll between the pads. ADR-0061's `cite_simulation::GraspHold`, a world
+#: plugin, now fixes the box rigidly to the arm's own wrist link for exactly as
+#: long as the CELL says the jaws are holding it (ADR-0065), and it never touches
+#: this collision or its friction. This stays, unchanged, because it still governs
+#: everything ADR-0061 does not: the box resting and sliding on the pick table and
+#: the belts.
+FRICTION_MU = 1.0
+
+
+class WorkpieceError(Exception):
+    """A work-piece model could not be built from what the facility declares."""
+
+
+def appearance(name: str, path: Path | None = None) -> tuple[tuple[float, ...], ...]:
+    """Return the ambient and diffuse colour a body of type ``name`` wears.
+
+    ``path`` is for a caller that has the artifact and not the package — the unit
+    test, which must run without a built overlay. A caller inside a built
+    workspace passes nothing and the package URI is resolved.
+
+    Raises rather than falling back to a colour of its own. A default here would
+    be a second statement of an appearance, in the one layer that exists to stop
+    there being one, and it would make a model that says nothing indistinguishable
+    from a model that says grey.
+    """
+    source = path if path is not None else resolve_uri(APPEARANCE_URI)
+    document = yaml.safe_load(source.read_text())["appearance"]
+    material = (document.get("bodies") or {}).get(name)
+    if material is None:
+        raise WorkpieceError(
+            f"{source}: no body of type {name!r} declares a material. A work-piece is "
+            "spawned under the id of its L0 type, which is also the name the belts "
+            "carry and the beams watch, so the name asked for here has to be one of "
+            f"those. Declared: {', '.join(sorted((document.get('bodies') or {}))) or '(none)'}."
+        )
+    entry = (document.get("materials") or {}).get(material)
+    if entry is None:
+        raise WorkpieceError(
+            f"{source}: body {name!r} wears material {material!r}, which the library in "
+            "the same document does not declare. Regenerate; the validator reports this "
+            "as `unknown-material`."
+        )
+    return tuple(entry["ambient"]), tuple(entry["diffuse"])
+
+
+def workpiece_sdf(name: str, appearance_path: Path | None = None) -> str:
+    """Build the SDF for one work-piece, spawned into a running world under ``name``.
+
+    ``name`` is both the Gazebo model name and the L0 work-piece type id. Those
+    are one string by rule, not by coincidence: `Facility.workpiece_models`
+    reaches the generated world as each belt's `<carry>` list and each beam's
+    `<watch>` list, both of which match on the Gazebo model name, so a part
+    spawned under any other name rides through the cell untouched and unseen.
+
+    The inertia is computed, not guessed — a wrong tensor here would make the pick
+    behave oddly for reasons that look like a controller fault (L1).
+
+    It used to carry a `<sensor type="contact">`, which existed for exactly one
+    reader: `GraspAttachment::FindGraspable` iterated every `ContactSensorData` in
+    the world, and no pad link declares a sensor, so without one here the
+    attachment plugin could not fire at all. That plugin is removed (ADR-0029), so
+    the sensor has no reader and is gone with it.
+    """
+    ambient, diffuse = appearance(name, appearance_path)
+    inertia = MASS_KG * (SIDE_M * SIDE_M + SIDE_M * SIDE_M) / 12.0
+    return f"""<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="{name}">
+    <link name="link">
+      <inertial>
+        <mass>{MASS_KG}</mass>
+        <inertia>
+          <ixx>{inertia}</ixx><iyy>{inertia}</iyy><izz>{inertia}</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><box><size>{SIDE_M} {SIDE_M} {SIDE_M}</size></box></geometry>
+        <surface><friction><ode>{_friction()}</ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>{SIDE_M} {SIDE_M} {SIDE_M}</size></box></geometry>
+        <material><ambient>{_rgba(ambient)}</ambient><diffuse>{_rgba(diffuse)}</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>
+"""
+
+
+def _friction() -> str:
+    """Render the isotropic Coulomb pair, as SDF spells it.
+
+    A function only so that the line it produces fits: `mu` and `mu2` carry one
+    value and must keep carrying one, which is what stating it once here says.
+    """
+    return f"<mu>{FRICTION_MU}</mu><mu2>{FRICTION_MU}</mu2>"
+
+
+def _rgba(colour: tuple[float, ...]) -> str:
+    """Four numbers, space separated, as SDF spells a colour."""
+    if len(colour) != 4:
+        raise WorkpieceError(f"a colour is red, green, blue and alpha; got {colour!r}")
+    return " ".join(f"{component:g}" for component in colour)

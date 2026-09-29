@@ -1,0 +1,68 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# The cell's reference work-piece: a 50 mm cube.
+#
+# WHY THIS FILE EXISTS AT ALL, because L0 deliberately held out against it for a
+# while and the reason it gave was a good one. `Facility.workpiece_models` used
+# to hold names and nothing else, on the grounds that a work-piece with
+# attributes nobody reads is invented schema. That held until two separate rules
+# turned out to need the same missing fact:
+#
+#   * `insufficient-support-margin` (cite_tools.validate.geometric) has to know
+#     how much of a body a part covers before it can say how far a place point
+#     must sit from that body's edge. Without it, `cell_a__conveyor_1__infeed`
+#     sat exactly on the belt's leading edge, every placed cube tipped over the
+#     end and fell 0.6 m to the floor, and the model validated cleanly the whole
+#     time.
+#   * `default-grasp-width-never-closes` (cite_tools.validate.physical) could
+#     only enforce "narrower than the gripper opens" — 88.93 mm — when the bound
+#     that actually matters is "narrower than the part". Its own docstring said
+#     so and named this gap as the blocker.
+#
+# Two consumers make it a fact the model owes, not a field for symmetry (P5).
+#
+# WHY IT IS AN ASSET TYPE and not a new document kind: a work-piece needs exactly
+# what every other authored object needs — extents, mass, a centroidal inertia
+# tensor — and `Body` already says all of it and is already validated by
+# `cite_tools.validate.physical`. A parallel declaration would be a second Body
+# to keep in step.
+#
+# It has no instances, and that is the point of the category. Where a work-piece
+# is at any moment is the process's business; the layout describes what is bolted
+# down. Nothing generated places one.
+#
+# THE ID IS ALSO THE SPAWNED MODEL NAME. `Facility.workpiece_models` reaches the
+# generated world as the belt's `<carry>` list and the break beam's `<watch>`
+# list, both of which match on the Gazebo model name. So this type's id and the
+# name a part is spawned under have to be the same string, and they are.
+asset_type:
+  id: workpiece
+  category: workpiece
+
+  # No frames. A work-piece is grasped and placed by its centre; nothing in the
+  # model reaches for a named point on it.
+
+  description:
+    provider: body
+    body:
+      visual:
+        kind: box
+        size_m: [0.050, 0.050, 0.050]
+      collision:
+        kind: box
+        size_m: [0.050, 0.050, 0.050]
+      inertial:
+        # 0.2 kg over 1.25e-4 m^3 is 1600 kg/m^3 — a dense polymer or a hardwood
+        # block, and inside the plausibility band `validate.physical` enforces.
+        mass_kg: 0.200
+        # Centroidal, like every tensor in this model, and relative to the CENTRE
+        # of the collision box.
+        com_m: [0.0, 0.0, 0.0]
+        # Solid cube 0.05 m at 0.2 kg, identical on all three axes:
+        #   i = m/12 * (a^2 + a^2) = 0.2/12 * (0.0025 + 0.0025) = 8.3333e-5
+        ixx: 0.000083333
+        iyy: 0.000083333
+        izz: 0.000083333
+      material: workpiece_stock
