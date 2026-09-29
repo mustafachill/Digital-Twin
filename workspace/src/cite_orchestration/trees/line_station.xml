@@ -114,14 +114,14 @@
 
                It was stopped when this station's trigger fired, so that the piece
                stood still at the pick point instead of riding past it. The beam
-               that fired stands 0.027 m DOWNSTREAM of that point — half a part
+               that fired stands 0.035 m DOWNSTREAM of that point — half a part
                length plus half a beam width, derived in
                `cite_tools.model.resolve.index_offset_m` rather than authored — so
                a part breaks it at the instant its own centre reaches the pick
                point (ADR-0033). There is therefore no travel budget to spend:
                every metre the belt runs after that edge is a metre the part is in
                the wrong place, and at the declared 0.150 m/s it clears its own
-               0.050 m length in 0.333 s, against a station cycle of roughly two
+               0.066 m length in 0.44 s, against a station cycle of roughly two
                minutes.
 
                STOPPING IT IS NOT A LEAF, and its absence here is deliberate

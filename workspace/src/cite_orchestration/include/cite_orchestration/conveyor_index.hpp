@@ -15,14 +15,14 @@
 // The belt setpoint, and its owner (ADR-0032).
 //
 // A station cannot pick from a running belt, and the beam that starts it leaves
-// no margin at all. It stands 0.027 m DOWNSTREAM of the point the station picks
+// no margin at all. It stands 0.035 m DOWNSTREAM of the point the station picks
 // from — half a part length plus half a beam width, derived by
 // `cite_tools.model.resolve.index_offset_m` from the work-piece's own geometry
 // rather than authored (ADR-0033) — so a part breaks it exactly when the part's
 // centre reaches the pick point. The instant of the edge is the instant the part
 // is where it is wanted; there is no travel time to spend, and every further
 // metre of belt is displacement. At the declared 0.150 m/s the part clears its
-// own 0.050 m length in 0.333 s, against a pick-and-place cycle of 106 to 119 s.
+// own 0.066 m length in 0.44 s, against a pick-and-place cycle of 106 to 119 s.
 // So the belt is INDEXED: it stops when the station it feeds is triggered, and
 // runs again when that station reports `CompleteHandoff`.
 //
