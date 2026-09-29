@@ -1,0 +1,97 @@
+---
+name: Projects
+
+# The frozen milestone snapshots under projects/ (ADR-0068), each built and run
+# from its own folder exactly as someone handed that folder would.
+#
+# NOT A GATE ON main. It runs on demand and once a week, and no branch
+# protection requires it: a snapshot is a record of a past commit, and a change
+# to the main tree cannot fix one. What this job is for is noticing that a
+# snapshot has stopped building or running, which otherwise nothing would.
+#
+# READ THE STEP LOGS, NOT THE CONCLUSIONS. Every scenario step passes
+# --teardown-advisory, so a failed post-shutdown check prints
+# "passed its cycle assertions" and the step still succeeds; the verdict string
+# in the log is the result. The main CI file's phase-split block says why.
+#
+# Each step mirrors the ros-workspace job in ci.yml, with two differences only:
+# the build context and the bind mount are the snapshot's folder rather than the
+# repository root, and the image carries the snapshot's own tag.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays, 06:00 UTC.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    name: ${{ matrix.project }}
+    runs-on: ubuntu-24.04
+    strategy:
+      # Three independent records: one that has rotted says nothing about the others.
+      fail-fast: false
+      matrix:
+        include:
+          - project: 01-three-arm-event-driven-line
+            image: cite-digital-twin:p01-three-arm-line
+            scenario: continuous_line
+          - project: 02-fixed-program-pair
+            image: cite-digital-twin:p02-fixed-program
+            scenario: program_cycle
+          - project: 03-real-program-twin-on-track
+            image: cite-digital-twin:p03-real-program
+            scenario: program_cycle
+    env:
+      SNAPSHOT: projects/${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.SNAPSHOT }}
+          file: ${{ env.SNAPSHOT }}/infra/docker/Dockerfile
+          tags: ${{ matrix.image }}
+          load: true
+          # One cache per snapshot, so three images of three commits do not evict
+          # each other's layers.
+          cache-from: type=gha,scope=${{ matrix.project }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+
+      - name: Bootstrap workspace
+        run: |
+          docker run --rm -v "$PWD/$SNAPSHOT:/workspace" -w /workspace \
+            "${{ matrix.image }}" ./scripts/bootstrap --in-container
+
+      - name: Validate facility model
+        run: |
+          docker run --rm -v "$PWD/$SNAPSHOT:/workspace" -w /workspace \
+            "${{ matrix.image }}" ./scripts/validate-model
+
+      - name: Build
+        run: |
+          docker run --rm -v "$PWD/$SNAPSHOT:/workspace" -w /workspace \
+            "${{ matrix.image }}" ./scripts/build
+
+      - name: Simulation-in-the-loop scenario — ${{ matrix.scenario }}
+        run: |
+          docker run --rm --shm-size=2gb -v "$PWD/$SNAPSHOT:/workspace" -w /workspace \
+            "${{ matrix.image }}" ./scripts/scenario "${{ matrix.scenario }}" --teardown-advisory
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project }}-log
+          path: ${{ env.SNAPSHOT }}/workspace/log/
+          if-no-files-found: ignore
