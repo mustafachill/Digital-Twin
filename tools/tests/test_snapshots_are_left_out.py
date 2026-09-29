@@ -1,12 +1,12 @@
 """The frozen snapshots are left out of the main tree's checks, and nothing else is.
 
 ADR-0068 decision 4 narrows the main tree's coverage on purpose: `projects/<name>/` holds
-whole trees extracted from past commits, each a record rather than a source and each checked
-by its own `./scripts/lint`. That narrowing is the kind a later edit widens without anyone
-noticing — a prefix match instead of a component match, an exception that grows, a skip that
-moves from the top level to any depth — and a widened skip reports "clean" over files it never
-read. These tests pin the boundary from both sides: what must be skipped, and everything
-adjacent to it that must not be.
+whole trees extracted from past commits, each a record rather than a source, whose own lint
+is outside its contract (it builds, its scenario passes, its `./run` runs). That narrowing is
+the kind a later edit widens without anyone noticing — a prefix match instead of a component
+match, an exception that grows, a skip that moves from the top level to any depth — and a
+widened skip reports "clean" over files it never read. These tests pin the boundary from
+both sides: what must be skipped, and everything adjacent to it that must not be.
 
 The `git ls-files` walkers (`test_interface_counts.py`,
 `test_superseded_real_time_requirement.py`, `test_the_retracted_gripper_claim.py`) use
@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from cite_tools import tree
 from cite_tools.doclinks import markdown_files
@@ -38,6 +39,7 @@ INSIDE = (
 #: Paths next to the boundary that must still be checked. Each is a way the skip could widen.
 OUTSIDE = (
     "projects/README.md",  # the main tree's own index of the snapshots
+    "projects/snapshots.yaml",  # the main tree's own manifest of them
     "projectsX/foo.md",  # a prefix, not the directory
     "projects.md",
     "tools/projects/foo",  # the name at depth, not at the top level
@@ -67,10 +69,10 @@ def test_the_snapshot_directories_are_pruned_and_their_parent_is_not() -> None:
     assert not is_skipped_directory(Path("projectsX"))
 
 
-def test_exactly_one_file_is_walked_inside_the_snapshots() -> None:
-    """The exception is one exact path, so it cannot quietly grow into a second skip hole."""
+def test_exactly_two_files_are_walked_inside_the_snapshots() -> None:
+    """The exception is two exact paths, so it cannot quietly grow into a second skip hole."""
     walked = tree.WALKED_INSIDE_SKIP_PATHS
-    assert walked == frozenset({Path("projects/README.md")})
+    assert walked == frozenset({Path("projects/README.md"), Path("projects/snapshots.yaml")})
 
 
 def _tree(root: Path) -> None:
@@ -120,3 +122,35 @@ def test_every_ls_files_walker_takes_the_boundary_from_the_one_predicate(walker:
     assert "from cite_tools.tree import in_a_snapshot" in source
     assert "not in_a_snapshot(Path(name))" in source
     assert '"projects' not in source and "'projects" not in source
+
+
+REPO_ROOT = TOOLS_TESTS.parents[1]
+
+
+def _lines_naming_projects(lines: list[str]) -> list[str]:
+    return [
+        line.strip() for line in lines if "projects" in line and not line.strip().startswith("#")
+    ]
+
+
+def test_yamllint_ignores_exactly_the_root_projects_directory() -> None:
+    """`.yamllint`'s `ignore` is gitignore syntax: a leading `/` anchors it at the root.
+
+    The one negation re-admits the main tree's own manifest, which is not a snapshot.
+
+    Without the slash, `projects/` would also match `tools/projects/` or any deeper
+    directory of that name — the widening this file exists to catch.
+    """
+    config = yaml.safe_load((REPO_ROOT / ".yamllint").read_text(encoding="utf-8"))
+    ignore = config["ignore"].splitlines()
+    assert _lines_naming_projects(ignore) == ["/projects/", "!/projects/snapshots.yaml"]
+
+
+def test_dockerignore_excludes_exactly_the_root_projects_directory() -> None:
+    """`.dockerignore` patterns are matched from the context root, so `projects/` is anchored.
+
+    Docker has no unanchored form; depth comes only from a `**` prefix, which is what this
+    refuses, along with any second pattern naming the directory.
+    """
+    lines = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    assert _lines_naming_projects(lines) == ["projects/"]

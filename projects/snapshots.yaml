@@ -1,0 +1,43 @@
+# The frozen milestone snapshots under projects/ (ADR-0068), stated once.
+#
+# Read by two things and restated by neither:
+#   - .github/workflows/projects.yml derives its build-and-run matrix from this list;
+#   - tools/tests/test_snapshots_are_frozen.py asserts that each folder's committed
+#     git tree still hashes to `tree`, and that the folders on disk are exactly these.
+#
+# `tree` IS WHAT MAKES "FROZEN" A CHECK RATHER THAN A PROMISE. Any edit under a
+# snapshot's folder — a listed patch, a row in its PROVENANCE.md verification log,
+# anything — changes that folder's tree hash and fails the test until this line is
+# bumped in the same commit, so a change to a record is always a visible one. To
+# update it after a deliberate, PROVENANCE-listed change has been committed:
+#
+#     git rev-parse HEAD:projects/<name>
+#
+# and paste the result here. The hash covers committed content only; an uncommitted
+# edit is not a change to the record yet.
+#
+# `source` is the commit the folder was extracted from with
+# tools/snapshot_project.sh; `image` is the per-snapshot tag its patches set;
+# `scenario` and `scenario_args` are what the weekly workflow runs to hold it to
+# its contract (it builds, its scenario passes, its ./run runs).
+
+---
+snapshots:
+  - name: 01-three-arm-event-driven-line
+    source: b5a0bc9e86b192b012c42f79c39623f5a292cd57
+    image: cite-digital-twin:p01-three-arm-line
+    scenario: continuous_line
+    scenario_args: --teardown-advisory
+    tree: 0000000000000000000000000000000000000000
+  - name: 02-fixed-program-pair
+    source: c83119b5f95063c27b40a397fd0f5094feb00ec2
+    image: cite-digital-twin:p02-fixed-program
+    scenario: program_cycle
+    scenario_args: --teardown-advisory
+    tree: 0000000000000000000000000000000000000000
+  - name: 03-real-program-twin-on-track
+    source: e90d230224cf66cc84eb39443676ab28d2a9ed99
+    image: cite-digital-twin:p03-real-program
+    scenario: program_cycle
+    scenario_args: --teardown-advisory
+    tree: 0000000000000000000000000000000000000000

@@ -27,5 +27,7 @@ ignore: |
   legacy/
   .venv/
   workspace/
-  # Frozen snapshots of past commits (ADR-0068), each linted by its own ./scripts/lint.
+  # Frozen snapshots of past commits (ADR-0068): records, not linted by the main tree.
   /projects/
+  # ...except the main tree's own manifest of them.
+  !/projects/snapshots.yaml

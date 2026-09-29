@@ -10,7 +10,7 @@ name: Projects
 # snapshot has stopped building or running, which otherwise nothing would.
 #
 # READ THE STEP LOGS, NOT THE CONCLUSIONS. Every scenario step passes
-# --teardown-advisory, so a failed post-shutdown check prints
+# --teardown-advisory (as scenario_args in projects/snapshots.yaml), so a failed post-shutdown check prints
 # "passed its cycle assertions" and the step still succeeds; the verdict string
 # in the log is the result. The main CI file's phase-split block says why.
 #
@@ -32,25 +32,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The matrix is read from projects/snapshots.yaml, the one place the snapshots
+  # are listed (ADR-0068), rather than restated here. `yq` is preinstalled on the
+  # ubuntu-24.04 runner image.
+  matrix:
+    name: Read projects/snapshots.yaml
+    runs-on: ubuntu-24.04
+    outputs:
+      snapshots: ${{ steps.read.outputs.snapshots }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          echo "snapshots=$(yq -o=json -I=0 '.snapshots' projects/snapshots.yaml)" >> "$GITHUB_OUTPUT"
+
   snapshot:
-    name: ${{ matrix.project }}
+    name: ${{ matrix.name }}
+    needs: matrix
     runs-on: ubuntu-24.04
     strategy:
       # Three independent records: one that has rotted says nothing about the others.
       fail-fast: false
       matrix:
-        include:
-          - project: 01-three-arm-event-driven-line
-            image: cite-digital-twin:p01-three-arm-line
-            scenario: continuous_line
-          - project: 02-fixed-program-pair
-            image: cite-digital-twin:p02-fixed-program
-            scenario: program_cycle
-          - project: 03-real-program-twin-on-track
-            image: cite-digital-twin:p03-real-program
-            scenario: program_cycle
+        include: ${{ fromJSON(needs.matrix.outputs.snapshots) }}
     env:
-      SNAPSHOT: projects/${{ matrix.project }}
+      SNAPSHOT: projects/${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,10 +69,13 @@ jobs:
           file: ${{ env.SNAPSHOT }}/infra/docker/Dockerfile
           tags: ${{ matrix.image }}
           load: true
-          # One cache per snapshot, so three images of three commits do not evict
-          # each other's layers.
-          cache-from: type=gha,scope=${{ matrix.project }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+          # ONE cache for all three, because their Dockerfiles and the requirements
+          # they COPY are byte-identical today (md5sum, 2026-09-29), so the layers are
+          # the same layers. mode=min exports only the final image's layers, which is
+          # all a same-Dockerfile rebuild can reuse. If a snapshot's build inputs ever
+          # diverge, give it its own scope rather than let the three evict each other.
+          cache-from: type=gha,scope=projects
+          cache-to: type=gha,mode=min,scope=projects
 
       - name: Bootstrap workspace
         run: |
@@ -84,14 +93,15 @@ jobs:
             "${{ matrix.image }}" ./scripts/build
 
       - name: Simulation-in-the-loop scenario — ${{ matrix.scenario }}
+        # scenario_args is unquoted on purpose: it is a word list from the manifest.
         run: |
           docker run --rm --shm-size=2gb -v "$PWD/$SNAPSHOT:/workspace" -w /workspace \
-            "${{ matrix.image }}" ./scripts/scenario "${{ matrix.scenario }}" --teardown-advisory
+            "${{ matrix.image }}" ./scripts/scenario "${{ matrix.scenario }}" ${{ matrix.scenario_args }}
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.project }}-log
+          name: ${{ matrix.name }}-log
           path: ${{ env.SNAPSHOT }}/workspace/log/
           if-no-files-found: ignore

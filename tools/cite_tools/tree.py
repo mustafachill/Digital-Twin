@@ -77,10 +77,15 @@ SKIP_NAMES = {
 }
 
 #: The frozen milestone snapshots (ADR-0068): whole trees extracted from past commits by
-#: `tools/snapshot_project.sh`, each checked by its own `./scripts/lint` and tests. They are
-#: records of past states, not sources, so a finding inside one is one no commit of the main
-#: tree may act on — a snapshot takes only the patches its `PROVENANCE.md` lists. **Skipping
-#: them is a deliberate reduction of coverage**, and ADR-0068 decision 4 records it. The one
+#: `tools/snapshot_project.sh`. They are records of past states, not sources, so a finding
+#: inside one is one no commit of the main tree may act on — a snapshot takes only the patches
+#: its `PROVENANCE.md` lists. **Skipping them is a deliberate reduction of coverage**, and
+#: ADR-0068 decision 4 records it. **Nothing else lints them either**: a snapshot's contract is
+#: that it builds, its scenario passes and its `./run` runs, and its own lint, unit tests and
+#: doctor are outside it and fail by construction — the extract omits `docs/measurements/`,
+#: `CLAUDE.md` and the charter, and its `git ls-files` walkers need a git checkout of it. What
+#: the main tree does check there is each snapshot's `run` (shellcheck, in `scripts/lint`) and
+#: that each tree still hashes to its pin (`tools/tests/test_snapshots_are_frozen.py`). The one
 #: file there that belongs to the main tree, `projects/README.md`, stays walked: see
 #: `WALKED_INSIDE_SKIP_PATHS`.
 SNAPSHOTS = Path("projects")
@@ -123,9 +128,11 @@ SKIP_PATHS = {
 #:
 #: `projects/README.md` is the main tree's index of the snapshots, written alongside this
 #: repository's other documentation and linking into it; skipping it with the snapshots would
-#: take a main-tree document out of the English and link checks for no reason. Listed by exact
+#: take a main-tree document out of the English and link checks for no reason.
+#: `projects/snapshots.yaml` is the main tree's manifest of them — the workflow matrix and the
+#: pinned tree hashes — and is main-tree configuration for the same reason. Listed by exact
 #: path, so the exception cannot widen to anything else under `projects/`.
-WALKED_INSIDE_SKIP_PATHS = frozenset({SNAPSHOTS / "README.md"})
+WALKED_INSIDE_SKIP_PATHS = frozenset({SNAPSHOTS / "README.md", SNAPSHOTS / "snapshots.yaml"})
 
 
 def in_a_snapshot(relative: Path) -> bool:
