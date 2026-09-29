@@ -8,7 +8,8 @@
 #
 # WHAT IT DOES. It brings `cell_a` up with the line running
 # (`./scripts/sim --zone cell_a line:=true`), waits for the cell's own readiness
-# announcement, then for each work-piece: puts one on the pick table, watches it
+# announcement and for the line coordinator's first `LineState`, then for each
+# work-piece: puts one on the pick table, watches it
 # until the belts and the three arms have carried it to the accumulation beam at
 # the end of the last belt, and takes it off so the next can be fed. Nothing here
 # commands an arm or a belt: a part appearing on the table is what starts the
@@ -37,7 +38,7 @@ for arg in "$@"; do
         --headless)  HEADLESS=1 ;;
         --pieces)    WANT_PIECES=1 ;;
         --pieces=*)  PIECES="${arg#--pieces=}" ;;
-        -h|--help)   sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
@@ -87,7 +88,14 @@ source_overlay || die "no built overlay under workspace/install. Run ./scripts/b
 # spelled a second time here.
 READY_TOKEN="$(python3 -c 'from cite_bringup.readiness import READY_TOKEN; print(READY_TOKEN)')"
 
-SIM_LOG="$(mktemp -t cite-run-cell.XXXXXX.log)"
+# Kept under workspace/log/, which is this snapshot's log volume in the container
+# (a named volume, so it outlives the container) and a plain directory on a native
+# install. A mktemp file inside a --rm container would be gone the moment the
+# container is, which is when someone wants to read it.
+SIM_LOG_DIR="${REPO_ROOT}/workspace/log/run"
+mkdir -p "$SIM_LOG_DIR"
+SIM_LOG="${SIM_LOG_DIR}/cell-$(date -u +%Y%m%dT%H%M%SZ).log"
+LOG_HINT="${SIM_LOG} (read it later with: ./scripts/enter dev less ${SIM_LOG#"${REPO_ROOT}"/})"
 SIM_PID=""
 TAIL_PID=""
 FEED_PID=""
@@ -106,7 +114,7 @@ teardown() {
         kill -INT "$SIM_PID" 2>/dev/null || true
         wait "$SIM_PID" 2>/dev/null || true
     fi
-    ok "the cell is down. Its log was ${SIM_LOG}, inside the container."
+    ok "the cell is down. Its log is ${LOG_HINT}"
 }
 trap teardown INT TERM HUP EXIT
 
@@ -131,7 +139,7 @@ for _ in $(seq 1 180); do
 done
 kill "$TAIL_PID" 2>/dev/null || true
 TAIL_PID=""
-[ "$READY" -eq 1 ] || die "the cell never announced that it was ready. Its log is ${SIM_LOG}"
+[ "$READY" -eq 1 ] || die "the cell never announced that it was ready. Its log is ${LOG_HINT}"
 ok "the cell is up"
 
 step "Feeding ${PIECES} work-piece(s) onto the pick table, one at a time"
@@ -149,13 +157,84 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 import time
 
+import rclpy
 import yaml
 
 from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, watch, world_name
 from cite_bringup.gz import PLANT_SIDE, ModelPoses, plan_for, run
 from cite_bringup.workpiece import SIDE_M, workpiece_sdf
+from cite_interfaces.msg import LineState
+from cite_interfaces.qos import STATE
 
 NAME = "workpiece"
+
+#: The bound on waiting for the first `LineState`: the value
+#: `tests/scenarios/continuous_line.py` gives `BRING_UP_CEILING_S` for the same wait.
+#: A ceiling on a failure, not a duration anything waits out.
+LINE_STATE_CEILING_S = 300.0
+
+#: The bound on one work-piece's whole journey from the pick table to the sink beam.
+#: STATED, NOT MEASURED: no campaign has timed a piece through this line, and nothing
+#: waits it out — the watch ends the moment the piece arrives, and a line that stops
+#: ends the launch, which the shell around this program notices first. It exists
+#: only so that a piece that never arrives does not hold the terminal for ever.
+PIECE_CEILING_S = 900.0
+
+#: The bound on the simulator answering, before and after a removal. Also a ceiling:
+#: each wait ends on the condition it names.
+POSES_CEILING_S = 60.0
+
+
+def wait_for_the_line() -> bool:
+    """Wait for the coordinator's first `LineState`, as the scenario does before feeding.
+
+    The readiness token says every skill and detection server answers; it says
+    nothing about `line_orchestrator`, which bring-up starts last and which is the
+    only publisher of `LineState`. A part put on the table before it runs is a part
+    no behaviour tree is watching for. The topic is `LineState.TOPIC`, the one place
+    the name is written, and the profile is the STATE one the scenario uses: volatile,
+    and republished several times a second, so a subscriber opened now hears the next.
+    """
+    rclpy.init()
+    node = rclpy.create_node("cite_snapshot_run_feeder")
+    heard: list[LineState] = []
+    node.create_subscription(LineState, LineState.TOPIC, heard.append, STATE)
+    started = time.monotonic()
+    try:
+        while not heard and time.monotonic() - started < LINE_STATE_CEILING_S:
+            rclpy.spin_once(node, timeout_sec=0.5)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+    return bool(heard)
+
+
+def remove(zone: str, world: str, poses: ModelPoses) -> str | None:
+    """Take the finished piece out of the world, and confirm it is gone.
+
+    As the scenario's `_remove_workpiece` does, absence is read from a pose
+    snapshot rather than assumed: `ModelPoses.position` also returns None before its
+    first snapshot, so the piece is first SEEN, and only then waited on to vanish.
+    Returns None on success and the reason otherwise.
+    """
+    deadline = time.monotonic() + POSES_CEILING_S
+    while poses.position(NAME) is None:
+        if time.monotonic() > deadline:
+            return f"no pose snapshot showed '{NAME}' within {POSES_CEILING_S:.0f} s"
+        time.sleep(0.2)
+    removed = run(["gz", "service", "-s", f"/world/{world}/remove",
+                   "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
+                   "--timeout", "5000", "--req", f'name: "{NAME}" type: MODEL'],
+                  zone=zone, timeout=60)
+    if removed.returncode != 0:
+        said = (removed.stderr or removed.stdout or "no output").strip()
+        return f"the remove request exited {removed.returncode}: {said}"
+    deadline = time.monotonic() + POSES_CEILING_S
+    while poses.position(NAME) is not None:
+        if time.monotonic() > deadline:
+            return f"'{NAME}' was still in the world {POSES_CEILING_S:.0f} s after removal"
+        time.sleep(0.2)
+    return None
 
 
 def main() -> int:
@@ -194,6 +273,16 @@ def main() -> int:
         mark = "ARRIVED" if arrived else "       "
         print(f"    {mark} x={at[0]:+.3f}  y={at[1]:+.3f}  z={at[2]:+.3f}")
 
+    if not wait_for_the_line():
+        print(f"error: no LineState on {LineState.TOPIC} within "
+              f"{LINE_STATE_CEILING_S:.0f} s, so the line coordinator is not running",
+              file=sys.stderr)
+        return 1
+    print("  ok  the line coordinator is publishing its state")
+
+    # Opened once and kept, so that a removal is judged against snapshots this
+    # subscription has already been receiving (see `remove`).
+    poses = ModelPoses(zone=zone, world=world)
     try:
         for piece in range(1, pieces + 1):
             problem = spawn(zone, PLANT_SIDE, NAME, release, sdf, timeout_s=180.0)
@@ -206,7 +295,7 @@ def main() -> int:
             # its centre stops half a width short; one width of margin reads that
             # as arrived without reading a part still on its way as one.
             (arrival,) = watch(zone, world, (PLANT_SIDE,), NAME, end[0], SIDE_M,
-                               900.0, report)
+                               PIECE_CEILING_S, report)
             if not arrival.reached:
                 print(f"error: work-piece {piece} did not reach {beam.asset} "
                       f"within {arrival.seconds:.0f} s", file=sys.stderr)
@@ -215,18 +304,13 @@ def main() -> int:
                   f"{arrival.seconds:.0f} s")
             # A Gazebo model name is unique and the belts carry exactly this one,
             # so the finished piece is taken off before the next is fed.
-            run(["gz", "service", "-s", f"/world/{world}/remove",
-                 "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
-                 "--timeout", "5000", "--req", f'name: "{NAME}" type: MODEL'],
-                zone=zone, timeout=60)
-            poses = ModelPoses(zone=zone, world=world)
-            try:
-                deadline = time.monotonic() + 60.0
-                while poses.position(NAME) is not None and time.monotonic() < deadline:
-                    time.sleep(0.2)
-            finally:
-                poses.close()
+            problem = remove(zone, world, poses)
+            if problem is not None:
+                print(f"error: could not take work-piece {piece} off the line: {problem}",
+                      file=sys.stderr)
+                return 1
     finally:
+        poses.close()
         sdf.unlink(missing_ok=True)
     print(f"  ok  all {pieces} work-piece(s) carried from the pick table to the sink")
     return 0
@@ -244,7 +328,7 @@ while kill -0 "$FEED_PID" 2>/dev/null; do
         err "the cell ended before the work-pieces arrived."
         grep -aE "escalated to an operator|is blocked and needs an operator|the line stopped at" \
              "$SIM_LOG" | tail -5 >&2 || true
-        err "The full log is ${SIM_LOG}, inside this container."
+        err "The full log is ${LOG_HINT}"
         kill "$FEED_PID" 2>/dev/null || true
         STATUS=1
         break
