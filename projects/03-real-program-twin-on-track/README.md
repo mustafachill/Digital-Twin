@@ -111,13 +111,19 @@ teardown check passed; `passed its cycle assertions` means the teardown check fa
 
 Copy this folder anywhere and run the steps above from the copy; it is its own repository
 root. The Compose project name and `ROS_DOMAIN_ID` are derived from the folder's path, so a
-copy does not collide with the original or with other snapshots.
+copy normally gets its own. **Normally, not certainly**: the domain is a checksum of the path
+folded onto 50 values, so two arbitrary paths can share one. `./scripts/doctor` prints the
+domain in use; to choose one, export `ROS_DOMAIN_ID` before running any script, which the
+scripts keep rather than derive over. [`PROVENANCE.md`](PROVENANCE.md) has the detail.
 
-**One known caveat.** Some of this snapshot's own host tests (for example
-`tools/tests/test_interface_counts.py`) list files with `git ls-files`, so `./scripts/test`
-fails them in a copy that is not a git checkout. Either run `git init && git add -A` in the
-copy first, or leave those tests out. The build, `./run` and the scenario do not depend on
-git.
+**What this snapshot promises is that it builds, `./scripts/scenario program_cycle` passes, and
+`./run` runs — nothing more.** Its own `./scripts/lint`, its host and unit tests and
+`./scripts/doctor` are outside that promise, and some of them fail by construction: the
+extract leaves out `docs/measurements/`, `CLAUDE.md` and the charter, so the link check
+reports dead links into them and host tests that read them fail; and tests that list files
+with `git ls-files` find nothing in a copy that is not a git checkout.
+[`PROVENANCE.md`](PROVENANCE.md) lists which, and why. The build, `./run` and the scenario
+depend on none of it.
 
 ## Known limits and open issues
 

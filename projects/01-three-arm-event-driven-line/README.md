@@ -95,7 +95,7 @@ To check the behaviour rather than watch it:
 ```
 
 Both drive `cell_a`: this snapshot changes the scenarios' default zone from `cell_b` to
-`cell_a` (patch 3 in [`PROVENANCE.md`](PROVENANCE.md)). A scenario prints
+`cell_a` (patch 2 in [`PROVENANCE.md`](PROVENANCE.md)). A scenario prints
 `Scenario '<name>' passed` only when both its cycle and its post-shutdown teardown check
 passed; `passed its cycle assertions` means the teardown check failed
 (`scripts/scenario`'s header explains `--teardown-advisory`).
@@ -104,13 +104,19 @@ passed; `passed its cycle assertions` means the teardown check failed
 
 Copy this folder anywhere and run the steps above from the copy; it is its own repository
 root. The Compose project name and `ROS_DOMAIN_ID` are derived from the folder's path, so a
-copy does not collide with the original or with other snapshots.
+copy normally gets its own. **Normally, not certainly**: the domain is a checksum of the path
+folded onto 50 values, so two arbitrary paths can share one. `./scripts/doctor` prints the
+domain in use; to choose one, export `ROS_DOMAIN_ID` before running any script, which the
+scripts keep rather than derive over. [`PROVENANCE.md`](PROVENANCE.md) has the detail.
 
-**One known caveat.** Some of this snapshot's own host tests (for example
-`tools/tests/test_interface_counts.py`) list files with `git ls-files`, so `./scripts/test`
-fails them in a copy that is not a git checkout. Either run `git init && git add -A` in the
-copy first, or leave those tests out. The build, `./run` and the scenarios do not depend on
-git.
+**What this snapshot promises is that it builds, `./scripts/scenario continuous_line` passes, and
+`./run` runs — nothing more.** Its own `./scripts/lint`, its host and unit tests and
+`./scripts/doctor` are outside that promise, and some of them fail by construction: the
+extract leaves out `docs/measurements/`, `CLAUDE.md` and the charter, so the link check
+reports dead links into them and host tests that read them fail; and tests that list files
+with `git ls-files` find nothing in a copy that is not a git checkout.
+[`PROVENANCE.md`](PROVENANCE.md) lists which, and why. The build, `./run` and the scenario
+depend on none of it.
 
 ## Known limits and open issues
 

@@ -1,9 +1,9 @@
 # Provenance — `03-real-program-twin-on-track`
 
 This folder is a frozen snapshot kept under
-[ADR-0068](../../docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md) in the main
-repository. It is a record of a past state, not a source: nothing here is copied back into
-the main tree, and every edit it carries beyond the extract is listed below.
+ADR-0068 (`docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md` in the main
+repository; a path, not a link, because this folder is meant to be copied out). It is a
+record of a past state, not a source: nothing here is copied back into the main tree, and every edit it carries beyond the extract is listed below.
 
 ## Source
 
@@ -36,12 +36,20 @@ never the working tree, so nothing untracked or uncommitted can enter. Excluded:
 - CLAUDE.md
 - AGENTS.md
 - what-we-are-doing.md
+- projects/
+- .github/ — GitHub runs workflows from the repository root only, so a nested workflow
+  never runs; the main repository's `.github/workflows/projects.yml` builds and runs this
+  snapshot instead
 - any `__pycache__/`
-- any `log/`
+- workspace/log/
 
 `.gitattributes` at the source commit declares no `export-ignore` or `export-subst`, so the
 extract is exactly the tracked tree minus the paths above. At that commit no tracked path
-lies under a `__pycache__/` or `log/` directory, so those two exclusions remove nothing.
+lies under `projects/`, a `__pycache__/` directory or `workspace/log/`, so those three
+exclusions remove nothing. `.github/` was removed by hand when this snapshot was first
+made and has been part of the script's exclusions since; re-running the command above
+against `e90d230` reproduces the unpatched extract at `3f475a3` exactly, less that
+`.github/` (checked 2026-09-29 with `diff -rq`).
 
 ## Patches
 
@@ -50,16 +58,23 @@ Nothing else is edited.
 | # | Path | Change and why |
 |---|---|---|
 | 1 | `infra/docker/docker-compose.yml`, `scripts/_lib.sh`, `scripts/audit-deps`, `scripts/bootstrap` | The image tag `cite-digital-twin:dev` becomes `cite-digital-twin:p03-real-program` at every executable site. The tag was fixed, so the main tree and every snapshot on one host rebuilt and overwrote one image. Documentation that quotes `:dev` is left as it was: it records what was run at the time. |
-| 2 | `.github/` (removed) | GitHub runs workflows from the repository root only, so a nested workflow never runs; the main repository's `.github/workflows/projects.yml` builds and runs this snapshot instead. |
-| 3 | `run` (new) | The top-level entry point: a thin wrapper over `./scripts/program --zone cell_b`, every other argument passed through. |
-| 4 | `PROVENANCE.md` (new) | This record. |
-| 5 | `README.md` (replaced) | The source commit's README described the whole repository as it stood at that commit and pointed at `CLAUDE.md` and the charter, which are not in this folder. It is replaced by one describing this snapshot: what the milestone achieved, how to run and check it, how to take the folder out, and its known limits, drawn from the ADRs in `docs/adr/`. The source commit's README is still readable with `git show e90d230:README.md` in the main repository. |
+| 2 | `run` (new) | The top-level entry point: a thin wrapper over `./scripts/program --zone cell_b`, every other argument passed through. |
+| 3 | `PROVENANCE.md` (new) | This record. |
+| 4 | `README.md` (replaced) | The source commit's README described the whole repository as it stood at that commit and pointed at `CLAUDE.md` and the charter, which are not in this folder. It is replaced by one describing this snapshot: what the milestone achieved, how to run and check it, how to take the folder out, and its known limits, drawn from the ADRs in `docs/adr/`. The source commit's README is still readable with `git show e90d230:README.md` in the main repository. |
 
 Not patched, checked instead: the Compose project name and `ROS_DOMAIN_ID` are both derived
 from the checkout's absolute path (`cite_project_name` and `cite_domain_id` in
 `scripts/_lib.sh`), and the build volumes are declared bare in the compose file, so Compose
 prefixes them with that per-path project name. Two snapshots and the main tree on one host
 therefore get distinct volumes, containers, networks and domains without an edit.
+
+**Distinct, not guaranteed distinct.** The domain is a checksum of the absolute path folded
+onto 50 odd bases (`cite_domain_id`), so two arbitrary paths can land on the same one. On
+the development host, at `/home/cite/Developer/Digital-Twin/projects/03-real-program-twin-on-track/`, it derives 57, against 43 for the main tree there and a different value for
+each other snapshot; a copy elsewhere derives its own. `./scripts/doctor` prints the
+domain in use and says whether it was derived or set. To choose one, export `ROS_DOMAIN_ID`
+before any script: `_lib.sh` keeps an explicit value rather than deriving one. A paired
+snapshot also claims the even domain above that base for its counterpart.
 
 ### Diff against a clean extract
 
@@ -68,7 +83,6 @@ therefore get distinct volumes, containers, networks and domains without an edit
 the file itself.
 
 ```diff
-Only in source/03-real-program-twin-on-track: .github
 diff -ru source/03-real-program-twin-on-track/infra/docker/docker-compose.yml snapshot/03-real-program-twin-on-track/infra/docker/docker-compose.yml
 --- source/03-real-program-twin-on-track/infra/docker/docker-compose.yml
 +++ snapshot/03-real-program-twin-on-track/infra/docker/docker-compose.yml
@@ -119,6 +133,32 @@ diff -ru source/03-real-program-twin-on-track/scripts/_lib.sh snapshot/03-real-p
          warn "This takes several minutes. Run ./scripts/bootstrap to do it explicitly,"
          warn "or wait while it happens now."
 ```
+
+## What this snapshot promises, and what it does not
+
+**The contract is three things: it builds (`./scripts/bootstrap`, `./scripts/build`),
+the scenario `program_cycle` passes, and `./run` runs.** That is what ADR-0068 and the main repository's
+weekly projects workflow hold it to.
+
+**Its own lint, unit tests and `./scripts/doctor` are outside the contract, and some of them
+fail by construction.** The extract leaves out `docs/measurements/`, `CLAUDE.md` and
+`what-we-are-doing.md`, and the folder is not a git checkout once copied out. Expected to fail,
+identified by reading and grep on 2026-09-29 rather than by a run of each:
+
+- **`./scripts/lint`'s link check** — 195 dead links, every one of them into
+  `docs/measurements/`, `CLAUDE.md`, `AGENTS.md` or `what-we-are-doing.md` (counted by running
+  this folder's own `cite_tools.doclinks` over it).
+- **Host tests under `tools/tests/` that read the charter, `CLAUDE.md` or
+  `docs/measurements/`** — for example `test_rtf_figure_conditions.py` and
+  `test_stall_band.py`.
+- **Host tests that walk `git ls-files`** — `test_interface_counts.py`,
+  `test_superseded_real_time_requirement.py`, `test_the_retracted_gripper_claim.py`,
+  `test_a_removed_plan_key_stays_removed.py`, `test_declared_hardware_fact.py` among them —
+  which find no files, or the wrong ones, outside a git checkout of this folder.
+- **`./scripts/doctor`**, whose checks include the ADR index and paths this extract omits.
+
+None of those failures is a defect in the milestone, and none may be "fixed" by a patch here
+unless it stops the build, the scenario or `./run`.
 
 ## Verification log
 

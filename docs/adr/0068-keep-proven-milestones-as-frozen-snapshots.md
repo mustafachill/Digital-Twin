@@ -1,6 +1,8 @@
 # ADR-0068: Keep each proven milestone as a frozen, runnable snapshot
 
-- **Status:** Proposed
+- **Status:** Proposed — its P1 exception **ratified by the project owner on 2026-09-29** and
+  recorded in the charter at **v1.14** (`what-we-are-doing.md` §7 and §14). Ratification is
+  not promotion: the promotion condition below is unchanged.
 - **Date:** 2026-09-29
 - **Deciders:** Project owner
 - **Related:** [ADR-0001](0001-rebuild-rather-than-migrate.md),
@@ -69,31 +71,66 @@ Each milestone is kept permanently as a frozen, self-contained, runnable snapsho
 
 1. **Mechanism.** A committed script, `tools/snapshot_project.sh`, runs `git archive <sha>` into
    the folder, excluding `docs/measurements/`, `legacy/`, `real-robot-code/`, `CLAUDE.md`,
-   `AGENTS.md` and `what-we-are-doing.md`. The facts in Context make the folder its own root with
-   no code change.
+   `AGENTS.md`, `what-we-are-doing.md`, `projects/` (a snapshot never nests another), `.github/`
+   (GitHub runs workflows from the repository root only, so a nested one never runs),
+   `**/__pycache__/` and `workspace/log/`. It refuses a destination that exists and is not an
+   empty directory. `tools/tests/test_snapshot_extractor.py` extracts `HEAD` and checks each
+   exclusion from both sides, and the refusals. The facts in Context make the folder its own root
+   with no code change.
 2. **Only minimal patches, each listed with its rationale in the snapshot's `PROVENANCE.md`:**
    a per-project image tag, `cite-digital-twin:<name>` in place of `:dev`, so snapshots do not
    overwrite each other's image; for project 01 only, `DRIVEN_ZONE = "cell_a"` in
    `tests/scenarios/_cell.py`; and a top-level `run` wrapper, `README.md` and `PROVENANCE.md` in
-   each. Nothing else is edited. **A snapshot is a record, not a source.**
+   each. Nothing else is edited. `.github/` is **not** a patch: it was removed by hand when the
+   snapshots were first made and has since become one of the script's exclusions, and
+   re-running the script against each source commit reproduces the unpatched extract at
+   `3f475a3` exactly, less that directory. **A snapshot is a record, not a source.**
+   **"Frozen" is checked, not only stated**: `projects/snapshots.yaml` pins each folder's
+   committed git tree hash and `tools/tests/test_snapshots_are_frozen.py` fails on any
+   difference, so every change to a snapshot — a patch or a verification-log row alike — carries
+   a visible hash bump in the same commit.
 3. **One-way rule.** Nothing may be copied from `projects/` back into the main tree, and the main
    tree never imports or builds from `projects/`. A snapshot's patterns are not precedent, for
    the same reason v1's are not ([`../reference/v1-lessons.md`](../reference/v1-lessons.md)).
    On that rule P1 holds: a snapshot is a record of a past state, not a second source of any
-   value the main tree uses.
-4. **Main-tree checks are deliberately narrowed, and this is a reduction of coverage.**
-   `tools/cite_tools/tree.py`'s `SKIP_PATHS` gains `projects`, with `projects/README.md` still
-   checked; `tools/tests/test_superseded_real_time_requirement.py` and
-   `tools/tests/test_interface_counts.py` drop `projects/` from their `git ls-files` walks;
-   `.yamllint` ignores `projects/`. `tools/tests/test_a_removed_plan_key_stays_removed.py` walks
-   seven named trees, none of them `projects`, and is unaffected. Each exclusion carries a test
-   that fails if it widens beyond `projects/`. Each snapshot keeps its own `./scripts/lint` and
-   tests for its own tree.
+   value the main tree uses. **Half of this rule has a mechanical check and half cannot have
+   one.** `tools/tests/test_nothing_reaches_into_a_snapshot.py` fails when a tracked main-tree
+   file names a snapshot's path outside an allowlist of the files that document or run the
+   snapshots, which is what building or importing from one would require. **Copy-back itself
+   cannot be detected mechanically**: a value or function copied out of a snapshot carries no
+   trace of its origin, so that half rests on review and on this rule.
+4. **Main-tree checks are deliberately narrowed, and this is a reduction of coverage.** Exactly
+   these changes, each with a test that fails if it widens beyond the top-level `projects/`
+   (`tools/tests/test_snapshots_are_left_out.py`):
+   - `tools/cite_tools/tree.py`'s `SKIP_PATHS` gains `projects`, which takes the snapshots out of
+     every `./scripts/lint` walk (English, links) — with `projects/README.md` and
+     `projects/snapshots.yaml`, which are main-tree files, still walked;
+   - three `git ls-files` walkers drop the snapshots through the one predicate `in_a_snapshot`:
+     `tools/tests/test_superseded_real_time_requirement.py`,
+     `tools/tests/test_interface_counts.py` and `tools/tests/test_the_retracted_gripper_claim.py`;
+   - `.yamllint` ignores the root-anchored `/projects/`, re-admitting `projects/snapshots.yaml`;
+   - `.dockerignore` leaves `projects/` out of the main image's build context;
+   - `scripts/lint`'s shellcheck gains the extractor `tools/*.sh` and each snapshot's `run`, named
+     exactly and nothing else under `projects/`;
+   - `.github/` is excluded at extraction (decision 1), so no snapshot carries a workflow.
+
+   `tools/tests/test_a_removed_plan_key_stays_removed.py` walks seven named trees, none of them
+   `projects`, and is unaffected. **A snapshot's contract is that it builds, its scenario passes
+   and its `./run` runs** — decided by the project owner on 2026-09-29. Its own `./scripts/lint`,
+   unit and host tests and `./scripts/doctor` are **outside** that contract and some fail by
+   construction: the extract omits `docs/measurements/`, `CLAUDE.md` and the charter, so the link
+   check reports roughly 193–195 dead links per snapshot into them and host tests that read them
+   fail, and the `git ls-files` walkers need a git checkout of the folder. Each snapshot's
+   `PROVENANCE.md` lists which, and none of those failures may be answered with a patch unless it
+   stops the build, the scenario or `./run`.
 5. **CI.** A separate, non-blocking workflow, `.github/workflows/projects.yml`
-   (`workflow_dispatch` and a weekly schedule), runs a matrix over the three projects: build the
+   (`workflow_dispatch` and a weekly schedule), runs a matrix over the snapshots: build the
    image, bootstrap, `validate-model`, build, and the project's scenario with
-   `--teardown-advisory` — `continuous_line` for 01, `program_cycle` for 02 and 03. It does not
-   gate `main`.
+   `--teardown-advisory` — `continuous_line` for 01, `program_cycle` for 02 and 03. **The matrix
+   is read from `projects/snapshots.yaml`**, the one list of the snapshots (name, source commit,
+   image tag, scenario, scenario arguments, tree hash), by a first job; the workflow restates
+   none of it. The three image builds share one GitHub Actions cache scope with `mode=min`, while
+   their Dockerfiles are byte-identical. It does not gate `main`.
 6. **Out of scope.** Removing the parked event-driven line, `cell_a` and the fixed-program
    leftovers from the main tree is a later branch with its own ADR.
 
@@ -107,8 +144,10 @@ Each milestone is kept permanently as a frozen, self-contained, runnable snapsho
 
 ### What this costs us
 - Repository size grows by roughly three copies of `workspace/src`, `model/` and `tools/`.
-- Main-tree lint and the two tree-walking host tests no longer see `projects/`; a defect there is
-  caught only by the snapshot's own checks or the weekly job.
+- Main-tree lint and three tree-walking host tests no longer see `projects/`; a defect there is
+  caught only by the weekly job, since a snapshot's own lint and tests are outside its contract.
+- Every change to a snapshot, including a verification-log row, needs a tree-hash bump in
+  `projects/snapshots.yaml`: deliberate friction, and the price of "frozen" being checked.
 - Snapshots rot silently if nobody reads the weekly job, and a non-blocking job is easy to ignore.
 - Security and dependency fixes are not backported to snapshots.
 - A snapshot carries its own docs without `CLAUDE.md`; any figure in them was true at its source

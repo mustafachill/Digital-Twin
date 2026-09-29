@@ -69,11 +69,19 @@ sides of the paired `cell_b` there today, and no hardware path has been run. See
   `PROVENANCE.md` names as excluded.
 - **Figures inside a snapshot were true at its source commit only.** Its `docs/` are not
   maintained; read them as the state of that commit.
-- **The main tree's checks deliberately skip `projects/`**, apart from this file. Each
-  snapshot has its own `./scripts/lint` and `./scripts/test` for its own tree.
+- **The main tree's checks deliberately skip `projects/`**, apart from this file and each
+  snapshot's `run`, which the main tree's shellcheck names.
+- **What a snapshot promises is that it builds, its scenario passes and `./run` runs.** Its
+  own lint, unit tests and `doctor` are outside that promise and some of them fail by
+  construction, because the extract leaves out `docs/measurements/`, `CLAUDE.md` and the
+  charter; each `PROVENANCE.md` lists which.
+- **A snapshot is frozen by a test, not only by this rule.** `projects/snapshots.yaml` pins
+  each snapshot's git tree hash, and a host test fails when the committed tree differs, so a
+  change to a snapshot needs a visible hash bump in the same commit.
 - **A weekly workflow, not a gate.**
   [`.github/workflows/projects.yml`](../.github/workflows/projects.yml) builds each snapshot
-  and runs its scenario — `continuous_line` for 01, `program_cycle` for 02 and 03 — on
+  listed in [`snapshots.yaml`](snapshots.yaml) and runs its scenario — `continuous_line` for
+  01, `program_cycle` for 02 and 03 — on
   Mondays and on demand. It does not gate `main`, and its scenario steps pass
   `--teardown-advisory`, so read the verdict in the step log rather than the step's
   conclusion.
