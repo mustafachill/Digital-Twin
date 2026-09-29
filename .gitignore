@@ -42,3 +42,8 @@ rosbag2_*/
 # --- OS ---
 .DS_Store
 Thumbs.db
+
+# --- The real cell's own program archives (read-only reference, never committed) ---
+# Only the one file the twin reads is copied into model/programs/, byte for
+# byte; see model/programs/README.md.
+real-robot-code/
