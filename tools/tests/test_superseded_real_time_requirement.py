@@ -34,6 +34,8 @@ from pathlib import Path
 
 import pytest
 
+from cite_tools.tree import in_a_snapshot
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: Files whose comments are read as instruction. Markdown is deliberately absent:
@@ -61,6 +63,9 @@ def tracked_source_files() -> list[Path]:
     `test_the_retracted_gripper_claim.py` gives: the question is what the
     repository carries, and a walk answers about whatever is on disk — including
     build trees and, in a worktree, another checkout's artefacts.
+
+    The frozen snapshots under `projects/` are left out (ADR-0068 decision 4): a
+    snapshot is a record of its source commit, and takes no correction from here.
     """
     out = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files"],
@@ -68,7 +73,11 @@ def tracked_source_files() -> list[Path]:
         text=True,
         check=True,
     ).stdout.splitlines()
-    return [REPO_ROOT / name for name in out if Path(name).suffix in SOURCE_SUFFIXES]
+    return [
+        REPO_ROOT / name
+        for name in out
+        if Path(name).suffix in SOURCE_SUFFIXES and not in_a_snapshot(Path(name))
+    ]
 
 
 def _mentions_0043() -> list[Path]:

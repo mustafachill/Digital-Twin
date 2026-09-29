@@ -62,6 +62,9 @@ REMOVED_KEY = "hosted_by"
 #: moved rather than a reasoned exclusion, and the honest reading of this guard
 #: is "these seven trees", never "everywhere". Run the command before restating
 #: the number.
+#:
+#: `projects/` is deliberately absent too (ADR-0068): it holds frozen snapshots of
+#: past commits, which are records and take no correction from this guard.
 GUARDED_TREES = ("workspace", "tools", "tests", "scripts", "model", ".github", "infra")
 
 #: Files whose subject IS the removed key, named relative to the repository root.

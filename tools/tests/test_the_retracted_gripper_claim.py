@@ -42,6 +42,7 @@ import pytest
 
 from cite_tools import manifest
 from cite_tools.model.loader import load
+from cite_tools.tree import in_a_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "assets" / "manifest.yaml"
@@ -126,6 +127,10 @@ def tracked_text_files() -> list[Path]:
     `git ls-files` rather than a walk: the question is what the repository
     carries, and a walk answers about whatever is on disk, including build trees
     and other checkouts' artefacts.
+
+    The frozen snapshots under `projects/` are left out (ADR-0068 decision 4): each
+    carries its source commit's documents as they stood, retracted claims and all,
+    and a snapshot takes no correction from the main tree.
     """
     out = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files"],
@@ -134,7 +139,11 @@ def tracked_text_files() -> list[Path]:
         check=True,
     ).stdout.splitlines()
     suffixes = {".md", ".py", ".yaml", ".yml", ".xacro", ".hpp", ".cpp", ".json", ".patch"}
-    return [REPO_ROOT / name for name in out if Path(name).suffix in suffixes]
+    return [
+        REPO_ROOT / name
+        for name in out
+        if Path(name).suffix in suffixes and not in_a_snapshot(Path(name))
+    ]
 
 
 class TestTheFingersAreHulledIndependently:
