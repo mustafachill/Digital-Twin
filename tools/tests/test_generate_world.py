@@ -404,9 +404,9 @@ class TestTheWindowOpensOnTheCell:
             "EntityContextMenuPlugin",
             "WorldControl",
             "WorldStats",
-            "EntityTree",
-            "ComponentInspector",
         } <= names
+        # Left out on purpose: docked, they kept half the window from the cell.
+        assert not {"EntityTree", "ComponentInspector"} & names
         pose = gui.gui_camera_pose(zone_cell)
         emitted = [float(v) for v in root.find("plugin/camera_pose").text.split()]
         assert emitted == pytest.approx([pose.x, pose.y, pose.z, 0.0, pose.pitch, pose.yaw])

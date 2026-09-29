@@ -2,8 +2,11 @@
 {{ xml_banner() }}
 <!-- Harmonic's default GUI configuration (gz-sim8, gui/gui.config), copied
      plugin for plugin so that passing this file removes nothing from the window.
-     The one value that differs is the 3D view's camera_pose, which the generator
-     derives from where L0 places this zone's assets (generate/gui.py). -->
+     Two things differ: the 3D view's camera_pose, which the generator derives
+     from where L0 places this zone's assets (generate/gui.py), and the component
+     inspector and entity tree are not opened: docked, even collapsed, they kept
+     half the window and the cell had to be framed into what was left. Both can
+     still be opened from the window's plugin menu. -->
 
 <!-- Quick start dialog -->
 <dialog name="quick_start" show_again="true"/>
@@ -240,18 +243,4 @@
   </gz-gui>
 </plugin>
 
-<!-- Inspector -->
-<plugin filename="ComponentInspector" name="Component inspector">
-  <gz-gui>
-    <property type="bool" key="showTitleBar">false</property>
-    <property type="string" key="state">docked</property>
-  </gz-gui>
-</plugin>
 
-<!-- Entity tree -->
-<plugin filename="EntityTree" name="Entity tree">
-  <gz-gui>
-    <property type="bool" key="showTitleBar">false</property>
-    <property type="string" key="state">docked</property>
-  </gz-gui>
-</plugin>

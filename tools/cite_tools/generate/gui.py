@@ -29,8 +29,11 @@ ELEVATION_RAD = math.radians(33.0)
 HORIZONTAL_FOV_RAD = math.radians(90.0)
 
 #: Added to each end of the zone's X extent. Asset positions are origins, and a
-#: table or a belt reaches past its origin, so the frame needs room beyond them.
-MARGIN_M = 1.0
+#: table or a belt reaches past its origin (the widest here by 0.3 m), so the
+#: frame needs room beyond them, and their near faces sit closer to the camera
+#: than their origins. Checked by eye: 1.0 m left the cell small, 0.4 m clipped
+#: the tables.
+MARGIN_M = 0.7
 
 
 @dataclass(frozen=True)
