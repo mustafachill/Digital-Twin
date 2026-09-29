@@ -49,7 +49,7 @@ from pathlib import Path
 #: `bringup` against `cell_a`" as the answer if the showcase is found broken, and
 #: `SELECTED_BY` below is what makes that a command rather than a commit:
 #: `./scripts/scenario bringup --zone cell_a`.
-DRIVEN_ZONE = "cell_b"
+DRIVEN_ZONE = "cell_a"
 
 #: Where `./scripts/scenario --zone` puts its answer. An environment variable
 #: rather than an argument because `launch_test` owns the scenario's argv and

@@ -233,7 +233,7 @@ if ! have docker; then
 fi
 
 step "Container image"
-info "Building cite-digital-twin:dev — first run takes a while"
+info "Building cite-digital-twin:p02-fixed-program — first run takes a while"
 compose build dev
 ok "Image built"
 

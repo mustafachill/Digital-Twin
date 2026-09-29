@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Run this snapshot's milestone: the fixed program of taught joint poses and timed belt runs (ADR-0066),
+# on both sides of the paired cell `cell_b`, through the twin boundary.
+#
+#   ./run                  one cycle, both sides, one window each
+#   ./run --headless       the same with no windows
+#   ./run --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
+#
+# A thin wrapper over `./scripts/program --zone cell_b`, which does all of the
+# work; every argument is passed through to it. The zone is fixed here because
+# `cell_b` is the cell this milestone was proven on, so `--zone` is refused.
+#
+# This folder is a frozen snapshot (ADR-0068 in the main repository), not a
+# source: see PROVENANCE.md for the commit it was taken from and every patch.
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help)
+            sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+            echo
+            echo "What ./scripts/program itself says:"
+            exec "${HERE}/scripts/program" --help
+            ;;
+        --zone|--zone=*)
+            echo "error: this snapshot runs cell_b only; do not pass --zone to ./run" >&2
+            exit 2
+            ;;
+    esac
+done
+
+exec "${HERE}/scripts/program" --zone cell_b "$@"
