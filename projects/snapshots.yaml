@@ -28,7 +28,7 @@ snapshots:
     image: cite-digital-twin:p01-three-arm-line
     scenario: continuous_line
     scenario_args: --teardown-advisory
-    tree: f50f126e34173515780197f85f8559e964f621be
+    tree: 66088a9d9cf7ec1aa041fdec77f797d145b55cb7
   - name: 02-fixed-program-pair
     source: c83119b5f95063c27b40a397fd0f5094feb00ec2
     image: cite-digital-twin:p02-fixed-program

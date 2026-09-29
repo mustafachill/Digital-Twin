@@ -99,32 +99,61 @@ LOG_HINT="${SIM_LOG} (read it later with: ./scripts/enter dev less ${SIM_LOG#"${
 SIM_PID=""
 TAIL_PID=""
 FEED_PID=""
+#: The bound on the launch's own orderly shutdown after SIGINT, before its process
+#: group is killed. STATED, NOT MEASURED: a ceiling on a failure, which a launch
+#: that stops normally never reaches, since the wait ends when it exits.
+TEARDOWN_CEILING_S=120
 
 # Invoked by the trap below and never by name, which shellcheck cannot see.
 # shellcheck disable=SC2329
 teardown() {
-    trap - EXIT
+    trap - EXIT INT TERM HUP
     trap 'warn "still stopping — the launch is working through its own shutdown"' INT TERM
     if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null || true; fi
     if [ -n "$FEED_PID" ]; then kill "$FEED_PID" 2>/dev/null || true; fi
     if [ -n "$SIM_PID" ] && kill -0 "$SIM_PID" 2>/dev/null; then
         step "Stopping the cell"
         # SIGINT and not SIGKILL: `ros2 launch` then shuts every process down in
-        # order rather than leaving Gazebo and the controllers behind.
+        # order rather than leaving Gazebo and the controllers behind. It reaches
+        # the launch only because the launch was started with job control on
+        # (below); otherwise bash starts it with SIGINT ignored.
         kill -INT "$SIM_PID" 2>/dev/null || true
+        # Waited on as a condition — the launch has exited — and bounded, so a
+        # launch that never finishes its shutdown cannot hold the terminal.
+        local waited=0
+        while kill -0 "$SIM_PID" 2>/dev/null && [ "$waited" -lt "$TEARDOWN_CEILING_S" ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+        if kill -0 "$SIM_PID" 2>/dev/null; then
+            # The launch's whole process group, so nothing it started is left behind.
+            warn "the launch had not stopped ${TEARDOWN_CEILING_S} s after SIGINT; sending SIGKILL to its process group"
+            kill -KILL -- "-${SIM_PID}" 2>/dev/null || true
+        fi
         wait "$SIM_PID" 2>/dev/null || true
     fi
     ok "the cell is down. Its log is ${LOG_HINT}"
 }
-trap teardown INT TERM HUP EXIT
+trap teardown EXIT
+trap 'teardown; exit 130' INT
+trap 'teardown; exit 143' TERM
+trap 'teardown; exit 129' HUP
 
 step "Bringing up ${ZONE} with the line running"
+# JOB CONTROL ON FOR THIS ONE JOB. A non-interactive shell starts every `&` job
+# with SIGINT and SIGQUIT ignored, and `ros2 launch` inherits that, so the
+# SIGINT teardown sends would be ignored and its wait would never end. With
+# `set -m` the job keeps the default disposition and gets its own process group,
+# which is also what lets the ceiling in teardown signal everything it started.
+# The operator's Ctrl-C reaches this shell, whose INT trap forwards it.
+set -m
 if [ "$HEADLESS" -eq 1 ]; then
     "${REPO_ROOT}/scripts/sim" --zone "$ZONE" --headless line:=true > "$SIM_LOG" 2>&1 &
 else
     "${REPO_ROOT}/scripts/sim" --zone "$ZONE" line:=true > "$SIM_LOG" 2>&1 &
 fi
 SIM_PID=$!
+set +m
 tail -n +1 -f "$SIM_LOG" & TAIL_PID=$!
 
 # THE WAIT IS FOR AN EVENT, NOT A DURATION: the loop polls for the readiness line
