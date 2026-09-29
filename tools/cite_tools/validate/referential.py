@@ -15,9 +15,10 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
-from cite_tools.model import ids
+from cite_tools.model import blockly, ids
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
+from cite_tools.model.resolve import program_steps
 from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge, xacro_would_evaluate
 from cite_tools.validate import Finding, error
 
@@ -30,6 +31,7 @@ _CATEGORY_CONFIG_KIND: dict[str, str | None] = {
     "fixture": None,
     "end_effector": None,
     "workpiece": None,
+    "linear_axis": None,
 }
 
 
@@ -47,6 +49,8 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _counterpart_backend_matches_the_plant(model)
     findings += _configuration_matches_category(model)
     findings += _named_poses_fit_the_arm(model)
+    findings += _an_arm_rides_its_track_on_one_backend(model)
+    findings += _programs_fit_the_arm(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
     findings += _flow_is_consistent(model)
@@ -766,6 +770,161 @@ def _named_poses_fit_the_arm(model: FacilityModel) -> list[Finding]:
                         f"{dof} joint(s)",
                     )
                 )
+    return findings
+
+
+def _an_arm_rides_its_track_on_one_backend(model: FacilityModel) -> list[Finding]:
+    """An arm on a track selects the backend the track selects (ADR-0067).
+
+    The track's joint is emitted into the ARM's description, under the arm's
+    base, with the track's own `ros2_control` plugin. An arm on `real` above a
+    track on `sim` would put a Gazebo plugin into a physical robot's description,
+    and the reverse a physical plugin into a simulated one: a P2 break either
+    way, and one no other rule sees, because each asset is valid on its own.
+    """
+    findings: list[Finding] = []
+    for asset in model.assets:
+        if asset.pose.frame == WORLD_FRAME:
+            continue
+        track = model.asset(asset.pose.frame.split("/", 1)[0])
+        track_type = None if track is None else model.asset_type(track.type)
+        if track is None or track_type is None or track_type.axis is None:
+            continue
+        mine = (asset.hardware.backend, asset.hardware.effective_counterpart_backend)
+        theirs = (track.hardware.backend, track.hardware.effective_counterpart_backend)
+        if mine != theirs:
+            findings.append(
+                error(
+                    "track-backend-differs-from-its-arm",
+                    f"assets.{asset.id}.hardware",
+                    f"selects {mine} (plant, counterpart) while the track it rides, "
+                    f"{track.id!r}, selects {theirs}",
+                    "The track's joint lives in this arm's description, so the two load "
+                    "one hardware plugin set. Select the same backends on both.",
+                )
+            )
+    return findings
+
+
+def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:
+    """A program the arm cannot run is refused here, not at the robot (ADR-0067).
+
+    Four things, each a way the program would otherwise fail part-way through a
+    cycle with a part in the jaws:
+
+    * `program-refused` — the reader refuses the file: a block the twin does not
+      model, a blended move, a move that does not wait.
+    * `program-pose-outside-joint-limits` — a pose past the vendor's own joint
+      limits, which L0 states for exactly this check.
+    * `program-pose-name-taken` — a program pose named like one `poses_rad`
+      declares, which would make one name mean two poses.
+    * `program-track-*` — a track move on an arm with no track, or past the
+      track's stroke or speed.
+    """
+    findings: list[Finding] = []
+    for asset in model.assets:
+        configuration = asset.configuration
+        if configuration is None or configuration.kind != "robot" or not configuration.program:
+            continue
+        where = f"assets.{asset.id}.configuration.program"
+        try:
+            steps = program_steps(model, asset)
+        except blockly.BlocklyError as exc:
+            findings.append(
+                error(
+                    "program-refused",
+                    where,
+                    f"{configuration.program}: {exc}",
+                    "The program is the real robot's, and is not edited here. Model the "
+                    "block in cite_tools.model.blockly, or change the program on the robot "
+                    "and export it again.",
+                )
+            )
+            continue
+        asset_type = model.asset_type(asset.type)
+        limits = (
+            asset_type.kinematics.joint_limits_rad
+            if asset_type is not None and asset_type.kinematics is not None
+            else None
+        )
+        for name, values in blockly.poses(steps).items():
+            if name in configuration.poses_rad or name == "home":
+                findings.append(
+                    error(
+                        "program-pose-name-taken",
+                        where,
+                        f"the program's pose {name!r} is also declared in poses_rad",
+                        "Rename the entry in poses_rad; the program's names are derived.",
+                    )
+                )
+            if limits is None:
+                findings.append(
+                    error(
+                        "program-pose-limits-unstated",
+                        where,
+                        f"type {asset.type!r} states no kinematics.joint_limits_rad, so the "
+                        f"program's pose {name!r} cannot be checked against them",
+                    )
+                )
+                continue
+            outside = [
+                f"joint{index + 1} {value:.4f} rad not in [{low:g}, {high:g}]"
+                for index, (value, (low, high)) in enumerate(zip(values, limits, strict=True))
+                if not low <= value <= high
+            ]
+            if outside:
+                findings.append(
+                    error(
+                        "program-pose-outside-joint-limits",
+                        where,
+                        f"pose {name!r}: {'; '.join(outside)}",
+                        "The planning group refuses it at MoveTo, mid-cycle. The program is "
+                        "the robot's own, so the limits or the program are wrong, not the "
+                        "reader.",
+                    )
+                )
+        findings += _program_track_moves_fit(model, asset, steps, where)
+    return findings
+
+
+def _program_track_moves_fit(
+    model: FacilityModel, asset, steps: tuple[blockly.Step, ...], where: str
+) -> list[Finding]:
+    moves = [step for step in steps if isinstance(step, blockly.Track)]
+    if not moves:
+        return []
+    track = None if asset.pose.frame == WORLD_FRAME else model.asset(asset.pose.frame.split("/")[0])
+    track_type = None if track is None else model.asset_type(track.type)
+    axis = None if track_type is None else track_type.axis
+    if axis is None:
+        return [
+            error(
+                "program-track-without-a-track",
+                where,
+                f"the program moves a linear track and {asset.id!r} does not stand on one",
+                "Place the arm on a track's carriage frame.",
+            )
+        ]
+    findings: list[Finding] = []
+    for move in moves:
+        if not 0.0 <= move.position_m <= axis.stroke_m:
+            findings.append(
+                error(
+                    "program-track-beyond-stroke",
+                    where,
+                    f"a track move to {move.position_m:.3f} m, outside the "
+                    f"{axis.stroke_m:.3f} m stroke of {track_type.id!r}",  # type: ignore[union-attr]
+                )
+            )
+        if move.speed_mps > axis.max_speed_mps:
+            findings.append(
+                error(
+                    "program-track-too-fast",
+                    where,
+                    f"a track move at {move.speed_mps:.3f} m/s, over the "
+                    f"{axis.max_speed_mps:.3f} m/s the track declares",
+                )
+            )
     return findings
 
 

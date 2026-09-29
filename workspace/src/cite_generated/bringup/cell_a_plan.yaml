@@ -50,8 +50,12 @@ plan:
   # are the same. That is today's model, and it is not a special case in anything
   # that reads this.
   workpieces:
-    narrowest_width_m: 0.05
-    widest_width_m: 0.05
+    narrowest_width_m: 0.066
+    widest_width_m: 0.066
+    # Each declared part's box and mass, for whatever spawns one into a running
+    # world. Read from here rather than restated beside the spawn (ADR-0067).
+    models:
+      - {name: workpiece, size_m: [0.066, 0.066, 0.066], mass_kg: 0.2}
 
   # The sides this zone runs, and the Gazebo transport partition each one runs
   # in. One side on an untwinned zone; two where the zone declares

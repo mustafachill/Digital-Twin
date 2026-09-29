@@ -33,10 +33,10 @@
          only; naming and typing it for ROS is a bridge's business, above this
          boundary and identical on the hardware path. -->
     <plugin filename="cite_conveyor" name="cite_simulation::Conveyor">
-      <surface_pose>1.05 3 0.6 0 0 0</surface_pose>
+      <surface_pose>1.31 3.06 0.635 0 0 0</surface_pose>
       <belt_length_m>1.2</belt_length_m>
       <belt_width_m>0.4</belt_width_m>
-      <carry_height_m>0.05</carry_height_m>
+      <carry_height_m>0.066</carry_height_m>
       <direction>forward</direction>
       <installed_speed_mps>0.15</installed_speed_mps>
       <command_topic>/cite/cell_b/transfer_belt/command</command_topic>
@@ -58,11 +58,11 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>-0.475 3.25 0.63 0 0 0</beam_pose>
+      <beam_pose>-0.5 2.674 0.63 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
       <beam_width_m>0.004</beam_width_m>
-      <beam_offset_m>-0.25</beam_offset_m>
+      <beam_offset_m>0.25</beam_offset_m>
       <state_topic>/cite/cell_b/infeed_beam/detection</state_topic>
       <publish_period_s>0.1</publish_period_s>
       <watch>workpiece</watch>
@@ -81,7 +81,7 @@
          beam is emitted from its housing and crosses what it watches, rather
          than being centred on it. -->
     <plugin filename="cite_break_beam" name="cite_simulation::BreakBeam">
-      <beam_pose>1.55 3.25 0.63 0 0 0</beam_pose>
+      <beam_pose>1.805 3.31 0.665 0 0 0</beam_pose>
       <beam_axis>y</beam_axis>
       <beam_length_m>0.5</beam_length_m>
       <beam_width_m>0.004</beam_width_m>

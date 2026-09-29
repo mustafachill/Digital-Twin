@@ -371,9 +371,18 @@ class TestTheWindowOpensOnTheCell:
     def test_it_stands_across_the_line_from_the_arms_and_faces_them(self, zone_cell) -> None:
         pose = gui.gui_camera_pose(zone_cell)
         ys = [a.world_pose.xyz_m[1] for a in zone_cell.assets]
-        # Both zones put their arms on -Y of the line, so the customer is on +Y.
-        assert pose.y > max(ys)
-        assert pose.yaw == pytest.approx(-math.pi / 2)
+        robots = [a.world_pose.xyz_m[1] for a in zone_cell.of_category("robot")]
+        others = [
+            a.world_pose.xyz_m[1]
+            for a in zone_cell.assets
+            if a.id not in {r.id for r in zone_cell.of_category("robot")}
+        ]
+        # The customer is on the side of the line away from the arms: +Y in
+        # cell_a, whose arms stand on -Y, and -Y in cell_b, whose arm rides a
+        # track on +Y since ADR-0067. Derived per zone, not assumed.
+        customer = 1.0 if sum(others) / len(others) >= sum(robots) / len(robots) else -1.0
+        assert (pose.y - max(ys) if customer > 0 else min(ys) - pose.y) > 0
+        assert pose.yaw == pytest.approx(-customer * math.pi / 2)
         # Positive pitch looks down in Gazebo's camera frame.
         assert math.radians(30) <= pose.pitch <= math.radians(35)
         assert pose.z > max(a.world_pose.xyz_m[2] for a in zone_cell.assets)
@@ -383,8 +392,10 @@ class TestTheWindowOpensOnTheCell:
         half_fov = gui.HORIZONTAL_FOV_RAD / 2
         for asset in zone_cell.assets:
             x, y, z = asset.world_pose.xyz_m
-            # Distance along the viewing direction (-Y, tilted down by pitch).
-            forward = (pose.y - y) * math.cos(pose.pitch) + (pose.z - z) * math.sin(pose.pitch)
+            # Distance along the viewing direction (along the yaw, tilted down).
+            forward = (y - pose.y) * math.sin(pose.yaw) * math.cos(pose.pitch) + (
+                pose.z - z
+            ) * math.sin(pose.pitch)
             assert abs(x - pose.x) < forward * math.tan(half_fov), asset.id
 
     def test_the_config_keeps_harmonics_default_plugins(self, zone_cell) -> None:

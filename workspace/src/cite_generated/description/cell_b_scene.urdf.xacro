@@ -60,9 +60,6 @@
   <material name="conveyor_frame">
     <color rgba="0.28 0.34 0.42 1"/>
   </material>
-  <material name="pedestal_steel">
-    <color rgba="0.52 0.53 0.56 1"/>
-  </material>
   <material name="sensor_housing">
     <color rgba="0.78 0.62 0.1 1"/>
   </material>
@@ -96,7 +93,7 @@
   <joint name="infeed_beam_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="infeed_beam_base_link"/>
-    <origin xyz="-0.475 3.25 0.63" rpy="0 0 0"/>
+    <origin xyz="-0.5 2.674 0.63" rpy="0 0 0"/>
   </joint>
   <link name="infeed_beam_beam"/>
   <joint name="infeed_beam_beam_fixed" type="fixed">
@@ -131,7 +128,7 @@
   <joint name="infeed_table_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="infeed_table_base_link"/>
-    <origin xyz="-0.475 3 0" rpy="0 0 0"/>
+    <origin xyz="-0.5 2.924 0" rpy="0 0 0"/>
   </joint>
   <link name="infeed_table_surface"/>
   <joint name="infeed_table_surface_fixed" type="fixed">
@@ -166,7 +163,7 @@
   <joint name="outfeed_beam_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="outfeed_beam_base_link"/>
-    <origin xyz="1.55 3.25 0.63" rpy="0 0 0"/>
+    <origin xyz="1.805 3.31 0.665" rpy="0 0 0"/>
   </joint>
   <link name="outfeed_beam_beam"/>
   <joint name="outfeed_beam_beam_fixed" type="fixed">
@@ -201,7 +198,7 @@
   <joint name="outfeed_table_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="outfeed_table_base_link"/>
-    <origin xyz="2 3 0" rpy="0 0 0"/>
+    <origin xyz="2.26 3.06 0" rpy="0 0 0"/>
   </joint>
   <link name="outfeed_table_surface"/>
   <joint name="outfeed_table_surface_fixed" type="fixed">
@@ -210,39 +207,33 @@
     <origin xyz="0 0 0.6" rpy="0 0 0"/>
   </joint>
 
-  <!-- picker_base — pedestal_600 -->
-  <link name="picker_base_base_link">
+  <!-- picker_track — ufactory_linear_motor -->
+  <link name="picker_track_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
            height above the link origin. `com_m` is measured from the box centre
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <mass value="40"/>
-      <inertia ixx="1.5" ixy="0"
-               ixz="0" iyy="1.5"
-               iyz="0" izz="0.6"/>
+      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
+      <mass value="25"/>
+      <inertia ixx="1.0607" ixy="0"
+               ixz="0" iyy="3.1188"
+               iyz="0" izz="2.1086"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.3 0.3 0.6"/></geometry>
-      <material name="pedestal_steel"/>
+      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
+      <geometry><box size="1 0.11 0.705"/></geometry>
+      <material name="conveyor_frame"/>
     </visual>
     <collision>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.3 0.3 0.6"/></geometry>
+      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
+      <geometry><box size="1 0.11 0.705"/></geometry>
     </collision>
   </link>
-  <joint name="picker_base_anchor" type="fixed">
+  <joint name="picker_track_anchor" type="fixed">
     <parent link="cite_world"/>
-    <child link="picker_base_base_link"/>
-    <origin xyz="0 2.7 0" rpy="0 0 0"/>
-  </joint>
-  <link name="picker_base_top"/>
-  <joint name="picker_base_top_fixed" type="fixed">
-    <parent link="picker_base_base_link"/>
-    <child link="picker_base_top"/>
-    <origin xyz="0 0 0.6" rpy="0 0 0"/>
+    <child link="picker_track_base_link"/>
+    <origin xyz="0.05 3.3 0" rpy="0 0 0"/>
   </joint>
 
   <!-- transfer_belt — belt_1200x400 -->
@@ -271,19 +262,19 @@
   <joint name="transfer_belt_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="transfer_belt_base_link"/>
-    <origin xyz="1.05 3 0" rpy="0 0 0"/>
+    <origin xyz="1.31 3.06 0.035" rpy="0 0 0"/>
   </joint>
   <link name="transfer_belt_infeed"/>
   <joint name="transfer_belt_infeed_fixed" type="fixed">
     <parent link="transfer_belt_base_link"/>
     <child link="transfer_belt_infeed"/>
-    <origin xyz="-0.55 0 0.6" rpy="0 0 0"/>
+    <origin xyz="-0.545 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="transfer_belt_outfeed"/>
   <joint name="transfer_belt_outfeed_fixed" type="fixed">
     <parent link="transfer_belt_base_link"/>
     <child link="transfer_belt_outfeed"/>
-    <origin xyz="0.55 0 0.6" rpy="0 0 0"/>
+    <origin xyz="0.545 0 0.6" rpy="0 0 0"/>
   </joint>
   <link name="transfer_belt_surface"/>
   <joint name="transfer_belt_surface_fixed" type="fixed">

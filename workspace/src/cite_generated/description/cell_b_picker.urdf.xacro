@@ -19,11 +19,56 @@
        coordinate of its own. -->
   <link name="picker_mount"/>
 
+  <!-- The linear track this arm rides (ADR-0067). Its rail is a body in the
+       scene; its one joint is HERE, between the mount and the carriage the arm's
+       base is bolted to, so robot_state_publisher, MoveIt's robot state and its
+       collision checks all see where the arm really is. The mount stands where
+       the carriage is at stroke zero, and the axis is stated in the mount's own
+       frame, derived from the track type's direction.
+
+       The carriage has mass because a massless link between two joints is
+       dropped by the URDF-to-SDF converter, and the axis with it. It has no
+       collision geometry: the plate rides 5 mm above the rail's top face and is
+       drawn, not checked. -->
+  <link name="picker_track_carriage">
+    <inertial>
+      <origin xyz="0 0 -0.0025" rpy="0 0 0"/>
+      <mass value="3"/>
+      <inertia ixx="0.00640625" ixy="0" ixz="0" iyy="0.01000625" iyz="0" izz="0.0164"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.0025" rpy="0 0 0"/>
+      <geometry><box size="0.2 0.16 0.005"/></geometry>
+    </visual>
+  </link>
+  <joint name="picker_track_joint" type="prismatic">
+    <parent link="picker_mount"/>
+    <child link="picker_track_carriage"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.7" velocity="1" effort="500"/>
+  </joint>
+  <!-- One hardware component for the track, beside the arm's own: the same
+       controller manager loads both, and only the plugin names which machine is
+       behind it. The track's hardware path is not implemented (ADR-0067). -->
+  <ros2_control name="picker_track_joint_system" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <joint name="picker_track_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
   <xacro:include filename="$(find xarm_description)/urdf/xarm_device_macro.xacro"/>
   <xacro:xarm_device
       add_gripper="true"
       attach_rpy="0 0 0"
-      attach_to="picker_mount"
+      attach_to="picker_track_carriage"
       attach_xyz="0 0 0"
       collision_mesh_path="file://$(find cite_description)/meshes/collision/xarm5/convex_hull"
       create_attach_link="false"

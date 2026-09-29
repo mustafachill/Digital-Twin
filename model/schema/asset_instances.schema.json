@@ -404,6 +404,19 @@
           },
           "title": "Poses Rad",
           "type": "object"
+        },
+        "program": {
+          "anyOf": [
+            {
+              "pattern": "^programs/[a-z0-9_]+\\.blockly\\.xml$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Program"
         }
       },
       "title": "RobotConfiguration",

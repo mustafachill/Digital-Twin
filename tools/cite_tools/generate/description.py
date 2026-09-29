@@ -20,7 +20,7 @@ from typing import Any
 from cite_tools.generate import Artifact
 from cite_tools.model import ids
 from cite_tools.model.geometry import Pose
-from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
+from cite_tools.model.resolve import ResolvedAsset, ResolvedAxis, ResolvedCell
 from cite_tools.model.schema import (
     PARAMS_BINDING_PREFIX,
     PLUGIN_BINDING,
@@ -73,6 +73,51 @@ class _ArmView:
     namespace: str
     mount_link: str
     args: tuple[tuple[str, str], ...]
+    #: The linear track this arm rides, emitted between the mount and the arm's
+    #: base (ADR-0067); `None` for an arm bolted in place.
+    axis: _AxisView | None = None
+
+
+@dataclass(frozen=True)
+class _AxisView:
+    """A track's joint and carriage, formatted for the arm's description."""
+
+    joint: str
+    carriage_link: str
+    direction: str
+    stroke_m: str
+    max_speed_mps: str
+    max_force_n: str
+    mass_kg: str
+    size_m: str
+    half_height_m: str
+    ixx: str
+    iyy: str
+    izz: str
+    plugin: str
+
+
+def _axis_view(axis: ResolvedAxis | None) -> _AxisView | None:
+    """The carriage as a solid box, so the joint has a link with mass behind it."""
+    if axis is None:
+        return None
+    x, y, z = axis.carriage_size_m
+    m = axis.carriage_mass_kg
+    return _AxisView(
+        joint=axis.joint,
+        carriage_link=axis.carriage_link,
+        direction=fmt_triple(axis.direction),
+        stroke_m=fmt(axis.stroke_m),
+        max_speed_mps=fmt(axis.max_speed_mps),
+        max_force_n=fmt(axis.max_force_n),
+        mass_kg=fmt(m),
+        size_m=fmt_triple(axis.carriage_size_m),
+        half_height_m=fmt(-z / 2.0),
+        ixx=fmt(round(m * (y * y + z * z) / 12.0, 9)),
+        iyy=fmt(round(m * (x * x + z * z) / 12.0, 9)),
+        izz=fmt(round(m * (x * x + y * y) / 12.0, 9)),
+        plugin=axis.ros2_control_plugin,
+    )
 
 
 def _geometry_xml(geometry: Any) -> str:
@@ -164,7 +209,11 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
         "instance.prefix": asset.prefix,
         "instance.zone": asset.zone,
         "instance.namespace": asset.namespace,
-        "instance.parent_link": _mount_link(asset),
+        # The carriage when the arm rides a track: the vendor base then sits on
+        # the moving link, and the track's joint is between it and the mount.
+        "instance.parent_link": (
+            asset.axis.carriage_link if asset.axis is not None else _mount_link(asset)
+        ),
         # Zero: the arm's root link IS its mount, and the model is placed in the
         # world at spawn time. Writing the pose here as well would state the same
         # fact twice.
@@ -379,6 +428,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         namespace=asset.namespace,
         mount_link=_mount_link(asset),
         args=tuple(sorted(args)),
+        axis=_axis_view(asset.axis),
     )
 
 

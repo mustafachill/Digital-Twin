@@ -58,13 +58,20 @@ asset_type:
   # 87.2% of the xArm's 0.700 m envelope, over the 85% comfort threshold. The
   # standoff in assets/instances/fixtures.yaml was reduced from 0.350 m to
   # 0.300 m to pay for it, which returns every station to 83.3%. See that file.
+  #
+  # THE INSET IS NOW 0.055 m, since 2026-09-29, because the part grew. The
+  # reference work-piece became a 66 mm cube (ADR-0067; its type says why), and
+  # `insufficient-support-margin` then needs half of it plus 20 mm: 53 mm. The
+  # 50 mm inset fell 3 mm short of that at every belt station of both cells.
+  # 55 mm restores 2 mm over the floor. Every other figure in this comment was
+  # measured with the 50 mm cube and the 0.050 m inset and is not re-measured.
   frames:
     - id: surface
       xyz_m: [0.000, 0.000, 0.600]
     - id: infeed
-      xyz_m: [-0.550, 0.000, 0.600]
+      xyz_m: [-0.545, 0.000, 0.600]
     - id: outfeed
-      xyz_m: [0.550, 0.000, 0.600]
+      xyz_m: [0.545, 0.000, 0.600]
 
   description:
     provider: body

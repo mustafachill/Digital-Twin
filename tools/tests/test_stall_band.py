@@ -70,6 +70,12 @@ GRIPPER_CPP = REPO / "workspace/src/cite_skills/src/gripper.cpp"
 #: `tools/tests/test_rtf_figure_conditions.py`, which walks the same tree.
 CAMPAIGN = REPO / "docs/measurements/2026-09-01-grasp-discrimination/raw"
 
+#: The part that campaign's trials gripped: the 50 mm cube this facility
+#: declared until 2026-09-29. The re-analysis below judges those trials against
+#: THAT part, because a stall is evidence about the part it stalled on; the
+#: facility now declares a 66 mm cube (ADR-0067), which no trial here touched.
+CAMPAIGN_PART_M = 0.050
+
 
 def physical_rules(path: Path, severity: Severity) -> set[str]:
     return {f.rule for f in physical.check(load(path)) if f.severity is severity}
@@ -197,10 +203,10 @@ class TestTheValidatorRejectsTheDefect:
         real_model: Path,
         edit_yaml: Callable[[Path, Callable[[dict], None]], None],
     ) -> None:
-        """4 mm on a 50 mm part opens the window to 46.0 mm, below the floor."""
+        """20 mm on a 66 mm part opens the window to 46.0 mm, below the floor."""
         edit_yaml(
             real_model / EFFECTOR,
-            lambda d: d["asset_type"]["grasp"].__setitem__("stall_band_narrow_m", 0.004),
+            lambda d: d["asset_type"]["grasp"].__setitem__("stall_band_narrow_m", 0.020),
         )
         assert ADMITS_NOTHING in physical_rules(real_model, Severity.ERROR)
 
@@ -220,7 +226,7 @@ class TestTheValidatorRejectsTheDefect:
         edit_yaml(
             real_model / EFFECTOR,
             lambda d: d["asset_type"]["grasp"].__setitem__(
-                "stall_band_narrow_m", 0.050 - 0.047137972
+                "stall_band_narrow_m", 0.066 - 0.047137972
             ),
         )
         assert ADMITS_NOTHING not in physical_rules(real_model, Severity.ERROR)
@@ -324,7 +330,7 @@ class TestTheValidatorRejectsTheDefect:
         """The ceiling still fires, and on the same number it always did."""
         edit_yaml(
             real_model / EFFECTOR,
-            lambda d: d["asset_type"]["grasp"].__setitem__("default_grasp_width_m", 0.049),
+            lambda d: d["asset_type"]["grasp"].__setitem__("default_grasp_width_m", 0.065),
         )
         assert NEVER_CLOSES in physical_rules(real_model, Severity.ERROR)
 
@@ -610,12 +616,10 @@ class TestTheReanalysisGate:
         """
         effector = load(real_model).asset_type("xarm_parallel_gripper")
         grasp = effector.grasp
-        model = load(real_model)
-        parts = workpiece_widths(model.facility.workpiece_models, model.types)
         width, _ = _closed_forms(grasp)
 
-        low = parts.narrowest_m - grasp.stall_band_narrow_m
-        high = parts.widest_m + grasp.stall_band_wide_m
+        low = CAMPAIGN_PART_M - grasp.stall_band_narrow_m
+        high = CAMPAIGN_PART_M + grasp.stall_band_wide_m
         rejected = [
             (t["label"], t["trial"], width(t["q_at_stall_rad"]))
             for t in campaign_trials[0]
@@ -639,13 +643,11 @@ class TestTheReanalysisGate:
         """
         effector = load(real_model).asset_type("xarm_parallel_gripper")
         grasp = effector.grasp
-        model = load(real_model)
-        parts = workpiece_widths(model.facility.workpiece_models, model.types)
         width, tolerance = _closed_forms(grasp)
         goal_tolerance = physical._gripper_goal_tolerance(effector)
 
-        low = parts.narrowest_m - grasp.stall_band_narrow_m
-        high = parts.widest_m + grasp.stall_band_wide_m
+        low = CAMPAIGN_PART_M - grasp.stall_band_narrow_m
+        high = CAMPAIGN_PART_M + grasp.stall_band_wide_m
         under_f = sum(1 for t in campaign_trials[0] if low < width(t["q_at_stall_rad"]) < high)
         under_command = sum(
             1
@@ -704,13 +706,11 @@ class TestTheReanalysisGate:
         """
         effector = load(real_model).asset_type("xarm_parallel_gripper")
         grasp = effector.grasp
-        model = load(real_model)
-        parts = workpiece_widths(model.facility.workpiece_models, model.types)
         width, tolerance = _closed_forms(grasp)
         goal_tolerance = physical._gripper_goal_tolerance(effector)
 
-        low = parts.narrowest_m - grasp.stall_band_narrow_m
-        high = parts.widest_m + grasp.stall_band_wide_m
+        low = CAMPAIGN_PART_M - grasp.stall_band_narrow_m
+        high = CAMPAIGN_PART_M + grasp.stall_band_wide_m
         at_default = [
             t
             for t in campaign_trials[1]

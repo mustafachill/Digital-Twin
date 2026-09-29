@@ -2,7 +2,21 @@
 # yaml-language-server: $schema=../../../schema/asset_type.schema.json
 schema: cite/asset_type/v1
 
-# The cell's reference work-piece: a 50 mm cube.
+# The cell's reference work-piece: a 66 mm cube.
+#
+# THE SIZE IS DERIVED FROM THE REAL PROGRAM'S GRIPPER COMMAND (ADR-0067), and it
+# was 50 mm until 2026-09-29. The real xArm 5's program closes its gripper to
+# `pos` 550, which the vendor driver maps to 0.300 rad on the drive joint and the
+# L0 linkage maps to 60.9 mm between the pads. A part the jaws are to STALL on
+# has to be wider than that by enough to tell a stall from closing on air, and
+# the two rules that say how much are `default-grasp-width-never-closes` and
+# `stall-band-admits-a-stall-on-nothing` (cite_tools.validate.physical), applied
+# to every width a program closes to:
+#
+#   60.9 mm command + 2.03 mm discrimination margin          = 62.95 mm floor
+#   the band's narrow edge must clear it: 62.95 + 2.385 band = 65.33 mm
+#
+# 66 mm is the smallest whole millimetre above that. The mass stays 0.200 kg.
 #
 # WHY THIS FILE EXISTS AT ALL, because L0 deliberately held out against it for a
 # while and the reason it gave was a good one. `Facility.workpiece_models` used
@@ -49,20 +63,20 @@ asset_type:
     body:
       visual:
         kind: box
-        size_m: [0.050, 0.050, 0.050]
+        size_m: [0.066, 0.066, 0.066]
       collision:
         kind: box
-        size_m: [0.050, 0.050, 0.050]
+        size_m: [0.066, 0.066, 0.066]
       inertial:
-        # 0.2 kg over 1.25e-4 m^3 is 1600 kg/m^3 — a dense polymer or a hardwood
-        # block, and inside the plausibility band `validate.physical` enforces.
+        # 0.2 kg over 2.875e-4 m^3 is 696 kg/m^3 — a hardwood block, and inside
+        # the plausibility band `validate.physical` enforces.
         mass_kg: 0.200
         # Centroidal, like every tensor in this model, and relative to the CENTRE
         # of the collision box.
         com_m: [0.0, 0.0, 0.0]
-        # Solid cube 0.05 m at 0.2 kg, identical on all three axes:
-        #   i = m/12 * (a^2 + a^2) = 0.2/12 * (0.0025 + 0.0025) = 8.3333e-5
-        ixx: 0.000083333
-        iyy: 0.000083333
-        izz: 0.000083333
+        # Solid cube 0.066 m at 0.2 kg, identical on all three axes:
+        #   i = m/12 * (a^2 + a^2) = 0.2/12 * (0.004356 + 0.004356) = 1.452e-4
+        ixx: 0.0001452
+        iyy: 0.0001452
+        izz: 0.0001452
       material: workpiece_stock

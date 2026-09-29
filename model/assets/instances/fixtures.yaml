@@ -103,64 +103,38 @@ assets:
     hardware: {backend: sim}
 
   # ------------------------------------------------------------------------ #
-  # cell_b — the one-arm cell (ADR-0056)
+  # cell_b — the one-arm cell (ADR-0056), on a linear track (ADR-0067)
   # ------------------------------------------------------------------------ #
   #
-  # Same fixtures, same dimensions, same relative spacing as `cell_a` above.
-  #
-  # THE PLACEMENT RULE, STATED FOR WHAT IT IS TRUE OF. The three bodies at the
-  # head of the line — `picker_base`, `infeed_table` and `transfer_belt` — are
-  # `cell_a`'s `pedestal_1`, `table_pick` and `conveyor_1` translated +3.000 m in
-  # y and nothing else. The two DOWNSTREAM fixtures are not: `cell_b`'s line is
-  # one belt long where `cell_a`'s is three, so `outfeed_table` sits at x 2.000
-  # against `table_accumulation`'s 6.200. This comment said "+3.000 m in y and
-  # nothing else" of the whole cell, which was false of that table by 4.200 m in
-  # x and of the beam that watches it.
-  #
-  # WHAT DOES TRANSFER, and it is the claim the clearances rest on, is the
-  # RELATIVE placement against the belt: the arm still stands 0.300 m in front of
-  # the belt centreline, the pick table still ends 25 mm short of the pedestal,
-  # and the outfeed table still stands 50 mm clear of the belt's end. Those three
-  # numbers were measured for `cell_a`; re-using its x datum is what keeps them
-  # true here instead of making every distance in this cell a fresh number nobody
-  # has checked. `outfeed_table`'s x is chosen to hold the last of the three
-  # against `transfer_belt`, which is exactly why it is not a copy of
-  # `table_accumulation`'s.
-  #
-  # The y offset itself is sized against `cell_a`'s zone box rather than against
-  # its bodies. The two boxes and the air between them are declared in
-  # model/facility/zones.yaml and are deliberately not restated here.
+  # THE PLACEMENT RULE CHANGED WITH THE TRACK. Until 2026-09-29 the head of this
+  # line was `cell_a`'s translated +3.000 m in y, with the arm on a pedestal. The
+  # arm now rides a linear track and runs the real robot's own program, and
+  # where the pick table and the belt stand is DERIVED from that program's pick
+  # and place poses by forward kinematics. The derivation, and the numbers, are
+  # in model/assets/instances/tracks.yaml and are not restated here.
   #
   # LAYOUT STATUS: PROVISIONAL, exactly as cell_a's is. Engineered, not surveyed.
-  - id: picker_base
-    zone: cell_b
-    type: pedestal_600
-    pose:
-      frame: cite_world
-      xyz_m: [0.000, 2.700, 0.000]
-    hardware: {backend: sim}
 
-  # The cell's only pick surface. `b_transfer_1` picks from its `surface` frame,
-  # which is 0.475 m along -x and 0.300 m along -y from the arm's base: 0.5618 m,
-  # 80.3% of the xarm5's 0.700 m envelope — the same margin the cell_a comment
-  # above derives for `table_pick`, and clean against COMFORTABLE_REACH_FRACTION.
+  # The cell's only pick surface, centred under the pads at the program's pick
+  # pose. Its +y face stands 21 mm clear of the track's rail.
   - id: infeed_table
     zone: cell_b
     type: work_table_600
     pose:
       frame: cite_world
-      xyz_m: [-0.475, 3.000, 0.000]
+      xyz_m: [-0.500, 2.924, 0.000]
     hardware: {backend: sim}
 
   # Where the belt delivers. `b_accumulation` is a sink with no actor, so nothing
   # picks from this table and its surface is never a station point — it exists to
-  # catch what runs off `transfer_belt`, at the belt's own 0.600 m surface height.
-  # Its near face stands at x = 1.700 against the belt's end at 1.650: the same
-  # 50 mm of designed air cell_a leaves between conveyor_3 and table_accumulation.
+  # catch what runs off `transfer_belt`. Its near face stands at x = 1.960 against
+  # the belt's end at 1.910: the same 50 mm of designed air cell_a leaves between
+  # conveyor_3 and table_accumulation. Its surface is 35 mm below the belt's,
+  # which stands on a riser (see model/assets/instances/conveyors.yaml).
   - id: outfeed_table
     zone: cell_b
     type: work_table_600
     pose:
       frame: cite_world
-      xyz_m: [2.000, 3.000, 0.000]
+      xyz_m: [2.260, 3.060, 0.000]
     hardware: {backend: sim}

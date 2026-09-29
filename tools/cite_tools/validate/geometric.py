@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from itertools import combinations
 
+import numpy as np
+
 from cite_tools.model.geometry import Aabb, Pose
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.validate import Finding, error, warning
@@ -247,7 +249,7 @@ def _stations_are_reachable(cell: ResolvedCell) -> list[Finding]:
         for label, target in (("pick_from", station.pick_pose), ("place_to", station.place_pose)):
             if target is None:
                 continue
-            distance = base.distance_to(target)
+            distance = _reach_distance(actor, base, target)
             if distance > reach:
                 findings.append(
                     error(
@@ -270,6 +272,25 @@ def _stations_are_reachable(cell: ResolvedCell) -> list[Finding]:
                     )
                 )
     return findings
+
+
+def _reach_distance(actor: ResolvedAsset, base: Pose, target: Pose) -> float:
+    """How far ``target`` is from the nearest place ``actor``'s base can stand.
+
+    An arm bolted in place has one base position. An arm on a linear track has a
+    segment of them, from stroke zero to the end of the stroke, and a point is
+    reachable if it is within reach of ANY of them (ADR-0067). The segment is
+    the base's stroke-zero pose moved along the axis, which `ResolvedAxis`
+    states in the arm's mount frame and is rotated into the world here.
+    """
+    if actor.axis is None:
+        return base.distance_to(target)
+    rotation = np.asarray(actor.world_pose.to_matrix())[:3, :3]
+    along = rotation @ np.asarray(actor.axis.direction, dtype=float)
+    start = np.asarray(base.xyz_m, dtype=float)
+    offset = np.asarray(target.xyz_m, dtype=float) - start
+    travel = min(max(float(offset @ along), 0.0), actor.axis.stroke_m)
+    return float(np.linalg.norm(offset - travel * along))
 
 
 def _widest_workpiece_footprint_m(cell: ResolvedCell) -> float | None:

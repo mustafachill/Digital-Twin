@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from cite_tools.model import blockly
 from cite_tools.model.loader import FacilityModel
+from cite_tools.model.resolve import program_steps
 from cite_tools.model.schema import AssetType, Body, GraspSpec, Inertial
 from cite_tools.model.workpieces import WorkpieceWidths, workpiece_widths
 from cite_tools.validate import Finding, error, warning
@@ -130,6 +132,7 @@ def check(model: FacilityModel) -> list[Finding]:
         key = _tensor_key(body.inertial)
         seen_tensors.setdefault(key, []).append(asset_type.id)
 
+    findings += _program_grips_can_close(model, widths)
     findings += _no_copied_placeholder_tensors(model, seen_tensors)
     findings += _scene_material_does_not_clip(model)
     return findings
@@ -918,6 +921,67 @@ def _stall_band_still_discriminates(
             "floor moves with it.",
         )
     ]
+
+
+def _program_grips_can_close(model: FacilityModel, widths: WorkpieceWidths) -> list[Finding]:
+    """Every width a program closes to has to evidence a grasp, as a default does.
+
+    ADR-0067. A program's close is a grasp exactly as `Pick`'s default is: the
+    jaws are sent narrower than the part, stall on it, and
+    `cite_skills::gripper_is_holding` judges the stall against the declared
+    part. So the two rules above apply to it with the program's width in place
+    of ``default_grasp_width_m``, and a part too narrow for the real program's
+    close is refused here instead of reporting an empty grasp on the cell:
+
+    * the part has to be wider than the close by the discrimination margin, or
+      the close ends on the goal-tolerance branch and evidences nothing
+      (`default-grasp-width-never-closes`'s argument);
+    * the band's narrow edge has to clear the close plus that margin, or a close
+      on nothing lands inside the window and is called a grasp
+      (`stall-band-admits-a-stall-on-nothing`'s).
+
+    A program that cannot be read is `program-refused` in the referential level
+    and is skipped here.
+    """
+    findings: list[Finding] = []
+    narrowest = widths.narrowest_m
+    if narrowest is None:
+        return findings
+    for asset in model.assets:
+        if asset.end_effector is None:
+            continue
+        effector = model.asset_type(asset.end_effector.type)
+        if effector is None or effector.grasp is None:
+            continue
+        try:
+            steps = program_steps(model, asset)
+        except blockly.BlocklyError:
+            continue
+        grasp = effector.grasp
+        for step in steps:
+            if not isinstance(step, blockly.Grip) or not step.closing:
+                continue
+            margin = _grasp_discrimination_margin_m(effector, grasp, step.width_m)
+            if margin is None:
+                continue
+            floor = step.width_m + margin
+            edge = narrowest - grasp.stall_band_narrow_m
+            if narrowest < floor or edge < floor:
+                findings.append(
+                    error(
+                        "program-grip-never-evidences-a-grasp",
+                        f"assets.{asset.id}.configuration.program",
+                        f"the program closes to {step.width_m * 1000.0:.2f} mm; the "
+                        f"narrowest part is {narrowest * 1000.0:.1f} mm and the band's narrow "
+                        f"edge {edge * 1000.0:.3f} mm, and both must clear "
+                        f"{floor * 1000.0:.3f} mm ({margin * 1000.0:.3f} mm of "
+                        "discrimination margin over the close)",
+                        "The program is the robot's own; the PART is what to change. Declare a "
+                        f"work-piece at least {(floor + grasp.stall_band_narrow_m) * 1000.0:.2f} "
+                        "mm wide (ADR-0067).",
+                    )
+                )
+    return findings
 
 
 def _derived_collision_is_within_its_measured_range(

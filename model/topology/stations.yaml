@@ -105,7 +105,7 @@ stations:
     zone: cell_b
     type: transfer_station
     actor: picker
-    assets: [picker, picker_base]
+    assets: [picker, picker_track]
     pick_from: {asset: infeed_table, frame: surface}
     place_to: {asset: transfer_belt, frame: infeed}
     trigger: {sensor: infeed_beam, state: blocked}
