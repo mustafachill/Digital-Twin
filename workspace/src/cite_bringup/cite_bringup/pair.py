@@ -639,14 +639,6 @@ def supervise(
     environ = os.environ if environ is None else environ
 
     events: queue.Queue = queue.Queue()
-    sides = [_launch(spec, environ, events, out) for spec in specs]
-
-    print(
-        "[pair] started " + ", ".join(s.name for s in sides) + "; waiting for each "
-        "side to announce its own readiness",
-        file=out,
-        flush=True,
-    )
 
     def start_the_boundary() -> _Side:
         # The whole command, because what this supervisor is allowed to pass the
@@ -660,7 +652,22 @@ def supervise(
         return _launch(boundary, environ, events, out)
 
     interrupted = False
+    # The handlers go in BEFORE any side is started, and the order is the fix
+    # for a three-minute teardown. A supervisor started as a background job of a
+    # non-interactive shell (`scripts/program`, `scripts/demo`) inherits SIGINT
+    # as IGNORED, an ignored disposition survives `exec`, and a side started
+    # while it was still ignored could not hear the SIGINT `_stop` sends it - so
+    # every such teardown waited out `STOP_GRACE_S` per side before the group
+    # SIGTERM. Once a Python handler is installed, a child's `exec` resets
+    # SIGINT to the default instead.
     with _stop_requests(events):
+        sides = [_launch(spec, environ, events, out) for spec in specs]
+        print(
+            "[pair] started " + ", ".join(s.name for s in sides) + "; waiting for "
+            "each side to announce its own readiness",
+            file=out,
+            flush=True,
+        )
         interrupted, participants = _join(
             sides,
             events,

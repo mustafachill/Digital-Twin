@@ -94,6 +94,13 @@ def test_the_program_reads_top_to_bottom(cell) -> None:
     assert belts[:2] == [cell.conveyor.installed_speed_mps, 0.0]
 
 
+def test_a_caller_running_one_cycle_at_a_time_numbers_them_itself(cell) -> None:
+    lines: list[str] = []
+    assert run(program(cell), FakeCell(), cycles=1, say=lines.append, first_cycle=3) == 0
+    assert lines[0].startswith("[cycle 3, step 1/")
+    assert "done: 1 cycle(s)" in lines
+
+
 def test_the_numbers_come_from_the_plan(cell) -> None:
     plan = load(default_plan_path(ZONE))
     assert cell.grip_width_m == cell.arm.gripper["gripper_default_grasp_width_m"]

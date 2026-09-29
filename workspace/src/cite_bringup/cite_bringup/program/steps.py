@@ -126,9 +126,17 @@ def execute(step: Step, cell: Cell) -> None:
 
 
 def run(
-    steps: Sequence[Step], cell: Cell, cycles: int, say: Callable[[str], None] = print
+    steps: Sequence[Step],
+    cell: Cell,
+    cycles: int,
+    say: Callable[[str], None] = print,
+    first_cycle: int = 1,
 ) -> int:
     """Run ``steps`` ``cycles`` times (0: until stopped). Return an exit status.
+
+    ``first_cycle`` only numbers the log lines: a caller that runs one cycle per
+    invocation (``scripts/program``, which puts a part on the table between
+    cycles) passes its own count so that cycle 3 is not reported as cycle 1.
 
     However it ends — the last cycle, a failed step, Ctrl-C — the active goal is
     cancelled and the belt is commanded to zero on the way out. A physical belt
@@ -136,15 +144,17 @@ def run(
     without saying so would leave it running; a stop that could not be sent is
     therefore a failure of the run, whatever the steps did.
     """
-    cycle = 0
+    done = 0
+    cycle = first_cycle - 1
     status = 1
     try:
-        while cycles == 0 or cycle < cycles:
+        while cycles == 0 or done < cycles:
+            done += 1
             cycle += 1
             for number, step in enumerate(steps, start=1):
                 say(f"[cycle {cycle}, step {number}/{len(steps)}] {step}")
                 execute(step, cell)
-        say(f"done: {cycle} cycle(s)")
+        say(f"done: {done} cycle(s)")
         status = 0
     except StepFailed as failure:
         say(f"FAILED in cycle {cycle}: {failure}")

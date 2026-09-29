@@ -1314,3 +1314,35 @@ def test_the_boundary_is_stopped_before_the_sides(tmp_path: Path) -> None:
     reported = [line.split(":")[0] for line in text.splitlines() if ": ready=" in line]
     assert reported == ["[pair] plant", "[pair] counterpart", "[pair] boundary"]
     assert code == pair.PAIR_ENDED
+
+
+def test_a_side_hears_sigint_when_the_supervisor_inherited_it_ignored(
+    tmp_path: Path,
+) -> None:
+    """A background job starts with SIGINT ignored, and a side must not inherit it.
+
+    `scripts/program` and `scripts/demo` start the supervisor with `&` in a
+    non-interactive shell, so it begins with SIGINT set to SIG_IGN. Sides started
+    before its handler was installed inherited that across `exec`, never heard
+    `_stop`'s SIGINT, and every teardown waited out `STOP_GRACE_S` per side.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the pair is up", release=release)
+    report = (
+        "import signal\n"
+        "print('sigint-ignored=' + str(signal.getsignal(signal.SIGINT) is "
+        "signal.SIG_IGN), flush=True)\n"
+    )
+    previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        _, text = _run(
+            [
+                _held_until("plant", release, before=report),
+                _held_until("counterpart", release, before=report),
+            ],
+            log=log,
+        )
+    finally:
+        signal.signal(signal.SIGINT, previous)
+    assert text.count("sigint-ignored=False") == 2, text
+    assert "sigint-ignored=True" not in text, text

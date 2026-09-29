@@ -100,6 +100,9 @@ teardown() {
         step "Stopping the pair"
         kill -INT "$PAIR_PID" 2>/dev/null || true
         wait "$PAIR_PID" 2>/dev/null || true
+        # The supervisor's own account of the teardown, which the console stopped
+        # tailing at readiness: a side that had to be killed says so here.
+        grep -E '^\[pair\] ' "$PAIR_LOG" 2>/dev/null | tail -n 6 || true
     fi
     ok "the cell is down. Its log was ${PAIR_LOG}, inside the container."
 }
@@ -188,7 +191,7 @@ while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]
         || die "a side would not take the work-piece"
 
     step "Cycle ${CYCLE}: running the fixed program through the twin boundary"
-    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 &
+    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 --first-cycle "$CYCLE" &
     PROGRAM_PID=$!
     while kill -0 "$PROGRAM_PID" 2>/dev/null; do
         if ! kill -0 "$PAIR_PID" 2>/dev/null; then

@@ -49,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--zone", required=True, help="The zone to drive, e.g. cell_b.")
     parser.add_argument("--cycles", type=int, default=1, help="Cycles to run; 0 = forever.")
     parser.add_argument("--via", choices=("twin", "plant"), default="twin")
+    parser.add_argument(
+        "--first-cycle", type=int, default=1, help="Number of the first cycle, for the log."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print the steps and exit.")
     args = parser.parse_args(argv)
     if args.cycles < 0:
@@ -86,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_INTERRUPTED
         say = lambda text: print(text, flush=True)  # noqa: E731
         say(f"==> {args.zone}: {cell.arm.asset} and {cell.conveyor.asset}, via {args.via}")
-        return run(steps, ros, args.cycles, say)
+        return run(steps, ros, args.cycles, say, first_cycle=args.first_cycle)
     finally:
         rclpy.try_shutdown()
 

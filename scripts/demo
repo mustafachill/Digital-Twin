@@ -182,6 +182,9 @@ teardown() {
         # above: a second Ctrl-C says so instead of orphaning two cells.
         kill -INT "$PAIR_PID" 2>/dev/null || true
         wait "$PAIR_PID" 2>/dev/null || true
+        # The supervisor's own account of the teardown, which the console stopped
+        # tailing at readiness: a side that had to be killed says so here.
+        grep -E '^\[pair\] ' "$PAIR_LOG" 2>/dev/null | tail -n 6 || true
     fi
     # Said rather than left to be discovered: this path is inside the container,
     # which goes when this command does. It is not written into the repository on
