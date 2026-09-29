@@ -11,6 +11,8 @@
 plan:
   zone: {{ cell.zone }}
   world: package://cite_generated/worlds/{{ cell.zone }}.sdf
+  # Where a windowed run's camera starts. Read only when Gazebo opens a window.
+  gui_config: package://cite_generated/worlds/{{ cell.zone }}_gui.config
   scene: package://cite_generated/description/{{ cell.zone }}_scene.urdf.xacro
   static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
   topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml

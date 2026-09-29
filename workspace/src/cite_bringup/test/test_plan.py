@@ -335,6 +335,7 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
         "plan": {
             "zone": "cell_a",
             "world": "package://cite_generated/worlds/cell_a.sdf",
+            "gui_config": "package://cite_generated/worlds/cell_a_gui.config",
             "scene": "package://cite_generated/description/cell_a_scene.urdf.xacro",
             "static_frames": "package://cite_generated/frames/cell_a_static_tf.yaml",
             "topology": "package://cite_generated/topology/cell_a_flow.yaml",

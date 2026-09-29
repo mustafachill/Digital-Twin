@@ -53,6 +53,10 @@ against an invalid model debugs the wrong thing.
 ./scripts/sim --headless line:=true    # and let L4 drive every station
 ```
 
+A windowed run opens with the camera already framing the whole zone from the customer side,
+across the line from the arm; the pose is generated from L0 into `worlds/<zone>_gui.config`,
+and the view can still be moved by hand.
+
 **`line:=true` hands the cell over.** The coordinator claims each arm's skill server, and a
 skill server admits one goal at a time, so anything else that sends a goal — an operator, a
 diagnostic, a scenario — is refused by a server that is busy. Bring the line up this way only

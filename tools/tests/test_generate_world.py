@@ -13,13 +13,14 @@ world, and the names it reaches it under are the same names the plan declares.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
 import yaml
 
-from cite_tools.generate import bringup, world
+from cite_tools.generate import bringup, gui, world
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import resolve
 
@@ -354,3 +355,65 @@ class TestTheWorldIsHeldToTheWallClock:
         physics = world_xml(cell).find("physics")
         assert physics is not None
         assert float(physics.findtext("max_step_size")) == 0.001
+
+
+class TestTheWindowOpensOnTheCell:
+    """A windowed run's camera frames the whole zone from the customer side.
+
+    Presentation only: the file is passed to `gz sim --gui-config` when a window
+    opens and never on a headless run. The pose is derived from L0 per zone.
+    """
+
+    @pytest.fixture(params=["cell_a", "cell_b"])
+    def zone_cell(self, request, real_model: Path):
+        return resolve(load(real_model), request.param)
+
+    def test_it_stands_across_the_line_from_the_arms_and_faces_them(self, zone_cell) -> None:
+        pose = gui.gui_camera_pose(zone_cell)
+        ys = [a.world_pose.xyz_m[1] for a in zone_cell.assets]
+        # Both zones put their arms on -Y of the line, so the customer is on +Y.
+        assert pose.y > max(ys)
+        assert pose.yaw == pytest.approx(-math.pi / 2)
+        # Positive pitch looks down in Gazebo's camera frame.
+        assert math.radians(30) <= pose.pitch <= math.radians(35)
+        assert pose.z > max(a.world_pose.xyz_m[2] for a in zone_cell.assets)
+
+    def test_the_whole_x_extent_fits_the_view(self, zone_cell) -> None:
+        pose = gui.gui_camera_pose(zone_cell)
+        half_fov = gui.HORIZONTAL_FOV_RAD / 2
+        for asset in zone_cell.assets:
+            x, y, z = asset.world_pose.xyz_m
+            # Distance along the viewing direction (-Y, tilted down by pitch).
+            forward = (pose.y - y) * math.cos(pose.pitch) + (pose.z - z) * math.sin(pose.pitch)
+            assert abs(x - pose.x) < forward * math.tan(half_fov), asset.id
+
+    def test_the_config_keeps_harmonics_default_plugins(self, zone_cell) -> None:
+        (artifact,) = gui.generate(zone_cell)
+        assert artifact.path == f"worlds/{zone_cell.zone}_gui.config"
+        root = ElementTree.fromstring(f"<root>{artifact.content.split('?>', 1)[1]}</root>")
+        names = {p.get("filename") for p in root.findall("plugin")}
+        assert {
+            "MinimalScene",
+            "GzSceneManager",
+            "InteractiveViewControl",
+            "CameraTracking",
+            "MarkerManager",
+            "SelectEntities",
+            "Spawn",
+            "VisualizationCapabilities",
+            "EntityContextMenuPlugin",
+            "WorldControl",
+            "WorldStats",
+        } <= names
+        # Left out on purpose: docked, they kept half the window from the cell.
+        assert not {"EntityTree", "ComponentInspector"} & names
+        pose = gui.gui_camera_pose(zone_cell)
+        emitted = [float(v) for v in root.find("plugin/camera_pose").text.split()]
+        assert emitted == pytest.approx([pose.x, pose.y, pose.z, 0.0, pose.pitch, pose.yaw])
+
+    def test_the_plan_names_it(self, zone_cell) -> None:
+        (plan,) = bringup.generate(zone_cell)
+        document = yaml.safe_load(plan.content)["plan"]
+        assert document["gui_config"] == (
+            f"package://cite_generated/worlds/{zone_cell.zone}_gui.config"
+        )
