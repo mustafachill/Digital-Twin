@@ -135,7 +135,12 @@
   2026-08-28 and are corrected in that record's Correction section — read it before changing
   the predicate or the ordering in `conveyor_index.hpp`; the mechanism is there and is not
   restated here (P1).
-- **Related:** [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [ADR-0039](../adr/0039-report-a-station-that-cannot-be-triggered.md), [L3](L3-capabilities.md)
+- **The event-driven line is parked.** The beam-triggered line described here, with its
+  `line_orchestrator`, `line_station.xml` and `ConveyorIndex`, is kept, built and tested, but
+  it is no longer how the cell is meant to be run. Its complete end-to-end record, with
+  findings, is [L4-event-driven-line.md](L4-event-driven-line.md), and the snapshot is the
+  tag `event-driven-line-v1`.
+- **Related:** [event-driven line (parked)](L4-event-driven-line.md), [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md), [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md), [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), [ADR-0032](../adr/0032-index-the-belt.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [ADR-0038](../adr/0038-stop-the-line-without-ending-the-process.md), [ADR-0039](../adr/0039-report-a-station-that-cannot-be-triggered.md), [L3](L3-capabilities.md)
 
 ## Responsibility
 

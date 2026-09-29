@@ -50,6 +50,11 @@ is the one that is wrong.
 `DESIGNED` means the contract the code must satisfy, with nothing built. `PARTIAL` says
 which part is real; read the document's status block, which names it. `BUILT` means tested.
 
+**Parked:** [L4 — the event-driven line](L4-event-driven-line.md) (`BUILT — parked`). It
+records the beam-triggered line end to end: how it works, what it does not do, and how to run
+it again. The code is kept, built and tested, but it is no longer how the cell is meant to be
+run.
+
 ## Cross-cutting
 
 | Concern | Document |

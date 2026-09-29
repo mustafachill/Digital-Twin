@@ -46,8 +46,10 @@
 // not frictional. A part that would slip, tumble, jam against a neighbour or
 // fail to be driven at all in reality is carried smoothly here. No claim about
 // belt handling, accumulation pressure or singulation can rest on this plugin. What it is for
-// is making a station act because a work-piece ARRIVED — which is what the break
-// beam observes and what makes the line sensor-driven rather than timed.
+// is carrying a work-piece when the belt is commanded: by the parked event-driven
+// line, which acts because a break beam saw a part ARRIVE, or by the fixed
+// program, which runs the belt for a time computed from the belt's length
+// (ADR-0066). The plugin does not care which; it carries on command either way.
 //
 // THE PROPERTY THAT MUST NOT BE ERODED: nothing above ros2_control knows this
 // exists. It speaks Gazebo transport only; the ROS-side name and type are a

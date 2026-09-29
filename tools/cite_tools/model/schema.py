@@ -1577,6 +1577,12 @@ class BreakBeamConfiguration(Strict):
 class RobotConfiguration(Strict):
     kind: Literal["robot"] = "robot"
     home_rad: list[float] = Field(default_factory=list)
+    #: Named joint configurations a fixed program moves the arm through
+    #: (ADR-0066), one value per joint in the type's joint order. `home` is not
+    #: one of them: it is `home_rad` above, and a second statement of it here
+    #: would be the same pose in two places. `named-pose-*` in
+    #: cite_tools.validate.referential checks the names and the lengths.
+    poses_rad: dict[Identifier, list[float]] = Field(default_factory=dict)
 
 
 #: Only the categories that actually carry settings appear here. A fixture has

@@ -35,6 +35,8 @@
        package's launch graph starts, so rclpy and the shutdown mechanism are
        runtime dependencies of cite_bringup rather than only of its tests. -->
   <exec_depend>rclpy</exec_depend>
+  <!-- The fixed program publishes belt setpoints (ADR-0066). -->
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>cite_runtime</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>launch</exec_depend>

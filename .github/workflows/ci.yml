@@ -279,6 +279,16 @@ jobs:
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/scenario continuous_line --teardown-advisory
 
+      # The fixed program (ADR-0066), one cycle on the plant: taught poses, a grip,
+      # a place and a timed belt run, asserted by where the work-piece ends. Advisory
+      # until it has a record in CI, as continuous_line is; read its verdict from
+      # the log, because a continue-on-error step reports success either way.
+      - name: Simulation-in-the-loop scenario — program_cycle (advisory)
+        continue-on-error: true
+        run: |
+          docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
+            cite-digital-twin:dev ./scripts/scenario program_cycle --teardown-advisory
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

@@ -46,6 +46,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _paired_zone_has_no_physical_plant(model)
     findings += _counterpart_backend_matches_the_plant(model)
     findings += _configuration_matches_category(model)
+    findings += _named_poses_fit_the_arm(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
     findings += _flow_is_consistent(model)
@@ -725,6 +726,46 @@ def _configuration_matches_category(model: FacilityModel) -> list[Finding]:
                     f"Expected kind {expected!r}.",
                 )
             )
+    return findings
+
+
+def _named_poses_fit_the_arm(model: FacilityModel) -> list[Finding]:
+    """A named pose has one value per joint and is never called `home` (ADR-0066).
+
+    Checked here because the skill server can only refuse a wrong length at
+    configure time, which takes the whole arm down with a message about a
+    parameter. The joint LIMITS are not checked here: they live in the vendor
+    description, which L0 invokes and never reads, so the planning group's own
+    bounds check in `MoveTo` is what refuses an out-of-range pose.
+    """
+    findings: list[Finding] = []
+    for asset in model.assets:
+        configuration = asset.configuration
+        asset_type = model.asset_type(asset.type)
+        if configuration is None or configuration.kind != "robot" or asset_type is None:
+            continue
+        dof = asset_type.kinematics.dof if asset_type.kinematics else None
+        for name, values in configuration.poses_rad.items():
+            where = f"assets.{asset.id}.configuration.poses_rad.{name}"
+            if name == "home":
+                findings.append(
+                    error(
+                        "named-pose-is-home",
+                        where,
+                        "`home` is declared by home_rad; a second statement of it here "
+                        "could disagree with the first",
+                        "Remove this entry, or change home_rad.",
+                    )
+                )
+            if dof is not None and len(values) != dof:
+                findings.append(
+                    error(
+                        "named-pose-length",
+                        where,
+                        f"has {len(values)} value(s) but type {asset_type.id!r} has "
+                        f"{dof} joint(s)",
+                    )
+                )
     return findings
 
 

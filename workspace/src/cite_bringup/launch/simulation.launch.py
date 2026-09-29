@@ -1264,6 +1264,22 @@ def _skill_parameters(plan: Plan, manager) -> dict:
         # and in the direction of a window opening onto a closed gripper. The
         # server refuses to configure on the sentinel instead.
         **_workpiece_parameters(plan),
+        **_pose_parameters(manager.moveit.poses_rad),
+    }
+
+
+def _pose_parameters(poses) -> dict:
+    """Return the arm's named joint poses as the skill server's two flat parameters.
+
+    Absent rather than empty where L0 declares none: an empty list carries no
+    element type, and a parameter file cannot state one, so the server's own
+    empty defaults are what an arm with no poses gets (ADR-0066).
+    """
+    if not poses:
+        return {}
+    return {
+        "pose_names": list(poses),
+        "pose_values_rad": [value for values in poses.values() for value in values],
     }
 
 

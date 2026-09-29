@@ -938,7 +938,10 @@ bullet.
   under-reads a failure, here it over-reads a pass. The over-count was observed on 2026-09-08
   by the agent that read that run; the half that is re-derived here is that the string is in
   the commit body.
-  **There are three such step names, not one, and this file named only the first until
+  **There are FOUR such step names as of 2026-09-28** — the same grep on
+  `feat/fixed-program` adds `Simulation-in-the-loop scenario — program_cycle (advisory)`
+  (ADR-0066), so a restriction to the three below drops that scenario's verdict.
+  **There were three such step names, not one, and this file named only the first until
   2026-09-08.** `grep -n "Simulation-in-the-loop" .github/workflows/ci.yml`, run here on that
   date, returns `Simulation-in-the-loop scenarios` (both `bringup` invocations),
   `Simulation-in-the-loop scenario — pick_and_place` and `Simulation-in-the-loop scenario —
@@ -2477,6 +2480,12 @@ bullet.
     measurement. **An audit taken at a commanded value must state whether the machine ever
     reaches that value, and a promotion gate must not be written against a mechanism nothing
     has observed.**
+- **The cell runs from a fixed program, and the event-driven line is parked**
+  ([ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md), `Proposed`).
+  `python3 -m cite_bringup.program` moves the arm through taught L0 joint poses
+  (`configuration.poses_rad`) and runs the belt for its length at its speed; through the twin
+  boundary, which now also routes a belt setpoint, one program drives both sides of `cell_b`.
+  The beam-triggered line is unchanged, still tested, and tagged `event-driven-line-v1`.
 - **The layout is `PROVISIONAL`.** The coordinates in `model/` are engineered, not surveyed.
   Charter §8 puts the physical scan in Phase 3; until then a measurement taken from this model
   does not transfer to the building, and no report should imply that it does.
@@ -2551,7 +2560,11 @@ bullet.
     harness had been starting the belts and that the best local figure is a single run.
   - **"Every architectural decision is written down" is the one clause the charter records as
     unclosable as stated**, and the counting is the reproducible part. `./scripts/doctor`'s
-    `ADR index` line reported **64 records, all indexed** on 2026-09-28 on
+    `ADR index` line reported **65 records, all indexed** on 2026-09-28 on
+    `feat/fixed-program`, the newest being
+    [ADR-0066](docs/adr/0066-run-the-cell-from-a-fixed-program.md) — run the cell from a fixed
+    program through the twin boundary and park the event-driven line, `Proposed`. It read
+    **64 records, all indexed** earlier on 2026-09-28 on
     `feat/let-go-when-clear`, the newest being
     [ADR-0065](docs/adr/0065-the-cell-says-what-it-holds.md) — **the cell says what it holds and
     the simulation is told**, `Proposed`, written after two records were refuted in five days
@@ -2774,6 +2787,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` selects the cell to drive and, unlike `./scripts/sim --zone`, HAS a default — which cell the regression suite drives is a project decision (ADR-0056 decision 5) stated once in `tests/scenarios/_cell.py`, not one each caller makes. `./scripts/scenario bringup --zone cell_a` is how the three-arm showcase is checked without a commit |
 | `./scripts/demo [--zone <name>] [--headless]` | Bring both sides of the twin pair up with the line running, put a work-piece on each side's pick table and watch it carried to the end of the belt, then tear the pair down. **One window per side by default** — watching it is the point. **A demonstration, not an instrument**: it asserts nothing, gates nothing and is in no CI step, `./scripts/scenario continuous_line` is what CHECKS this, and it deliberately prints no gap between the two sides because its two samples are taken at different instants on a moving belt. `--zone` defaults to whichever zone the model declares `twin: {sides: pair}`, read from the generated plans rather than stated here |
+| `./scripts/program [--zone <name>] [--headless] [--cycles N]` | Bring the twin pair up **without** the line, put a box on each side's table and run the fixed program once through the twin boundary (ADR-0066): taught L0 joint poses, a timed belt run, both arms and both belts from one client. A demonstration like `./scripts/demo`; `./scripts/scenario program_cycle` is what checks it, on the plant |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |

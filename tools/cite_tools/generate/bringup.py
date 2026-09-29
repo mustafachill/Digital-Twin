@@ -82,6 +82,8 @@ class _ManagerView:
     #: what a pipeline is made of, so the L3 server never restates it.
     cartesian_planner_ids: tuple[str, ...]
     home_rad: tuple[float, ...]
+    #: The arm's named joint poses from L0, in declaration order (ADR-0066).
+    poses_rad: tuple[tuple[str, tuple[float, ...]], ...]
     trajectory_action: str | None
     gripper_action: str | None
     gripper_open_position: float | None
@@ -417,6 +419,18 @@ def _home(asset: ResolvedAsset) -> tuple[float, ...]:
     return ()
 
 
+def _poses(asset: ResolvedAsset) -> tuple[tuple[str, tuple[float, ...]], ...]:
+    """The named joint poses a fixed program moves this arm through (ADR-0066).
+
+    From L0 for the reason `_home` is: which poses a program uses is a decision
+    about this cell, and the angles live once, in the model.
+    """
+    configuration = asset.instance.configuration
+    if configuration is not None and configuration.kind == "robot":
+        return tuple((name, tuple(values)) for name, values in configuration.poses_rad.items())
+    return ()
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     managers = tuple(
         _ManagerView(
@@ -462,6 +476,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             fallback_planner_id=_planning_field(asset, "fallback_planner_id"),
             cartesian_planner_ids=_cartesian_planner_ids(asset),
             home_rad=_home(asset),
+            poses_rad=_poses(asset),
             trajectory_action=_controller_action(asset, "joint_trajectory_controller"),
             gripper_action=_controller_action(asset, "gripper_controller"),
             gripper_open_position=_grasp(cell, asset, "open_position"),

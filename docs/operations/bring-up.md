@@ -161,6 +161,35 @@ two lines arrive in says nothing and carries no meaning.
 **The console is two labelled streams.** Every line is prefixed with the side it came from.
 That is a real ergonomic cost of running a pair and there is no single-stream form of it.
 
+### Running the fixed program on the pair
+
+The cell's default cycle is a fixed program
+([ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md)): taught joint poses from L0 and
+a timed belt run, sent once through the twin boundary so both arms and both belts follow it.
+
+```bash
+./scripts/program                     # bring the pair up without the line, one box per side,
+                                      # one cycle through the twin, then tear down
+./scripts/program --headless --cycles 3
+```
+
+Or by hand, on a pair that is already up (`./scripts/sim --zone cell_b --pair`, **without**
+`line:=true` — the line would command the same arms and belts):
+
+```bash
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --dry-run    # print the steps
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --cycles 1   # via the twin
+./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --via plant  # the plant alone
+```
+
+`--via twin` (the default) first asks for `VALIDATED`; in `SIM` the boundary refuses every goal
+and drops every belt command. Any step that does not succeed stops the program; so does Ctrl-C.
+Either way the goal in flight is cancelled and the belt is commanded to zero. The poses are
+`configuration.poses_rad` on the arm in `model/assets/instances/arms.yaml`; move a station and
+they must be taught again. `./scripts/scenario program_cycle` checks one cycle on the plant.
+
+The beam-triggered line is parked beside it, unchanged: `line:=true` and `./scripts/demo`.
+
 ### Reaching one side
 
 A shell is on the plant's domain by default — `./scripts/doctor` prints it — so a bare

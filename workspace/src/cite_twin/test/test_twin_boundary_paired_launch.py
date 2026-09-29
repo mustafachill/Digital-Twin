@@ -58,7 +58,7 @@ from cite_bringup.plan import default_plan_path
 from cite_bringup.readiness import boundary_announcement
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
-from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import SetMode
 import launch
 from launch.actions import ExecuteProcess
@@ -70,6 +70,7 @@ import pytest
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node as RclpyNode
+from std_msgs.msg import Float64
 import yaml
 
 ZONE = "cell_a"
@@ -117,6 +118,15 @@ def _wait_for_side(proc_output, line: str) -> None:
     )
 
 
+def _stdout(proc_output) -> str:
+    """Everything every process has printed on stdout so far, as one string."""
+    return "".join(
+        entry.text.decode(errors="replace") if isinstance(entry.text, bytes) else entry.text
+        for entry in proc_output
+        if getattr(entry, "from_stdout", True)
+    )
+
+
 def _paired_plan() -> Path:
     """Write `cell_a`'s generated plan, plus a counterpart that zone lacks.
 
@@ -151,6 +161,11 @@ def _paired_plan() -> Path:
 
 PLAN_PATH = _paired_plan()
 
+#: The first belt's command topic, as a side owns it, and the operator's twin
+#: of it, which is where a fixed program sends a setpoint (ADR-0066).
+BELT = yaml.safe_load(PLAN_PATH.read_text())["plan"]["conveyors"][0]["command_topic"]
+TWIN_BELT = BELT.replace("/cite/", "/cite/twin/", 1)
+
 
 def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
     return ExecuteProcess(
@@ -165,6 +180,8 @@ def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
             ASSET,
             "--offset",
             str(offset),
+            "--belts",
+            BELT,
         ],
         # The whole of the isolation, and the reason this rig can hold two
         # sides at once: each child process discovers only its own domain.
@@ -214,6 +231,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         cls.set_mode = cls.node.create_client(SetMode, SetMode.Request.SERVICE)
         cls.move_to = ActionClient(cls.node, MoveTo, MOVE_TO)
         cls.pick = ActionClient(cls.node, Pick, PICK)
+        cls.belt = cls.node.create_publisher(Float64, TWIN_BELT, COMMAND)
 
     @classmethod
     def tearDownClass(cls):
@@ -371,6 +389,68 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             self._send(self.move_to, self._move_to("abort:abort"))
         )
         self.assertEqual(result.result.code, ResultCode.MOTION_INTERRUPTED)
+
+    def test_a_belt_command_crosses_only_when_the_mode_routes_it(self, proc_output):
+        """ADR-0066: a belt setpoint follows the skills' routing table.
+
+        Sent in SIM first, where nothing crosses, then in VALIDATED, where it
+        must reach both sides. The SIM value is distinct so that its absence
+        can be read from the same output the arrival is read from.
+        """
+        self._spin_until(
+            lambda: self.node.count_subscribers(TWIN_BELT) > 0, "L5 subscribed to the belt"
+        )
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "resetting").accepted)
+        refused = Float64(data=0.125)
+        deadline = self.node.get_clock().now().nanoseconds + int(2e9)
+        while self.node.get_clock().now().nanoseconds < deadline:
+            self.belt.publish(refused)
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+
+        self._enter_validated()
+        routed = Float64(data=0.25)
+        for side in ("plant", "counterpart"):
+            self._spin_until(
+                lambda side=side: self.belt.publish(routed)
+                or f"{side}: belt {BELT} 0.25" in _stdout(proc_output),
+                f"the belt command reached the {side}",
+            )
+        self.assertNotIn(
+            f"belt {BELT} 0.125",
+            _stdout(proc_output),
+            "a belt command crossed the boundary in SIM",
+        )
+
+    def test_a_belt_stop_crosses_in_every_mode(self, proc_output):
+        """ADR-0066: a zero setpoint is never gated, and leaving a mode stops its belts.
+
+        Counted as exact lines, because `0` is a prefix of every other value
+        this class sends. VALIDATED -> SIM must send exactly one zero to each
+        side on its own; only then is an operator's zero sent in SIM, so the
+        second zero on each side can have come from nothing but that.
+        """
+        def zeros(side: str) -> int:
+            line = f"{side}: belt {BELT} 0"
+            return sum(1 for text in _stdout(proc_output).splitlines() if text == line)
+
+        sides = ("plant", "counterpart")
+        self._spin_until(
+            lambda: self.node.count_subscribers(TWIN_BELT) > 0, "L5 subscribed to the belt"
+        )
+        self._enter_validated()
+        before = {side: zeros(side) for side in sides}
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "leaving VALIDATED").accepted)
+        for side in sides:
+            self._spin_until(
+                lambda side=side: zeros(side) == before[side] + 1,
+                f"leaving VALIDATED stopped the {side}'s belt",
+            )
+        stop = Float64(data=0.0)
+        for side in sides:
+            self._spin_until(
+                lambda side=side: self.belt.publish(stop) or zeros(side) >= before[side] + 2,
+                f"a stop sent in SIM reached the {side}",
+            )
 
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""

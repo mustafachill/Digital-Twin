@@ -30,6 +30,11 @@ what starts a cycle. This module spawns and then watches. That is deliberate —
 a demonstration that commanded the arms itself would be showing its own
 sequencing rather than the cell's.
 
+THIS IS THE PARKED EVENT-DRIVEN LINE (ADR-0066). The cell's default is now the
+fixed program, `cite_bringup.program`, which `./scripts/program` runs through
+the twin boundary; this module and `./scripts/demo` are kept, unchanged in
+behaviour, for the line the program parked.
+
 EVERY GAZEBO-TRANSPORT CALL GOES THROUGH `cite_bringup.gz`. That module is the
 one door (ADR-0042): a process that speaks Gazebo transport without the
 partition the generated plan names discovers a world that is not there, and
@@ -95,7 +100,7 @@ def paired_zones(plans: Path) -> list[str]:
 
 
 def world_name(world: Path) -> str:
-    """The Gazebo world's NAME, read from the world the plan names.
+    """Return the Gazebo world's NAME, read from the world the plan names.
 
     Read rather than assumed to equal the zone. They agree today, and that is a
     property of the generator rather than a rule: a zone whose world were named

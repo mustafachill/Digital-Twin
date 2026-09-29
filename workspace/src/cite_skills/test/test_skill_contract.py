@@ -66,6 +66,8 @@ import yaml
 
 ZONE = "cell_a"
 ASSET = "arm_1"
+#: The one named pose this rig declares beside `home` (ADR-0066).
+PROBE_POSE = "probe"
 NAMESPACE = f"/cite/{ZONE}/{ASSET}"
 GRIPPER_ACTION = "/test_gripper/gripper_cmd"
 
@@ -259,6 +261,16 @@ def generate_test_description() -> LaunchDescription:
                         "workpiece_narrowest_width_m": workpieces["narrowest_width_m"],
                         "workpiece_widest_width_m": workpieces["widest_width_m"],
                         "home_rad": list(moveit["home_rad"]),
+                        # One named pose beside `home` (ADR-0066). Test-only: the
+                        # arm this rig serves declares none in L0, and what is
+                        # under test is the lookup, not a taught angle. Home with
+                        # the base turned a tenth of a radian, so the plan has
+                        # somewhere to go.
+                        "pose_names": [PROBE_POSE],
+                        "pose_values_rad": [
+                            float(value) + (0.1 if index == 0 else 0.0)
+                            for index, value in enumerate(moveit["home_rad"])
+                        ],
                         # The planner the server asks for, from the plan rather
                         # than restated here (ADR-0027). Without these the
                         # server says nothing about a pipeline and move_group
@@ -1001,6 +1013,35 @@ class TestSkillContract(unittest.TestCase):
             "which is the belief that makes L4 retry and open the gripper at the "
             "home pose (ADR-0038 decision 5, ADR-0046)",
         )
+
+    def _named(self, name: str):
+        goal = MoveTo.Goal()
+        goal.named_configuration = name
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, f"the move to {name!r} never reported a result")
+        return wrapped.result.result
+
+    def test_9_a_named_pose_is_planned_like_home(self) -> None:
+        # Planned and then failed for want of a controller, exactly as a
+        # reachable pose goal does in test_3: the lookup found the pose and the
+        # planning group accepted it.
+        result = self._named(PROBE_POSE)
+        self.assertEqual(
+            result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the named pose to plan and fail for want of a controller, got "
+            f"{result.code}: {result.detail}",
+        )
+
+    def test_9b_an_unknown_name_is_refused_and_the_known_ones_are_named(self) -> None:
+        result = self._named("nowhere")
+        self.assertEqual(result.code, ResultCode.PRECONDITION_FAILED, result.detail)
+        self.assertIn("'home'", result.detail)
+        self.assertIn(f"'{PROBE_POSE}'", result.detail)
 
 
 @launch_testing.post_shutdown_test()

@@ -316,6 +316,9 @@ class MoveItConfig:
     #: endpoints, so that the skill server can refuse to have such a request
     #: rescued by a planner that samples (ADR-0027).
     cartesian_planner_ids: tuple[str, ...]
+    #: The arm's named joint poses (ADR-0066), by name. Empty where L0 declares
+    #: none; `home` is never among them, because it is `home_rad` above.
+    poses_rad: Mapping[str, tuple[float, ...]]
 
 
 @dataclass(frozen=True)
@@ -1506,7 +1509,24 @@ def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
         cartesian_planner_ids=tuple(
             str(value) for value in (_optional(entry, "cartesian_planner_ids") or [])
         ),
+        poses_rad=_poses(entry, where),
     )
+
+
+def _poses(entry: object, where: str) -> Mapping[str, tuple[float, ...]]:
+    """Read `moveit.poses_rad`, which the plan emits only where L0 declares poses."""
+    poses = _optional(entry, "poses_rad") or {}
+    if not isinstance(poses, dict):
+        raise PlanError(f"{where}: 'poses_rad' must be a mapping, not {_kind(poses)}")
+    read: dict[str, tuple[float, ...]] = {}
+    for name, values in poses.items():
+        if not isinstance(values, list):
+            raise PlanError(f"{where}: poses_rad.{name} must be a list, not {_kind(values)}")
+        read[str(name)] = tuple(
+            _number(value, f"poses_rad.{name}[{position}]", where)
+            for position, value in enumerate(values)
+        )
+    return MappingProxyType(read)
 
 
 def _kind(value: object) -> str:

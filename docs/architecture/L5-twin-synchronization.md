@@ -171,7 +171,8 @@ what that refusal does and does not amount to.
 
 Decided in [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) and deliberately not
 restated here (P1), and implemented in `cite_twin` — with the caveat in this document's
-status bullet, which is that no goal has crossed in any run. The four things a reader of
+status bullet — though since 2026-09-28 goals and belt setpoints have crossed on a running pair,
+once, by `./scripts/program` (ADR-0066). The things a reader of
 this document needs to know it says, each with the clause that carries it:
 
 - **L5 is one process per zone holding one ROS context per side**, and **nothing is
@@ -185,6 +186,14 @@ this document needs to know it says, each with the clause that carries it:
   dispatched to both sides' L3. Both sides then plan independently, so the operator is not on
   present evidence watching the path the far arm will take; ADR-0050 carries the argument and
   the rejected alternative.
+- **A belt setpoint crosses too, since [ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md).**
+  For each conveyor in the plan L5 subscribes, on the plant's domain, to
+  `/cite/twin/<zone>/<belt>/command` (`std_msgs/Float64`, m/s, the `COMMAND` profile) and
+  publishes each value on each side's own `/cite/<zone>/<belt>/command`, under the same routing
+  table as the skills: dropped with a log line in `SIM`, `REAL` and `SHADOW`, sent to both sides
+  in `VALIDATED` and `VIRTUAL_LEAD`. It is a command, like a goal; the belt's state does not
+  cross. This is what lets the fixed program (`cite_bringup.program`) run both belts from one
+  client. Tested against fake sides in `cite_twin/test/test_twin_boundary_paired_launch.py`.
 - **Which side is which is a derivation, not a choice.** On a paired zone the plant is always
   `sim`, so the mode table's *physical* side is the `counterpart` and its *virtual* side is the
   `plant`.

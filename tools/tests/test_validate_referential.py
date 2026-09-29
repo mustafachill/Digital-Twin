@@ -688,3 +688,39 @@ def test_a_counterpart_backend_the_type_does_not_declare_is_refused(
         ),
     )
     assert "unknown-backend" in rules(minimal_model)
+
+
+def _set_poses(poses: dict) -> Callable[[dict], None]:
+    def mutate(d: dict) -> None:
+        arm = next(a for a in d["assets"] if a["type"] == "xarm5")
+        arm.setdefault("configuration", {"kind": "robot"})["poses_rad"] = poses
+
+    return mutate
+
+
+def test_a_named_pose_of_the_right_length_is_clean(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        _set_poses({"pick": [0.0, 0.1, -0.2, 0.0, 1.0]}),
+    )
+    assert rules(minimal_model) == set()
+
+
+def test_a_named_pose_of_the_wrong_length_is_refused(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    # The skill server can only refuse this at configure time, taking the whole
+    # arm down with a message about a parameter (ADR-0066).
+    edit_yaml(minimal_model / "assets/instances/cell.yaml", _set_poses({"pick": [0.0, 0.1]}))
+    assert "named-pose-length" in rules(minimal_model)
+
+
+def test_a_named_pose_called_home_is_refused(minimal_model: Path, edit_yaml: Callable) -> None:
+    # `home` is home_rad; a second statement of it could disagree with the first.
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        _set_poses({"home": [0.0, 0.0, 0.0, 0.0, 0.0]}),
+    )
+    assert "named-pose-is-home" in rules(minimal_model)
