@@ -103,6 +103,15 @@ run is refused by `./scripts/validate-model` rather than by the cell.
 - The Blockly gripper `speed` and the track block's missing `wait` field are not modelled; the
   twin's gripper runs at its L0 rate and every track move waits.
 
+### What has been observed, 2026-09-29
+One machine, nothing registered in advance, not a rate. `./scripts/scenario program_cycle
+--zone cell_b` passed once with the bare verdict (cycle and teardown): lifted, carried along
+the track, placed at the belt's infeed and carried on by the belt; the program took 81 s of
+wall time. `./scripts/program --zone cell_b --headless` ran all 22 steps once through the
+boundary, both tracks sliding on the one command, and both boxes ended at x = 1.944 m,
+y = 3.060 / 3.061 m, z = 0.631 m: carried past the belt's end (1.910 m) onto the edge of the
+outfeed table, with each side's belt run on that side.
+
 ### What we will have to revisit
 The hardware path of the track (Phase 2.B), and the layout when the building is scanned.
 Promotion to `Accepted` wants `program_cycle` passing in CI and the program run on the pair
