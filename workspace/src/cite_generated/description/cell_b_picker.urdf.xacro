@@ -17,7 +17,16 @@
   <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
        generated static transform table, so this description states no world
        coordinate of its own. -->
-  <link name="picker_mount"/>
+  <!-- With mass here, and only on an arm that rides a track: the joint under
+       this link is not fixed, and the URDF-to-SDF converter drops a massless
+       link that has a moving child, together with the world anchor below that
+       names it. It is welded to the world, so the value moves nothing. -->
+  <link name="picker_mount">
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
 
   <!-- The linear track this arm rides (ADR-0067). Its rail is a body in the
        scene; its one joint is HERE, between the mount and the carriage the arm's
