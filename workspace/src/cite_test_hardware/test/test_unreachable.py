@@ -127,10 +127,16 @@ def _may_name_it(relative: str) -> bool:
 
 
 #: Directories that are not this repository's to answer for: build products, the
-#: superseded v1 tree (CLAUDE.md §2), and third-party source imported by vcstool.
+#: superseded v1 tree (CLAUDE.md §2), third-party source imported by vcstool, and
+#: the frozen milestone snapshots under `projects/` (ADR-0068), which are records of
+#: past commits and each carry their own copy of this package. Stated here rather
+#: than taken from `cite_tools.tree.in_a_snapshot` because this test runs under
+#: ctest in the ROS environment, where `cite_tools` is not importable; matched below
+#: at the root only, as the tree module does.
 SKIPPED = (
     '.git',
     'legacy',
+    'projects',
     'workspace/build',
     'workspace/install',
     'workspace/log',

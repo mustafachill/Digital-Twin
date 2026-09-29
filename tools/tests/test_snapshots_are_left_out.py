@@ -16,6 +16,7 @@ them too; the last test below checks that they still do.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -154,3 +155,22 @@ def test_dockerignore_excludes_exactly_the_root_projects_directory() -> None:
     """
     lines = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
     assert _lines_naming_projects(lines) == ["projects/"]
+
+
+def test_the_fixture_walker_skips_exactly_the_root_projects_directory() -> None:
+    """`cite_test_hardware`'s repository walk cannot import `in_a_snapshot` (it runs under
+    ctest, without `cite_tools`), so it states `projects` itself. Its matcher is anchored at
+    the root (`relative == skip or relative.startswith(skip + '/')`); this pins the entry.
+    """
+    source = (REPO_ROOT / "workspace/src/cite_test_hardware/test/test_unreachable.py").read_text(
+        encoding="utf-8"
+    )
+    skipped = next(
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "SKIPPED" for t in node.targets)
+    )
+    entries = ast.literal_eval(skipped)
+    assert [e for e in entries if "projects" in e] == ["projects"]
+    assert "relative == skip or relative.startswith(skip + '/')" in source

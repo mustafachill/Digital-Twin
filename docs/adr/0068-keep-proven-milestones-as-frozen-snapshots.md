@@ -108,6 +108,14 @@ Each milestone is kept permanently as a frozen, self-contained, runnable snapsho
    - three `git ls-files` walkers drop the snapshots through the one predicate `in_a_snapshot`:
      `tools/tests/test_superseded_real_time_requirement.py`,
      `tools/tests/test_interface_counts.py` and `tools/tests/test_the_retracted_gripper_claim.py`;
+   - one disk walker states the exclusion itself because it cannot import the predicate:
+     `workspace/src/cite_test_hardware/test/test_unreachable.py`, which runs under ctest without
+     `cite_tools`, adds `projects` to its root-anchored `SKIPPED`. Every other walker from the
+     repository root was checked on 2026-09-29 and walks named trees that exclude `projects`
+     (`test_a_removed_plan_key_stays_removed.py`, `test_declared_hardware_fact.py`,
+     `cite_bringup/test/test_the_bridge_is_simulation_only.py`), reads through `our_files`
+     (`test_rtf_figure_conditions.py`), or asks only about named main-tree paths
+     (`test_event_driven_line_is_kept.py`);
    - `.yamllint` ignores the root-anchored `/projects/`, re-admitting `projects/snapshots.yaml`;
    - `.dockerignore` leaves `projects/` out of the main image's build context;
    - `scripts/lint`'s shellcheck gains the extractor `tools/*.sh` and each snapshot's `run`, named
