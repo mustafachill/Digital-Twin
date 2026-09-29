@@ -21,7 +21,13 @@
 #   CLAUDE.md, AGENTS.md, what-we-are-doing.md
 #                         the rulebook and the charter belong to the main tree;
 #                         a snapshot is a record of a past state, not a source
-#   __pycache__/, log/    runtime output, excluded should any ever be tracked
+#   projects/             the snapshots themselves, should the source commit
+#                         carry any: a snapshot never nests another
+#   .github/              GitHub runs workflows from the repository root only,
+#                         so a nested workflow never runs; the main tree's
+#                         .github/workflows/projects.yml runs each snapshot
+#   **/__pycache__/, workspace/log/
+#                         runtime output, excluded should any ever be tracked
 #
 # WHAT IT DOES NOT DO. It applies no patch. Every edit a snapshot carries beyond
 # this extract is listed, with its rationale and its diff, in that snapshot's
@@ -59,8 +65,10 @@ EXCLUDES=(
     ':(exclude)CLAUDE.md'
     ':(exclude)AGENTS.md'
     ':(exclude)what-we-are-doing.md'
+    ':(exclude)projects'
+    ':(exclude).github'
     ':(exclude,glob)**/__pycache__/**'
-    ':(exclude,glob)**/log/**'
+    ':(exclude)workspace/log'
 )
 
 if ! git -C "$REPO_ROOT" rev-parse --verify --quiet "${COMMIT}^{commit}" >/dev/null; then
@@ -68,7 +76,11 @@ if ! git -C "$REPO_ROOT" rev-parse --verify --quiet "${COMMIT}^{commit}" >/dev/n
     exit 1
 fi
 
-if [ -e "$DEST" ] && [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
+if [ -e "$DEST" ] && [ ! -d "$DEST" ]; then
+    echo "error: ${DEST} exists and is not a directory; refusing to extract over it" >&2
+    exit 1
+fi
+if [ -d "$DEST" ] && [ -n "$(ls -A "$DEST")" ]; then
     echo "error: ${DEST} exists and is not empty; refusing to extract over it" >&2
     exit 1
 fi
