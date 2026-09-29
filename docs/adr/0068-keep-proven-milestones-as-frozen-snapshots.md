@@ -1,0 +1,124 @@
+# ADR-0068: Keep each proven milestone as a frozen, runnable snapshot
+
+- **Status:** Proposed
+- **Date:** 2026-09-29
+- **Deciders:** Project owner
+- **Related:** [ADR-0001](0001-rebuild-rather-than-migrate.md),
+  [ADR-0021](0021-generated-artifacts-are-committed.md),
+  [ADR-0032](0032-index-the-belt.md),
+  [ADR-0038](0038-stop-the-line-without-ending-the-process.md),
+  [ADR-0056](0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md),
+  [ADR-0066](0066-run-the-cell-from-a-fixed-program.md),
+  [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md),
+  [`../reference/v1-lessons.md`](../reference/v1-lessons.md), CLAUDE.md §3 (P1, P6)
+
+## Context
+
+The repository has reached three milestones, each of which ran a cell end to end and each of
+which the main tree has since moved past:
+
+| Milestone | Source commit | What it runs |
+|---|---|---|
+| Three-arm event-driven line | tag `event-driven-line-v1` = `b5a0bc9` | Three arms on zone `cell_a`, coordinated by L4 behaviour trees on beam events, carry work-pieces along three belts ([ADR-0032](0032-index-the-belt.md), [ADR-0038](0038-stop-the-line-without-ending-the-process.md) and the records they build on). |
+| Fixed-program pair | `c83119b` | Two Gazebo instances (paired `cell_b`), one arm each, driven through the twin boundary by a fixed program of taught joint poses and timed belt runs ([ADR-0066](0066-run-the-cell-from-a-fixed-program.md)). |
+| Real program, arm on a track | `e90d230` | The real xArm 5's Blockly program drives both sides of paired `cell_b`, the arm on a linear track ([ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md)). |
+
+The second milestone no longer runs on `main`: its taught poses lived in `poses_rad` under
+`model/assets/instances/arms.yaml` (present at `c83119b`), and `e02fb67`, ADR-0067's model
+commit, removed them from L0. The first is parked rather than deleted (ADR-0066), but at the
+tag `tests/scenarios/_cell.py` already sets `DRIVEN_ZONE = "cell_b"`, so its own scenario does
+not drive the three-arm cell without a change. A git tag records a state; it does not keep that
+state runnable for someone who is handed a folder.
+
+Facts that make a whole-tree copy work without code changes, read at `e90d230`:
+
+- `scripts/_lib.sh` derives `REPO_ROOT` from its own location.
+- `infra/docker/docker-compose.yml` uses `../..` as the build context and as the bind mount.
+- The Compose project name and `ROS_DOMAIN_ID` are derived from the checkout path
+  (`cite_project_name`, `cite_domain_id` in `scripts/_lib.sh`).
+- The generator writes `cite_generated` into `workspace/src/`, the sibling of `model/`
+  (ADR-0021).
+- The image tag is fixed at `cite-digital-twin:dev` (`docker-compose.yml`, `scripts/_lib.sh`),
+  so two trees on one host overwrite each other's image.
+
+## Options considered
+
+### Option A — Tags only
+Keep the three commits as tags and check them out when needed. Costs nothing in size. Not
+chosen: a tag is not extractable on its own, the first milestone needs a one-line change to run
+at all, and nothing would ever notice that a tag had stopped building.
+
+### Option B — Keep the old capabilities alive in the main tree
+Keep `cell_a`, the event-driven line and the fixed program working beside the real program.
+Not chosen: every platform change would have to carry three generations of behaviour, which is
+the cost ADR-0066 already started to pay by parking the line.
+
+### Option C — Frozen, self-contained snapshots under `projects/`
+Copy each milestone's tree into its own folder, runnable from that folder alone. Chosen, and the
+duplication it costs is accepted by the project owner.
+
+## Decision
+
+Each milestone is kept permanently as a frozen, self-contained, runnable snapshot under
+`projects/<name>/`, which builds and runs when the folder is copied anywhere else:
+
+- `projects/01-three-arm-event-driven-line/` from `event-driven-line-v1` (`b5a0bc9`); if it does
+  not run, the fallback source is `aed36c4`.
+- `projects/02-fixed-program-pair/` from `c83119b`.
+- `projects/03-real-program-twin-on-track/` from `e90d230`.
+
+1. **Mechanism.** A committed script, `tools/snapshot_project.sh`, runs `git archive <sha>` into
+   the folder, excluding `docs/measurements/`, `legacy/`, `real-robot-code/`, `CLAUDE.md`,
+   `AGENTS.md` and `what-we-are-doing.md`. The facts in Context make the folder its own root with
+   no code change.
+2. **Only minimal patches, each listed with its rationale in the snapshot's `PROVENANCE.md`:**
+   a per-project image tag, `cite-digital-twin:<name>` in place of `:dev`, so snapshots do not
+   overwrite each other's image; for project 01 only, `DRIVEN_ZONE = "cell_a"` in
+   `tests/scenarios/_cell.py`; and a top-level `run` wrapper, `README.md` and `PROVENANCE.md` in
+   each. Nothing else is edited. **A snapshot is a record, not a source.**
+3. **One-way rule.** Nothing may be copied from `projects/` back into the main tree, and the main
+   tree never imports or builds from `projects/`. A snapshot's patterns are not precedent, for
+   the same reason v1's are not ([`../reference/v1-lessons.md`](../reference/v1-lessons.md)).
+   On that rule P1 holds: a snapshot is a record of a past state, not a second source of any
+   value the main tree uses.
+4. **Main-tree checks are deliberately narrowed, and this is a reduction of coverage.**
+   `tools/cite_tools/tree.py`'s `SKIP_PATHS` gains `projects`, with `projects/README.md` still
+   checked; `tools/tests/test_superseded_real_time_requirement.py` and
+   `tools/tests/test_interface_counts.py` drop `projects/` from their `git ls-files` walks;
+   `.yamllint` ignores `projects/`. `tools/tests/test_a_removed_plan_key_stays_removed.py` walks
+   seven named trees, none of them `projects`, and is unaffected. Each exclusion carries a test
+   that fails if it widens beyond `projects/`. Each snapshot keeps its own `./scripts/lint` and
+   tests for its own tree.
+5. **CI.** A separate, non-blocking workflow, `.github/workflows/projects.yml`
+   (`workflow_dispatch` and a weekly schedule), runs a matrix over the three projects: build the
+   image, bootstrap, `validate-model`, build, and the project's scenario with
+   `--teardown-advisory` — `continuous_line` for 01, `program_cycle` for 02 and 03. It does not
+   gate `main`.
+6. **Out of scope.** Removing the parked event-driven line, `cell_a` and the fixed-program
+   leftovers from the main tree is a later branch with its own ADR.
+
+## Consequences
+
+### What this gets us
+- Each milestone can be handed over as one folder and shown running, independent of where
+  `main` has gone.
+- The main tree is free to drop old capabilities later without losing a runnable record of them.
+- A weekly job, rather than nobody, is what notices a snapshot has stopped building.
+
+### What this costs us
+- Repository size grows by roughly three copies of `workspace/src`, `model/` and `tools/`.
+- Main-tree lint and the two tree-walking host tests no longer see `projects/`; a defect there is
+  caught only by the snapshot's own checks or the weekly job.
+- Snapshots rot silently if nobody reads the weekly job, and a non-blocking job is easy to ignore.
+- Security and dependency fixes are not backported to snapshots.
+- A snapshot carries its own docs without `CLAUDE.md`; any figure in them was true at its source
+  commit only, and the snapshot's `README.md` must say so.
+
+### What we will have to revisit
+- **Promotion condition:** all three snapshots verified to build and run their scenario from a
+  folder copied outside the repository, recorded in each `PROVENANCE.md`, and the projects
+  workflow has run green once, read from the step logs and not from the step conclusions.
+- If project 01 cannot be made to run from `b5a0bc9`, record the switch to `aed36c4` in its
+  `PROVENANCE.md` and amend this record.
+- If a snapshot's upstream pins (image base, `external/cite.repos`) stop resolving, decide
+  whether to repair it with a listed patch or retire it.
