@@ -933,6 +933,21 @@ require_local_cite_tools() {
 # file. It is passed here, once, so that no caller can forget it — and `clean
 # --all`, which is the command that can destroy another checkout's work, gets the
 # scoping by construction rather than by its own care.
+# Remove this checkout's running containers, and only this checkout's: another
+# checkout's cell is somebody else's work and is left alone. Used by the
+# one-command entry points (demo, program) so that a run left up — or still
+# running in another terminal — is replaced by a clean one rather than attached
+# to. `rm -f` is SIGKILL: acceptable for a simulated cell, which holds nothing a
+# restart does not rebuild.
+stop_this_checkouts_containers() {
+    local ids
+    ids="$(docker ps -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null || true)"
+    [ -n "$ids" ] || return 0
+    warn "stopping this checkout's running container(s) so the run starts clean"
+    # shellcheck disable=SC2086  # one id per word, deliberately split
+    docker rm -f $ids >/dev/null
+}
+
 compose() {
     if have docker && docker compose version >/dev/null 2>&1; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \

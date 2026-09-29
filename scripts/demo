@@ -99,9 +99,10 @@ if ! in_container; then
     # they check that a process carries the RIGHT identifiers, not that nobody
     # else is already there. A guard a reader believes is total is worse than no
     # guard, which is why this paragraph exists rather than a wider claim.
+    stop_this_checkouts_containers
     if [ "$(docker ps -q 2>/dev/null | wc -l)" -ne 0 ]; then
-        die "a container is already running, and this would attach to it rather than
-  start a clean one. Stop it first:  docker ps   then   docker rm -f <id>"
+        die "a container of another checkout is running, and this would share its ROS
+  domain and Gazebo partition. Stop it first:  docker ps   then   docker rm -f <id>"
     fi
 
     if [ ! -d "${REPO_ROOT}/.venv" ]; then
