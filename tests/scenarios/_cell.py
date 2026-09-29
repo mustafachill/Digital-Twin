@@ -39,17 +39,26 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 #: The zone the scenarios drive when nothing says otherwise, stated ONCE for all
-#: three of them (ADR-0056 decision 5). It was a `ZONE = "cell_b"` literal in each
+#: of them (ADR-0056 decision 5). It was a `ZONE = "cell_b"` literal in each
 #: scenario until this file existed: three statements of one fact, able to
 #: disagree silently, which is the shape CLAUDE.md §4 prohibits.
 #:
-#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and is no
-#: longer driven by these scenarios — a deliberate reduction in regression
-#: coverage recorded in ADR-0056's consequences. ADR-0056 names "a cheap periodic
-#: `bringup` against `cell_a`" as the answer if the showcase is found broken, and
-#: `SELECTED_BY` below is what makes that a command rather than a commit:
-#: `./scripts/scenario bringup --zone cell_a`.
-DRIVEN_ZONE = "cell_b"
+#: `cell_a` SINCE 2026-09-29, by the project owner's decision (ADR-0067). `cell_b`'s
+#: arm rides a linear track that nothing in L3 or L4 moves, so its belt is out of
+#: the reach of a behaviour-tree Place and its station declares no place point;
+#: the behaviour-tree scenarios — `pick_and_place` and `continuous_line` — drive
+#: `cell_a`, the three-arm cell whose arms are bolted down, and `bringup` goes
+#: with them. `cell_b` is gated by the real program, which is `PROGRAM_ZONE`.
+DRIVEN_ZONE = "cell_a"
+
+#: The zone the real program runs on (ADR-0067): `cell_b`, whose arm rides the
+#: track the program slides.
+PROGRAM_ZONE = "cell_b"
+
+#: Every scenario whose default is NOT `DRIVEN_ZONE`, by file stem. A table here
+#: rather than a literal in the scenario, so that which cell each scenario drives
+#: is still answered in this one file.
+DEFAULT_ZONE_OF = {"program_cycle": PROGRAM_ZONE}
 
 #: Where `./scripts/scenario --zone` puts its answer. An environment variable
 #: rather than an argument because `launch_test` owns the scenario's argv and
@@ -58,8 +67,11 @@ DRIVEN_ZONE = "cell_b"
 SELECTED_BY = "CITE_SCENARIO_ZONE"
 
 
-def zone() -> str:
-    """Which cell this run drives.
+def zone(scenario: str | None = None) -> str:
+    """Which cell this run of ``scenario`` drives: the selection, else its default.
+
+    ``scenario`` is the scenario's file stem, looked up in `DEFAULT_ZONE_OF`;
+    one not listed there, or None, defaults to `DRIVEN_ZONE`.
 
     **THIS FUNCTION reads the environment on every call; the SCENARIOS bind
     `ZONE = zone()` once at module scope. Both are right, and the reason is that
@@ -81,7 +93,7 @@ def zone() -> str:
     This docstring argued for the call-time read alone until 2026-09-17, which
     read as an argument against what all three scenarios actually do.
     """
-    return os.environ.get(SELECTED_BY) or DRIVEN_ZONE
+    return os.environ.get(SELECTED_BY) or DEFAULT_ZONE_OF.get(scenario or "", DRIVEN_ZONE)
 
 
 def cell(zone_id: str) -> tuple:

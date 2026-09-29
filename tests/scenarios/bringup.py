@@ -686,9 +686,12 @@ class TestCellBringUp(unittest.TestCase):
         buffer = tf2_ros.Buffer()
         listener = tf2_ros.TransformListener(buffer, self.node)
         try:
+            # A station may declare no place frame: `cell_b`'s does not, because
+            # its belt is out of reach until the track slides and nothing in L3
+            # or L4 slides it (ADR-0067). What is declared is what is checked.
             for frame in (
                 station["pick_frame"],
-                station["place_frame"],
+                *([station["place_frame"]] if station.get("place_frame") else []),
                 f"{arm.asset}_mount",
                 arm.moveit.base_link,
             ):

@@ -260,6 +260,12 @@ class TestPickAndPlace(unittest.TestCase):
         plan, topology = cell(ZONE)
         cls.station = acting_station(topology)
         cls.pick_frame = cls.station["pick_frame"]
+        # `cell_b`'s station declares none since ADR-0067: its belt is out of
+        # reach until a track nothing in L3 or L4 moves has slid.
+        assert cls.station.get("place_frame"), (
+            f"station {cls.station['id']!r} in {ZONE} declares no place frame, so a "
+            "behaviour-tree Place has nowhere to go; that cell is driven by program_cycle"
+        )
         cls.place_frame = cls.station["place_frame"]
         cls.arm = cls.station["actor"]
 

@@ -85,6 +85,35 @@ class TestReach:
         )
         assert "reach-margin" in geometric_rules(real_model, Severity.WARNING)
 
+    def test_a_point_reachable_only_along_the_track_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """An arm on a track is checked with its carriage at stroke zero.
+
+        `cell_b`'s belt infeed is where the real program places, after sliding the
+        track 0.650 m. Nothing in L3 or L4 slides it, so as a behaviour-tree
+        station's place point it is 1.094 m from the arm against a 0.700 m reach.
+        This rule counted it reachable from anywhere along the stroke until
+        2026-09-29, and the station's Place would have failed on inverse
+        kinematics at run time (ADR-0067).
+        """
+
+        def restore_place(document: dict) -> None:
+            station = next(s for s in document["stations"] if s["id"] == "b_transfer_1")
+            station["place_to"] = {"asset": "transfer_belt", "frame": "infeed"}
+
+        edit_yaml(real_model / "topology/stations.yaml", restore_place)
+        model = load(real_model)
+        (finding,) = (
+            f for f in geometric.check(resolve(model, "cell_b")) if f.rule == "unreachable-station"
+        )
+        assert finding.where == "stations.b_transfer_1.place_to"
+        assert "with its track at stroke zero" in finding.message
+
+    def test_a_tracked_arm_still_reaches_its_pick_point(self, real_model: Path) -> None:
+        """The pick is at track zero in the real program, so it passes as shipped."""
+        assert "unreachable-station" not in geometric_rules(real_model)
+
 
 class TestLayout:
     def test_an_asset_outside_the_zone_is_caught(

@@ -201,7 +201,7 @@ plan:
       # reach where it was sent, so a width equal to the part teaches the skill
       # nothing (ADR-0022). Its ceiling is derived and enforced in
       # cite_tools.validate.physical.
-      gripper_default_grasp_width_m: 0.045
+      gripper_default_grasp_width_m: 0.060915
       # How far either side of a declared part's width a genuine stall on that
       # part may land and still be a grasp (ADR-0052 option F). The predicate
       # used to ask "did the jaws stop wider than we ASKED?"; it now asks "did
@@ -348,7 +348,7 @@ plan:
       # reach where it was sent, so a width equal to the part teaches the skill
       # nothing (ADR-0022). Its ceiling is derived and enforced in
       # cite_tools.validate.physical.
-      gripper_default_grasp_width_m: 0.045
+      gripper_default_grasp_width_m: 0.060915
       # How far either side of a declared part's width a genuine stall on that
       # part may land and still be a grasp (ADR-0052 option F). The predicate
       # used to ask "did the jaws stop wider than we ASKED?"; it now asks "did
@@ -495,7 +495,7 @@ plan:
       # reach where it was sent, so a width equal to the part teaches the skill
       # nothing (ADR-0022). Its ceiling is derived and enforced in
       # cite_tools.validate.physical.
-      gripper_default_grasp_width_m: 0.045
+      gripper_default_grasp_width_m: 0.060915
       # How far either side of a declared part's width a genuine stall on that
       # part may land and still be a grasp (ADR-0052 option F). The predicate
       # used to ask "did the jaws stop wider than we ASKED?"; it now asks "did

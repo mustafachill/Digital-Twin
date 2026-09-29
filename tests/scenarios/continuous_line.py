@@ -393,6 +393,13 @@ def milestones(topology: dict) -> tuple[Milestone, ...]:
         ladder.append(Milestone("lifted", station["id"], station["pick_frame"], "", inbound))
         downstream = (station.get("downstream") or [""])[0]
         outbound = link_between(topology, station["id"], downstream)
+        if not station.get("place_frame"):
+            raise ValueError(
+                f"station {station['id']!r} has an actor and no place frame, so no line "
+                "can run here: L4 refuses it at plan time. In `cell_b` that is the model "
+                "saying its belt is out of reach until the track slides (ADR-0067); that "
+                "cell is driven by `program_cycle`"
+            )
         ladder.append(Milestone("on_link", station["id"], station["place_frame"], "", outbound))
     return tuple(ladder)
 

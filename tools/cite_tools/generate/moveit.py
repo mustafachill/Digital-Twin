@@ -233,6 +233,9 @@ class _PlanningView:
     srdf_file: str
     srdf_macro: str
     srdf_args: tuple[tuple[str, str], ...]
+    #: Link pairs rigidly in contact that the vendor matrix does not know about:
+    #: a track's carriage and the arm base bolted to it (ADR-0067).
+    adjacent_pairs: tuple[tuple[str, str], ...]
     kinematics_plugin: str
     kinematics_resolution: float
     kinematics_timeout_s: float
@@ -380,6 +383,11 @@ def _view(asset: ResolvedAsset) -> _PlanningView | None:
         srdf_file=planning.srdf_file,
         srdf_macro=planning.srdf_macro,
         srdf_args=tuple(sorted(args)),
+        adjacent_pairs=(
+            ((asset.axis.carriage_link, ids.link(asset.id, kinematics.base_link_suffix)),)
+            if asset.axis is not None
+            else ()
+        ),
         kinematics_plugin=planning.kinematics_plugin,
         kinematics_resolution=planning.kinematics_resolution,
         kinematics_timeout_s=planning.kinematics_timeout_s,

@@ -601,27 +601,18 @@ public:
         "workpiece_height_m", 0.025, "the work-piece's centre above the frame"),
       BT::InputPort<double>("approach_m", 0.10, "standoff before grasping"),
       BT::InputPort<double>("retreat_m", 0.12, "lift after grasping"),
-      // The jaw width commanded on the part, and a stand-in in the same sense:
-      // L0 records no work-piece geometry, so nothing can derive it yet.
+      // The jaw width commanded on the part. 0 BY DEFAULT, and 0 means "the end
+      // effector's L0 `default_grasp_width_m`", which the skill server receives
+      // from the generated bring-up plan (`cite_bringup.plan.GRIPPER_KEYS`).
       //
-      // WHERE THIS NUMBER COMES FROM. Against the WORK-PIECE, which is the only
-      // datum it has ever really been about: a parallel gripper evidences a grasp
-      // by failing to reach where it was sent (ADR-0022), so the command has to be
-      // narrower than the part. The scenario's part is a 50 mm cube, and 0.045
-      // leaves 5.00 mm of margin — against the ~2.11 mm that `gripper_is_holding`
-      // needs to tell a real grasp from the controller's own end-of-goal position
-      // bias. Wider than the part and the jaws arrive on target and learn nothing;
-      // much narrower and the jaws close through nothing at all.
-      //
-      // THE VALUE IS ALSO IN L0, as `default_grasp_width_m` on the end-effector
-      // type, and `Pick.Goal.grasp_width_m == 0` means "use that". Sending 0 from
-      // here is where this belongs and is deliberately NOT done yet: the
-      // generated bring-up plan carries the default, but the launch mechanism
-      // does not pass it to the skill server, so a 0 sent today resolves to no
-      // width at all and closes the gripper against its effort limit. Sending the
-      // number keeps the cell working; it is a duplicate until that delivery is
-      // fixed, and it is named as one here rather than left to be discovered.
-      BT::InputPort<double>("grasp_width_m", 0.045, "commanded jaw width on the part"),
+      // It was a literal 0.045 until 2026-09-29, named here as a duplicate of the
+      // L0 value kept only because the launch did not then deliver that value.
+      // The launch has delivered it since `GRIPPER_KEYS`, and the duplicate
+      // outlived its reason: when L0 moved the default to the real program's
+      // 60.9 mm close for the 66 mm part (ADR-0067), the line kept commanding
+      // 45 mm. A tree that needs a different width sets this port.
+      BT::InputPort<double>(
+        "grasp_width_m", 0.0, "commanded jaw width on the part; 0 is the L0 default"),
     };
   }
 
@@ -686,7 +677,7 @@ public:
     goal.workpiece_id = getInput<std::string>("workpiece").value_or("");
     goal.approach_distance_m = getInput<double>("approach_m").value_or(0.10);
     goal.retreat_distance_m = getInput<double>("retreat_m").value_or(0.12);
-    goal.grasp_width_m = getInput<double>("grasp_width_m").value_or(0.045);
+    goal.grasp_width_m = getInput<double>("grasp_width_m").value_or(0.0);
     return begin(action, goal);
   }
 

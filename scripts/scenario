@@ -3,7 +3,7 @@
 #
 #   ./scripts/scenario                 list available scenarios
 #   ./scripts/scenario pick_and_place  run one
-#   ./scripts/scenario bringup --zone cell_a
+#   ./scripts/scenario bringup --zone cell_b
 #                                      run one against another cell
 #   ./scripts/scenario bringup --teardown-advisory
 #                                      gate on the cycle only; still run and
@@ -104,8 +104,8 @@ export CITE_PHYSICS_SEED="${CITE_PHYSICS_SEED:-20260824}"
 #
 # An empty value is refused rather than defaulted, which `./scripts/sim` does not
 # have to think about because it has no default to fall back to. Here it does:
-# `_cell.zone()` reads `os.environ.get(SELECTED_BY) or DRIVEN_ZONE`, so an empty
-# string comes back as `cell_b`. The caller named something and got the default
+# `_cell.zone()` reads the selection `or` the scenario's default, so an empty
+# string comes back as that default. The caller named something and got the default
 # without a word — the same class of silence as the swallowed flag.
 select_zone() {  # select_zone <spelling> <value>
     case "$2" in

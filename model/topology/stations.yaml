@@ -107,7 +107,16 @@ stations:
     actor: picker
     assets: [picker, picker_track]
     pick_from: {asset: infeed_table, frame: surface}
-    place_to: {asset: transfer_belt, frame: infeed}
+    # NO `place_to`, AND THAT IS THE MODEL SAYING WHAT L4 CAN DO HERE (ADR-0067).
+    # The arm rides a track, and the belt's infeed is 1.094 m from its base with
+    # the carriage at stroke zero, against a 0.700 m reach. Only the real
+    # program moves the track — it places there at +0.650 m — and nothing in L3
+    # or L4 does, so a `place_to` on the belt would be a point this station's
+    # Pick and Place cannot reach, and `unreachable-station` refuses it.
+    # Without one, `line_plan.hpp` refuses this cell's line at plan time
+    # ("does not declare both a pick frame and a place frame") instead of the
+    # planner failing mid-cycle. The flow edge below still says where the part
+    # goes; `program_cycle` is what drives and checks this cell.
     trigger: {sensor: infeed_beam, state: blocked}
 
   # The sink. It has a trigger and no actor: nothing here acts, and the trigger is

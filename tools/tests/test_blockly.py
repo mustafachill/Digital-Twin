@@ -7,14 +7,16 @@ through what the reader makes of it.
 
 from __future__ import annotations
 
+import ast
 import math
+import re
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 import yaml
 
-from cite_tools.generate import bringup, control, description
+from cite_tools.generate import bringup, control, description, moveit
 from cite_tools.model import blockly
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import resolve
@@ -222,6 +224,60 @@ def test_the_track_joint_is_under_the_arm_and_has_a_controller(model) -> None:
     assert "      - picker_track_joint" in controllers
 
 
+def test_the_carriage_collides_as_it_is_drawn(model) -> None:
+    """The carriage plate is checked, not only drawn, and is not at war with the base.
+
+    Its collision box is its visual box, so an arm link swinging down past the
+    carriage is caught by MoveIt and by the physics. The arm's base is bolted to
+    its top face, which the vendor's self-collision matrix cannot know, so the
+    generated SRDF disables that one pair.
+    """
+    import xml.etree.ElementTree as ElementTree
+
+    cell = resolve(model, "cell_b")
+    urdf = next(a for a in description.generate(cell) if a.path.endswith("_picker.urdf.xacro"))
+    root = ElementTree.fromstring(urdf.content)
+    (carriage,) = (
+        link for link in root.iter("link") if link.get("name") == "picker_track_carriage"
+    )
+
+    def shape(tag: str) -> tuple:
+        element = carriage.find(tag)
+        assert element is not None, f"the carriage has no <{tag}>"
+        return (
+            element.find("origin").attrib,
+            element.find("geometry/box").get("size"),
+        )
+
+    assert shape("collision") == shape("visual")
+    srdf = next(a for a in moveit.generate(cell) if a.path.endswith("_picker.srdf.xacro")).content
+    assert (
+        '<disable_collisions link1="picker_track_carriage" link2="picker_link_base" '
+        'reason="Adjacent"/>'
+    ) in srdf
+    fixed = next(
+        a for a in moveit.generate(resolve(model, "cell_a")) if a.path.endswith(".srdf.xacro")
+    )
+    assert "disable_collisions" not in fixed.content
+
+
+def test_the_default_grasp_width_is_the_programs_close(model, linkage) -> None:
+    """L0's `default_grasp_width_m` is the real program's close (owner, 2026-09-29).
+
+    Stated once on the end-effector type, with its derivation, because a type
+    cannot read one arm's program; this is what keeps the two from drifting. A
+    program edited on the robot to close elsewhere fails here.
+    """
+    closes = {
+        round(step.width_m, 6)
+        for step in parse(linkage, REAL_PROGRAM.read_text())
+        if isinstance(step, blockly.Grip) and step.closing
+    }
+    grasp = model.asset_type("xarm_parallel_gripper").grasp
+    assert len(closes) == 1, f"the program closes to {sorted(closes)}"
+    assert closes.pop() == pytest.approx(grasp.default_grasp_width_m, abs=1e-6)
+
+
 def test_an_arm_without_a_track_is_unchanged(model) -> None:
     cell = resolve(model, "cell_a")
     assert all(a.axis is None and not a.program for a in cell.assets)
@@ -280,16 +336,43 @@ def test_an_arm_and_its_track_on_different_backends_is_a_finding(
 
 @pytest.mark.skipif(not VENDOR_ARM.is_file(), reason="the vendor source is not imported")
 def test_the_declared_limits_are_the_vendors(model) -> None:
-    """L0 copies the vendor's joint limits; a pin bump that moves them fails here."""
+    """L0 copies the vendor's joint limits; a pin bump that moves them fails here.
+
+    All ten `jointN_{lower,upper}_limit` defaults are parsed out of the vendor
+    macro's parameter list and evaluated, `pi` included, rather than a hand-written
+    list of expected strings being looked for in it: a list written here would be
+    a third statement of the limits, and would keep passing when the vendor moved
+    a limit it did not name.
+    """
     source = VENDOR_ARM.read_text()
     kinematics = model.asset_type("xarm5").kinematics
-    for (low, high), text in zip(
-        kinematics.joint_limits_rad,
-        ("${-2.0*pi}", "${-2.059}", "${-3.927}", "${-1.69297}", "${-2.0*pi}"),
-        strict=True,
-    ):
-        assert text in source
-        assert low < high
-    assert kinematics.joint_limits_rad[1] == (-2.059, 2.0944)
-    assert kinematics.joint_limits_rad[2] == (-3.927, 0.19198)
+    defaults = dict(re.findall(r"(joint\d_(?:lower|upper)_limit):=\$\{([^}]*)\}", source))
+    expected = {
+        f"joint{n}_{end}_limit"
+        for n in range(1, len(kinematics.joint_limits_rad) + 1)
+        for end in ("lower", "upper")
+    }
+    assert set(defaults) == expected, f"the vendor declares {sorted(defaults)}"
+    for n, (low, high) in enumerate(kinematics.joint_limits_rad, start=1):
+        assert low == pytest.approx(_evaluate(defaults[f"joint{n}_lower_limit"]), abs=1e-8)
+        assert high == pytest.approx(_evaluate(defaults[f"joint{n}_upper_limit"]), abs=1e-8)
     assert source.count(f'velocity="{kinematics.max_joint_velocity_rad_s}"') == 5
+
+
+def _evaluate(expression: str) -> float:
+    """A xacro `${...}` default: numbers, `pi` and arithmetic, and nothing else."""
+    tree = ast.parse(expression, mode="eval")
+    allowed = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Constant,
+        ast.Name,
+        ast.Load,
+        ast.operator,
+        ast.unaryop,
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed) or (isinstance(node, ast.Name) and node.id != "pi"):
+            raise AssertionError(f"{expression!r} is not a number, `pi` or arithmetic")
+    return float(eval(compile(tree, "<xacro>", "eval"), {"__builtins__": {}}, {"pi": math.pi}))

@@ -64,6 +64,28 @@ def zone_ids() -> list[str]:
     return sorted(path.name[: -len("_plan.yaml")] for path in GENERATED.glob("bringup/*_plan.yaml"))
 
 
+def line_zone_ids() -> list[str]:
+    """Every zone whose behaviour-tree line can run: each acting station places.
+
+    A station with an actor and no place frame is one L4 refuses at plan time
+    (`line_plan.hpp`: "does not declare both a pick frame and a place frame").
+    `cell_b` is one since ADR-0067 — its belt is out of the arm's reach until the
+    track slides, and nothing in L3 or L4 slides it — so it is driven by the real
+    program and not by the line, and a guard over the line's scenarios has no
+    place point there to measure. Read off the generated topology, like
+    `zone_ids`, so a zone that regains a place point is covered again unasked.
+    """
+    return [
+        zone
+        for zone in zone_ids()
+        if all(
+            station.get("place_frame")
+            for station in load(zone).topology["stations"]
+            if station.get("actor")
+        )
+    ]
+
+
 @dataclass(frozen=True)
 class Artifacts:
     """One zone's generated artifacts, read as data."""

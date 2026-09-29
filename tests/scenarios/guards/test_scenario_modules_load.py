@@ -271,7 +271,7 @@ def test_every_scenario_takes_its_zone_from_the_one_statement() -> None:
     for path in scenario_paths():
         with _ros_stubs():
             module = _load_like_launch_test(path)
-        assert getattr(module, "ZONE", None) == _cell.zone(), (
+        assert getattr(module, "ZONE", None) == _cell.zone(path.stem), (
             f"{path.name} does not take its zone from `_cell.zone()`. A scenario that "
             "spells a cell is a fourth statement of which cell this repository drives."
         )
@@ -305,10 +305,27 @@ def test_the_selected_zone_overrides_the_default(monkeypatch) -> None:
     import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
     import _cell
 
+    monkeypatch.setenv(_cell.SELECTED_BY, "cell_b")
+    assert _cell.zone() == "cell_b"
     monkeypatch.setenv(_cell.SELECTED_BY, "cell_a")
-    assert _cell.zone() == "cell_a"
+    assert _cell.zone("program_cycle") == "cell_a"
     monkeypatch.delenv(_cell.SELECTED_BY)
     assert _cell.zone() == _cell.DRIVEN_ZONE
+
+
+def test_the_owner_split_of_zones_holds() -> None:
+    """The behaviour-tree scenarios drive `cell_a`; the real program, `cell_b`.
+
+    The project owner's decision of 2026-09-29 (ADR-0067): `cell_b`'s arm rides a
+    track that nothing in L3 or L4 moves, so a behaviour-tree Place cannot reach
+    its belt, and that cell is gated by `program_cycle` instead.
+    """
+    import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
+    import _cell
+
+    for name in ("bringup", "pick_and_place", "continuous_line"):
+        assert _cell.DEFAULT_ZONE_OF.get(name, _cell.DRIVEN_ZONE) == "cell_a", name
+    assert _cell.DEFAULT_ZONE_OF["program_cycle"] == "cell_b"
 
 
 def test_a_helper_module_is_not_offered_as_a_scenario() -> None:

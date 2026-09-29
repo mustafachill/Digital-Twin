@@ -58,10 +58,11 @@ from _cell import (  # noqa: E402  (insert first)
     zone,
 )
 
-#: The cell this scenario drives, from the one statement in `_cell.py`. The
-#: program needs taught poses, so a zone whose arm declares none is refused by
-#: the program itself, with a message naming what is missing.
-ZONE = zone()
+#: The cell this scenario drives, from the one statement in `_cell.py`: its
+#: default is `PROGRAM_ZONE`, the zone the real program runs on, looked up by this
+#: file's stem. The program needs taught poses, so a zone whose arm declares none
+#: is refused by the program itself, with a message naming what is missing.
+ZONE = zone(Path(__file__).stem)
 
 #: Height above the pick surface the work-piece is released from.
 SPAWN_DROP_M = 0.005

@@ -76,6 +76,17 @@ CAMPAIGN = REPO / "docs/measurements/2026-09-01-grasp-discrimination/raw"
 #: facility now declares a 66 mm cube (ADR-0067), which no trial here touched.
 CAMPAIGN_PART_M = 0.050
 
+#: The default command those trials ran at: 45 mm, the shipped default until
+#: 2026-09-29, when it moved to the real program's 60.9 mm close (ADR-0067). The
+#: campaign's per-trial gate below is evidence about THIS command; no trial has
+#: run at the new default, and what holds the subset property there is the
+#: validator rule `stall-band-admits-a-stall-on-nothing`, not a trial.
+CAMPAIGN_COMMAND_M = 0.045
+
+#: The command-referenced floor at the shipped default: 60.915 mm plus its
+#: 2.034 mm discrimination margin. Derived in `TestTheFloorArithmetic` below.
+SHIPPED_FLOOR_M = 0.062949131
+
 
 def physical_rules(path: Path, severity: Severity) -> set[str]:
     return {f.rule for f in physical.check(load(path)) if f.severity is severity}
@@ -132,13 +143,17 @@ class TestTheFloorArithmetic:
         )
         assert margin is not None
         floor = grasp.default_grasp_width_m + margin
-        # ADR-0052 §A.7 quotes 47.138 mm for this cell, and §A.11 records the
-        # same figure recomputed independently. Pinned rather than recomputed
-        # loosely, because the C++ side pins the identical number in
+        # At the shipped default, the real program's 60.915 mm close since
+        # 2026-09-29 (ADR-0067): 2.034 mm of margin and a 62.949 mm floor.
+        assert margin == pytest.approx(0.002034131, abs=1e-9)
+        assert floor == pytest.approx(SHIPPED_FLOOR_M, abs=1e-9)
+        # ADR-0052 §A.7 quotes 47.138 mm for the 45 mm default of its day, and
+        # §A.11 records the same figure recomputed independently. Still pinned at
+        # THAT command, because the C++ side pins the identical number in
         # `GripperDiscrimination.MatchesTheValidatorsOwnDerivation` — one policy,
         # two languages, and a drift in either fails one of the two tests.
-        assert margin == pytest.approx(0.002137972, abs=1e-9)
-        assert floor == pytest.approx(0.047137972, abs=1e-9)
+        at_45 = physical._grasp_discrimination_margin_m(effector, grasp, CAMPAIGN_COMMAND_M)
+        assert at_45 == pytest.approx(0.002137972, abs=1e-9)
 
     def test_the_shipped_band_clears_the_floor(self, grasp, widths) -> None:
         """Where the shipped value sits, stated rather than asserted loosely.
@@ -150,9 +165,9 @@ class TestTheFloorArithmetic:
         reader sees how much room there is without re-deriving it.
         """
         edge = widths.narrowest_m - grasp.stall_band_narrow_m
-        assert edge > 0.047137972, (
+        assert edge > SHIPPED_FLOOR_M, (
             f"the window opens to {edge * 1000.0:.3f} mm, at or below the "
-            f"47.138 mm the command-referenced bound already refused"
+            f"{SHIPPED_FLOOR_M * 1000.0:.3f} mm the command-referenced bound already refused"
         )
 
     def test_the_band_is_inside_the_interval_the_record_derives(self, grasp) -> None:
@@ -226,7 +241,7 @@ class TestTheValidatorRejectsTheDefect:
         edit_yaml(
             real_model / EFFECTOR,
             lambda d: d["asset_type"]["grasp"].__setitem__(
-                "stall_band_narrow_m", 0.066 - 0.047137972
+                "stall_band_narrow_m", 0.066 - SHIPPED_FLOOR_M
             ),
         )
         assert ADMITS_NOTHING not in physical_rules(real_model, Severity.ERROR)
@@ -714,10 +729,10 @@ class TestTheReanalysisGate:
         at_default = [
             t
             for t in campaign_trials[1]
-            if t["commanded_width_m"] == pytest.approx(grasp.default_grasp_width_m)
+            if t["commanded_width_m"] == pytest.approx(CAMPAIGN_COMMAND_M)
         ]
         assert at_default, (
-            "no false-positive trial ran at the shipped default command, so this gate "
+            "no false-positive trial ran at the campaign's default command, so this gate "
             "has nothing to test and its silence may not be read as a pass"
         )
 

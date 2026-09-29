@@ -57,7 +57,9 @@ joint limit, or a part the gripper cannot stall on, would be found by the cell m
 3. **Validation.** A refused program, a pose outside the vendor joint limits (now copied into
    L0 with a test against the vendor source), a track move beyond the stroke or speed, and a
    closing grip that the declared part cannot evidence (ADR-0052's two rules, applied to the
-   program's width) are errors. The reach check is track-aware.
+   program's width) are errors. The reach check takes a tracked arm **at stroke zero**
+   (corrected 2026-09-29, below): a station is served by L3's `Pick` and `Place` under L4,
+   and nothing in either moves the track.
 4. **The linear track.** A new `linear_axis` category and a `ufactory_linear_motor` type:
    700 mm stroke and 1 m/s from the datasheet, everything else engineered and `PROVISIONAL`.
    `picker_track` replaces `picker_base`, and `picker` stands on its `carriage` frame. The rail
@@ -91,10 +93,43 @@ joint limit, or a part the gripper cannot stall on, would be found by the cell m
 The twin runs what the robot runs, from the robot's own file, and a program the twin cannot
 run is refused by `./scripts/validate-model` rather than by the cell.
 
+### Corrected 2026-09-29, after review, on the project owner's decisions
+- **The reach check was track-aware in the wrong sense.** It counted a station point
+  reachable from anywhere along the stroke, but a station is served by L4's `Pick` and
+  `Place`, and nothing in L3 or L4 moves the track; only the program does. It now
+  checks a tracked arm with its carriage at stroke zero, and `cell_b`'s place point, the
+  belt's infeed, is then 1.094 m from the arm against a 0.700 m reach. **`b_transfer_1`
+  therefore declares no `place_to`**: its pick is reachable at track zero, its place is
+  not, and without a place point `line_plan.hpp` refuses the cell's line at plan time
+  instead of the planner failing mid-cycle. The flow edge still says where the part
+  goes. The rule was not weakened. **`./scripts/demo`, which runs the line on the
+  paired zone, cannot run it on `cell_b`**, and could not have placed there since this
+  record moved the belt out of reach.
+- **Which scenario drives which cell.** `cell_b` is gated by the real program:
+  `program_cycle` on `cell_b` is a **blocking** CI step. The behaviour-tree scenarios,
+  `pick_and_place` and `continuous_line`, and `bringup` with them, drive `cell_a`,
+  whose arms are bolted down (`tests/scenarios/_cell.py`: `DRIVEN_ZONE`,
+  `PROGRAM_ZONE`). Their CI steps keep their status: `pick_and_place` blocking,
+  `continuous_line` advisory. The parked event-driven line is kept whole.
+- **The default grasp width is the program's close**, 60.915 mm (`pos` 550 through the
+  vendor map and the L0 linkage), stated once on the end effector with that derivation
+  and held to the program by a host test. `PickAt` no longer sends its own 45 mm; it
+  sends 0, which the skill server resolves to that default. The ADR-0052 per-trial gate
+  over the 2026-09-01 campaign stays pinned to the 45 mm command those trials ran at;
+  **no trial has run at 60.9 mm**, and what holds the subset property there is the
+  validator rule, not a measurement.
+- **The carriage collides.** It has a collision box equal to its visual box, and the
+  generated SRDF disables the carriage/base pair, which are bolted together.
+- **A mode change during a track move lets the counterpart finish its slide.** A track
+  step is one trajectory point the boundary forwards to both sides and then forgets. If
+  the mode leaves `VALIDATED` or `VIRTUAL_LEAD` while the carriages are moving, the
+  boundary drops *later* track commands and sends no stop: each side's controller runs
+  the point it already has to its end. That is unlike a belt, whose setpoint the
+  boundary zeroes on the sides a mode stops commanding. It is recorded, not fixed.
+
 ### What this costs us
 - **`cell_a`'s generated artifacts change** although its L0 files do not: the part and the
-  belt type are facility-wide, so its beams, planning scene and plan move with them. Its
-  scenarios were not re-run here.
+  belt type are facility-wide, so its beams, planning scene and plan move with them.
 - The track's rail is 110 mm wide so that the pick table keeps 20 mm of clearance; the real
   profile is wider. The stand height (0.710 m) is derived from the pick pose, not measured.
 - Arrival of a track move is observed on the **plant**; through the twin the counterpart's
@@ -114,5 +149,5 @@ outfeed table, with each side's belt run on that side.
 
 ### What we will have to revisit
 The hardware path of the track (Phase 2.B), and the layout when the building is scanned.
-Promotion to `Accepted` wants `program_cycle` passing in CI and the program run on the pair
-with both boxes placed and carried, recorded.
+Promotion to `Accepted` wants `program_cycle` passing in CI, where it is now a blocking
+step, and the program run on the pair with both boxes placed and carried, recorded.

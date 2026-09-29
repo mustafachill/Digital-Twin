@@ -1002,7 +1002,7 @@ class TestGraspPolicyReachesTheBringUpPlan:
         managers = [m for m in plan["controller_managers"] if m.get("gripper_action")]
         assert managers, "no arm in the plan has a gripper; this test would prove nothing"
         for manager in managers:
-            assert manager["gripper_default_grasp_width_m"] == 0.045, manager["asset"]
+            assert manager["gripper_default_grasp_width_m"] == 0.060915, manager["asset"]
 
     def test_the_value_comes_from_the_model_and_is_not_a_generator_constant(
         self, real_model: Path, edit_yaml: Callable

@@ -61,9 +61,9 @@ def scenario():
         return _load_like_launch_test(SCENARIO_DIR / "pick_and_place.py")
 
 
-@pytest.fixture(scope="module", params=_artifacts.zone_ids(), ids=lambda zone: zone)
+@pytest.fixture(scope="module", params=_artifacts.line_zone_ids(), ids=lambda zone: zone)
 def artifacts(request) -> _artifacts.Artifacts:
-    """One case per zone the generated tree declares."""
+    """One case per zone whose line can run: every acting station has a place point."""
     return _artifacts.load(request.param)
 
 
@@ -81,7 +81,7 @@ def place_z(artifacts: _artifacts.Artifacts) -> float:
 
 def test_the_generated_tree_declares_at_least_one_zone() -> None:
     """The tripwire for the parametrisation collecting nothing."""
-    assert _artifacts.zone_ids(), (
+    assert _artifacts.line_zone_ids(), (
         f"no <zone>_plan.yaml under {_artifacts.GENERATED / 'bringup'}; this guard "
         "would collect zero cases and pass"
     )

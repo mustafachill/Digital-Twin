@@ -50,9 +50,13 @@ def scenario():
         return _load_like_launch_test(SCENARIO_DIR / "continuous_line.py")
 
 
-@pytest.fixture(scope="module", params=_artifacts.zone_ids(), ids=lambda zone: zone)
+@pytest.fixture(scope="module", params=_artifacts.line_zone_ids(), ids=lambda zone: zone)
 def artifacts(request) -> _artifacts.Artifacts:
-    """One case per zone the generated tree declares, NOT per zone anyone drives.
+    """One case per zone whose line can run, NOT per zone anyone drives.
+
+    `_artifacts.line_zone_ids` says which: a zone with an acting station that
+    declares no place point is one L4 refuses, and the scenario with it — see
+    `test_a_station_with_no_place_point_is_refused_by_name` below.
 
     The scenario is pointed at one cell at a time and this guard covers every
     cell it could be pointed at, so the two cannot come apart — which they did:
@@ -78,10 +82,37 @@ def test_the_generated_tree_declares_at_least_one_zone() -> None:
     fixture yields no cases, every test in this file disappears, and the suite
     reports green having checked no cell at all.
     """
-    assert _artifacts.zone_ids(), (
+    assert _artifacts.line_zone_ids(), (
         f"no <zone>_plan.yaml under {_artifacts.GENERATED / 'bringup'}; this guard "
         "would collect zero cases and pass"
     )
+
+
+def test_a_station_with_no_place_point_is_refused_by_name(scenario) -> None:
+    """A line the model says cannot place is a diagnosis, not a KeyError.
+
+    `cell_b`'s acting station declares no place frame since ADR-0067, because
+    its belt is out of reach until a track nothing in L4 moves has slid. Pointed
+    there, the scenario has to say which station and why, as `line_plan.hpp`
+    does, rather than die on a missing key.
+    """
+    topology = {
+        "zone": "z",
+        "stations": [
+            {"id": "src", "downstream": ["arm"]},
+            {
+                "id": "arm",
+                "actor": "picker",
+                "pick_frame": "p",
+                "upstream": ["src"],
+                "downstream": ["sink"],
+            },
+            {"id": "sink", "upstream": ["arm"]},
+        ],
+        "edges": [{"from": "src", "to": "arm"}, {"from": "arm", "to": "sink"}],
+    }
+    with pytest.raises(ValueError, match="'arm'.*no place frame"):
+        scenario.milestones(topology)
 
 
 # -----------------------------------------------------------------------------
