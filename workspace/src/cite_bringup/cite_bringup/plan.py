@@ -650,6 +650,8 @@ class Workpieces:
 class Plan:
     zone: str
     world: Path
+    #: The Gazebo GUI configuration a windowed run opens with (camera framing).
+    gui_config: Path
     scene: Path
     static_frames: Path
     topology: Path
@@ -839,6 +841,7 @@ def load(path: Path) -> Plan:
     return Plan(
         zone=_require(plan, "zone", "plan"),
         world=resolve_uri(_require(plan, "world", "plan")),
+        gui_config=resolve_uri(_require(plan, "gui_config", "plan")),
         scene=resolve_uri(_require(plan, "scene", "plan")),
         static_frames=resolve_uri(_require(plan, "static_frames", "plan")),
         topology=resolve_uri(_require(plan, "topology", "plan")),

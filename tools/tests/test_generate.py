@@ -1273,9 +1273,13 @@ class TestTwinSidesAndTheGazeboPartition:
         # paired is the count per zone, and this used to state it as the literal
         # `["worlds/cell_a.sdf"]` because there was only ever one zone. Pairing
         # `cell_a` must leave BOTH sides of that equality alone.
-        before = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
+        before = sorted(
+            p for p in artifacts(real_model) if p.startswith("worlds/") and p.endswith(".sdf")
+        )
         self._pair(real_model, edit_yaml)
-        worlds = sorted(p for p in artifacts(real_model) if p.startswith("worlds/"))
+        worlds = sorted(
+            p for p in artifacts(real_model) if p.startswith("worlds/") and p.endswith(".sdf")
+        )
         assert worlds == per_zone(real_model, "worlds/{zone}.sdf")
         assert worlds == before, "pairing a zone emitted a world it did not have unpaired"
 

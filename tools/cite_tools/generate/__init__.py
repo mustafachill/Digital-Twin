@@ -74,6 +74,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         control,
         description,
         frames,
+        gui,
         materials,
         moveit,
         package,
@@ -90,6 +91,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         cell = resolve(model, zone.id)
         artifacts += description.generate(cell)
         artifacts += world.generate(cell)
+        artifacts += gui.generate(cell)
         artifacts += control.generate(cell)
         artifacts += moveit.generate(cell)
         artifacts += planning_scene.generate(cell)

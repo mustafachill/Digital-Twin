@@ -549,6 +549,26 @@ def test_no_seed_means_no_flag(
     assert "--seed" not in _command(context, simulator)
 
 
+@pytest.mark.parametrize("headless", ["true", "false"])
+def test_only_a_window_is_given_the_gui_config(
+    module: ModuleType, context: LaunchContext, monkeypatch, headless: str
+) -> None:
+    """The generated camera framing reaches a windowed `gz sim` and nothing else."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["headless"] = headless
+    actions = module._bring_up(context)
+    simulator = next(
+        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
+    )
+    command = _command(context, simulator)
+    if headless == "true":
+        assert "--gui-config" not in command
+    else:
+        path = command[command.index("--gui-config") + 1]
+        assert path.endswith("worlds/cell_a_gui.config")
+        assert command[-1].endswith(".sdf"), "the world must stay the last argument"
+
+
 def test_a_seed_gz_will_not_accept_is_refused(
     module: ModuleType, context: LaunchContext, monkeypatch
 ) -> None:

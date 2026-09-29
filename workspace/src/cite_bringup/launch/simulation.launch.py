@@ -474,7 +474,11 @@ def _seed(environ: dict) -> str | None:
 def _simulator(
     plan: Plan, *, headless: bool, seed: str | None, gz_env: dict[str, str]
 ) -> list:
-    gz_args = ["-s", "-r", "-v", "2"] if headless else ["-r", "-v", "2"]
+    gz_args = (
+        ["-s", "-r", "-v", "2"]
+        if headless
+        else ["-r", "-v", "2", "--gui-config", str(plan.gui_config)]
+    )
     if seed is not None:
         gz_args += ["--seed", seed]
     gz_args.append(str(plan.world))
