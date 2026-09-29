@@ -119,8 +119,10 @@ step "Shell"
 # all. The pin removes the ambiguity, so the skip may go with it.
 if SHELL_GATE="$(assert_shellcheck_pinned "${VENV}/shellcheck" "$CITE_DEV_REQUIREMENTS")"; then
     # -x follows sourced files, so the `source=` directives in each script resolve
+    # tools/*.sh is the snapshot extractor (ADR-0068). The snapshots' own scripts
+    # under projects/ are not listed: each snapshot's ./scripts/lint checks them.
     check "${VENV}/shellcheck" -x -P "${REPO_ROOT}" \
-        "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh
+        "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh "${REPO_ROOT}"/tools/*.sh
 else
     FAILED=1
     err "Shell gate broken — ${SHELL_GATE}.
