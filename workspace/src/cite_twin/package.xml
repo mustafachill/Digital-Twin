@@ -51,6 +51,9 @@
        monitor and republished nowhere. -->
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <!-- A linear track's command crosses the boundary as the trajectory its
+       controller takes (ADR-0067). -->
+  <depend>trajectory_msgs</depend>
   <exec_depend>cite_generated</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

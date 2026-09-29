@@ -224,58 +224,49 @@ asset_type:
       pad_inset_m: 0.026
       tip_link_z_m: 0.172
       pad_face_centre_z_m: 0.041003
-    # What a Pick closes to when its goal names no width. 45 mm, and the bound
-    # that produces that number rather than any other:
+    # What a Pick closes to when its goal names no width: 60.9 mm, THE REAL
+    # PROGRAM'S CLOSE (project owner, 2026-09-29; ADR-0067). Derived, and stated
+    # here once because an end-effector type cannot read one arm's program:
     #
-    #   * Below the work-piece, not equal to it. The cell's reference work-piece
-    #     is a 50 mm cube, and a parallel gripper evidences a grasp by *failing*
-    #     to reach where it was sent: the pads meet the part, the joint stops
-    #     short, the controller reports a stall, and the skill compares the width
-    #     it reached against the width it asked for. Commanding 50 mm would let
-    #     the gripper arrive exactly on target and teach the skill nothing.
+    #   program close          gripper_set pos 550
+    #                          (model/programs/xarm5_real_demo.blockly.xml)
+    #   vendor driver          q = (850 - 550) / 1000 = 0.300 rad
+    #                          (cite_tools.model.blockly.gripper_drive_position)
+    #   linkage above          opening(0.300 rad) = 60.915 mm
     #
-    # What 45 mm actually buys, through the map above rather than through the
-    # linear one that used to be here:
-    #     commanded 45 mm      -> q = 0.4528 rad
-    #     50 mm part stops it  -> q = 0.4056 rad, i.e. opening 50.00 mm
-    #     unrelieved error     -> 0.047 rad, about 4.7x the controller's 0.01 rad
-    #                             goal_tolerance, so the stall is unambiguous
-    #     width margin         -> 5.00 mm, against a 2.11 mm discrimination
-    #                             threshold (see gripper_is_holding)
+    # `tools/tests/test_blockly.py` holds this value to that chain, so a program
+    # edited on the robot that closes elsewhere fails there rather than leaving
+    # the line and the program closing to two widths.
     #
-    # The number is unchanged from before the map was corrected, and that is a
-    # coincidence worth naming rather than hiding: 45 mm was always the right
-    # *intent*, but the linear map turned it into a 0.400 rad command that opened
-    # the pads to 50.59 mm — 0.3 mm of clearance per side on a 50 mm part, which
-    # is why no work-piece was ever grasped. The value did not need recomputing;
-    # the map that read it did.
+    # WHY IT IS STILL BELOW THE PART, which is the bound that produced 45 mm
+    # before: a parallel gripper evidences a grasp by *failing* to reach where it
+    # was sent — the pads meet the part, the joint stops short, the controller
+    # reports a stall, and the skill judges the width it reached. Against the
+    # 66 mm reference cube (sized from this same close, ADR-0067 decision 7):
     #
-    # `cite_tools.validate.physical` NOW ENFORCES THE BOUND THAT MATTERS. This
-    # block used to end by saying it could not: the 60.92 mm ceiling died with
-    # ADR-0023's attachment plugin, the 88.93 mm one that replaced it is only the
-    # gripper's own opening, and "narrower than the part" was unenforceable while
-    # L0 recorded no work-piece geometry. L0 records it now
-    # (assets/types/workpieces/workpiece.yaml), so the ceiling is derived from
-    # the part and the controller together:
+    #   narrowest work-piece                       66.00 mm
+    #   less the discrimination margin at 60.9 mm   2.03 mm
+    #   ceiling                                    63.97 mm
     #
-    #   narrowest work-piece                       50.00 mm
-    #   less 2 x goal_tolerance, in width           2.14 mm
-    #   ceiling                                    47.86 mm
+    # and the stall band's narrow edge, 66.00 - 2.385 = 63.615 mm, clears the
+    # close plus that margin, 62.95 mm. `cite_tools.validate.physical` enforces
+    # both (`default-grasp-width-never-closes`,
+    # `stall-band-admits-a-stall-on-nothing`), so this comment is the derivation
+    # and not the guarantee.
     #
-    # The subtracted term is not padding. `GripperActionController` ends a goal
-    # as soon as |error| < goal_tolerance, so the width it reports is
-    # systematically wider than commanded even in free air, and
-    # `cite_skills::gripper_is_holding` demands twice that bias before it calls
-    # anything a grasp. A default inside that band produces real grasps L3 cannot
-    # tell from closing on air. 45 mm leaves 5.00 mm — 2.3x the threshold.
+    # The margin term is not padding. `GripperActionController` ends a goal as
+    # soon as |error| < goal_tolerance, so the width it reports is systematically
+    # wider than commanded even in free air, and `cite_skills::gripper_is_holding`
+    # demands twice that bias before it calls anything a grasp.
+    #
+    # It was 45 mm against the 50 mm cube until 2026-09-29; every grasp figure
+    # published before then was taken at 45 mm on that cube.
     #
     # Honest about its home (P7): this is a property of an end effector *paired
     # with a work-piece*, and it still sits on the end-effector type. The day a
     # second work-piece size exists, this value moves to the work-piece and the
-    # goal carries it; the end-effector keeps only the stroke. Until then it is
-    # written once, here, and the validator checks it against the part rather
-    # than against a comment.
-    default_grasp_width_m: 0.045
+    # goal carries it; the end-effector keeps only the stroke.
+    default_grasp_width_m: 0.060915
 
     # HOW LONG L3 WAITS FOR THIS GRIPPER'S CONTROLLER TO ANSWER AT ALL, in
     # seconds of the waiting node's own clock (ADR-0045).

@@ -339,24 +339,23 @@ TEST_F(SkillGoals, PickPointsTheToolDown)
   EXPECT_DOUBLE_EQ(goal->object_pose.pose.orientation.w, 0.0);
 }
 
-TEST_F(SkillGoals, PickCommandsAWidthNarrowerThanTheWorkpiece)
+TEST_F(SkillGoals, PickLeavesTheWidthToTheModelsDefault)
 {
-  // A parallel gripper evidences a grasp by FAILING to reach where it was sent
-  // (ADR-0022), so the command has to be narrower than the 50 mm part. This
-  // bound is the one that has always been real; the bound written here until
-  // now was derived from an L1 simulation plugin's own thresholds, which is a
-  // layer violation that happened to produce the same number.
+  // 0 means "use the end effector's L0 default", which the skill server receives
+  // from the generated plan. A width written into the leaf is a second statement
+  // of that default, and one existed: it stayed at 45 mm when L0 moved to the
+  // real program's 60.9 mm close for the 66 mm part (ADR-0067), so the line
+  // closed to a width the model no longer declared. Whether the default is
+  // narrower than the part is `cite_tools.validate.physical`'s check, and the
+  // skill server's `resolve_grasp_width` refuses one that is not.
   RecordingServer<Pick> server(kPickAction);
   PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
   ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
 
   const auto goal = server.received();
   ASSERT_TRUE(goal.has_value());
-  EXPECT_GT(goal->grasp_width_m, 0.0) << "0 means 'use the configured default', which the "
-    "launch mechanism does not currently deliver, so the gripper would close on its "
-    "effort limit";
-  EXPECT_LT(goal->grasp_width_m, 0.050) << "a command at or above the part's own width "
-    "lets the jaws arrive on target, and the skill learns nothing";
+  EXPECT_DOUBLE_EQ(goal->grasp_width_m, 0.0) << "the leaf restated a grasp width the model "
+    "already declares";
 }
 
 TEST_F(SkillGoals, PlaceSendsTheWorkpiecesTargetNotAToolTarget)

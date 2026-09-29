@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The program's vocabulary: five kinds of step, and one loop that runs them.
+"""The program's vocabulary: a handful of step kinds, and one loop that runs them.
 
 A step is data, so a program can be printed (`--dry-run`) and tested without a
 cell. What a step DOES is a `Cell`'s job: `RosCell` below talks to the arm and
@@ -48,14 +48,22 @@ class Step:
 
     kind: str
     pose: str = ""
+    #: A move's fraction of the joint velocity limit; zero is the server default.
+    velocity_scaling: float = 0.0
     width_m: float = 0.0
     expect_object: bool = False
     speed_mps: float = 0.0
     seconds: float = 0.0
+    #: Where a track move takes the carriage, metres along the track.
+    position_m: float = 0.0
 
     def __str__(self) -> str:
         if self.kind == "move":
+            if self.velocity_scaling > 0.0:
+                return f"move to {self.pose} at {self.velocity_scaling:.3f} of full speed"
             return f"move to {self.pose}"
+        if self.kind == "track":
+            return f"slide the track to {self.position_m * 1000:.0f} mm at {self.speed_mps:g} m/s"
         if self.kind == "grip":
             if math.isinf(self.width_m):
                 return "open the gripper"
@@ -68,9 +76,14 @@ class Step:
         return f"wait {self.seconds:.2f} s"
 
 
-def move(pose: str) -> Step:
+def move(pose: str, velocity_scaling: float = 0.0) -> Step:
     """Move the arm to a named joint pose: `home` or one L0 declares."""
-    return Step("move", pose=pose)
+    return Step("move", pose=pose, velocity_scaling=velocity_scaling)
+
+
+def track(position_m: float, speed_mps: float) -> Step:
+    """Slide the linear track's carriage to ``position_m``, at ``speed_mps`` (ADR-0067)."""
+    return Step("track", position_m=position_m, speed_mps=speed_mps)
 
 
 def grip(width_m: float, expect_object: bool = True) -> Step:
@@ -100,7 +113,7 @@ class StepFailed(RuntimeError):
 class Cell(Protocol):
     """What a program needs from the cell. `RosCell` is the real one."""
 
-    def move(self, pose: str) -> None: ...
+    def move(self, pose: str, velocity_scaling: float) -> None: ...
 
     def grip(self, width_m: float, expect_object: bool) -> None: ...
 
@@ -108,19 +121,23 @@ class Cell(Protocol):
 
     def wait(self, seconds: float) -> None: ...
 
+    def track(self, position_m: float, speed_mps: float) -> None: ...
+
     def cancel(self) -> None: ...
 
 
 def execute(step: Step, cell: Cell) -> None:
     """Hand one step to the cell."""
     if step.kind == "move":
-        cell.move(step.pose)
+        cell.move(step.pose, step.velocity_scaling)
     elif step.kind == "grip":
         cell.grip(step.width_m, step.expect_object)
     elif step.kind == "belt":
         cell.belt(step.speed_mps)
     elif step.kind == "wait":
         cell.wait(step.seconds)
+    elif step.kind == "track":
+        cell.track(step.position_m, step.speed_mps)
     else:
         raise StepFailed(f"unknown step kind {step.kind!r}")
 
@@ -139,11 +156,15 @@ def run(
     cycles) passes its own count so that cycle 3 is not reported as cycle 1.
 
     However it ends — the last cycle, a failed step, Ctrl-C — the active goal is
-    cancelled and the belt is commanded to zero on the way out. A physical belt
-    is a drive whose setpoint persists (ADR-0038), so a program that stopped
-    without saying so would leave it running; a stop that could not be sent is
-    therefore a failure of the run, whatever the steps did.
+    cancelled, and, IF THE PROGRAM DRIVES A BELT, the belt is commanded to zero on
+    the way out. A physical belt is a drive whose setpoint persists (ADR-0038),
+    so a program that started one and stopped without saying so would leave it
+    running; a stop that could not be sent is therefore a failure of the run,
+    whatever the steps did. A program with no belt step leaves the belt alone:
+    the real robot's program has no belt block, and each side's belt is run on
+    that side by whoever started it (ADR-0067).
     """
+    drives_a_belt = any(step.kind == "belt" for step in steps)
     done = 0
     cycle = first_cycle - 1
     status = 1
@@ -167,7 +188,7 @@ def run(
         # it, and the script forwards one more; a second KeyboardInterrupt here
         # would abandon the cancel or the stop half-way.
         with _interrupts_ignored():
-            stopped = _stop(cell, say)
+            stopped = _stop(cell, say, drives_a_belt)
     if not stopped:
         say("FAILED: the belt was NOT confirmed stopped; it may still be running")
         return status or 1
@@ -202,15 +223,17 @@ def _interrupts_ignored() -> Iterator[None]:
             signal.signal(number, handler)
 
 
-def _stop(cell: Cell, say: Callable[[str], None]) -> bool:
+def _stop(cell: Cell, say: Callable[[str], None], drives_a_belt: bool = True) -> bool:
     """Cancel whatever is in flight, then stop the belt, each attempted regardless.
 
-    Return whether the belt's stop was sent.
+    Return whether the belt's stop was sent, or True for a program with no belt.
     """
     try:
         cell.cancel()
     except Exception as error:  # noqa: BLE001 - reported, and the stop still runs
         say(f"could not cancel the active goal: {error}")
+    if not drives_a_belt:
+        return True
     try:
         cell.belt(0.0)
     except Exception as error:  # noqa: BLE001 - reported, and made the exit status

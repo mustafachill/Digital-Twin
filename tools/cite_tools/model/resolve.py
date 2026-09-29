@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cite_tools.model import ids
+import numpy as np
+
+from cite_tools.model import blockly, ids
 from cite_tools.model.geometry import Aabb, Pose
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.schema import (
@@ -57,6 +59,35 @@ class ResolvedController:
 
 
 @dataclass(frozen=True)
+class ResolvedAxis:
+    """The linear track an arm stands on, as the arm's own description needs it.
+
+    Everything here is emitted into the ARM's description and the ARM's
+    controller manager, because the carriage carries the arm (ADR-0067): the
+    prismatic joint sits between the arm's mount link and its base, and its
+    controller is loaded beside the arm's.
+
+    ``direction`` is in the arm's MOUNT frame — the frame the joint's parent
+    link has — and is derived from the track type's own direction and the two
+    world poses, so the arm may be yawed on the carriage freely.
+    """
+
+    asset: str
+    joint: str
+    carriage_link: str
+    direction: tuple[float, float, float]
+    stroke_m: float
+    max_speed_mps: float
+    max_force_n: float
+    carriage_mass_kg: float
+    carriage_size_m: tuple[float, float, float]
+    goal_tolerance_m: float
+    ros2_control_plugin: str
+    controller: str
+    command_topic: str
+
+
+@dataclass(frozen=True)
 class ResolvedAsset:
     """One asset instance with everything a generator needs, already computed."""
 
@@ -71,6 +102,10 @@ class ResolvedAsset:
     namespace: str
     frames: dict[str, Pose] = field(default_factory=dict)
     controllers: tuple[ResolvedController, ...] = ()
+    #: The track this arm rides on, or `None` for an arm bolted in place.
+    axis: ResolvedAxis | None = None
+    #: The program this arm runs, read from L0 (ADR-0067); empty where none.
+    program: tuple[blockly.Step, ...] = ()
 
     def _backend(self, backend_id: str) -> HardwareBackend:
         backend = self.asset_type.hardware_backends.get(backend_id)
@@ -248,9 +283,99 @@ def _joint_names(
                 f"type {asset_type.id!r} declares an arm controller but no kinematics"
             )
         return tuple(ids.joint(asset.id, s) for s in asset_type.kinematics.joint_suffixes)
+    if spec.joints == "axis":
+        raise ResolveError(f"an axis controller on {asset.id!r} is resolved with its carrier")
     # end_effector: the vendor gripper exposes exactly one actuated joint; its
     # fingers follow through URDF <mimic> tags rather than being commanded.
     return (ids.joint(asset.id, "drive_joint"),)
+
+
+def program_steps(model: FacilityModel, instance: AssetInstance) -> tuple[blockly.Step, ...]:
+    """The program ``instance`` runs, read and converted, or ``()`` if it names none.
+
+    The one place a program is read against the facts its units convert with —
+    the arm's joint count and velocity limit, and the fitted gripper's linkage —
+    so that the validator and the generator read one answer (ADR-0067). Raises
+    `blockly.BlocklyError` when the program cannot be read; referential
+    validation reports that as `program-refused` before anything is generated.
+    """
+    configuration = instance.configuration
+    path = getattr(configuration, "program", None)
+    if path is None:
+        return ()
+    text = model.program(path)
+    asset_type = model.asset_type(instance.type)
+    if text is None or asset_type is None or asset_type.kinematics is None:
+        raise blockly.BlocklyError(f"asset {instance.id!r}: program {path!r} was not loaded")
+    kinematics = asset_type.kinematics
+    if kinematics.max_joint_velocity_rad_s is None:
+        raise blockly.BlocklyError(
+            f"type {asset_type.id!r} states no `kinematics.max_joint_velocity_rad_s`, so a "
+            "program's joint speed cannot be turned into a velocity scaling"
+        )
+    effector = (
+        None if instance.end_effector is None else model.asset_type(instance.end_effector.type)
+    )
+    if effector is None or effector.grasp is None:
+        raise blockly.BlocklyError(
+            f"asset {instance.id!r} fits no end effector with a grasp specification, so a "
+            "program's gripper positions cannot be turned into widths"
+        )
+    return blockly.parse(
+        text,
+        dof=kinematics.dof,
+        linkage=effector.grasp.linkage,
+        max_joint_velocity_rad_s=kinematics.max_joint_velocity_rad_s,
+    )
+
+
+def _axis(
+    model: FacilityModel, instance: AssetInstance, world: Pose
+) -> tuple[ResolvedAxis, AssetType] | None:
+    """The track ``instance`` stands on, or None when its parent is not one."""
+    if instance.pose.frame == ids.WORLD_FRAME:
+        return None
+    parent_id = instance.pose.frame.split("/", 1)[0]
+    track = model.asset(parent_id)
+    track_type = None if track is None else model.asset_type(track.type)
+    if track is None or track_type is None or track_type.axis is None:
+        return None
+    spec = track_type.axis
+    backend = track_type.hardware_backends.get(track.hardware.backend)
+    if backend is None:
+        raise ResolveError(
+            f"track {track.id!r} selects backend {track.hardware.backend!r}, which type "
+            f"{track_type.id!r} does not declare"
+        )
+    track_world = _resolve_world_pose(model, track.id)
+    rotation = np.asarray(world.to_matrix())[:3, :3].T @ np.asarray(track_world.to_matrix())[:3, :3]
+    direction = rotation @ np.asarray(spec.direction, dtype=float)
+    direction = direction / np.linalg.norm(direction)
+    controller = next((c for c in track_type.controllers if c.joints == "axis"), None)
+    if controller is None:
+        raise ResolveError(f"type {track_type.id!r} declares an axis and no controller for it")
+    return (
+        ResolvedAxis(
+            asset=track.id,
+            joint=ids.joint(track.id, spec.joint_suffix),
+            carriage_link=ids.link(track.id, spec.carriage_link_suffix),
+            direction=tuple(round(float(v), 9) + 0.0 for v in direction),  # type: ignore[arg-type]
+            stroke_m=spec.stroke_m,
+            max_speed_mps=spec.max_speed_mps,
+            max_force_n=spec.max_force_n,
+            carriage_mass_kg=spec.carriage_mass_kg,
+            carriage_size_m=spec.carriage_size_m,
+            goal_tolerance_m=spec.goal_tolerance_m,
+            ros2_control_plugin=backend.ros2_control_plugin,
+            controller=ids.controller(track.id, controller.suffix),
+            command_topic=ids.interface(
+                instance.zone,
+                instance.id,
+                f"{ids.controller(track.id, controller.suffix)}/joint_trajectory",
+            ),
+        ),
+        track_type,
+    )
 
 
 def index_offset_m(model: FacilityModel, asset: AssetInstance) -> float:
@@ -416,7 +541,9 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
             f.id: world.compose(Pose(xyz_m=f.xyz_m, rpy_rad=f.rpy_rad)) for f in asset_type.frames
         }
 
-        specs = list(asset_type.controllers)
+        # A track's controllers are loaded by the arm it carries, below, and
+        # never by a controller manager of the track's own.
+        specs = [] if asset_type.category == "linear_axis" else list(asset_type.controllers)
         # An end-effector's controllers belong to the arm that carries it: they
         # are loaded into the arm's controller manager and named with the arm's
         # prefix, because that is the asset an operator addresses.
@@ -425,7 +552,7 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
             if effector_type is not None:
                 specs.extend(effector_type.controllers)
 
-        controllers = tuple(
+        controllers = [
             ResolvedController(
                 name=ids.controller(instance.id, spec.suffix),
                 type=spec.type,
@@ -437,7 +564,41 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
                 constraints=spec.constraints,
             )
             for spec in sorted(specs, key=lambda s: (s.stage, s.suffix))
-        )
+        ]
+
+        # A track's controller is loaded by the controller manager of the arm on
+        # its carriage, because its joint is in that arm's description
+        # (ADR-0067). Named for the TRACK, so the joint and the controller say
+        # which asset they drive.
+        axis = None
+        if asset_type.category == "robot":
+            carried = _axis(model, instance, world)
+            if carried is not None:
+                axis, track_type = carried
+                assert track_type.axis is not None
+                controllers += [
+                    ResolvedController(
+                        name=ids.controller(axis.asset, spec.suffix),
+                        type=spec.type,
+                        stage=spec.stage,
+                        joints=(axis.joint,),
+                        command_interfaces=tuple(spec.command_interfaces),
+                        state_interfaces=tuple(spec.state_interfaces),
+                        parameters=dict(spec.parameters),
+                        # In the joint's own units, which for this joint are
+                        # metres; `TrajectoryConstraints` names its fields for
+                        # the revolute case it was written for.
+                        constraints=TrajectoryConstraints(
+                            goal_time_s=track_type.axis.goal_time_s,
+                            goal_tolerance_rad=track_type.axis.goal_tolerance_m,
+                            trajectory_tolerance_rad=track_type.axis.trajectory_tolerance_m,
+                            stopped_velocity_tolerance_rad_s=0.0,
+                        ),
+                    )
+                    for spec in track_type.controllers
+                    if spec.joints == "axis"
+                ]
+                controllers.sort(key=lambda c: (c.stage, c.name))
 
         parent_asset, parent_frame = (
             (None, None)
@@ -457,7 +618,9 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
                 prefix=ids.prefix(instance.id),
                 namespace=ids.namespace(zone_id, instance.id),
                 frames=frames,
-                controllers=controllers,
+                controllers=tuple(controllers),
+                axis=axis,
+                program=program_steps(model, instance),
             )
         )
 

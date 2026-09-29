@@ -65,6 +65,14 @@ class FacilityModel:
     stations: tuple[Station, ...]
     flows: tuple[Flow, ...]
     source_files: tuple[Path, ...]
+    #: Every program an asset's configuration names, as ``(path, text)`` with the
+    #: path relative to ``model/`` (ADR-0067). Read here, with the YAML, so that a
+    #: missing file is a load error and the text is part of what the model hash
+    #: identifies; what the text MEANS is `cite_tools.model.blockly`'s business.
+    programs: tuple[tuple[str, str], ...] = ()
+
+    def program(self, path: str) -> str | None:
+        return next((text for name, text in self.programs if name == path), None)
 
     def zone(self, zone_id: str) -> Zone | None:
         return next((z for z in self.zones if z.id == zone_id), None)
@@ -165,6 +173,19 @@ def load(root: Path) -> FacilityModel:
         elif isinstance(document, FlowDocument):
             flows.append(document.flow)
 
+    programs: dict[str, str] = {}
+    for asset in assets:
+        configuration = asset.configuration
+        program: str | None = getattr(configuration, "program", None)
+        if program is None or program in programs:
+            continue
+        source = root / program
+        if not source.is_file():
+            raise ModelError(
+                f"asset {asset.id!r} names the program {program!r}, and {source} does not exist"
+            )
+        programs[program] = source.read_text()
+
     if facility is None:
         raise ModelError(
             f"no facility document under {root}. Exactly one file must declare "
@@ -182,6 +203,7 @@ def load(root: Path) -> FacilityModel:
         stations=tuple(sorted(stations, key=lambda s: s.id)),
         flows=tuple(sorted(flows, key=lambda f: f.id)),
         source_files=tuple(seen),
+        programs=tuple(sorted(programs.items())),
     )
 
 

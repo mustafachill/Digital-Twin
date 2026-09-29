@@ -50,6 +50,13 @@ CAMPAIGN_OFFSETS_M = {
 }
 
 
+#: The drive-joint command the grasp-plane campaign ran at: the 45 mm default of
+#: its day, on the 50 mm part. Pinned here rather than read from the model's
+#: default, because the tests that use it reproduce THAT campaign, and the
+#: default has since moved to the real program's close (ADR-0067).
+CAMPAIGN_COMMAND_RAD = 0.4528
+
+
 @pytest.fixture
 def grasp(real_model: Path):
     effector = load(real_model).asset_type("xarm_parallel_gripper")
@@ -117,30 +124,35 @@ class TestDerivedWidths:
 class TestTheDefaultGraspActuallySqueezes:
     """What the default width buys, in the terms the skill server judges it on.
 
-    The value is 45 mm and was 45 mm before the map was corrected, which makes it
-    exactly the kind of number someone will assume was already checked. It was
-    not: under the linear map it commanded 0.400 rad and opened the pads to
-    50.59 mm, giving 0.3 mm of clearance per side on a 50 mm part.
+    Against the SHIPPED part, read from the model: the 66 mm cube and the real
+    program's 60.9 mm close since 2026-09-29 (ADR-0067). It was 45 mm on the
+    50 mm cube before, and under the linear map that 45 mm had commanded 0.400 rad
+    and opened the pads to 50.59 mm — 0.3 mm of clearance per side, which is why
+    this class exists.
     """
 
-    def test_the_default_is_narrower_than_the_work_piece(self, grasp) -> None:
-        assert grasp.default_grasp_width_m < WORKPIECE_M
+    @pytest.fixture
+    def part_m(self, real_model: Path) -> float:
+        body = load(real_model).asset_type("workpiece").description.body
+        return body.horizontal_extents_m[0]
 
-    def test_the_part_stops_the_joint_well_short_of_the_command(self, grasp) -> None:
+    def test_the_default_is_narrower_than_the_work_piece(self, grasp, part_m) -> None:
+        assert grasp.default_grasp_width_m < part_m
+
+    def test_the_part_stops_the_joint_well_short_of_the_command(self, grasp, part_m) -> None:
         commanded = grasp.linkage.position_for(grasp.default_grasp_width_m)
-        stalled_at = grasp.linkage.position_for(WORKPIECE_M)
+        stalled_at = grasp.linkage.position_for(part_m)
         # Unrelieved error at the drive joint, which is what makes the stall
-        # unambiguous rather than marginal: ~0.047 rad against a 0.01 rad
+        # unambiguous rather than marginal: ~0.051 rad against a 0.01 rad
         # goal_tolerance.
-        assert commanded - stalled_at == pytest.approx(0.0472, abs=5e-4)
+        assert commanded - stalled_at == pytest.approx(0.0508, abs=5e-4)
 
-    def test_the_width_margin_clears_the_controller_bias(self, grasp) -> None:
-        """5.00 mm of real margin against a ~2.11 mm discrimination threshold."""
-        margin = (
-            grasp.linkage.opening_m(grasp.linkage.position_for(WORKPIECE_M))
-            - grasp.default_grasp_width_m
+    def test_the_width_margin_clears_the_controller_bias(self, grasp, part_m) -> None:
+        """5.09 mm of real margin against a ~2.03 mm discrimination threshold."""
+        margin = grasp.linkage.opening_m(grasp.linkage.position_for(part_m)) - (
+            grasp.default_grasp_width_m
         )
-        assert margin == pytest.approx(0.005, abs=1e-4)
+        assert margin == pytest.approx(0.00509, abs=1e-4)
 
 
 class TestThePadPlaneSitsWhereTheCampaignMeasuredIt:
@@ -176,9 +188,7 @@ class TestThePadPlaneSitsWhereTheCampaignMeasuredIt:
         constant is right at more than one width.
         """
         wide = grasp.linkage.pad_plane_offset_m(grasp.open_position)
-        narrow = grasp.linkage.pad_plane_offset_m(
-            grasp.linkage.position_for(grasp.default_grasp_width_m)
-        )
+        narrow = grasp.linkage.pad_plane_offset_m(CAMPAIGN_COMMAND_RAD)
         assert wide - narrow == pytest.approx(0.01128, abs=5e-5)
 
     def test_correcting_it_puts_the_pad_face_on_the_work_piece(self, grasp) -> None:
@@ -194,9 +204,7 @@ class TestThePadPlaneSitsWhereTheCampaignMeasuredIt:
         uncorrected = grasp.linkage.pad_plane_offset_m(stall)
         assert uncorrected == pytest.approx(0.0193, abs=5e-4)
 
-        commanded = grasp.linkage.pad_plane_offset_m(
-            grasp.linkage.position_for(grasp.default_grasp_width_m)
-        )
+        commanded = grasp.linkage.pad_plane_offset_m(CAMPAIGN_COMMAND_RAD)
         # Where the pad centre lands, relative to the part's centre of mass, once
         # the tip link is put `commanded` below the object's pose. The residual is
         # the clearance between the commanded width and the part's own, which this

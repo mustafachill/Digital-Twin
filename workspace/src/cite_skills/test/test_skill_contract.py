@@ -134,6 +134,23 @@ def _workpieces() -> dict:
     return workpieces
 
 
+def _stall_position() -> float:
+    """Return the drive position at which the pads meet the narrowest declared part.
+
+    Through the linkage the plan delivers to the skill server, so the fake
+    gripper stalls where a real one would on the part the facility declares,
+    whatever its size (ADR-0052 judges the reached width against that part).
+    """
+    manager = _plan()
+    width = _workpieces()["narrowest_width_m"]
+    pivot = manager["gripper_drive_pivot_y_m"] - manager["gripper_pad_inset_m"]
+    offset_y = manager["gripper_finger_offset_y_m"]
+    offset_z = manager["gripper_finger_offset_z_m"]
+    crank = math.hypot(offset_y, offset_z)
+    phase = math.atan2(offset_z, offset_y)
+    return math.acos((width / 2.0 - pivot) / crank) - phase
+
+
 def _joints(manager: dict) -> list:
     """Return the arm's joints, plus the gripper's drive joint, as ros2_control has them.
 
@@ -387,11 +404,11 @@ class Harness(RclpyNode):
         controller's own end-of-goal bias. Reporting a stall alone would be the
         defect ADR-0022 fixed — `stalled` says the joint stopped short, never why.
 
-        Half of the commanded stroke is comfortably wide of that margin when the
-        command is a full close, which is what the transfer tests send.
+        It stops where the pads meet the declared part, which is far wide of that
+        margin when the command is a full close, as the transfer tests send.
         """
         result = GripperCommand.Result()
-        result.position = goal_handle.request.command.position / 2.0
+        result.position = _stall_position()
         result.effort = goal_handle.request.command.max_effort
         result.stalled = True
         result.reached_goal = False
@@ -407,8 +424,8 @@ class Harness(RclpyNode):
         """
         self.gripper_stalls_on_a_part = True
         goal = Grasp.Goal()
-        # A full close. The fake gripper stalls at half the commanded drive
-        # position, which is far wider than the width this asked for — a part.
+        # A full close. The fake gripper stalls where the pads meet the declared
+        # part, which is far wider than the width this asked for.
         goal.width_m = 0.0
         goal.max_effort_n = 10.0
         goal.expect_object = True

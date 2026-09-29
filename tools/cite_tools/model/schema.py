@@ -276,6 +276,54 @@ class Kinematics(Strict):
     base_link_suffix: str
     tip_link_suffix: str
     max_reach_m: Annotated[float, Field(gt=0.0)]
+    #: Each joint's position limits, ``[lower, upper]`` in joint order, as the
+    #: vendor description declares them. Stated here because L0 does not read
+    #: the vendor description (DescriptionSpec), and a program's poses have to be
+    #: checked against them before anything is generated (`program-pose-*` in
+    #: cite_tools.validate.referential, ADR-0067). `None` where nothing needs
+    #: them.
+    joint_limits_rad: list[tuple[float, float]] | None = None
+    #: The joint velocity limit the vendor description declares, rad/s. A
+    #: Blockly program states its speed in degrees per second, and MoveIt takes
+    #: a fraction of THIS limit, so the conversion needs it (ADR-0067).
+    max_joint_velocity_rad_s: Annotated[float, Field(gt=0.0)] | None = None
+
+
+class LinearAxisSpec(Strict):
+    """One driven prismatic axis that carries another asset: a linear track.
+
+    The axis is part of what it carries, not of the building. Its rail is an
+    authored body in the scene, but its joint is emitted into the description of
+    the arm that stands on its carriage, under that arm's base, so that
+    `robot_state_publisher`, MoveIt's robot state and the collision scene all see
+    where the arm really is (ADR-0067). An arm mounted on a carriage frame of a
+    type with an `axis` is the whole of how that relationship is declared.
+
+    The joint moves along ``direction``, a unit vector in the TYPE's own frame,
+    from the carriage frame's position (stroke zero) to ``stroke_m`` past it.
+    """
+
+    joint_suffix: Identifier
+    carriage_link_suffix: Identifier
+    direction: Triple
+    stroke_m: Annotated[float, Field(gt=0.0)]
+    #: The axis's own speed limit, m/s. Emitted as the joint's URDF velocity
+    #: limit, which `enforce_command_limits` applies (ADR-0036's control block).
+    max_speed_mps: Annotated[float, Field(gt=0.0)]
+    #: The URDF effort limit, N. In simulation it bounds the force the physics
+    #: engine may use to follow the command.
+    max_force_n: Annotated[float, Field(gt=0.0)]
+    #: The moving carriage, as a solid box, so the joint has a link with mass
+    #: behind it: a massless link between two joints is dropped by the
+    #: URDF-to-SDF converter, and the axis with it.
+    carriage_mass_kg: Annotated[float, Field(gt=0.0)]
+    carriage_size_m: Triple
+    #: When the axis's trajectory controller calls a move mistracked (ADR-0036),
+    #: in the joint's own units, metres. The same three numbers serve the
+    #: simulated and the physical axis.
+    goal_time_s: Annotated[float, Field(gt=0.0)]
+    goal_tolerance_m: Annotated[float, Field(gt=0.0)]
+    trajectory_tolerance_m: Annotated[float, Field(gt=0.0)]
 
 
 class CollisionMeshSet(Strict):
@@ -744,7 +792,9 @@ class ControllerSpec(Strict):
 
     suffix: Identifier
     type: str
-    joints: Literal["arm", "end_effector", "none"]
+    #: ``axis`` is the one joint of a `LinearAxisSpec`; its controller is loaded
+    #: by the controller manager of the arm that stands on the carriage.
+    joints: Literal["arm", "end_effector", "axis", "none"]
     stage: Annotated[int, Field(ge=0)]
     command_interfaces: list[str] = Field(default_factory=list)
     state_interfaces: list[str] = Field(default_factory=list)
@@ -1299,7 +1349,11 @@ class AssetType(Strict):
     #: A work-piece type is never instantiated as an `AssetInstance`: it has no
     #: fixed pose, because where it is is the process's business and not the
     #: layout's. `Facility.workpiece_models` names the ones this facility handles.
-    category: Literal["robot", "end_effector", "conveyor", "sensor", "fixture", "workpiece"]
+    #: ``linear_axis`` is a track an arm rides on (ADR-0067): a rail body in the
+    #: scene, and one prismatic joint emitted under the arm it carries.
+    category: Literal[
+        "robot", "end_effector", "conveyor", "sensor", "fixture", "workpiece", "linear_axis"
+    ]
     vendor: str | None = None
     kinematics: Kinematics | None = None
     frames: list[NamedFrame] = Field(default_factory=list)
@@ -1309,6 +1363,7 @@ class AssetType(Strict):
     controllers: list[ControllerSpec] = Field(default_factory=list)
     planning: PlanningSpec | None = None
     grasp: GraspSpec | None = None
+    axis: LinearAxisSpec | None = None
 
     @model_validator(mode="after")
     def _every_backend_answers_the_collision_scheme(self) -> AssetType:
@@ -1583,6 +1638,11 @@ class RobotConfiguration(Strict):
     #: would be the same pose in two places. `named-pose-*` in
     #: cite_tools.validate.referential checks the names and the lengths.
     poses_rad: dict[Identifier, list[float]] = Field(default_factory=dict)
+    #: The program this arm runs, as the real robot's programming tool wrote it,
+    #: relative to ``model/`` (ADR-0067). Read by `cite_tools.model.blockly`;
+    #: its poses become named poses beside ``poses_rad`` and its steps the
+    #: bring-up plan's ``program:`` block. Nothing in it is copied by hand.
+    program: Annotated[str, Field(pattern=r"^programs/[a-z0-9_]+\.blockly\.xml$")] | None = None
 
 
 #: Only the categories that actually carry settings appear here. A fixture has

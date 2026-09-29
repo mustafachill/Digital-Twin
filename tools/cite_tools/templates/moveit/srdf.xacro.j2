@@ -22,4 +22,11 @@
       {{ name }}="{{ value }}"
 {% endfor %}
   />
+{% for first, second in arm.adjacent_pairs %}
+
+  <!-- {{ first }} is bolted to {{ second }}: the track's carriage carries the
+       arm's base on its top face (ADR-0067), so the two are always in contact and
+       the vendor matrix, which has never heard of a carriage, cannot say so. -->
+  <disable_collisions link1="{{ first }}" link2="{{ second }}" reason="Adjacent"/>
+{% endfor %}
 </robot>

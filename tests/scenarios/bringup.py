@@ -118,7 +118,13 @@ def joints_of(arm) -> set[str]:
     every zone the generated tree declares, because `./scripts/test` runs no
     scenario and nothing else in the quality gate evaluates this expression.
     """
-    return {f"{arm.asset}_{suffix}" for suffix in JOINT_SUFFIXES}
+    joints = {f"{arm.asset}_{suffix}" for suffix in JOINT_SUFFIXES}
+    # An arm riding a linear track also publishes the track's joint, named for
+    # the TRACK and read from the plan (ADR-0067).
+    track = getattr(arm, "track", None)
+    if track is not None:
+        joints.add(track.joint)
+    return joints
 
 
 #: How far a follower may sit from `drive_joint` and still count as tracking it.
@@ -452,8 +458,9 @@ class TestCellBringUp(unittest.TestCase):
         # `test_the_gripper_linkage_is_actually_coupled` asserts that they TRACK
         # the drive joint. A count alone would pass again the day the patch is
         # reverted and the followers reappear as five joints that never move.
-        self.assertEqual(len(owners), len(self.arms) * len(JOINT_SUFFIXES), sorted(owners))
-        self.assertEqual(len(owners), len(self.arms) * JOINTS_PER_ARM, sorted(owners))
+        tracks = sum(1 for arm in self.arms if getattr(arm, "track", None) is not None)
+        self.assertEqual(len(owners), len(self.arms) * len(JOINT_SUFFIXES) + tracks, sorted(owners))
+        self.assertEqual(len(owners), len(self.arms) * JOINTS_PER_ARM + tracks, sorted(owners))
 
     def test_the_gripper_linkage_is_actually_coupled(self) -> None:
         """The five follower joints track `drive_joint`, rather than merely existing.
@@ -679,9 +686,12 @@ class TestCellBringUp(unittest.TestCase):
         buffer = tf2_ros.Buffer()
         listener = tf2_ros.TransformListener(buffer, self.node)
         try:
+            # A station may declare no place frame: `cell_b`'s does not, because
+            # its belt is out of reach until the track slides and nothing in L3
+            # or L4 slides it (ADR-0067). What is declared is what is checked.
             for frame in (
                 station["pick_frame"],
-                station["place_frame"],
+                *([station["place_frame"]] if station.get("place_frame") else []),
                 f"{arm.asset}_mount",
                 arm.moveit.base_link,
             ):

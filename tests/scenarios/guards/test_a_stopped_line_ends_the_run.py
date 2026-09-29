@@ -679,6 +679,7 @@ def test_the_failure_carries_the_ladder_and_the_stop_point(line_state, arm) -> N
         halt_state=state,
     )
     fake.workpiece = "workpiece_1"
+    fake.workpiece_part = "workpiece_1"
     fake.world = "cell_a"
 
     with pytest.raises(AssertionError) as raised:
@@ -731,6 +732,7 @@ def test_a_stop_during_the_removal_wait_still_carries_the_context(line_state) ->
     ladder = _ladder(module)
     fake = _fake_self(module, ladder=ladder)
     fake.workpiece = "workpiece_1"
+    fake.workpiece_part = "workpiece_1"
     fake.world = "cell_a"
     fake._on_line_state(_line_state_message(STALLED))
     fake._journeys.append(module.Journey(1, (ladder[0].describe(),), (), 420.0))
@@ -785,6 +787,7 @@ def test_a_halt_during_the_spawn_wait_is_not_re_labelled_as_a_setup_failure(
     ladder = _ladder(module)
     fake = _fake_self(module, ladder=ladder)
     fake.workpiece = "workpiece_1"
+    fake.workpiece_part = "workpiece_1"
     fake.world = "cell_a"
     fake._on_line_state(_line_state_message(BLOCKED))
     _bind(module, fake, "_spin_until")

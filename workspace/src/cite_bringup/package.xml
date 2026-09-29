@@ -37,6 +37,11 @@
   <exec_depend>rclpy</exec_depend>
   <!-- The fixed program publishes belt setpoints (ADR-0066). -->
   <exec_depend>std_msgs</exec_depend>
+  <!-- The fixed program commands the linear track on its trajectory controller's
+       own topic and reads its arrival on the arm's joint states (ADR-0067). -->
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>cite_runtime</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>launch</exec_depend>

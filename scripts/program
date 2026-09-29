@@ -6,13 +6,15 @@
 #   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
 #   ./scripts/program --zone cell_b    name the zone rather than letting the model choose
 #
-# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line, and
+# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line,
+# starts each side's belt ON THAT SIDE (the belt is not twinned, ADR-0067), and
 # for each cycle puts one work-piece on each side's pick table (taking the last
-# cycle's off the belt first) and runs `python3 -m cite_bringup.program --via
-# twin --cycles 1`: ONE program, through the twin boundary, moving both arms pose
-# by pose and running both belts (ADR-0066). Then it reports where the last box
-# ended and tears the pair down. Ctrl-C stops the program (goal
-# cancelled, belt commanded to zero) and then the pair.
+# cycle's off first) and runs `python3 -m cite_bringup.program --via twin
+# --cycles 1`: the real xArm 5's own program, read from its program file, sent
+# ONCE through the twin boundary, moving both arms and sliding both tracks step
+# by step (ADR-0067). Then it reports where the last box ended and tears the
+# pair down. Ctrl-C stops the program (goal cancelled, track held) and then the
+# pair.
 #
 # WHAT IT IS NOT. A demonstration, like ./scripts/demo: it gates nothing and is in
 # no CI step. `./scripts/scenario program_cycle` is what CHECKS the program, on one
@@ -92,7 +94,7 @@ teardown() {
     trap 'warn "still stopping — the supervisor is working through its own ceilings"' INT TERM
     if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null || true; fi
     if [ -n "$PROGRAM_PID" ] && kill -0 "$PROGRAM_PID" 2>/dev/null; then
-        # SIGINT, so the program cancels its goal and stops the belt itself.
+        # SIGINT, so the program cancels its goal and holds the track itself.
         kill -INT "$PROGRAM_PID" 2>/dev/null || true
         wait "$PROGRAM_PID" 2>/dev/null || true
     fi
@@ -148,16 +150,17 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, world_name
 from cite_bringup.gz import plan_for, run
-from cite_bringup.workpiece import SIDE_M, workpiece_sdf
+from cite_bringup.workpiece import part_of, workpiece_sdf
 
 zone, remove_first = sys.argv[1], sys.argv[2] == "1"
 name = "workpiece"
 plan = plan_for(zone)
 world = world_name(plan.world)
 pick = frame(plan, f"{zone}__infeed_table__surface")
-at = (pick[0], pick[1], pick[2] + SIDE_M / 2.0 + SPAWN_DROP_M)
+part = part_of(plan, name)
+at = (pick[0], pick[1], pick[2] + part.size_m[2] / 2.0 + SPAWN_DROP_M)
 with NamedTemporaryFile("w", suffix=".sdf", delete=False) as sdf:
-    sdf.write(workpiece_sdf(name))
+    sdf.write(workpiece_sdf(part))
 try:
     for side in plan.sides:
         if remove_first:
@@ -181,6 +184,13 @@ finally:
     Path(sdf.name).unlink(missing_ok=True)
 PY
 }
+
+# Each side's belt, on that side's own domain and never through the boundary:
+# the real program has no belt block, so the belt is not part of the twin
+# (ADR-0067). It runs for the whole session, the way a line's belt does.
+step "Starting each side's belt, on that side"
+python3 -m cite_bringup.program.belt --zone "$ZONE" \
+    || die "a side's belt would not take its setpoint"
 
 STATUS=0
 CYCLE=0
@@ -208,8 +218,9 @@ while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]
 done
 
 step "Where the last box ended"
-# Read once, after the belt has stopped. Not a measurement of divergence: see
-# ADR-0065 for that.
+# Read once, with the belts still running, so a box that was placed has been
+# carried on towards the outfeed. Not a measurement of divergence: see ADR-0065
+# for that.
 python3 - "$ZONE" <<'PY' || true
 import sys
 from cite_bringup.demo import frame, world_name

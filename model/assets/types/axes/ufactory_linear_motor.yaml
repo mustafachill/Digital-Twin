@@ -1,0 +1,101 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# UFACTORY Linear Motor — the linear track the real xArm 5 rides on (ADR-0067).
+#
+# The real cell's program picks a box at track position 0, lifts it, slides the
+# arm 650 mm along the track and places the box on the belt. The twin models the
+# track so that the same program does the same thing.
+#
+# TWO HALVES, AND THEY LIVE IN DIFFERENT DESCRIPTIONS.
+#
+#   * The RAIL is an authored body in the scene, like a pedestal: the rail and
+#     the stand it is bolted to, as one box. It never moves.
+#   * The AXIS — one prismatic joint and the carriage it moves — is emitted into
+#     the description of the ARM on the carriage, under the arm's base, so that
+#     robot_state_publisher, MoveIt's robot state and its collision checks all
+#     see where the arm really is. Its trajectory controller is loaded by that
+#     arm's controller manager. An arm declares it stands on this track by being
+#     placed on the `carriage` frame, and that is the whole of the declaration.
+#
+# WHAT IS THE VENDOR'S AND WHAT IS OURS. The stroke (700 mm) and the speed limit
+# (1000 mm/s) are the UFACTORY Linear Motor datasheet's. Everything else — the
+# rail's box, the stand height, the carriage's mass and plate, the force limit —
+# is engineered here and PROVISIONAL, like the rest of the layout: nothing on the
+# real track has been measured. The stand height in particular is a fact about
+# this installation, derived from the real program's pick pose (see
+# model/assets/instances/tracks.yaml).
+#
+# THE HARDWARE PATH IS NOT IMPLEMENTED. The real track is commanded through the
+# vendor's `set_linear_motor_pos` service in `xarm_api`, not through
+# `ros2_control`, so there is no `real` backend here and an instance selecting one
+# is refused by the validator. Phase 2.B builds it (ADR-0067, DoD item 5).
+asset_type:
+  id: ufactory_linear_motor
+  category: linear_axis
+  vendor: ufactory
+
+  frames:
+    # Where the arm's base stands when the carriage is at stroke zero. It names a
+    # link because the carriage MOVES: the link is emitted into the carrying
+    # arm's description and published by that arm's robot_state_publisher, so no
+    # static transform claims a pose the carriage has left.
+    #
+    # 5 mm above the rail's top face. The gap stands for the carriage plate,
+    # which rides the rail: without it the arm's base would slide in contact with
+    # the rail, and the contact friction would fight the axis in simulation.
+    - id: carriage
+      xyz_m: [-0.350, 0.000, 0.710]
+      link: carriage
+
+  axis:
+    joint_suffix: joint
+    carriage_link_suffix: carriage
+    # Along the rail, in this type's own frame.
+    direction: [1.0, 0.0, 0.0]
+    stroke_m: 0.700
+    max_speed_mps: 1.000
+    max_force_n: 500.0
+    carriage_mass_kg: 3.0
+    carriage_size_m: [0.200, 0.160, 0.005]
+    # ADR-0036's detector for this joint, in metres. The goal tolerance is also
+    # what the fixed program waits for before its next step.
+    goal_time_s: 0.5
+    goal_tolerance_m: 0.001
+    trajectory_tolerance_m: 0.050
+
+  description:
+    provider: body
+    body:
+      # 1.000 m of rail: the 0.700 m stroke plus 0.150 m at each end, so the
+      # carriage never overhangs it. 0.110 m wide, narrower than the vendor's
+      # profile, so that the pick table the real program reaches keeps 20 mm of
+      # clearance from it; the width is not the vendor's and is PROVISIONAL.
+      visual:
+        kind: box
+        size_m: [1.000, 0.110, 0.705]
+      collision:
+        kind: box
+        size_m: [1.000, 0.110, 0.705]
+      inertial:
+        mass_kg: 25.0
+        com_m: [0.0, 0.0, 0.0]
+        ixx: 1.0607
+        iyy: 3.1188
+        izz: 2.1086
+      material: conveyor_frame
+
+  hardware_backends:
+    sim:
+      ros2_control_plugin: gz_ros2_control/GazeboSimSystem
+      commands_physical_hardware: false
+      instance_params: []
+
+  controllers:
+    - suffix: trajectory_controller
+      type: joint_trajectory_controller/JointTrajectoryController
+      joints: axis
+      stage: 1
+      command_interfaces: [position]
+      state_interfaces: [position, velocity]

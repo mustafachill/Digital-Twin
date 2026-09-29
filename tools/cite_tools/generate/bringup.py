@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from cite_tools.generate import Artifact
 from cite_tools.generate.moveit import PIPELINES
-from cite_tools.model import ids
+from cite_tools.model import blockly, ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell, ResolveError
 from cite_tools.model.units import fmt
 from cite_tools.render import environment
@@ -120,6 +120,43 @@ class _ManagerView:
     gripper_tip_link_z_m: float | None
     gripper_pad_face_centre_z_m: float | None
     skills: _SkillView | None
+    track: _TrackView | None = None
+
+
+@dataclass(frozen=True)
+class _TrackView:
+    """The linear track an arm rides, as a program drives it (ADR-0067).
+
+    Commanded through its trajectory controller's own `joint_trajectory` topic,
+    so that the twin boundary can forward one command to both sides exactly as
+    it forwards a belt setpoint; arrival is read on the arm's `joint_states`.
+    """
+
+    asset: str
+    joint: str
+    controller: str
+    command_topic: str
+    stroke_m: float
+    max_speed_mps: float
+    goal_tolerance_m: float
+
+
+@dataclass(frozen=True)
+class _ProgramView:
+    """One arm's program, as steps the fixed-program runner executes (ADR-0067)."""
+
+    asset: str
+    source: str
+    steps: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _WorkpieceModelView:
+    """One work-piece type's box, for whatever spawns one into a running world."""
+
+    name: str
+    size_m: tuple[float, float, float]
+    mass_kg: float
 
 
 @dataclass(frozen=True)
@@ -423,12 +460,77 @@ def _poses(asset: ResolvedAsset) -> tuple[tuple[str, tuple[float, ...]], ...]:
     """The named joint poses a fixed program moves this arm through (ADR-0066).
 
     From L0 for the reason `_home` is: which poses a program uses is a decision
-    about this cell, and the angles live once, in the model.
+    about this cell, and the angles live once, in the model. The poses of the
+    arm's program, if it runs one, follow: they are read from the program file
+    and never written in L0 (ADR-0067), and `program-pose-name-taken` keeps the
+    two sets of names apart.
     """
     configuration = asset.instance.configuration
-    if configuration is not None and configuration.kind == "robot":
-        return tuple((name, tuple(values)) for name, values in configuration.poses_rad.items())
-    return ()
+    if configuration is None or configuration.kind != "robot":
+        return ()
+    taught = tuple((name, tuple(values)) for name, values in configuration.poses_rad.items())
+    return taught + tuple(blockly.poses(asset.program).items())
+
+
+def _step(step: blockly.Step) -> str:
+    """One program step as a YAML flow mapping, in SI units."""
+    if isinstance(step, blockly.Move):
+        return f"{{kind: move, pose: {step.pose}, velocity_scaling: {fmt(step.velocity_scaling)}}}"
+    if isinstance(step, blockly.Grip):
+        expect = "true" if step.closing else "false"
+        return f"{{kind: grip, width_m: {fmt(step.width_m)}, expect_object: {expect}}}"
+    if isinstance(step, blockly.Wait):
+        return f"{{kind: wait, seconds: {fmt(step.seconds)}}}"
+    return f"{{kind: track, position_m: {fmt(step.position_m)}, speed_mps: {fmt(step.speed_mps)}}}"
+
+
+def _programs(cell: ResolvedCell) -> tuple[_ProgramView, ...]:
+    return tuple(
+        _ProgramView(
+            asset=asset.id,
+            source=str(getattr(asset.instance.configuration, "program", "")),
+            steps=tuple(_step(step) for step in asset.program),
+        )
+        for asset in cell.assets
+        if asset.program
+    )
+
+
+def _track(asset: ResolvedAsset) -> _TrackView | None:
+    axis = asset.axis
+    if axis is None:
+        return None
+    return _TrackView(
+        asset=axis.asset,
+        joint=axis.joint,
+        controller=axis.controller,
+        command_topic=axis.command_topic,
+        stroke_m=axis.stroke_m,
+        max_speed_mps=axis.max_speed_mps,
+        goal_tolerance_m=axis.goal_tolerance_m,
+    )
+
+
+def _workpiece_models(cell: ResolvedCell) -> tuple[_WorkpieceModelView, ...]:
+    """Every declared work-piece whose body is a box, with its size and mass.
+
+    So that a caller spawning a part reads the part's size from the plan rather
+    than from a literal of its own (ADR-0067): the size was a second statement in
+    `cite_bringup.workpiece` until the part changed size.
+    """
+    views = []
+    for asset_type in cell.workpiece_types:
+        body = asset_type.description.body
+        if body is None or body.collision.kind != "box":
+            continue
+        views.append(
+            _WorkpieceModelView(
+                name=asset_type.id,
+                size_m=tuple(body.collision.size_m),  # type: ignore[arg-type]
+                mass_kg=body.inertial.mass_kg,
+            )
+        )
+    return tuple(views)
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
@@ -500,6 +602,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_tip_link_z_m=_linkage(cell, asset, "tip_link_z_m"),
             gripper_pad_face_centre_z_m=_linkage(cell, asset, "pad_face_centre_z_m"),
             skills=_skills(cell, asset),
+            track=_track(asset),
         )
         for asset in cell.assets
         if asset.controllers
@@ -556,6 +659,8 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             grasp_holds=grasp_holds,
             sensors=sensors,
             detection=_detection(cell),
+            programs=_programs(cell),
+            workpiece_models=_workpiece_models(cell),
         )
     )
     return [Artifact(f"bringup/{cell.zone}_plan.yaml", text)]

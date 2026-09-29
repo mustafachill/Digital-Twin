@@ -166,12 +166,13 @@ assets:
   # from, and in this cell no station picks from a belt at all. The arm picks from
   # a table; the belt only carries the finished part away.
   #
-  # Both offsets are cell_a's, for cell_a's two reasons, and neither is re-derived
-  # here: +0.250 m in y stands the housing on the side away from the arm — which
-  # works from -y, as `picker_base` is at y = 2.700 against a centreline of
-  # 3.000 — and clears the 0.100 m approach corridor
-  # `cite_tools.validate.geometric` enforces above a station point. +0.030 m in z
-  # is a mounting height: above the surface, under the top of the shortest part.
+  # The offsets are cell_a's, for cell_a's two reasons: 0.250 m in y stands the
+  # housing on the side AWAY from the arm and clears the 0.100 m approach corridor
+  # `cite_tools.validate.geometric` enforces above a station point, and +0.030 m
+  # in z is a mounting height: above the surface, under the top of the shortest
+  # part. Since the arm moved onto its track (ADR-0067) it works on the pick
+  # table from +y, so `infeed_beam`'s housing is at -0.250 m; `outfeed_beam` is
+  # nowhere near the arm and keeps +0.250 m.
 
   # What tells `b_transfer_1` that a part is there to pick. The cell's infeed is
   # a table fed from outside, so this is the station's only observation — see
@@ -184,7 +185,7 @@ assets:
     type: break_beam
     pose:
       frame: infeed_table/surface
-      xyz_m: [0.000, 0.250, 0.030]
+      xyz_m: [0.000, -0.250, 0.030]
     hardware: {backend: sim}
     configuration:
       kind: sensor

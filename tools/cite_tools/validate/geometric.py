@@ -242,7 +242,20 @@ def _stations_are_reachable(cell: ResolvedCell) -> list[Finding]:
         if actor is None or actor.asset_type.kinematics is None:
             continue
         reach = actor.asset_type.kinematics.max_reach_m
+        # An arm on a linear track is checked where its carriage stands at stroke
+        # zero, which is where `base` is, and NOT anywhere along the stroke: a
+        # station is served by L4's Pick and Place, and nothing in L3 or L4 moves
+        # the track (ADR-0067). Only a fixed program does, and a station point
+        # reachable only after a slide nothing on the station's path commands is
+        # an IK failure at run time, which is what this rule exists to prevent.
         base = actor.frames.get("base", actor.world_pose)
+        on_track = " with its track at stroke zero" if actor.axis is not None else ""
+        track_hint = (
+            " Nothing in L3 or L4 moves the track, so a point reachable only further "
+            "along the stroke is not a station point this arm can serve (ADR-0067)."
+            if actor.axis is not None
+            else ""
+        )
 
         for label, target in (("pick_from", station.pick_pose), ("place_to", station.place_pose)):
             if target is None:
@@ -253,9 +266,11 @@ def _stations_are_reachable(cell: ResolvedCell) -> list[Finding]:
                     error(
                         "unreachable-station",
                         f"stations.{station.id}.{label}",
-                        f"is {distance:.3f} m from {actor.id!r}, whose reach is {reach:.3f} m",
+                        f"is {distance:.3f} m from {actor.id!r}{on_track}, whose reach is "
+                        f"{reach:.3f} m",
                         "The planner will fail at this station with an inverse-kinematics "
-                        "error that says nothing about the layout. Move the asset or the arm.",
+                        "error that says nothing about the layout. Move the asset or the arm."
+                        + track_hint,
                     )
                 )
             elif distance > reach * COMFORTABLE_REACH_FRACTION:

@@ -61,6 +61,9 @@ def model_hash(model: FacilityModel) -> str:
         *[a.model_dump_json() for a in model.assets],
         *[s.model_dump_json() for s in model.stations],
         *[f.model_dump_json() for f in model.flows],
+        # A program is part of the facility that was described (ADR-0067): an
+        # edit to it changes what the cell does, so it changes the hash.
+        *[f"{path}\n{text}" for path, text in model.programs],
     ):
         digest.update(part.encode())
         digest.update(b"\0")

@@ -181,7 +181,9 @@ jobs:
 
       # Phase 1.C's acceptance claim rests on pick_and_place: one arm picks a
       # work-piece off the table and places it on the belt, held by friction alone
-      # since ADR-0029 removed the attachment plugin.
+      # since ADR-0029 removed the attachment plugin. It drives `cell_a` since
+      # 2026-09-29 (ADR-0067): `cell_b`'s belt is out of a behaviour-tree Place's
+      # reach, and `continuous_line` below moved with it.
       #
       # BLOCKING as of this change, on its cycle assertion. The condition this step
       # recorded for its own promotion had narrowed to exactly one thing —
@@ -279,12 +281,14 @@ jobs:
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/scenario continuous_line --teardown-advisory
 
-      # The fixed program (ADR-0066), one cycle on the plant: taught poses, a grip,
-      # a place and a timed belt run, asserted by where the work-piece ends. Advisory
-      # until it has a record in CI, as continuous_line is; read its verdict from
-      # the log, because a continue-on-error step reports success either way.
-      - name: Simulation-in-the-loop scenario — program_cycle (advisory)
-        continue-on-error: true
+      # The real robot's program (ADR-0067), one cycle on `cell_b`'s plant: its
+      # poses, its grip, its track slide and its place, asserted by where the
+      # work-piece ends. BLOCKING since 2026-09-29, by the project owner's decision
+      # that `cell_b` is gated by the real program; the behaviour-tree scenarios
+      # above drive `cell_a` (tests/scenarios/_cell.py). Promoted without a CI
+      # record of its own — the evidence is the local runs ADR-0067 lists — so a
+      # failure here is a finding to investigate, not a flake to re-run past.
+      - name: Simulation-in-the-loop scenario — program_cycle
         run: |
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
             cite-digital-twin:dev ./scripts/scenario program_cycle --teardown-advisory

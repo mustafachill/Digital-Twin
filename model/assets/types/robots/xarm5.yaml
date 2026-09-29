@@ -25,6 +25,21 @@ asset_type:
     # UFACTORY specification. Used by the geometric validator to reject a station
     # whose pick or place point is beyond what the arm can actually reach.
     max_reach_m: 0.700
+    # The vendor description's own joint limits, copied rather than read, because
+    # L0 does not read the vendor description (see `description:` below):
+    # `xarm_description/urdf/xarm5/xarm5.urdf.xacro`, lines 5-9 for the positions
+    # and the `velocity=` of every `<limit>` for the speed, at the commit
+    # external/cite.repos pins. What reads them is the check that a program's
+    # poses lie inside the arm's range (ADR-0067), and the conversion of a
+    # program's joint speed into a velocity scaling. A pin bump that changes
+    # them is caught by tools/tests/test_blockly.py.
+    joint_limits_rad:
+      - [-6.283185307, 6.283185307]
+      - [-2.059, 2.0944]
+      - [-3.927, 0.19198]
+      - [-1.69297, 3.141592654]
+      - [-6.283185307, 6.283185307]
+    max_joint_velocity_rad_s: 3.14
 
   frames:
     - id: base

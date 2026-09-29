@@ -31,7 +31,6 @@ topology:
       actor: picker
       capacity: 1
       pick_frame: cell_b__infeed_table__surface
-      place_frame: cell_b__transfer_belt__infeed
       trigger:
         topic: /cite/cell_b/infeed_beam/detection
         state: blocked

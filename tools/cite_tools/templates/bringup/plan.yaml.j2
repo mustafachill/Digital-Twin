@@ -49,6 +49,14 @@ plan:
   workpieces:
     narrowest_width_m: {{ cell.workpiece_widths.narrowest_m | f }}
     widest_width_m: {{ cell.workpiece_widths.widest_m | f }}
+{% if workpiece_models %}
+    # Each declared part's box and mass, for whatever spawns one into a running
+    # world. Read from here rather than restated beside the spawn (ADR-0067).
+    models:
+{% for model in workpiece_models %}
+      - {name: {{ model.name }}, size_m: [{{ model.size_m | map('m') | join(', ') }}], mass_kg: {{ model.mass_kg | f }}}
+{% endfor %}
+{% endif %}
 {% endif %}
 
   # The sides this zone runs, and the Gazebo transport partition each one runs
@@ -257,6 +265,22 @@ plan:
         grasp: {{ manager.skills.grasp }}
         transfer: {{ manager.skills.transfer }}
 {% endif %}
+{% if manager.track %}
+      # The linear track this arm rides (ADR-0067). Its joint is in this arm's
+      # description and its controller in this arm's controller manager. A
+      # program commands it on `command_topic`, the controller's own
+      # `joint_trajectory` input, so that the twin boundary forwards one command
+      # to both sides as it forwards a belt setpoint, and reads arrival within
+      # `goal_tolerance_m` on this arm's joint states.
+      track:
+        asset: {{ manager.track.asset }}
+        joint: {{ manager.track.joint }}
+        controller: {{ manager.track.controller }}
+        command_topic: {{ manager.track.command_topic }}
+        stroke_m: {{ manager.track.stroke_m | f }}
+        max_speed_mps: {{ manager.track.max_speed_mps | f }}
+        goal_tolerance_m: {{ manager.track.goal_tolerance_m | f }}
+{% endif %}
       controllers:
 {% for controller in manager.controllers %}
         - {name: {{ controller.name }}, stage: {{ controller.stage }}}
@@ -368,4 +392,26 @@ plan:
   detection:
     namespace: {{ detection.namespace }}
     detect_action: {{ detection.detect_action }}
+{% endif %}
+{% if programs %}
+
+  # What each arm's program does, step by step, read from the program file the
+  # real robot's programming tool wrote (ADR-0067) and converted to SI units by
+  # cite_tools.model.blockly. Nothing here is written by hand: an edit to the
+  # program file is an edit to this list, and to nothing else.
+  #
+  #   move   a named pose from this arm's `poses_rad`, at a fraction of the
+  #          description's joint velocity limit
+  #   grip   a width between the pads; `expect_object` on a close
+  #   wait   seconds of the cell's own clock
+  #   track  a carriage position along the track, at a speed
+  programs:
+{% for program in programs %}
+    - asset: {{ program.asset }}
+      source: {{ program.source }}
+      steps:
+{% for step in program.steps %}
+        - {{ step }}
+{% endfor %}
+{% endfor %}
 {% endif %}

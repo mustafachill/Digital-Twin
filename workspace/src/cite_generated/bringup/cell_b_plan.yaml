@@ -50,8 +50,12 @@ plan:
   # are the same. That is today's model, and it is not a special case in anything
   # that reads this.
   workpieces:
-    narrowest_width_m: 0.05
-    widest_width_m: 0.05
+    narrowest_width_m: 0.066
+    widest_width_m: 0.066
+    # Each declared part's box and mass, for whatever spawns one into a running
+    # world. Read from here rather than restated beside the spawn (ADR-0067).
+    models:
+      - {name: workpiece, size_m: [0.066, 0.066, 0.066], mass_kg: 0.2}
 
   # The sides this zone runs, and the Gazebo transport partition each one runs
   # in. One side on an untwinned zone; two where the zone declares
@@ -133,8 +137,8 @@ plan:
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model
       # says where it stands (L1).
-      spawn_xyz_m: "0 2.7 0.6"
-      spawn_rpy_rad: "0 0 1.57079633"
+      spawn_xyz_m: "-0.3 3.3 0.71"
+      spawn_rpy_rad: "0 0 -1.57079633"
       parameters: package://cite_generated/control/cell_b_picker_controllers.yaml
       trajectory_action: /cite/cell_b/picker/picker_joint_trajectory_controller/follow_joint_trajectory
       gripper_action: /cite/cell_b/picker/picker_gripper_controller/gripper_cmd
@@ -212,7 +216,7 @@ plan:
       # reach where it was sent, so a width equal to the part teaches the skill
       # nothing (ADR-0022). Its ceiling is derived and enforced in
       # cite_tools.validate.physical.
-      gripper_default_grasp_width_m: 0.045
+      gripper_default_grasp_width_m: 0.060915
       # How far either side of a declared part's width a genuine stall on that
       # part may land and still be a grasp (ADR-0052 option F). The predicate
       # used to ask "did the jaws stop wider than we ASKED?"; it now asks "did
@@ -237,10 +241,25 @@ plan:
         place: /cite/cell_b/picker/place
         grasp: /cite/cell_b/picker/grasp
         transfer: /cite/cell_b/picker/transfer
+      # The linear track this arm rides (ADR-0067). Its joint is in this arm's
+      # description and its controller in this arm's controller manager. A
+      # program commands it on `command_topic`, the controller's own
+      # `joint_trajectory` input, so that the twin boundary forwards one command
+      # to both sides as it forwards a belt setpoint, and reads arrival within
+      # `goal_tolerance_m` on this arm's joint states.
+      track:
+        asset: picker_track
+        joint: picker_track_joint
+        controller: picker_track_trajectory_controller
+        command_topic: /cite/cell_b/picker/picker_track_trajectory_controller/joint_trajectory
+        stroke_m: 0.7
+        max_speed_mps: 1.0
+        goal_tolerance_m: 0.001
       controllers:
         - {name: picker_joint_state_broadcaster, stage: 0}
         - {name: picker_gripper_controller, stage: 1}
         - {name: picker_joint_trajectory_controller, stage: 1}
+        - {name: picker_track_trajectory_controller, stage: 1}
       moveit:
         group: picker_xarm5
         base_link: picker_link_base
@@ -252,10 +271,14 @@ plan:
         # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
         # and each of these.
         poses_rad:
-          pick_above: [1.0071, 0.4035, -1.363, 0.959, 2.5778]
-          pick: [1.0075, 0.5688, -1.3065, 0.7373, 2.5783]
-          place_above: [-1.03, 0.4576, -1.4875, 1.0299, 0.5408]
-          place: [-1.0304, 0.6043, -1.4145, 0.8103, 0.5404]
+          zero: [0, 0, 0, 0, 0]
+          blockly_01: [0, 0, -0.785398163, 0.785398163, 0]
+          blockly_02: [-0.436332313, 0, -0.785398163, 0.785398163, -0.523598776]
+          blockly_03: [-0.488692191, 0.541052068, -0.785398163, 0.244346095, -0.523598776]
+          blockly_04: [-0.488692191, -0.34906585, -0.436332313, 0.785398163, -0.523598776]
+          blockly_05: [1.04719755, -0.34906585, -0.436332313, 0.785398163, -0.261799388]
+          blockly_06: [1.04719755, 0.523598776, -0.959931089, 0.436332313, -0.523598776]
+          blockly_07: [1.04719755, -0.34906585, -0.436332313, 0.785398163, -0.523598776]
         srdf: package://cite_generated/moveit/cell_b_picker.srdf.xacro
         kinematics: package://cite_generated/moveit/cell_b_picker_kinematics.yaml
         planning_pipelines: package://cite_generated/moveit/cell_b_picker_planning_pipelines.yaml
@@ -345,3 +368,40 @@ plan:
   detection:
     namespace: /cite/cell_b/detection
     detect_action: /cite/cell_b/detection/detect
+
+  # What each arm's program does, step by step, read from the program file the
+  # real robot's programming tool wrote (ADR-0067) and converted to SI units by
+  # cite_tools.model.blockly. Nothing here is written by hand: an edit to the
+  # program file is an edit to this list, and to nothing else.
+  #
+  #   move   a named pose from this arm's `poses_rad`, at a fraction of the
+  #          description's joint velocity limit
+  #   grip   a width between the pads; `expect_object` on a close
+  #   wait   seconds of the cell's own clock
+  #   track  a carriage position along the track, at a speed
+  programs:
+    - asset: picker
+      source: programs/xarm5_real_demo.blockly.xml
+      steps:
+        - {kind: move, pose: zero, velocity_scaling: 0.111167468}
+        - {kind: move, pose: blockly_01, velocity_scaling: 0.111167468}
+        - {kind: wait, seconds: 1}
+        - {kind: track, position_m: 0, speed_mps: 0.1}
+        - {kind: wait, seconds: 1}
+        - {kind: move, pose: blockly_02, velocity_scaling: 0.111167468}
+        - {kind: wait, seconds: 1}
+        - {kind: grip, width_m: 0.0846392074, expect_object: false}
+        - {kind: wait, seconds: 1}
+        - {kind: move, pose: blockly_03, velocity_scaling: 0.111167468}
+        - {kind: grip, width_m: 0.0609152692, expect_object: true}
+        - {kind: move, pose: blockly_04, velocity_scaling: 0.111167468}
+        - {kind: track, position_m: 0.65, speed_mps: 0.1}
+        - {kind: wait, seconds: 1}
+        - {kind: move, pose: blockly_05, velocity_scaling: 0.111167468}
+        - {kind: move, pose: blockly_06, velocity_scaling: 0.111167468}
+        - {kind: grip, width_m: 0.0846392074, expect_object: false}
+        - {kind: move, pose: blockly_07, velocity_scaling: 0.111167468}
+        - {kind: move, pose: blockly_04, velocity_scaling: 0.111167468}
+        - {kind: track, position_m: 0, speed_mps: 0.1}
+        - {kind: wait, seconds: 1}
+        - {kind: move, pose: zero, velocity_scaling: 0.111167468}

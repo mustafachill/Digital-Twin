@@ -73,11 +73,11 @@ from _cell import (  # noqa: E402  (insert first)
 #: <name> --zone <zone>` overrides it for one run.
 ZONE = zone()
 
-#: The reference work-piece's edge length. The SAME QUANTITY as
-#: `cite_bringup.workpiece.SIDE_M`, which is what the spawned model is actually
-#: built from. The two are tied at run time by `_cell.tie_the_work_piece_size`,
+#: The reference work-piece's edge length. The SAME QUANTITY as the part the
+#: bring-up plan states, which is what the spawned model is actually built from
+#: (ADR-0067). The two are tied at run time by `_cell.tie_the_work_piece_size`,
 #: called from `setUpClass`, rather than by an import — that function says why.
-WORKPIECE_SIZE = 0.05
+WORKPIECE_SIZE = 0.066
 
 #: Height above the pick surface the work-piece is released from. Small enough
 #: that it settles immediately, large enough that it is not spawned interpenetrating
@@ -155,7 +155,7 @@ PLACE_TOLERANCE_M = 0.10
 #: The bound is set by the widest legitimate resting pose rather than by taste.
 #: The cube is released from `release_height_m` (0.04 m above the frame, so about
 #: 0.01 m of free fall) and may settle on a corner instead of a face, which lifts
-#: its centre by 0.025 x (sqrt(3) - 1) = 0.018 m. 0.05 m clears that worst case
+#: its centre by 0.033 x (sqrt(3) - 1) = 0.024 m. 0.05 m clears that worst case
 #: with margin while still being an order of magnitude below the 0.576 m error
 #: the welded-to-the-gripper baseline showed.
 PLACE_HEIGHT_TOLERANCE_M = 0.05
@@ -249,7 +249,7 @@ class TestPickAndPlace(unittest.TestCase):
         rclpy.init()
         cls.node = Node("scenario_pick_and_place")
         cls.seed = os.environ.get(SEED_VARIABLE, "unset")
-        tie_the_work_piece_size(WORKPIECE_SIZE)
+        tie_the_work_piece_size(WORKPIECE_SIZE, ZONE)
 
         # The station this scenario drives, and the arm that serves it, read off
         # the generated topology in flow order rather than named. The rule is
@@ -260,6 +260,12 @@ class TestPickAndPlace(unittest.TestCase):
         plan, topology = cell(ZONE)
         cls.station = acting_station(topology)
         cls.pick_frame = cls.station["pick_frame"]
+        # `cell_b`'s station declares none since ADR-0067: its belt is out of
+        # reach until a track nothing in L3 or L4 moves has slid.
+        assert cls.station.get("place_frame"), (
+            f"station {cls.station['id']!r} in {ZONE} declares no place frame, so a "
+            "behaviour-tree Place has nowhere to go; that cell is driven by program_cycle"
+        )
         cls.place_frame = cls.station["place_frame"]
         cls.arm = cls.station["actor"]
 
@@ -290,6 +296,8 @@ class TestPickAndPlace(unittest.TestCase):
             "watched. This scenario drives one part, so it cannot choose between two."
         )
         cls.workpiece = next(iter(names))
+        # Its box and mass, from the plan (ADR-0067).
+        cls.workpiece_part = workpiece.part_of(plan, cls.workpiece)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -515,7 +523,7 @@ class TestPickAndPlace(unittest.TestCase):
             pick[2] + WORKPIECE_SIZE / 2.0 + SPAWN_DROP_M,
         )
         sdf_path = Path("/tmp/cite_workpiece.sdf")
-        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece))
+        sdf_path.write_text(workpiece.workpiece_sdf(self.workpiece_part))
         created = gz_run(
             [
                 "ros2",

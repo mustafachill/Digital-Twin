@@ -19,12 +19,15 @@
     --via plant      the plant's own servers only
     --dry-run        print the steps and exit
 
-It does NOT put parts on the table: the caller supplies one per cycle, which is
-what `./scripts/program` does. It refuses to start on an arm that says it holds
-a part, because its first step opens the gripper.
+The steps are the real robot's program as the bring-up plan states it
+(`from_plan`, ADR-0067). It does NOT put parts on the table, and it does NOT run
+the belt: the caller supplies one part per cycle and starts each side's belt on
+that side, which is what `./scripts/program` does. It refuses to start on an arm
+that says it holds a part, because the program opens the gripper before it
+closes it.
 
-Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in flight, stops the
-belt and exits non-zero.
+Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in
+flight, holds the track where it stands and exits non-zero.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ import argparse
 import sys
 
 from cite_bringup.plan import default_plan_path, load
-from cite_bringup.program.cell_b_pick_place import program, target
+from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.steps import (
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
@@ -76,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
-        ros = RosCell(cell, args.via)
+        ros = RosCell(cell.arm, args.via, track=cell.track)
         try:
             ros.refuse_if_holding()
             if args.via == "twin":
@@ -88,7 +91,11 @@ def main(argv: list[str] | None = None) -> int:
             print("interrupted before the first step", flush=True)
             return EXIT_INTERRUPTED
         say = lambda text: print(text, flush=True)  # noqa: E731
-        say(f"==> {args.zone}: {cell.arm.asset} and {cell.conveyor.asset}, via {args.via}")
+        riding = f" on {cell.track.asset}" if cell.track is not None else ""
+        say(
+            f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
+            f"via {args.via}"
+        )
         return run(steps, ros, args.cycles, say, first_cycle=args.first_cycle)
     finally:
         rclpy.try_shutdown()

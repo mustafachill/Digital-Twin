@@ -54,5 +54,6 @@ appearance:
     belt_1200x400: conveyor_frame
     break_beam: sensor_housing
     pedestal_600: pedestal_steel
+    ufactory_linear_motor: conveyor_frame
     work_table_600: table_top
     workpiece: workpiece_stock

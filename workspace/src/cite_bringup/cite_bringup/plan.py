@@ -381,6 +381,25 @@ ARM_KEYS = ("arm_goal_tolerance_rad",)
 
 
 @dataclass(frozen=True)
+class Track:
+    """The linear track an arm rides, as a program drives it (ADR-0067).
+
+    Its joint is in the arm's description and its controller in the arm's
+    controller manager. A program commands it on `command_topic`, the
+    controller's own `joint_trajectory` input, and reads arrival on the arm's
+    joint states within `goal_tolerance_m`.
+    """
+
+    asset: str
+    joint: str
+    controller: str
+    command_topic: str
+    stroke_m: float
+    max_speed_mps: float
+    goal_tolerance_m: float
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -424,6 +443,8 @@ class ControllerManager:
     #: Keyed by the names in `ARM_KEYS`, delivered by the same route and for the
     #: same reason as `gripper` above.
     arm: Mapping[str, float]
+    #: The linear track this arm rides, or `None` for an arm bolted in place.
+    track: Track | None = None
 
     def backend_on(self, side: str) -> str:
         """Return the `ros2_control` backend this asset loads on ``side``, or refuse.
@@ -644,6 +665,45 @@ class Workpieces:
 
     narrowest_width_m: float
     widest_width_m: float
+    #: Each declared part's box and mass, by name. A spawn reads the part's size
+    #: here rather than stating it a second time (ADR-0067). Empty on a plan that
+    #: states no box part.
+    models: Mapping[str, WorkpieceModel] = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class WorkpieceModel:
+    """One work-piece type's box and mass, as L0 declares it."""
+
+    name: str
+    size_m: tuple[float, float, float]
+    mass_kg: float
+
+
+@dataclass(frozen=True)
+class ProgramStep:
+    """One step of an arm's program, in SI units (ADR-0067).
+
+    `kind` is `move`, `grip`, `wait` or `track`, and says which fields it reads.
+    """
+
+    kind: str
+    pose: str = ""
+    velocity_scaling: float = 0.0
+    width_m: float = 0.0
+    expect_object: bool = False
+    seconds: float = 0.0
+    position_m: float = 0.0
+    speed_mps: float = 0.0
+
+
+@dataclass(frozen=True)
+class Program:
+    """What one arm's program does, read from the real robot's program file."""
+
+    asset: str
+    source: str
+    steps: tuple[ProgramStep, ...]
 
 
 @dataclass(frozen=True)
@@ -678,6 +738,8 @@ class Plan:
     #: before a plan is generated at all (ADR-0052 A.7). Defaulting a width here
     #: would put a number the model never stated inside the predicate.
     workpieces: Workpieces | None
+    #: One per arm that runs a program (ADR-0067). Empty where none does.
+    programs: tuple[Program, ...] = ()
 
     def side_named(self, name: str) -> Side:
         """Return the side called ``name``, or refuse.
@@ -852,6 +914,9 @@ def load(path: Path) -> Plan:
         sensors=sensors,
         detection=detection,
         workpieces=_workpieces(_optional(plan, "workpieces")),
+        programs=tuple(
+            _program(entry, index) for index, entry in enumerate(_sequence(plan, "programs"))
+        ),
     )
 
 
@@ -1255,7 +1320,82 @@ def _workpieces(entry: object | None) -> Workpieces | None:
             "The pair is generated from L0 - run ./scripts/validate-model --write, "
             "then ./scripts/build."
         )
-    return Workpieces(narrowest_width_m=narrowest, widest_width_m=widest)
+    models = {}
+    for position, model in enumerate(_optional(entry, "models") or []):
+        where = f"workpieces.models[{position}]"
+        name = _require(model, "name", where)
+        models[name] = WorkpieceModel(
+            name=name,
+            size_m=_box(_require(model, "size_m", where), where),
+            mass_kg=_number(_require(model, "mass_kg", where), "mass_kg", where),
+        )
+    return Workpieces(narrowest_width_m=narrowest, widest_width_m=widest, models=models)
+
+
+def _box(value: object, where: str) -> tuple[float, float, float]:
+    """Read a box size: three positive numbers in a YAML list."""
+    if not isinstance(value, list) or len(value) != 3:
+        raise PlanError(f"{where}: 'size_m' must be a list of three numbers, not {value!r}")
+    size = tuple(_number(v, "size_m", where) for v in value)
+    if min(size) <= 0.0:
+        raise PlanError(f"{where}: 'size_m' {size} has a non-positive side")
+    return size  # type: ignore[return-value]
+
+
+#: The fields each program step kind carries, and nothing else.
+_STEP_FIELDS = {
+    "move": ("pose", "velocity_scaling"),
+    "grip": ("width_m", "expect_object"),
+    "wait": ("seconds",),
+    "track": ("position_m", "speed_mps"),
+}
+
+
+def _program(entry: object, index: int) -> Program:
+    """Read one arm's program. An unknown step kind or field is refused, not skipped."""
+    where = f"program {index}"
+    steps = []
+    for position, step in enumerate(_sequence(entry, "steps", where)):
+        here = f"{where}, step {position + 1}"
+        kind = _require(step, "kind", here)
+        fields = _STEP_FIELDS.get(kind)
+        if fields is None:
+            raise PlanError(f"{here}: unknown step kind {kind!r}")
+        extra = set(step) - {"kind", *fields}
+        if extra:
+            raise PlanError(f"{here}: {kind} carries unknown field(s) {sorted(extra)}")
+        values: dict[str, object] = {}
+        for name in fields:
+            value = _require(step, name, here)
+            if name == "pose":
+                values[name] = str(value)
+            elif name == "expect_object":
+                values[name] = _flag(value, name, here)
+            else:
+                values[name] = _number(value, name, here)
+        steps.append(ProgramStep(kind=kind, **values))  # type: ignore[arg-type]
+    return Program(
+        asset=_require(entry, "asset", where),
+        source=_require(entry, "source", where),
+        steps=tuple(steps),
+    )
+
+
+def _track(entry: object | None, where: str) -> Track | None:
+    if entry is None:
+        return None
+    here = f"{where}, track"
+    return Track(
+        asset=_require(entry, "asset", here),
+        joint=_require(entry, "joint", here),
+        controller=_require(entry, "controller", here),
+        command_topic=_require(entry, "command_topic", here),
+        stroke_m=_number(_require(entry, "stroke_m", here), "stroke_m", here),
+        max_speed_mps=_number(_require(entry, "max_speed_mps", here), "max_speed_mps", here),
+        goal_tolerance_m=_number(
+            _require(entry, "goal_tolerance_m", here), "goal_tolerance_m", here
+        ),
+    )
 
 
 def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
@@ -1442,6 +1582,7 @@ def _manager(entry: object, index: int) -> ControllerManager:
         skills=_skills(_optional(entry, "skills"), where),
         gripper=_named_numbers(entry, GRIPPER_KEYS, where),
         arm=_named_numbers(entry, ARM_KEYS, where),
+        track=_track(_optional(entry, "track"), where),
     )
 
 

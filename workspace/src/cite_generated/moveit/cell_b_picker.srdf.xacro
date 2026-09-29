@@ -27,4 +27,9 @@
       prefix="picker_"
       robot_type="xarm"
   />
+
+  <!-- picker_track_carriage is bolted to picker_link_base: the track's carriage carries the
+       arm's base on its top face (ADR-0067), so the two are always in contact and
+       the vendor matrix, which has never heard of a carriage, cannot say so. -->
+  <disable_collisions link1="picker_track_carriage" link2="picker_link_base" reason="Adjacent"/>
 </robot>

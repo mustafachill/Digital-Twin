@@ -4,6 +4,17 @@
       "additionalProperties": false,
       "description": "A reusable definition, instantiated many times with different prefixes.",
       "properties": {
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LinearAxisSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "category": {
           "enum": [
             "robot",
@@ -11,7 +22,8 @@
             "conveyor",
             "sensor",
             "fixture",
-            "workpiece"
+            "workpiece",
+            "linear_axis"
           ],
           "title": "Category",
           "type": "string"
@@ -398,6 +410,7 @@
           "enum": [
             "arm",
             "end_effector",
+            "axis",
             "none"
           ],
           "title": "Joints",
@@ -829,6 +842,31 @@
           "title": "Dof",
           "type": "integer"
         },
+        "joint_limits_rad": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Joint Limits Rad"
+        },
         "joint_suffixes": {
           "items": {
             "type": "string"
@@ -836,6 +874,19 @@
           "minItems": 1,
           "title": "Joint Suffixes",
           "type": "array"
+        },
+        "max_joint_velocity_rad_s": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Joint Velocity Rad S"
         },
         "max_reach_m": {
           "exclusiveMinimum": 0.0,
@@ -855,6 +906,106 @@
         "max_reach_m"
       ],
       "title": "Kinematics",
+      "type": "object"
+    },
+    "LinearAxisSpec": {
+      "additionalProperties": false,
+      "description": "One driven prismatic axis that carries another asset: a linear track.\n\nThe axis is part of what it carries, not of the building. Its rail is an\nauthored body in the scene, but its joint is emitted into the description of\nthe arm that stands on its carriage, under that arm's base, so that\n`robot_state_publisher`, MoveIt's robot state and the collision scene all see\nwhere the arm really is (ADR-0067). An arm mounted on a carriage frame of a\ntype with an `axis` is the whole of how that relationship is declared.\n\nThe joint moves along ``direction``, a unit vector in the TYPE's own frame,\nfrom the carriage frame's position (stroke zero) to ``stroke_m`` past it.",
+      "properties": {
+        "carriage_link_suffix": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Carriage Link Suffix",
+          "type": "string"
+        },
+        "carriage_mass_kg": {
+          "exclusiveMinimum": 0.0,
+          "title": "Carriage Mass Kg",
+          "type": "number"
+        },
+        "carriage_size_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Carriage Size M",
+          "type": "array"
+        },
+        "direction": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Direction",
+          "type": "array"
+        },
+        "goal_time_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Goal Time S",
+          "type": "number"
+        },
+        "goal_tolerance_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Goal Tolerance M",
+          "type": "number"
+        },
+        "joint_suffix": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Joint Suffix",
+          "type": "string"
+        },
+        "max_force_n": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Force N",
+          "type": "number"
+        },
+        "max_speed_mps": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Speed Mps",
+          "type": "number"
+        },
+        "stroke_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Stroke M",
+          "type": "number"
+        },
+        "trajectory_tolerance_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Trajectory Tolerance M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "joint_suffix",
+        "carriage_link_suffix",
+        "direction",
+        "stroke_m",
+        "max_speed_mps",
+        "max_force_n",
+        "carriage_mass_kg",
+        "carriage_size_m",
+        "goal_time_s",
+        "goal_tolerance_m",
+        "trajectory_tolerance_m"
+      ],
+      "title": "LinearAxisSpec",
       "type": "object"
     },
     "MeshGeometry": {

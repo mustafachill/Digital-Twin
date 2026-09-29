@@ -35,22 +35,23 @@ obvious and reading it the wrong way would be worse than not knowing.
   which the generator writes from the facility's material library, so the box is
   the colour L0 declares and that colour is stated exactly once for the whole
   facility.
-* The GEOMETRY, the MASS, the INERTIA and the FRICTION are not. They are the
-  literals both scenarios carried, moved here unchanged and not re-derived. L0
-  does describe this part — `model/assets/types/workpieces/workpiece.yaml` states
-  the same 50 mm box and 0.2 kg — but its declared inertia tensor is a rounded
-  0.000083333 where the value below is computed, and it declares no friction at
-  all. Sourcing them from L0 would therefore change, by a little, what the physics
-  engine sees, and every grasp figure this project has published was measured
-  against the numbers below. Closing that duplication is a change with a
-  measurement attached to it, not a tidy-up, and it is deliberately not made here.
+* The GEOMETRY and the MASS are derived too, since 2026-09-29 (ADR-0067). They
+  were literals here — a 50 mm box and 0.2 kg, carried over from the scenarios —
+  while L0 stated the same part, which is one fact in two places. The part then
+  changed size, to the 66 mm cube the real program's gripper command obliges,
+  and the literal would have gone on spawning the old one. They are now read
+  from the bring-up plan, which states each declared box part's size and mass.
+* The INERTIA is computed from those two, as a solid box, rather than copied from
+  L0's rounded tensor; and the FRICTION is still the literal below, because L0
+  declares none. Every grasp figure this project published before 2026-09-29
+  was measured against the 50 mm box and does not describe the 66 mm one.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cite_bringup.plan import resolve_uri
+from cite_bringup.plan import Plan, resolve_uri, WorkpieceModel
 
 import yaml
 
@@ -59,13 +60,6 @@ import yaml
 #: LOADS and bring-up does not load this: a plan entry for it would be a key
 #: nothing reads.
 APPEARANCE_URI = "package://cite_generated/materials/appearance.yaml"
-
-#: The reference work-piece's edge length, in metres. See the module docstring for
-#: why this is a literal here rather than read from L0.
-SIDE_M = 0.05
-
-#: Its mass, in kilograms.
-MASS_KG = 0.2
 
 #: Coulomb friction between the box and everything it touches.
 #:
@@ -118,10 +112,23 @@ def appearance(name: str, path: Path | None = None) -> tuple[tuple[float, ...], 
     return tuple(entry["ambient"]), tuple(entry["diffuse"])
 
 
-def workpiece_sdf(name: str, appearance_path: Path | None = None) -> str:
-    """Build the SDF for one work-piece, spawned into a running world under ``name``.
+def part_of(plan: Plan, name: str) -> WorkpieceModel:
+    """Return the box and mass the plan states for the work-piece type ``name``, or refuse."""
+    models = plan.workpieces.models if plan.workpieces is not None else {}
+    part = models.get(name)
+    if part is None:
+        raise WorkpieceError(
+            f"the {plan.zone} plan states no box work-piece named {name!r}; it states "
+            f"{', '.join(sorted(models)) or 'none'}. Regenerate from L0: "
+            "./scripts/validate-model --write, then ./scripts/build."
+        )
+    return part
 
-    ``name`` is both the Gazebo model name and the L0 work-piece type id. Those
+
+def workpiece_sdf(part: WorkpieceModel, appearance_path: Path | None = None) -> str:
+    """Build the SDF for one work-piece, spawned into a running world under its name.
+
+    ``part.name`` is both the Gazebo model name and the L0 work-piece type id. Those
     are one string by rule, not by coincidence: `Facility.workpiece_models`
     reaches the generated world as each belt's `<carry>` list and each beam's
     `<watch>` list, both of which match on the Gazebo model name, so a part
@@ -136,25 +143,29 @@ def workpiece_sdf(name: str, appearance_path: Path | None = None) -> str:
     attachment plugin could not fire at all. That plugin is removed (ADR-0029), so
     the sensor has no reader and is gone with it.
     """
-    ambient, diffuse = appearance(name, appearance_path)
-    inertia = MASS_KG * (SIDE_M * SIDE_M + SIDE_M * SIDE_M) / 12.0
+    ambient, diffuse = appearance(part.name, appearance_path)
+    x, y, z = part.size_m
+    mass = part.mass_kg
+    size = f"{x:g} {y:g} {z:g}"
     return f"""<?xml version="1.0"?>
 <sdf version="1.9">
-  <model name="{name}">
+  <model name="{part.name}">
     <link name="link">
       <inertial>
-        <mass>{MASS_KG}</mass>
+        <mass>{mass:g}</mass>
         <inertia>
-          <ixx>{inertia}</ixx><iyy>{inertia}</iyy><izz>{inertia}</izz>
+          <ixx>{mass * (y * y + z * z) / 12.0}</ixx>
+          <iyy>{mass * (x * x + z * z) / 12.0}</iyy>
+          <izz>{mass * (x * x + y * y) / 12.0}</izz>
           <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
         </inertia>
       </inertial>
       <collision name="collision">
-        <geometry><box><size>{SIDE_M} {SIDE_M} {SIDE_M}</size></box></geometry>
+        <geometry><box><size>{size}</size></box></geometry>
         <surface><friction><ode>{_friction()}</ode></friction></surface>
       </collision>
       <visual name="visual">
-        <geometry><box><size>{SIDE_M} {SIDE_M} {SIDE_M}</size></box></geometry>
+        <geometry><box><size>{size}</size></box></geometry>
         <material><ambient>{_rgba(ambient)}</ambient><diffuse>{_rgba(diffuse)}</diffuse></material>
       </visual>
     </link>

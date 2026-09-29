@@ -85,6 +85,35 @@ class TestReach:
         )
         assert "reach-margin" in geometric_rules(real_model, Severity.WARNING)
 
+    def test_a_point_reachable_only_along_the_track_is_caught(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """An arm on a track is checked with its carriage at stroke zero.
+
+        `cell_b`'s belt infeed is where the real program places, after sliding the
+        track 0.650 m. Nothing in L3 or L4 slides it, so as a behaviour-tree
+        station's place point it is 1.094 m from the arm against a 0.700 m reach.
+        This rule counted it reachable from anywhere along the stroke until
+        2026-09-29, and the station's Place would have failed on inverse
+        kinematics at run time (ADR-0067).
+        """
+
+        def restore_place(document: dict) -> None:
+            station = next(s for s in document["stations"] if s["id"] == "b_transfer_1")
+            station["place_to"] = {"asset": "transfer_belt", "frame": "infeed"}
+
+        edit_yaml(real_model / "topology/stations.yaml", restore_place)
+        model = load(real_model)
+        (finding,) = (
+            f for f in geometric.check(resolve(model, "cell_b")) if f.rule == "unreachable-station"
+        )
+        assert finding.where == "stations.b_transfer_1.place_to"
+        assert "with its track at stroke zero" in finding.message
+
+    def test_a_tracked_arm_still_reaches_its_pick_point(self, real_model: Path) -> None:
+        """The pick is at track zero in the real program, so it passes as shipped."""
+        assert "unreachable-station" not in geometric_rules(real_model)
+
 
 class TestLayout:
     def test_an_asset_outside_the_zone_is_caught(
@@ -454,7 +483,7 @@ class TestDefaultGraspWidth:
         # ADR-0022's whole mechanism: a parallel gripper evidences a grasp by
         # failing to reach where it was sent. Commanded exactly the part's width,
         # it arrives on target and the skill learns nothing.
-        self._set(real_model, edit_yaml, default_grasp_width_m=0.050)
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.066)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
     def test_a_margin_below_the_controller_bias_is_caught(
@@ -462,14 +491,14 @@ class TestDefaultGraspWidth:
     ) -> None:
         """Narrower than the part is necessary and not sufficient.
 
-        48 mm leaves 2.00 mm against the 50 mm cube. `GripperActionController`
+        64 mm leaves 2.00 mm against the 66 mm cube. `GripperActionController`
         ends a goal as soon as `|error| < goal_tolerance`, so the width it reports
         is systematically wider than commanded even in free air, and
         `cite_skills::gripper_is_holding` demands twice that bias — 2.14 mm here —
         before calling anything a grasp. A real grasp inside that band is
         indistinguishable from closing on air.
         """
-        self._set(real_model, edit_yaml, default_grasp_width_m=0.048)
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.064)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
     def test_the_bound_follows_the_declared_tolerance(
@@ -478,9 +507,9 @@ class TestDefaultGraspWidth:
         """It is derived, not a millimetre count someone wrote down.
 
         Loosen the controller's `goal_tolerance` fourfold and the discrimination
-        threshold widens with it, so the 45 mm default that passes at 0.01 rad
-        stops passing. That is the property that keeps this ceiling and the L3
-        predicate from drifting apart — both read the same declared number.
+        threshold widens with it, so a 60 mm default that passes at 0.01 rad
+        against the 66 mm cube stops passing. That is the property that keeps this
+        ceiling and the L3 predicate from drifting apart — both read the same declared number.
         """
 
         def mutate(document: dict) -> None:
@@ -488,6 +517,8 @@ class TestDefaultGraspWidth:
                 if controller["joints"] == "end_effector":
                     controller["parameters"]["goal_tolerance"] = 0.04
 
+        self._set(real_model, edit_yaml, default_grasp_width_m=0.060)
+        assert "default-grasp-width-never-closes" not in physical_rules(real_model)
         edit_yaml(real_model / self.EFFECTOR, mutate)
         assert "default-grasp-width-never-closes" in physical_rules(real_model)
 
@@ -801,7 +832,7 @@ class TestTheRemedyTheHintNamesIsAValidModel:
     ARM = TestDerivedCollisionGeometryIsBoundToAWidth.ARM
 
     #: Narrow enough to be outside the measured range that ADR-0051 bounds a
-    #: derived collision set to. 48 mm against the shipped 50 mm.
+    #: derived collision set to. 48 mm, below the 50 mm the hull campaign measured.
     NARROW_M = 0.048
 
     #: The grasp default this narrow part is declared WITH, and it is not an
@@ -826,6 +857,9 @@ class TestTheRemedyTheHintNamesIsAValidModel:
     #: The end effector whose grasp default moves with the part.
     EFFECTOR = "assets/types/end_effectors/xarm_parallel_gripper.yaml"
 
+    #: The arm instances, one of which runs the real program.
+    ARMS = "assets/instances/arms.yaml"
+
     def _narrow(self, model: Path, edit_yaml: Callable) -> None:
         """Declare the narrow part, and the grasp default it obliges.
 
@@ -842,6 +876,18 @@ class TestTheRemedyTheHintNamesIsAValidModel:
             lambda d: d["asset_type"]["grasp"].__setitem__(
                 "default_grasp_width_m", self.NARROW_DEFAULT_GRASP_M
             ),
+        )
+        # And the real program comes out with it: it closes to 60.9 mm, which a
+        # 48 mm part cannot stall, and `program-grip-never-evidences-a-grasp`
+        # refuses exactly that (ADR-0067). This class is about the collision
+        # selection a narrow part obliges, not about the program.
+        edit_yaml(
+            model / self.ARMS,
+            lambda d: [
+                a["configuration"].pop("program", None)
+                for a in d["assets"]
+                if a.get("configuration", {}).get("kind") == "robot"
+            ],
         )
 
     def test_the_narrow_part_is_refused_the_derived_set(
@@ -951,18 +997,18 @@ class TestIndexingBeams:
     def test_the_stand_off_is_derived_from_the_part(self, real_model: Path) -> None:
         """The shipped number, and where it comes from.
 
-        `conveyor_1/outfeed` is at x = 1.600. Half a 50 mm cube is 25 mm and half
-        a 4 mm beam is 2 mm, so the housing stands at 1.627 and a part whose
+        `conveyor_1/outfeed` is at x = 1.595. Half a 66 mm cube is 33 mm and half
+        a 4 mm beam is 2 mm, so the housing stands at 1.630 and a part whose
         leading edge breaks the beam has its centre exactly on the pick point.
         """
-        assert self._beam_x(real_model) == pytest.approx(1.627)
+        assert self._beam_x(real_model) == pytest.approx(1.630)
 
     def test_the_stand_off_follows_the_part(self, real_model: Path, edit_yaml: Callable) -> None:
         """The whole point of deriving it rather than writing it down.
 
         Double the part and the beam moves with it, with nothing authored to keep
-        in step. A fitted coordinate would have stayed at 1.627 and started
-        parking the new part 25 mm short, reporting nothing.
+        in step. A fitted coordinate would have stayed at 1.630 and started
+        parking the new part 17 mm short, reporting nothing.
         """
 
         def widen(document: dict) -> None:
@@ -973,7 +1019,7 @@ class TestIndexingBeams:
             ]
 
         edit_yaml(real_model / self.WORKPIECE, widen)
-        assert self._beam_x(real_model) == pytest.approx(1.652)
+        assert self._beam_x(real_model) == pytest.approx(1.647)
 
     def test_an_authored_offset_beside_the_derived_one_is_caught(
         self, real_model: Path, edit_yaml: Callable

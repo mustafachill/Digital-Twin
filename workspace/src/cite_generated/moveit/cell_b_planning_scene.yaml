@@ -37,7 +37,7 @@ planning_scene:
         type: box
         dimensions_m: [0.04, 0.04, 0.12]
       pose:
-        xyz_m: [-0.475, 3.25, 0.69]
+        xyz_m: [-0.5, 2.674, 0.69]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: infeed_table
       type: work_table_600
@@ -46,7 +46,7 @@ planning_scene:
         type: box
         dimensions_m: [0.6, 0.6, 0.6]
       pose:
-        xyz_m: [-0.475, 3.0, 0.3]
+        xyz_m: [-0.5, 2.924, 0.3]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: outfeed_beam
       type: break_beam
@@ -55,7 +55,7 @@ planning_scene:
         type: box
         dimensions_m: [0.04, 0.04, 0.12]
       pose:
-        xyz_m: [1.55, 3.25, 0.69]
+        xyz_m: [1.805, 3.31, 0.725]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: outfeed_table
       type: work_table_600
@@ -64,16 +64,16 @@ planning_scene:
         type: box
         dimensions_m: [0.6, 0.6, 0.6]
       pose:
-        xyz_m: [2.0, 3.0, 0.3]
+        xyz_m: [2.26, 3.06, 0.3]
         rpy_rad: [0.0, 0.0, 0.0]
-    - id: picker_base
-      type: pedestal_600
+    - id: picker_track
+      type: ufactory_linear_motor
       frame_id: cite_world
       primitive:
         type: box
-        dimensions_m: [0.3, 0.3, 0.6]
+        dimensions_m: [1.0, 0.11, 0.705]
       pose:
-        xyz_m: [0.0, 2.7, 0.3]
+        xyz_m: [0.05, 3.3, 0.3525]
         rpy_rad: [0.0, 0.0, 0.0]
     - id: transfer_belt
       type: belt_1200x400
@@ -82,5 +82,5 @@ planning_scene:
         type: box
         dimensions_m: [1.2, 0.4, 0.6]
       pose:
-        xyz_m: [1.05, 3.0, 0.3]
+        xyz_m: [1.31, 3.06, 0.335]
         rpy_rad: [0.0, 0.0, 0.0]
