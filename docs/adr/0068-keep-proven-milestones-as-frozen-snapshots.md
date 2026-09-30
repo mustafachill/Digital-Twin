@@ -152,8 +152,12 @@ Each milestone is kept permanently as a frozen, self-contained, runnable snapsho
 
 ### What this costs us
 - Repository size grows by roughly three copies of `workspace/src`, `model/` and `tools/`.
-- Main-tree lint and three tree-walking host tests no longer see `projects/`; a defect there is
-  caught only by the weekly job, since a snapshot's own lint and tests are outside its contract.
+- Main-tree lint and four repository walkers — three `git ls-files` host tests and
+  `cite_test_hardware`'s ctest walk — no longer see the snapshots. What the main tree still
+  checks under `projects/` is exactly: `README.md` and `snapshots.yaml` walked (English, links)
+  and the manifest yamllinted, each snapshot's `run` shellchecked, and each snapshot's tree
+  hash-checked. Any other defect there is caught only by the weekly job, since a snapshot's own
+  lint and tests are outside its contract.
 - Every change to a snapshot, including a verification-log row, needs a tree-hash bump in
   `projects/snapshots.yaml`: deliberate friction, and the price of "frozen" being checked.
 - Snapshots rot silently if nobody reads the weekly job, and a non-blocking job is easy to ignore.

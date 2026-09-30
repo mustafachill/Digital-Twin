@@ -87,8 +87,12 @@ bullet.
   `Proposed`): `01-three-arm-event-driven-line` from `b5a0bc9` (tag `event-driven-line-v1`),
   `02-fixed-program-pair` from `c83119b` and `03-real-program-twin-on-track` from `e90d230`.
   **Whether each builds and runs is recorded in its own `PROVENANCE.md` and is not copied
-  here.** Nothing in this section describes a snapshot, and the main tree's checks skip
-  `projects/` apart from its `README.md`.
+  here.** Nothing in this section describes a snapshot. The main tree's checks skip
+  `projects/` except for exactly this: `projects/README.md` and `projects/snapshots.yaml` are
+  walked (English, links) and the manifest yamllinted; each snapshot's `run` is shellchecked;
+  and each snapshot's committed tree is checked against the hash the manifest pins. Four
+  repository walkers are narrowed to leave the snapshots out — three `git ls-files` host tests
+  and `cite_test_hardware`'s ctest walk (ADR-0068 decision 4).
 - **Phase 1.A is closed.** Container image, the `./scripts/*` contract, dependency
   manifests, CI, and the asset policy all exist and work. `external/cite.repos` pins
   `xarm_ros2` to a commit SHA, after the branch was built and driven against our stack

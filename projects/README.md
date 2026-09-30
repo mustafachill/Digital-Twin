@@ -73,8 +73,11 @@ sides of the paired `cell_b` there today, and no hardware path has been run. See
   `PROVENANCE.md` names as excluded.
 - **Figures inside a snapshot were true at its source commit only.** Its `docs/` are not
   maintained; read them as the state of that commit.
-- **The main tree's checks deliberately skip `projects/`**, apart from this file and each
-  snapshot's `run`, which the main tree's shellcheck names.
+- **The main tree's checks deliberately skip `projects/`**, except for exactly this: this file
+  and `snapshots.yaml` are walked (English, links) and the manifest yamllinted; each
+  snapshot's `run` is shellchecked; and each snapshot's committed tree is checked against its
+  pinned hash. Four repository walkers are narrowed to leave the snapshots out — three
+  `git ls-files` host tests and `cite_test_hardware`'s ctest walk.
 - **What a snapshot promises is that it builds, its scenario passes and `./run` runs.** Its
   own lint, unit tests and `doctor` are outside that promise and some of them fail by
   construction, because the extract leaves out `docs/measurements/`, `CLAUDE.md` and the
