@@ -102,9 +102,36 @@ def test_a_path_beside_the_exclusions_is_extracted(extract: Path, path: str) -> 
     assert (extract / path).exists(), f"{path} was left out and should not have been"
 
 
-def test_the_workspace_log_exclusion_is_anchored(extract: Path) -> None:
-    """Only `workspace/log` is runtime output; a `log` directory elsewhere is source."""
-    assert not (extract / "workspace" / "log").exists()
+def test_the_workspace_log_exclusion_is_anchored(tmp_path: Path) -> None:
+    """Only `workspace/log` is runtime output; a `log` directory elsewhere is source.
+
+    HEAD tracks neither, so this builds a throwaway repository that tracks both and runs a
+    copy of the script from inside it: the script takes its repository from its own path.
+    """
+    repo = tmp_path / "repo"
+    for relative in ("workspace/log/x", "src/log/y", "tools/snapshot_project.sh"):
+        (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SCRIPT, repo / "tools" / "snapshot_project.sh")
+    (repo / "workspace" / "log" / "x").write_text("runtime\n")
+    (repo / "src" / "log" / "y").write_text("source\n")
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+
+    git("init", "-q")
+    git("add", "-A")
+    identity = ("-c", "user.name=t", "-c", "user.email=t@example.invalid")
+    git(*identity, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", "t")
+    dest = tmp_path / "out"
+    result = subprocess.run(
+        [str(repo / "tools" / "snapshot_project.sh"), "HEAD", str(dest)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (dest / "workspace" / "log" / "x").exists()
+    assert (dest / "src" / "log" / "y").is_file()
 
 
 def test_a_non_empty_destination_is_refused(tmp_path: Path) -> None:

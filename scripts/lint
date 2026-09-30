@@ -127,7 +127,14 @@ if SHELL_GATE="$(assert_shellcheck_pinned "${VENV}/shellcheck" "$CITE_DEV_REQUIR
     # exactly; nothing else under projects/ is checked here. SCRIPTDIR, so a
     # `source=scripts/_lib.sh` directive resolves against that snapshot's own
     # library rather than this tree's.
-    check "${VENV}/shellcheck" -x -P SCRIPTDIR "${REPO_ROOT}"/projects/*/run
+    SNAPSHOT_RUNS=()
+    for run in "${REPO_ROOT}"/projects/*/run; do
+        # An unmatched glob stays literal; only files that exist are checked.
+        if [ -f "$run" ]; then SNAPSHOT_RUNS+=("$run"); fi
+    done
+    if [ "${#SNAPSHOT_RUNS[@]}" -gt 0 ]; then
+        check "${VENV}/shellcheck" -x -P SCRIPTDIR "${SNAPSHOT_RUNS[@]}"
+    fi
 else
     FAILED=1
     err "Shell gate broken — ${SHELL_GATE}.

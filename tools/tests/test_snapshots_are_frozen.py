@@ -30,6 +30,12 @@ PROJECTS = REPO_ROOT / "projects"
 MANIFEST = PROJECTS / "snapshots.yaml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "projects.yml"
 
+if not MANIFEST.is_file():
+    pytest.skip(
+        f"{MANIFEST.relative_to(REPO_ROOT)} does not exist, so there are no snapshots to hold",
+        allow_module_level=True,
+    )
+
 
 def _snapshots() -> list[dict]:
     return yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["snapshots"]

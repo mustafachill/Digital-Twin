@@ -29,16 +29,10 @@ ALLOWED = frozenset(
     {
         "CLAUDE.md",
         "README.md",
-        "what-we-are-doing.md",
-        "docs/README.md",
-        "docs/adr/README.md",
         "docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md",
         "docs/operations/bring-up.md",
-        ".github/workflows/projects.yml",
         "tools/snapshot_project.sh",
         "tools/tests/test_snapshots_are_left_out.py",
-        "tools/tests/test_snapshots_are_frozen.py",
-        "tools/tests/test_snapshot_extractor.py",
         "tools/tests/test_nothing_reaches_into_a_snapshot.py",
     }
 )
@@ -87,6 +81,17 @@ def test_the_allowlist_names_only_files_that_exist() -> None:
     """A stale entry is a hole: a new file at that path would be exempt without review."""
     missing = sorted(name for name in ALLOWED if not (REPO_ROOT / name).is_file())
     assert missing == []
+
+
+def test_every_allowlisted_file_names_a_snapshot_path() -> None:
+    """An entry whose file names no snapshot is an exemption nobody needs, and a hole."""
+    pattern = _snapshot_path_pattern()
+    unused = sorted(
+        name
+        for name in ALLOWED
+        if not pattern.search((REPO_ROOT / name).read_bytes().decode("utf-8", errors="ignore"))
+    )
+    assert unused == []
 
 
 def test_the_pattern_catches_a_reach_into_a_snapshot() -> None:
