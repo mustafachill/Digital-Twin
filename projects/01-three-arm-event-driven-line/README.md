@@ -12,7 +12,7 @@ are ADR-0068 in the main repository, which is not part of this folder.
 | Zone | `cell_a`, one side (no twin pair) |
 | Entry point | `./run` |
 | Check | `./scripts/scenario continuous_line`, `./scripts/scenario pick_and_place` |
-| Verification of this folder | **pending — see [`PROVENANCE.md`](PROVENANCE.md)** |
+| Verification of this folder | 2026-09-29/30, one machine: builds; `continuous_line` **failed its first run** and passed its second; `pick_and_place` passed its cycle and failed its teardown; `./run --headless` carried 3 of 3 work-pieces — details in [`PROVENANCE.md`](PROVENANCE.md) |
 | Changes against the source commit | listed, with their diff, in [`PROVENANCE.md`](PROVENANCE.md) |
 
 ## What was achieved, and why this step
@@ -148,8 +148,16 @@ log records.
   ([`docs/open-work.md`](docs/open-work.md) #60). ADR-0038, ADR-0039, ADR-0045 and ADR-0046
   are all `Proposed`.
 - **At the source commit CI did not drive this line on `cell_a`**: the scenarios' default
-  zone was `cell_b` (ADR-0056). The zone change in this folder restores `cell_a`; whether the
-  line runs here is what the verification log is for.
+  zone was `cell_b` (ADR-0056). The zone change in this folder restores `cell_a`.
+- **Here, `continuous_line` failed the first time it was run.** Its first run on 2026-09-29/30
+  stopped the first work-piece at `station_transfer_1`, the table-fed first transfer station,
+  before it was lifted; the line kept reporting `RUNNING` and nothing escalated, until the
+  420 s leg ceiling ended the run. The second run passed with all three work-pieces carried.
+  The cause of the first was not attributed. [`PROVENANCE.md`](PROVENANCE.md) has both runs.
+- **After Ctrl-C, `./run` returns before the container has finished tearing down** — about
+  25 s later in the one run that measured it. Wait until `docker ps` lists none of this
+  snapshot's containers before starting it again; `./run`'s own guard refuses to start while
+  they are still there.
 - **A grasp holds a position, not an orientation**, and scenarios are not deterministic:
   `CITE_PHYSICS_SEED` reaches `gz sim --seed` and not the physics solver, and `./run`
   (through `./scripts/sim`) passes no seed at all

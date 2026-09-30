@@ -166,3 +166,12 @@ Filled in by whoever runs it, one row per run. A run is a run, not a rate.
 
 | Date | Command | Result | Who |
 |---|---|---|---|
+| 2026-09-29/30 | `./scripts/bootstrap` | exit 0, 575 s. At main-repository commit `03261a3`; nothing under this folder but `README.md` and `PROVENANCE.md` has changed since (`git diff --stat 03261a3..d16885a`). | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/validate-model` | exit 0, `ok model valid — 2 zone(s), 8 type(s), 22 asset(s), 8 station(s), across 19 file(s)`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/build` | exit 0, `Summary: 23 packages finished [3min 58s]`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/scenario program_cycle --zone cell_b` | exit 0, `Scenario 'program_cycle' passed` (cycle and teardown both), `Ran 1 test in 98.672s`; one genuine stall, `commanded 60.9 mm, reached 65.8 mm, stalled=true … -> holding`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./run --headless` | exit 0, 96 s, all 22 steps, `done: 1 cycle(s)`. Box on the plant at x=+1.944 y=+3.060 z=+0.631, on the counterpart identical to 3 decimals; the outfeed frame is at x=+1.855. Pair teardown: `plant: ready=True status=1`, `counterpart: ready=True status=1`, `boundary: ready=True status=0` — why the two sides exited 1 was not read. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `cp -a` of this folder to a scratch directory outside any git checkout, copied `.venv/` deleted, then `./scripts/validate-model` and `./scripts/build` | both exit 0; build `Summary: 23 packages finished [4min 8s]`. | tester agent, one machine |
+| 2026-09-29/30 | `cp -a` of this folder **with** the copied `.venv/`, then `./scripts/bootstrap` in the copy | bootstrap re-pointed the **original** folder's `.venv/`, not the copy's — the reason README.md now says to take a copy with `git archive` or `rsync --exclude .venv`. | tester agent, one machine |
+
+Each row above is a single run on one machine, not a rate.

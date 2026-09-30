@@ -13,7 +13,7 @@ repository, which is not part of this folder.
 | Zone | `cell_b`, paired: two Gazebo instances, one arm on one track and one belt each |
 | Entry point | `./run` (a thin wrapper over `./scripts/program --zone cell_b`) |
 | Check | `./scripts/scenario program_cycle` |
-| Verification of this folder | **pending — see [`PROVENANCE.md`](PROVENANCE.md)** |
+| Verification of this folder | 2026-09-29/30, one run each on one machine: builds, `program_cycle` passed, `./run --headless` completed a cycle on both sides — figures in [`PROVENANCE.md`](PROVENANCE.md) |
 | Changes against the source commit | listed, with their diff, in [`PROVENANCE.md`](PROVENANCE.md) |
 
 ## What was achieved, and why this step

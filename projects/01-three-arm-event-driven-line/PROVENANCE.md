@@ -179,3 +179,15 @@ Filled in by whoever runs it, one row per run. A run is a run, not a rate.
 
 | Date | Command | Result | Who |
 |---|---|---|---|
+| 2026-09-29/30 | `./scripts/bootstrap` | exit 0. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/validate-model` | exit 0, `… 2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 17 file(s)`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/build` | exit 0, 23 packages. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/scenario continuous_line --zone cell_a` (first run) | **exit 1**, `Scenario 'continuous_line' failed — 1 cycle assertion(s) failed`. Piece 1 stopped after 1 of 10 milestones, waiting 420 s on `lifted(station_transfer_1)` while `LineState` read `RUNNING`: the silent dead end at the table-fed `station_transfer_1`, where nothing escalates. The piece never reached `lifted`, so this is not the lifted-then-held signature README.md lists from CI. Not attributed. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/scenario continuous_line --zone cell_a` (re-run) | exit 0, `Scenario 'continuous_line' passed`, `wp_000003 reached station_accumulation; 3 completed`, `Ran 1 test in 325.669s`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/scenario pick_and_place --zone cell_a` | **exit 1**, `Scenario 'pick_and_place' failed — 1 teardown assertion(s) failed`. Cycle passed (`Ran 1 test in 83.772s`, genuine stall, commanded 45.0 mm, reached 49.4 mm); teardown failed on `gz-1 exited with -9`, a known signature, unclassified. | tester agent, one machine |
+| 2026-09-29/30 | `./run` before main-repository commit `51d6cf8` | hung at teardown: SIGINT was ignored by the background launch job. Fixed at `51d6cf8`. | tester agent, one machine |
+| 2026-09-29/30 | `./run --headless` at `d16885a` | exit 0, 338 s. `work-piece 1 reached beam_c3_out after 109 s`, 2 after 91 s, 3 after 92 s; `all 3 work-piece(s) carried from the pick table to the sink`; `the cell is down`. `move_group` exited -11 three times at teardown, the known upstream member. | tester agent, one machine |
+| 2026-09-29/30 | `./run` at `d16885a`, SIGINT sent to its process group at 60 s (no TTY) | `./run` exited 130 immediately; the container finished an orderly teardown about 25 s later, no orphaned containers. A keyboard Ctrl-C was not tested. | tester agent, one machine |
+
+Each row above is a single run on one machine, not a rate. Where no commit is named, the report
+the rows were copied from did not name one.

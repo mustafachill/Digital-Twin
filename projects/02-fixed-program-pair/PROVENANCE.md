@@ -166,3 +166,10 @@ Filled in by whoever runs it, one row per run. A run is a run, not a rate.
 
 | Date | Command | Result | Who |
 |---|---|---|---|
+| 2026-09-29/30 | `./scripts/bootstrap` | exit 0. At main-repository commit `03261a3`; nothing under this folder but `README.md` and `PROVENANCE.md` has changed since (`git diff --stat 03261a3..d16885a`). | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/validate-model` | exit 0, `… 2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 17 file(s)`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/build` | `Summary: 23 packages finished [4min 12s]`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./scripts/scenario program_cycle` | exit 0, `Scenario 'program_cycle' passed` (cycle and teardown both), `Ran 1 test in 66.687s`. At `03261a3`. | tester agent, one machine |
+| 2026-09-29/30 | `./run --headless --cycles 2` | exit 0, 112 s, 14 of 14 steps in both cycles. Last box on the plant at x=+1.529 y=+3.000 z=+0.625, on the counterpart x=+1.529 y=+3.001 z=+0.625; the outfeed frame is at x=+1.600. Pair teardown: `plant: ready=True status=1`, `counterpart: ready=True status=1`, `boundary: ready=True status=0` — why the two sides exited 1 was not read. At `03261a3`. | tester agent, one machine |
+
+Each row above is a single run on one machine, not a rate.
