@@ -108,7 +108,7 @@ TEARDOWN_CEILING_S=120
 # shellcheck disable=SC2329
 teardown() {
     trap - EXIT INT TERM HUP
-    trap 'warn "still stopping — the launch is working through its own shutdown"' INT TERM
+    trap 'warn "still stopping — the launch is working through its own shutdown"' INT TERM HUP
     if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null || true; fi
     if [ -n "$FEED_PID" ]; then kill "$FEED_PID" 2>/dev/null || true; fi
     if [ -n "$SIM_PID" ] && kill -0 "$SIM_PID" 2>/dev/null; then

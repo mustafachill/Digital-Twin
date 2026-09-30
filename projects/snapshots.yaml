@@ -18,8 +18,10 @@
 #
 # `source` is the commit the folder was extracted from with
 # tools/snapshot_project.sh; `image` is the per-snapshot tag its patches set;
-# `scenario` and `scenario_args` are what the weekly workflow runs to hold it to
-# its contract (it builds, its scenario passes, its ./run runs).
+# `scenario` and `scenario_args` are what the weekly workflow runs. The workflow
+# checks two thirds of a snapshot's contract — it builds, its scenario passes —
+# and not the third: that `./run` runs is backed only by the runs recorded in
+# each snapshot's PROVENANCE.md verification log.
 
 ---
 snapshots:
@@ -28,7 +30,7 @@ snapshots:
     image: cite-digital-twin:p01-three-arm-line
     scenario: continuous_line
     scenario_args: --teardown-advisory
-    tree: b9609d1a788bdab5fca3494fcd04f23c40e5bad1
+    tree: 74c92d657e80a6afbef6f0d06f8370a805e3c7d3
   - name: 02-fixed-program-pair
     source: c83119b5f95063c27b40a397fd0f5094feb00ec2
     image: cite-digital-twin:p02-fixed-program
