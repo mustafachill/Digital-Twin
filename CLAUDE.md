@@ -154,9 +154,11 @@ bullet.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1569** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1782** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on
-  `feat/let-go-when-clear`, 2026-09-28).
+  `feat/projects-snapshots`, 2026-09-30). **The step from 1569 spans several branches and is
+  not reconciled here**; the reviewer of this branch measured 1716 at `e90d230`, its base.
+  It read **1569** on `feat/let-go-when-clear`, 2026-09-28.
   **The 1564 -> 1569 step is +5 and it is the first in this bullet's recent history that is NOT
   tree growth alone** — it is tree growth **minus** a deletion, and both halves were measured on
   both sides in a worktree at `main` rather than differenced. The branch adds **5** tracked files
@@ -1104,7 +1106,11 @@ bullet.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported `2045 files checked, no non-English content outside 1 exemption(s)` on
+  runs, and reported `2091 files checked, no non-English content outside 1 exemption(s)` on
+  `feat/projects-snapshots`, 2026-09-30, **5** of them untracked (the 3 below plus two
+  `real-robot-code/` archives), so a clean clone reports **2086**. **The step from 2045 spans
+  several branches and is not reconciled here.**
+  It reported `2045 files checked` on
   `feat/let-go-when-clear`, 2026-09-28 — **+5, the same five tracked files the collection above
   reconciles**, with the same 3 untracked still on disk, so a clean clone reports **2042**.
   It read `2040 files checked` on `feat/clamp-the-box` at `50a51a9`, 2026-09-24.
