@@ -100,6 +100,10 @@ HEIGHT_TOLERANCE_M = 0.05
 BELTED_M = 0.30
 BELT_CEILING_S = 300.0
 
+#: How long the belt's stop may take to be acknowledged by its subscriber. A
+#: hang detector, like every ceiling above.
+BELT_STOP_ACK_S = 10.0
+
 #: Recorded in a failure report as a condition of the run, never as a promise
 #: of reproducibility: `gz sim --seed` does not seed the physics solver (see
 #: `./scripts/scenario`'s header).
@@ -329,6 +333,12 @@ class TestProgramCycle(unittest.TestCase):
             BRING_UP_CEILING_S,
             f"a subscriber on {self.conveyor.command_topic}",
         )
+        # Commanded back to zero when this test ends, whether it passed or
+        # failed, and registered BEFORE the belt is started so that no route out
+        # of the test can skip it. A simulated belt stops when the launch does; a
+        # physical one is a drive whose setpoint persists, and the line's
+        # StopAll, which used to stop every belt, left with the line (ADR-0069).
+        self.addCleanup(self._stop_the_belt, belt, Float64(data=0.0))
         belt.publish(Float64(data=float(self.conveyor.installed_speed_mps)))
         belt_axis = _unit((outfeed[0] - infeed[0], outfeed[1] - infeed[1]))
 
@@ -344,6 +354,24 @@ class TestProgramCycle(unittest.TestCase):
             infeed[2],
             "the work-piece left the belt downwards rather than along it.\n" + context,
         )
+
+    def _stop_the_belt(self, belt, zero) -> None:
+        """Command the belt this scenario started back to ``zero``.
+
+        Reported rather than raised when the stop is not acknowledged: the
+        cleanup runs after the verdict, and a missing acknowledgement is a
+        statement about delivery, which the line below makes visible without
+        replacing whatever the test itself concluded.
+        """
+        from rclpy.duration import Duration
+
+        belt.publish(zero)
+        if not belt.wait_for_all_acked(Duration(seconds=BELT_STOP_ACK_S)):
+            print(
+                f"warning: the belt's stop on {self.conveyor.command_topic} was not "
+                f"acknowledged within {BELT_STOP_ACK_S:.0f} s",
+                flush=True,
+            )
 
     def _run_program(self, command, resting):
         """Run the program to completion, sampling the part's position as it goes."""
