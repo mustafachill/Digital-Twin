@@ -218,7 +218,7 @@ asset_type:
           # ROOT, so every collision reference in the expanded description
           # resolves under the new root — a mesh missing from this list is a
           # collision shape that resolves to nothing. These thirteen are the
-          # complete set, read off the expanded `cell_a_arm_1.urdf.xacro` rather
+          # complete set, read off an expanded arm description rather
           # than off the vendor's source: five arm links, one end-tool proxy on
           # `link5`, and seven gripper links.
           #
@@ -375,8 +375,8 @@ asset_type:
         # This is the only one of the three that catches a clipped fixture
         # mid-motion, and it is also the only one evaluated on every cycle of
         # every motion — so it is the one that can cry wolf, and a flake here
-        # lands on `./scripts/scenario pick_and_place`, which is a BLOCKING CI
-        # gate. At 1.0 rad it fires when a joint is held back hard enough to
+        # lands on whichever scenario drives the arm in CI, which is a
+        # BLOCKING gate. At 1.0 rad it fires when a joint is held back hard enough to
         # accumulate 57° of error, which is a stall, not a loaded machine.
         #
         # State plainly what that buys and what it does not: it detects a joint
@@ -417,7 +417,7 @@ asset_type:
 
   planning:
     # The vendor's own SRDF group names, prefixed with the asset id exactly as
-    # joints and controllers are: arm_1 plans with group arm_1_xarm5.
+    # joints and controllers are: picker plans with group picker_xarm5.
     group_suffix: xarm5
     end_effector_group_suffix: xarm_gripper
     # link_tcp rather than link_eef: with a gripper fitted the vendor's chain

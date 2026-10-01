@@ -5,88 +5,46 @@ schema: cite/zones/v1
 # Zones partition the facility; they do not nest (naming-and-namespaces.md rule
 # 6). Nesting would change every name in the system and needs an ADR.
 #
+# ONE ZONE, AND THAT IS WHAT LETS `--zone` BE LEFT OUT. `./scripts/sim`,
+# `./scripts/scenario` and `./scripts/program` default to the only zone this file
+# declares, and require `--zone` again the day a second one is added (ADR-0069
+# decision 5). The three-arm cell that stood here as `cell_a` runs as
+# `projects/01` (ADR-0068, ADR-0069).
+#
 # WHAT A `bounds` BOX MEANS, because it has one meaning and not two. It encloses
 # the BODIES THIS FILE'S SIBLINGS AUTHOR — pedestals, tables, belts, beams, arm
 # bases — and NOT the volume an arm's links sweep.
 #
-# NEITHER ZONE'S BOX CONTAINS ITS OWN ARMS' REACH, AND NEITHER IS MEANT TO.
-# Forward kinematics over the shipped xarm5 URDF's own joint limits puts the tool
-# point up to 0.9153 m from `link_base` — reported by the 2026-09-17
-# model-validator review and not re-measured here. Against that, the boxes below
-# leave 0.700 m toward -y from `cell_b`'s arm base and 0.900 m from `cell_a`'s
-# nearest one, both derivable from this file: shortfalls of about 0.215 m and
-# 0.015 m. So a commanded pose at the envelope edge is outside the declared box
-# in BOTH cells, by construction and not by an error in one of them.
+# THE BOX DOES NOT CONTAIN THE ARM'S REACH, AND IS NOT MEANT TO. Forward
+# kinematics over the shipped xarm5 URDF's own joint limits puts the tool point
+# up to 0.9153 m from `link_base` — reported by the 2026-09-17 model-validator
+# review and not re-measured here. Against that, the box below leaves 0.700 m
+# toward -y from the arm base, derivable from this file: a shortfall of about
+# 0.215 m. So a commanded pose at the envelope edge is outside the declared box
+# by construction and not by an error.
 #
-# The meaning is recorded rather than a box widened, and the reason is that
-# widening one would give the two zones two different meanings for one key.
-# Nothing reads these bounds — they reach no generated artifact — so the
-# consequence today is nil either way, and what a later reader needs is to know
-# which question the box answers. `docs/open-work.md` #66, nothing validates that
-# two zones' boxes are disjoint, INHERITS this meaning: a box that bounded swept
-# volume would be a different and much larger claim, and a guard written against
-# one reading would be wrong under the other.
+# The meaning is recorded rather than the box widened. Nothing reads these
+# bounds — they reach no generated artifact — so the consequence today is nil
+# either way, and what a later reader needs is to know which question the box
+# answers. `docs/open-work.md` #66, nothing validates that two zones' boxes are
+# disjoint, INHERITS this meaning should a second zone be declared.
 zones:
-  - id: cell_a
-    name: Three-arm serial transfer cell
-    bounds:
-      kind: aabb
-      frame: cite_world
-      # Encloses the whole line with roughly a metre of clearance at each end,
-      # and enough height for an arm at full extension.
-      min_m: [-1.000, -1.200, 0.000]
-      max_m: [6.800, 0.800, 2.500]
-    # Whether this zone is modelled as one cell or as a twinned pair (ADR-0041).
-    # `pair` covers both 2.A, where the counterpart is a second simulation, and
-    # 2.B, where it is the physical cell — this line does not change when that
-    # happens; a `counterpart_backend:` on the asset that acquired hardware does.
-    #
-    # SINGLE, AND THE ASYMMETRY WITH `cell_b` BELOW IS DELIBERATE (ADR-0059).
-    # This is the archived three-arm showcase; the paired cell is `cell_b`.
-    # Pairing this one would ALSO break the suite today: `docs/open-work.md` #62
-    # records that `cite_twin`'s two launch fixtures append a counterpart to the
-    # live plan unconditionally, and both name `cell_a` literally, so a paired
-    # `cell_a` makes each write a document with two sides called `counterpart`
-    # and `cite_bringup.plan.load` refuses it. #62 is dormant only while this
-    # line reads `single`.
-    twin:
-      sides: single
-
   - id: cell_b
     name: One-arm pick-and-place cell
     bounds:
       kind: aabb
       frame: cite_world
-      # PLACED CLEAR OF `cell_a` IN +Y, AND NOTHING CHECKS THAT. Zones are
-      # validated one at a time — `cite_tools.validate.geometric.check` is handed
-      # a single `ResolvedCell` (cli.py runs it once per zone) and
-      # `_no_overlapping_bodies` only ever sees that zone's assets — so a zone
-      # declared inside another produces zero findings and a world with two cells
-      # interpenetrating. The separation below is therefore a stated design fact
-      # rather than an enforced one, and is filed as a validator gap in
-      # docs/open-work.md #66.
+      # WHERE IT STANDS IS HISTORY, NOT A RULE. The box sits at +y 2.000 m
+      # because it was placed clear of the three-arm cell that shared this file
+      # until ADR-0069, and it reuses that cell's x datum so that every relative
+      # dimension inside it — the 0.300 m arm standoff, the 0.050 m belt transfer
+      # inset, the 25 mm and 50 mm fixture clearances — is a number that was
+      # derived and measured there. Moving it would change every generated
+      # coordinate for no gain, so it stays.
       #
-      # THE RULE, AND NOT A COPY OF THE NUMBERS IT RANGES OVER: this zone's
-      # `min_m[1]` must stand above `cell_a`'s `max_m[1]`, declared for that zone
-      # above in this same file, and the clear air between the two boxes is the
-      # difference of those two keys. This comment used to restate `cell_a`'s y
-      # span and the resulting gap, which — since #66 records that nothing
-      # validates the separation — made this prose the whole guarantee AND a copy
-      # nothing keeps in step. Two of the three numbers would have gone stale the
-      # first time either box moved, in the one place a reader would trust.
-      #
-      # The two boxes overlap in x on purpose: `cell_b` reuses `cell_a`'s x
-      # datum so that every relative dimension inside it — the 0.300 m arm
-      # standoff, the 0.050 m belt transfer inset, the 25 mm and 50 mm fixture
-      # clearances — is the SAME number that cell_a's layout comment derives and
-      # that its reach margins were measured at. Offsetting in +y alone keeps
-      # that arithmetic transferable; offsetting in x as well would have made
-      # every distance in this cell a new number nobody has checked.
-      #
-      # Only one zone is up at a time (ADR-0056 decision 3), so this separation
-      # buys correctness of the model rather than isolation at run time — the run-
-      # time collisions are on ROS names, not on geometry, and are the reason for
-      # the one-zone-at-a-time rule.
+      # Zones are validated one at a time — `cite_tools.validate.geometric.check`
+      # is handed a single `ResolvedCell` — so should a second zone be declared,
+      # nothing would check that the two boxes are disjoint (docs/open-work.md #66).
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
     # PAIRED, and this is the system under construction (ADR-0059): two sides,
