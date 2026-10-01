@@ -88,6 +88,17 @@ fi
 source_overlay
 
 PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
+
+# How long the pair may take to stop after its SIGINT before SIGKILL goes to
+# its process group. A ceiling on a failure, not a schedule. It sits above the
+# supervisor's own stated worst case — three participants stopped one after
+# another, each given `STOP_GRACE_S + STOP_KILL_S` in `cite_bringup/pair.py`
+# (ADR-0057) — so that a supervisor still escalating on its own is not cut
+# short. The SIGKILL reaches the supervisor's group only: each side leads a
+# session of its own (`start_new_session` in `pair.py`), so what reaches the
+# sides if the supervisor itself is killed is this script's container ending
+# with the script.
+PAIR_STOP_CEILING_S=420
 BELT_STARTED=0
 PAIR_PID=""
 TAIL_PID=""
@@ -119,8 +130,8 @@ teardown() {
     fi
     if [ -n "$PAIR_PID" ] && kill -0 "$PAIR_PID" 2>/dev/null; then
         step "Stopping the pair"
-        kill -INT "$PAIR_PID" 2>/dev/null || true
-        wait "$PAIR_PID" 2>/dev/null || true
+        stop_own_group "$PAIR_PID" "$PAIR_STOP_CEILING_S" \
+            || warn "the pair did not stop within ${PAIR_STOP_CEILING_S} s of SIGINT; its process group was killed"
         # The supervisor's own account of the teardown, which the console stopped
         # tailing at readiness: a side that had to be killed says so here.
         grep -E '^\[pair\] ' "$PAIR_LOG" 2>/dev/null | tail -n 6 || true
@@ -135,8 +146,15 @@ trap teardown EXIT
 step "Bringing up both sides of ${ZONE}"
 SIM_ARGS=(--zone "$ZONE" --pair)
 [ "$HEADLESS" -eq 0 ] || SIM_ARGS+=(--headless)
-"${REPO_ROOT}/scripts/sim" "${SIM_ARGS[@]}" > "$PAIR_LOG" 2>&1 &
-PAIR_PID=$!
+# IN A PROCESS GROUP OF ITS OWN, so that the terminal's Ctrl-C does not reach
+# the supervisor (see `start_in_own_group`). It used to: the supervisor installs
+# its own SIGINT handler, so it heard Ctrl-C together with this script's trap
+# and began stopping the sides at once — and the teardown's belt stop, which has
+# to come first, then found the pair gone, or waited out its ceiling on a side
+# that was going. Now only the teardown's own SIGINT reaches it, in order:
+# program, then each side's belt, then the pair.
+start_in_own_group "$PAIR_LOG" "${REPO_ROOT}/scripts/sim" "${SIM_ARGS[@]}"
+PAIR_PID="$STARTED_PID"
 tail -n +1 -f "$PAIR_LOG" & TAIL_PID=$!
 
 # An event, not a duration (P4): the loop only polls for the supervisor's token.

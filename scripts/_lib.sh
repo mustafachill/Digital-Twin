@@ -867,6 +867,59 @@ require_declared_zone() {
 }
 
 # -----------------------------------------------------------------------------
+# start_in_own_group <log> <command...> — start a background job that the
+# terminal's Ctrl-C does not reach. Sets STARTED_PID.
+#
+# A job started with `&` shares the script's process group, so the terminal
+# delivers its SIGINT to the job and to the script AT THE SAME TIME. A
+# non-interactive shell does start such a job with SIGINT ignored, but a program
+# that installs its own handler — `cite_bringup.pair` does — undoes that and
+# starts tearing down while the script's trap is still running, so any step the
+# trap meant to take FIRST finds what it needed already gone. With job control
+# on for this one job it gets a process group of its own: the terminal signals
+# the foreground group only, and the job hears exactly what the script sends it.
+# The previous job-control setting is put back, so later jobs are unaffected.
+#
+# The job's pid is also its process-group id, which is what
+# `stop_own_group` uses to reach everything it started.
+# -----------------------------------------------------------------------------
+start_in_own_group() {
+    local log="$1"; shift
+    local had_m=0
+    case "$-" in *m*) had_m=1 ;; esac
+    set -m
+    "$@" > "$log" 2>&1 &
+    # shellcheck disable=SC2034  # read by the caller that sourced this file
+    STARTED_PID=$!
+    [ "$had_m" -eq 1 ] || set +m
+}
+
+# stop_own_group <pid> <ceiling-seconds> — SIGINT, then SIGKILL the whole group.
+#
+# Sends SIGINT to the job `start_in_own_group` started and waits for it to end.
+# If it is still running after <ceiling-seconds>, SIGKILL goes to its entire
+# process group. Returns 0 when SIGINT was enough and 1 when it had to kill.
+# The ceiling bounds a failure and sequences nothing (P4): a job that stops
+# promptly is not delayed, and the poll only decides how soon a hung one is
+# noticed.
+# -----------------------------------------------------------------------------
+stop_own_group() {
+    local pid="$1" ceiling="$2" waited=0
+    kill -INT "$pid" 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$waited" -ge "$ceiling" ]; then
+            kill -KILL -- "-${pid}" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    wait "$pid" 2>/dev/null || true
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # cite_tools resolution — which checkout's tooling is about to run?
 #
 # `cite_tools` is installed editable, so the interpreter resolves it through a

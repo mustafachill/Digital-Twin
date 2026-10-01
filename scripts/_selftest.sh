@@ -1206,6 +1206,42 @@ expect_ok   "and names the zone" \
 # simulated belt stops when its simulator does; a physical one is a drive whose
 # setpoint persists, and StopAll, which used to stop every belt, left with the
 # line (ADR-0069). A grep, because driving it means starting a pair.
+# The pair runs in a process group of its own, so the terminal's Ctrl-C reaches
+# only this script's trap and the order program -> belts -> pair holds. Driven
+# here with ordinary processes standing in for the supervisor; no container.
+GROUP_TMP="$(mktemp -d)"
+group_of() { ps -o pgid= -p "$1" 2>/dev/null | tr -d ' '; }
+start_in_own_group "${GROUP_TMP}/a.log" sleep 30
+own_pid="$STARTED_PID"
+expect_ok   "start_in_own_group puts the job in a process group of its own" \
+            test "$(group_of "$own_pid")" = "$own_pid"
+expect_ok   "which is not the script's group, so the terminal's SIGINT misses it" \
+            test "$(group_of "$own_pid")" != "$(group_of $$)"
+expect_ok   "and stop_own_group ends a job that obeys SIGINT without killing it" \
+            stop_own_group "$own_pid" 5
+expect_fail "and leaves nothing running" kill -0 "$own_pid"
+# A job that ignores SIGINT, with a child of its own: the ceiling has to fire
+# and SIGKILL has to reach the whole group, child included.
+# shellcheck disable=SC2016  # expanded by the inner shell, not this one
+start_in_own_group "${GROUP_TMP}/b.log" \
+    bash -c 'trap "" INT; sleep 30 & echo "$!" > "$0"; wait' "${GROUP_TMP}/child.pid"
+stubborn_pid="$STARTED_PID"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "${GROUP_TMP}/child.pid" ] && break; sleep 0.2; done
+expect_fail "a job that ignores SIGINT is killed at the ceiling, and says so" \
+            stop_own_group "$stubborn_pid" 1
+expect_fail "and the job is gone" kill -0 "$stubborn_pid"
+expect_fail "and so is its child, because SIGKILL went to the group" \
+            kill -0 "$(cat "${GROUP_TMP}/child.pid" 2>/dev/null || echo 0)"
+expect_eq   "and job control is put back as it was" "" "$(case "$-" in *m*) echo on ;; esac)"
+rm -rf "$GROUP_TMP"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/program starts the pair in its own process group" \
+            grep -qF 'start_in_own_group "$PAIR_LOG" "${REPO_ROOT}/scripts/sim"' \
+            "${REPO_ROOT}/scripts/program"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "and stops it with the SIGKILL fallback" \
+            grep -qF 'stop_own_group "$PAIR_PID" "$PAIR_STOP_CEILING_S"' \
+            "${REPO_ROOT}/scripts/program"
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "./scripts/program's teardown commands every side's belt to zero" \
             grep -qF 'python3 -m cite_bringup.program.belt --zone "$ZONE" --stop' \
