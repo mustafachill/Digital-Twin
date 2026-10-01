@@ -28,7 +28,7 @@
   one cycle and asserts where the work-piece ends. **It said three until 2026-10-01**:
   `pick_and_place` (blocking since `c1e9e03`) and `continuous_line` (advisory) left the main
   tree with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); both still run, frozen, from
-  `projects/01-three-arm-event-driven-line`, and the weekly, non-blocking
+  `projects/01`, and the weekly, non-blocking
   `.github/workflows/projects.yml` is what checks them there. Their figures are a closed
   record, kept in CLAUDE.md §2.
   Both are run with `--teardown-advisory`, which splits the two questions a scenario

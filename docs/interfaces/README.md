@@ -13,7 +13,7 @@
   removed the ten that only the event-driven line used — `LineState`, `LineTopology`,
   `StationTopology`, `StationEdge`, `StationState`, `DetectionEvent`, `Detection`,
   `Detect.action`, `ResetStation.srv` and `ConveyorState`. They run, frozen, in
-  `projects/01-three-arm-event-driven-line`. `ConveyorState` was the typed contract reserved
+  `projects/01`. `ConveyorState` was the typed contract reserved
   for a measured belt speed and was published by nothing; belts are commanded over a bare
   `std_msgs/Float64` and give no confirmation back, and a closed-loop belt now needs a contract
   of its own (ADR-0069, "What this costs us").
@@ -147,7 +147,7 @@ string. The container stays typed even when the contents vary.
 *This section records a convention whose message, writer, reader and consumer all left the
 main tree on 2026-10-01 with the event-driven line (ADR-0069): `Detection`,
 `cite_skills/observation.hpp` and `cite_orchestration`'s `PickAt` run only in
-`projects/01-three-arm-event-driven-line`. It is kept because the rule binds the next message
+`projects/01`. It is kept because the rule binds the next message
 that carries a pose a sensor cannot fill.*
 
 A message declares the shape of an answer; it does not promise that every sensor can give

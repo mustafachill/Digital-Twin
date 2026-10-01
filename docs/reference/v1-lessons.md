@@ -112,7 +112,7 @@ project wrote.
 *Overtaken 2026-10-01: everything this section calls built — `cell_a`, its flow document, the
 line coordinator, `line_plan.hpp` and `./scripts/scenario continuous_line` — left the main tree
 with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) and runs,
-frozen, in `projects/01-three-arm-event-driven-line`, where the paths below resolve. The section
+frozen, in `projects/01`, where the paths below resolve. The section
 is kept as the record of what Phase 1.D delivered against this requirement.*
 
 The resemblance between this sentence and what Phase 1.D produced is close enough to be

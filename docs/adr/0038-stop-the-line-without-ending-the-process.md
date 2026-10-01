@@ -237,7 +237,7 @@ has two entrances**, and decision 5's other half is what closes either.
 A station's escalation stops the line **and the coordinator stays alive**, serving the
 reset — and resumption is gated on **re-armability**, not on acknowledgement.
 **[Overtaken 2026-10-01 — ADR-0069 removed the line, its coordinator and the reset from the
-main tree; this mechanism runs only in `projects/01-three-arm-event-driven-line`. The reason
+main tree; this mechanism runs only in `projects/01`. The reason
 `StopAll` exists — a physical belt's setpoint persists — is still cited by the twin boundary's
 belt route, which stays.]**
 

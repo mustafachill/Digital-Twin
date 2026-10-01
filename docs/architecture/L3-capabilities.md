@@ -21,7 +21,7 @@
   deprecated).
   **`Detect` is not in the main tree.** Its action definition, `detection_server.cpp` and the
   `DetectionEvent`/`Detection` messages left with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); they run, frozen,
-  in `projects/01-three-arm-event-driven-line`, whose line started a station on the beam
+  in `projects/01`, whose line started a station on the beam
   transition and stopped the belt on it
   ([ADR-0032](../adr/0032-index-the-belt.md), deprecated). The beams themselves stay in
   `cell_b`'s world, and their levels are still bridged into ROS; nothing in the main tree turns

@@ -304,9 +304,8 @@ and has not been taken.
 
 The line coordinator and the topology server left the main tree on 2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). This
 entry — capture-first instructions and three candidate causes — is kept, unchanged, in the
-frozen copy of this document at
-`projects/01-three-arm-event-driven-line/docs/operations/troubleshooting.md`, which is where
-the line still runs.
+frozen copy of this document inside the `projects/01` snapshot
+(`docs/operations/troubleshooting.md` there), which is where the line still runs.
 
 ### Bring-up fails on the second attempt
 

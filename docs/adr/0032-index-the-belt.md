@@ -2,7 +2,7 @@
 
 - **Status:** Deprecated — [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
   removed the event-driven line from the main tree with no replacement there: the belt indexing lived in `cite_orchestration` and keyed on the detection server's `DetectionEvent`, and both are gone.
-  The mechanism still runs, unchanged, in `projects/01-three-arm-event-driven-line`.
+  The mechanism still runs, unchanged, in `projects/01`.
   **Nothing below is rewritten, and nothing below binds the main tree.**
   **[Replaced 2026-10-01, kept for the record:]** *"Accepted (corrected 2026-08-26 and 2026-08-27) — **the decision stands and is
   implemented.** L4 owns the belt setpoint, stops the belt on the `DetectionEvent`

@@ -101,7 +101,7 @@ while `cell_b` is up.
 `cell_b` is the system under construction: two sides, both simulated, one of everything on
 each. `cell_a` remains the generated, built, hand-launchable three-arm showcase that
 ADR-0056 made it. **[Overtaken 2026-10-01 — ADR-0069 removed `cell_a` from L0 and the main
-tree; the three-arm cell runs only as `projects/01-three-arm-event-driven-line`. `cell_b` is the
+tree; the three-arm cell runs only as `projects/01`. `cell_b` is the
 only zone, and it stays paired.]**
 
 ## Consequences

@@ -4,7 +4,7 @@
   — the *decision* to park the event-driven line in the main tree is withdrawn: ADR-0069 removes
   the line, `cell_a` and this record's taught-pose program (`program/cell_b_pick_place.py` and L0's
   `configuration.poses_rad` field) from the main tree, and the line runs as
-  `projects/01-three-arm-event-driven-line` instead. The twin boundary's belt route this record
+  `projects/01` instead. The twin boundary's belt route this record
   added **stays**, on the project owner's decision, with no in-tree client. The fixed-program
   idea itself was already continued by [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md).
   **Nothing below is rewritten and nothing below binds any longer.** Read ADR-0069 for what does.
@@ -82,7 +82,7 @@ runs it on the pair. Concretely:
    the tag `event-driven-line-v1` marks the commit before this change; and
    `tools/tests/test_event_driven_line_is_kept.py` fails if a file of it disappears.
    **[Overtaken 2026-10-01 — ADR-0069 removes the line, the guard and `./scripts/demo` from the
-   main tree; the line runs as `projects/01-three-arm-event-driven-line`.]**
+   main tree; the line runs as `projects/01`.]**
 
 This reverses the "sensor-driven rather than timed" framing the belt plugin's header carried.
 

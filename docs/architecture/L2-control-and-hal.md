@@ -12,7 +12,7 @@
   main tree on 2026-10-01
   ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); it last
   asserted 9 across three arms at the commits CLAUDE.md §2's CI table names, and the
-  three-arm cell is checked now only from `projects/01-three-arm-event-driven-line`.
+  three-arm cell is checked now only from `projects/01`.
   Controller configuration, MoveIt configuration and the
   planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
   the scene per arm and reads it back rather than trusting the service result. The gripper

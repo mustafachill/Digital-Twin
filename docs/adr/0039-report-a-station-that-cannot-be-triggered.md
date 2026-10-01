@@ -2,7 +2,7 @@
 
 - **Status:** Deprecated — [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
   removed the event-driven line from the main tree with no replacement there: the untriggerable-station report lived in `cite_orchestration` and was published on `LineState`, and both are gone.
-  The mechanism still runs, unchanged, in `projects/01-three-arm-event-driven-line`.
+  The mechanism still runs, unchanged, in `projects/01`.
   **Nothing below is rewritten, and nothing below binds the main tree.**
   **[Replaced 2026-10-01, kept for the record:]** *"Proposed. Written before the implementation, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below is a commitment, not a description.

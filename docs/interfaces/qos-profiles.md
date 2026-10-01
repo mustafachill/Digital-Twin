@@ -83,7 +83,7 @@ discovery event. Publish before it happens and the message is delivered to zero 
 with no incompatibility to find and nothing wrong on either side of `ros2 topic info`.
 
 The measured case was in this repository, and is now in
-`projects/01-three-arm-event-driven-line`, since `cite_orchestration` left the main tree on
+`projects/01`, since `cite_orchestration` left the main tree on
 2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
 `ConveyorIndex` creates its belt command publishers
 inside `line_orchestrator`'s topology callback and publishes the start-up setpoint from the

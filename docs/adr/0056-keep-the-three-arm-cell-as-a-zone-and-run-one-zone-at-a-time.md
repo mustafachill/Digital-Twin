@@ -2,7 +2,7 @@
 
 - **Status:** Superseded by [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
   — zone `cell_a` has left L0 and the main tree; the three-arm cell runs only as
-  `projects/01-three-arm-event-driven-line`. What survives of this record is ADR-0069 decision 5's
+  `projects/01`. What survives of this record is ADR-0069 decision 5's
   rule that `--zone` is **required whenever L0 declares more than one zone**; with one zone it
   defaults to that zone. **Nothing below is rewritten and nothing below binds any longer.**
   **[Replaced 2026-10-01, kept for the record:]** *"**Proposed — implemented, and all eight promotion clauses now have evidence

@@ -54,7 +54,7 @@ which part is real; read the document's status block, which names it. `BUILT` me
 It records the beam-triggered line end to end: how it works and what it does not do. Its code
 was removed from the main tree on 2026-10-01
 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and runs,
-frozen, as `projects/01-three-arm-event-driven-line`; it said `BUILT — parked` until then.
+frozen, as `projects/01`; it said `BUILT — parked` until then.
 The L3 box in the diagram above is the target vocabulary: `Detect` left the main tree with the
 line and has no action definition there today.
 

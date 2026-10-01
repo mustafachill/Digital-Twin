@@ -58,7 +58,7 @@ performs the two-party confirmation, enforces the timeout with its defined outco
 arbitrates the shared volume. Ownership state lives in exactly one place and is published
 as typed line state. **[Overtaken 2026-10-01 — ADR-0069 removed the line coordinator and
 `LineState` from the main tree; the L4 half of this split runs only in
-`projects/01-three-arm-event-driven-line`. The L3 half, `Transfer`, is still served in the main
+`projects/01`. The L3 half, `Transfer`, is still served in the main
 tree, and no program there sends it a goal; its callers are tests and the twin boundary's
 forwarding.]**
 
