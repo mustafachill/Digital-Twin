@@ -27,11 +27,43 @@ artifact a zone is addressed through — `<zone>_plan.yaml` is the composition
 `cite_bringup.plan.default_plan_path` makes — and the plans are generated from L0
 (ADR-0021), so this duplicates no value (P1).
 
+IT ALSO SAYS WHETHER A NAMED ZONE EXISTS (`--check`). A zone the model does
+not declare used to reach `simulation.launch.py`, inside a freshly started
+container, where the plan lookup failed — and `./scripts/sim` exited 0. The
+shell entry points now ask this file first, on the host, and refuse naming the
+zones there are.
+
 STANDARD LIBRARY ONLY, AND RUNNABLE AS A FILE. The shell scripts ask it on the
 host, before the container is entered, so that a refusal stays cheap; and the
 scenario guards import `_cell.py` on a host with no ROS overlay. Neither can
 import an installed workspace package, so both run this file by its path in the
 source tree. Nothing here may import ROS, `yaml` or a sibling module.
+
+THE SOURCE TREE ONLY, AND IT REFUSES ANYWHERE ELSE. The plans it reads are
+found from this file's own (resolved) place in `workspace/src`. This module
+ships in the `cite_bringup` package, so an install prefix carries it too.
+`./scripts/build` installs with `--symlink-install`, whose entry resolves back
+to this file and answers correctly; a build without that flag puts a COPY there,
+which has no plans beside it, and answering from there would mean answering "no
+zones" about a facility that has one. So importing or running it from anywhere
+its source-tree plans are not refuses, saying where to run it instead. A node
+that is already running knows its zone: it is handed one
+(`cite_bringup.plan.default_plan_path` takes it as a required argument), and it
+has no business asking for a default.
+
+THE SAME SET IS COMPUTED TWICE MORE, ON PURPOSE.
+`cite_facility.artifacts.declared_zones` reads it from the INSTALLED
+`cite_generated` share directory through the ament index, because it runs inside
+a node, where this file is refused; and `tests/scenarios/guards/_artifacts.py`'s
+`zone_ids` reads it from the source tree with no ROS, because the guards run on a
+host and `cite_facility` is a workspace package they cannot import. This module
+cannot call the first, which needs the ament index and therefore ROS, and the
+first cannot call this one, which refuses inside an install prefix. That is a
+layering necessity rather than a copy made for convenience. The rule all three
+apply is one line —
+every `<zone>_plan.yaml` under `cite_generated/bringup`, sorted — and it is the
+plan file name `cite_bringup.plan.default_plan_path` composes, which is what
+keeps them from drifting.
 """
 
 from __future__ import annotations
@@ -47,9 +79,22 @@ PLAN_SUFFIX = "_plan.yaml"
 #: hand-edited (ADR-0021), and byte-identical to what the build installs.
 SOURCE_PLANS = Path(__file__).resolve().parents[2] / "cite_generated" / "bringup"
 
+if not SOURCE_PLANS.is_dir():
+    raise ImportError(
+        f"cite_bringup/zones.py answers from the source tree's generated plans, and "
+        f"this copy at {Path(__file__).resolve()} has none beside it — it is the copy "
+        "an install prefix carries. Run the source-tree file by its path, as "
+        "scripts/_lib.sh's `default_zone` does; a running node is handed its zone "
+        "and never asks for a default."
+    )
+
 
 class NoDefaultZone(Exception):
     """The generated plans do not name exactly one zone, so none is the default."""
+
+
+class UndeclaredZone(Exception):
+    """A zone was named that no generated bring-up plan declares."""
 
 
 def zones(plans: Path) -> list[str]:
@@ -79,20 +124,39 @@ def default_zone(plans: Path = SOURCE_PLANS) -> str:
     )
 
 
+def check(zone: str, plans: Path = SOURCE_PLANS) -> str:
+    """Return ``zone`` if the plans in ``plans`` declare it, or refuse naming them.
+
+    Raises `UndeclaredZone` naming every zone found, so a caller who mistyped
+    one is told what there is.
+    """
+    found = zones(plans)
+    if zone in found:
+        return zone
+    declared = ", ".join(found) if found else f"none — there is no plan under {plans}"
+    raise UndeclaredZone(
+        f"the model declares no zone {zone!r}. Declared: {declared}."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Print the default zone, or say why there is none and exit 2."""
+    """Print the default zone, or the checked one; say why not and exit 2."""
     parser = argparse.ArgumentParser(
         prog="zones.py",
-        description="Print the zone a command drives when none is named.",
+        description="Print the zone a command drives when none is named, or check a named one.",
     )
     parser.add_argument(
         "--plans", type=Path, default=SOURCE_PLANS,
         help="The directory of generated bring-up plans to read.",
     )
+    parser.add_argument(
+        "--check", metavar="ZONE",
+        help="Print ZONE if the plans declare it, and refuse naming them if not.",
+    )
     args = parser.parse_args(argv)
     try:
-        print(default_zone(args.plans))
-    except NoDefaultZone as refusal:
+        print(default_zone(args.plans) if args.check is None else check(args.check, args.plans))
+    except (NoDefaultZone, UndeclaredZone) as refusal:
         print(f"error: {refusal}", file=sys.stderr)
         return 2
     return 0

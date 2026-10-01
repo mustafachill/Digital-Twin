@@ -127,6 +127,12 @@ for arg in "$@"; do
     esac
 done
 [ "$WANT_ZONE" -eq 0 ] || die "--zone needs a zone name, e.g. --zone cell_b"
+# A named zone is checked here, on the host, against the plans the default is
+# read from, rather than at plan load inside a container (ADR-0069 decision 5).
+if [ -n "${CITE_SCENARIO_ZONE:-}" ]; then
+    require_declared_zone "$CITE_SCENARIO_ZONE" \
+        || die "--zone named a zone the model does not declare (see above)."
+fi
 
 require_ros_env scenario "$@"
 

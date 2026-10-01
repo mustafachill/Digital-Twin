@@ -13,8 +13,8 @@
 # --cycles 1`: the real xArm 5's own program, read from its program file, sent
 # ONCE through the twin boundary, moving both arms and sliding both tracks step
 # by step (ADR-0067). Then it reports where the last box ended and tears the
-# pair down. Ctrl-C stops the program (goal cancelled, track held) and then the
-# pair.
+# pair down. Ctrl-C stops the program (goal cancelled, track held), then each
+# side's belt, then the pair; a normal end and a failure stop the belts too.
 #
 # WHAT IT IS NOT. A demonstration: it gates nothing and is in no CI step.
 # `./scripts/scenario program_cycle` is what CHECKS the program, on one side. The
@@ -47,10 +47,14 @@ done
 [ -z "$WANT" ] || die "${WANT} needs a value."
 case "$CYCLES" in ''|*[!0-9]*) die "--cycles needs a whole number, 0 for forever." ;; esac
 
-# Defaulted only when the model leaves one answer (ADR-0069 decision 5), and
-# asked here, before the container is entered, so that a refusal costs nothing.
+# Defaulted only when the model leaves one answer (ADR-0069 decision 5), a named
+# zone checked against the same plans, and both asked here, before the container
+# is entered — and before this checkout's containers are stopped below — so that
+# a refusal costs nothing. `zones.py` has already said which zones there are.
 if [ -z "$ZONE" ]; then
-    ZONE="$(default_zone)" || die "--zone is required when the model declares more than one zone."
+    ZONE="$(default_zone)" || die "no zone was named, and the model leaves none to default to (see above)."
+else
+    require_declared_zone "$ZONE" || die "--zone named a zone the model does not declare (see above)."
 fi
 
 # ---------------------------------------------------------------- on the host
@@ -84,6 +88,7 @@ fi
 source_overlay
 
 PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
+BELT_STARTED=0
 PAIR_PID=""
 TAIL_PID=""
 PROGRAM_PID=""
@@ -98,6 +103,19 @@ teardown() {
         # SIGINT, so the program cancels its goal and holds the track itself.
         kill -INT "$PROGRAM_PID" 2>/dev/null || true
         wait "$PROGRAM_PID" 2>/dev/null || true
+    fi
+    # EVERY SIDE'S BELT IS COMMANDED TO ZERO BEFORE THE PAIR STOPS, on every
+    # route here — a normal end, a failure and Ctrl-C. A simulated belt stops
+    # because its simulator does; a physical belt is a drive whose setpoint
+    # persists, and the line's StopAll, which used to stop every belt, left the
+    # main tree with the line (ADR-0069). The command is the one that started
+    # the belts, on each side's own domain. Only while the pair is up: with a
+    # side gone there is no subscriber to match and the command would wait out
+    # its ceiling for nothing.
+    if [ "$BELT_STARTED" -eq 1 ] && [ -n "$PAIR_PID" ] && kill -0 "$PAIR_PID" 2>/dev/null; then
+        step "Stopping each side's belt, on that side"
+        python3 -m cite_bringup.program.belt --zone "$ZONE" --stop \
+            || warn "a side's belt did not confirm the stop; the pair is stopped next regardless"
     fi
     if [ -n "$PAIR_PID" ] && kill -0 "$PAIR_PID" 2>/dev/null; then
         step "Stopping the pair"
@@ -188,6 +206,9 @@ PY
 # the real program has no belt block, so the belt is not part of the twin
 # (ADR-0067). It runs for the whole session, the way a line's belt does.
 step "Starting each side's belt, on that side"
+# Set before the command rather than after it: a side that took its setpoint
+# while the other refused is a running belt, and the teardown has to stop it.
+BELT_STARTED=1
 python3 -m cite_bringup.program.belt --zone "$ZONE" \
     || die "a side's belt would not take its setpoint"
 

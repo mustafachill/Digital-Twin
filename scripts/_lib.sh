@@ -849,6 +849,23 @@ default_zone() {
     "$python" "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" --plans "$plans"
 }
 
+# require_declared_zone <zone> [plans-dir] — refuse a zone the model does not declare.
+#
+# Succeeds silently when the generated bring-up plans declare <zone>; otherwise
+# says on stderr which zones they do declare and fails. Asked on the host, before
+# `require_ros_env`, for the reason `default_zone` is: an undeclared zone used to
+# start a container, fail inside the launch's plan lookup and exit 0. Same file,
+# same rule (`cite_bringup/zones.py --check`), so the set a name is checked
+# against and the set a default is taken from cannot disagree.
+# -----------------------------------------------------------------------------
+require_declared_zone() {
+    local plans="${2:-${REPO_ROOT}/workspace/src/cite_generated/bringup}"
+    local python
+    python="$(cite_python)" || python=python3
+    "$python" "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" \
+        --plans "$plans" --check "$1" >/dev/null
+}
+
 # -----------------------------------------------------------------------------
 # cite_tools resolution — which checkout's tooling is about to run?
 #

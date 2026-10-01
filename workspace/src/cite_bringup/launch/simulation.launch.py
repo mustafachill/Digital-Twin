@@ -131,6 +131,45 @@ TEARDOWN_SIGKILL_S = "60"
 PHYSICS_SEED_ENV = "CITE_PHYSICS_SEED"
 
 
+class BringUpFailed(RuntimeError):
+    """Raised after a refusal has been logged and the shutdown requested.
+
+    Its only job is the exit status: see `_stop`.
+    """
+
+
+class FailTheLaunch(OpaqueFunction):
+    """The last action of a refusal: raise `BringUpFailed`, and do nothing else.
+
+    A class of its own rather than a bare `OpaqueFunction`, so that a test can
+    tell the stop apart from a bring-up step: a transition event may stop the
+    launch, and may never start anything (ADR-0058).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(function=self._fail)
+
+    @staticmethod
+    def _fail(context: LaunchContext) -> None:  # noqa: ARG004 - launch's callback shape
+        raise BringUpFailed("bring-up refused; the BRING-UP FAILED line above says why")
+
+
+def _stop(message: str) -> list:
+    """Log ``message``, shut the launch down, and make it exit non-zero.
+
+    `Shutdown` alone ends a launch with status 0 — `launch`'s `LaunchService`
+    returns 1 only when an exception reaches its run loop — so every refusal in
+    this file used to report success to whoever started it: `./scripts/sim
+    --zone <undeclared>` printed `BRING-UP FAILED` and exited 0. The trailing
+    `FailTheLaunch` raises once the message is logged and the shutdown
+    requested, which is the one route `launch` offers to a non-zero status;
+    launch then logs the exception's text a second time, which is why that text
+    points back at the line above instead of repeating it. The `LogInfo` stays
+    first, because it is what a person reads.
+    """
+    return [LogInfo(msg=message), Shutdown(reason=message), FailTheLaunch()]
+
+
 def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
@@ -211,7 +250,7 @@ def _bring_up(context: LaunchContext) -> list:
     except PlanError as exc:
         # Fail here, with the reason, rather than launching a partial system that
         # fails three layers later pointing nowhere near the cause.
-        return [LogInfo(msg=f"BRING-UP FAILED: {exc}"), Shutdown(reason=str(exc))]
+        return _stop(f"BRING-UP FAILED: {exc}")
 
     actions: list = [
         LogInfo(
@@ -840,7 +879,7 @@ def _refuses(
             target_lifecycle_node=node,
             start_state=start_state,
             goal_state=goal_state,
-            entities=[LogInfo(msg=message), Shutdown(reason=message)],
+            entities=_stop(message),
         )
     )
 
@@ -1143,10 +1182,10 @@ def _motion_planning(plan: Plan) -> list:
 
     **The cost is real and is stated here rather than discovered.** One
     `move_group` and one `xacro` expansion **per arm that carries MoveIt** now sit
-    behind facility activation instead of running beside it — one in `cell_b`
-    today, and **ask the plan rather than reading a number out of this
-    comment** (ADR-0027's first correction: do not state the cardinality of a
-    generated collection in prose). The added wall-clock cost is **estimated at
+    behind facility activation instead of running beside it — **ask the plan
+    how many, rather than reading a number out of this comment** (ADR-0027's
+    first correction: do not state the cardinality of a generated collection in
+    prose). The added wall-clock cost is **estimated at
     the order of a second and has not been measured** — no instrument, host or
     trial count stands behind it, and it must not be quoted as though one did.
     Every scenario ceiling in
@@ -1282,7 +1321,7 @@ def _gate(entities: list, what: str, *, hint: str = "") -> callable:
             f"BRING-UP FAILED before {what}: the previous step exited "
             f"{event.returncode}. {hint}".rstrip()
         )
-        return [LogInfo(msg=message), Shutdown(reason=message)]
+        return _stop(message)
 
     return handler
 
@@ -1302,6 +1341,6 @@ def _fatal_on_exit(what: str) -> callable:
             f"BRING-UP FAILED: {what} exited {event.returncode}. The cell is "
             "stopped rather than left running without it."
         )
-        return [LogInfo(msg=message), Shutdown(reason=message)]
+        return _stop(message)
 
     return handler

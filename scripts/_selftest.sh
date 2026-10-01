@@ -1081,10 +1081,45 @@ expect_fail "no declared zone has no default either" \
             default_zone "${ZONES_TMP}/none"
 expect_ok   "the shipped model's plans have exactly one answer" \
             default_zone
+
+# A NAMED zone is checked against the same plans. An undeclared one used to
+# start a container, fail inside the launch's plan lookup and exit 0.
+check_refusal() { # check_refusal <expected substring> <zone> <plans-dir>
+    local output
+    output="$(require_declared_zone "$2" "$3" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+expect_ok   "a declared zone passes the check" \
+            require_declared_zone zone_y "${ZONES_TMP}/two"
+expect_fail "an undeclared zone is refused" \
+            require_declared_zone zone_z "${ZONES_TMP}/two"
+expect_ok   "and the refusal names it and every declared zone" \
+            check_refusal "no zone 'zone_z'. Declared: zone_x, zone_y." zone_z "${ZONES_TMP}/two"
+expect_ok   "and says so when there are none at all" \
+            check_refusal "Declared: none" zone_z "${ZONES_TMP}/none"
+expect_ok   "the shipped model declares the zone its default names" \
+            require_declared_zone "$(default_zone)"
 rm -rf "$ZONES_TMP"
 
-# The three entry points ask that one function rather than stating a zone. A
-# grep, because the alternative is starting a cell.
+# zones.py answers from the source tree only, and refuses from anywhere its
+# source-tree plans are not — which is where an install prefix puts its copy.
+ZONES_COPY="$(mktemp -d)"
+cp "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" "${ZONES_COPY}/zones.py"
+zones_copy_says() { # zones_copy_says <expected substring>
+    local output
+    output="$(python3 "${ZONES_COPY}/zones.py" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+expect_fail "zones.py refuses to run where it has no source-tree plans beside it" \
+            python3 "${ZONES_COPY}/zones.py"
+expect_ok   "and says it is the copy an install prefix carries" \
+            zones_copy_says "the copy an install prefix carries"
+rm -rf "$ZONES_COPY"
+
+# The two shell entry points that default a zone themselves ask that one
+# function rather than stating a zone; `./scripts/scenario` gets the same
+# answer through `tests/scenarios/_cell.py`, whose guards hold it there. A grep,
+# because the alternative is starting a cell.
 # The pattern is matched literally, so the `$(...)` in it is text and is never
 # expanded; that is what the single quotes are for.
 for entry in sim program; do
@@ -1129,6 +1164,52 @@ expect_ok   "and the refusal names both spellings and both zones" \
             sim_says "--zone says 'cell_x' and zone:= says 'cell_b'" --zone cell_x zone:=cell_b
 expect_fail "and it is refused whichever order they come in" \
             sim_args zone:=cell_b --zone=cell_x
+
+# A zone the model does not declare is refused on the host, naming the ones it
+# does, before any container. It used to start one and exit 0.
+expect_fail "./scripts/sim --zone with an undeclared zone refuses" \
+            sim_args --zone zone_nobody_declared --headless
+expect_ok   "and names the zone and the declared ones" \
+            sim_says "the model declares no zone 'zone_nobody_declared'. Declared: $(default_zone)." \
+            --zone zone_nobody_declared --headless
+expect_ok   "whichever spelling named it" \
+            sim_says "zone:= named a zone the model does not declare" zone:=zone_nobody_declared
+
+# An empty zone is refused in every spelling rather than falling back to the
+# default, as ./scripts/scenario and ./scripts/program already refused it.
+expect_fail "./scripts/sim --zone= refuses instead of falling back to the default" \
+            sim_args --zone= --headless
+expect_ok   "and says that an empty zone would have run the default" \
+            sim_says "empty zone name" --zone= --headless
+expect_fail "./scripts/sim zone:= refuses too" \
+            sim_args zone:= --headless
+expect_ok   "with the same diagnosis" \
+            sim_says "zone:= was given an empty zone name" zone:= --headless
+expect_fail "and so does the two-token spelling of an empty zone" \
+            sim_args --zone "" --headless
+
+# ./scripts/program checks a named zone the same way, before it stops this
+# checkout's containers or starts any.
+program_says() { # program_says <expected substring> <args...>
+    local expected="$1"; shift
+    local output
+    output="$("${REPO_ROOT}/scripts/program" "$@" 2>&1 || true)"
+    grep -qF -- "$expected" <<<"$output"
+}
+expect_fail "./scripts/program --zone with an undeclared zone refuses" \
+            "${REPO_ROOT}/scripts/program" --zone zone_nobody_declared --headless
+expect_ok   "and names the zone" \
+            program_says "no zone 'zone_nobody_declared'" --zone zone_nobody_declared --headless
+
+# ./scripts/program stops every side's belt before it stops the pair, on every
+# route out — a normal end, a failure and Ctrl-C all reach `teardown`. A
+# simulated belt stops when its simulator does; a physical one is a drive whose
+# setpoint persists, and StopAll, which used to stop every belt, left with the
+# line (ADR-0069). A grep, because driving it means starting a pair.
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/program's teardown commands every side's belt to zero" \
+            grep -qF 'python3 -m cite_bringup.program.belt --zone "$ZONE" --stop' \
+            "${REPO_ROOT}/scripts/program"
 
 # -----------------------------------------------------------------------------
 # ./scripts/scenario — the same two token guards, for the script whose default is
@@ -1179,6 +1260,10 @@ expect_ok   "and quotes that token as well" \
 # of a missing name cannot come apart.
 expect_fail "./scripts/scenario --zone with no name after it refuses" \
             scenario_args bringup --zone
+expect_fail "./scripts/scenario --zone with an undeclared zone refuses on the host" \
+            scenario_args bringup --zone zone_nobody_declared
+expect_ok   "and names the zone" \
+            scenario_says "no zone 'zone_nobody_declared'" bringup --zone zone_nobody_declared
 
 # An empty zone is refused rather than falling back. `_cell.zone()` treats an
 # exported empty string as no selection and returns the default: the caller

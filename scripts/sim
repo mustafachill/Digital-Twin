@@ -45,7 +45,17 @@ PASSTHROUGH=()
 # redundant and allowed; one that disagrees is refused, naming both, because
 # there is no way to tell which the caller meant.
 ZONE_SPELLING=""
+#
+# An EMPTY value is refused too, in every spelling. `--zone=` and `zone:=` used to
+# set ZONE to "" — which the default below then silently replaced, so the caller
+# named something and got the model's only zone without a word. `./scripts/scenario`
+# and `./scripts/program` already refused it.
 set_zone() {  # set_zone <spelling> <value>
+    if [ -z "$2" ]; then
+        die "$1 was given an empty zone name.
+  There is no zone called '', and an empty one would silently run the default.
+  ./scripts/sim --zone cell_b --headless"
+    fi
     if [ -n "$ZONE" ] && [ "$ZONE" != "$2" ]; then
         die "two different zones were asked for: ${ZONE_SPELLING} says '${ZONE}' and $1 says '$2'.
   A cell comes up as one zone or the other, never both, so this cannot be resolved here."
@@ -85,11 +95,16 @@ if [ "$WANT_ZONE" -eq 1 ]; then
 fi
 
 # Defaulted only when the model leaves one answer, and refused otherwise
-# (ADR-0069 decision 5). Asked here, on the host, before `require_ros_env`, so
-# the refusal costs no container; `default_zone` has already said which zones
-# there are to choose from.
+# (ADR-0069 decision 5); a NAMED zone is checked against the same plans. Both
+# are asked here, on the host, before `require_ros_env`, so a refusal costs no
+# container. An undeclared zone used to start one, fail inside the launch's plan
+# lookup and exit 0. `zones.py` has already said, on stderr, which zones there
+# are — whether that is none, one or several — so the line below adds nothing
+# that could contradict it.
 if [ -z "$ZONE" ]; then
-    ZONE="$(default_zone)" || die "--zone is required when the model declares more than one zone."
+    ZONE="$(default_zone)" || die "no zone was named, and the model leaves none to default to (see above)."
+else
+    require_declared_zone "$ZONE" || die "${ZONE_SPELLING} named a zone the model does not declare (see above)."
 fi
 
 # A PAIR USED TO BE FORCED HEADLESS HERE, AND IS NOT ANY MORE. The reason given

@@ -178,6 +178,54 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
     assert "picker" in reason and HARDWARE_OPT_IN_ENV in reason
 
 
+def _ends_non_zero(module: ModuleType, entities: list, context: LaunchContext) -> bool:
+    """Whether ``entities`` end the launch with a non-zero status.
+
+    `Shutdown` alone exits 0; what makes `ros2 launch` exit 1 is an exception
+    reaching its run loop. So the entities have to carry, after their
+    `Shutdown`, an action that raises `BringUpFailed` when it is executed.
+    """
+    kinds = _kinds(entities)
+    if "Shutdown" not in kinds:
+        return False
+    after = entities[kinds.index("Shutdown"):]
+    for entity in after:
+        if not isinstance(entity, module.FailTheLaunch):
+            continue
+        try:
+            entity.execute(context)
+        except module.BringUpFailed:
+            return True
+    return False
+
+
+def test_a_refusal_ends_the_launch_non_zero(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """`./scripts/sim --zone <undeclared>` printed BRING-UP FAILED and exited 0.
+
+    The refusal was a `LogInfo` and a `Shutdown`, and a `Shutdown` ends a launch
+    successfully. Measured before the fix with an undeclared zone: `exit=0`.
+    """
+    _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+
+    assert _ends_non_zero(module, module._bring_up(context), context)
+
+
+def test_a_missing_plan_ends_the_launch_non_zero(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """The exact path an undeclared zone takes: no plan file under that name."""
+    _use(module, monkeypatch, tmp_path / "zone_nobody_declared_plan.yaml")
+
+    actions = module._bring_up(context)
+
+    assert not _processes(actions)
+    assert "zone_nobody_declared_plan.yaml" in _refusal(actions, context)
+    assert _ends_non_zero(module, actions, context)
+
+
 def test_a_hardware_plan_starts_with_the_opt_in(
     module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
 ) -> None:
@@ -248,6 +296,9 @@ def test_no_process_exit_handler_passes_a_failure_through(
         assert any(isinstance(entity, Shutdown) for entity in entities), (
             f"{handler.describe()[0]} continues after a non-zero exit, which "
             "leaves a half-built system running"
+        )
+        assert _ends_non_zero(module, entities, context), (
+            f"{handler.describe()[0]} stops the launch with status 0"
         )
 
 
@@ -325,6 +376,11 @@ def test_a_managed_node_that_fails_a_transition_stops_bring_up(
             f"a managed node reaching {start_state} -> {goal_state} does not stop "
             "bring-up; the cell would come up without it"
         )
+        assert all(
+            _ends_non_zero(module, list(handler.handle(event, context) or []), context)
+            for handler in handlers
+            if handler.matches(event)
+        ), f"{start_state} -> {goal_state} stops the launch with status 0"
 
 
 def test_activation_is_triggered_only_by_a_successful_configure(
@@ -493,8 +549,12 @@ def test_no_transition_event_makes_anything_happen(
                 for handler in handlers:
                     if not handler.matches(event):
                         continue
+                    # `FailTheLaunch` is part of the stop — it only sets the
+                    # launch's exit status — and starts nothing.
                     for entity in handler.handle(event, context) or []:
-                        assert type(entity).__name__ in ("LogInfo", "Shutdown"), (
+                        assert type(entity).__name__ in (
+                            "LogInfo", "Shutdown", "FailTheLaunch"
+                        ), (
                             f"{start_state} -> {goal_state} makes bring-up do "
                             f"something ({type(entity).__name__}), and a "
                             "transition event can be dropped"

@@ -1771,9 +1771,12 @@ def default_plan_path(zone: str) -> Path:
     tell a caller that meant that zone from one that had simply never thought
     about it. A second zone turns each of those into a silently wrong answer —
     the plan loads, the names resolve, and the cell that comes up is not the one
-    the caller wanted. A caller that wants the model's only zone asks
-    `cite_bringup.zones.default_zone` (ADR-0069 decision 5), which refuses when
-    there is more than one.
+    the caller wanted. Defaulting to the model's only zone (ADR-0069 decision
+    5) happens before anything reaches this function, in the shell entry points
+    and the scenarios, which run the SOURCE-TREE `cite_bringup/zones.py` by its
+    path. That file refuses to be imported from an install prefix, so nothing
+    that calls this function — a node, a launch file, a supervisor — can ask it
+    for a default: it is handed a zone and passes it here.
 
     Removing the default is what turned them into visible call sites. It is the
     same rule `cite_bringup.gz.plan_for`, `readiness_witness` and
