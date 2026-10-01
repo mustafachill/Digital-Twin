@@ -171,6 +171,14 @@ package); `cite_facility`'s `test_topology_message.py`; the `continuous_line` an
   arm being a data-only change — are now asked of a second, track-less arm that the
   `add_arm` fixture adds to a model copy. That arm is generated and never validated
   geometrically, so these assertions no longer say anything about a real multi-arm layout.
+- **`test_a_hardware_plan_refuses_to_bring_the_cell_up`** asserted that the refusal named
+  `arm_2`, the arm whose backend the test had flipped on a plan with several, so it held that
+  the refusal named **the right arm among several**. On one arm it names `picker`, the only arm
+  there is, and that half of the assertion can no longer fail on a wrong pick.
+- **The generator's `DETECTION_SCOPE` asset-name check** went with the detection server: it
+  refused a zone holding an asset named `detection`, which would have shared a namespace
+  with that server. With no detection server there is no namespace to collide with, so the
+  check and its subject left together, and nothing in the main tree reserves that name.
 - **Indexing beams and belt station points** no longer exist in the shipped cell; the
   validator rules about them (`beam-indexes-*`, `beam-off-its-belt`, `beam-cannot-index`,
   `insufficient-support-margin`) are now exercised only on a copy of the model that puts a
@@ -202,6 +210,25 @@ package); `cite_facility`'s `test_topology_message.py`; the `continuous_line` an
   docstring already says so.
 - The belt route has no in-tree client; a regression in it is caught only by `cite_twin`'s unit
   and launch tests, which drive fake sides.
+- **The break-beam levels are still bridged and nothing in the main tree reads them.** The
+  generated bring-up plan still declares each beam's topic and `ros_gz_bridge` still carries
+  it, but the detection server that consumed them is gone; the beams publish into a graph with
+  no subscriber. Read in this checkout on 2026-10-01: `simulation.launch.py` remaps each
+  sensor's `detection_topic` onto its `level_topic`, and no source outside `cite_generated`
+  and the tests names a `level_topic` to subscribe to it. Their consumer runs in
+  `projects/01`.
+- **StopAll was the main tree's only automatic all-belts stop**, and it left with the line.
+  `./scripts/program` now commands every side's belt back to zero when it ends — normally, on
+  a failure and on Ctrl-C — and `program_cycle` stops the belt it started when its test ends,
+  passed or failed; but that is each tool stopping what it started, not a cell-wide stop. A physical belt is a drive whose setpoint persists, so
+  before [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md)'s belt becomes real
+  it needs a drive-side stop of its own; nothing in this tree provides one.
+- **`Pick`, `Place` and `Transfer` have no production caller in the main tree.** The skill
+  server serves them, the readiness witness waits for their servers, L5 routes them, and the
+  package launch tests cover them; nothing in the main tree sends one a goal. **On the project
+  owner's decision of 2026-10-01** they and their routes stay as they are, and the end-to-end
+  coverage that matters is `program_cycle` — the real program, through `MoveTo` and `Grasp`
+  (ADR-0067).
 - `ConveyorState` was the typed contract reserved for a measured belt speed, which CLAUDE.md §2
   names as what would close the open-loop belt gap. A future closed-loop belt re-introduces a
   contract by its own decision.
