@@ -863,9 +863,10 @@ CYCLE_FAILURE='<testcase classname="bringup.TestBringup" name="test_a_trajectory
 # The upstream teardown abort this whole split exists for.
 TEARDOWN_UPSTREAM='<testcase classname="bringup.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : parameter_bridge-5 exited with -6&#10;" /></testcase>'
 # A first-party teardown bug wearing the SAME exit code as the upstream one.
-# `line_orchestrator` aborting on UnknownGoalHandleError is a real cancellation
-# defect that this check has already caught once, and it must stay reported.
-TEARDOWN_OURS='<testcase classname="continuous_line.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6&#10;" /></testcase>'
+# A first-party node aborting on UnknownGoalHandleError is a real cancellation
+# defect that this check has already caught once (in the line coordinator that
+# now runs as projects/01), and it must stay reported.
+TEARDOWN_OURS='<testcase classname="program_cycle.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : skill_server-9 exited with -6&#10;" /></testcase>'
 
 junit_report "${JUNIT_TMP}/cycle-failed.xml" "$CYCLE_FAILURE" "$PASSING_CASE"
 junit_report "${JUNIT_TMP}/teardown-upstream.xml" "$PASSING_CASE" "$TEARDOWN_UPSTREAM"
@@ -911,7 +912,7 @@ expect_ok   "a teardown failure is advisory under the advisory policy" \
 expect_fail "a first-party teardown failure gates under the blocking policy" \
             scenario_verdict "${JUNIT_TMP}/teardown-ours.xml" blocking
 expect_eq "a first-party teardown failure is reported with its process named" \
-          "AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6" \
+          "AssertionError: -6 not found in [0, -2] : skill_server-9 exited with -6" \
           "$(scenario_failed_cases "${JUNIT_TMP}/teardown-ours.xml" | cut -f3)"
 
 # Fail-closed, three ways. Anything unclassifiable must gate rather than pass.
@@ -1084,9 +1085,12 @@ rm -rf "$ZONES_TMP"
 
 # The three entry points ask that one function rather than stating a zone. A
 # grep, because the alternative is starting a cell.
+# The pattern is matched literally, so the `$(...)` in it is text and is never
+# expanded; that is what the single quotes are for.
 for entry in sim program; do
+    # shellcheck disable=SC2016
     expect_ok "./scripts/${entry} defaults its zone through default_zone" \
-              grep -q 'ZONE="$(default_zone)"' "${REPO_ROOT}/scripts/${entry}"
+              grep -qF 'ZONE="$(default_zone)"' "${REPO_ROOT}/scripts/${entry}"
 done
 
 sim_args() { "${REPO_ROOT}/scripts/sim" "$@"; }

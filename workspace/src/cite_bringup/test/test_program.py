@@ -292,7 +292,6 @@ def test_a_cell_without_a_program_is_refused(tmp_path) -> None:
         target(load(path))
 
 
-
 def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:
     assert twin_name("/cite/cell_b/picker/move_to") == "/cite/twin/cell_b/picker/move_to"
     with pytest.raises(ValueError):

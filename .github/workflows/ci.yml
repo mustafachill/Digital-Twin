@@ -90,18 +90,21 @@ jobs:
       # artifact (ADR-0021).
       #
       # Verified before flipping, not assumed: ./scripts/lint reports
-      # "Lint clean" across all 7 packages in the container. The first attempt at
-      # that check reported 2 packages registering no linters and was wrong - the
-      # build volume was stale.
+      # "Lint clean" across all first-party packages in the container (10 of
+      # them, re-measured on 2026-10-01 with ADR-0069's removals). The first
+      # attempt at that check reported 2 packages registering no linters and was
+      # wrong - the build volume was stale.
       #
       # What "Lint clean" covers is now worth stating, because it used to be much
       # weaker than it read. ./scripts/lint selected linters with `-R "lint"`, a
       # NAME filter, which matched cpplint, lint_cmake and xmllint and silently
       # dropped flake8, pep257, copyright, cppcheck and uncrustify. The gate ran
       # 3 of 8 linters per package. It selects by the `linter` LABEL now, which is
-      # what ament actually sets: 41 linter tests across the 7 packages, all
-      # passing. The promotion above was right in outcome and under-justified in
-      # its reasoning; this is the justification it should have had.
+      # what ament actually sets: 58 linter tests across the 10 packages, all
+      # passing, by `./scripts/enter dev ./scripts/lint` on 2026-10-01 (it read
+      # 41 across 7 when this was first written). The promotion above was right
+      # in outcome and under-justified in its reasoning; this is the
+      # justification it should have had.
       #
       # "Rebuild before trusting a lint result here" used to be the whole defence,
       # and a note in a workflow file is not a defence. ./scripts/lint now refuses
@@ -179,115 +182,16 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Phase 1.C's acceptance claim rests on pick_and_place: one arm picks a
-      # work-piece off the table and places it on the belt, held by friction alone
-      # since ADR-0029 removed the attachment plugin. It drives `cell_a` since
-      # 2026-09-29 (ADR-0067): `cell_b`'s belt is out of a behaviour-tree Place's
-      # reach, and `continuous_line` below moved with it.
-      #
-      # BLOCKING as of this change, on its cycle assertion. The condition this step
-      # recorded for its own promotion had narrowed to exactly one thing —
-      # reproducibility — and that is now answered: the cycle passed 6 of 6 in an
-      # isolated, freshly built tree at this commit, after an independent 5 of 5
-      # recorded in CLAUDE.md §2. Eleven consecutive cycle passes across two
-      # separate measurements is "passes repeatably" by any reading, and it is the
-      # reading this step's own text asked for.
-      #
-      # WHAT KEPT IT ADVISORY UNTIL NOW, and why neither reason survives:
-      #
-      #   * "It fails every time." It did — 0 of 18, every run releasing the cube
-      #     short of the belt and dropping it on the floor. That was a real
-      #     placement defect and it is fixed: b2be77f moved the belt transfer
-      #     frames 0.050 m inboard so a released cube is no longer neutrally stable
-      #     on the belt's end plane, and ADR-0030 gave L0 the work-piece geometry
-      #     that makes the rule expressible at all.
-      #   * "One green run is not a promotion case." Correct, and it is no longer
-      #     one run.
-      #
-      # THE SEEDING CONDITION IS DELIBERATELY NOT CARRIED FORWARD. It asked that
-      # the stochastic path be seeded end to end, and ADR-0027 establishes that it
-      # is not meetable: `gz sim --seed` reaches gz::math::Rand, not the physics
-      # solver, and MoveIt exposes no hook to seed OMPL. Holding a gate behind a
-      # condition that cannot be met is a way of never gating. What that condition
-      # was really protecting against is a flaky hard gate, and the answer to that
-      # is the pass count above plus the phase split, not determinism.
-      #
-      # THE HISTORY THAT STILL BINDS, because it cost this file a retraction: an
-      # earlier version recorded "10/11 cycle passes" that was measured against
-      # another worktree's binaries through shared Docker build volumes. The
-      # command was right, the machine was quiet, and the answer described code
-      # nobody was looking at. Volumes are namespaced per checkout now
-      # (cite_project_name in scripts/_lib.sh) and lint and test refuse to answer
-      # from a build tree that does not match the source, so that class of number
-      # cannot be produced silently again. Measure it in an isolated tree or do not
-      # put the number here.
-      #
-      # WHAT RETRACTS THIS PROMOTION: the cycle failing on a run that is not
-      # explained by the machine. Do not answer such a run by widening a tolerance
-      # or by adding a teardown allowance — see the phase-split block above for why
-      # the teardown half is reported rather than gated here.
-      - name: Simulation-in-the-loop scenario — pick_and_place
-        run: |
-          docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
-            cite-digital-twin:dev ./scripts/scenario pick_and_place --teardown-advisory
-
-      # Phase 1.D's acceptance claim rests on continuous_line — work-pieces enter
-      # at the pick area and arrive at accumulation, sensor-triggered, with no
-      # intervention.
-      #
-      # STILL ADVISORY, and for a different reason than when this step was written.
-      # The three blockers recorded here are closed; the fourth condition,
-      # reproducibility, is not, and it is the only one left.
-      #
-      # WHAT CLOSED. This step used to describe a line that could not start at all:
-      # 0 of 4 runs left the FIRST of nine milestones, because station_transfer_1's
-      # source-fed pick point had no sensor that could observe it, a detection
-      # carried the beam's pose rather than the part's, and nothing at L4 commanded
-      # a belt. All three are addressed — the aid topics are bridged, `Detect` turns
-      # a beam level into a typed `DetectionEvent`, L4 stops the belt on that edge
-      # and restarts it on `CompleteHandoff` (ADR-0032), and the beam indexes on the
-      # part's body rather than its origin (ADR-0033). The milestone ladder reached
-      # 10 of 10 where it had been stuck at 4 of 10.
-      #
-      # WHAT DOES NOT CLOSE, and it is condition 4 verbatim: it passes repeatably.
-      # The measurements at this commit do not support a gate. CLAUDE.md §2 records
-      # two of four runs carrying all three pieces end to end, with nine of twelve
-      # pieces traversing every milestone; a separate verification put the cycle at
-      # three of four. Either way this is one agent's four runs on one machine with
-      # no thresholds registered in advance — the same shape of evidence that cost
-      # the pick_and_place block above a retraction. A step that fails a quarter to
-      # a half of the time is the coin toss this file keeps arguing against, and
-      # promoting it would make that argument dishonest.
-      #
-      # THE KNOWN RESIDUAL, so that a failing run is recognised rather than
-      # re-run: a piece has stalled at 8 of 10 after an arm closed on air at a
-      # conveyor outfeed, following the loosest grasp recorded anywhere. The stated
-      # hypothesis is that a leading-edge test makes the index position depend on
-      # the part's yaw, so a square part arriving yawed parks a few millimetres
-      # short. That sensitivity is REAL ON HARDWARE — a physical photo-eye behaves
-      # the same way — and must not be described as a simulation artefact or
-      # compensated in the beam. Whether the residual accumulates over three
-      # stations is explicitly unmeasured; see
-      # docs/measurements/2026-08-26-conveyor-yaw-transfer/.
-      #
-      # PROMOTION CONDITION, now one rather than four: the cycle passes repeatably
-      # in an isolated freshly built tree, measured against thresholds written down
-      # before the runs. Not a tolerance change, and not a teardown allowance — the
-      # teardown half is already reported rather than gated, for the reasons in the
-      # phase-split block above, so it is neither the obstacle here nor the lever.
-      - name: Simulation-in-the-loop scenario — continuous_line (advisory)
-        continue-on-error: true
-        run: |
-          docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
-            cite-digital-twin:dev ./scripts/scenario continuous_line --teardown-advisory
-
       # The real robot's program (ADR-0067), one cycle on `cell_b`'s plant: its
       # poses, its grip, its track slide and its place, asserted by where the
       # work-piece ends. BLOCKING since 2026-09-29, by the project owner's decision
-      # that `cell_b` is gated by the real program; the behaviour-tree scenarios
-      # above drive `cell_a` (tests/scenarios/_cell.py). Promoted without a CI
-      # record of its own — the evidence is the local runs ADR-0067 lists — so a
-      # failure here is a finding to investigate, not a flake to re-run past.
+      # that `cell_b` is gated by the real program. Every scenario here drives the
+      # model's only zone (tests/scenarios/_cell.py, ADR-0069); the behaviour-tree
+      # scenarios that drove the three-arm cell run in projects/01 and are checked
+      # by .github/workflows/projects.yml, which does not gate main. Promoted
+      # without a CI record of its own — the evidence is the local runs ADR-0067
+      # lists — so a failure here is a finding to investigate, not a flake to
+      # re-run past.
       - name: Simulation-in-the-loop scenario — program_cycle
         run: |
           docker run --rm --shm-size=2gb -v "$PWD:/workspace" -w /workspace \
