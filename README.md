@@ -1,13 +1,57 @@
 # CITE Digital Twin
 
-A **facility-scale digital twin** of the Center for Innovation, Technology and
-Entrepreneurship at Sam Houston State University, built on ROS 2 and Gazebo. Its first
-instrument is a multi-robot UFACTORY xArm work cell; its scope is the building around it.
+A **real + digital twin** of the UFACTORY xArm work cell at the Center for Innovation,
+Technology and Entrepreneurship (CITE), Sam Houston State University, built on **ROS 2 Jazzy**
+and **Gazebo Harmonic**. The target is a physical cell and a simulated one sharing **one
+control interface**, with the system **continuously measuring how far the model is from
+reality**. The cell is the first instrument; the project's scope is the building around it
+([charter](./what-we-are-doing.md)).
 
-It is a *twin*, not a simulation. Real hardware and the virtual model share **one control
-interface**, and the system **continuously measures how far the model is from reality**.
+**Today both sides are digital.** No hardware path has been run, so nothing here is measured
+against reality yet. Saying so plainly is a project rule, not modesty.
 
 ---
+
+## Where the main tree is now
+
+- **The real robot's program drives both sides of the twin.** The real xArm 5's UFACTORY
+  Studio program is kept byte for byte in `model/programs/` and read strictly into the
+  generated bring-up plan. `./scripts/program` brings up both sides of the paired zone
+  `cell_b` — two Gazebo instances, one arm on a linear track and one belt each — and sends
+  that program **once** through the twin boundary, so both arms and both tracks follow it
+  ([ADR-0067](./docs/adr/0067-the-real-program-drives-the-twin-on-a-track.md), `Proposed`).
+  The belt is not twinned: each side's belt is started on that side.
+- **What checks it:** `./scripts/scenario program_cycle` runs the program on the plant side
+  and asserts from the simulator that the part was lifted, carried along the track, placed on
+  the belt and belted on. It is a blocking CI step (`.github/workflows/ci.yml`). **No scenario
+  and no CI step brings the pair up**; both sides together are shown by `./scripts/program`
+  and asserted by nothing.
+- **What is not built.** The track has no hardware path, a twin mode change during a track
+  move sends no stop, and the counterpart's track position and custody are not read back —
+  all recorded in ADR-0067. There is no hardware interface at all yet (Phase 2.B), and the
+  cell layout is engineered, not surveyed (Phase 3).
+- **The three-arm event-driven line is parked, not deleted.** It stays in the tree on zone
+  `cell_a` and its scenarios still run in CI (`pick_and_place` blocking, `continuous_line`
+  advisory); it is shown running by milestone 01 below.
+
+The detailed, dated state — every count with the command that reproduces it — is
+[`CLAUDE.md`](./CLAUDE.md) §2. Each layer's design document in
+[`docs/architecture/`](./docs/architecture/README.md) carries a `DESIGNED`, `PARTIAL` or
+`BUILT` marker; read it before believing the body.
+
+## Milestones
+
+Three steps on the way here are kept as frozen, runnable snapshots under
+[`projects/`](./projects/README.md), each a folder that builds and runs on its own
+([ADR-0068](./docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md), `Proposed`):
+
+| | Milestone | Run it |
+|---|---|---|
+| 01 | Three arms on `cell_a`, coordinated by behaviour trees on beam events | `projects/01-three-arm-event-driven-line/run` |
+| 02 | One fixed program of taught poses drives both sides of the pair | `projects/02-fixed-program-pair/run` |
+| 03 | The real robot's program drives both sides, the arm on a track | `projects/03-real-program-twin-on-track/run` |
+
+Snapshots are records, not sources: nothing is copied from them into the main tree.
 
 ## What "digital twin" means here
 
@@ -26,34 +70,11 @@ published literature (Kritzinger et al., 2018); L2 is our own refinement.
 **L2 is the level that matters.** A shadow whose error nobody measures is an assertion, not
 a twin — which is why every fidelity claim in this project has to carry a published number.
 
-> **Today the rebuild is at L0.** The simulated cell comes up, its three arms move under
-> the real control stack, and work-pieces have been carried the length of the line by
-> sensor-driven handoffs. There is no hardware interface and no automated link to anything
-> physical, so nothing here is measured against reality yet. See [Status](#status). Saying
-> so plainly is a project rule, not modesty — the previous iteration called itself a digital
-> twin while containing no hardware interface at all.
-
-## Status
-
-A capability is listed as working only when something proves it.
-
-| | State | What proves it |
-|---|---|---|
-| Charter, architecture, ADRs | **Written** — one design document per layer, L0 to L7, and a decision record for every locked technology and boundary choice | `./scripts/doctor`'s `ADR index` line counts the records — **51, all indexed**, in this checkout on 2026-09-01 — and its `ADR references` and `status markers` lines check that every reference resolves and every design document declares a marker. `ls docs/architecture/L[0-7]-*.md` returns 8. **Run `doctor` rather than reading the ADR figure here; it moves whenever a decision is recorded.** `ls docs/adr/[0-9]*.md` returns one more, because the glob also matches the template |
-| Environment, dependencies, CI | **Working** — one command from clone to a built container | `./scripts/doctor` exits 0 — `22 passed, 0 failed, 4 skipped` in this checkout on 2026-09-01, the skips being the vendor source `./scripts/bootstrap` imports. **`doctor` does not build the image**: CI builds it on every run (`.github/workflows/ci.yml`), and the clone-to-green walk that exercised the whole path by hand is recorded in [CLAUDE.md §2](./CLAUDE.md) |
-| Supply-chain and CVE scanning | **Working** — `./scripts/audit-deps` found no known vulnerabilities in the Python tooling layer on 2026-09-01. **A scan answers for the day it runs, not for the commit** | `./scripts/audit-deps`. It scans the two host requirement files only: not the ROS packages, not the pinned external sources, and not the container's OS packages unless given `--image`. It says so itself |
-| L0 facility model and generators | **Working** — the whole cell is declared in `model/`, and every derived artifact is generated from it byte-identically | `./scripts/validate-model`, which exits 0 and prints the cardinality — **ask it for the numbers; they are deliberately not written out here**. The host suite in `tools/tests/` |
-| Typed interfaces | **Working** — frozen against a stored baseline; the count is in [`docs/interfaces/README.md`](./docs/interfaces/README.md) | Contract test in `cite_interfaces`, against `test/interfaces.baseline` |
-| Simulated cell bring-up | **Working, but not on every run** — 3 arms, 9 controllers, MoveIt and the planning scene per arm. The scenario has failed its own `MoveTo` assertion on developer machines; a failure there is a finding to investigate, not a flake to re-run past | `./scripts/scenario bringup`, a blocking CI gate run twice per CI run (`.github/workflows/ci.yml`). The arm and controller counts are in the generated plan, `workspace/src/cite_generated/bringup/cell_a_plan.yaml`; the pass record and its qualifications are in [CLAUDE.md §2](./CLAUDE.md) |
-| L3 skills | **Partial** — all 6 have a server; `Transfer` has never been run against the simulator, because nothing calls it | Five servers in `cite_skills/src/skill_server.cpp` and one in `detection_server.cpp`; `MoveTo`, `Pick`, `Place`, `Grasp`, `Detect` asserted in scenarios; `Transfer` by unit test only |
-| Pick-and-place cycle, one arm | **Partial** — the cycle completes and a friction grasp holds the part; the scenario is a merge gate, but it is still not reproducible | `./scripts/scenario pick_and_place`, a blocking CI gate (`.github/workflows/ci.yml`) |
-| Line orchestration from the topology | **Partial** — L4 builds the line from L0, owns handoff, recovery and the belt setpoint, and **no arm moves in any of its own tests** | Unit tests against the fake arm in `cite_orchestration/test/fake_arm.cpp`; motion is evidenced only by `./scripts/scenario continuous_line` |
-| Grasping | **By friction, no simulation aid** — repeatable in position, **not in orientation** | [`docs/measurements/`](./docs/measurements/README.md) holds **8** published campaigns (`find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l`, 2026-09-01) — **not all of them are about grasping**; that directory's own README says which is which. Cite a campaign; the numbers are not copied here |
-| Sensor-driven three-robot line | **Runs, not finished** — Phase 1.D. The beams are bridged to ROS, `Detect` reads them, L4 indexes the belts, and the milestone ladder has been reported complete. Not every piece completed every run, and no campaign measures it | `./scripts/scenario continuous_line`, run as `continue-on-error` in CI (`.github/workflows/ci.yml`); the qualified count is in [CLAUDE.md §2](./CLAUDE.md) |
-| Twin pair, and the L5 boundary | **Mechanism only** — `./scripts/sim --pair` starts two sides under a process supervisor, and `cite_twin` holds the mode server, command routing and the divergence monitor. `cell_b` declares `twin: {sides: pair}` as of 2026-09-18 ([ADR-0059](./docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so a pair comes up from a clean checkout and `cell_a`, which stays `single`, refuses. **A declaration is not a gate**: no scenario and no CI step brings a pair up, and what CI drives on `cell_b` is the plant alone; and every divergence sample the code can produce is invalid, because one of its terms has no instrument. Phase 2.A produces no fidelity number and closes no clause of the Phase 2 exit criterion (charter §8) | Package tests in `cite_bringup` and `cite_twin`, including a paired launch test that crosses a goal between two fake sides in two processes. A pair of real cells has come up three times, on one machine, by hand — [ADR-0047](./docs/adr/0047-two-independent-launches-joined-not-sequenced.md) and [CLAUDE.md §2](./CLAUDE.md) — and once on the committed model, one run on one machine, recorded in [ADR-0059](./docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md). `grep -rn -- --pair tests .github` returns nothing |
-| Physical hardware integration | Phase 2.B — no hardware path has been run | — |
-| CITE facility 3D scan | Phase 3 | — |
-| Data platform and operator HMI | Phase 4 | — |
+> **Today the rebuild is at L0.** Two simulated sides of one cell follow one program through
+> the twin boundary, but both run the same model and the same solver, so their agreement is a
+> thing agreeing with itself and produces no fidelity number (charter §8). There is no
+> automated link to anything physical. The previous iteration called itself a digital twin
+> while containing no hardware interface at all; this one says where it is.
 
 Three things worth knowing before you read a number out of this system. The cell layout is
 **engineered, not surveyed**, so a measurement taken from the model does not transfer to
@@ -61,10 +82,8 @@ the building until the Phase 3 scan. **Scenarios are not reproducible**: a passi
 evidence about that run only — see
 [`docs/architecture/cross-cutting-testing.md`](./docs/architecture/cross-cutting-testing.md).
 And a grasp here holds a part's **position, not its orientation**, so nothing may be
-asserted about how a part sits in the jaws. Two rotation figures are published for this cell
-and they are different quantities — a roll between the pads and a yaw about the vertical.
-Quote the axis with the number:
-[`docs/measurements/`](./docs/measurements/README.md) has the table.
+asserted about how a part sits in the jaws — see
+[`docs/measurements/`](./docs/measurements/README.md).
 
 ## Quick start
 
@@ -73,7 +92,15 @@ git clone https://github.com/mustafachill/Digital-Twin.git
 cd Digital-Twin
 ./scripts/bootstrap      # Python tooling, container image, dependencies
 ./scripts/doctor         # what works on this machine, and what does not
+./scripts/build          # build the ROS 2 workspace
+./scripts/program        # both sides of the pair, one window each, the real program once
+./scripts/program --headless
+./scripts/scenario program_cycle   # the check: one cycle on the plant side, asserted
 ```
+
+A windowed run needs an X display (`DISPLAY` set) on a Linux host; use `--headless`
+elsewhere. `./scripts/program` refuses to start while a container of another checkout is
+running on the host, because it would share that checkout's ROS domain.
 
 **You can author anywhere. Building and running require Linux** — ROS 2 Jazzy, Gazebo
 Harmonic, and MoveIt 2 do not run natively on macOS or Windows. You should never have to
@@ -139,11 +166,15 @@ directly — they route to the right environment automatically.
 | `./scripts/lint` · `format` | Check · apply formatting and static analysis. |
 | `./scripts/validate-model` | Validate the facility model. Runs anywhere. |
 | `./scripts/sim --zone <name> [--headless] [--pair]` | Launch the simulated cell. **`--zone` is required and has no default** (ADR-0056): `cell_b` is the one-arm cell, `cell_a` the three-arm showcase, and one zone runs at a time. `--pair` brings up both sides of a twin pair and needs a zone that declares one — `cell_b` does, `cell_a` does not. |
-| `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
+| `./scripts/scenario [name] [--zone <name>]` | Run a headless scenario; no argument lists them. `program_cycle` drives `cell_b`; the behaviour-tree scenarios drive `cell_a`. |
+| `./scripts/program [--headless] [--cycles N]` | Bring up both sides of the paired zone and run the real program once per cycle through the twin boundary. A demonstration: it asserts nothing; `program_cycle` is the check. |
+| `./scripts/demo` | The parked event-driven line on a pair. **It does not run on the main tree today**: the line is refused on `cell_b`, whose transfer station declares no place frame since ADR-0067, and `cell_a` is not paired. Use `projects/01-three-arm-event-driven-line/run` for the three-arm line. |
+| `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares. |
 | `./scripts/audit-deps [--image]` | Scan dependencies for known vulnerabilities. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/clean [--all]` | Remove build artifacts. |
+| `projects/<name>/run` | Run a frozen milestone snapshot from its own folder; see [`projects/`](./projects/README.md). |
 
 Quality gate before any handoff:
 
@@ -157,11 +188,10 @@ The rules are in [`CLAUDE.md`](./CLAUDE.md); the reasoning behind each one is in
 [`docs/adr/`](./docs/adr/README.md). Three things are worth knowing before you read code:
 
 - **Decisions are recorded before they are implemented.** Every locked technology and
-  boundary choice has an ADR, each stating what it costs as well as what it buys. The count
-  is in the status table above, beside the command that produces it. One record has been
-  superseded on the evidence of a measurement campaign and is kept in place rather than
-  deleted; several more carry dated corrections, which are listed with the record in
-  [`docs/adr/README.md`](./docs/adr/README.md).
+  boundary choice has an ADR, each stating what it costs as well as what it buys.
+  `./scripts/doctor`'s `ADR index` line counts them; run it rather than trusting a figure
+  written down anywhere. Superseded and corrected records are kept in place rather than
+  deleted, and are listed as such in [`docs/adr/README.md`](./docs/adr/README.md).
 - **Documentation is a contract, not a description.** Layer documents carry a status
   marker — `DESIGNED`, `PARTIAL`, or `BUILT` — so a specification is never mistaken for
   something that exists.
@@ -190,6 +220,7 @@ no third-party source copied into the tree, and nothing marked complete without 
 | What number backs that claim? | [`docs/measurements/`](./docs/measurements/README.md) |
 | Where do I read more? | [`docs/reference/`](./docs/reference/README.md) |
 | What does this term mean here? | [`docs/onboarding/glossary.md`](./docs/onboarding/glossary.md) |
+| How do I run an earlier milestone? | [`projects/`](./projects/README.md) |
 
 ## Technology
 
@@ -217,6 +248,7 @@ infra/docker/          container image and compose services
 external/              pinned third-party sources — never vendored
 scripts/               one command per task
 docs/                  architecture · ADRs · interfaces · operations · measurements · reference
+projects/              frozen, runnable snapshots of earlier milestones — records, not sources
 ```
 
 The charter's [§7](./what-we-are-doing.md) describes the target structure in full.

@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+# Run this snapshot's milestone: the three-arm event-driven line on zone `cell_a`,
+# one side, with work-pieces fed onto the pick table one after another.
+#
+#   ./run                  windowed, three work-pieces
+#   ./run --headless       the same with no window
+#   ./run --pieces 5       five work-pieces, one at a time
+#
+# WHAT IT DOES. It brings `cell_a` up with the line running
+# (`./scripts/sim --zone cell_a line:=true`), waits for the cell's own readiness
+# announcement and for the line coordinator's first `LineState`, then for each
+# work-piece: puts one on the pick table, watches it
+# until the belts and the three arms have carried it to the accumulation beam at
+# the end of the last belt, and takes it off so the next can be fed. Nothing here
+# commands an arm or a belt: a part appearing on the table is what starts the
+# line, and the behaviour trees do the rest. Ctrl-C tears the cell down.
+#
+# WHAT IT IS NOT. A demonstration, not an instrument. It asserts nothing and gates
+# nothing; `./scripts/scenario continuous_line` is what CHECKS this behaviour.
+#
+# This folder is a frozen snapshot (ADR-0068 in the main repository), not a
+# source: see PROVENANCE.md for the commit it was taken from and every patch.
+# The feeding below reuses `cite_bringup.demo`, `cite_bringup.gz` and
+# `cite_bringup.workpiece` as they stood at that commit; nothing of them is edited.
+#
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/_lib.sh"
+
+ZONE="cell_a"
+HEADLESS=0
+PIECES=3
+WANT_PIECES=0
+for arg in "$@"; do
+    if [ "$WANT_PIECES" -eq 1 ]; then
+        PIECES="$arg"; WANT_PIECES=0; continue
+    fi
+    case "$arg" in
+        --headless)  HEADLESS=1 ;;
+        --pieces)    WANT_PIECES=1 ;;
+        --pieces=*)  PIECES="${arg#--pieces=}" ;;
+        -h|--help)   sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)           die "unknown argument '${arg}'. Try --help." ;;
+    esac
+done
+[ "$WANT_PIECES" -eq 0 ] || die "--pieces needs a number."
+case "$PIECES" in
+    ''|*[!0-9]*|0) die "--pieces needs a whole number of at least 1, and was given '${PIECES}'." ;;
+esac
+
+# ---------------------------------------------------------------- on the host
+if ! in_container && ! native_ros_available; then
+    have docker || die "No native ROS 2 installation and no Docker, so nothing here can run the cell."
+    # This checkout's containers only: another checkout's cell is on another
+    # domain and another compose project, and is somebody else's work. A running
+    # one of ours would be attached to with `compose exec`, which skips the image's
+    # entrypoint and so leaves the overlay unsourced.
+    RUNNING="$(compose ps -q 2>/dev/null | tr '\n' ' ' || true)"
+    if [ -n "${RUNNING// /}" ]; then
+        die "this snapshot already has a container running, and this run would attach to it
+  rather than start a clean one. Stop it first:  docker rm -f ${RUNNING}"
+    fi
+    if [ ! -d "${REPO_ROOT}/.venv" ]; then
+        step "No environment yet — preparing one. This happens once."
+        "${REPO_ROOT}/scripts/bootstrap"
+    fi
+    SERVICE=dev
+    if [ "$HEADLESS" -eq 0 ]; then
+        if [ "$(host_os)" = "macos" ]; then
+            die "the window needs an X display, which macOS does not pass through.
+  Run ./run --headless here, or run this on the Linux workstation."
+        fi
+        [ -n "${DISPLAY:-}" ] || die "DISPLAY is not set, so there is nowhere to put the window.
+  Run ./run --headless instead."
+        SERVICE=gui
+    fi
+    exec_in_container "$SERVICE" ./run "$@"
+fi
+
+# ----------------------------------------------------------- in the container
+if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
+    step "Nothing is built yet — building. This happens once, and takes a while."
+    "${REPO_ROOT}/scripts/build"
+fi
+source_overlay || die "no built overlay under workspace/install. Run ./scripts/build."
+
+# The token the cell prints once its own readiness witness has seen every server
+# the plan declares answering, read from the module that defines it rather than
+# spelled a second time here.
+READY_TOKEN="$(python3 -c 'from cite_bringup.readiness import READY_TOKEN; print(READY_TOKEN)')"
+
+# Kept under workspace/log/, which is this snapshot's log volume in the container
+# (a named volume, so it outlives the container) and a plain directory on a native
+# install. A mktemp file inside a --rm container would be gone the moment the
+# container is, which is when someone wants to read it.
+SIM_LOG_DIR="${REPO_ROOT}/workspace/log/run"
+mkdir -p "$SIM_LOG_DIR"
+SIM_LOG="${SIM_LOG_DIR}/cell-$(date -u +%Y%m%dT%H%M%SZ).log"
+LOG_HINT="${SIM_LOG} (read it later with: ./scripts/enter dev less ${SIM_LOG#"${REPO_ROOT}"/})"
+SIM_PID=""
+TAIL_PID=""
+FEED_PID=""
+#: The bound on the launch's own orderly shutdown after SIGINT, before its process
+#: group is killed. STATED, NOT MEASURED: a ceiling on a failure, which a launch
+#: that stops normally never reaches, since the wait ends when it exits.
+TEARDOWN_CEILING_S=120
+
+# Invoked by the trap below and never by name, which shellcheck cannot see.
+# shellcheck disable=SC2329
+teardown() {
+    trap - EXIT INT TERM HUP
+    trap 'warn "still stopping — the launch is working through its own shutdown"' INT TERM HUP
+    if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null || true; fi
+    if [ -n "$FEED_PID" ]; then kill "$FEED_PID" 2>/dev/null || true; fi
+    if [ -n "$SIM_PID" ] && kill -0 "$SIM_PID" 2>/dev/null; then
+        step "Stopping the cell"
+        # SIGINT and not SIGKILL: `ros2 launch` then shuts every process down in
+        # order rather than leaving Gazebo and the controllers behind. It reaches
+        # the launch only because the launch was started with job control on
+        # (below); otherwise bash starts it with SIGINT ignored.
+        kill -INT "$SIM_PID" 2>/dev/null || true
+        # Waited on as a condition — the launch has exited — and bounded, so a
+        # launch that never finishes its shutdown cannot hold the terminal.
+        local waited=0
+        while kill -0 "$SIM_PID" 2>/dev/null && [ "$waited" -lt "$TEARDOWN_CEILING_S" ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+        if kill -0 "$SIM_PID" 2>/dev/null; then
+            # The launch's whole process group, so nothing it started is left behind.
+            warn "the launch had not stopped ${TEARDOWN_CEILING_S} s after SIGINT; sending SIGKILL to its process group"
+            kill -KILL -- "-${SIM_PID}" 2>/dev/null || true
+        fi
+        wait "$SIM_PID" 2>/dev/null || true
+    fi
+    ok "the cell is down. Its log is ${LOG_HINT}"
+}
+trap teardown EXIT
+trap 'teardown; exit 130' INT
+trap 'teardown; exit 143' TERM
+trap 'teardown; exit 129' HUP
+
+step "Bringing up ${ZONE} with the line running"
+# JOB CONTROL ON FOR THIS ONE JOB. A non-interactive shell starts every `&` job
+# with SIGINT and SIGQUIT ignored, and `ros2 launch` inherits that, so the
+# SIGINT teardown sends would be ignored and its wait would never end. With
+# `set -m` the job keeps the default disposition and gets its own process group,
+# which is also what lets the ceiling in teardown signal everything it started.
+# The operator's Ctrl-C reaches this shell, whose INT trap forwards it.
+set -m
+if [ "$HEADLESS" -eq 1 ]; then
+    "${REPO_ROOT}/scripts/sim" --zone "$ZONE" --headless line:=true > "$SIM_LOG" 2>&1 &
+else
+    "${REPO_ROOT}/scripts/sim" --zone "$ZONE" line:=true > "$SIM_LOG" 2>&1 &
+fi
+SIM_PID=$!
+set +m
+tail -n +1 -f "$SIM_LOG" & TAIL_PID=$!
+
+# THE WAIT IS FOR AN EVENT, NOT A DURATION: the loop polls for the readiness line
+# having appeared and gives up early if the launch dies. The bound only stops a
+# cell that never comes up from holding the terminal for ever.
+info "Waiting for the cell to announce readiness"
+READY=0
+for _ in $(seq 1 180); do
+    if grep -q "$READY_TOKEN" "$SIM_LOG" 2>/dev/null; then READY=1; break; fi
+    if ! kill -0 "$SIM_PID" 2>/dev/null; then break; fi
+    sleep 2
+done
+kill "$TAIL_PID" 2>/dev/null || true
+TAIL_PID=""
+[ "$READY" -eq 1 ] || die "the cell never announced that it was ready. Its log is ${LOG_HINT}"
+ok "the cell is up"
+
+step "Feeding ${PIECES} work-piece(s) onto the pick table, one at a time"
+python3 -u - "$ZONE" "$PIECES" <<'PY' &
+"""Feed work-pieces into a running single-side cell and watch each reach the sink.
+
+Everything addressed here is read from the generated plan and topology of the
+zone: the pick frame is the first acting station's, the destination is the beam
+the sink station is triggered by, and every Gazebo call goes through
+`cite_bringup.gz`, the one door that carries the partition (ADR-0042).
+"""
+
+import sys
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+import time
+
+import rclpy
+import yaml
+
+from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, watch, world_name
+from cite_bringup.gz import PLANT_SIDE, ModelPoses, plan_for, run
+from cite_bringup.workpiece import SIDE_M, workpiece_sdf
+from cite_interfaces.msg import LineState
+from cite_interfaces.qos import STATE
+
+NAME = "workpiece"
+
+#: The bound on waiting for the first `LineState`: the value
+#: `tests/scenarios/continuous_line.py` gives `BRING_UP_CEILING_S` for the same wait.
+#: A ceiling on a failure, not a duration anything waits out.
+LINE_STATE_CEILING_S = 300.0
+
+#: The bound on one work-piece's whole journey from the pick table to the sink beam.
+#: STATED, NOT MEASURED: no campaign has timed a piece through this line, and nothing
+#: waits it out — the watch ends the moment the piece arrives, and a line that stops
+#: ends the launch, which the shell around this program notices first. It exists
+#: only so that a piece that never arrives does not hold the terminal for ever.
+PIECE_CEILING_S = 900.0
+
+#: The bound on the simulator answering, before and after a removal. Also a ceiling:
+#: each wait ends on the condition it names.
+POSES_CEILING_S = 60.0
+
+
+def wait_for_the_line() -> bool:
+    """Wait for the coordinator's first `LineState`, as the scenario does before feeding.
+
+    The readiness token says every skill and detection server answers; it says
+    nothing about `line_orchestrator`, which bring-up starts last and which is the
+    only publisher of `LineState`. A part put on the table before it runs is a part
+    no behaviour tree is watching for. The topic is `LineState.TOPIC`, the one place
+    the name is written, and the profile is the STATE one the scenario uses: volatile,
+    and republished several times a second, so a subscriber opened now hears the next.
+    """
+    rclpy.init()
+    node = rclpy.create_node("cite_snapshot_run_feeder")
+    heard: list[LineState] = []
+    node.create_subscription(LineState, LineState.TOPIC, heard.append, STATE)
+    started = time.monotonic()
+    try:
+        while not heard and time.monotonic() - started < LINE_STATE_CEILING_S:
+            rclpy.spin_once(node, timeout_sec=0.5)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+    return bool(heard)
+
+
+def remove(zone: str, world: str, poses: ModelPoses) -> str | None:
+    """Take the finished piece out of the world, and confirm it is gone.
+
+    As the scenario's `_remove_workpiece` does, absence is read from a pose
+    snapshot rather than assumed: `ModelPoses.position` also returns None before its
+    first snapshot, so the piece is first SEEN, and only then waited on to vanish.
+    Returns None on success and the reason otherwise.
+    """
+    deadline = time.monotonic() + POSES_CEILING_S
+    while poses.position(NAME) is None:
+        if time.monotonic() > deadline:
+            return f"no pose snapshot showed '{NAME}' within {POSES_CEILING_S:.0f} s"
+        time.sleep(0.2)
+    removed = run(["gz", "service", "-s", f"/world/{world}/remove",
+                   "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
+                   "--timeout", "5000", "--req", f'name: "{NAME}" type: MODEL'],
+                  zone=zone, timeout=60)
+    if removed.returncode != 0:
+        said = (removed.stderr or removed.stdout or "no output").strip()
+        return f"the remove request exited {removed.returncode}: {said}"
+    deadline = time.monotonic() + POSES_CEILING_S
+    while poses.position(NAME) is not None:
+        if time.monotonic() > deadline:
+            return f"'{NAME}' was still in the world {POSES_CEILING_S:.0f} s after removal"
+        time.sleep(0.2)
+    return None
+
+
+def main() -> int:
+    zone, pieces = sys.argv[1], int(sys.argv[2])
+    plan = plan_for(zone)
+    topology = yaml.safe_load(plan.topology.read_text())["topology"]
+    stations = {station["id"]: station for station in topology["stations"]}
+
+    # The first station in flow order that picks, and the sink the flow ends at.
+    acting = next(
+        stations[edge["from"]] for edge in topology["edges"]
+        if stations[edge["from"]].get("pick_frame")
+    )
+    sinks = [s for s in topology["stations"] if not s.get("downstream")]
+    if len(sinks) != 1 or not (sinks[0].get("trigger") or {}).get("topic"):
+        print(f"error: {zone} does not declare exactly one triggered sink", file=sys.stderr)
+        return 2
+    sink_topic = sinks[0]["trigger"]["topic"]
+    beam = next(s for s in plan.sensors if s.detection_topic == sink_topic)
+
+    pick = frame(plan, acting["pick_frame"])
+    end = frame(plan, beam.frame_id)
+    if end[0] <= pick[0]:
+        print("error: this watcher follows a line that runs toward +x, and this one "
+              "does not", file=sys.stderr)
+        return 2
+    release = (pick[0], pick[1], pick[2] + SIDE_M / 2.0 + SPAWN_DROP_M)
+    world = world_name(plan.world)
+
+    sdf_file = NamedTemporaryFile("w", suffix=".sdf", delete=False)
+    sdf_file.write(workpiece_sdf(NAME))
+    sdf_file.close()
+    sdf = Path(sdf_file.name)
+
+    def report(side, at, arrived=False):
+        mark = "ARRIVED" if arrived else "       "
+        print(f"    {mark} x={at[0]:+.3f}  y={at[1]:+.3f}  z={at[2]:+.3f}")
+
+    if not wait_for_the_line():
+        print(f"error: no LineState on {LineState.TOPIC} within "
+              f"{LINE_STATE_CEILING_S:.0f} s, so the line coordinator is not running",
+              file=sys.stderr)
+        return 1
+    print("  ok  the line coordinator is publishing its state")
+
+    # Opened once and kept, so that a removal is judged against snapshots this
+    # subscription has already been receiving (see `remove`).
+    poses = ModelPoses(zone=zone, world=world)
+    try:
+        for piece in range(1, pieces + 1):
+            problem = spawn(zone, PLANT_SIDE, NAME, release, sdf, timeout_s=180.0)
+            if problem is not None:
+                print(f"error: the cell would not take work-piece {piece}: {problem}",
+                      file=sys.stderr)
+                return 1
+            print(f"  ok  work-piece {piece} of {pieces} on {acting['pick_frame']}")
+            # The belt parks a part with its leading face on the sink's beam, so
+            # its centre stops half a width short; one width of margin reads that
+            # as arrived without reading a part still on its way as one.
+            (arrival,) = watch(zone, world, (PLANT_SIDE,), NAME, end[0], SIDE_M,
+                               PIECE_CEILING_S, report)
+            if not arrival.reached:
+                print(f"error: work-piece {piece} did not reach {beam.asset} "
+                      f"within {arrival.seconds:.0f} s", file=sys.stderr)
+                return 1
+            print(f"  ok  work-piece {piece} reached {beam.asset} after "
+                  f"{arrival.seconds:.0f} s")
+            # A Gazebo model name is unique and the belts carry exactly this one,
+            # so the finished piece is taken off before the next is fed.
+            problem = remove(zone, world, poses)
+            if problem is not None:
+                print(f"error: could not take work-piece {piece} off the line: {problem}",
+                      file=sys.stderr)
+                return 1
+    finally:
+        poses.close()
+        sdf.unlink(missing_ok=True)
+    print(f"  ok  all {pieces} work-piece(s) carried from the pick table to the sink")
+    return 0
+
+
+raise SystemExit(main())
+PY
+FEED_PID=$!
+
+# A stopped line ends the launch (the coordinator latches the fault and exits),
+# which the feeder cannot see; this shell can, so it watches the launch.
+STATUS=0
+while kill -0 "$FEED_PID" 2>/dev/null; do
+    if ! kill -0 "$SIM_PID" 2>/dev/null; then
+        err "the cell ended before the work-pieces arrived."
+        grep -aE "escalated to an operator|is blocked and needs an operator|the line stopped at" \
+             "$SIM_LOG" | tail -5 >&2 || true
+        err "The full log is ${LOG_HINT}"
+        kill "$FEED_PID" 2>/dev/null || true
+        STATUS=1
+        break
+    fi
+    sleep 2
+done
+WAIT_RC=0
+wait "$FEED_PID" 2>/dev/null || WAIT_RC=$?
+if [ "$STATUS" -eq 0 ]; then
+    STATUS="$WAIT_RC"
+fi
+FEED_PID=""
+
+exit "$STATUS"

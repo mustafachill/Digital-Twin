@@ -1,0 +1,699 @@
+{
+  "$defs": {
+    "AssetType": {
+      "additionalProperties": false,
+      "description": "A reusable definition, instantiated many times with different prefixes.",
+      "properties": {
+        "category": {
+          "enum": [
+            "robot",
+            "end_effector",
+            "conveyor",
+            "sensor",
+            "fixture",
+            "work_area"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "controllers": {
+          "items": {
+            "$ref": "#/$defs/ControllerSpec"
+          },
+          "title": "Controllers",
+          "type": "array"
+        },
+        "description": {
+          "$ref": "#/$defs/DescriptionSpec"
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/NamedFrame"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "graspable": {
+          "default": false,
+          "description": "May be attached by the simulated grasp plugin (ADR-0023).",
+          "title": "Graspable",
+          "type": "boolean"
+        },
+        "hardware_backends": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]*$": {
+              "$ref": "#/$defs/HardwareBackend"
+            }
+          },
+          "title": "Hardware Backends",
+          "type": "object"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kinematics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Kinematics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "planning": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanningSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "description"
+      ],
+      "title": "AssetType",
+      "type": "object"
+    },
+    "Body": {
+      "additionalProperties": false,
+      "description": "Geometry for a part we author ourselves — a conveyor, a table, a pedestal.\n\nVisual and collision are separate fields with no default linking them,\ndeliberately. L1 calls reusing a dense visual mesh as collision geometry the\nsingle most consequential mistake in that layer: it destroys real-time factor\nand produces contact behaviour nobody can explain. Making them separate\nrequired fields means doing it is a visible choice, not an omission.",
+      "properties": {
+        "collision": {
+          "discriminator": {
+            "mapping": {
+              "box": "#/$defs/BoxGeometry",
+              "cylinder": "#/$defs/CylinderGeometry",
+              "mesh": "#/$defs/MeshGeometry"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BoxGeometry"
+            },
+            {
+              "$ref": "#/$defs/CylinderGeometry"
+            },
+            {
+              "$ref": "#/$defs/MeshGeometry"
+            }
+          ],
+          "title": "Collision"
+        },
+        "inertial": {
+          "$ref": "#/$defs/Inertial"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Material"
+        },
+        "visual": {
+          "discriminator": {
+            "mapping": {
+              "box": "#/$defs/BoxGeometry",
+              "cylinder": "#/$defs/CylinderGeometry",
+              "mesh": "#/$defs/MeshGeometry"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BoxGeometry"
+            },
+            {
+              "$ref": "#/$defs/CylinderGeometry"
+            },
+            {
+              "$ref": "#/$defs/MeshGeometry"
+            }
+          ],
+          "title": "Visual"
+        }
+      },
+      "required": [
+        "visual",
+        "collision",
+        "inertial"
+      ],
+      "title": "Body",
+      "type": "object"
+    },
+    "BoxGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "box",
+          "default": "box",
+          "enum": [
+            "box"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "size_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Size M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "size_m"
+      ],
+      "title": "BoxGeometry",
+      "type": "object"
+    },
+    "ControllerSpec": {
+      "additionalProperties": false,
+      "description": "A controller a type needs, named by suffix and ordered by stage.\n\n``stage`` exists because a broadcaster must be active before the controllers\nthat depend on its state, and expressing that as data rather than as a sleep\nis what P4 requires.",
+      "properties": {
+        "command_interfaces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command Interfaces",
+          "type": "array"
+        },
+        "joints": {
+          "enum": [
+            "arm",
+            "end_effector",
+            "none"
+          ],
+          "title": "Joints",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "stage": {
+          "minimum": 0,
+          "title": "Stage",
+          "type": "integer"
+        },
+        "state_interfaces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "State Interfaces",
+          "type": "array"
+        },
+        "suffix": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Suffix",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "suffix",
+        "type",
+        "joints",
+        "stage"
+      ],
+      "title": "ControllerSpec",
+      "type": "object"
+    },
+    "CylinderGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cylinder",
+          "default": "cylinder",
+          "enum": [
+            "cylinder"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "length_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Length M",
+          "type": "number"
+        },
+        "radius_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Radius M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "radius_m",
+        "length_m"
+      ],
+      "title": "CylinderGeometry",
+      "type": "object"
+    },
+    "DescriptionSpec": {
+      "additionalProperties": false,
+      "description": "How a type becomes geometry.\n\n``xacro_macro`` is how a vendor description is incorporated **without editing\nit** — the open question L1 leaves for the component library. The generator's\nentire knowledge of the vendor package is the argument names below, which are\nmodel data. It never opens a vendor file and never patches one, so a vendor\nupgrade that renames a parameter is a two-line model diff.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bound_args": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "macro parameter -> generator binding name; an unknown binding is an error",
+          "title": "Bound Args",
+          "type": "object"
+        },
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File"
+        },
+        "fixed_args": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "title": "Fixed Args",
+          "type": "object"
+        },
+        "macro": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Macro"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Package"
+        },
+        "provider": {
+          "enum": [
+            "xacro_macro",
+            "body"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "DescriptionSpec",
+      "type": "object"
+    },
+    "HardwareBackend": {
+      "additionalProperties": false,
+      "description": "One selectable ``ros2_control`` backend for a type.\n\nThe plugin class string exists exactly once, here. That is what makes\n'the only thing that differs is which plugin is loaded' (ADR-0005) true by\nconstruction rather than by discipline.",
+      "properties": {
+        "instance_params": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Instance Params",
+          "type": "array"
+        },
+        "ros2_control_plugin": {
+          "title": "Ros2 Control Plugin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ros2_control_plugin"
+      ],
+      "title": "HardwareBackend",
+      "type": "object"
+    },
+    "Inertial": {
+      "additionalProperties": false,
+      "description": "Mass properties. Validated, never trusted — see L1.\n\nA wrong inertia tensor raises no error. The simulation runs and the physics\nis wrong in a way that reads as a controller bug, which is why\n``cite_tools.validate.physical`` checks positive-definiteness and the\ntriangle inequality rather than assuming the author got it right.",
+      "properties": {
+        "com_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Com M",
+          "type": "array"
+        },
+        "ixx": {
+          "exclusiveMinimum": 0.0,
+          "title": "Ixx",
+          "type": "number"
+        },
+        "ixy": {
+          "default": 0.0,
+          "title": "Ixy",
+          "type": "number"
+        },
+        "ixz": {
+          "default": 0.0,
+          "title": "Ixz",
+          "type": "number"
+        },
+        "iyy": {
+          "exclusiveMinimum": 0.0,
+          "title": "Iyy",
+          "type": "number"
+        },
+        "iyz": {
+          "default": 0.0,
+          "title": "Iyz",
+          "type": "number"
+        },
+        "izz": {
+          "exclusiveMinimum": 0.0,
+          "title": "Izz",
+          "type": "number"
+        },
+        "mass_kg": {
+          "exclusiveMinimum": 0.0,
+          "title": "Mass Kg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mass_kg",
+        "ixx",
+        "iyy",
+        "izz"
+      ],
+      "title": "Inertial",
+      "type": "object"
+    },
+    "Kinematics": {
+      "additionalProperties": false,
+      "properties": {
+        "base_link_suffix": {
+          "title": "Base Link Suffix",
+          "type": "string"
+        },
+        "dof": {
+          "maximum": 7,
+          "minimum": 1,
+          "title": "Dof",
+          "type": "integer"
+        },
+        "joint_suffixes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Joint Suffixes",
+          "type": "array"
+        },
+        "max_reach_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Reach M",
+          "type": "number"
+        },
+        "tip_link_suffix": {
+          "title": "Tip Link Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dof",
+        "joint_suffixes",
+        "base_link_suffix",
+        "tip_link_suffix",
+        "max_reach_m"
+      ],
+      "title": "Kinematics",
+      "type": "object"
+    },
+    "MeshGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "mesh",
+          "default": "mesh",
+          "enum": [
+            "mesh"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "scale": {
+          "default": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Scale",
+          "type": "array"
+        },
+        "uri": {
+          "description": "package:// or file:// URI, declared in assets/manifest.yaml",
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "title": "MeshGeometry",
+      "type": "object"
+    },
+    "NamedFrame": {
+      "additionalProperties": false,
+      "description": "A reference frame a type offers, that instances can be placed against.\n\n``conveyor_1/outfeed`` resolves through one of these, so the coordinate of a\nbelt's end is written once — in the type — rather than at every station that\nreaches for it.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "URDF link this frame is attached to, if the type has a description.",
+          "title": "Link"
+        },
+        "rpy_rad": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rpy Rad",
+          "type": "array"
+        },
+        "xyz_m": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Xyz M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "NamedFrame",
+      "type": "object"
+    },
+    "PlanningSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Group",
+          "type": "string"
+        },
+        "tip_link_suffix": {
+          "title": "Tip Link Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "tip_link_suffix"
+      ],
+      "title": "PlanningSpec",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/asset_type/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "asset_type": {
+      "$ref": "#/$defs/AssetType"
+    },
+    "schema": {
+      "const": "cite/asset_type/v1",
+      "enum": [
+        "cite/asset_type/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "asset_type"
+  ],
+  "title": "cite/asset_type/v1",
+  "type": "object"
+}

@@ -5,6 +5,8 @@
 .git/
 .venv/
 legacy/
+# Frozen snapshots (ADR-0068): each builds its own image from its own folder.
+projects/
 workspace/build/
 workspace/install/
 workspace/log/

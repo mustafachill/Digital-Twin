@@ -1,0 +1,17 @@
+<library path="joint_stop_system">
+  <class name="cite_test_hardware/JointStopSystem"
+         type="cite_test_hardware::JointStopSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      TEST FIXTURE, NOT A BACKEND (ADR-0040). mock_components/GenericSystem with a
+      pair of hard stops on one named joint, so a trajectory can be made to
+      mistrack part way along its path instead of at its first point, and with a
+      velocity state that is the first difference of the position state rather
+      than the permanent zero a position-only mock reports.
+
+      It refuses to initialise unless the description gives it a joint to stop and
+      an interval to stop it in. Those parameters have no home in the L0 facility
+      model, so no generated description can carry them.
+    </description>
+  </class>
+</library>

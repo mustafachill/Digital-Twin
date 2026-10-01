@@ -1,0 +1,2097 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""The bring-up plan reader.
+
+Pure logic, so it is tested here rather than only by bringing the cell up — most
+of what can go wrong in bring-up configuration is in this half, and a unit test
+finds it in milliseconds instead of after a simulator start.
+"""
+
+from __future__ import annotations
+
+import ast
+import copy
+from pathlib import Path
+
+from cite_bringup.plan import (
+    ARM_KEYS,
+    BACKEND_FIELD_BY_SIDE,
+    ControllerManager,
+    ControllerRef,
+    COUNTERPART_SIDE,
+    DOMAIN_BAND,
+    domain_base,
+    DOMAIN_BASE_ENV,
+    DOMAIN_ENV,
+    DomainUnresolvedError,
+    GazeboPartitionMissingError,
+    GRIPPER_KEYS,
+    GZ_PARTITION_ENV,
+    HARDWARE_OPT_IN_ENV,
+    HardwareNotPermittedError,
+    load,
+    PHYSICAL_FIELD_BY_SIDE,
+    PlanError,
+    PLANT_SIDE,
+    require_domain,
+    require_gz_partition,
+    require_hardware_opt_in,
+    resolve_domain_id,
+    resolve_uri,
+    RosDomainMismatchError,
+    Side,
+    SideNotDeclaredError,
+    Workpieces,
+)
+import pytest
+import yaml
+
+GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
+
+
+def _generated() -> Path:
+    return Path(resolve_uri(GENERATED_PLAN))
+
+
+#: The reader of the live generated plan, and the only two functions allowed to
+#: call it. Named rather than spelled inside the guard below, so that the guard
+#: cannot drift from the thing it guards.
+_LIVE_READER = "_live_document"
+_SHAPE_HELPERS = ("_paired_document", "_solo_document")
+
+#: The path accessor underneath that reader, and the URI constant underneath
+#: that. Guarding only `_live_document` guards a WRAPPER: its whole body is
+#: `yaml.safe_load(_generated().read_text())`, so a test that spells that one
+#: line itself reaches the live plan with the guard above still green - a bypass
+#: that was demonstrated, and that dies on a paired checkout with open-work #40's
+#: exact signature while passing for everyone on a `single` one.
+#:
+#: So the accessor is guarded too, and by shape rather than by caller: outside
+#: `_live_document` a call to it may only be the direct argument of `load`, which
+#: returns a `Plan` - an object with no `sides` list anybody can append to. And
+#: the URI constant with it, since `Path(resolve_uri(GENERATED_PLAN))` is the
+#: same reach one layer lower down.
+_PLAN_PATH_READER = "_generated"
+_PLAN_URI = "GENERATED_PLAN"
+#: And the function that turns the one into the other. Guarded so that the URI
+#: cannot be assembled from parts the constant check below is blind to.
+_URI_RESOLVER = "resolve_uri"
+#: The one call a path outside the reader may sit inside.
+_PLAN_LOADER = "load"
+
+#: Builtins that turn this module's namespace into a dictionary, and so turn a
+#: guarded NAME into a string no AST guard below can see. Barred outright rather
+#: than guarded by shape: none of them has a use in this file, and
+#: `globals().get("_live_document")()` was demonstrated reaching the live plan
+#: with every other guard here green.
+#:
+#: `getattr` is deliberately NOT on this list - it is used twice above on AST
+#: nodes and on a dataclass, neither of which is a namespace reach. So a
+#: determined `getattr(sys.modules[__name__], ...)` is not closed by this, and
+#: saying otherwise would be the overclaim these guards keep catching.
+_NAMESPACE_ACCESSORS = ("globals", "locals", "vars")
+
+#: Builtins that execute a string, which reaches a guarded name without any of
+#: the guards here seeing a `Name` node at all: `eval("_live_document()")` was
+#: demonstrated on 2026-09-10 passing the full suite. Barred for the same reason
+#: and on the same terms as the three above - none has a use in this file - and
+#: kept as a separate tuple because the reason differs. Those turn the namespace
+#: into data; these turn data into code.
+_DYNAMIC_EVALUATORS = ("eval", "exec", "__import__")
+
+#: Every controller-manager key a paired plan carries and an untwinned one does
+#: not, taken from the reader's own maps rather than transcribed. `_solo_document`
+#: removes exactly these; a key added to either map without a matching pop here
+#: would leave the solo shape stating something no generator emits, which is how
+#: this helper came to drop one of two and fail 35 tests on a paired checkout.
+_COUNTERPART_MANAGER_KEYS = (
+    BACKEND_FIELD_BY_SIDE[COUNTERPART_SIDE],
+    PHYSICAL_FIELD_BY_SIDE[COUNTERPART_SIDE],
+)
+
+
+def _this_module() -> ast.Module:
+    """Parse this file into the syntax tree the two guards below walk.
+
+    Read from disk rather than from the imported module, because what is guarded
+    is what the repository carries.
+    """
+    return ast.parse(Path(__file__).read_text())
+
+
+def _calls_to(tree: ast.Module, name: str) -> list[ast.Call]:
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+    ]
+
+
+def _enclosing_functions(tree: ast.Module, nodes: object) -> set[str]:
+    """Name the functions the given nodes appear inside.
+
+    By identity, since `in` over a container of AST nodes falls back to `is`;
+    two syntactically identical calls in two functions are two different nodes,
+    which is what makes this able to name the offender.
+
+    `AsyncFunctionDef` as well as `FunctionDef`, because a node inside an async
+    function IS inside a function and a walk that knows only the synchronous
+    kind reports it as belonging to nothing - which the caller below reads as a
+    finding rather than as a pass, but only because it asks the question in the
+    total form. Both kinds here, so the two spellings answer alike.
+    """
+    return {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for inner in ast.walk(function)
+        if any(inner is node for node in nodes)
+    }
+
+
+def _not_owned_by(tree: ast.Module, nodes: object, owner: str) -> list[ast.AST]:
+    """Return the given nodes not inside `owner`, and inside nothing else.
+
+    Asked node by node, and that is the guard rather than a detail of it. A set
+    of enclosing function names is EMPTY for a node written at module scope or
+    in a class body, so the subset form - `_enclosing_functions(tree, nodes) <=
+    {owner}` - HOLDS VACUOUSLY for a bypass that names no function at all. That
+    is not hypothetical: a module-level `yaml.safe_load(_generated().read_text())`
+    and a module-level `Path(resolve_uri(GENERATED_PLAN))` were both written
+    above `_live_document` and left both halves of the subset form green. And it
+    is the shape most likely to be copied here, since reading a plan at module
+    scope is an established pattern one package over -
+    `test_grasp_predicate_launch.py`, `test_gripper_deadline_launch.py` and
+    `cite_twin`'s `test_twin_boundary_launch.py` all do it.
+
+    Requiring each node to name `owner` cannot be satisfied by naming nobody.
+    """
+    return [node for node in nodes if _enclosing_functions(tree, [node]) != {owner}]
+
+
+def _named_or_module_scope(tree: ast.Module, nodes: object) -> str:
+    """Say where the offending nodes are, since a module-scope one has no name."""
+    nodes = list(nodes)
+    if not nodes:
+        return "nobody"
+    named = sorted(_enclosing_functions(tree, nodes))
+    where = f"line(s) {sorted({getattr(node, 'lineno', 0) for node in nodes})}"
+    return f"{named} at {where}" if named else f"module or class scope, at {where}"
+
+
+def _live_document() -> dict:
+    """Read the plan this checkout generates, in whatever shape its model declares.
+
+    **Not for a test to call.** Which shape this is depends on the model - `single`
+    today, `pair` on a checkout flipped for a run - so a test built on it asserts
+    about whichever cell happens to be committed. That is open-work #40, and it
+    cost fourteen tests at once. `_solo_document` and `_paired_document` below
+    normalise it into the two shapes a plan ships in, the `document` fixture runs
+    every plan-shape test over BOTH of them, and
+    `test_only_the_two_shape_helpers_read_the_live_plan` keeps this function's
+    callers down to those two.
+    """
+    return yaml.safe_load(_generated().read_text())
+
+
+@pytest.fixture(params=("solo", "paired"))
+def document(request: pytest.FixtureRequest) -> dict:
+    """Build the generated plan in both shapes, for every test that edits one.
+
+    A plan-shape test that took the live document asserted about the model this
+    checkout happens to carry; on a checkout flipped to `pair` fourteen of them
+    failed on their own fixture rather than on what they were asking about
+    (open-work #40). Parametrising closes that by construction rather than by
+    everyone remembering: both shapes run on every checkout, so neither can be
+    the one nobody tried.
+
+    A test that APPENDS a side must not take this fixture - it would be appending
+    to a document that already has two - and the three that do say so where they
+    call `_solo_document` instead.
+    """
+    return {"solo": _solo_document, "paired": _paired_document}[request.param]()
+
+
+def _written(tmp_path: Path, document: dict) -> Path:
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+    return path
+
+
+def test_the_generated_plan_loads() -> None:
+    plan = load(_generated())
+    assert plan.zone == "cell_a"
+    assert plan.scene.exists()
+    assert plan.world.exists()
+    assert len(plan.controller_managers) == 3, "one controller manager per arm"
+    for manager in plan.controller_managers:
+        assert manager.description.exists(), manager.asset
+
+
+def test_each_arm_has_its_own_description() -> None:
+    """One Gazebo model per arm, so one controller manager per arm's hardware.
+
+    With all three arms in a single model, every controller manager claimed all
+    eighteen joints and wrote to them each cycle. Nothing reports that; it would
+    surface much later as motion nobody can account for.
+    """
+    plan = load(_generated())
+    descriptions = {m.description for m in plan.controller_managers}
+    assert len(descriptions) == len(plan.controller_managers)
+    assert plan.scene not in descriptions
+
+
+def test_every_manager_is_namespaced_by_asset() -> None:
+    # P2 is made of these names. A manager outside /cite/<zone>/<asset_id> would
+    # put its controllers' actions somewhere the rest of the system does not look.
+    plan = load(_generated())
+    for manager in plan.controller_managers:
+        assert manager.node == f"/cite/{plan.zone}/{manager.asset}/controller_manager"
+
+
+def test_stages_are_ordered_with_the_broadcaster_first() -> None:
+    plan = load(_generated())
+    for manager in plan.controller_managers:
+        stages = manager.stages()
+        assert [s for s, _ in stages] == sorted(s for s, _ in stages)
+        first_stage_names = stages[0][1]
+        assert any("joint_state_broadcaster" in n for n in first_stage_names), (
+            "the broadcaster must be in the first stage: the controllers after it "
+            "read the state it publishes"
+        )
+
+
+def test_stage_grouping_is_deterministic() -> None:
+    manager = ControllerManager(
+        asset="arm_1",
+        node="/cite/cell_a/arm_1/controller_manager",
+        backend="sim",
+        # No counterpart: this manager stands for an untwinned zone, which is
+        # what `None` means here — never "the key was left out".
+        counterpart_backend=None,
+        commands_physical_hardware=False,
+        counterpart_commands_physical_hardware=None,
+        description_topic="/robot_description",
+        joint_state_topic="/cite/cell_a/arm_1/joint_states",
+        description=Path("/dev/null"),
+        spawn_xyz_m=(0.0, 0.0, 0.0),
+        spawn_rpy_rad=(0.0, 0.0, 0.0),
+        parameters="package://cite_generated/control/x.yaml",
+        controllers=(
+            ControllerRef("b", 1),
+            ControllerRef("a", 1),
+            ControllerRef("jsb", 0),
+        ),
+        moveit=None,
+        trajectory_action=None,
+        gripper_action=None,
+        skills=None,
+        gripper={},
+        arm={},
+    )
+    assert manager.stages() == [(0, ("jsb",)), (1, ("a", "b"))]
+
+
+def test_every_arm_gets_a_planning_configuration() -> None:
+    """Both planners must be told the same controller names.
+
+    MoveIt and ros2_control disagreeing about what a controller is called fails
+    at run time with an error naming neither.
+
+    Both come from the same L0 model here, so they cannot disagree — a mismatch
+    fails at run time with an error naming neither of them.
+    """
+    plan = load(_generated())
+    for manager in plan.controller_managers:
+        assert manager.moveit is not None, manager.asset
+        assert manager.moveit.group.startswith(manager.asset)
+        assert manager.moveit.srdf.exists()
+        assert manager.moveit.controllers.exists()
+
+        declared = yaml.safe_load(manager.moveit.controllers.read_text())
+        named = set(declared["moveit_simple_controller_manager"]["controller_names"])
+        spawned = {c.name for c in manager.controllers}
+        assert named <= spawned, (
+            f"{manager.asset}: MoveIt is configured for {sorted(named - spawned)}, "
+            "which ros2_control never spawns"
+        )
+
+
+def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
+    # Bring-up would otherwise report success having activated nothing.
+    document = {
+        "plan": {
+            "zone": "cell_a",
+            "world": "package://cite_generated/worlds/cell_a.sdf",
+            "scene": "package://cite_generated/description/cell_a_scene.urdf.xacro",
+            "static_frames": "package://cite_generated/frames/cell_a_static_tf.yaml",
+            "topology": "package://cite_generated/topology/cell_a_flow.yaml",
+            "sides": [
+                {
+                    "name": "plant",
+                    "gz_partition": "cite/cell_a/plant",
+                    "domain_offset": 0,
+                }
+            ],
+            "controller_managers": [
+                {
+                    "asset": "arm_1",
+                    "node": "/cite/cell_a/arm_1/controller_manager",
+                    "backend": "sim",
+                    "commands_physical_hardware": False,
+                    "description_topic": "/robot_description",
+                    "joint_state_topic": "/cite/cell_a/arm_1/joint_states",
+                    "description": (
+                        "package://cite_generated/description/cell_a_arm_1.urdf.xacro"
+                    ),
+                    "spawn_xyz_m": "0 0 0",
+                    "spawn_rpy_rad": "0 0 0",
+                    "parameters": "package://cite_generated/control/x.yaml",
+                    "controllers": [],
+                }
+            ],
+        }
+    }
+    with pytest.raises(PlanError, match="lists no controllers"):
+        load(_written(tmp_path, document))
+
+
+def test_a_missing_plan_says_how_to_produce_one(tmp_path: Path) -> None:
+    with pytest.raises(PlanError, match="validate-model"):
+        load(tmp_path / "absent.yaml")
+
+
+def test_an_unresolvable_package_uri_is_reported(tmp_path: Path) -> None:
+    with pytest.raises(PlanError, match="not on the ament index"):
+        resolve_uri("package://not_a_real_package/thing.yaml")
+
+
+# --- A malformed plan is a PlanError, never a KeyError or a ValueError ---------
+#
+# `simulation.launch.py` catches PlanError and turns it into a message plus a
+# Shutdown. Anything else escapes an OpaqueFunction as a raw traceback naming the
+# launch machinery instead of the key that is wrong, which is what these lock in.
+
+
+def test_a_missing_manager_key_is_a_plan_error(tmp_path: Path, document: dict) -> None:
+    del document["plan"]["controller_managers"][0]["node"]
+    with pytest.raises(PlanError, match="missing required key 'node'"):
+        load(_written(tmp_path, document))
+
+
+def test_a_missing_top_level_key_is_a_plan_error(tmp_path: Path, document: dict) -> None:
+    del document["plan"]["zone"]
+    with pytest.raises(PlanError, match="missing required key 'zone'"):
+        load(_written(tmp_path, document))
+
+
+def test_a_non_numeric_value_is_a_plan_error(tmp_path: Path, document: dict) -> None:
+    document["plan"]["conveyors"] = [
+        {
+            "asset": "conveyor_1",
+            "state_topic": "/cite/cell_a/conveyor_1/state",
+            "command_topic": "/cite/cell_a/conveyor_1/command",
+            "installed_speed_mps": "quite fast",
+        }
+    ]
+    with pytest.raises(PlanError, match="must be a number"):
+        load(_written(tmp_path, document))
+
+
+def test_a_list_where_a_triple_was_expected_is_a_plan_error(
+    tmp_path: Path, document: dict
+) -> None:
+    # YAML happily reads `spawn_xyz_m: [1, 2, 3]` as a list. float("[1,") does not.
+    document["plan"]["controller_managers"][0]["spawn_xyz_m"] = [1.0, 2.0, 3.0]
+    with pytest.raises(PlanError, match="three space-separated numbers"):
+        load(_written(tmp_path, document))
+
+
+def test_a_mapping_where_a_list_was_expected_is_a_plan_error(
+    tmp_path: Path, document: dict
+) -> None:
+    document["plan"]["controller_managers"][0]["controllers"] = {"name": "a", "stage": 0}
+    with pytest.raises(PlanError, match="must be a list"):
+        load(_written(tmp_path, document))
+
+
+# --- The hardware gate --------------------------------------------------------
+
+
+def _with_backend(document: dict, backend: str) -> dict:
+    """Rename one manager's backend and change nothing else.
+
+    A NAME-ONLY change, which after ADR-0054 must move no gate at all.
+    """
+    document = copy.deepcopy(document)
+    document["plan"]["controller_managers"][1]["backend"] = backend
+    return document
+
+
+def _declaring_physical(document: dict, backend: str = "real") -> dict:
+    """Make one manager declare that its plant side commands physical hardware."""
+    document = _with_backend(document, backend)
+    document["plan"]["controller_managers"][1]["commands_physical_hardware"] = True
+    return document
+
+
+def test_the_generated_plan_needs_no_opt_in() -> None:
+    """Every arm is simulated today, so nothing is gated. The gate must not fire."""
+    require_hardware_opt_in(load(_generated()), {})
+
+
+def test_a_physical_declaration_is_refused_without_the_opt_in(
+    tmp_path: Path, document: dict
+) -> None:
+    plan = load(_written(tmp_path, _declaring_physical(document)))
+    with pytest.raises(HardwareNotPermittedError) as raised:
+        require_hardware_opt_in(plan, {})
+    message = str(raised.value)
+    # The refusal must name the asset. "Hardware is not permitted" sends the
+    # reader looking through three arms for the one that is not simulated.
+    assert "arm_2" in message
+    # And the plan FIELD that decided, which is what a reader has to go and
+    # change. The backend id rides along as context and decides nothing.
+    assert "commands_physical_hardware" in message
+    assert "real" in message
+    assert HARDWARE_OPT_IN_ENV in message
+
+
+def test_a_physical_declaration_starts_with_the_opt_in(
+    tmp_path: Path, document: dict
+) -> None:
+    """The gate is a refusal, not a ban. With the opt-in the plan loads normally."""
+    plan = load(_written(tmp_path, _declaring_physical(document)))
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
+
+
+def test_the_opt_in_must_say_exactly_one(tmp_path: Path, document: dict) -> None:
+    """`CITE_ALLOW_HARDWARE=0`, `=false`, or empty is not an opt-in.
+
+    The shell gate compares against "1" and this must not be more permissive, or
+    the two disagree about what an opt-in is and a person meets two rules.
+    """
+    plan = load(_written(tmp_path, _declaring_physical(document)))
+    for value in ("0", "", "true", "yes", "1 "):
+        with pytest.raises(HardwareNotPermittedError):
+            require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: value})
+
+
+# --- ADR-0054 clause 4: the gate keys on the fact, in BOTH directions ---------
+#
+# The whole of ADR-0054's Context is one model that defeats this gate by naming
+# a physical plugin `sim`, and the record's own reproduction reports
+# `require_hardware_opt_in` returning None with an empty environment. Both
+# directions are asserted, because a check that only refused more would also be
+# passed by an implementation that refuses everything.
+
+
+def test_a_backend_named_sim_that_declares_physical_is_refused(
+    tmp_path: Path, document: dict
+) -> None:
+    """The reproduction, at this layer. The id stays `sim` throughout."""
+    physical = _declaring_physical(document, backend="sim")
+    assert physical["plan"]["controller_managers"][1]["backend"] == "sim"
+    plan = load(_written(tmp_path, physical))
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {})
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
+
+
+@pytest.mark.parametrize("backend", ["real", "plant", "mock_components", "anything"])
+def test_a_backend_of_any_name_declaring_no_physical_hardware_is_permitted(
+    tmp_path: Path, document: dict, backend: str
+) -> None:
+    """The other direction, which the id got wrong too.
+
+    A simulation with an unfortunate id is not hardware. Under the old rule
+    `real` was refused on a cell containing no physical machine, and
+    `mock_components` was refused as "a backend nobody anticipated" — a false
+    refusal, and the only thing that used to stand in front of a Gazebo-driven
+    arm configured off `use_sim_time: false`. ADR-0054's *What this costs us*
+    says so in as many words.
+    """
+    plan = load(_written(tmp_path, _with_backend(document, backend)))
+    require_hardware_opt_in(plan, {})
+
+
+def test_the_allowlist_is_now_structural_rather_than_a_list_of_names(
+    tmp_path: Path, document: dict
+) -> None:
+    """cross-cutting-safety.md: a hardware path is never reachable by omission.
+
+    The old check was an allowlist over NAMES, so the property depended on
+    nobody inventing an id it recognised. It is now the shape of the datum: the
+    dangerous branch is the positive one, so reaching an arm requires that
+    somebody wrote `true`. There is no unanticipated value to fall through - the
+    only two values a plan may carry are asserted here, and one of them refuses.
+    """
+    permitted = _with_backend(document, "a_backend_nobody_anticipated")
+    require_hardware_opt_in(load(_written(tmp_path, permitted)), {})
+    refused = _declaring_physical(document, backend="a_backend_nobody_anticipated")
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(load(_written(tmp_path, refused)), {})
+
+
+# --- ADR-0054 clause 5: the plan key is required too --------------------------
+#
+# EVERY OTHER CLAUSE OF THAT RECORD CAN BE SATISFIED BY AN IMPLEMENTATION THAT
+# PARSES THIS KEY WITH `_optional(..., False)`. That implementation makes the
+# plan layer strictly weaker than it was - a plan missing `backend` raises today
+# - and the document most likely to be missing the new key is a plan left in a
+# stale build tree, which is exactly what `simulation.launch.py` loads, from the
+# package share rather than from the source tree. Every manager would read
+# `False`, nothing would consult `CITE_ALLOW_HARDWARE`, and ADR-0054's own
+# defect would reopen in a build state nobody notices.
+
+
+def test_a_plan_omitting_the_hardware_declaration_is_refused(
+    tmp_path: Path, document: dict
+) -> None:
+    """Exactly as deleting `backend` is refused, and for a sharper reason.
+
+    A REMOVED key's presence is an absence of information, which is why the plan
+    tolerates one (ADR-0048 clause 3). This key's ABSENCE is a safety fact
+    nobody stated, and defaulting it sends nobody anywhere. The `PlanError` has
+    to name the key, or its reader cannot tell a stale build tree from a
+    generator bug.
+    """
+    document = copy.deepcopy(document)
+    del document["plan"]["controller_managers"][0]["commands_physical_hardware"]
+    with pytest.raises(PlanError, match="commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_a_null_hardware_declaration_is_refused(tmp_path: Path, document: dict) -> None:
+    """An empty value is not `false`. A key with nothing after it states nothing."""
+    document = copy.deepcopy(document)
+    document["plan"]["controller_managers"][0]["commands_physical_hardware"] = None
+    with pytest.raises(PlanError, match="commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, "no"])
+def test_a_hardware_declaration_that_is_not_a_boolean_is_refused(
+    tmp_path: Path, document: dict, value: object
+) -> None:
+    """Strict about the type, because every caller is a safety gate.
+
+    The string `"false"` is truthy in Python: a document spelling it that way
+    would be read as commanding hardware while saying the opposite, and `1` and
+    `0` would let a plan state the fact in a spelling the generator never emits.
+    """
+    document = copy.deepcopy(document)
+    document["plan"]["controller_managers"][0]["commands_physical_hardware"] = value
+    with pytest.raises(PlanError, match="must be true or false"):
+        load(_written(tmp_path, document))
+
+
+def test_a_counterpart_backend_without_its_declaration_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The pair is stated together, so the two accessors cannot disagree.
+
+    A document stating `counterpart_backend` alone would give
+    `backend_on(COUNTERPART_SIDE)` an answer while the fact accessor said there
+    is no such side - the same disagreement `Plan.load`'s declared-side refusal
+    exists to prevent one layer up, reached from inside a single entry.
+    """
+    document = _paired_document()
+    del document["plan"]["controller_managers"][0][
+        "counterpart_commands_physical_hardware"
+    ]
+    with pytest.raises(PlanError, match="counterpart_commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_a_counterpart_declaration_without_its_backend_is_refused(
+    tmp_path: Path,
+) -> None:
+    """And the mirror: a side nothing can say what loads."""
+    document = _solo_document()
+    document["plan"]["controller_managers"][0][
+        "counterpart_commands_physical_hardware"
+    ] = False
+    with pytest.raises(PlanError, match="counterpart_commands_physical_hardware"):
+        load(_written(tmp_path, document))
+
+
+def test_an_untwinned_plan_states_neither_counterpart_key(tmp_path: Path) -> None:
+    """Absent exactly where `counterpart_backend` is absent."""
+    plan = load(_written(tmp_path, _solo_document()))
+    for manager in plan.controller_managers:
+        assert manager.counterpart_backend is None
+        assert manager.counterpart_commands_physical_hardware is None
+
+
+# --- (asset, side) -> the declared fact, asked once ---------------------------
+
+
+def test_the_plant_declaration_is_reached_by_side_name(
+    tmp_path: Path, document: dict
+) -> None:
+    plan = load(_written(tmp_path, document))
+    for manager in plan.controller_managers:
+        assert (
+            manager.commands_physical_hardware_on(PLANT_SIDE)
+            is manager.commands_physical_hardware
+        )
+
+
+def test_each_side_is_answered_with_its_own_declaration(tmp_path: Path) -> None:
+    """Returning the plant's answer for both sides would pass every other test.
+
+    The same mutation `test_each_side_is_answered_with_its_own_backend` catches
+    for the backend, on the datum that now decides.
+    """
+    document = _paired_document()
+    document["plan"]["controller_managers"][1]["counterpart_backend"] = "real"
+    document["plan"]["controller_managers"][1][
+        "counterpart_commands_physical_hardware"
+    ] = True
+    plan = load(_written(tmp_path, document))
+    divergent = [
+        manager
+        for manager in plan.controller_managers
+        if manager.commands_physical_hardware_on(COUNTERPART_SIDE)
+        != manager.commands_physical_hardware_on(PLANT_SIDE)
+    ]
+    assert len(divergent) == 1
+    assert divergent[0].commands_physical_hardware_on(PLANT_SIDE) is False
+    assert divergent[0].commands_physical_hardware_on(COUNTERPART_SIDE) is True
+
+
+def test_asking_an_untwinned_asset_for_its_counterpart_declaration_says_so(
+    tmp_path: Path,
+) -> None:
+    """`SideNotDeclaredError`, exactly as `backend_on` refuses, and never `False`.
+
+    Reporting `False` would hand every caller a three-way branch and let one of
+    them read "there is no such side" as "that side is simulated".
+    """
+    plan = load(_written(tmp_path, _solo_document()))
+    manager = plan.controller_managers[0]
+    with pytest.raises(SideNotDeclaredError, match="states no hardware declaration"):
+        manager.commands_physical_hardware_on(COUNTERPART_SIDE)
+    assert manager.commands_physical_hardware_on_or_none(COUNTERPART_SIDE) is None
+
+
+def test_the_total_sibling_answers_the_plant_and_none_elsewhere(
+    tmp_path: Path, document: dict
+) -> None:
+    """The accessor `cite_twin` uses. `None` means "no such side", never "safe"."""
+    manager = load(_written(tmp_path, document)).controller_managers[0]
+    assert manager.commands_physical_hardware_on_or_none(PLANT_SIDE) is False
+    assert manager.commands_physical_hardware_on_or_none("somewhere_else") is None
+
+
+# --- The simulation-fidelity aids: two topics per beam, not two names for one --
+
+
+def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
+    """A beam has two interfaces and they must not collide.
+
+    `detection_topic` is already spoken for: `cell_a_flow.yaml` gives it to a
+    station as a `DetectionEvent` trigger and `StationTopology.msg` documents it
+    as one. Bridging the raw `std_msgs/Bool` level onto that name would put two
+    publishers of two types on the topic the line acts on.
+    """
+    plan = load(_generated())
+    assert plan.sensors, "the generated plan declares no sensors at all"
+    for sensor in plan.sensors:
+        assert sensor.detection_topic != sensor.level_topic, sensor.asset
+        assert sensor.asset in sensor.detection_topic
+        assert sensor.asset in sensor.level_topic
+        assert sensor.frame_id.startswith(f"{plan.zone}__{sensor.asset}__"), (
+            "a beam's detections are reported in a frame the generated static TF "
+            "table publishes; this one names a frame from nowhere"
+        )
+
+
+def test_a_beam_whose_two_topics_are_one_name_is_refused(tmp_path: Path, document: dict) -> None:
+    """Refused when the plan says it, not discovered when the line stalls.
+
+    The two would connect, both publish, and `ros2 topic echo` would show a
+    stream of deserialisation errors naming neither publisher.
+    """
+    sensor = document["plan"]["sensors"][0]
+    sensor["level_topic"] = sensor["detection_topic"]
+    with pytest.raises(PlanError, match="fight over it"):
+        load(_written(tmp_path, document))
+
+
+def test_sensors_without_a_detection_block_are_refused(tmp_path: Path, document: dict) -> None:
+    """Beams bridged into ROS and read by nobody is a silent half-system."""
+    del document["plan"]["detection"]
+    with pytest.raises(PlanError, match="turns their levels into typed events"):
+        load(_written(tmp_path, document))
+
+
+def test_the_detection_server_is_zone_scoped() -> None:
+    plan = load(_generated())
+    assert plan.detection is not None
+    assert plan.detection.namespace == f"/cite/{plan.zone}/detection"
+    assert plan.detection.detect_action == f"{plan.detection.namespace}/detect"
+    # Not an arm's namespace: one server watches every belt in the zone, and
+    # three would give the same question three answers.
+    for manager in plan.controller_managers:
+        assert manager.asset not in plan.detection.namespace
+
+
+# --- The skill actions L4 calls come from the model ---------------------------
+
+
+def test_every_planned_arm_declares_its_skill_actions() -> None:
+    """The names used to be assembled by whoever launched the coordinator.
+
+    That is an asset name written a second time, outside `ids.py` and outside
+    every test that covers it — which is exactly what CLAUDE.md §8 forbids.
+    """
+    plan = load(_generated())
+    for manager in plan.controller_managers:
+        if manager.moveit is None:
+            continue
+        assert manager.skills is not None, manager.asset
+        prefix = f"/cite/{plan.zone}/{manager.asset}/"
+        for skill in ("move_to", "pick", "place", "grasp", "transfer"):
+            name = getattr(manager.skills, skill)
+            assert name == f"{prefix}{skill}", (name, skill)
+
+
+def test_a_partial_skills_block_is_refused(tmp_path: Path, document: dict) -> None:
+    """Half a skill table is worse than none: the missing one fails at goal time."""
+    del document["plan"]["controller_managers"][0]["skills"]["pick"]
+    with pytest.raises(PlanError, match="missing required key 'pick'"):
+        load(_written(tmp_path, document))
+
+
+# --- The gripper values reach L3 because the plan carries them ----------------
+
+
+def test_every_gripper_key_the_plan_states_is_read(
+    tmp_path: Path, document: dict
+) -> None:
+    """The P1 defect that worked because two copies agreed.
+
+    `cite_bringup` delivered four keys, one of which — `gripper_max_width_m` —
+    exists in neither the plan nor the skill server's declared parameters and was
+    therefore accepted and dropped. Meanwhile the default grasp width, the goal
+    tolerance, the drive rate and all seven linkage dimensions never arrived, and
+    the node ran on compiled defaults that happen to equal the L0 values.
+    """
+    plan = load(_written(tmp_path, document))
+    for manager, entry in zip(
+        plan.controller_managers, document["plan"]["controller_managers"]
+    ):
+        if manager.gripper_action is None:
+            continue
+        stated = {key for key in GRIPPER_KEYS if entry.get(key) is not None}
+        assert stated == set(manager.gripper), (
+            f"{manager.asset}: the plan states {sorted(stated)} and the reader "
+            f"produced {sorted(manager.gripper)}"
+        )
+        assert stated, f"{manager.asset} has a gripper action and no gripper values"
+        for key in stated:
+            assert manager.gripper[key] == pytest.approx(float(entry[key])), key
+
+
+#: The skill server's own source. `GRIPPER_KEYS` claims its entries are spelled
+#: "under the exact name the skill server declares it", and that claim is about
+#: another package — the kind of statement that is true when written and rots in
+#: silence. Reading the declarations is what turns it into a test.
+SKILL_SERVER = (
+    Path(__file__).resolve().parents[2] / "cite_skills" / "src" / "skill_server.cpp"
+)
+
+
+def test_every_gripper_key_is_one_the_skill_server_declares() -> None:
+    """A key the server does not declare is delivered, dropped and reported by nobody.
+
+    `rclcpp` ignores an override for a parameter that was never declared: launch
+    accepts it, the node discards it, and neither says so. That is how
+    `gripper_default_grasp_width_m` and seven linkage dimensions never arrived
+    while the node ran on compiled defaults which happened to equal the L0 values
+    — a P1 defect that worked because two copies agreed.
+
+    `gripper_max_drive_rate_rad_s` was the twelfth key and was in exactly that
+    state at the commit before this test: carried by the plan, delivered by
+    `_skill_parameters`, and declared by nothing.
+    """
+    assert SKILL_SERVER.is_file(), f"the skill server's source is not at {SKILL_SERVER}"
+    source = SKILL_SERVER.read_text()
+    undeclared = [
+        key for key in GRIPPER_KEYS if f'declare_parameter("{key}"' not in source
+    ]
+    assert not undeclared, (
+        f"{sorted(undeclared)} are delivered to the skill server and declared by it "
+        f"nowhere in {SKILL_SERVER.name}, so rclcpp drops them without a word"
+    )
+
+
+# --- The work-piece interval, which does NOT ride the gripper block ----------
+#
+# ADR-0052 option F: `cite_skills::gripper_is_holding` judges a stall against the
+# width of the parts this facility handles rather than against the width it
+# commanded. The band is an end-effector property and travels on the gripper
+# channel above; the interval is a FACILITY fact and is stated once per zone in
+# the plan's own `plan:` block. Every key on the gripper tuple is sourced from
+# the end-effector type, and a part width is not a property of an end effector.
+
+
+def test_the_generated_plan_states_the_work_piece_interval() -> None:
+    plan = load(_generated())
+    assert plan.workpieces is not None, (
+        "the generated plan states no `workpieces:` block, so no skill server would "
+        "be told what a stall is judged against (ADR-0052 §A.4)"
+    )
+    assert plan.workpieces.narrowest_width_m > 0.0
+    assert plan.workpieces.widest_width_m >= plan.workpieces.narrowest_width_m
+
+
+def test_the_interval_is_one_per_zone_and_not_one_per_manager(document: dict) -> None:
+    """Where it is stated is the decision, so where it is NOT is worth pinning."""
+    assert "workpieces" in document["plan"]
+    for manager in document["plan"]["controller_managers"]:
+        assert not [key for key in manager if "workpiece" in key], (
+            f"{manager['asset']}'s block carries a work-piece width. It is a fact "
+            f"about the facility, and a tuple named for the gripper carrying one is "
+            f"how a name stops meaning anything"
+        )
+
+
+def test_a_plan_without_the_interval_loads_and_says_none(tmp_path: Path, document: dict) -> None:
+    """Absent is a real state, and it is `None` rather than a manufactured width.
+
+    A facility that grasps nothing has no predicate to configure. Where the
+    absence IS a fault it is a fault at L0, and
+    `workpiece-width-unstated-for-a-grasping-facility` refuses the model before a
+    plan is generated at all — so defaulting a width here would put a number the
+    model never stated inside the predicate.
+    """
+    del document["plan"]["workpieces"]
+    assert load(_written(tmp_path, document)).workpieces is None
+
+
+def test_a_half_stated_interval_is_refused(tmp_path: Path, document: dict) -> None:
+    """A window with one edge is not a window.
+
+    Defaulting the missing edge from the stated one would make L3 admit every
+    stall above the narrow edge, which is the option ADR-0052 rejects, reached by
+    omission rather than by decision.
+    """
+    for key in ("narrowest_width_m", "widest_width_m"):
+        # Copied per iteration rather than mutated in place: with both edges gone
+        # the second pass would be asking about a document with NO interval, which
+        # `test_a_plan_without_the_interval_loads_and_says_none` says loads
+        # cleanly, so the refusal would be reported for the wrong reason.
+        one_edge_missing = copy.deepcopy(document)
+        del one_edge_missing["plan"]["workpieces"][key]
+        with pytest.raises(PlanError):
+            load(_written(tmp_path, one_edge_missing))
+
+
+def test_an_inverted_interval_is_refused(tmp_path: Path, document: dict) -> None:
+    """An empty window reports every grasp empty, which is silence at the point of use.
+
+    Refused here, where it names the pair, rather than at L3, where the symptom
+    is a cell that picks nothing up and says nothing about why.
+    """
+    document["plan"]["workpieces"]["widest_width_m"] = 0.01
+    with pytest.raises(PlanError, match="empty"):
+        load(_written(tmp_path, document))
+
+
+def test_a_zero_width_is_refused(tmp_path: Path, document: dict) -> None:
+    """Zero is not a width; it is the sentinel the skill server refuses on.
+
+    Letting it through here would open the predicate's window onto a fully closed
+    gripper, and the plan is where the pair is stated as a pair.
+    """
+    document["plan"]["workpieces"]["narrowest_width_m"] = 0.0
+    with pytest.raises(PlanError):
+        load(_written(tmp_path, document))
+
+
+def test_the_interval_reaches_the_skill_server_under_names_it_declares(
+) -> None:
+    """The same guard `GRIPPER_KEYS` gets, for the keys that do not travel with them.
+
+    `rclcpp` ignores an override for a parameter that was never declared: launch
+    accepts it, the node discards it, and neither says so. These two arrive by a
+    different route from the gripper keys and so are covered by no test that
+    walks that tuple.
+    """
+    source = SKILL_SERVER.read_text()
+    for key in ("workpiece_narrowest_width_m", "workpiece_widest_width_m"):
+        assert f'declare_parameter("{key}"' in source, (
+            f"{key} is delivered to the skill server and declared by it nowhere in "
+            f"{SKILL_SERVER.name}, so rclcpp drops it without a word"
+        )
+
+
+def test_workpieces_is_a_record_rather_than_a_pair_of_floats() -> None:
+    """Two numbers whose order decides the answer are not interchangeable.
+
+    Named fields rather than a tuple, so that a caller cannot silently swap them
+    — which produces an empty window and a cell that reports every grasp empty.
+    """
+    interval = Workpieces(narrowest_width_m=0.04, widest_width_m=0.05)
+    assert interval.narrowest_width_m == 0.04
+    assert interval.widest_width_m == 0.05
+
+
+def test_a_gripper_key_the_plan_omits_is_absent_rather_than_zero(
+    tmp_path: Path, document: dict
+) -> None:
+    """Omission must not become a value.
+
+    A zero manufactured here would be passed as a parameter and would override
+    the skill server's own declared default with a number the model never stated
+    — silently, and in the direction of a gripper that thinks it is fully open.
+    """
+    del document["plan"]["controller_managers"][0]["gripper_default_grasp_width_m"]
+    plan = load(_written(tmp_path, document))
+    assert "gripper_default_grasp_width_m" not in plan.controller_managers[0].gripper
+    assert "gripper_open_position" in plan.controller_managers[0].gripper
+
+
+# --- The arm values reach L3 by the same route, and need the same guards -----
+#
+# `ARM_KEYS` is `GRIPPER_KEYS`' younger sibling (ADR-0037) and arrived with none
+# of its guards. The three below are the gripper's three, applied to it. They
+# exist because of a defect that had already happened once: eight values were
+# delivered to a node that declared none of them, `rclcpp` dropped every one
+# without a word, and nothing noticed because the compiled defaults happened to
+# equal the L0 values — a P1 defect that worked because two copies agreed.
+#
+# `arm_goal_tolerance_rad` is in exactly that position. The skill server declares
+# it with a compiled default of 0.01 and L0 currently declares 0.01, so the day
+# the model changes and the delivery breaks, nothing downstream would tell the
+# difference. These are what tell the difference.
+
+
+def test_every_arm_key_the_plan_states_is_read(tmp_path: Path, document: dict) -> None:
+    """A key the plan states must reach the reader, with the plan's own value."""
+    plan = load(_written(tmp_path, document))
+    for manager, entry in zip(
+        plan.controller_managers, document["plan"]["controller_managers"]
+    ):
+        if manager.trajectory_action is None:
+            continue
+        stated = {key for key in ARM_KEYS if entry.get(key) is not None}
+        assert stated == set(manager.arm), (
+            f"{manager.asset}: the plan states {sorted(stated)} and the reader "
+            f"produced {sorted(manager.arm)}"
+        )
+        assert stated, f"{manager.asset} has a trajectory action and no arm values"
+        for key in stated:
+            assert manager.arm[key] == pytest.approx(float(entry[key])), key
+
+
+def test_every_arm_key_is_one_the_skill_server_declares() -> None:
+    """An undeclared key is delivered, dropped by rclcpp, and reported by nobody.
+
+    The same silence that hid `gripper_default_grasp_width_m` and seven linkage
+    dimensions. `arm_goal_tolerance_rad` is the threshold ADR-0037 classifies an
+    aborted motion against, so a delivery that is dropped leaves the classifier
+    judging against a compiled constant while the model says something else.
+    """
+    assert SKILL_SERVER.is_file(), f"the skill server's source is not at {SKILL_SERVER}"
+    source = SKILL_SERVER.read_text()
+    undeclared = [key for key in ARM_KEYS if f'declare_parameter("{key}"' not in source]
+    assert not undeclared, (
+        f"{sorted(undeclared)} are delivered to the skill server and declared by it "
+        f"nowhere in {SKILL_SERVER.name}, so rclcpp drops them without a word"
+    )
+
+
+def test_an_arm_key_the_plan_omits_is_absent_rather_than_zero(
+    tmp_path: Path, document: dict
+) -> None:
+    """Omission must not become a value.
+
+    A zero manufactured here would be passed as a parameter and would override
+    the skill server's declared default with a number the model never stated —
+    and `arm_goal_tolerance_rad` at zero makes every aborted motion classify as
+    MOTION_INTERRUPTED, which is the answer that blocks a station for an operator.
+    The server refuses a non-positive value on configure for that reason; this
+    keeps the plan from ever handing it one.
+    """
+    del document["plan"]["controller_managers"][0]["arm_goal_tolerance_rad"]
+    plan = load(_written(tmp_path, document))
+    assert "arm_goal_tolerance_rad" not in plan.controller_managers[0].arm
+    assert plan.controller_managers[1].arm["arm_goal_tolerance_rad"] > 0.0
+
+
+# --- The Gazebo transport partition -------------------------------------------
+#
+# `ROS_DOMAIN_ID` does not isolate Gazebo transport. Two `gz sim` servers in one
+# container on separate ROS domains were measured with two publishers on one
+# world's stats topic and two subscribers on one belt's command topic, so one
+# conveyor setpoint would have started both cells' belts — with nothing logged,
+# and with every ROS-side instrument this project has reporting clean isolation
+# at the same moment (ADR-0042). What kept the measured pairs apart was the
+# container hostname, which gz-transport derives its default partition from.
+#
+# These are the tests that make the replacement structural rather than
+# conventional. The defect is invisible at runtime and cannot occur at all on a
+# hardware side, so no amount of running the cell will surface it.
+
+
+def test_the_generated_plan_names_a_partitioned_side() -> None:
+    plan = load(_generated())
+    assert plan.sides
+    assert all(side.gz_partition for side in plan.sides)
+
+
+def test_the_partition_carried_by_the_environment_is_accepted() -> None:
+    side = load(_generated()).sides[0]
+    require_gz_partition(side, {GZ_PARTITION_ENV: side.gz_partition})
+
+
+def test_a_side_started_without_a_partition_is_refused() -> None:
+    side = load(_generated()).sides[0]
+    with pytest.raises(GazeboPartitionMissingError) as raised:
+        require_gz_partition(side, {})
+    message = str(raised.value)
+    assert GZ_PARTITION_ENV in message
+    # The refusal must name the value that was expected. "Partition missing"
+    # leaves the reader with nothing to set it to.
+    assert side.gz_partition in message
+
+
+def test_a_side_started_with_the_wrong_partition_is_refused() -> None:
+    # Not the same failure as an absent one, and worth its own answer: an
+    # exported GZ_PARTITION that disagrees with the plan puts the server
+    # somewhere the plan does not describe, which is how a developer debugging
+    # two sides in one shell would produce two cells on one transport.
+    side = load(_generated()).sides[0]
+    with pytest.raises(GazeboPartitionMissingError) as raised:
+        require_gz_partition(side, {GZ_PARTITION_ENV: "somewhere_else"})
+    assert "somewhere_else" in str(raised.value)
+
+
+def test_a_plan_with_no_sides_is_refused_rather_than_defaulted(
+    tmp_path: Path, document: dict
+) -> None:
+    # A plan generated before this existed, or hand-edited to remove the block.
+    # Defaulting a partition here would put the derivation in a second place,
+    # which is the failure the emission exists to prevent.
+    del document["plan"]["sides"]
+    with pytest.raises(GazeboPartitionMissingError, match="no `sides:`"):
+        load(_written(tmp_path, document))
+
+
+def test_a_side_with_an_empty_partition_is_refused(tmp_path: Path, document: dict) -> None:
+    document["plan"]["sides"][0]["gz_partition"] = "  "
+    with pytest.raises(GazeboPartitionMissingError, match="empty gz_partition"):
+        load(_written(tmp_path, document))
+
+
+def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
+    # The measured defect itself, written down. Two servers on one partition see
+    # each other's topics, and one belt command drives both cells.
+    #
+    # Built from the plant side alone, because the side appended below is the
+    # BROKEN one: on a checkout flipped to `pair` the generated plan already
+    # declares a counterpart, and a third side would be refused for its
+    # duplicated name before the shared partition was ever reached.
+    document = _solo_document()
+    shared = document["plan"]["sides"][0]["gz_partition"]
+    document["plan"]["sides"].append(
+        {"name": "counterpart", "gz_partition": shared, "domain_offset": 1}
+    )
+    with pytest.raises(GazeboPartitionMissingError, match="share the Gazebo partition"):
+        load(_written(tmp_path, document))
+
+
+def test_a_paired_plan_keeps_its_two_partitions_apart(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    assert [side.name for side in plan.sides] == ["plant", "counterpart"]
+    assert len({side.gz_partition for side in plan.sides}) == 2
+
+
+def test_the_partition_refusal_is_a_plan_error() -> None:
+    # simulation.launch.py catches PlanError and turns it into a message plus a
+    # Shutdown. A partition refusal that escaped as something else would surface
+    # as a traceback naming the launch machinery.
+    assert issubclass(GazeboPartitionMissingError, PlanError)
+
+
+def test_a_side_is_named_as_well_as_partitioned() -> None:
+    # The name is what a second side's launch will select on, and it comes from
+    # the plan rather than from whoever starts it.
+    side = load(_generated()).sides[0]
+    assert isinstance(side, Side)
+    assert side.name
+
+
+# --- A hardware backend on the counterpart side -------------------------------
+
+
+def _with_counterpart_backend(document: dict, backend: str) -> dict:
+    """Give every manager a counterpart backend, and one of them a different one.
+
+    Takes an already-paired document rather than pairing one itself, so that the
+    guard against a checkout flipped to `pair` lives in `_paired_document` and
+    nowhere else.
+    """
+    document = copy.deepcopy(document)
+    for manager in document["plan"]["controller_managers"]:
+        manager["counterpart_backend"] = "sim"
+        # A NAME-ONLY change: every side still declares that it commands nothing
+        # physical, which after ADR-0054 is what the gate reads.
+        manager["counterpart_commands_physical_hardware"] = False
+    document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
+    return document
+
+
+def _with_physical_counterpart(document: dict, backend: str = "real") -> dict:
+    """Pair the zone, and make one counterpart declare that it reaches a machine."""
+    document = _with_counterpart_backend(document, backend)
+    document["plan"]["controller_managers"][1][
+        "counterpart_commands_physical_hardware"
+    ] = True
+    return document
+
+
+def test_a_simulated_counterpart_needs_no_opt_in(tmp_path: Path) -> None:
+    # Phase 2.A: both sides simulated, so nothing is gated and the gate must not
+    # fire on the mere presence of a counterpart.
+    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "sim")))
+    require_hardware_opt_in(plan, {})
+
+
+def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) -> None:
+    # This is Phase 2.B arriving. A backend is selected per (asset, side), so a
+    # gate that read only the plant would let the far side become physical
+    # without ever looking at it (ADR-0041, Decision 2).
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
+    with pytest.raises(HardwareNotPermittedError) as raised:
+        require_hardware_opt_in(plan, {})
+    message = str(raised.value)
+    assert "arm_2" in message
+    assert "counterpart_commands_physical_hardware" in message
+    assert HARDWARE_OPT_IN_ENV in message
+
+
+def test_a_physical_counterpart_starts_with_the_opt_in(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
+
+
+def test_a_counterpart_of_any_name_declaring_no_hardware_is_permitted(
+    tmp_path: Path,
+) -> None:
+    """The far side's NAME decides nothing either, in both directions.
+
+    This used to assert the opposite - that `mock_components` on the counterpart
+    was refused as "a backend nobody anticipated". ADR-0054's Context measures
+    what that allowlist-over-names was worth: it also permitted the vendor's
+    physical component named `sim`. What is refused now is the declaration, and
+    a mock far side that declares nothing physical is not hardware.
+    """
+    plan = load(
+        _written(
+            tmp_path, _with_counterpart_backend(_paired_document(), "mock_components")
+        )
+    )
+    require_hardware_opt_in(plan, {})
+    physical = _with_physical_counterpart(_paired_document(), "mock_components")
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(load(_written(tmp_path, physical)), {})
+
+
+def test_an_untwinned_plan_states_no_counterpart_backend(tmp_path: Path) -> None:
+    # `None` here means "there is no such side", never "the model left the key
+    # out": the generator writes the key for every asset of a paired zone and for
+    # none of an untwinned one.
+    #
+    # Driven against a plan written here rather than the generated one, because
+    # the question is about an UNTWINNED zone and a checkout flipped to `pair`
+    # for a run generates exactly the key this asserts is absent.
+    plan = load(_written(tmp_path, _solo_document()))
+    assert all(m.counterpart_backend is None for m in plan.controller_managers)
+
+
+# --- (asset, side) -> backend, asked once ------------------------------------
+#
+# `ControllerManager.backend_on` is the one place in cite_bringup that turns a
+# side into a backend. It exists because the map was open-coded where it was
+# needed - once in `require_hardware_opt_in` - and Phase 2.B needs it in more
+# places than one; two copies of it disagree on the day a side stops being
+# simulated, which is the day nobody wants to find out.
+
+
+def test_the_plant_backend_is_reached_by_side_name(tmp_path: Path, document: dict) -> None:
+    plan = load(_written(tmp_path, document))
+    for manager in plan.controller_managers:
+        assert manager.backend_on(PLANT_SIDE) == manager.backend
+
+
+def test_each_side_is_answered_with_its_own_backend(tmp_path: Path) -> None:
+    """Two fields, two answers, and the difference is the whole point.
+
+    Driven against a document whose sides DIFFER, so an accessor that returned
+    `self.backend` for both would pass every other test in this file and fail
+    here. That is the mutation this test is registered against, and it is the
+    same shape as `test_the_refusal_is_keyed_on_difference_rather_than_on_a_
+    physical_backend` uses one layer up.
+
+    A divergent pair is refused at L0 today (ADR-0048 clause 1) and is exactly
+    what clause 2 will emit, so the accessor is asked the question before the
+    model can pose it - which is the order that keeps the answer honest.
+    """
+    plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
+    divergent = [
+        manager
+        for manager in plan.controller_managers
+        if manager.backend_on(COUNTERPART_SIDE) != manager.backend_on(PLANT_SIDE)
+    ]
+    assert [manager.asset for manager in divergent] == ["arm_2"], (
+        "the fixture puts one asset's counterpart on a different backend; an "
+        "accessor reading one field for both sides reports none"
+    )
+    assert divergent[0].backend_on(PLANT_SIDE) == "sim"
+    assert divergent[0].backend_on(COUNTERPART_SIDE) == "real"
+
+
+def test_asking_an_untwinned_asset_for_its_counterpart_backend_says_so(
+    tmp_path: Path,
+) -> None:
+    """`None` is not an answer this accessor gives.
+
+    An untwinned zone has no counterpart, so "what does the counterpart load" has
+    no value - and a caller handed `None` has to decide what it means, which is
+    where one of them reads "no side" as "simulated" and gates nothing. The same
+    refusal `Plan.side_named` gives for the same reason.
+    """
+    plan = load(_written(tmp_path, _solo_document()))
+    manager = plan.controller_managers[0]
+    with pytest.raises(SideNotDeclaredError, match="states no backend"):
+        manager.backend_on(COUNTERPART_SIDE)
+
+
+def test_a_side_the_plan_never_heard_of_is_refused(tmp_path: Path, document: dict) -> None:
+    # By identity and never by index: a name nobody declared is a question with
+    # no answer, not the first side that happens to be there.
+    plan = load(_written(tmp_path, document))
+    with pytest.raises(SideNotDeclaredError, match="somewhere_else"):
+        plan.controller_managers[0].backend_on("somewhere_else")
+
+
+def test_the_hardware_gate_reads_through_the_accessor(tmp_path: Path) -> None:
+    """The refusal names the plan FIELD, and the accessor supplies the value.
+
+    Both halves matter and they are different halves. The message has always
+    named the key a reader would grep for, and `PHYSICAL_FIELD_BY_SIDE` is what
+    keeps that name attached to the side the value came from - so a gate that
+    started reading the wrong field could not go on printing the right one. The
+    field it names is now the DECLARATION, because that is what decides; the
+    backend id rides along as context (ADR-0054).
+    """
+    plan = load(_written(tmp_path, _with_physical_counterpart(_paired_document())))
+    with pytest.raises(HardwareNotPermittedError) as raised:
+        require_hardware_opt_in(plan, {})
+    message = str(raised.value)
+    assert "arm_2 (counterpart_commands_physical_hardware, backend 'real')" in message
+    assert (
+        plan.controller_managers[1].commands_physical_hardware_on(COUNTERPART_SIDE)
+        is True
+    )
+
+
+def test_the_two_side_maps_declare_the_same_sides() -> None:
+    """The one thing that can drift between `plan.py`'s two side-to-field maps.
+
+    They are not two copies of one value - each holds different plan-key names,
+    authored once - so deriving one from the other would buy nothing and would
+    make the counterpart's keys an artefact of a naming convention. What they may
+    not do is disagree about WHICH SIDES exist: `require_hardware_opt_in` walks
+    the physical map and reports through it, and asks `backend_on` for the same
+    side, so a side present in one and absent from the other is either a side
+    that is gated and cannot be named or one that is named and never gated.
+    """
+    assert set(PHYSICAL_FIELD_BY_SIDE) == set(BACKEND_FIELD_BY_SIDE) == {
+        PLANT_SIDE,
+        COUNTERPART_SIDE,
+    }
+
+
+def test_a_declared_side_no_asset_states_a_backend_for_is_refused(tmp_path: Path) -> None:
+    """A plan that disagrees with itself about whether a side exists.
+
+    The `sides:` block says `counterpart`; every controller manager is silent
+    about it. That document used to LOAD, and every gate downstream then agreed
+    with the wrong half: `Plan.side_named` handed out a side,
+    `backend_on(COUNTERPART_SIDE)` refused, and `require_hardware_opt_in` skipped
+    that side without gating it - so a side the plan declares would have gone
+    unasked whether it may reach a physical machine. Through L5 the same document
+    accepted a mode that commands it.
+
+    The generator cannot emit this, which is exactly why it is checked here: this
+    module reads documents the generator did not write. `backend_on`'s own
+    docstring promises `counterpart_backend is None` means *no counterpart*, never
+    *the key is missing*, and that promise is only true of every document that
+    loads if a document breaking it does not.
+    """
+    document = _solo_document()
+    document["plan"]["sides"].append(_counterpart())
+    with pytest.raises(SideNotDeclaredError) as raised:
+        load(_written(tmp_path, document))
+    message = str(raised.value)
+    assert COUNTERPART_SIDE in message
+    # Named assets, because a refusal that cannot say where to look sends its
+    # reader to the wrong half of the cell.
+    for asset in ("arm_1", "arm_2", "arm_3"):
+        assert repr(asset) in message, message
+    assert "counterpart_backend" in message
+
+
+def test_the_refusal_names_only_the_assets_that_are_silent(tmp_path: Path) -> None:
+    """One asset short is the shape a hand-edit actually takes.
+
+    Refusing while naming all three would send the reader to two entries that are
+    correct, which is the failure mode a refusal message exists to avoid.
+    """
+    document = _paired_document()
+    # Both counterpart keys go together, because the entry-level reader refuses
+    # one without the other before `Plan.load`'s cross-document check is reached
+    # (ADR-0054, decision 3). What is under test here is the LATTER: a manager
+    # silent about a side the plan declares.
+    document["plan"]["controller_managers"][1].pop("counterpart_backend")
+    document["plan"]["controller_managers"][1].pop(
+        "counterpart_commands_physical_hardware"
+    )
+    with pytest.raises(SideNotDeclaredError) as raised:
+        load(_written(tmp_path, document))
+    message = str(raised.value)
+    assert "'arm_2'" in message
+    assert "'arm_1'" not in message and "'arm_3'" not in message, message
+
+
+def test_a_solo_plan_is_not_refused_for_the_side_it_does_not_declare(
+    tmp_path: Path,
+) -> None:
+    """The other direction, since a refusal that fires on every plan is not one.
+
+    An untwinned zone declares one side and states one backend, and that is the
+    document every checkout in this repository ships. It must load.
+    """
+    plan = load(_written(tmp_path, _solo_document()))
+    assert [side.name for side in plan.sides] == [PLANT_SIDE]
+
+
+def test_the_gate_does_not_swallow_an_accessor_that_fails_some_other_way(
+    tmp_path: Path,
+) -> None:
+    """The `except SideNotDeclaredError` in the gate is narrow ON PURPOSE.
+
+    Skipping a side is right for exactly one reason - the asset states no backend
+    for it, so there is no machine behind it to command. Any OTHER failure of the
+    accessor is a broken reader, and swallowing it would ungate every side it
+    happened to touch while the launch went on reporting success. That is the
+    quiet direction, so it is the one that needs a test.
+
+    Registered against the mutation `except SideNotDeclaredError` ->
+    `except Exception`, which leaves the rest of this suite green.
+    """
+
+    class _BrokenManager:
+        asset = "arm_1"
+        backend = "real"
+        commands_physical_hardware = True
+
+        def commands_physical_hardware_on(self, side: str) -> bool:
+            raise ArithmeticError("the accessor is broken, not the side")
+
+        def backend_on(self, side: str) -> str:
+            raise ArithmeticError("the accessor is broken, not the side")
+
+    class _PlanWithOne:
+        controller_managers = (_BrokenManager(),)
+
+    with pytest.raises(ArithmeticError, match="the accessor is broken"):
+        require_hardware_opt_in(_PlanWithOne(), {})
+
+
+# --- The ROS domain, and why the plan carries half of one ---------------------
+#
+# The other isolation, and neither substitutes for the other. `GZ_PARTITION` is a
+# gz-transport namespace that move_group, the controller managers, the skill
+# servers and the coordinator have never heard of; `ROS_DOMAIN_ID` was measured
+# not to isolate the Gazebo transport at all (ADR-0042, ADR-0044 clause 2). Both
+# sides of a pair carry byte-identical names by rule, so a pair separated only by
+# partition puts two of every node, two /clock publishers and two identical frame
+# trees into one graph.
+#
+# The plan carries an OFFSET rather than a domain. An absolute value fails both
+# ways it could be derived: from the deployment it differs in every clone, which
+# breaks the byte-identity check ./scripts/validate-model performs on the
+# committed tree; from the model it is identical everywhere, so two checkouts of
+# one commit resolve the same domain and discover each other.
+
+
+def test_the_generated_plan_gives_its_side_a_domain_offset() -> None:
+    plan = load(_generated())
+    assert plan.side_named(PLANT_SIDE).domain_offset == 0
+
+
+def test_the_plant_is_reached_by_name_rather_than_by_position() -> None:
+    # The property that replaces `plan.sides[0]`. Positional meaning is not
+    # reviewable, and a plan addressed by index is one reordering away from
+    # handing a caller the counterpart's environment while calling it the plant.
+    plan = load(_generated())
+    assert plan.side_named(PLANT_SIDE).name == PLANT_SIDE
+
+
+def test_asking_an_untwinned_zone_for_its_counterpart_says_so(tmp_path: Path) -> None:
+    # Rather than an IndexError from `sides[1]`, which names the list instead of
+    # the fact: whether a zone runs as a pair is an L0 fact, and the refusal
+    # points at the model rather than at bring-up.
+    #
+    # Written here rather than read from the generated plan: the question is
+    # about an untwinned zone, and a paired checkout has the side it asks for.
+    plan = load(_written(tmp_path, _solo_document()))
+    with pytest.raises(SideNotDeclaredError, match="declares no side named"):
+        plan.side_named("counterpart")
+
+
+def test_a_missing_side_is_not_reported_as_a_domain_failure(tmp_path: Path) -> None:
+    # `gz.gz_environment` asks for a side in order to build a GZ_PARTITION, and
+    # answering it with "the ROS domain cannot be resolved" names the wrong
+    # isolation and sends a reader to the wrong half of ADR-0044. Both are
+    # PlanErrors, so the loader's contract is unchanged.
+    #
+    # Written here for the same reason as the test above: the side has to be
+    # missing, and on a paired checkout it is not.
+    plan = load(_written(tmp_path, _solo_document()))
+    with pytest.raises(PlanError):
+        plan.side_named("counterpart")
+    assert not issubclass(SideNotDeclaredError, DomainUnresolvedError)
+
+
+def test_a_side_with_no_domain_offset_is_refused_rather_than_defaulted(
+    tmp_path: Path, document: dict
+) -> None:
+    # Defaulting one here would put the derivation in a second place, which is
+    # exactly the failure emitting it exists to prevent.
+    del document["plan"]["sides"][0]["domain_offset"]
+    with pytest.raises(PlanError, match="domain_offset"):
+        load(_written(tmp_path, document))
+
+
+def test_a_boolean_domain_offset_is_refused(tmp_path: Path, document: dict) -> None:
+    # `bool` is an `int` in Python, so `True` would otherwise be accepted and
+    # resolve to the counterpart's domain.
+    document["plan"]["sides"][0]["domain_offset"] = True
+    with pytest.raises(DomainUnresolvedError, match="whole number"):
+        load(_written(tmp_path, document))
+
+
+def test_a_plan_with_no_plant_is_refused(tmp_path: Path, document: dict) -> None:
+    document["plan"]["sides"][0]["name"] = "somewhere_else"
+    with pytest.raises(SideNotDeclaredError, match="no side is named"):
+        load(_written(tmp_path, document))
+
+
+def test_a_plant_at_a_non_zero_offset_is_refused(tmp_path: Path, document: dict) -> None:
+    # Offset 0 is what makes an untwinned zone resolve to the domain the checkout
+    # already uses, so nothing in Phase 1 moves. A plant anywhere else moves
+    # every existing script off the cell it launched.
+    document["plan"]["sides"][0]["domain_offset"] = 3
+    with pytest.raises(DomainUnresolvedError, match="rather than 0"):
+        load(_written(tmp_path, document))
+
+
+def _counterpart(offset: int = 1) -> dict:
+    """Return a second side, as a paired zone's generated plan would state it."""
+    return {
+        "name": "counterpart",
+        "gz_partition": "cite/cell_a/counterpart",
+        "domain_offset": offset,
+    }
+
+
+def _paired_document() -> dict:
+    """Return the generated plan paired, adding a counterpart only if it has none.
+
+    Built from whatever the generated plan declares rather than assuming it is
+    `single`. **A checkout flipped to `twin: {sides: pair}` for a run is a real
+    state** — it is how a pair is brought up at all — and on such a checkout a
+    fixture that appends unconditionally produces two sides named `counterpart`,
+    so the test fails on its own fixture rather than on what it is asking about.
+    The same shape as `_paired` in `test_simulation_launch.py` and `_paired_plan`
+    in `test_pair.py`.
+
+    **All three of the things pairing adds, not one.** `_solo_document` below
+    removes the counterpart's `sides:` entry AND both counterpart keys on every
+    controller manager, because those are the three things a paired zone's plan
+    carries. Adding only the first here would leave a document no generator emits
+    - two sides, with every asset silent about what the second one loads - so
+    every test taking the paired half of the `document` fixture would be asking
+    about that instead of about a pair.
+    """
+    document = _live_document()
+    sides = document["plan"]["sides"]
+    if not any(side["name"] == COUNTERPART_SIDE for side in sides):
+        sides.append(_counterpart())
+    for manager in document["plan"]["controller_managers"]:
+        # The fallback ADR-0041 Decision 3 applies in the generator: an instance
+        # that writes no `counterpart_backend` in L0 loads the same plugin on both
+        # sides, so the plan states the backend of every side that exists.
+        manager.setdefault("counterpart_backend", manager["backend"])
+        # Emitted exactly where the backend is, and by the same fallback: the
+        # counterpart loads the plant's plugin, so it declares the plant's fact.
+        manager.setdefault(
+            "counterpart_commands_physical_hardware",
+            manager["commands_physical_hardware"],
+        )
+    return document
+
+
+def _solo_document() -> dict:
+    """Return the generated plan as an UNTWINNED zone generates it.
+
+    The other half of the same hazard: a test about an untwinned zone read the
+    live plan, so it asserted the opposite of what a paired checkout declares.
+
+    THREE things go, because pairing adds exactly three things to this plan: the
+    counterpart's `sides:` entry, a `counterpart_backend` on every controller
+    manager, and — since ADR-0054 — the `counterpart_commands_physical_hardware`
+    emitted beside it. Dropping only some of them would leave a document no
+    generator emits — a zone with one side that still states what its second side
+    loads, or whether that side reaches a machine — and a test written against it
+    would be asking about nothing.
+
+    **The count was two until 2026-09-09 and the third key was not popped**,
+    which is that same defect in this helper rather than in a test: on a checkout
+    flipped to `pair` the solo half of the `document` fixture produced exactly
+    such a document and 35 tests failed on their fixture.
+
+    The two manager keys are taken from `plan.py`'s own side-to-field maps rather
+    than spelled here, so this helper cannot name a key the reader has stopped
+    parsing, or miss one it has started (P1).
+    """
+    document = _live_document()
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
+    ]
+    for manager in document["plan"]["controller_managers"]:
+        for field in _COUNTERPART_MANAGER_KEYS:
+            manager.pop(field, None)
+    return document
+
+
+def test_only_the_two_shape_helpers_read_the_live_plan() -> None:
+    """The fixture hazard, closed by construction rather than by remembering.
+
+    `_live_document` returns whatever shape this checkout's L0 model declares, so
+    a test that calls it is asserting about the model that happens to be
+    committed. Fourteen tests here did, and on a checkout flipped to
+    `twin: {sides: pair}` all fourteen failed on their own fixture rather than on
+    what they were asking about (open-work #40).
+
+    Reading the source rather than the behaviour, because that is the only way to
+    catch the NEXT one: a test added on a `single` checkout that calls it passes
+    on every machine anybody runs, and says nothing until someone pairs a zone.
+    """
+    tree = _this_module()
+    calls = _calls_to(tree, _LIVE_READER)
+    callers = _enclosing_functions(tree, calls)
+    # Parsed rather than grepped, because a guard that counts a string counts its
+    # own message and passes or fails for that reason alone.
+    assert callers == set(_SHAPE_HELPERS) and len(calls) == len(_SHAPE_HELPERS), (
+        f"the live plan is read by {sorted(callers)} in {len(calls)} place(s); it "
+        f"must be read by exactly {sorted(_SHAPE_HELPERS)}. A test that reads it "
+        "asserts about whichever model this checkout carries - take the `document` "
+        "fixture, which runs both shapes, or one shape helper by name where the "
+        "shape is the question"
+    )
+    # The NAME and not only the call, because `_ALIAS = _live_document` followed
+    # by `_ALIAS()` reaches the same document with the clause above green: the
+    # call it makes names `_ALIAS`. Demonstrated, on 2026-09-09, against the
+    # clause above alone.
+    mentions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _LIVE_READER
+        and isinstance(node.ctx, ast.Load)
+    ]
+    borrowed = [
+        node
+        for node in mentions
+        if _enclosing_functions(tree, [node]) - set(_SHAPE_HELPERS)
+        or not _enclosing_functions(tree, [node])
+    ]
+    assert not borrowed, (
+        f"{_LIVE_READER!r} is named outside {sorted(_SHAPE_HELPERS)} at "
+        f"{_named_or_module_scope(tree, borrowed)}; binding it to another name "
+        "reaches the live document with the caller check above still green"
+    )
+
+
+def test_nothing_reaches_the_live_plan_around_that_reader() -> None:
+    """The same hazard one layer down, where the guard above does not reach.
+
+    `_live_document`'s whole body is `yaml.safe_load(_generated().read_text())`,
+    and `_generated` is a module-level accessor with two dozen callers. So a test
+    that spells that one line itself gets the live document with the guard above
+    green - and on a `single` checkout it passes for everyone, breaking only for
+    whoever flips a zone to `pair`, which is open-work #40 verbatim. That bypass
+    was written and demonstrated before this test existed.
+
+    Guarded by SHAPE rather than by caller, because most of those callers are
+    legitimate: `load(_generated())` returns a `Plan`, which has no `sides` list
+    to append to and no keys to pop. So outside `_live_document` a call to the
+    accessor must be the direct argument of `load`, and the URI constant beneath
+    it may be read nowhere but the accessor - otherwise
+    `Path(resolve_uri(GENERATED_PLAN))` is the same reach with one more step.
+
+    Asked TOTALLY rather than as a subset, via `_not_owned_by`: every offending
+    node must name `_live_document` itself. Written as
+    `_enclosing_functions(tree, loose) <= {_LIVE_READER}` this guard passed a
+    module-level read of the live plan, because a node at module scope is inside
+    no function and contributes no name to the set - so both halves of the
+    subset form held for a bypass that was demonstrated here. The sibling guard
+    above never had that hole, and not by design: its `len(calls)` clause counts
+    a call the caller set cannot attribute.
+    """
+    tree = _this_module()
+
+    handed_straight_to_the_loader = {
+        argument
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == _PLAN_LOADER
+        for argument in node.args
+        if isinstance(argument, ast.Call)
+        and isinstance(argument.func, ast.Name)
+        and argument.func.id == _PLAN_PATH_READER
+    }
+    loose = [
+        call for call in _calls_to(tree, _PLAN_PATH_READER)
+        if call not in handed_straight_to_the_loader
+    ]
+    stray = _not_owned_by(tree, loose, _LIVE_READER)
+    assert not stray, (
+        f"{_PLAN_PATH_READER}() is called outside `load(...)` by "
+        f"{_named_or_module_scope(tree, stray)}; only {_LIVE_READER!r} may "
+        "do that. Reading the generated plan's text yourself gives you whichever "
+        "shape this checkout's model declares, which is the hazard "
+        f"{_LIVE_READER!r} exists to contain - take the `document` fixture, or "
+        f"{_PLAN_LOADER}({_PLAN_PATH_READER}()) where a `Plan` is what you want"
+    )
+
+    # The accessor's NAME and not only its call, the clause its sibling above has
+    # had since 2026-09-09 and this guard did not: `_ACCESSOR = _generated`
+    # followed by `yaml.safe_load(_ACCESSOR().read_text())` reaches the live plan
+    # with every clause here green, because the call it makes names `_ACCESSOR`.
+    # Demonstrated on 2026-09-10, passing the full 160-test suite.
+    #
+    # Written as "may only be the callee of a call" rather than as a caller list,
+    # because two dozen legitimate `load(_generated())` sites name it. Handing the
+    # function object to anything - an alias, an argument, a decorator - is what
+    # is barred, and that is exactly the shape the alias bypass needs.
+    handed_around = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _PLAN_PATH_READER
+        and isinstance(node.ctx, ast.Load)
+        and not any(
+            isinstance(call, ast.Call) and call.func is node
+            for call in ast.walk(tree)
+        )
+    ]
+    assert not handed_around, (
+        f"{_PLAN_PATH_READER!r} is passed around as a value by "
+        f"{_named_or_module_scope(tree, handed_around)} rather than called; "
+        "binding it to another name reaches the live plan with the shape check "
+        "above still green"
+    )
+
+    reads_of_the_uri = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == _PLAN_URI
+        and isinstance(node.ctx, ast.Load)
+    ]
+    elsewhere = _not_owned_by(tree, reads_of_the_uri, _PLAN_PATH_READER)
+    assert reads_of_the_uri and not elsewhere, (
+        f"{_PLAN_URI} is read by "
+        f"{_named_or_module_scope(tree, elsewhere)}; only "
+        f"{_PLAN_PATH_READER!r} may resolve it. Resolving the URI yourself walks "
+        "around both guards above and lands on the same live document"
+    )
+
+
+def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> None:
+    """The two reaches the guards above are written against a call shape to miss.
+
+    Both were written and demonstrated on 2026-09-09, each passing every other
+    guard in this file.
+
+    **The namespace spelling.** `globals().get("_live_document")()` calls the
+    reader through a string, so `_calls_to` - which matches a call whose `func`
+    is a `Name` - sees nothing, and the name guard sees nothing either because
+    the name is now a `Constant`. The three builtins that make that possible have
+    no use here, so they are barred rather than shape-checked.
+
+    **The literal spelling.** `Path(resolve_uri("package://..."))` written out is
+    the same reach as `Path(resolve_uri(GENERATED_PLAN))` with the constant
+    guard green, because the constant is never named. So the URI's own text may
+    appear exactly once in this file, where the constant is bound.
+
+    **The dynamic spelling**, added 2026-09-10. `eval("_live_document()")` never
+    produces a `Name` node for the reader at all, so every guard here is blind to
+    it; it was demonstrated passing all 160 tests. `eval`, `exec` and
+    `__import__` are barred alongside the three namespace builtins, for the same
+    reason and on separate terms - see `_DYNAMIC_EVALUATORS`.
+
+    **WHAT THIS FILE'S GUARDS STILL DO NOT CLOSE, IN FULL.** This block named one
+    residual while three more stood, two of them the same class as bypasses it
+    said it had closed; all three were driven green on 2026-09-10 and are now
+    shut. What is left is stated here so the count cannot go stale again:
+
+    1. `getattr(sys.modules[__name__], "_live_document")()`. `getattr` is used
+       twice in this file on AST nodes and on a dataclass, so it cannot be
+       barred outright the way the six builtins above are. Open, and known.
+    2. A resolution of the generated share directory that never goes through
+       `resolve_uri` at all - importing `ament_index_python` here, or walking up
+       from `__file__` to `workspace/src/cite_generated`. Every guard above is
+       written against the two routes this module actually holds; a new import
+       is a third, and nothing here refuses one.
+
+    A guard that claimed more than that would be the overclaim these guards keep
+    catching.
+
+    The URI is taken **out of the parsed tree**, from the assignment that binds
+    the constant, rather than by naming `GENERATED_PLAN` here or by writing the
+    string a second time. Both alternatives are barred by the guards above and by
+    this one respectively - and the first is not a formality: written as a plain
+    read of the constant, this guard fails
+    `test_nothing_reaches_the_live_plan_around_that_reader`, which is that guard
+    working.
+    """
+    tree = _this_module()
+
+    dynamic = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in _NAMESPACE_ACCESSORS + _DYNAMIC_EVALUATORS
+    ]
+    assert not dynamic, (
+        f"{sorted({node.func.id for node in dynamic})} is called by "
+        f"{_named_or_module_scope(tree, dynamic)}; these turn this module's "
+        "namespace into a dictionary, or a string into code, so a guarded name "
+        "becomes something every guard in this file is blind to. Call what you "
+        "mean by name"
+    )
+
+    bound = next(
+        node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == _PLAN_URI
+            for target in node.targets
+        )
+    )
+    assert isinstance(bound, ast.Constant), (
+        f"{_PLAN_URI} is no longer bound to a literal, so this guard cannot read "
+        "the URI out of the tree; give it the new shape rather than deleting it"
+    )
+    spellings = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and node.value == bound.value
+    ]
+    assert len(spellings) == 1, (
+        f"the generated plan's URI is written out at line(s) "
+        f"{sorted(node.lineno for node in spellings)}; it may appear only where "
+        f"{_PLAN_URI} is bound. Spelling it again resolves the live plan without "
+        f"naming the constant, which is the reach {_PLAN_PATH_READER!r} exists "
+        "to be the only holder of"
+    )
+
+    # And the same reach with the string ARITHMETIC that walks past the clause
+    # above: `resolve_uri("package://cite_generated/bringup/" + "cell_a_plan.yaml")`
+    # is a `BinOp`, so no `ast.Constant` in this file equals the URI and the
+    # count stays at one. Demonstrated on 2026-09-10, passing the full suite.
+    #
+    # Closed by refusing the SHAPE rather than by evaluating the string, which is
+    # the only version of this that cannot overclaim: outside the accessor,
+    # `resolve_uri` may be handed a literal and nothing else. A literal is
+    # something the clause above can see; anything computed is not. Adjacent
+    # string literals are folded by the parser into one `ast.Constant`, so the
+    # implicit-concatenation spelling is caught by that clause and not by this
+    # one.
+    computed = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == _URI_RESOLVER
+        and not all(isinstance(argument, ast.Constant) for argument in node.args)
+    ]
+    stray_resolution = _not_owned_by(tree, computed, _PLAN_PATH_READER)
+    assert not stray_resolution, (
+        f"{_URI_RESOLVER}() is called on a COMPUTED value by "
+        f"{_named_or_module_scope(tree, stray_resolution)}; outside "
+        f"{_PLAN_PATH_READER!r} it may only be handed a literal, which is what "
+        "makes the single-spelling check above able to see what is being "
+        "resolved. Building the URI from parts resolves the live plan with every "
+        "other guard in this file green"
+    )
+
+
+def test_two_sides_sharing_one_domain_offset_are_refused(tmp_path: Path) -> None:
+    # The ROS-graph twin of two sides sharing a partition, refused in the same
+    # place so that a side cannot carry one isolation and not the other.
+    #
+    # From the plant side alone, for the reason given at
+    # `test_two_sides_sharing_one_partition_are_refused`: the appended side is
+    # the broken one, and a paired checkout would refuse its name first.
+    document = _solo_document()
+    document["plan"]["sides"].append(_counterpart(offset=0))
+    with pytest.raises(DomainUnresolvedError, match="share the domain offset"):
+        load(_written(tmp_path, document))
+
+
+def test_the_resolver_adds_the_base_to_the_side_offset(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    assert resolve_domain_id(plan, PLANT_SIDE, 41) == 41
+    assert resolve_domain_id(plan, "counterpart", 41) == 42
+
+
+def test_the_two_sides_of_a_pair_never_resolve_to_one_domain(tmp_path: Path) -> None:
+    # The clause reduces to this inequality, and it holds for every base rather
+    # than for a chosen one.
+    plan = load(_written(tmp_path, _paired_document()))
+    # Every base a pair may legally take, not a chosen one. The upper end is 100
+    # rather than 101 because the counterpart sits above the plant and both must
+    # land inside the band; a base of 101 is refused by the test below rather
+    # than silently producing 102.
+    for base in range(DOMAIN_BAND.start, DOMAIN_BAND.stop - 1):
+        plant = resolve_domain_id(plan, PLANT_SIDE, base)
+        assert plant != resolve_domain_id(plan, "counterpart", base)
+
+
+def test_an_untwinned_zone_resolves_to_exactly_the_base() -> None:
+    # Nothing in Phase 1 moves. This is the regression that says so.
+    plan = load(_generated())
+    for base in (1, 42, 99):
+        assert resolve_domain_id(plan, PLANT_SIDE, base) == base
+
+
+def test_the_base_travels_on_its_own_channel() -> None:
+    assert domain_base({DOMAIN_BASE_ENV: "7"}) == 7
+
+
+def test_an_unset_base_is_refused_rather_than_read_from_the_ambient_domain() -> None:
+    """The refusal that is not the tautology `env == env + 0`.
+
+    If the base were read from `ROS_DOMAIN_ID` in the process's own environment,
+    then for the plant - at offset 0 - the base would be the value under test,
+    and any check comparing them would pass for every possible value including a
+    wrong one. Only the counterpart's half would have had teeth, and a green
+    result would have been read as covering both sides (ADR-0044, clause 4). So
+    an absent base is refused here rather than defaulted, and the presence of the
+    ambient domain does not satisfy it.
+    """
+    with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
+        domain_base({DOMAIN_ENV: "42"})
+
+
+def test_a_base_that_is_not_a_number_is_refused() -> None:
+    with pytest.raises(DomainUnresolvedError, match="whole number"):
+        domain_base({DOMAIN_BASE_ENV: "plant"})
+
+
+def test_a_negative_base_is_refused() -> None:
+    # The branch existed and nothing reached it. `int("-1")` succeeds, so without
+    # this the only thing standing between `CITE_DOMAIN_BASE=-1` and a resolved
+    # domain of -1 was an untested line.
+    with pytest.raises(DomainUnresolvedError, match="negative"):
+        domain_base({DOMAIN_BASE_ENV: "-1"})
+
+
+# --- The band, enforced where the absolute value is formed --------------------
+#
+# `cite_domain_id` allocates an odd base so that `base + 1` stays inside the
+# band, and that guarantee covers a DERIVED base only. An explicit
+# CITE_DOMAIN_BASE or ROS_DOMAIN_ID goes straight past it, which is how the
+# `101 + 1 = 102` edge ADR-0044 clause 4 eliminates stayed reachable.
+
+
+def test_a_hand_set_base_cannot_resolve_a_counterpart_past_the_band(
+    tmp_path: Path,
+) -> None:
+    # The edge itself: base 101 is a legal plant and an illegal pair.
+    plan = load(_written(tmp_path, _paired_document()))
+    assert resolve_domain_id(plan, PLANT_SIDE, 101) == 101
+    with pytest.raises(DomainUnresolvedError, match="outside 1..101"):
+        resolve_domain_id(plan, "counterpart", 101)
+
+
+def test_the_refusal_names_the_base_rather_than_only_the_result() -> None:
+    # A resolved domain outside the band is a mis-set base, so the message has to
+    # point at the thing a reader can change.
+    plan = load(_generated())
+    with pytest.raises(DomainUnresolvedError, match=f"base is 0, from {DOMAIN_BASE_ENV}"):
+        resolve_domain_id(plan, PLANT_SIDE, 0)
+
+
+def test_the_ecosystem_default_is_not_a_domain_a_side_may_take() -> None:
+    # Domain 0 is what ./scripts/doctor fails the run on; resolving to it here
+    # would hand a side the value the whole mechanism exists to escape.
+    assert 0 not in DOMAIN_BAND
+    plan = load(_generated())
+    with pytest.raises(DomainUnresolvedError):
+        resolve_domain_id(plan, PLANT_SIDE, 0)
+
+
+def test_the_band_does_not_reach_the_private_domains_the_runtime_test_uses() -> None:
+    # `cite_runtime/test/test_shutdown_under_signal.py` draws a test's private
+    # domain from 215..232 precisely because no side of any checkout can be
+    # there. Admitting a cell into that range would take the disjointness away,
+    # so the two claims are pinned against each other from this side too.
+    assert not set(DOMAIN_BAND) & set(range(215, 233))
+
+
+def test_two_sides_with_the_same_name_are_refused(tmp_path: Path) -> None:
+    # `side_named` returns the first match and every caller believes it got the
+    # only one, so a duplicated name hands one caller a side and another caller a
+    # different side under the same word.
+    #
+    # From the plant side alone, for the reason the two tests above give. On a
+    # checkout flipped to `pair` the live plan already declares a counterpart, so
+    # appending a copy of the plant made THREE sides, and the refusal fired on a
+    # pair this test never meant to create. It passed either way, which is worse
+    # than failing: the assertion was right and the fixture was not (open-work
+    # #40).
+    document = _solo_document()
+    twin = dict(document["plan"]["sides"][0])
+    twin["gz_partition"] = "cite/cell_a/elsewhere"
+    twin["domain_offset"] = 1
+    document["plan"]["sides"].append(twin)
+    with pytest.raises(SideNotDeclaredError, match="two sides are named"):
+        load(_written(tmp_path, document))
+
+
+def test_a_hand_written_offset_beyond_the_sides_is_refused(tmp_path: Path) -> None:
+    # An offset is an index into the sides, not a number a reader may choose.
+    # `domain_offset: 200` loaded, and 200 resolves a counterpart far outside any
+    # band a side may occupy.
+    #
+    # From the plant side alone, so that the appended side is the only broken one
+    # and the refusal is the offset rather than a duplicated name.
+    document = _solo_document()
+    document["plan"]["sides"].append(_counterpart(offset=200))
+    with pytest.raises(DomainUnresolvedError, match="declares exactly 0, 1"):
+        load(_written(tmp_path, document))
+
+
+# --- The refusal ADR-0044 clause 4 owes ---------------------------------------
+#
+# `require_gz_partition` one isolation over, and the pair of them is one rule: a
+# process belonging to a side carries both. These tests exist to hold the half
+# that is easy to get wrong. A refusal that read its base out of `ROS_DOMAIN_ID`
+# would reduce, for the plant at offset 0, to `env == env + 0` — green for every
+# possible value, including a wrong one — and would have been read as covering
+# both sides. So the plant's half is tested for teeth explicitly, and not only
+# the counterpart's.
+
+
+def test_a_side_on_the_domain_the_plan_resolves_for_it_is_accepted() -> None:
+    plan = load(_generated())
+    require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "42"})
+
+
+def test_a_counterpart_on_the_base_plus_one_is_accepted(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
+
+
+def test_the_plants_half_of_the_refusal_can_fail() -> None:
+    """The test this whole block exists for.
+
+    Base and carried domain are independently sourced, so a plant started on a
+    domain that is not its base is refused. Had the base been read from
+    `ROS_DOMAIN_ID` this case would be unreachable and the check would have had
+    teeth on one side of a pair only (ADR-0044, clause 4).
+    """
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError) as raised:
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
+    message = str(raised.value)
+    # The refusal names both numbers. "Wrong domain" leaves a reader with nothing
+    # to set it to, which is the failure `require_gz_partition` was written to
+    # avoid one isolation over.
+    assert "43" in message and "42" in message
+
+
+def test_a_counterpart_started_on_the_plants_domain_is_refused(tmp_path: Path) -> None:
+    # The collision that matters: both sides carry byte-identical names by rule,
+    # so a counterpart on the plant's domain is two identical node sets and two
+    # /clock publishers in one graph, reported by nothing.
+    plan = load(_written(tmp_path, _paired_document()))
+    with pytest.raises(RosDomainMismatchError, match="byte-identical names"):
+        require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "42"})
+
+
+def test_a_side_started_with_no_domain_at_all_is_refused() -> None:
+    # Not defaulted to 0. Domain 0 is the ecosystem-wide default the whole
+    # mechanism exists to escape, and ./scripts/doctor already fails a run on it.
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError, match=DOMAIN_ENV):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42"})
+
+
+def test_a_side_started_with_a_malformed_domain_is_refused() -> None:
+    # ROS 2 does not refuse a non-numeric ROS_DOMAIN_ID; it falls back to the
+    # default domain, so the side comes up where nothing addresses it.
+    plan = load(_generated())
+    with pytest.raises(RosDomainMismatchError, match="whole number"):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "plant"})
+
+
+def test_a_side_with_no_base_is_refused_before_the_domain_is_compared() -> None:
+    # `domain_base` owns this refusal and `require_domain` does not repeat it, so
+    # a supervisor that sets a child's ROS_DOMAIN_ID and forgets CITE_DOMAIN_BASE
+    # is stopped rather than silently taking the ambient value as its base.
+    plan = load(_generated())
+    with pytest.raises(DomainUnresolvedError, match=DOMAIN_BASE_ENV):
+        require_domain(plan, PLANT_SIDE, {DOMAIN_ENV: "42"})
+
+
+def test_asking_an_untwinned_zone_for_a_counterpart_names_the_missing_side(
+    tmp_path: Path,
+) -> None:
+    # Not a domain failure. The side does not exist, and answering "the domain
+    # cannot be resolved" would send a reader to the wrong half of ADR-0044.
+    #
+    # Driven against a plan written here rather than the generated one, because
+    # the question is about an UNTWINNED zone and a checkout flipped to `pair`
+    # for a run declares a counterpart that exists.
+    plan = load(_written(tmp_path, _solo_document()))
+    with pytest.raises(SideNotDeclaredError):
+        require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})

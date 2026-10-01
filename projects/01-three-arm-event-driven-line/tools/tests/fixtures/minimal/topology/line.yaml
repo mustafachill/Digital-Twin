@@ -1,0 +1,12 @@
+---
+schema: cite/stations/v1
+stations:
+  - id: station_1
+    zone: cell_a
+    type: transfer_station
+    actor: arm_1
+    assets: [arm_1]
+  - id: station_sink
+    zone: cell_a
+    type: sink_station
+    capacity: 4

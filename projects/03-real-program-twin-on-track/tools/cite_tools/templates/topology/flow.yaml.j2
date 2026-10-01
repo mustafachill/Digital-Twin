@@ -1,0 +1,32 @@
+---
+{{ hash_banner() }}
+#
+# Process topology for L4. A station says what it is connected to, never what it
+# does — behaviour comes from behaviour trees, not from this file.
+topology:
+  zone: {{ cell.zone }}
+  flow: {{ flow_id }}
+  stations:
+{% for station in stations %}
+    - id: {{ station.id }}
+      type: {{ station.type }}
+      actor: {{ station.actor if station.actor else "null" }}
+      capacity: {{ station.capacity }}
+{% if station.pick_frame %}
+      pick_frame: {{ station.pick_frame }}
+{% endif %}
+{% if station.place_frame %}
+      place_frame: {{ station.place_frame }}
+{% endif %}
+{% if station.trigger_topic %}
+      trigger:
+        topic: {{ station.trigger_topic }}
+        state: {{ station.trigger_state }}
+{% endif %}
+      upstream: [{{ station.upstream | join(", ") }}]
+      downstream: [{{ station.downstream | join(", ") }}]
+{% endfor %}
+  edges:
+{% for edge in edges %}
+    - {from: {{ edge.from_station }}, to: {{ edge.to_station }}, via: {{ edge.via if edge.via else "null" }}, buffer: {{ edge.buffer }}}
+{% endfor %}

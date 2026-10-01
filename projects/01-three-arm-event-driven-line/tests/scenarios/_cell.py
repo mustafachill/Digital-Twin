@@ -1,0 +1,196 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""What every scenario has to work out about the cell it is pointed at.
+
+Two derivations lived in three places before this file existed: `cell()` was
+byte-identical in `bringup.py` and `pick_and_place.py` and inlined a third time
+in `continuous_line.py`, and the rule for finding the station that acts was
+written twice. Neither is obvious enough to be safe as a copy — see
+`acting_stations` below for why reading the station list in file order finds the
+wrong one — and a copy that drifts produces a scenario that drives a different
+station from the one it reports.
+
+The leading underscore keeps this out of `./scripts/scenario`'s listing and out
+of the guards' `scenario_paths()`: it is a helper, not a runnable scenario.
+
+NO ROS AT MODULE SCOPE, deliberately. `tests/scenarios/guards/` loads the
+scenario modules on a host with no ROS overlay, so anything they import at module
+level must import on that host too. `cell()` reaches into the built workspace and
+does its importing inside the function, which is the rule the scenarios already
+followed for the same reason.
+"""
+
+from __future__ import annotations
+
+import os
+import xml.etree.ElementTree as ElementTree
+from pathlib import Path
+
+#: The zone the scenarios drive when nothing says otherwise, stated ONCE for all
+#: three of them (ADR-0056 decision 5). It was a `ZONE = "cell_b"` literal in each
+#: scenario until this file existed: three statements of one fact, able to
+#: disagree silently, which is the shape CLAUDE.md §4 prohibits.
+#:
+#: `cell_a`, the three-arm cell Phase 1 closed on, is kept as a zone and is no
+#: longer driven by these scenarios — a deliberate reduction in regression
+#: coverage recorded in ADR-0056's consequences. ADR-0056 names "a cheap periodic
+#: `bringup` against `cell_a`" as the answer if the showcase is found broken, and
+#: `SELECTED_BY` below is what makes that a command rather than a commit:
+#: `./scripts/scenario bringup --zone cell_a`.
+DRIVEN_ZONE = "cell_a"
+
+#: Where `./scripts/scenario --zone` puts its answer. An environment variable
+#: rather than an argument because `launch_test` owns the scenario's argv and
+#: passes nothing of ours through it; `CITE_`-prefixed so that
+#: `exec_in_container` carries it into the container with the rest.
+SELECTED_BY = "CITE_SCENARIO_ZONE"
+
+
+def zone() -> str:
+    """Which cell this run drives.
+
+    **THIS FUNCTION reads the environment on every call; the SCENARIOS bind
+    `ZONE = zone()` once at module scope. Both are right, and the reason is that
+    they are answering for two different processes.**
+
+    A scenario process is handed its environment by `./scripts/scenario` before
+    it starts and it drives one cell from the first assertion to the last, so it
+    resolves the answer once — a scenario that re-read this per test could assert
+    against two cells in one run and report neither.
+
+    The guards are the other process. `tests/scenarios/guards/` imports these
+    modules on a host that runs no cell at all, and
+    `test_the_selected_zone_overrides_the_default` sets and unsets the variable
+    and expects a different answer each time. A module-level read here would
+    freeze whatever was set at import and make that unaskable — and then
+    `./scripts/scenario <name> --zone cell_a`, which is ADR-0056's own named
+    mitigation for a broken showcase, would be held up by nothing.
+
+    This docstring argued for the call-time read alone until 2026-09-17, which
+    read as an argument against what all three scenarios actually do.
+    """
+    return os.environ.get(SELECTED_BY) or DRIVEN_ZONE
+
+
+def cell(zone_id: str) -> tuple:
+    """The generated bring-up plan and process topology for ``zone_id``.
+
+    Imported inside the function, not at module scope: `cite_bringup` is a
+    workspace package and `plan.load` reads a file out of the built workspace,
+    which the ROS-free guards have no reason to require.
+    """
+    import yaml
+    from cite_bringup.plan import default_plan_path, load
+
+    plan = load(default_plan_path(zone_id))
+    return plan, yaml.safe_load(Path(plan.topology).read_text())["topology"]
+
+
+def acting_stations(topology: dict) -> list[dict]:
+    """Every station that picks and places, in flow order.
+
+    THE ORDER IS THE POINT, and it is why this is not a list comprehension at
+    each call site. The generated topology emits its stations ALPHABETICALLY, so
+    "the first station in the list that acts" finds whichever id sorts first —
+    in `cell_b` that is `b_accumulation`, the sink, which acts not at all, and in
+    `cell_a` the same sort puts `station_accumulation` first. Walking the edges
+    instead asks the flow rather than the spelling.
+    """
+    stations = {station["id"]: station for station in topology["stations"]}
+    ordered: list[dict] = []
+    for edge in topology["edges"]:
+        station = stations[edge["from"]]
+        if station.get("pick_frame") and station not in ordered:
+            ordered.append(station)
+    return ordered
+
+
+def acting_station(topology: dict) -> dict:
+    """The first station in flow order that picks and places.
+
+    What a one-arm cell has exactly one of, and a scenario driving a single arm
+    is asking for. Raises rather than returning None: a cell with nothing that
+    acts is a cell no scenario can drive, and that is a diagnosis, not a skip.
+    """
+    ordered = acting_stations(topology)
+    if not ordered:
+        raise ValueError(
+            f"the topology for zone {topology.get('zone')!r} declares no station with a "
+            "pick frame, so nothing in it picks and places and there is no arm for a "
+            "scenario to drive"
+        )
+    return ordered[0]
+
+
+def tie_the_work_piece_size(size_m: float) -> None:
+    """Check that a scenario and `cite_bringup.workpiece` mean one box.
+
+    A scenario's `WORKPIECE_SIZE` and `cite_bringup.workpiece.SIDE_M` are the
+    same quantity in two modules — the first is what the scenario measures
+    heights against, the second is what the spawned model is actually built from
+    — and a scenario cannot import the second at module scope. The guards load
+    those files on a host with no ROS, where `cite_bringup` is replaced by a
+    stub, so a module-level import would leave every guard computing with that
+    stub instead of with a number. `cite_bringup.workpiece` cannot state the
+    scenario's side either: it is a product package and must not import a test.
+
+    So the two are tied at run time instead, and this is that tie, written once
+    rather than once per scenario.
+
+    CALL IT FROM `setUpClass` AND NOWHERE ELSE. It was an assertion inside
+    `_spawn_workpiece` first, and the guards drive that method unbound against a
+    fabricated `self` — so it fired on the stub and replaced the diagnosis a
+    guard was reading with its own. A check that masks the failure standing next
+    to it is worse than no check. `setUpClass` is reached only by a real run,
+    where both values are real.
+
+    Imported inside the function for the reason the module docstring gives.
+    """
+    from cite_bringup.workpiece import SIDE_M
+
+    if size_m != SIDE_M:
+        raise AssertionError(
+            f"this scenario measures against a {size_m} m work-piece and "
+            f"cite_bringup.workpiece spawns a {SIDE_M} m one, so every height "
+            "assertion in it is about a different box from the one in the world"
+        )
+
+
+def world_root(world: Path) -> ElementTree.Element:
+    """The generated world, parsed. Plain XML, so no simulator is needed."""
+    return ElementTree.parse(world).getroot()
+
+
+def carried_models(world: Path) -> frozenset[str]:
+    """Every Gazebo model name the belts carry and the beams watch.
+
+    Both plugins match this set EXACTLY — `carried_.count(name->Data())` in
+    `conveyor.cpp`, `watched_.count(name->Data())` in `break_beam.cpp` — so a
+    part spawned under any other name rides through the cell untouched and
+    unseen. The intersection is taken rather than either list alone: a name a
+    belt carries but no beam watches would move and never be reported, and a
+    scenario that fed one would be testing a piece the line is blind to.
+
+    Here rather than in one scenario because BOTH scenarios that spawn a part
+    need it. `pick_and_place` carried `WORKPIECE = "workpiece"` under a comment
+    arguing that the name is a facility fact and not a cell one. That is true and
+    it is not the question: being facility-scoped does not stop it being a second
+    statement of `facility.workpiece_models`, which is exactly the value in two
+    places CLAUDE.md §4 prohibits. `continuous_line` already derived it.
+    """
+    root = world_root(world)
+    carried = {element.text.strip() for element in root.iter("carry") if element.text}
+    watched = {element.text.strip() for element in root.iter("watch") if element.text}
+    return frozenset(carried & watched)

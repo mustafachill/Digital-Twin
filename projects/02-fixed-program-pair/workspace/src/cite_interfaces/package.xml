@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_interfaces</name>
+  <version>0.1.0</version>
+  <description>
+    Every typed contract in the CITE Digital Twin: messages, services and actions
+    for L3 skills, L4 line state, L5 twin mode and divergence, and the safety
+    layer — together with the QoS profile library that says how each is
+    delivered.
+
+    This package depends on nothing else in the project and sits at the bottom of
+    the dependency graph (ADR-0010), so that an interface can be reviewed before
+    the code that consumes it exists.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <depend>builtin_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclpy</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

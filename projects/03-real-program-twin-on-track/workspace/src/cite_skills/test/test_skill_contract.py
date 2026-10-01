@@ -1,0 +1,1076 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""The parts of the skill contract that only a running server can show.
+
+Three of them, and each one is a defect this branch shipped:
+
+1. Four action servers share one arm, one MoveGroupInterface and one gripper. A
+   second goal accepted while one is in flight lets two goals share a planner
+   that is not thread-safe — and the shipped recovery path reached it, because
+   the coordinator abandons a goal on its deadline without cancelling it and the
+   tree's fallback then sends another goal to the same server.
+2. `Grasp` accepted cancellation and ignored it: it never checked
+   `is_canceling()`, never kept the gripper's goal handle, and reported success
+   for a goal the caller had cancelled.
+3. A pose goal on a 5-DOF arm is satisfied by random draws that are almost never
+   reachable (ADR-0026). The skill server now solves IK on the exact pose and
+   plans to the joint configuration.
+
+There is no simulator here and there are no controllers: move_group plans, and
+execution always fails. That is what makes the rig useful — it separates "the
+planner produced a trajectory" from "the trajectory ran", which is the
+distinction the failing `pick_and_place` needed and could not make.
+"""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+import threading
+import time
+import unittest
+
+from ament_index_python.packages import get_package_share_directory
+from builtin_interfaces.msg import Duration
+from cite_interfaces.action import Grasp, MoveTo, Place, Transfer
+from cite_interfaces.msg import ResultCode, RobotState
+from cite_interfaces.qos import latched
+from control_msgs.action import GripperCommand
+from geometry_msgs.msg import PoseStamped
+from launch import LaunchDescription
+from launch.substitutions import Command
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
+import launch_testing
+import launch_testing.markers
+import pytest
+import rclpy
+from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node as RclpyNode
+from sensor_msgs.msg import JointState
+import yaml
+
+ZONE = "cell_a"
+ASSET = "arm_1"
+#: The one named pose this rig declares beside `home` (ADR-0066).
+PROBE_POSE = "probe"
+NAMESPACE = f"/cite/{ZONE}/{ASSET}"
+GRIPPER_ACTION = "/test_gripper/gripper_cmd"
+
+#: A pose the arm can reach, stated in the arm's own base frame: the approach
+#: point of the pick the failing scenario could not plan. Its tool axis points
+#: down and its yaw faces the target, which is exactly reachable — IK solves it 8
+#: times out of 8 — while the pose goal that used to be sent for it planned 3
+#: times out of 8. A test is allowed to state its own initial conditions; this is
+#: the only number here that is not read from the model, and it is in the arm's
+#: own frame, so where the arm stands in the facility does not change it.
+REACHABLE_XYZ = (0.35, 0.45, 0.13)
+
+STARTUP_CEILING_S = 180.0
+GOAL_CEILING_S = 120.0
+
+GENERATED = Path(get_package_share_directory("cite_generated"))
+
+
+def _read(path: Path) -> dict:
+    return yaml.safe_load(path.read_text()) or {}
+
+
+def _resolve(uri: str) -> Path:
+    """Resolve a `package://cite_generated/...` reference from the plan to a path."""
+    prefix = "package://cite_generated/"
+    assert uri.startswith(prefix), f"unexpected artifact reference: {uri}"
+    return GENERATED / uri[len(prefix):]
+
+
+def _plan() -> dict:
+    """Return this arm's entry in the generated bring-up plan.
+
+    Read rather than restated. The planning group, the tip link and the home
+    configuration are facts about the facility that already exist in the L0
+    model; a copy of them here would be a second place they are written (P1),
+    and it would go stale silently the first time the model changed.
+    """
+    plan = _read(GENERATED / "bringup" / f"{ZONE}_plan.yaml")
+    for manager in plan["plan"]["controller_managers"]:
+        if manager["asset"] == ASSET:
+            return manager
+    raise AssertionError(f"the generated plan has no entry for {ASSET}")
+
+
+def _workpieces() -> dict:
+    """Return the zone's work-piece width interval, from the plan's facility block.
+
+    One statement per ZONE and not one per arm, which is why it is not in
+    `_plan()` above (ADR-0052 A.4): every key on a controller manager's gripper
+    block describes an end effector, and a part width is not a property of one.
+
+    Read rather than restated, for the reason everything else here is. A literal
+    50 mm would be a second copy of an L0 fact, and it would go stale silently
+    the first time the cube changed — which is exactly the failure the one
+    accessor behind this value exists to prevent.
+    """
+    plan = _read(GENERATED / "bringup" / f"{ZONE}_plan.yaml")
+    workpieces = plan["plan"].get("workpieces")
+    assert workpieces is not None, (
+        "the generated plan states no `workpieces:` block, so this rig cannot tell the "
+        "skill server what a stall is judged against (ADR-0052). Run "
+        "./scripts/validate-model --write, then ./scripts/build."
+    )
+    return workpieces
+
+
+def _stall_position() -> float:
+    """Return the drive position at which the pads meet the narrowest declared part.
+
+    Through the linkage the plan delivers to the skill server, so the fake
+    gripper stalls where a real one would on the part the facility declares,
+    whatever its size (ADR-0052 judges the reached width against that part).
+    """
+    manager = _plan()
+    width = _workpieces()["narrowest_width_m"]
+    pivot = manager["gripper_drive_pivot_y_m"] - manager["gripper_pad_inset_m"]
+    offset_y = manager["gripper_finger_offset_y_m"]
+    offset_z = manager["gripper_finger_offset_z_m"]
+    crank = math.hypot(offset_y, offset_z)
+    phase = math.atan2(offset_z, offset_y)
+    return math.acos((width / 2.0 - pivot) / crank) - phase
+
+
+def _joints(manager: dict) -> list:
+    """Return the arm's joints, plus the gripper's drive joint, as ros2_control has them.
+
+    The skill server's MoveIt client waits for a complete joint state, so a
+    missing drive joint means it never learns where the arm is.
+    """
+    controllers = _read(_resolve(manager["parameters"]))
+    names: list = []
+    for key, value in controllers.items():
+        parameters = value.get("ros__parameters", {})
+        if key.endswith("_joint_trajectory_controller"):
+            names.extend(parameters["joints"])
+        elif key.endswith("_gripper_controller") and "joint" in parameters:
+            names.append(parameters["joint"])
+    assert names, "no joints found in the generated controller configuration"
+    return names
+
+
+def _yaml_parameters(document: dict, prefix: str) -> dict:
+    return {prefix: document}
+
+
+@pytest.mark.launch_test
+@launch_testing.markers.keep_alive
+def generate_test_description() -> LaunchDescription:
+    manager = _plan()
+    workpieces = _workpieces()
+    moveit = manager["moveit"]
+    description = ParameterValue(
+        Command(["xacro ", str(_resolve(manager["description"]))]), value_type=str
+    )
+    semantic = ParameterValue(
+        Command(["xacro ", str(_resolve(moveit["srdf"]))]), value_type=str
+    )
+    kinematics = _yaml_parameters(
+        _read(_resolve(moveit["kinematics"])), "robot_description_kinematics"
+    )
+    # Both limit files land in one parameter namespace, exactly as
+    # `cite_bringup` loads them: MoveIt reads the joint half itself and Pilz
+    # reads the Cartesian half from `robot_description_planning.cartesian_limits`
+    # (ADR-0027), and its parameter listener declares those four keys without
+    # defaults — a missing one takes move_group down at start-up.
+    planning = _yaml_parameters(
+        {
+            **_read(_resolve(moveit["joint_limits"])),
+            **_read(_resolve(moveit["cartesian_limits"])),
+        },
+        "robot_description_planning",
+    )
+    pipelines = _read(_resolve(moveit["planning_pipelines"]))
+    controllers = _read(_resolve(moveit["controllers"]))
+
+    return LaunchDescription(
+        [
+            Node(
+                package="robot_state_publisher",
+                executable="robot_state_publisher",
+                namespace=NAMESPACE,
+                parameters=[{"robot_description": description, "use_sim_time": False}],
+                remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+                output="log",
+            ),
+            Node(
+                package="moveit_ros_move_group",
+                executable="move_group",
+                name="move_group",
+                namespace=NAMESPACE,
+                parameters=[
+                    {
+                        "robot_description": description,
+                        "robot_description_semantic": semantic,
+                        "use_sim_time": False,
+                        "publish_robot_description_semantic": True,
+                    },
+                    kinematics,
+                    planning,
+                    pipelines,
+                    controllers,
+                ],
+                remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+                output="log",
+            ),
+            Node(
+                package="cite_skills",
+                executable="skill_server",
+                name="skill_server",
+                namespace=NAMESPACE,
+                parameters=[
+                    {
+                        "robot_description": description,
+                        "robot_description_semantic": semantic,
+                    },
+                    kinematics,
+                    planning,
+                    {
+                        "asset_id": ASSET,
+                        "zone": ZONE,
+                        "planning_group": moveit["group"],
+                        "tip_link": moveit["tip_link"],
+                        "gripper_action": GRIPPER_ACTION,
+                        # How long the server waits for the gripper's controller
+                        # to answer, in its own clock (ADR-0045). Read from the
+                        # plan rather than written here: it is an L0 value, and a
+                        # literal would be the second copy that decision removes.
+                        # Not optional — a server with a gripper action and no
+                        # delivered timeout refuses to configure, which is what
+                        # makes an undelivered parameter loud instead of silent.
+                        "gripper_result_timeout_s": manager["gripper_result_timeout_s"],
+                        # What separates a grasp from a stall on nothing
+                        # (ADR-0052, option F). Four values from two places in
+                        # one plan, and the split is the decision: the BAND is a
+                        # property of this end effector and rides the gripper
+                        # block; the PART INTERVAL is a fact about the facility
+                        # and is stated once in the plan's own `plan:` block.
+                        #
+                        # Not optional, for the same reason the timeout above is
+                        # not: a server with a gripper action and no delivered
+                        # band refuses to configure, which is what makes an
+                        # undelivered parameter loud instead of a predicate that
+                        # reports every grasp empty.
+                        "gripper_stall_band_narrow_m": manager[
+                            "gripper_stall_band_narrow_m"
+                        ],
+                        "gripper_stall_band_wide_m": manager["gripper_stall_band_wide_m"],
+                        "workpiece_narrowest_width_m": workpieces["narrowest_width_m"],
+                        "workpiece_widest_width_m": workpieces["widest_width_m"],
+                        "home_rad": list(moveit["home_rad"]),
+                        # One named pose beside `home` (ADR-0066). Test-only: the
+                        # arm this rig serves declares none in L0, and what is
+                        # under test is the lookup, not a taught angle. Home with
+                        # the base turned a tenth of a radian, so the plan has
+                        # somewhere to go.
+                        "pose_names": [PROBE_POSE],
+                        "pose_values_rad": [
+                            float(value) + (0.1 if index == 0 else 0.0)
+                            for index, value in enumerate(moveit["home_rad"])
+                        ],
+                        # The planner the server asks for, from the plan rather
+                        # than restated here (ADR-0027). Without these the
+                        # server says nothing about a pipeline and move_group
+                        # applies the file's own default — which would make this
+                        # rig prove something the running cell does not do.
+                        "default_pipeline": moveit["default_pipeline"],
+                        "default_planner_id": moveit["default_planner_id"],
+                        "fallback_pipeline": moveit["fallback_pipeline"],
+                        "fallback_planner_id": moveit["fallback_planner_id"] or "",
+                        "cartesian_planner_ids": list(
+                            moveit.get("cartesian_planner_ids") or []
+                        ),
+                        "use_sim_time": False,
+                    },
+                ],
+                remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
+                output="screen",
+            ),
+            launch_testing.actions.ReadyToTest(),
+        ]
+    )
+
+
+class Harness(RclpyNode):
+    """Everything the skill server needs to exist, and the clients that drive it.
+
+    The gripper is served here rather than by a controller: a gripper that never
+    finishes on its own is what makes cancellation observable at all.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("skill_contract_harness")
+        manager = _plan()
+        self.moveit = manager["moveit"]
+        self.joints = _joints(manager)
+        # Every joint at zero except the arm's, which rest at the configuration
+        # the L0 model calls home.
+        home = list(self.moveit["home_rad"])
+        self.positions = home + [0.0] * (len(self.joints) - len(home))
+        self.callbacks = ReentrantCallbackGroup()
+        self.gripper_running = threading.Event()
+        self.gripper_cancelled = threading.Event()
+        #: Whether the fake gripper stalls on a part instead of hanging.
+        #:
+        #: Both behaviours are needed and neither can serve for the other. A
+        #: gripper that never finishes is what makes cancellation observable; a
+        #: gripper that stalls short of its command with `reached_goal` false is
+        #: the only way `holding_` becomes true in this rig, and `Transfer`
+        #: refuses to run without it — as it should, since transferring nothing
+        #: is a handoff the line believes happened.
+        self.gripper_stalls_on_a_part = False
+
+        self.states = self.create_publisher(JointState, f"{NAMESPACE}/joint_states", 10)
+        self.create_timer(0.05, self._publish_state, callback_group=self.callbacks)
+
+        #: Every `RobotState` this arm has published, in order (ADR-0065).
+        #:
+        #: Subscribed with the SAME latched profile the server publishes on, and
+        #: created here — before `wait_for_server` — deliberately: a late joiner
+        #: receiving the current value is the property `LATCHED` buys, and a
+        #: volatile subscriber would not match a transient-local publisher at all.
+        #: A test that subscribed first and then started the server could not tell
+        #: the two apart.
+        self.robot_states: list[RobotState] = []
+        self.create_subscription(
+            RobotState,
+            f"{NAMESPACE}/state",
+            self.robot_states.append,
+            latched(),
+            callback_group=self.callbacks,
+        )
+
+        self.gripper = ActionServer(
+            self,
+            GripperCommand,
+            GRIPPER_ACTION,
+            execute_callback=self._serve_gripper,
+            goal_callback=lambda _goal: GoalResponse.ACCEPT,
+            cancel_callback=lambda _goal: CancelResponse.ACCEPT,
+            callback_group=self.callbacks,
+        )
+        self.grasp = ActionClient(self, Grasp, f"{NAMESPACE}/grasp",
+                                  callback_group=self.callbacks)
+        self.move_to = ActionClient(self, MoveTo, f"{NAMESPACE}/move_to",
+                                    callback_group=self.callbacks)
+        self.transfer = ActionClient(self, Transfer, f"{NAMESPACE}/transfer",
+                                     callback_group=self.callbacks)
+        self.place = ActionClient(self, Place, f"{NAMESPACE}/place",
+                                  callback_group=self.callbacks)
+
+    def _publish_state(self) -> None:
+        message = JointState()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.name = self.joints
+        message.position = self.positions
+        self.states.publish(message)
+
+    def _serve_gripper(self, goal_handle):
+        self.gripper_running.set()
+        if self.gripper_stalls_on_a_part:
+            return self._stall_on_a_part(goal_handle)
+        while not goal_handle.is_cancel_requested:
+            time.sleep(0.05)
+        self.gripper_cancelled.set()
+        goal_handle.canceled()
+        return GripperCommand.Result()
+
+    def _stall_on_a_part(self, goal_handle):
+        """Finish the way a gripper closing onto a work-piece finishes.
+
+        `cite_skills::gripper_is_holding` asks three questions and all three have
+        to be answered for a grasp to count: the joint stalled, it did NOT reach
+        its goal, and it stopped further open than commanded by more than the
+        controller's own end-of-goal bias. Reporting a stall alone would be the
+        defect ADR-0022 fixed — `stalled` says the joint stopped short, never why.
+
+        It stops where the pads meet the declared part, which is far wide of that
+        margin when the command is a full close, as the transfer tests send.
+        """
+        result = GripperCommand.Result()
+        result.position = _stall_position()
+        result.effort = goal_handle.request.command.max_effort
+        result.stalled = True
+        result.reached_goal = False
+        goal_handle.succeed()
+        return result
+
+    def hold_a_workpiece(self) -> None:
+        """Close the gripper onto an imaginary part, so `holding_` becomes true.
+
+        `Transfer` will not run without it, and that refusal is itself one of the
+        things under test — so this has to actually establish the state rather
+        than be asserted around.
+        """
+        self.gripper_stalls_on_a_part = True
+        goal = Grasp.Goal()
+        # A full close. The fake gripper stalls where the pads meet the declared
+        # part, which is far wider than the width this asked for.
+        goal.width_m = 0.0
+        goal.max_effort_n = 10.0
+        goal.expect_object = True
+        handle = self.wait(self.grasp.send_goal_async(goal), GOAL_CEILING_S)
+        assert handle is not None and handle.accepted, "the grasp was not accepted"
+        wrapped = self.wait(handle.get_result_async(), GOAL_CEILING_S)
+        assert wrapped is not None, "the grasp never reported a result"
+        assert wrapped.result.holding, (
+            f"the rig failed to establish a held work-piece: "
+            f"{wrapped.result.result.code} {wrapped.result.result.detail}"
+        )
+
+    def wait_for_state(self, holds, timeout: float):
+        """Return the newest `RobotState` satisfying `holds`, or None.
+
+        A bounded poll on a condition, never a sleep for a guessed duration: the
+        topic is published on change, so how long a change takes to arrive is a
+        property of the run and the only thing stated here is when to give up.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.robot_states and holds(self.robot_states[-1]):
+                return self.robot_states[-1]
+            time.sleep(0.05)
+        return None
+
+    @staticmethod
+    def wait(future, timeout: float):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if future.done():
+                return future.result()
+            time.sleep(0.05)
+        return None
+
+
+class TestSkillContract(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        rclpy.init()
+        cls.harness = Harness()
+        cls.executor = MultiThreadedExecutor()
+        cls.executor.add_node(cls.harness)
+        cls.spinner = threading.Thread(target=cls.executor.spin, daemon=True)
+        cls.spinner.start()
+        assert cls.harness.grasp.wait_for_server(STARTUP_CEILING_S), (
+            "the skill server never advertised 'grasp'"
+        )
+        assert cls.harness.move_to.wait_for_server(STARTUP_CEILING_S), (
+            "the skill server never advertised 'move_to'"
+        )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.executor.shutdown()
+        cls.harness.destroy_node()
+        rclpy.shutdown()
+
+    def test_0_the_arm_says_what_it_holds_and_a_late_joiner_is_told(self) -> None:
+        """ADR-0065, decision 1: `RobotState` has a publisher, and it latches.
+
+        `RobotState` was declared with `gripper_holding`, `held_workpiece_id` and
+        `active_skill` and had no publisher at all — the same shape CLAUDE.md
+        records for `ConveyorState`: a typed contract designed for exactly this
+        and left unconnected, so the information was in the system and not on the
+        wire.
+
+        THE LATCH IS WHAT THIS TEST IS FOR, and it is not a formality. The topic
+        is published on CHANGE, custody changes a handful of times per cycle, and
+        every consumer of it starts after the skill servers do. Volatile
+        durability here would leave a consumer that joined between two grasps
+        with no answer at all until the next one — and a volatile publisher and a
+        transient-local subscriber do not merely deliver late, they never match,
+        silently. This harness subscribes before the server is even up and
+        requires the value that was current before it asked.
+
+        IT IS NOT A SIMULATION AID, which is why it is asserted here rather than
+        anywhere in `cite_bringup`. There is no simulator in this rig and no
+        backend branch anywhere on this path; what reads this topic in simulation
+        is a bridge that lives above it.
+        """
+        first = self.harness.wait_for_state(lambda _state: True, STARTUP_CEILING_S)
+        self.assertIsNotNone(
+            first,
+            f"nothing was ever published on {NAMESPACE}/state. Either the server "
+            "creates no publisher, or it creates one whose durability a latched "
+            "subscriber cannot match — which delivers nothing and reports nothing",
+        )
+        self.assertEqual(
+            first.asset_id, ASSET,
+            "the arm's state does not name the arm it is about")
+        self.assertFalse(
+            first.gripper_holding,
+            "the first thing this arm said was that it is holding something, before "
+            "any goal was sent to it")
+        self.assertEqual(
+            first.active_skill, "",
+            "the arm named a running skill before any goal was sent to it")
+        # The three display fields this node does not own, left empty on purpose:
+        # it holds no `/joint_states` subscription, and inventing one to fill them
+        # would make this a second publisher's-worth of joint state (P1).
+        self.assertEqual(list(first.joint_positions_rad), [])
+        self.assertEqual(list(first.joint_velocities_rad_s), [])
+        # No L3 action tells this server which work-piece it has, so nothing may
+        # be written here (ADR-0052 A.5).
+        self.assertEqual(first.held_workpiece_id, "")
+
+    def test_1_one_goal_at_a_time_and_a_cancel_that_is_honoured(self) -> None:
+        grasp = Grasp.Goal()
+        grasp.width_m = 0.0
+        grasp.max_effort_n = 10.0
+        grasp.expect_object = False
+        grasp_handle = self.harness.wait(
+            self.harness.grasp.send_goal_async(grasp), GOAL_CEILING_S)
+        self.assertIsNotNone(grasp_handle, "the grasp goal was never answered")
+        self.assertTrue(grasp_handle.accepted, "the first goal must be accepted")
+        self.assertTrue(
+            self.harness.gripper_running.wait(GOAL_CEILING_S),
+            "the skill server never commanded the gripper",
+        )
+
+        # A second goal, while the first still holds the arm. Accepting it would
+        # put two goals on one planner and one trajectory.
+        blocked = MoveTo.Goal()
+        blocked.named_configuration = "home"
+        blocked_handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(blocked), GOAL_CEILING_S)
+        self.assertIsNotNone(blocked_handle, "the second goal was never answered")
+        self.assertFalse(
+            blocked_handle.accepted,
+            "a second goal was accepted while a grasp was in flight",
+        )
+
+        # And the cancel must reach the gripper rather than being noticed after
+        # it has finished.
+        self.harness.wait(grasp_handle.cancel_goal_async(), GOAL_CEILING_S)
+        self.assertTrue(
+            self.harness.gripper_cancelled.wait(GOAL_CEILING_S),
+            "the cancelled grasp never cancelled the gripper command",
+        )
+        wrapped = self.harness.wait(grasp_handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the cancelled grasp never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.CANCELLED,
+            f"a cancelled grasp reported {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+
+    def test_2_a_cartesian_path_is_refused_rather_than_silently_replaced(self) -> None:
+        # The field is declared, so it gets an answer. Planning it as an ordinary
+        # joint-space move would give a caller asking for a straight line a
+        # different, possibly colliding, motion (ADR-0026).
+        goal = MoveTo.Goal()
+        goal.cartesian_path = True
+        goal.named_configuration = "home"
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(wrapped.result.result.code, ResultCode.NOT_IMPLEMENTED)
+
+    def test_3_a_reachable_pose_is_planned_to_rather_than_refused(self) -> None:
+        # The regression that matters: this exact pose, sent as a 6-DOF pose
+        # goal, planned 3 times out of 8 and failed the rest with
+        # PLANNING_FAILED. Solved as IK and planned as a joint configuration it
+        # succeeds every time. There are no controllers here, so the trajectory
+        # cannot run — EXECUTION_FAILED means the planner produced one.
+        yaw = math.atan2(REACHABLE_XYZ[1], REACHABLE_XYZ[0])
+        goal = MoveTo.Goal()
+        goal.target = PoseStamped()
+        # The arm's own base frame, named by the generated plan. Nothing here
+        # depends on where the arm stands in the facility.
+        goal.target.header.frame_id = self.harness.moveit["base_link"]
+        (goal.target.pose.position.x,
+         goal.target.pose.position.y,
+         goal.target.pose.position.z) = REACHABLE_XYZ
+        # Tool pointing down, yawed to face the target: roll pi then yaw.
+        goal.target.pose.orientation.x = math.cos(yaw / 2.0)
+        goal.target.pose.orientation.y = math.sin(yaw / 2.0)
+        goal.target.pose.orientation.z = 0.0
+        goal.target.pose.orientation.w = 0.0
+
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the move never reported a result")
+        self.assertNotEqual(
+            wrapped.result.result.code,
+            ResultCode.PLANNING_FAILED,
+            f"a reachable pose was refused: {wrapped.result.result.detail}",
+        )
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the plan to run and fail for want of a controller, got "
+            f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
+        )
+
+    def test_3b_an_unreachable_pose_is_reported_as_unreachable(self) -> None:
+        # THE DISTINCTION L4 BRANCHES ON, and nothing emitted the code that
+        # carries it. `ResultCode.msg` separates UNREACHABLE — no IK solution
+        # exists for this pose at all — from PLANNING_FAILED, which means one
+        # exists and no collision-free path to it was found, because the remedies
+        # differ completely. `recovery_policy.hpp` ESCALATEs the first and retries
+        # the second, so reporting the first as the second retries a pose that no
+        # IK branch can reach and burns the station's recovery budget doing it.
+        #
+        # The skill server aliased UNREACHABLE onto PLANNING_FAILED while
+        # `cite_interfaces` had no such constant, the constant landed, and the
+        # alias stayed. Every test still passed. This is the one that would not
+        # have.
+        #
+        # 2.5 m along the arm's own +x is not a marginal pose: no xArm 5 reaches
+        # it from any seed, so IK fails outright rather than the planner failing
+        # to find a path.
+        goal = MoveTo.Goal()
+        goal.target = PoseStamped()
+        goal.target.header.frame_id = self.harness.moveit["base_link"]
+        goal.target.pose.position.x = 2.5
+        goal.target.pose.position.y = 0.0
+        goal.target.pose.position.z = 0.5
+        # Tool pointing down, as every reachable pose in this file is stated.
+        goal.target.pose.orientation.x = 1.0
+        goal.target.pose.orientation.y = 0.0
+        goal.target.pose.orientation.z = 0.0
+        goal.target.pose.orientation.w = 0.0
+
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the move never reported a result")
+        self.assertNotEqual(
+            wrapped.result.result.code,
+            ResultCode.PLANNING_FAILED,
+            "a pose no IK branch can reach was reported as a planning failure, which "
+            "L4 retries: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.UNREACHABLE,
+            f"expected UNREACHABLE, got {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+
+    # -------------------------------------------------------------------------
+    # Transfer — half of a handoff, and only half (ADR-0024)
+    # -------------------------------------------------------------------------
+
+    def _handoff_pose(self) -> PoseStamped:
+        """Return a reachable rendezvous, in the arm's own base frame."""
+        yaw = math.atan2(REACHABLE_XYZ[1], REACHABLE_XYZ[0])
+        pose = PoseStamped()
+        pose.header.frame_id = self.harness.moveit["base_link"]
+        (pose.pose.position.x,
+         pose.pose.position.y,
+         pose.pose.position.z) = REACHABLE_XYZ
+        pose.pose.orientation.x = math.cos(yaw / 2.0)
+        pose.pose.orientation.y = math.sin(yaw / 2.0)
+        pose.pose.orientation.z = 0.0
+        pose.pose.orientation.w = 0.0
+        return pose
+
+    def test_4_a_transfer_without_a_rendezvous_token_is_refused(self) -> None:
+        # The token is opaque to L3 and nothing here reads it — but its absence
+        # means L4 never negotiated the handoff, and opening the jaws into a
+        # rendezvous nobody confirmed is how a part ends up on the floor.
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = ""
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the transfer never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"an untokened transfer returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+
+    def test_5_a_transfer_carrying_nothing_is_refused(self) -> None:
+        # Nothing has been picked up at this point in the sequence. Miming the
+        # handoff would leave the line believing a work-piece moved, and the
+        # failure would surface at the receiving station instead of here.
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-1"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"a transfer with an empty gripper returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertFalse(
+            wrapped.result.still_holding,
+            "an arm holding nothing must not report still_holding",
+        )
+
+    def test_5b_unknown_custody_is_reported_as_still_holding_and_not_as_empty(self) -> None:
+        """After a gripper that never answered, `Place` says the arm may have it.
+
+        THE FIELD AND THE SENTENCE BESIDE IT USED TO DISAGREE. `execute_place`
+        refuses while custody is unknown and says so in the detail — "whether it
+        is holding anything is UNESTABLISHED" — and it leaves by the same
+        `finish` lambda as every other exit, which filled `still_holding` from
+        `holding_`. On this one path `holding_` is deliberately never written,
+        because writing true would claim a grasp nothing observed and writing
+        false is the claim that cost three CI runs, and an unwritten `bool`
+        reads FALSE. So the machine-readable field reported *not holding* on the
+        single exit whose whole purpose is to report that nobody knows, and the
+        field is what a consumer branches on.
+
+        UNKNOWN FALLS ON THE SIDE THAT ESCALATES. `Place.action` contracts it
+        and `cite_twin`'s `_compose_result` already applies the same rule one
+        layer up, counting a dispatched side that returned nothing as holding.
+        The cost of being wrong is asymmetric and not symmetric: reporting a
+        part that is not there costs an operator a look, and reporting no part
+        when there is one sends a retry through `MoveToHome` into `Pick`, whose
+        first physical act is to open the jaws (ADR-0038 decision 5, ADR-0046).
+
+        IT RUNS HERE, AND NOT AFTER `test_8`, BECAUSE THE GRIPPER MUST BE KNOWN
+        EMPTY FOR THE ASSERTION TO MEAN ANYTHING. `test_5` above has just shown
+        that this arm holds nothing and reports `still_holding` false for it,
+        which is this test's control: run after a work-piece is held, `holding_`
+        would be true on its own and the assertion below would pass whether or
+        not custody is consulted at all.
+
+        NOTHING HERE MOVES AND NOTHING OPENS. The refusal is the first statement
+        of `execute_place`, above the first motion and above the `require_holding`
+        test; the fake gripper is asked to close and simply never answers.
+        """
+        # A gripper that hangs, which is what this rig's default already is —
+        # `hold_a_workpiece` is what turns the stall-on-a-part behaviour on, and
+        # nothing has called it yet at this point in the sequence.
+        self.harness.gripper_stalls_on_a_part = False
+
+        grasp = Grasp.Goal()
+        grasp.width_m = 0.0
+        grasp.max_effort_n = 10.0
+        grasp.expect_object = True
+        handle = self.harness.wait(
+            self.harness.grasp.send_goal_async(grasp), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        # The server's own `gripper_result_timeout_s`, read from the plan rather
+        # than restated here, has to elapse first. `use_sim_time` is false in
+        # this rig, so it elapses on the wall clock.
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the grasp never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.TIMEOUT,
+            "the rig failed to produce a gripper that never answered, so the state "
+            "under test was never entered: "
+            f"{wrapped.result.result.code} {wrapped.result.result.detail}",
+        )
+
+        goal = Place.Goal()
+        goal.target_pose = self._handoff_pose()
+        goal.approach_distance_m = 0.0
+        goal.retreat_distance_m = 0.0
+        # False on purpose. `require_holding=True` would be refused by the test
+        # BELOW the custody one as well, so the exit taken would be ambiguous;
+        # with it false, the custody refusal is the only thing that can produce
+        # a PRECONDITION_FAILED here.
+        goal.require_holding = False
+
+        handle = self.harness.wait(
+            self.harness.place.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        placed = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(placed, "the place never reported a result")
+
+        self.assertEqual(
+            placed.result.result.code,
+            ResultCode.PRECONDITION_FAILED,
+            f"expected the custody refusal, got {placed.result.result.code}: "
+            f"{placed.result.result.detail}",
+        )
+        # The exit is named by its own words, so that a future refusal added
+        # above this one cannot quietly take the assertion below with it.
+        self.assertIn(
+            "UNESTABLISHED",
+            placed.result.result.detail,
+            f"the refusal taken was not the custody one: {placed.result.result.detail}",
+        )
+        self.assertTrue(
+            placed.result.still_holding,
+            "a place refused because custody is UNKNOWN reported the arm as empty. "
+            "That is the one exit this field exists for, and `false` there is the "
+            "belief that sends a retry through MoveToHome into a Pick that opens "
+            "the jaws on a part nobody knows is held",
+        )
+
+        # AND THE TOPIC SAYS THE SAME THING (ADR-0065). `gripper_holding` is one
+        # bool and custody has three states, so unknown has to fall on one side;
+        # it falls on the side that makes a consumer escalate, which is the
+        # identical rule the result field above is asserted on. Here `holding_`
+        # is FALSE — `test_5` above established that this arm holds nothing — and
+        # only the custody latch can make this true, so a publisher filled from
+        # `holding_` alone fails exactly here.
+        state = self.harness.wait_for_state(
+            lambda published: published.gripper_holding, GOAL_CEILING_S)
+        self.assertIsNotNone(
+            state,
+            f"custody is unknown and {NAMESPACE}/state still reports an empty "
+            "gripper. A consumer branching on that field acts on a part it "
+            "believes is gone, which is the direction ADR-0046 forbids",
+        )
+
+        # Leave the rig where the tests below expect to find it. `Grasp` is the
+        # one skill custody does not refuse, precisely because it is the way out
+        # of this state — asserting that it clears the latch is the other half
+        # of the contract, and it is what makes the rest of this file able to
+        # run after this test at all.
+        self.harness.hold_a_workpiece()
+
+        # NO ASSERTION ON THE TOPIC AFTER THIS CALL, deliberately. That grasp
+        # clears the custody latch AND establishes a real hold, so the topic
+        # reads `holding` either way and an assertion here would pass whether or
+        # not the latch was ever consulted — the same trap this test's own
+        # docstring records for its control.
+
+    def test_6_a_two_party_hold_is_reported_unbuilt_rather_than_timed_out(self) -> None:
+        """A hold this arm cannot complete is refused before it moves.
+
+        `hold_timeout` asks the arm to wait at the rendezvous until L4 says the
+        peer has taken the part, and no typed channel carries that signal. The
+        tempting answer is the contract's own TIMEOUT, which would look entirely
+        correct — a handoff that waited and was not met — while nothing was ever
+        listening. That is v1's handoff exactly, and no test could see it. So the
+        unbuilt path says it is unbuilt, in a code L4 can branch on.
+        """
+        self.harness.hold_a_workpiece()
+
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-2"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=30, nanosec=0)
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.NOT_IMPLEMENTED,
+            f"a two-party hold returned {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        # The refusal happens before the arm moves and before the jaws open, so
+        # the work-piece is exactly where it was. L4 chooses its recovery from
+        # this field; wrong here, the line abandons a part the arm still has.
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a refused hold must leave the work-piece with the upstream arm",
+        )
+        # Returned well inside the 30 s it was asked to wait, which is what
+        # separates "refused" from "waited and expired".
+        self.assertLess(
+            wrapped.result.duration.sec, 30,
+            "the refusal must not have spent the hold_timeout waiting",
+        )
+
+    def test_7_a_transfer_is_cancellable_while_it_is_still_moving(self) -> None:
+        """Cancelling a transfer leaves the work-piece where it was.
+
+        The half that matters is not that the goal ends — it is that it ends
+        BEFORE the jaws open. A cancelled handoff that had already let go would
+        put a part in a rendezvous with no owner on either side.
+        """
+        goal = Transfer.Goal()
+        goal.handoff_pose = self._handoff_pose()
+        goal.rendezvous_token = "rendezvous-3"
+        goal.workpiece_id = "workpiece"
+        goal.hold_timeout = Duration(sec=0, nanosec=0)
+
+        approaching = threading.Event()
+
+        def watch(feedback) -> None:
+            if feedback.feedback.phase >= Transfer.Feedback.PHASE_APPROACHING:
+                approaching.set()
+
+        handle = self.harness.wait(
+            self.harness.transfer.send_goal_async(goal, feedback_callback=watch),
+            GOAL_CEILING_S,
+        )
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        # Synchronised on the skill's own feedback rather than on a sleep: the
+        # cancel has to arrive while the arm is planning or executing, and
+        # guessing how long planning takes is the timing assumption P4 forbids.
+        self.assertTrue(
+            approaching.wait(GOAL_CEILING_S),
+            "the transfer never reported that it had begun approaching",
+        )
+        self.harness.wait(handle.cancel_goal_async(), GOAL_CEILING_S)
+
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the cancelled transfer never reported a result")
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.CANCELLED,
+            f"a cancelled transfer reported {wrapped.result.result.code}: "
+            f"{wrapped.result.result.detail}",
+        )
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a transfer cancelled before the release must still report the "
+            "work-piece as held",
+        )
+
+    # -------------------------------------------------------------------------
+    # Place — and what it says about the part when it does not finish
+    # -------------------------------------------------------------------------
+    def test_8_a_place_that_aborts_reports_the_work_piece_as_still_held(self) -> None:
+        """A place that does not reach the release still has the part.
+
+        `Place.Result` carried no field that could say so until this change: it
+        reported a code, a release pose and a duration, and L4 was left to infer
+        custody from the code. It cannot — `MOTION_INTERRUPTED` says the arm
+        stopped part-way and says nothing about the gripper, and it is the code
+        an aborted descent onto the release pose produces.
+
+        WHERE THIS RIG STOPS, stated rather than implied. There are no
+        controllers here, so the FIRST motion of the place fails — the standoff
+        approach, not the descent the CI failures died in — and the joint state
+        never advances. That is a weaker rig than the defect deserves and it is
+        the right one for THIS assertion: what is under test is that the field
+        is filled from the gripper at every exit of `execute_place`, and an
+        approach abort and a descent abort leave by the same lambda. The descent
+        itself needs an executing controller and a way to interrupt it, which is
+        `cite_bringup`'s abort rig and not this one.
+
+        NOTHING HERE OPENS THE JAWS, and nothing is asked to. The part stays in
+        the gripper, which is ADR-0038 decision 5: what to do with it is a
+        person's decision, and this field is how they learn there is one.
+
+        It runs after the transfer block on purpose. `test_5` asserts a refusal
+        that needs an EMPTY gripper, and this leaves a full one.
+        """
+        assert self.harness.place.wait_for_server(GOAL_CEILING_S), (
+            "the skill server never advertised 'place'"
+        )
+        self.harness.hold_a_workpiece()
+
+        goal = Place.Goal()
+        # The same reachable pose the move and transfer cases use, so a failure
+        # here is the execution failing and not the arm being asked for
+        # something it cannot reach. The standoff is zero for the same reason:
+        # every millimetre of offset is a millimetre away from the pose this
+        # file has evidence about.
+        goal.target_pose = self._handoff_pose()
+        goal.approach_distance_m = 0.0
+        goal.retreat_distance_m = 0.0
+        goal.require_holding = True
+
+        handle = self.harness.wait(
+            self.harness.place.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, "the place never reported a result")
+
+        # It failed for want of a controller, which is what this rig produces for
+        # any motion — and NOT for want of a part or a reachable pose. Asserting
+        # the code keeps the test honest about which exit it went out of: a
+        # PRECONDITION_FAILED would mean the gripper was empty and the custody
+        # assertion below would be true for a reason that proves nothing.
+        self.assertEqual(
+            wrapped.result.result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the place to plan and fail for want of a controller, got "
+            f"{wrapped.result.result.code}: {wrapped.result.result.detail}",
+        )
+        self.assertTrue(
+            wrapped.result.still_holding,
+            "a place that aborted before the release reported the arm as empty, "
+            "which is the belief that makes L4 retry and open the gripper at the "
+            "home pose (ADR-0038 decision 5, ADR-0046)",
+        )
+
+    def _named(self, name: str):
+        goal = MoveTo.Goal()
+        goal.named_configuration = name
+        handle = self.harness.wait(
+            self.harness.move_to.send_goal_async(goal), GOAL_CEILING_S)
+        self.assertIsNotNone(handle)
+        self.assertTrue(handle.accepted)
+        wrapped = self.harness.wait(handle.get_result_async(), GOAL_CEILING_S)
+        self.assertIsNotNone(wrapped, f"the move to {name!r} never reported a result")
+        return wrapped.result.result
+
+    def test_9_a_named_pose_is_planned_like_home(self) -> None:
+        # Planned and then failed for want of a controller, exactly as a
+        # reachable pose goal does in test_3: the lookup found the pose and the
+        # planning group accepted it.
+        result = self._named(PROBE_POSE)
+        self.assertEqual(
+            result.code,
+            ResultCode.EXECUTION_FAILED,
+            f"expected the named pose to plan and fail for want of a controller, got "
+            f"{result.code}: {result.detail}",
+        )
+
+    def test_9b_an_unknown_name_is_refused_and_the_known_ones_are_named(self) -> None:
+        result = self._named("nowhere")
+        self.assertEqual(result.code, ResultCode.PRECONDITION_FAILED, result.detail)
+        self.assertIn("'home'", result.detail)
+        self.assertIn(f"'{PROBE_POSE}'", result.detail)
+
+
+@launch_testing.post_shutdown_test()
+class TestCleanShutdown(unittest.TestCase):
+    def test_the_skill_server_exited_cleanly(self, proc_info) -> None:
+        # A goal thread that outlives its node crashes here, and only here: the
+        # detached threads this replaced were never joined, so teardown ran the
+        # node's destructor underneath them.
+        allowed = [0, launch_testing.asserts.EXIT_SIGINT]
+        for info in proc_info:
+            name = str(info.process_name)
+            if not name.startswith("skill_server"):
+                continue
+            self.assertIn(
+                info.returncode, allowed, f"{name} exited with {info.returncode}")

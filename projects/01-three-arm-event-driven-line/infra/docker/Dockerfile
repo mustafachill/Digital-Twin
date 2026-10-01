@@ -1,0 +1,225 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# CITE Digital Twin — development and CI image
+#
+# One image, two consumers: a developer's workstation and the CI runner. They
+# must be the same image, or "works on my machine" becomes possible again.
+#
+# Base: ROS 2 Jazzy on Ubuntu 24.04 (Noble) — the Tier-1 platform for the
+# Jazzy + Gazebo Harmonic combination locked in CLAUDE.md §6.
+# =============================================================================
+
+FROM ros:jazzy-ros-base-noble
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    ROS_DISTRO=jazzy
+
+# Marker used by scripts/_lib.sh to detect that it is already inside the
+# container and must not try to re-enter one.
+RUN touch /etc/cite-container
+
+# --- Base tooling ------------------------------------------------------------
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake git git-lfs curl wget gnupg lsb-release ca-certificates \
+      python3-pip python3-venv python3-colcon-common-extensions python3-vcstool \
+      python3-rosdep python3-argcomplete \
+      clang-format clangd gdb valgrind \
+      `# NOTE: linux-tools-common is deliberately absent. It provides only a perf` \
+      `# shim that fails against the container's kernel — see docs/reference/toolchain.md.` \
+      bash-completion less nano tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Gazebo Harmonic ---------------------------------------------------------
+# Harmonic ships from the OSRF repository. Added explicitly rather than relying
+# on transitive resolution, so the source of the simulator is auditable.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
+      -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] \
+      http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \
+      > /etc/apt/sources.list.d/gazebo-stable.list \
+ && apt-get update && apt-get install -y --no-install-recommends gz-harmonic \
+ && rm -rf /var/lib/apt/lists/*
+
+# --- ROS 2 stack -------------------------------------------------------------
+# Grouped by architectural layer so that a reader can tell why each is here.
+# Anything a workspace package needs belongs in that package's package.xml and
+# is resolved by rosdep; these are the stack-level dependencies.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      `# L1 description` \
+      ros-jazzy-xacro \
+      ros-jazzy-urdf \
+      ros-jazzy-robot-state-publisher \
+      ros-jazzy-joint-state-publisher \
+      `# L2 control and hardware abstraction` \
+      ros-jazzy-ros2-control \
+      ros-jazzy-ros2-controllers \
+      ros-jazzy-controller-manager \
+      ros-jazzy-gz-ros2-control \
+      `# L2 motion planning` \
+      ros-jazzy-moveit \
+      ros-jazzy-moveit-ros-planning-interface \
+      `# L1/L5 simulator bridge` \
+      ros-jazzy-ros-gz \
+      `# L4 orchestration` \
+      ros-jazzy-behaviortree-cpp \
+      `# L6 recording` \
+      ros-jazzy-rosbag2 \
+      ros-jazzy-rosbag2-storage-mcap \
+      `# visualization and debugging` \
+      ros-jazzy-rviz2 \
+      ros-jazzy-tf2-tools \
+      ros-jazzy-rqt-common-plugins \
+      `# test tooling` \
+      ros-jazzy-launch-testing \
+      ros-jazzy-launch-testing-ros \
+      ros-jazzy-ament-lint-auto \
+      ros-jazzy-ament-cmake-clang-format \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- External source dependencies -------------------------------------------
+# The vcs manifest is imported and its system dependencies resolved here, at
+# image build time, so that the image can build the pinned workspace on its own.
+#
+# This is not an optimisation. A container started from this image is ephemeral:
+# `./scripts/build` and CI each run `docker run --rm`, so anything a run-time
+# `rosdep install` installs is discarded the moment that container exits. Without
+# this layer the build fails on a missing apt package that `./scripts/bootstrap`
+# appears to have just installed — which is a genuinely confusing place to start
+# debugging.
+#
+# The source tree itself is discarded; only the resolved apt dependencies are
+# kept. The real checkout is imported into the mounted workspace by bootstrap.
+# Changing external/cite.repos therefore requires an image rebuild, which is
+# correct: the manifest and the image that can build it version together.
+COPY external/cite.repos /tmp/cite.repos
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    mkdir -p /tmp/deps/src \
+ && vcs import --recursive /tmp/deps/src < /tmp/cite.repos \
+ && apt-get update \
+ && rosdep update --rosdistro "$ROS_DISTRO" \
+ && rosdep install --from-paths /tmp/deps/src --ignore-src -r -y --rosdistro "$ROS_DISTRO" \
+ && rm -rf /tmp/deps /tmp/cite.repos /var/lib/apt/lists/*
+
+# --- osv-scanner (supply-chain CVE scanning) ---------------------------------
+# Pinned by version AND checksum. Bumping the version forces updating the hash,
+# which makes the upgrade a deliberate act rather than a silent one — the same
+# discipline ADR-0008 applies to source dependencies.
+ARG OSV_SCANNER_VERSION=v2.5.1
+RUN arch="$(dpkg --print-architecture)" \
+ && case "$arch" in \
+      amd64) osv_sha=f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be ;; \
+      arm64) osv_sha=3d0f5aa5a6baa8eb32bcef247388e149ef6030a6634ccae6fa0d62681fb27a6d ;; \
+      *) echo "osv-scanner: unsupported architecture '$arch'" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /usr/local/bin/osv-scanner \
+      "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_${arch}" \
+ && echo "${osv_sha}  /usr/local/bin/osv-scanner" | sha256sum -c - \
+ && chmod +x /usr/local/bin/osv-scanner \
+ && osv-scanner --version
+
+# --- Host-agnostic Python tooling -------------------------------------------
+# The L0 layer has no runtime behaviour (charter §5) — it is data, a validator,
+# and generators. Keeping it as plain Python in its own virtualenv means it runs
+# identically here, on a developer's macOS machine, and in CI.
+ENV CITE_VENV=/opt/cite-venv
+COPY requirements/tools.txt requirements/dev.txt /tmp/requirements/
+RUN python3 -m venv "$CITE_VENV" \
+ && "$CITE_VENV/bin/pip" install --no-cache-dir --upgrade pip \
+ && "$CITE_VENV/bin/pip" install --no-cache-dir \
+      -r /tmp/requirements/tools.txt -r /tmp/requirements/dev.txt \
+ && rm -rf /tmp/requirements \
+ # cite_tools itself is NOT installed here. It lives in the bind-mounted
+ # workspace, so it cannot be copied in at image build time without going stale,
+ # and a `pip install -e` at run time would be discarded when the container
+ # exits — every ephemeral `docker run` would need to repeat it. A path entry
+ # pointing at the mount makes it importable and always current, with no install
+ # step anywhere.
+ && echo "/workspace/tools" \
+      > "$("$CITE_VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')/cite_tools.pth"
+
+# --- Non-root user -----------------------------------------------------------
+# UID/GID are build args so that files created in the mounted workspace are
+# owned by the host user. Getting this wrong produces root-owned build
+# artifacts that the host cannot delete.
+#
+# Ubuntu 24.04 — and therefore ros:jazzy-ros-base-noble, which derives from it —
+# now ships a default `ubuntu` user at UID 1000 / GID 1000. On the most common
+# host there is (a fresh Ubuntu 24.04 desktop whose first interactive login is
+# UID 1000 / GID 1000) that pre-existing occupant collides with the `cite` user
+# we must create at the host's IDs. The old code hid the resulting groupadd /
+# useradd failures behind `2>/dev/null || true`, so the build "succeeded" while
+# `cite` was never created and every container then died at start with
+# "unable to find user cite: no matching entries in passwd file".
+#
+# So we evict whoever currently holds the requested UID/GID *first* — the
+# `ubuntu` user is the known culprit, but this handles any pre-existing occupant
+# by number rather than by name — then create `cite`. Removing an account that
+# is not in the way matches nothing and is a no-op, so this stays idempotent for
+# every UID/GID combination (1000/1000, the 1001/1001 defaults, a 501/20 macOS
+# host, …). The `|| true` masking is gone: user creation now fails the build.
+ARG USERNAME=cite
+ARG USER_UID=1001
+ARG USER_GID=1001
+# A build as root (USER_UID/USER_GID of 0) is rejected up front: the eviction
+# below would otherwise resolve to `userdel root && rm -rf /root` / `groupdel
+# root` and produce a broken image. Only 0 is rejected — every other host ID,
+# including sub-1000 macOS values such as 501/20 (which legitimately evicts the
+# image's gid-20 `dialout` group), is valid and must keep working.
+#
+# The `|| true` below guards only the *lookup*: when the UID is free, getent
+# exits non-zero and (under the image's `-o pipefail` shell) would abort the
+# whole chain. The passwd line is captured once and both fields are read from
+# it. The `|| true` never guards user creation, which stays hard. userdel runs
+# without `--remove` — which would return non-zero merely because the base image
+# ships no mail spool — and the evicted home directory is deleted explicitly.
+RUN if [ "$USER_UID" = "0" ] || [ "$USER_GID" = "0" ]; then \
+      echo "USER_UID/USER_GID of 0 (root) is not supported; build as a non-root host user" >&2; exit 1; \
+    fi \
+ && existing_passwd="$(getent passwd "$USER_UID" || true)" \
+ && existing_user="$(echo "$existing_passwd" | cut -d: -f1)" \
+ && existing_home="$(echo "$existing_passwd" | cut -d: -f6)" \
+ && if [ -n "$existing_user" ]; then userdel "$existing_user" && rm -rf "$existing_home"; fi \
+ && existing_group="$(getent group "$USER_GID" | cut -d: -f1 || true)" \
+ && if [ -n "$existing_group" ]; then groupdel "$existing_group"; fi \
+ && groupadd --gid "$USER_GID" "$USERNAME" \
+ && useradd --uid "$USER_UID" --gid "$USER_GID" -m -s /bin/bash "$USERNAME" \
+ && apt-get update && apt-get install -y --no-install-recommends sudo \
+ && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > "/etc/sudoers.d/$USERNAME" \
+ && chmod 0440 "/etc/sudoers.d/$USERNAME" \
+ && rm -rf /var/lib/apt/lists/*
+
+# Build-time assertion (charter P6): prove `cite` resolves at exactly the
+# requested UID/GID. If the collision handling above ever regresses, this fails
+# the build here — the earliest, cheapest place — instead of shipping an image
+# that is unusable the moment a container starts. This is the in-image test for
+# this change.
+RUN id "$USERNAME" \
+ && [ "$(id -u "$USERNAME")" = "$USER_UID" ] \
+ && [ "$(id -g "$USERNAME")" = "$USER_GID" ]
+
+RUN rosdep update --rosdistro "$ROS_DISTRO" || true
+
+# Docker seeds a fresh named volume from the image's directory at that path,
+# ownership included — and creates it root-owned if the path does not exist.
+# compose mounts named volumes over workspace/{build,install,log}, so without
+# these directories existing here and owned by the build user, every colcon run
+# in a fresh environment dies with a PermissionError on its own log directory.
+RUN mkdir -p /workspace/workspace/build \
+             /workspace/workspace/install \
+             /workspace/workspace/log \
+ && chown -R "$USER_UID:$USER_GID" /workspace
+
+COPY infra/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER $USERNAME
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["bash"]

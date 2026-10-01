@@ -1,0 +1,488 @@
+// Copyright 2026 Sam Houston State University
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// What these leaves actually put in a goal.
+//
+// An L4 leaf's whole job is to turn ports into one typed goal, so what it fills
+// in IS its behaviour — and it was wrong in a way no test could see. `PickAt`
+// wrote `object_pose.position.z = 0.030` into a field the action documents as
+// "where the object is", against a work-piece whose centre is at 0.025. The extra
+// 5.00 mm was this file guessing at where the tool should go, which is a question
+// about the END EFFECTOR and not about the line; the 40-trial campaign in
+// `docs/measurements/2026-08-25-grasp-plane-offset/` measured it as part of a
+// 24.4 mm error that rotated the work-piece past 20 degrees in 12 of 20 trials.
+//
+// Driven against a real action server, in-process, for the same reason
+// `test_skill_cancellation.cpp` is: what a leaf sends is only observable from the
+// far side of the action, and a mock would let the goal be asserted in the shape
+// this file believes it built rather than the shape that arrives.
+
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+
+#include <cite_interfaces/action/pick.hpp>
+#include <cite_interfaces/action/place.hpp>
+#include <cite_interfaces/msg/result_code.hpp>
+// The rule for WRITING the unobserved-pose convention. The fixtures below are
+// built with it rather than by hand, so they cannot drift from what the
+// detection server really publishes.
+#include <cite_skills/observation.hpp>
+
+#include "gtest/gtest.h"
+#include "cite_orchestration/skill_nodes.hpp"
+
+namespace
+{
+
+using cite_interfaces::action::Pick;
+using cite_interfaces::action::Place;
+using cite_interfaces::msg::ResultCode;
+using cite_orchestration::Context;
+using cite_orchestration::PickAt;
+using cite_orchestration::PlaceAt;
+using namespace std::chrono_literals;
+
+//: Fixture names, outside `/cite/` where no generated name can land. A test that
+//: stands up a fake server must not squat on an action the real cell serves: the
+//: suites run concurrently on one ROS domain, and two servers on one action name
+//: make each other fail in ways that read as unrelated defects.
+constexpr char kPickAction[] = "/skill_goals_test/pick";
+constexpr char kPlaceAction[] = "/skill_goals_test/place";
+
+//: A frame name, by contrast, is only ever copied into a goal and read back here,
+//: so the realistic one costs nothing and shows what a station actually sends.
+constexpr char kFrame[] = "cell_a__table_pick__surface";
+
+/// A server that records the goal it was sent and succeeds immediately.
+///
+/// Succeeding rather than hanging is deliberate: the leaf has to reach its own
+/// success path for the goal it sent to be the goal a working cycle sends.
+template<typename ActionT>
+class RecordingServer
+{
+public:
+  explicit RecordingServer(const std::string & action, uint8_t code = ResultCode::SUCCESS)
+  : node_(std::make_shared<rclcpp::Node>("recording_skill_server_" + std::to_string(++count_))),
+    code_(code)
+  {
+    server_ = rclcpp_action::create_server<ActionT>(
+      node_, action,
+      [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const typename ActionT::Goal> goal) {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        received_ = *goal;
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+      },
+      [](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>>) {
+        return rclcpp_action::CancelResponse::ACCEPT;
+      },
+      [this](const std::shared_ptr<rclcpp_action::ServerGoalHandle<ActionT>> handle) {
+        const uint8_t code = code_;
+        std::thread(
+          [handle, code]() {
+            auto result = std::make_shared<typename ActionT::Result>();
+            result->result.code = code;
+            // ABORTED rather than succeeded when the code is a failure: a leaf
+            // reads the CODE, and a server that reported a failure through a
+            // successful goal would be testing a shape the cell never produces.
+            if (code == ResultCode::SUCCESS) {
+              handle->succeed(result);
+            } else {
+              handle->abort(result);
+            }
+          }).detach();
+      });
+
+    executor_.add_node(node_);
+    spinner_ = std::thread([this]() {executor_.spin();});
+  }
+
+  ~RecordingServer()
+  {
+    executor_.cancel();
+    if (spinner_.joinable()) {
+      spinner_.join();
+    }
+  }
+
+  std::optional<typename ActionT::Goal> received() const
+  {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    return received_;
+  }
+
+private:
+  static inline std::atomic<int> count_{0};
+  rclcpp::Node::SharedPtr node_;
+  uint8_t code_;
+  typename rclcpp_action::Server<ActionT>::SharedPtr server_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spinner_;
+  mutable std::mutex mutex_;
+  std::optional<typename ActionT::Goal> received_;
+};
+
+BT::NodeConfig ports(const std::string & action)
+{
+  BT::NodeConfig config;
+  config.blackboard = BT::Blackboard::create();
+  config.input_ports["asset"] = "arm_1";
+  config.input_ports["action"] = action;
+  config.input_ports["frame"] = kFrame;
+  config.input_ports["workpiece"] = "workpiece";
+  return config;
+}
+
+
+/// Tick a leaf until it stops being RUNNING.
+///
+/// The leaves became `StatefulActionNode`s when the line gained parallel
+/// stations: they send a goal, return RUNNING, and poll without spinning
+/// anything. So a test drives them the way a tree does — by ticking — and
+/// something else spins the node. The wait below is a POLL PERIOD on an
+/// asynchronous result, not a guess at how long anything takes.
+BT::NodeStatus tick_until_settled(BT::TreeNode & leaf)
+{
+  BT::NodeStatus status = leaf.executeTick();
+  while (status == BT::NodeStatus::RUNNING) {
+    std::this_thread::sleep_for(5ms);
+    status = leaf.executeTick();
+  }
+  return status;
+}
+
+Context context_for(const rclcpp::Node::SharedPtr & node)
+{
+  Context context;
+  context.node = node;
+  context.skill_deadline = 20s;
+  context.cancel_deadline = 10s;
+  return context;
+}
+
+}  // namespace
+
+class SkillGoals : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    client_node_ = std::make_shared<rclcpp::Node>("skill_goals_test");
+    executor_.add_node(client_node_);
+    spinner_ = std::thread([this]() {executor_.spin();});
+  }
+
+  void TearDown() override
+  {
+    executor_.cancel();
+    if (spinner_.joinable()) {
+      spinner_.join();
+    }
+  }
+
+  rclcpp::Node::SharedPtr client_node_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::thread spinner_;
+};
+
+TEST_F(SkillGoals, PickSendsTheWorkpiecesOwnHeightNotAToolHeight)
+{
+  RecordingServer<Pick> server(kPickAction);
+  PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+
+  // 0.025, the centre of the cell's 50 mm reference cube resting on the frame —
+  // and specifically NOT 0.030, which is what this leaf sent while it was
+  // answering a question about the gripper that belongs one layer down. The
+  // skill server offsets this onto the pad plane using the end effector's own
+  // declared linkage, so a value here that anticipates the tool is now counted
+  // twice.
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
+  EXPECT_EQ(goal->object_pose.header.frame_id, kFrame);
+}
+
+TEST_F(SkillGoals, PickFallsBackToTheStationFrameWhenTheDetectionCarriesNoObservation)
+{
+  // THE PATH THE LINE ACTUALLY TAKES, and until now nothing exercised it.
+  //
+  // Every detector this project has is a break beam. A through-beam reports
+  // occupancy and knows nothing about position, so `Detection.pose` comes back
+  // marked unobserved and `PickAt` must reach for the station's L0 frame instead.
+  //
+  // BUILT BY THE FUNCTION THAT WRITES THE CONVENTION, not by a hand-made
+  // stand-in. `cite_skills::mark_pose_unobserved` is what the detection server
+  // calls, so this fixture cannot drift from the message the line really carries
+  // — and if the convention gains a fourth way of spelling absence, this test
+  // gets it for free. It used to be a default-constructed pose, because
+  // `cite_skills` exported no include directory and nothing outside it could
+  // reach the function; it exports one now.
+  geometry_msgs::msg::PoseStamped unobserved;
+  cite_skills::mark_pose_unobserved(unobserved);
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", unobserved);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+  EXPECT_EQ(goal->object_pose.header.frame_id, kFrame)
+    << "an unobserved detection was passed through as the object's pose; the arm would "
+       "be sent to wherever that pose happens to decode to";
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.x));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.y));
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
+}
+
+TEST_F(SkillGoals, PickRefusesAPoseThatHasAFrameAndNoNumbers)
+{
+  // THE CASE THE OLD GUARD LET THROUGH. `PickAt` used to ask only whether the
+  // frame_id was empty, because `cite_skills/observation.hpp` was unreachable
+  // from this package and the predicate could not be called. A pose with a frame
+  // set over NaN components passed that test and went to the planner as an object
+  // pose — where a NaN fails in TF or in inverse kinematics with a message about
+  // neither the detection nor the frame.
+  //
+  // `pose_is_observed` reads all three markings the convention writes, so this is
+  // the half that the frame_id test could not see. It is not hypothetical: it is
+  // exactly what a detector that stamps its own frame onto an unfilled pose would
+  // produce.
+  geometry_msgs::msg::PoseStamped half_marked;
+  cite_skills::mark_pose_unobserved(half_marked);
+  half_marked.header.frame_id = "a_frame_that_says_nothing";
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", half_marked);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+  EXPECT_EQ(goal->object_pose.header.frame_id, kFrame)
+    << "a pose carrying a frame and no finite numbers was sent as the object's pose";
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.x));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.position.y));
+  EXPECT_TRUE(std::isfinite(goal->object_pose.pose.orientation.w));
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.z, 0.025);
+}
+
+TEST_F(SkillGoals, PickUsesADetectionThatIsActuallyObserved)
+{
+  // The other half, so the hardening above cannot quietly become "ignore every
+  // detection". No detector in Phase 1 produces this, and the contract is what
+  // the day one arrives depends on.
+  geometry_msgs::msg::PoseStamped observed;
+  observed.header.frame_id = "observed_frame";
+  observed.pose.position.x = 0.11;
+  observed.pose.position.y = 0.22;
+  observed.pose.position.z = 0.33;
+  observed.pose.orientation.x = 1.0;
+  observed.pose.orientation.w = 0.0;
+
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  config.input_ports["pose"] = "{detected_pose}";
+  config.blackboard->set("detected_pose", observed);
+
+  PickAt leaf("PickAt", config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_EQ(goal->object_pose.header.frame_id, "observed_frame");
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.position.y, 0.22)
+    << "a real observation was discarded in favour of the station's frame, which throws "
+       "away the only thing that can know where the part actually is";
+}
+
+TEST_F(SkillGoals, PickPointsTheToolDown)
+{
+  // Not cosmetic: the skill stands off along the tool's own -Z, so with an
+  // identity orientation the approach pose would be below the table and the plan
+  // would fail with an inverse-kinematics error that says nothing about
+  // orientation.
+  RecordingServer<Pick> server(kPickAction);
+  PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.orientation.x, 1.0);
+  EXPECT_DOUBLE_EQ(goal->object_pose.pose.orientation.w, 0.0);
+}
+
+TEST_F(SkillGoals, PickLeavesTheWidthToTheModelsDefault)
+{
+  // 0 means "use the end effector's L0 default", which the skill server receives
+  // from the generated plan. A width written into the leaf is a second statement
+  // of that default, and one existed: it stayed at 45 mm when L0 moved to the
+  // real program's 60.9 mm close for the 66 mm part (ADR-0067), so the line
+  // closed to a width the model no longer declared. Whether the default is
+  // narrower than the part is `cite_tools.validate.physical`'s check, and the
+  // skill server's `resolve_grasp_width` refuses one that is not.
+  RecordingServer<Pick> server(kPickAction);
+  PickAt leaf("PickAt", ports(kPickAction), context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_DOUBLE_EQ(goal->grasp_width_m, 0.0) << "the leaf restated a grasp width the model "
+    "already declares";
+}
+
+TEST_F(SkillGoals, PlaceSendsTheWorkpiecesTargetNotAToolTarget)
+{
+  // `Place.Goal.target_pose` is where the OBJECT should end up, and the skill
+  // server applies the same pad-plane offset it applies to a pick. A height here
+  // that anticipated the tool would be counted twice, exactly as on the pick
+  // side. 0.040 against a part resting at 0.025 is a deliberate 15 mm drop.
+  RecordingServer<Place> server(kPlaceAction);
+  PlaceAt leaf("PlaceAt", ports(kPlaceAction), context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value()) << "the server never saw a goal, so nothing was tested";
+  EXPECT_DOUBLE_EQ(goal->target_pose.pose.position.z, 0.040);
+  EXPECT_GT(goal->target_pose.pose.position.z, 0.025)
+    << "a place at or below the resting height presses the part into the surface";
+}
+
+TEST_F(SkillGoals, PlaceRefusesToMimeAPlaceWithAnEmptyGripper)
+{
+  RecordingServer<Place> server(kPlaceAction);
+  PlaceAt leaf("PlaceAt", ports(kPlaceAction), context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+
+  const auto goal = server.received();
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_TRUE(goal->require_holding) << "without this the line believes a work-piece "
+    "arrived somewhere it never did, and the failure surfaces at the next station";
+}
+
+
+// ---------------------------------------------------------------------------
+// The blackboard key the recovery policy reads (ADR-0037).
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// The code recorded on a blackboard, or nothing if none was.
+std::optional<int> recorded_code(const BT::Blackboard::Ptr & blackboard)
+{
+  int code = 0;
+  if (!blackboard->get<int>(cite_orchestration::kLastResultCode, code)) {
+    return std::nullopt;
+  }
+  return code;
+}
+
+}  // namespace
+
+TEST_F(SkillGoals, ASuccessfulSkillDoesNotWriteTheCodeTheRecoveryPolicyReads)
+{
+  // THIS IS THE DEFECT THAT MADE THE RECOVERY POLICY DEAD CODE, and it is worth
+  // stating in full because the symptom looked like nothing at all.
+  //
+  // `SkillNode::poll` recorded its outcome unconditionally, success included, and
+  // `kLastResultCode` has exactly one reader: `RecoverFromFailure`. The recovery
+  // branch of `line_station.xml` ran `MoveToHome` before it. So on the common
+  // path — recovery motion succeeds — SUCCESS was written over the failure code
+  // the policy was about to read, `recovery_for(SUCCESS)` answered NONE, the
+  // station went back to WAITING, and the enclosing `<Repeat num_cycles="-1">`
+  // tried again. `ESCALATE` and `STOP_LINE` were unreachable on that path: every
+  // failure became a retry, `SAFETY_BLOCKED` and `HARDWARE_FAULT` included.
+  //
+  // ADR-0037 reorders that branch so the policy is consulted first. This is the
+  // other half, and it is not redundant with the ordering: a leaf added to the
+  // branch later would silently reintroduce the defect, and no test of the order
+  // would catch it.
+  RecordingServer<Pick> server(kPickAction);
+  auto config = ports(kPickAction);
+  const auto blackboard = config.blackboard;
+  PickAt leaf("PickAt", config, context_for(client_node_));
+
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::SUCCESS);
+  EXPECT_FALSE(recorded_code(blackboard).has_value())
+    << "a skill that succeeded wrote the key the recovery policy reads, so a recovery "
+    "MoveToHome can overwrite the failure that caused it";
+}
+
+TEST_F(SkillGoals, AFailedSkillDoesWriteTheCodeTheRecoveryPolicyReads)
+{
+  // The other direction, and the reason the fix above cannot simply stop writing
+  // the key. A failure must still reach the policy, and it must reach it as the
+  // CODE the server sent rather than as a default.
+  RecordingServer<Place> server(kPlaceAction, ResultCode::MOTION_INTERRUPTED);
+  auto config = ports(kPlaceAction);
+  const auto blackboard = config.blackboard;
+  PlaceAt leaf("PlaceAt", config, context_for(client_node_));
+
+  ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::FAILURE);
+  const auto code = recorded_code(blackboard);
+  ASSERT_TRUE(code.has_value()) << "the failure never reached the policy at all";
+  EXPECT_EQ(*code, static_cast<int>(ResultCode::MOTION_INTERRUPTED));
+}
+
+TEST_F(SkillGoals, ASuccessAfterAFailureDoesNotEraseTheFailure)
+{
+  // The sequence the recovery branch actually runs: something failed, and then a
+  // later leaf on the same blackboard succeeded. The failure has to survive it,
+  // because that is the value the policy chooses ESCALATE or STOP_LINE from.
+  auto config = ports(kPlaceAction);
+  const auto blackboard = config.blackboard;
+
+  {
+    RecordingServer<Place> failing(kPlaceAction, ResultCode::SAFETY_BLOCKED);
+    PlaceAt leaf("PlaceAt", config, context_for(client_node_));
+    ASSERT_EQ(tick_until_settled(leaf), BT::NodeStatus::FAILURE);
+  }
+
+  auto move_config = ports(kPickAction);
+  move_config.blackboard = blackboard;
+  RecordingServer<Pick> succeeding(kPickAction);
+  PickAt clearing("PickAt", move_config, context_for(client_node_));
+  ASSERT_EQ(tick_until_settled(clearing), BT::NodeStatus::SUCCESS);
+
+  const auto code = recorded_code(blackboard);
+  ASSERT_TRUE(code.has_value());
+  EXPECT_EQ(*code, static_cast<int>(ResultCode::SAFETY_BLOCKED))
+    << "a successful leaf erased the refusal the policy must never treat as a transient";
+}
+
+int main(int argc, char ** argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  rclcpp::init(argc, argv);
+  const int result = RUN_ALL_TESTS();
+  rclcpp::shutdown();
+  return result;
+}

@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# Launch the simulated cell.
+#
+#   ./scripts/sim --zone cell_b              GUI (requires a display)
+#   ./scripts/sim --zone cell_b --headless   no GUI — the form used by CI and by the tester agent
+#   ./scripts/sim --zone cell_b --pair       both sides of a twin pair, under the pair supervisor
+#
+# A pair takes --headless like a single side does, and without it opens one
+# window per side. The two windows are not distinguishable by their titles,
+# because both sides of a pair carry byte-identical names (ADR-0044, clause 1).
+#
+# --zone IS REQUIRED AND HAS NO DEFAULT (ADR-0056). The facility declares two
+# cells: `cell_b`, the one-arm cell this project works on, and `cell_a`, the
+# three-arm cell Phase 1 closed on, which is kept as a showcase and is brought up
+# with `./scripts/sim --zone cell_a`. Exactly one zone runs at a time — two share
+# one ROS graph and collide on the reserved `/cite/facility`, `/cite/line` and
+# `/cite/twin` scopes, which are deliberately not zone-scoped.
+#
+# --pair requires the zone to declare `twin: {sides: pair}` in the L0 model; on an
+# untwinned zone it refuses rather than inventing a second side. The two sides run
+# the same launch in two environments and are joined, never sequenced (ADR-0047).
+#
+# Launch arguments take the same `key:=value` spelling either way, so
+# `./scripts/sim --zone cell_b --pair line:=true` runs the line on both sides. A
+# pair takes fewer of them than one side does: `side:=` is the supervisor's to
+# decide.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+HEADLESS=0
+PAIR=0
+ZONE=""
+PASSTHROUGH=()
+# THREE SPELLINGS SET ONE VALUE, so the last one may not silently win.
+# `--zone X`, `--zone=X` and the launch spelling `zone:=X` all reach here — the
+# third because `./scripts/sim` forwards `key:=value` arguments and somebody who
+# knows `ros2 launch` will type it. A comment here used to claim that a bare
+# `zone:=X` "is caught below rather than silently competing with the flag", and
+# both halves were false: the case arm consumed it and the last writer won, so
+# `--zone cell_a zone:=cell_b` brought up `cell_b` without a word.
+#
+# `set_zone` is what makes the comment true. A second spelling that agrees is
+# redundant and allowed; one that disagrees is refused, naming both, because
+# there is no way to tell which the caller meant.
+ZONE_SPELLING=""
+set_zone() {  # set_zone <spelling> <value>
+    if [ -n "$ZONE" ] && [ "$ZONE" != "$2" ]; then
+        die "two different zones were asked for: ${ZONE_SPELLING} says '${ZONE}' and $1 says '$2'.
+  A cell comes up as one zone or the other, never both, so this cannot be resolved here."
+    fi
+    ZONE="$2"
+    ZONE_SPELLING="$1"
+}
+WANT_ZONE=0
+for arg in "$@"; do
+    if [ "$WANT_ZONE" -eq 1 ]; then
+        # A flag or a launch argument here means the NAME was left out and the
+        # next token was swallowed: `./scripts/sim --zone --headless` used to set
+        # ZONE to "--headless" and hand it to the launch, which then failed
+        # looking for a plan of that name.
+        case "$arg" in
+            -*|*:=*) die "--zone needs a zone name and was given '${arg}'.
+  ./scripts/sim --zone cell_b --headless" ;;
+        esac
+        set_zone "--zone" "$arg"
+        WANT_ZONE=0
+        continue
+    fi
+    case "$arg" in
+        --headless) HEADLESS=1 ;;
+        --pair)     PAIR=1 ;;
+        --zone)     WANT_ZONE=1 ;;
+        --zone=*)   set_zone "--zone=" "${arg#--zone=}" ;;
+        zone:=*)    set_zone "zone:=" "${arg#zone:=}" ;;
+        -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
+        *)          PASSTHROUGH+=("$arg") ;;
+    esac
+done
+
+if [ "$WANT_ZONE" -eq 1 ]; then
+    die "--zone needs a zone name.
+  ./scripts/sim --zone cell_b   the one-arm cell
+  ./scripts/sim --zone cell_a   the three-arm showcase"
+fi
+
+# Refused rather than defaulted (ADR-0056 decision 4). A default here would put
+# the zone back exactly where removing it from `default_plan_path` took it from:
+# somewhere nobody chose it.
+if [ -z "$ZONE" ]; then
+    die "--zone is required and has no default.
+  ./scripts/sim --zone cell_b   the one-arm cell this project works on
+  ./scripts/sim --zone cell_a   the three-arm cell Phase 1 closed on, kept as a showcase
+  Exactly one zone runs at a time; see ADR-0056."
+fi
+
+# A PAIR USED TO BE FORCED HEADLESS HERE, AND IS NOT ANY MORE. The reason given
+# was that two windows of a cell whose names are byte-identical on both sides
+# would be indistinguishable (ADR-0044, clause 1), and that the compose service
+# carrying a display carries one. The first is a usability cost, not a
+# technical block; the second is not a constraint on a pair at all, because both
+# sides run inside the ONE container the supervisor is started in, so one display
+# passthrough serves both. ADR-0044 clause 1 is about names in the ROS graph and
+# says nothing about windows.
+#
+# What the cost actually is, so nobody rediscovers it: the two windows carry the
+# same world name and cannot be told apart by their titles. The supervisor prints
+# which side it started first; beyond that, tell them apart by what you do to
+# them, or run --headless and inspect a side with Foxglove on its own domain.
+#
+# What it buys is the only way to WATCH a pair, which is what ./scripts/demo is
+# for. Two simulators and two GUIs on one machine is a real load — see CLAUDE.md
+# §2 on the real-time factor under CPU starvation before reading anything into
+# how fast it runs.
+
+# GUI needs display passthrough, which is a different compose service.
+if [ "$HEADLESS" -eq 0 ] && ! in_container; then
+    if [ "$(host_os)" = "macos" ]; then
+        die "GUI simulation is not supported from macOS.
+  Use --headless here and inspect the run with Foxglove, or run on the Linux workstation."
+    fi
+    export CITE_SERVICE=gui
+fi
+
+require_ros_env sim "$@"
+
+if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
+    die "No build found. Run ./scripts/build first."
+fi
+source_overlay
+
+# Captured first, then matched against a here-string rather than through a pipe.
+# `grep -q` exits on its first match, which sends SIGPIPE to `ros2 pkg list`, and
+# under `set -o pipefail` that turns a *successful* match into a failed pipeline.
+# The visible effect was this script reporting that cite_bringup is not built
+# whenever it was.
+# THE WINDOW GETS THE GPU, AND UNTIL 2026-09-28 IT NEVER HAD.
+#
+# Measured on this host that day: `gz sim gui` was rendering in SOFTWARE, and
+# nothing said so except two lines nobody read — `failed to load driver: iris`
+# and `egl: failed to create dri2 screen`. Mesa was reaching for the Intel
+# driver and for `/dev/dri/card1`, which the container does not have; it then
+# fell back to llvmpipe and painted a 3D scene on the CPU. The cost was not
+# cosmetic: a paired run with a window per side drove this 16-core host to a
+# load average of 22.74, the counterpart's arm fell 29.7 degrees behind its own
+# commanded trajectory, the controller aborted on GOAL_TOLERANCE_VIOLATED and
+# L4 stopped the line. With the two variables below set, the same host runs one
+# windowed cell at a load average of 0.80, and a PAIR with a window on each side
+# at 3.91 with both `gz sim gui` processes holding 293 and 295 MiB of VRAM at 30%
+# GPU utilisation — read from `nvidia-smi` rather than inferred, and the paired
+# figure measured because the paired case is the one that broke.
+#
+# BOTH SIDES HAD FALLEN BACK, NOT JUST THE SECOND, and that is what rules out
+# "one GPU cannot serve two" as the explanation: the pre-fix log carries four
+# `iris`/`dri` failures under EACH side's prefix. Neither window ever had the
+# GPU.
+#
+# WHY IT IS HERE AND NOT IN THE COMPOSE FILE. `__GLX_VENDOR_LIBRARY_NAME=nvidia`
+# names a vendor library, and on a host without it libglvnd would look for a
+# library that is not there. The compose file cannot ask that question; this can,
+# because by here we are inside the container looking at its own filesystem. The
+# NVIDIA container runtime injects both the device nodes and these libraries when
+# it is the runtime in use, so their presence IS the condition. A host with no
+# NVIDIA GPU falls through untouched and renders exactly as it did before.
+#
+# Both are honoured if the caller already set them, so a person debugging a
+# rendering problem can force either without editing this file.
+#
+# THE NEGATIVE BRANCH WARNS AND DOES NOT PASS IN SILENCE. A guard whose failure
+# mode is silence is the first failure class CLAUDE.md section 10 names, and here
+# the silent case IS the measured-bad one: a host without this library renders
+# both windows in software, which is the configuration that aborted an arm. It
+# warns rather than refusing, because a machine with an AMD or Intel GPU properly
+# passed through is fine and this test cannot see that — what it can say is that
+# the one path known to be fast was not taken.
+if [ "$HEADLESS" -eq 0 ]; then
+    if [ -e /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0 ]; then
+        export __NV_PRIME_RENDER_OFFLOAD="${__NV_PRIME_RENDER_OFFLOAD:-1}"
+        export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
+        info "GPU rendering: PRIME offload onto the NVIDIA vendor library"
+    else
+        warn "No NVIDIA GLX vendor library in this container, so this window is"
+        warn "  rendered by whatever GLX the container already resolves — which on"
+        warn "  the machine that measured this was llvmpipe, on the CPU. Check with"
+        warn "  nvidia-smi, or your GPU's equivalent, that the window is on the GPU."
+        warn "  Software rendering has been measured to starve this host badly"
+        warn "  enough to leave an arm 29.7 degrees behind its own trajectory and"
+        warn "  stop the line (docs/open-work.md #90). --headless avoids it entirely."
+    fi
+fi
+
+PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
+if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
+    warn "cite_bringup is not built yet — there is nothing to launch."
+    warn "Run ./scripts/build. See CLAUDE.md §2."
+    exit 0
+fi
+
+if [ "$PAIR" -eq 1 ]; then
+    info "Launching both sides of the pair under the supervisor"
+    # The supervisor rather than a second `ros2 launch` here: it owns the join
+    # and the pair's lifetime, and a shell that started two launches would leave
+    # nothing computing "the pair is up" and nothing stopping a half-pair
+    # (ADR-0047, Option A).
+    # Written as an `if` rather than `[ ... ] && ...` on purpose: this file runs
+    # under `set -e`, where a trailing test that is merely FALSE is a failing
+    # command, and the GUI case is exactly the false one.
+    PAIR_ARGS=("zone:=${ZONE}" "${PASSTHROUGH[@]}")
+    if [ "$HEADLESS" -eq 1 ]; then
+        PAIR_ARGS=(--headless "${PAIR_ARGS[@]}")
+    fi
+    exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
+fi
+
+info "Launching the simulated cell (zone=${ZONE}, headless=${HEADLESS})"
+exec ros2 launch cite_bringup simulation.launch.py \
+    zone:="$ZONE" \
+    headless:="$([ "$HEADLESS" -eq 1 ] && echo true || echo false)" \
+    "${PASSTHROUGH[@]}"

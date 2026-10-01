@@ -1,0 +1,5 @@
+---
+schema: cite/facility/v1
+facility:
+  id: cite
+  name: Test facility

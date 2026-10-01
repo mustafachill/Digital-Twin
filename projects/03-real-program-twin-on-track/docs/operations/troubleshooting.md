@@ -1,0 +1,401 @@
+# Troubleshooting
+
+- **Status:** `PARTIAL` — the "Start here" and "Environment" sections describe tooling that
+  exists today and can be run now. The "Build" and "Runtime" sections describe a system
+  that is not built yet. No section is covered by an automated test.
+
+## Start here, always
+
+```bash
+./scripts/doctor
+```
+
+It distinguishes **failed** from **skipped**. Skipped items do not exist at the current
+phase and are expected; failures are not. Most "nothing works" reports are a failed row in
+`doctor` that nobody ran.
+
+Second, before anything clever:
+
+```bash
+./scripts/clean && ./scripts/bootstrap && ./scripts/build
+```
+
+A stale build explains a genuinely surprising share of inexplicable failures. Rule it out
+early rather than after two hours.
+
+## Environment
+
+### `./scripts/build` seems to hang on macOS
+
+It is building the container image, which takes minutes on a first run. `_lib.sh` warns
+before this, but the warning scrolls. Run `./scripts/bootstrap` explicitly to do it as a
+visible step.
+
+### `No suitable Python found`
+
+The pinned dependencies have wheels for Python 3.10–3.13 only. Bootstrap prefers 3.12 to
+match the container.
+
+```bash
+brew install python@3.12          # macOS
+sudo apt install python3.12 python3.12-venv   # Ubuntu
+```
+
+### `cite_tools` not importable
+
+```bash
+./scripts/bootstrap --host-only
+```
+
+### Docker daemon not running
+
+Start Docker Desktop, or `sudo systemctl start docker`.
+
+## Build
+
+### `c++: fatal error: Killed signal terminated program cc1plus`
+
+The OOM killer, not a compiler bug and not a code error. A translation unit that includes
+generated ROS message headers routinely needs 2-3 GB, and the default one-worker-per-core
+parallelism multiplies that by the core count.
+
+`./scripts/build` derives its job count from **available memory** rather than from core
+count and reports the number it chose, so this should be rare. When it still happens:
+
+```bash
+CITE_BUILD_JOBS=1 ./scripts/build
+```
+
+and give Docker Desktop more memory (Settings → Resources). Building the full vendor
+`xarm_ros2` stack peaks near 6 GB in a single job, so a Docker VM below about 8 GB will be
+tight regardless of the job count.
+
+### `ModuleNotFoundError: No module named 'catkin_pkg'`
+
+An ament build is running under the host-agnostic tooling virtualenv instead of the system
+Python. The two environments are deliberately separate (`requirements/README.md`): ROS
+Python comes from apt, the tooling venv comes from pip, and the venv is kept **off** the
+`PATH` for exactly this reason.
+
+Check which interpreter is in front:
+
+```bash
+./scripts/enter dev
+command -v python3          # must be /usr/bin/python3, not /opt/cite-venv/bin/python3
+```
+
+If a previous build already cached the wrong interpreter, CMake will keep using it from
+`CMakeCache.txt` even after the `PATH` is fixed — so clean before retrying:
+
+```bash
+./scripts/clean && ./scripts/build
+```
+
+### The build fails on an apt package that bootstrap just installed
+
+Containers are ephemeral. `./scripts/build` and CI each run a fresh `docker run --rm`, so
+anything `rosdep install` puts in a container at run time is gone when that container
+exits. The image resolves `external/cite.repos`'s system dependencies at **image build**
+time for this reason.
+
+If you changed the manifest, rebuild the image:
+
+```bash
+./scripts/bootstrap
+```
+
+### A change to a script or the environment appears to have no effect
+
+`compose` mounts named volumes over `workspace/{build,install,log}`, so the copies of those
+directories you can see on the host are empty and deleting them changes nothing.
+`./scripts/clean` empties the volumes themselves; plain `rm -rf workspace/build` does not.
+
+### Package not found after building
+
+The overlay is not sourced. Inside the container the entrypoint does it; outside:
+
+```bash
+source workspace/install/setup.bash
+```
+
+### Changes not taking effect
+
+`--symlink-install` means Python changes take effect without rebuilding, and C++ changes do
+not. When in doubt about which copy is loaded, `./scripts/clean && ./scripts/build`.
+
+### `rosdep` reports unresolved dependencies
+
+A dependency is used but not declared in `package.xml`. Declare it. It works on your
+machine because you installed it once, and fails everywhere else.
+
+## Runtime
+
+### A topic exists but no data arrives
+
+**Suspect QoS first.** This is the most-misdiagnosed failure in ROS 2.
+
+```bash
+ros2 topic info /cite/... --verbose
+```
+
+Compare reliability, durability, and history on both sides. A best-effort publisher and a
+reliable subscriber never connect, and nothing reports it. See
+[`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md).
+
+**If both sides agree and one particular message still never arrives, it is not
+compatibility.** Reliable delivery is a promise to subscribers the publisher has been
+*matched* with, so a message published before that match reaches nobody — measured here as a
+subscriber up for 100 s receiving nothing for the next 300 while the bridge ran throughout.
+The section "Reliable is a promise to *matched* subscribers" in
+[`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md) has how to tell the two
+apart and what to do about it. **Do not answer it with a sleep or a publish loop.**
+
+### Nodes cannot see each other
+
+- `ROS_DOMAIN_ID` differs between shells, or collides with somebody else's session in the
+  lab. A collision makes another person's nodes appear in your graph, producing behaviour
+  no code in the repository explains.
+- `RMW_IMPLEMENTATION` differs between processes.
+- Container networking: DDS discovery does not cross Docker's default bridge reliably.
+
+### A controller will not activate
+
+Almost always joint names in the controller config not matching the description. The
+spawner error names the spawner, not the mismatch.
+
+```bash
+./scripts/validate-model      # checks this statically
+```
+
+Otherwise the controller manager was not ready — which under lifecycle sequencing should
+be impossible, so if you see it, that is a defect in bring-up.
+
+### Timeouts, TF extrapolation errors, "random" failures
+
+Suspect `use_sim_time`. One node on the wall clock and another on the simulation clock
+produces exactly this family of symptoms, all of them pointing away from the cause.
+
+### The simulation is slow, or a scenario timed out
+
+**Check what the container was allocated before you check the code.** Every wall-clock
+ceiling in `tests/scenarios/` scales inversely with real-time factor, and this cell wants
+several CPU cores; starve it and a scenario times out with nothing broken. The figure, its
+condition and the flake class are stated once — in
+[`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) under
+*Wall-clock ceilings* — and measured in
+[`../measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
+**Never answer such a timeout by widening a ceiling**, and do not read Gazebo's own
+`real_time_factor` field to decide: on a starved host it over-reports badly.
+
+Look at the CPU allocation the container runtime gives its Linux VM, and at what else was
+holding the host while the run was in flight. Then:
+
+```bash
+gz sim --versions      # confirm Harmonic
+```
+
+Then suspect collision geometry. A dense visual mesh reused as collision geometry is a
+first-rank cause of a collapsed real-time factor. `model-validator` catches it;
+`performance-engineer` measures it.
+
+### `gz topic -l` lists nothing while the cell is plainly running
+
+Not a fault. Every Gazebo process in a bring-up is started in an explicit transport
+partition, taken from the generated plan
+([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md)), and a `gz` client started
+without the same partition sees an empty transport rather than an error. This is the one
+ergonomic cost of that decision, and it is deliberate: `ROS_DOMAIN_ID` does not isolate
+Gazebo transport at all, and what used to isolate two cells was the container hostname —
+an accident that disappears the moment two sides share a container.
+
+Take the value from the plan rather than typing it, then use `gz` as before:
+
+```bash
+ZONE=cell_b   # or cell_a for the showcase; there is no default
+export GZ_PARTITION="$(./scripts/enter dev python3 -c '
+import sys
+from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
+print(load(default_plan_path(sys.argv[1])).side_named(PLANT_SIDE).gz_partition)' "$ZONE")"
+gz topic -l
+```
+
+> The zone is an ARGUMENT and not an environment variable, and the reason is in
+> `workspace/src/cite_bringup/README.md` under "What this costs you at a terminal":
+> `export CITE_ZONE=...` on the host never reaches the container.
+
+If bring-up itself refuses with a message naming `GZ_PARTITION` or `sides:`, that is not this
+problem: the plan is stale or was hand-edited. Run `./scripts/validate-model --write`, then
+`./scripts/build`.
+
+### `ros2 node list` is empty or short while the cell is plainly running
+
+The same shape of failure as the one above, on the other isolation, and it fails the same
+way: silence rather than an error. Each side of a twin pair runs in its own `ROS_DOMAIN_ID`,
+because both sides carry byte-identical names by rule and one ROS graph cannot hold two of
+them ([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)). A `ros2 topic echo`
+aimed at a topic on the other side does not fail; it waits, indefinitely, exactly as an
+incompatible QoS profile does.
+
+**Check which domain the shell is in before suspecting anything about the cell.**
+`./scripts/enter` from the checkout lands on the plant, which is the side every script here
+addresses and the side a person commands. `./scripts/doctor` reports that domain and says so.
+
+The plan states each side's *offset* from a base rather than an absolute domain — an absolute
+one in a committed, hashed tree would either differ in every clone and break
+`./scripts/validate-model`, or be identical in every clone and let two checkouts of one commit
+discover each other. The base travels in `CITE_DOMAIN_BASE`, and one function adds them, so
+ask it rather than doing the arithmetic:
+
+```bash
+ZONE=cell_b   # or cell_a for the showcase; there is no default
+./scripts/enter dev python3 -c '
+import os, sys
+from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
+plan = load(default_plan_path(sys.argv[1]))
+base = domain_base(os.environ)
+for side in plan.sides:
+    print(side.name, resolve_domain_id(plan, side.name, base))' "$ZONE"
+```
+
+An untwinned zone prints one line, and it is the domain the checkout already uses. Note that
+a checkout now claims **two** domains rather than one — the base is allocated on odd numbers
+so that no counterpart can ever land on another checkout's plant — so every checkout's domain
+changed on the day that landed. A cell launched before it and a shell entered after it are on
+different domains, and the shell finds an empty graph.
+
+### `gz sim --versions` disagrees with `./scripts/doctor`
+
+Not a fault, and nothing has been observed misbehaving as a result. **The container carries two
+Gazebo Sim installations, and which one answers depends on whether the ROS environment has been
+sourced.** Both readings below were taken from image `3a41d4e431b0` on 2026-09-03:
+
+| environment | `command -v gz` | `gz sim --versions` |
+|---|---|---|
+| **sourced** — `./scripts/enter dev bash -c ...` | `/opt/ros/jazzy/opt/gz_tools_vendor/bin/gz` | **8.11.0** |
+| **unsourced** — `docker run --rm --entrypoint bash cite-digital-twin:dev -lc ...` | `/usr/bin/gz` | **8.15.0** |
+
+The 8.15.0 is the `gz-harmonic` metapackage the Dockerfile installs from
+`packages.osrfoundation.org`; `dpkg -l` inside the image reads `gz-sim8-cli` and `libgz-sim8` at
+`8.15.0-1~noble`. The 8.11.0 is ROS Jazzy's vendored `gz_tools_vendor`. **The split is not only
+the command:** on the sourced `LD_LIBRARY_PATH`, `libgz-sim8.so.8` resolves to
+`/opt/ros/jazzy/opt/gz_sim_vendor/lib/libgz-sim8.so.8.11.0`, ahead of the system
+`/usr/lib/x86_64-linux-gnu/libgz-sim8.so.8.15.0`, so a sourced process loads the 8.11.0 server
+and not merely an 8.11.0 client.
+
+**The cell is consistent, and it is the vendored 8.11.0 throughout.** The image entrypoint
+sources `/opt/ros/${ROS_DISTRO}/setup.bash` before handing off to the command
+(`infra/docker/entrypoint.sh`), and `./scripts/enter`, `./scripts/sim` and `./scripts/scenario`
+all reach the container through it without overriding it. `./scripts/doctor` run inside the
+container reports **8.11.0**, and that is the simulator every process in a bring-up uses.
+`docker run --entrypoint bash` is what bypasses the sourcing and produces the other reading.
+
+**The hazard is the ad-hoc probe, not the cell.** A `gz` invocation that does not carry the ROS
+environment talks to a different Gazebo than the cell does — four releases apart — so a version,
+a behaviour or an oddity reproduced that way is not by itself a statement about this system.
+Probe through `./scripts/enter`, as the rest of this document does. Note that the partition entry
+above constrains the same command for an unrelated reason: an unsourced probe can be wrong about
+*which Gazebo*, and an unpartitioned one wrong about *which world*, and the two are independent.
+
+Both installations are legitimate and neither is known to be wrong, so **this entry records a
+fact and a hazard, not a bug.** Whether the image should carry one Gazebo or two is a decision
+and has not been taken.
+
+### `line_orchestrator` exits with "no LineTopology arrived"
+
+**Seen once, on a run that was restarted rather than analysed, so there is no log.** That is
+the whole reason this section exists: the next person to see it should capture the evidence
+before killing anything. A restart is what turned the only observation of this into an
+anecdote.
+
+**Capture first, while the cell is still up.** In another shell on the same domain
+(`./scripts/enter dev`, which lands on the plant — `./scripts/doctor` prints the domain):
+
+```bash
+ros2 topic info /cite/line/topology --verbose     # BOTH endpoints, all three QoS fields
+ros2 lifecycle get /cite/facility/topology_server # configured? active?
+ros2 node list | grep topology
+```
+
+Keep the full launch log. The coordinator's own FATAL line and the topology server's
+`configured with N station(s)` line, with their timestamps, are what separate the causes
+below; nothing reconstructs them afterwards.
+
+**Three candidate causes, worth separating rather than merging into "it was slow".**
+
+- **A QoS or latching mismatch on the topic.** The subscriber asks for the latched profile,
+  and the failure has two shapes. If the publisher is not `TRANSIENT_LOCAL`, the two are
+  *incompatible* and never connect — silently, which
+  [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md) and CLAUDE.md §10's first
+  bullet name as the most-misdiagnosed failure in ROS 2. If both sides are compatible but
+  the durability is volatile, they connect and still deliver nothing, because the server
+  publishes the topology **once**: a subscriber that matched after that publish gets no
+  sample and waits out the deadline. `ros2 topic info --verbose` distinguishes these two
+  from each other and from everything below.
+- **A publisher created and published from inside one callback.** Reliable is a promise to
+  *matched* subscribers, so anything published in the same callback that created the
+  publisher reaches nobody. This is the defect that cost this project a belt setpoint for
+  ten commits. **On the code as it stands it is ruled out, not suspected**: `topology_server`
+  creates its publisher in `on_configure` and publishes in `on_activate`, which are two
+  transitions. Check that this is still true before spending time elsewhere — it is the
+  cheapest of the three to re-confirm and the easiest to reintroduce.
+- **Genuinely slow bring-up under load.** `topology_deadline_s` defaults to 30 s. If the
+  topology arrives and the coordinator had already given up, the launch log shows the
+  server's own line *after* the FATAL. **Do not widen the parameter to make the symptom go
+  away.** It is a ceiling on a failure, not a schedule (P4), and
+  [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) is
+  explicit that no ceiling may be widened to absorb a slow host.
+
+**One thing that is not a candidate.** The deadline is a `std::condition_variable` wait on
+the wall clock, so a simulated clock that never started cannot expire it and cannot explain
+this. That failure produces a different symptom.
+
+### Bring-up fails on the second attempt
+
+Orphaned processes from the first.
+
+```bash
+pgrep -fl "gz sim|controller_manager"
+```
+
+Kill them. An orphan holds ports and names, and the resulting failure points nowhere near
+the cause.
+
+### Two `/clock` publishers, or two `/cite/facility/*` nodes with the same name
+
+Two zones are up on one ROS graph. **Exactly one is meant to be**
+([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
+decision 3), and the likeliest way it happens is the use `cell_a` is kept for: the showcase
+started in a second terminal while a `cell_b` run is up. `ROS_DOMAIN_ID` is derived per
+checkout and per side, never per zone, so both land on one graph.
+
+```bash
+ros2 topic info /clock                     # more than one publisher is the symptom
+ros2 node list | grep /cite/facility/      # each name should appear once
+ros2 topic list | grep -o '^/cite/[a-z0-9_]*' | sort -u   # one zone scope, plus facility/line/twin
+```
+
+**Only one of the collisions is loud**, and only with `line:=true`: `line_orchestrator`
+`RCLCPP_FATAL`s on a zone mismatch from the second latched `/cite/line/topology`. The rest
+are silent, and the consequences are not subtle — one `/cite/facility/get_model_version`
+answered by whichever server got there first, two `/robot_description` publishers describing
+**different robots**, so a bring-up can spawn the other cell's furniture into this cell's
+world, and a `/clock` fed by two independent simulators, which is CLAUDE.md §10's
+plausible-and-wrong mixed-time system.
+
+**The fix is to stop one of them**, not to work around it. Bring the second cell up from
+another checkout if you need both at once: the domain base is hashed per checkout, so a second
+clone gets its own graph. `./scripts/doctor` prints the domain a shell is on.
+
+A bring-up started *after* another zone is already on the graph is refused by `model_info`,
+naming the zone that is already there. That refusal is a graph-cache query and does not wait,
+so it cannot see a zone DDS has not discovered yet and says nothing about the same zone twice
+— which is why the symptom above is still worth knowing.
+
+## When none of this helps
+
+Delegate to the `debugger` agent. It carries the full trap list for this stack, isolates
+the noisy trial-and-error loop from the main conversation, and is required to **prove** a
+root cause rather than report a plausible hypothesis.
+
+Give it: the full error, what you were doing, what you expected, what you already ruled
+out.

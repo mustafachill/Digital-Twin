@@ -1,0 +1,1652 @@
+# Copyright 2026 Sam Houston State University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Read the generated bring-up plan.
+
+Kept apart from the launch file so it can be unit-tested without a ROS runtime.
+A launch file is awkward to test; a function that turns YAML into dataclasses is
+not, and most of what can go wrong here — a missing controller, a stage out of
+order, a package:// URI that does not resolve — is in this half.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+
+from ament_index_python.packages import get_package_share_directory
+import yaml
+
+PACKAGE_URI_PREFIX = "package://"
+
+# A restatement of the backend id `sim` used to live here, and the hardware
+# refusal below compared against it. ADR-0054 removed both: the id is a NAME, a
+# type may declare the vendor's physical `ros2_control` plugin under it, and that
+# record's Context measures this gate returning without refusing on exactly such
+# a model. What decides now is `commands_physical_hardware`, which the plan
+# states per (asset, side) because L0 declares it per backend beside the plugin
+# string it is about. The allowlist property the old comment claimed is what the
+# boolean actually delivers: the dangerous branch is the positive one, so a
+# backend nobody anticipated is refused unless someone wrote `true`, and there is
+# no name left to be wrong about.
+
+#: The deliberate opt-in. The same variable `scripts/_lib.sh` enforces at the
+#: shell boundary, so a person meets one name rather than two — but enforced here
+#: as well, because the shell gate only ever guarded `./scripts/enter hardware`
+#: and nothing at all inside the ROS graph.
+HARDWARE_OPT_IN_ENV = "CITE_ALLOW_HARDWARE"
+HARDWARE_OPT_IN_VALUE = "1"
+
+#: The Gazebo transport partition, as gz-transport itself reads it. Every process
+#: that speaks that transport — `gz sim`, `parameter_bridge`, `ros_gz_sim create`
+#: — must be started with this set to the value the plan names for its side.
+#:
+#: `ROS_DOMAIN_ID` does not isolate Gazebo transport and this variable is what
+#: does (ADR-0042). What isolated the pairs that have been measured was the
+#: container hostname, which gz-transport derives its default from — an accident
+#: of one deployment that evaporates the moment two sides share a container.
+GZ_PARTITION_ENV = "GZ_PARTITION"
+
+#: The DDS domain, as ROS 2 itself reads it. The second of the two isolations a
+#: side runs in, and it is not interchangeable with the one above: a partition is
+#: a gz-transport namespace that move_group, the controller managers, the skill
+#: servers and the coordinator have never heard of, and the domain was measured
+#: not to isolate the Gazebo transport at all (ADR-0042, ADR-0044 clause 2). A
+#: pair carrying one and not the other is either two cells sharing every belt
+#: topic or two cells colliding on every node name.
+#:
+#: **Enforced by :func:`require_domain`**, which is ADR-0044 clause 4's refusal in
+#: the shape of :func:`require_gz_partition`: a side whose process environment
+#: does not carry the domain the plan resolves for it does not start. What that
+#: check compares is this variable against `base + offset`, and the base arrives
+#: separately — see :data:`DOMAIN_BASE_ENV` for why it has to.
+DOMAIN_ENV = "ROS_DOMAIN_ID"
+
+#: The channel the plant's domain travels on, exported by `scripts/_lib.sh`
+#: beside `CITE_DOMAIN_SOURCE` and passed into every container.
+#:
+#: It carries the same number as `ROS_DOMAIN_ID` for the plant, and that is not
+#: redundancy. The plan states an OFFSET, so an absolute domain is base plus
+#: offset and a check needs the base from somewhere. Without this variable the
+#: only place to read it is `ROS_DOMAIN_ID` in the process's own environment —
+#: which, for the plant at offset 0, is the value under test, so the comparison
+#: would reduce to `env == env + 0` and pass for every possible value including a
+#: wrong one. Only the counterpart's half would have had teeth, and a green
+#: refusal would have been read as covering both sides (ADR-0044, clause 4).
+DOMAIN_BASE_ENV = "CITE_DOMAIN_BASE"
+
+#: The domains a side of a cell may occupy, inclusive of both ends.
+#:
+#: The LOWER of the two ranges the ROS 2 documentation names as safe from the
+#: Linux ephemeral port range, and the one this project's cells live in: 0 is the
+#: ecosystem-wide default `./scripts/doctor` fails on, and `cite_domain_id`
+#: allocates an odd base in 1..99 so that the counterpart at base + 1 lands in
+#: 2..100 (ADR-0044, clause 4).
+#:
+#: **Not a restatement of that allocation.** The allocation is a strict subset of
+#: this band and stays in `scripts/_lib.sh`; what is stated here is the band
+#: itself, which is an external fact about Linux and DDS rather than a project
+#: choice. Refused rather than clamped, and named after the base, because a
+#: resolved domain outside it is a mis-set base and not a value to repair.
+#:
+#: The upper band ROS 2 also documents, 215-232, is deliberately NOT admitted:
+#: `cite_runtime/test/test_shutdown_under_signal.py` draws a test's private
+#: domain from there precisely because no side of any checkout can be in it, and
+#: admitting a cell there would take that disjointness away.
+DOMAIN_BAND = range(1, 102)
+
+#: The side the untwinned model already describes, by name.
+#:
+#: A second statement of a name `tools/cite_tools/model/ids.py` owns, because
+#: this is a different build unit that cannot import that one. It does not DECIDE
+#: the value — it reads it out of the generated plan and refuses a plan that does
+#: not carry it, so the two cannot silently disagree. (A restatement of the
+#: simulation backend id used to sit above on the same argument; ADR-0054 removed
+#: it with the gate that read it, and side names are the only cross-build-unit
+#: string left here.)
+#:
+#: Named rather than taken as `sides[0]`, and that distinction is the point.
+#: ADR-0044 refuses positional meaning for the offset because positional meaning
+#: is not reviewable; a plan whose `sides:` list is addressed by index is one
+#: reordering away from handing a caller the counterpart's environment while
+#: calling it the plant.
+PLANT_SIDE = "plant"
+
+#: The side that exists only where the zone declares ``twin.sides: pair``.
+#:
+#: The second half of the pair `PLANT_SIDE` above states, and it does not DECIDE
+#: which sides exist. Which sides a zone has is read out of the plan's own
+#: `sides:` block, and which side an asset states a backend for is read off the
+#: controller manager - `ControllerManager.backend_on` is the one place those two
+#: names are turned into a value.
+#:
+#: **This is not the only statement of the string, and the count is not stated
+#: here**: `grep -rn COUNTERPART_SIDE` is what says how many exist, not this
+#: comment. Two others are known and they are not the same case.
+#: `cite_tools.model.ids.SIDES` is a different build unit that cannot import this
+#: one, which is the unavoidable kind. `cite_twin.routing.COUNTERPART_SIDE` is
+#: NOT: `cite_twin/package.xml` declares `<depend>cite_bringup</depend>` and
+#: `twin_boundary.py` already imports from this module, so that one could import
+#: rather than restate. Whether it should is that package's question and not
+#: this comment's; what would be wrong is implying all three are forced.
+COUNTERPART_SIDE = "counterpart"
+
+#: Which plan key states each side's backend. A fact about the plan SCHEMA - what
+#: the parser reads a side's backend out of - and deliberately not a second copy
+#: of the value map: `ControllerManager.backend_on` answers what the backend IS,
+#: and this answers what a refusal should call it, so a message and the accessor
+#: behind it cannot name different fields.
+#:
+#: Read-only, because it sits on the hardware gate's path: a plain dict here is
+#: module state anything in the process can pop the counterpart out of, and the
+#: gate would then walk one side and refuse nothing about the other for the rest
+#: of the run, silently.
+BACKEND_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
+    {
+        PLANT_SIDE: "backend",
+        COUNTERPART_SIDE: "counterpart_backend",
+    }
+)
+
+#: The same map for the fact each side declares, which is what the hardware
+#: refusal decides on and therefore what its message names. Kept beside its
+#: backend sibling because the two are emitted, parsed and answered in lockstep:
+#: a manager states both keys for a side or neither (ADR-0054, decision 3).
+#:
+#: **Two maps and not one derived from the other, deliberately.** They are not
+#: two copies of one value: each holds a DIFFERENT set of plan-key names, and
+#: each name is authored exactly once, here. What they share is the side names,
+#: and those are single-sourced already - both are keyed by `PLANT_SIDE` and
+#: `COUNTERPART_SIDE`, so neither can invent a side the other has not got.
+#: Deriving one from the other would mean building a plan key by string
+#: concatenation from the other's, which makes the counterpart's key names an
+#: artefact of a naming convention rather than something a reader can grep for,
+#: and would silently produce a key for any side added later whether the plan
+#: emits one or not. What must not drift is which SIDES they declare, and
+#: `test_the_two_side_maps_declare_the_same_sides` is what says so.
+PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
+    {
+        PLANT_SIDE: "commands_physical_hardware",
+        COUNTERPART_SIDE: "counterpart_commands_physical_hardware",
+    }
+)
+
+
+class PlanError(Exception):
+    """The bring-up plan is missing, malformed, or references something absent."""
+
+
+class HardwareNotPermittedError(PlanError):
+    """The plan would drive physical hardware and the opt-in was not given.
+
+    A `PlanError`, so the launch file's existing refusal path reports it the same
+    way it reports every other reason bring-up cannot proceed: a message and a
+    `Shutdown`, never a partially started cell.
+    """
+
+
+class GazeboPartitionMissingError(PlanError):
+    """A side is about to start Gazebo processes without its declared partition.
+
+    A `PlanError` for the same reason `HardwareNotPermittedError` is, and a
+    refusal rather than a warning for a sharper one: what it guards against
+    produces no symptom. Two servers sharing a partition connect silently and one
+    belt setpoint drives both cells, with nothing logged at either end. A warning
+    about that would be read once and then never again (ADR-0042).
+    """
+
+
+class DomainUnresolvedError(PlanError):
+    """A side's ROS domain cannot be resolved, or the plan does not state one.
+
+    A `PlanError` for the same reason the two above are, and a refusal for the
+    same reason the partition's is: what a wrong domain produces is not an error
+    but silence. Both sides of a pair carry byte-identical names by rule, so two
+    sides that resolved one domain would put two identically named node sets,
+    two `/clock` publishers and two identical frame trees into one graph; and a
+    side placed on a domain nobody expected simply finds an empty graph and waits
+    (ADR-0044).
+    """
+
+
+class RosDomainMismatchError(PlanError):
+    """A side would start its processes on a ROS domain that is not its own.
+
+    The exact counterpart of :class:`GazeboPartitionMissingError`, one isolation
+    over. ADR-0044 clause 2 states the two as one rule — a process belonging to a
+    side carries both — so the two refusals are the same refusal twice and are
+    kept in the same shape deliberately: a reader who has met one already knows
+    what the other means.
+
+    Separate from :class:`DomainUnresolvedError` because the two say different
+    things to whoever hits them. `DomainUnresolvedError` means the question could
+    not be answered — no base, no offset, an answer outside the band. This means
+    it was answered and the process is somewhere else, which is a bring-up that
+    would succeed and be invisible: a side alone on a domain nobody addresses
+    answers nothing, and a side sharing the plant's domain collides with it on
+    every name (ADR-0044, clause 4).
+    """
+
+
+class SideNotDeclaredError(PlanError):
+    """The plan declares no side by that name.
+
+    Separate from :class:`DomainUnresolvedError`, because the caller asking may
+    not have been asking about a domain at all. `gz.gz_environment` asks for a
+    side in order to build a `GZ_PARTITION`, and answering it with "the ROS
+    domain cannot be resolved" names the wrong isolation and sends a reader to
+    the wrong half of ADR-0044. What is actually missing is the side.
+
+    Whether a zone runs as a pair is an L0 fact, so the remedy is in the model
+    rather than in bring-up.
+    """
+
+
+@dataclass(frozen=True)
+class ControllerRef:
+    name: str
+    stage: int
+
+
+@dataclass(frozen=True)
+class Side:
+    """One side of the zone, and the two isolations it runs in.
+
+    An untwinned zone still has a side, and it is still named, still partitioned
+    and still given a domain offset. An isolation that appeared only when someone
+    paired a cell would be untested on every run that does not, which is the
+    arrangement ADR-0042 rejected — the isolation was already working by
+    accident, and an accident that only fails under the configuration nobody has
+    run yet is the worst kind.
+
+    ``domain_offset`` is half a domain on purpose. The absolute value is the
+    checkout's base plus this offset, resolved by :func:`resolve_domain_id`;
+    see :data:`DOMAIN_BASE_ENV` for where the base comes from and
+    `ids.domain_offset` for why an absolute domain cannot be emitted into a
+    committed, hashed tree.
+    """
+
+    name: str
+    gz_partition: str
+    domain_offset: int
+
+
+@dataclass(frozen=True)
+class MoveItConfig:
+    """Everything move_group needs for one arm, all generated from L0.
+
+    The controller names here and the ones ros2_control was configured with come
+    from the same model, which is what stops MoveIt and the controller manager
+    from disagreeing about what a controller is called — a mismatch that fails at
+    run time with an error naming neither.
+    """
+
+    group: str
+    base_link: str
+    tip_link: str
+    home_rad: tuple[float, ...]
+    srdf: Path
+    kinematics: Path
+    planning_pipelines: Path
+    joint_limits: Path
+    cartesian_limits: Path
+    controllers: Path
+    #: Which pipeline the skill server asks first, and what a refusal falls back
+    #: to (ADR-0027). Carried here rather than compiled into the server, and
+    #: under the server's own parameter names, so that no list anywhere maps one
+    #: to the other and goes stale.
+    default_pipeline: str
+    default_planner_id: str
+    fallback_pipeline: str
+    fallback_planner_id: str
+    #: Which of those planner ids define the SHAPE of a path rather than only its
+    #: endpoints, so that the skill server can refuse to have such a request
+    #: rescued by a planner that samples (ADR-0027).
+    cartesian_planner_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SkillActions:
+    """The action names one arm's L3 skill server advertises.
+
+    Generated, never assembled. Every one of these is `/cite/<zone>/<asset>/...`,
+    and an asset name written into a launch file or a parameter by hand is a
+    second place that name is made — the failure CLAUDE.md §8 names.
+    """
+
+    move_to: str
+    pick: str
+    place: str
+    grasp: str
+    transfer: str
+
+
+#: Every gripper key the plan carries, under the exact name the skill server
+#: declares it.
+#:
+#: One list, because the two names are the same name. `cite_bringup` used to
+#: pass four of these by hand, one of which (`gripper_max_width_m`) exists in
+#: neither the plan nor the server's declared parameters and was therefore
+#: silently dropped, while `gripper_default_grasp_width_m`, the two rate and
+#: tolerance keys and all seven linkage dimensions never arrived at all. The node
+#: ran on its compiled defaults, which happen to equal the L0 values — so it
+#: worked, and it worked only because two copies agreed. Reading the plan through
+#: this list keeps the number of statements at one: a key here reaches L3
+#: verbatim, and a key that reaches L3 came from the model.
+GRIPPER_KEYS = (
+    "gripper_open_position",
+    "gripper_closed_position",
+    "gripper_default_grasp_width_m",
+    "gripper_goal_tolerance_rad",
+    "gripper_max_drive_rate_rad_s",
+    "gripper_result_timeout_s",
+    "gripper_stall_band_narrow_m",
+    "gripper_stall_band_wide_m",
+    "gripper_drive_pivot_y_m",
+    "gripper_drive_pivot_z_m",
+    "gripper_finger_offset_y_m",
+    "gripper_finger_offset_z_m",
+    "gripper_pad_inset_m",
+    "gripper_tip_link_z_m",
+    "gripper_pad_face_centre_z_m",
+)
+
+#: Every ARM key the plan carries, under the exact name the skill server declares
+#: it. Same mechanism as `GRIPPER_KEYS`, kept as a separate tuple because these
+#: describe the arm's trajectory controller and not the end-effector, and one
+#: tuple named for the gripper carrying an arm's tolerance is how a name stops
+#: meaning anything.
+#:
+#: `arm_goal_tolerance_rad` is the L0 `constraints:` block's goal tolerance
+#: (ADR-0036), delivered to L3 because ADR-0037 classifies a failed execution by
+#: comparing the arm against the plan's endpoints and must use the same threshold
+#: the controller itself checks against rather than a second copy of it (P1).
+ARM_KEYS = ("arm_goal_tolerance_rad",)
+
+
+@dataclass(frozen=True)
+class ControllerManager:
+    asset: str
+    node: str
+    backend: str
+    #: What the counterpart side of this asset loads, or `None` where the zone
+    #: has no counterpart. The plan states it only on a paired zone, and states
+    #: it for every asset there, so `None` means "there is no such side" and
+    #: never "the model left the key out" (ADR-0041, Decision 3).
+    counterpart_backend: str | None
+    #: Whether this asset's PLANT backend can reach a physical machine, as the
+    #: L0 type declares it beside the plugin string it names (ADR-0054). This and
+    #: not `backend` is what `require_hardware_opt_in` decides on: an id is a
+    #: name, and a name says nothing about the plugin behind it.
+    #:
+    #: Read through `commands_physical_hardware_on` and never off this field —
+    #: see that accessor.
+    commands_physical_hardware: bool
+    #: The same fact for the counterpart side, `None` exactly where
+    #: `counterpart_backend` is `None`. The reader refuses a document that
+    #: states one of the pair without the other, so the two accessors can never
+    #: disagree about which sides this manager declares.
+    counterpart_commands_physical_hardware: bool | None
+    description_topic: str
+    #: Where this asset's joint state is published, stated by the plan rather
+    #: than composed by a consumer (see the generator's own note).
+    joint_state_topic: str
+    description: Path
+    spawn_xyz_m: tuple[float, float, float]
+    spawn_rpy_rad: tuple[float, float, float]
+    parameters: str
+    controllers: tuple[ControllerRef, ...]
+    moveit: MoveItConfig | None
+    trajectory_action: str | None
+    gripper_action: str | None
+    skills: SkillActions | None
+    #: Keyed by the names in `GRIPPER_KEYS`, which are the skill server's own
+    #: parameter names. Held as a mapping rather than as a dozen fields so that
+    #: delivering them cannot drift from declaring them: the launch file passes
+    #: this dictionary through, and a key it does not know about is impossible.
+    gripper: Mapping[str, float]
+    #: Keyed by the names in `ARM_KEYS`, delivered by the same route and for the
+    #: same reason as `gripper` above.
+    arm: Mapping[str, float]
+
+    def backend_on(self, side: str) -> str:
+        """Return the `ros2_control` backend this asset loads on ``side``, or refuse.
+
+        The one place in `cite_bringup` that turns an (asset, side) into a
+        backend. A backend is selected per (asset, side) — that is the grain
+        ADR-0041 Decision 3 chose and what Phase 2.B is made of — and the pair of
+        plan keys that state it is exactly the kind of value that acquires a
+        second reader, disagrees with the first and is discovered on a physical
+        machine. So this is the accessor a caller SHOULD ask, by side name rather
+        than by reaching for the field.
+
+        **It is not yet the only reader, and saying otherwise would be a claim
+        this repository does not support.** `cite_twin.twin_boundary` builds its
+        own `{asset: {side: backend}}` map straight off the two fields, and that
+        map is what decides whether the injected hardware refusal runs at all.
+        Migrating it is deliberately not a drop-in: `cite_twin.mode.Deployment`
+        keeps a TOTAL contract - `backend` returns `None` for an absent side, and
+        `has_a_far_side`, `assets_without_a_far_side` and
+        `physical_sides_commanded` all test `is None` - where this accessor
+        refuses. A caller swapping one for the other would have to wrap every
+        `(asset, side)` in `try/except SideNotDeclaredError` to rebuild the
+        `None`, which re-creates the three-way branch this refusal exists to
+        prevent. Whoever migrates it adds a total sibling accessor or accepts
+        that cost knowingly; ADR-0048's promotion section carries the decision.
+
+        By identity and never by index, for the reason `Plan.side_named` gives at
+        length: a caller who meant the counterpart and got whatever is second is
+        the failure this project refuses positional meaning to avoid.
+
+        **A side this asset states no backend for is refused, not reported as
+        `None`.** `counterpart_backend` is `None` exactly when the zone has no
+        counterpart — never when the model left the key out (see the field's own
+        note) — so the honest answer to "what does the counterpart load" on an
+        untwinned zone is that there is no such side, which is what
+        `SideNotDeclaredError` says. Returning `None` would hand every caller the
+        same three-way branch and let one of them read "no side" as "simulated".
+        """
+        if side == PLANT_SIDE:
+            return self.backend
+        if side == COUNTERPART_SIDE and self.counterpart_backend is not None:
+            return self.counterpart_backend
+        declared = (PLANT_SIDE,) if self.counterpart_backend is None else (
+            PLANT_SIDE,
+            COUNTERPART_SIDE,
+        )
+        stated = ", ".join(repr(name) for name in declared)
+        raise SideNotDeclaredError(
+            f"asset {self.asset!r} states no backend for a side named {side!r}; "
+            f"it states one for {stated}. Whether a zone runs as a pair is an L0 "
+            "fact - set `twin: {sides: pair}` on the zone and regenerate, rather "
+            "than asking bring-up to invent a side."
+        )
+
+    def commands_physical_hardware_on(self, side: str) -> bool:
+        """Whether what this asset loads on ``side`` can reach a physical machine.
+
+        To the declared fact what `backend_on` is to the backend: **the one place
+        in `cite_bringup` that turns an (asset, side) into the answer**. Reading
+        `commands_physical_hardware` or its counterpart directly is the
+        value-in-two-places P1 forbids, and the field that stops being read is
+        the one that goes stale (ADR-0054, decision 3).
+
+        It refuses an undeclared side with the same `SideNotDeclaredError`, for
+        the same reason and with the same wording as `backend_on`: the two
+        accessors answer the same shape of question about the same grain, and a
+        caller must not be able to get "there is no such side" from one and an
+        answer from the other. Because the plan states both keys for a side or
+        neither, they cannot disagree about which sides exist.
+
+        **A caller that genuinely needs a total answer asks
+        `commands_physical_hardware_on_or_none`**, which is the sibling
+        `backend_on`'s docstring says whoever migrates `cite_twin` has to add.
+        Do not rebuild the `None` with a `try/except` at a new call site: that
+        re-creates the three-way branch this refusal exists to prevent, and one
+        of the three arms reads "no side" as "simulated".
+        """
+        answer = self.commands_physical_hardware_on_or_none(side)
+        if answer is not None:
+            return answer
+        stated = ", ".join(
+            repr(name)
+            for name in (
+                (PLANT_SIDE,)
+                if self.counterpart_commands_physical_hardware is None
+                else (PLANT_SIDE, COUNTERPART_SIDE)
+            )
+        )
+        raise SideNotDeclaredError(
+            f"asset {self.asset!r} states no hardware declaration for a side named "
+            f"{side!r}; it states one for {stated}. Whether a zone runs as a pair "
+            "is an L0 fact - set `twin: {sides: pair}` on the zone and regenerate, "
+            "rather than asking bring-up to invent a side."
+        )
+
+    def commands_physical_hardware_on_or_none(self, side: str) -> bool | None:
+        """Answer the same question, with `None` where the asset declares no such side.
+
+        **The total sibling, and it exists for one caller.** `cite_twin` builds a
+        `{asset: {side: fact}}` map straight off every controller manager,
+        including on the shipped untwinned plan where no manager declares a
+        counterpart. A refusing accessor there would raise inside
+        `TwinBoundary.__init__` on the model this repository actually ships, and
+        no existing test would catch it because both twin-boundary launch tests
+        fabricate a paired plan first. `backend_on`'s docstring priced exactly
+        this — *"whoever migrates it adds a total sibling accessor or accepts
+        that cost knowingly"* — and this is that accessor (ADR-0054, decision 2).
+
+        **`None` means "this asset has no such side" and never "simulated".**
+        `cite_twin.mode.Deployment` keeps that distinction three-valued on
+        purpose: `assets_without_a_far_side` tests `is None`, and collapsing it
+        to a bare `bool` makes every unpaired asset look like it has a simulated
+        far side, which silently retires the `PRECONDITION_FAILED` refusal of a
+        two-sided mode on a one-sided deployment. Any caller that wants a safety
+        decision rather than a shape must treat `None` as "no machine there"
+        explicitly, in one place, and never by truthiness.
+        """
+        if side == PLANT_SIDE:
+            return self.commands_physical_hardware
+        if side == COUNTERPART_SIDE:
+            return self.counterpart_commands_physical_hardware
+        return None
+
+    def stages(self) -> list[tuple[int, tuple[str, ...]]]:
+        """Group the controllers by stage, in ascending order.
+
+        Stage is a dependency ordering, not a schedule: a broadcaster must be
+        active before the controllers that read the state it publishes. The
+        launch mechanism spawns one stage at a time and gates each on the
+        previous spawner exiting successfully — never on elapsed time (P4).
+        """
+        grouped: dict[int, list[str]] = {}
+        for controller in self.controllers:
+            grouped.setdefault(controller.stage, []).append(controller.name)
+        return [(stage, tuple(sorted(names))) for stage, names in sorted(grouped.items())]
+
+
+@dataclass(frozen=True)
+class Conveyor:
+    asset: str
+    state_topic: str
+    command_topic: str
+    installed_speed_mps: float
+
+
+@dataclass(frozen=True)
+class GraspHold:
+    """Where the simulation-only grasp-hold bridge drives one arm's world plugin.
+
+    Two Gazebo-transport topics, generated per arm from the L0 asset id and
+    emitted into the plugin's own declaration from the same calls (ADR-0065).
+    Nothing in this package builds either of them.
+
+    ONE ARM'S STATE TOPIC IS NOT HERE. The bridge runs in that arm's namespace and
+    subscribes to the relative name its skill server publishes on, which is how
+    the skill server and the planning-scene loader already resolve theirs.
+
+    READ BY THE SIMULATED LAUNCH AND BY NOTHING ELSE. An entry here does not
+    start anything by itself; `simulation.launch.py` is the only place in this
+    repository that reads it, and a guard in this package's tests fails if that
+    stops being true.
+    """
+
+    asset: str
+    attach_topic: str
+    detach_topic: str
+
+
+@dataclass(frozen=True)
+class Sensor:
+    """One break beam: where its level arrives, and where its events go.
+
+    `level_topic` and `detection_topic` are two interfaces, not two names for
+    one. The level is a state the beam republishes periodically; the event is
+    the edge L3 makes from it, and the process topology already gives
+    `detection_topic` to a station as a `DetectionEvent` trigger. Bridging the
+    raw `std_msgs/Bool` onto that name would put a second publisher of a second
+    type on the topic the line acts on.
+    """
+
+    asset: str
+    detection_topic: str
+    level_topic: str
+    frame_id: str
+    beam_axis: str
+    beam_length_m: float
+
+
+@dataclass(frozen=True)
+class Detection:
+    """Where the zone's single detection server runs, and what it advertises.
+
+    One per zone. A break beam watches a belt rather than a robot, so three
+    servers would give the question "did the piece pass beam 2" three answers.
+    """
+
+    namespace: str
+    detect_action: str
+
+
+@dataclass(frozen=True)
+class Workpieces:
+    """How wide the parts this zone handles are, as one interval.
+
+    ONE PER ZONE, not one per controller manager, which is why it is not on
+    `ControllerManager` and does not travel through `_named_numbers`. A
+    work-piece width is a fact about the facility; the gripper block beside it
+    carries facts about an end effector, and every key there is sourced from the
+    end-effector type (ADR-0052 A.4).
+
+    THE INTERVAL AND NEVER WHICH PART. `cite_skills::gripper_is_holding` judges a
+    stall against this range rather than against the width it commanded, and it
+    is never told which part is in the jaws: `Pick.Goal.workpiece_id` is an
+    instance id minted by L4's registry, and no map from one to an L0 work-piece
+    type exists anywhere in this repository. On a facility declaring one part the
+    two numbers are equal, which is today's model and is not a special case here.
+    """
+
+    narrowest_width_m: float
+    widest_width_m: float
+
+
+@dataclass(frozen=True)
+class Plan:
+    zone: str
+    world: Path
+    scene: Path
+    static_frames: Path
+    topology: Path
+    #: Every side this zone runs, in the order the generator emitted them, the
+    #: first of which is always the plant. Never empty — `load` refuses a plan
+    #: with no sides rather than defaulting one, because a defaulted partition is
+    #: the thing ADR-0042 forbids.
+    sides: tuple[Side, ...]
+    controller_managers: tuple[ControllerManager, ...]
+    conveyors: tuple[Conveyor, ...]
+    #: One per arm that fits a grasping end effector. Empty on a zone whose arms
+    #: grasp nothing, and read by the simulated launch alone (ADR-0065).
+    grasp_holds: tuple[GraspHold, ...]
+    sensors: tuple[Sensor, ...]
+    #: `None` when the zone declares no sensors, which is a real state and not a
+    #: fault: a cell with no beams has nothing for a detection server to watch,
+    #: and starting one would advertise `detect` over an empty sensor table.
+    detection: Detection | None
+    #: `None` when the zone declares no work-piece whose width L0 can state — no
+    #: part at all, or a mesh part whose extents live in a file L1 owns. A real
+    #: state and not a fault HERE, because a facility that grasps nothing has no
+    #: predicate to configure; where it is a fault, it is a fault at L0, and
+    #: `workpiece-width-unstated-for-a-grasping-facility` refuses the model
+    #: before a plan is generated at all (ADR-0052 A.7). Defaulting a width here
+    #: would put a number the model never stated inside the predicate.
+    workpieces: Workpieces | None
+
+    def side_named(self, name: str) -> Side:
+        """Return the side called ``name``, or refuse.
+
+        The way a side is addressed. `load` has already established that a side
+        named `PLANT_SIDE` exists, so the plant is always available; anything
+        else is available exactly when the zone declares it.
+
+        By identity and never by index. The offsets are emitted rather than left
+        implicit in list order because positional meaning is not reviewable, and
+        the same argument applies with more force to the side itself: reading
+        `sides[1]` gives a caller who meant the counterpart whatever happens to
+        be second, and on an untwinned zone gives them an `IndexError` where the
+        honest answer is "this zone has no counterpart" (ADR-0044).
+        """
+        for side in self.sides:
+            if side.name == name:
+                return side
+        declared = ", ".join(repr(s.name) for s in self.sides)
+        raise SideNotDeclaredError(
+            f"zone {self.zone!r} declares no side named {name!r}; it has {declared}. "
+            "Whether a zone runs as a pair is an L0 fact - set `twin: {sides: pair}` "
+            "on the zone and regenerate, rather than asking bring-up to invent a side."
+        )
+
+
+def resolve_uri(uri: str) -> Path:
+    """Turn a ``package://pkg/rest`` URI into an absolute path.
+
+    Resolved at launch rather than baked into the plan, because the plan is
+    committed to git and an absolute path in it would be wrong on every machine
+    but the one that generated it.
+    """
+    if not isinstance(uri, str):
+        raise PlanError(f"expected a package:// URI as a string, got {_kind(uri)} ({uri!r})")
+    if not uri.startswith(PACKAGE_URI_PREFIX):
+        return Path(uri)
+    remainder = uri[len(PACKAGE_URI_PREFIX):]
+    package, _, relative = remainder.partition("/")
+    if not package or not relative:
+        raise PlanError(f"malformed package URI: {uri!r}")
+    try:
+        share = get_package_share_directory(package)
+    except Exception as exc:  # noqa: BLE001 - ament raises its own exception type
+        raise PlanError(
+            f"{uri}: package {package!r} is not on the ament index. "
+            "Has the workspace been built and the overlay sourced?"
+        ) from exc
+    path = Path(share) / relative
+    if not path.exists():
+        raise PlanError(f"{uri} resolves to {path}, which does not exist")
+    return path
+
+
+def load(path: Path) -> Plan:
+    """Load and check a generated bring-up plan.
+
+    Every failure in here is a `PlanError`. That is not tidiness: the launch file
+    catches `PlanError` and turns it into ``BRING-UP FAILED: <reason>`` plus a
+    `Shutdown`, so anything escaping as a bare `KeyError` or `ValueError` instead
+    surfaces as a traceback out of an `OpaqueFunction` — which names the launch
+    machinery rather than the key that is missing from the plan.
+    """
+    if not path.is_file():
+        raise PlanError(
+            f"no bring-up plan at {path}. It is generated from the L0 model — "
+            "run ./scripts/validate-model --write, then ./scripts/build."
+        )
+    document = yaml.safe_load(path.read_text())
+    if not isinstance(document, dict) or "plan" not in document:
+        raise PlanError(f"{path}: expected a top-level `plan:` mapping")
+    plan = document["plan"]
+    if not isinstance(plan, dict):
+        raise PlanError(f"{path}: `plan:` must be a mapping, not {_kind(plan)}")
+
+    sides = _sides(plan, path)
+
+    managers = tuple(
+        _manager(entry, index)
+        for index, entry in enumerate(_sequence(plan, "controller_managers"))
+    )
+
+    for manager in managers:
+        if not manager.controllers:
+            raise PlanError(
+                f"controller manager for {manager.asset!r} lists no controllers; "
+                "bring-up would report success having activated nothing"
+            )
+
+    _every_declared_side_states_a_backend(sides, managers, path)
+
+    conveyors = tuple(
+        Conveyor(
+            asset=_require(entry, "asset", f"conveyor {index}"),
+            state_topic=_require(entry, "state_topic", f"conveyor {index}"),
+            command_topic=_require(entry, "command_topic", f"conveyor {index}"),
+            installed_speed_mps=_number(
+                _require(entry, "installed_speed_mps", f"conveyor {index}"),
+                "installed_speed_mps",
+                f"conveyor {index}",
+            ),
+        )
+        for index, entry in enumerate(_sequence(plan, "conveyors"))
+    )
+
+    # `_optional`, and the default is an empty list rather than a refusal: a zone
+    # whose arms grasp nothing declares none, and a plan written before this
+    # section existed must load rather than be rejected — the same rule the
+    # removed-key test in this package states for the other direction.
+    grasp_holds = tuple(
+        GraspHold(
+            asset=_require(entry, "asset", f"grasp hold {index}"),
+            attach_topic=_require(entry, "attach_topic", f"grasp hold {index}"),
+            detach_topic=_require(entry, "detach_topic", f"grasp hold {index}"),
+        )
+        for index, entry in enumerate(_optional(plan, "grasp_holds", []) or [])
+    )
+
+    for hold in grasp_holds:
+        if hold.attach_topic == hold.detach_topic:
+            raise PlanError(
+                f"grasp hold {hold.asset!r} names one topic for both taking hold and "
+                f"letting go ({hold.attach_topic}). The plugin would attach and detach "
+                "on the same message and the box would be taken and dropped at random."
+            )
+
+    sensors = tuple(
+        Sensor(
+            asset=_require(entry, "asset", f"sensor {index}"),
+            detection_topic=_require(entry, "detection_topic", f"sensor {index}"),
+            level_topic=_require(entry, "level_topic", f"sensor {index}"),
+            frame_id=_require(entry, "frame_id", f"sensor {index}"),
+            beam_axis=_require(entry, "beam_axis", f"sensor {index}"),
+            beam_length_m=_number(
+                _require(entry, "beam_length_m", f"sensor {index}"),
+                "beam_length_m",
+                f"sensor {index}",
+            ),
+        )
+        for index, entry in enumerate(_sequence(plan, "sensors"))
+    )
+
+    for sensor in sensors:
+        if sensor.level_topic == sensor.detection_topic:
+            raise PlanError(
+                f"sensor {sensor.asset!r} names one topic for both its raw level and its "
+                f"typed events ({sensor.detection_topic}). The bridge would publish a "
+                "std_msgs/Bool on the topic a station subscribes to for DetectionEvent, "
+                "and the two would fight over it."
+            )
+
+    detection = _detection(_optional(plan, "detection"))
+    if sensors and detection is None:
+        raise PlanError(
+            f"zone {_require(plan, 'zone', 'plan')!r} declares {len(sensors)} sensor(s) and "
+            "no `detection:` block, so nothing says where the server that turns their "
+            "levels into typed events runs. The beams would be bridged into ROS and "
+            "read by nobody."
+        )
+
+    return Plan(
+        zone=_require(plan, "zone", "plan"),
+        world=resolve_uri(_require(plan, "world", "plan")),
+        scene=resolve_uri(_require(plan, "scene", "plan")),
+        static_frames=resolve_uri(_require(plan, "static_frames", "plan")),
+        topology=resolve_uri(_require(plan, "topology", "plan")),
+        sides=sides,
+        controller_managers=managers,
+        conveyors=conveyors,
+        grasp_holds=grasp_holds,
+        sensors=sensors,
+        detection=detection,
+        workpieces=_workpieces(_optional(plan, "workpieces")),
+    )
+
+
+def _every_declared_side_states_a_backend(
+    sides: tuple[Side, ...], managers: tuple[ControllerManager, ...], path: Path
+) -> None:
+    """Refuse a plan whose `sides:` block names a side no asset states a backend for.
+
+    The fourth refusal of the kind `_sides` carries, and it is here rather than
+    there because it is the only one that needs both halves of the document: the
+    `sides:` block says which sides exist, and the controller managers say which
+    sides each asset loads something on. A plan can disagree with itself about
+    that, and every gate downstream then agrees with the wrong half.
+
+    **What it prevents, concretely.** A plan listing `plant` and `counterpart`
+    while a manager omits `counterpart_backend` used to load cleanly:
+    `Plan.side_named('counterpart')` returned a side, `backend_on('counterpart')`
+    raised `SideNotDeclaredError`, and `require_hardware_opt_in` skipped that side
+    without refusing - so `CITE_ALLOW_HARDWARE` gated a side the plan says exists.
+    Through L5 the same document accepted `SetMode(VIRTUAL_LEAD)` for the same
+    reason. The plan said a side was there and every gate said it was not.
+
+    **Why this is a refusal and not a softer accessor.**
+    `ControllerManager.backend_on` documents `counterpart_backend is None` as
+    meaning *the zone has no counterpart*, never *the model left the key out*.
+    That invariant is enforced in the GENERATOR, and this module is the reader
+    that faces documents the generator did not write - stale ones, hand-edited
+    ones. Enforcing it here is what makes the accessor's promise true of every
+    document that loads rather than only of every document we emit.
+
+    **It is not the stale-key tolerance's opposite.** A document carrying a key
+    that was REMOVED still loads and is ignored (ADR-0048 clause 3): the reader
+    stopped needing it, so its presence says nothing. A document MISSING a key a
+    side it declares needs is refused: the reader does need it, and skipping the
+    side silently is how the gate above went quiet. Different questions.
+    """
+    for side in sides:
+        field = BACKEND_FIELD_BY_SIDE.get(side.name)
+        if field is None:
+            # A side this module has no backend field for at all - a third side,
+            # which nothing in this project emits yet. Refusing it here would be
+            # this function deciding how many sides may exist, which is L0's and
+            # `ids.SIDES`' answer, not the reader's.
+            continue
+        silent = sorted(
+            manager.asset
+            for manager in managers
+            if not _states_a_backend_for(manager, side.name)
+        )
+        if silent:
+            raise SideNotDeclaredError(
+                f"{path}: the plan declares a side named {side.name!r}, and "
+                f"{len(silent)} controller manager(s) state no backend for it: "
+                f"{', '.join(repr(asset) for asset in silent)}. Each of those "
+                f"entries is missing `{field}:`. A side that exists in the "
+                "`sides:` block and nowhere else is invisible to every gate that "
+                "asks an asset what it loads - the hardware opt-in would let it "
+                "past unasked - so the plan is refused rather than half-honoured. "
+                "Which sides a zone has is an L0 fact: set `twin: {sides: pair}` "
+                "on the zone and regenerate."
+            )
+
+
+def _states_a_backend_for(manager: ControllerManager, side: str) -> bool:
+    """Whether this asset names a backend for that side, asked the one way.
+
+    Through `backend_on` rather than off the fields, so that this refusal and the
+    accessor it protects cannot disagree about what "states a backend" means.
+    """
+    try:
+        manager.backend_on(side)
+    except SideNotDeclaredError:
+        return False
+    return True
+
+
+def _sides(plan: object, path: Path) -> tuple[Side, ...]:
+    """Read the zone's sides, refusing anything that would leave one unpartitioned.
+
+    Three refusals, and each names a way the isolation could be lost silently
+    rather than a way the file could be untidy:
+
+    * **no sides at all** — a plan generated before ADR-0042, or one hand-edited
+      to remove the block. Defaulting a partition here would put the derivation
+      in two places, which is the failure the emission exists to prevent;
+    * **an empty partition** — a side that would fall back to gz-transport's own
+      `<HOSTNAME>:<USERNAME>` default, which is exactly the accident the decision
+      replaced;
+    * **two sides sharing one partition** — the measured defect itself, written
+      down: two servers on one partition see each other's topics, and one belt
+      command starts both cells' belts.
+    """
+    entries = _sequence(plan, "sides")
+    sides = tuple(
+        Side(
+            name=str(_require(entry, "name", f"side {index}")),
+            gz_partition=str(_require(entry, "gz_partition", f"side {index}")),
+            domain_offset=_offset(_require(entry, "domain_offset", f"side {index}"), index),
+        )
+        for index, entry in enumerate(entries)
+    )
+    if not sides:
+        raise GazeboPartitionMissingError(
+            f"{path}: the plan declares no `sides:`, so nothing says which Gazebo "
+            "transport partition this zone runs in. ROS_DOMAIN_ID does not isolate "
+            "Gazebo transport (ADR-0042), and the partition is generated from L0 — "
+            "run ./scripts/validate-model --write, then ./scripts/build."
+        )
+    for side in sides:
+        if not side.gz_partition.strip():
+            raise GazeboPartitionMissingError(
+                f"{path}: side {side.name!r} names an empty gz_partition. An unset "
+                "partition falls back to gz-transport's <HOSTNAME>:<USERNAME> default, "
+                "which is the deployment accident ADR-0042 replaced."
+            )
+    names = [s.name for s in sides]
+    if len(set(names)) != len(names):
+        shared = sorted({n for n in names if names.count(n) > 1})
+        raise SideNotDeclaredError(
+            f"{path}: two sides are named {', '.join(repr(n) for n in shared)}. "
+            "A side is addressed by identity - `side_named` returns the first match "
+            "and every caller believes it got the only one - so a duplicated name "
+            "hands one caller a side and another caller a different side under the "
+            "same word (ADR-0044)."
+        )
+    partitions = [s.gz_partition for s in sides]
+    if len(set(partitions)) != len(partitions):
+        shared = sorted({p for p in partitions if partitions.count(p) > 1})
+        raise GazeboPartitionMissingError(
+            f"{path}: sides share the Gazebo partition(s) {', '.join(shared)}. Two "
+            "servers on one partition subscribe to each other's topics, so one belt "
+            "setpoint would start both cells' belts with nothing logged."
+        )
+
+    # The domain half of the same three questions, refused in the same place so
+    # that a side cannot arrive carrying one isolation and not the other.
+    offsets = [s.domain_offset for s in sides]
+    if len(set(offsets)) != len(offsets):
+        shared = sorted({o for o in offsets if offsets.count(o) > 1})
+        raise DomainUnresolvedError(
+            f"{path}: sides share the domain offset(s) "
+            f"{', '.join(str(o) for o in shared)}, so they resolve to one domain. "
+            "Both sides carry byte-identical names by rule, so one graph would hold "
+            "two of every node, two publishers of /clock and two identical frame "
+            "trees (ADR-0044)."
+        )
+
+    named = [s for s in sides if s.name == PLANT_SIDE]
+    if not named:
+        raise SideNotDeclaredError(
+            f"{path}: no side is named {PLANT_SIDE!r}. Every zone has a plant — it is "
+            "the side the untwinned model describes and the side every scenario and "
+            "./scripts/sim addresses — and callers ask for it by name rather than by "
+            "position, so a plan without it has nothing to hand them."
+        )
+    if named[0].domain_offset != 0:
+        raise DomainUnresolvedError(
+            f"{path}: side {PLANT_SIDE!r} declares domain offset "
+            f"{named[0].domain_offset} rather than 0. Offset 0 is what makes an "
+            "untwinned zone resolve to the domain the checkout already uses; a plant "
+            "anywhere else moves every existing script off the cell it launched."
+        )
+
+    # An offset is an INDEX into the sides, not a free number: `ids.domain_offset`
+    # forms it as `SIDES.index(side)`, so a plan with N sides declares exactly
+    # 0..N-1 and nothing else. Without this a hand-written `domain_offset: 200`
+    # loaded, and 200 resolves a counterpart far outside the band any side may
+    # occupy - the same edge the odd-base allocation was chosen to eliminate,
+    # arriving through the plan instead of through the derivation (ADR-0044,
+    # clause 4). The offsets are checked as a SET, so this subsumes nothing above:
+    # the distinctness refusal names the collision, this one names the range.
+    if set(offsets) != set(range(len(sides))):
+        raise DomainUnresolvedError(
+            f"{path}: the sides declare domain offsets "
+            f"{', '.join(str(o) for o in offsets)}; a plan with {len(sides)} side(s) "
+            f"declares exactly {', '.join(str(o) for o in range(len(sides)))}. An "
+            "offset is an index into the sides rather than a number of domains a "
+            "reader may choose - it is generated from the L0 model, so run "
+            "./scripts/validate-model --write, then ./scripts/build."
+        )
+    return sides
+
+
+def require_gz_partition(side: Side, environ: Mapping[str, str]) -> None:
+    """Refuse to start a side whose process environment lacks its own partition.
+
+    ``environ`` is the environment the caller is about to hand to the Gazebo
+    processes, not the launching shell's. That is the sharper question, and it is
+    the one that catches the failure that actually happens: a stale generated
+    tree is caught earlier by `./scripts/validate-model`, while this catches the
+    launch path that dropped the value on its way into the process (ADR-0042).
+
+    A refusal rather than a warning, and never a default. What a missing
+    partition produces is not an error but silence — two cells that discover each
+    other's topics and act on each other's commands, with every ROS-side
+    instrument this project has reporting clean isolation at the same moment.
+    """
+    carried = environ.get(GZ_PARTITION_ENV)
+    if carried == side.gz_partition:
+        return
+    if carried is None:
+        raise GazeboPartitionMissingError(
+            f"side {side.name!r} would start its Gazebo processes with no "
+            f"{GZ_PARTITION_ENV}. The plan names {side.gz_partition!r}; without it "
+            "gz-transport falls back to <HOSTNAME>:<USERNAME>, and two sides sharing a "
+            "container then share every Gazebo topic silently (ADR-0042)."
+        )
+    raise GazeboPartitionMissingError(
+        f"side {side.name!r} would start its Gazebo processes with "
+        f"{GZ_PARTITION_ENV}={carried!r}, but the plan names {side.gz_partition!r}. "
+        "The partition is generated from L0 and is the one name that decides which "
+        "cell a belt command reaches; it may not be overridden per run."
+    )
+
+
+def domain_base(environ: Mapping[str, str]) -> int:
+    """Read the checkout's domain base out of the environment, or refuse.
+
+    The base is a deployment fact and cannot be generated: derived from the
+    checkout path it differs in every clone, which would break the byte-identity
+    check `./scripts/validate-model` performs on the committed tree; derived from
+    the model it is identical in every clone, so two checkouts of one commit
+    would resolve the same domain and discover each other. Those two are jointly
+    exhaustive, which is why the plan carries an offset and the base arrives here
+    instead (ADR-0044, clause 4).
+
+    ``environ`` is passed in rather than read from `os`, so a caller can ask what
+    a process it is about to start would resolve rather than what this one did.
+    """
+    raw = environ.get(DOMAIN_BASE_ENV)
+    if raw is None:
+        raise DomainUnresolvedError(
+            f"{DOMAIN_BASE_ENV} is unset, so no side's ROS domain can be resolved: "
+            "the plan states an offset from a base, and the base belongs to the "
+            "deployment rather than to the model. It is exported by scripts/_lib.sh "
+            "and handed to every container, so reaching this means something entered "
+            "the ROS graph outside ./scripts/*."
+        )
+    try:
+        base = int(raw)
+    except ValueError as exc:
+        raise DomainUnresolvedError(
+            f"{DOMAIN_BASE_ENV}={raw!r} is not a whole number."
+        ) from exc
+    if base < 0:
+        raise DomainUnresolvedError(f"{DOMAIN_BASE_ENV}={raw!r} is negative.")
+    return base
+
+
+def resolve_domain_id(plan: Plan, side: str, base: int) -> int:
+    """Resolve one side's absolute ROS domain: the base plus the side's offset.
+
+    **The one place this addition is written.** The launch graph, any refusal,
+    `doctor`'s report, a counterpart flag on `./scripts/enter` and any harness
+    that addresses a pair call this; none of them recomputes `base + offset`,
+    because a second copy of that arithmetic is a value in two places and the two
+    copies disagree the first time the allocation changes (ADR-0044, clause 4).
+    The tree already shows what the alternative costs: the range bound of the
+    derivation in `scripts/_lib.sh` has existed in three places, and the third is
+    an independent reimplementation that drifted out of sight.
+
+    ``side`` is a side IDENTITY rather than an index, so the caller says which
+    side it means and a reordered plan cannot answer with the other one.
+
+    A shell caller reaches this the way `docs/operations/troubleshooting.md`
+    already reaches the partition - by asking Python for the plan's answer rather
+    than reimplementing it in `sh`.
+
+    **The band is enforced here, and here only.** `cite_domain_id`'s odd-base
+    allocation is what makes `base + 1` land inside :data:`DOMAIN_BAND`, and that
+    guarantee holds for a DERIVED base and nothing else: an explicit
+    `CITE_DOMAIN_BASE=101` or `ROS_DOMAIN_ID=101` goes straight past it and
+    resolves a counterpart to 102, which is the exact edge ADR-0044 clause 4
+    spends a paragraph eliminating. This is the single place every consumer
+    reaches the absolute value, so it is the only place that can close it.
+    """
+    domain = base + plan.side_named(side).domain_offset
+    if domain not in DOMAIN_BAND:
+        raise DomainUnresolvedError(
+            f"side {side!r} resolves to ROS domain {domain}, outside "
+            f"{DOMAIN_BAND.start}..{DOMAIN_BAND.stop - 1}. The base is {base}, from "
+            f"{DOMAIN_BASE_ENV}, and the side's offset is "
+            f"{plan.side_named(side).domain_offset}. Domain 0 is the ecosystem-wide "
+            "default ./scripts/doctor fails on and domains above 101 collide with the "
+            "Linux ephemeral port range; scripts/_lib.sh derives a base that leaves "
+            "room for the counterpart, so reaching this means the base was set by "
+            "hand (ADR-0044, clause 4)."
+        )
+    return domain
+
+
+def require_domain(plan: Plan, side: str, environ: Mapping[str, str]) -> None:
+    """Refuse to start a side whose process environment is not on its own domain.
+
+    ADR-0044 clause 4's last obligation, and the counterpart of
+    :func:`require_gz_partition` one isolation over: *a side whose process
+    environment does not carry the domain the plan resolves for it does not
+    start.* Symmetry is the requirement rather than a nicety — one refusal
+    covering both variables, so that carrying one and not the other is impossible
+    rather than merely discouraged.
+
+    ``environ`` is the environment of the process that is about to bring the side
+    up — its OWN, not one it is assembling for a child. That asymmetry with
+    `require_gz_partition` is real and is the difference between the two
+    isolations rather than an inconsistency. `GZ_PARTITION` is read by each
+    gz-transport process as it starts, so the sharp question there is what the
+    launch is about to hand `gz sim`. `ROS_DOMAIN_ID` is read by DDS when a
+    context is created and is inherited by every child the launch starts, so the
+    sharp question here is which domain the launching process itself sits on.
+
+    **The plant's half is not a tautology, and this is the failure ADR-0044 most
+    nearly repeated.** A domain is `base + offset`, so a check needs the base from
+    somewhere; if it read the base out of :data:`DOMAIN_ENV` it would compare the
+    plant's own `ROS_DOMAIN_ID` against itself plus nothing, and `env == env + 0`
+    passes for every possible value including a wrong one. The base therefore
+    arrives on its own channel, :data:`DOMAIN_BASE_ENV`, and the two values
+    compared here are independently sourced on **both** sides. A supervisor that
+    sets a child's `ROS_DOMAIN_ID` and forgets its `CITE_DOMAIN_BASE`, or the
+    reverse, is refused here rather than producing a side that comes up somewhere
+    nobody is listening.
+
+    Nothing is defaulted and nothing is repaired. A missing `ROS_DOMAIN_ID` is
+    not "domain 0" here, because domain 0 is the ecosystem-wide default this
+    whole mechanism exists to escape and `./scripts/doctor` already fails a run
+    that lands on it.
+    """
+    base = domain_base(environ)
+    offset = plan.side_named(side).domain_offset
+    resolved = resolve_domain_id(plan, side, base)
+    carried = environ.get(DOMAIN_ENV)
+    if carried is None:
+        raise RosDomainMismatchError(
+            f"side {side!r} would start with no {DOMAIN_ENV}, so its processes "
+            f"would join the ecosystem-wide default domain rather than the "
+            f"{resolved} the plan resolves for it. The base is {base} from "
+            f"{DOMAIN_BASE_ENV} and the side's offset is {offset}; "
+            "scripts/_lib.sh exports both, so reaching this means something "
+            "entered the ROS graph outside ./scripts/* (ADR-0044, clause 4)."
+        )
+    try:
+        current = int(carried)
+    except ValueError as exc:
+        raise RosDomainMismatchError(
+            f"side {side!r} would start with {DOMAIN_ENV}={carried!r}, which is not "
+            "a whole number. ROS 2 does not refuse it; it falls back to the default "
+            "domain, and the side comes up where nothing addresses it."
+        ) from exc
+    if current == resolved:
+        return
+    raise RosDomainMismatchError(
+        f"side {side!r} would start on {DOMAIN_ENV}={current}, but the plan "
+        f"resolves {resolved} for it: base {base} from {DOMAIN_BASE_ENV} plus "
+        f"offset {offset}. "
+        "Both sides of a pair carry byte-identical names by rule, so a side on "
+        "the wrong domain is either two identical node sets and two /clock "
+        "publishers in one graph, or a cell alone on a domain nobody addresses. "
+        "Neither reports anything (ADR-0044, clauses 1 and 4)."
+    )
+
+
+def _detection(entry: object | None) -> Detection | None:
+    if entry is None:
+        return None
+    return Detection(
+        namespace=_require(entry, "namespace", "detection"),
+        detect_action=_require(entry, "detect_action", "detection"),
+    )
+
+
+def _workpieces(entry: object | None) -> Workpieces | None:
+    """Read the zone's work-piece width interval, or None where it states none.
+
+    Both edges required once the block exists, and neither defaulted from the
+    other. A window with one edge is not a window: L3 would admit every stall
+    above the narrow edge, which is option C — the one ADR-0052 rejects — reached
+    by omission rather than by decision.
+
+    The order is checked here rather than left to L3, because a reversed pair
+    produces an EMPTY window and therefore a predicate that reports every grasp
+    empty, which is silence rather than an error at the point of use.
+    """
+    if entry is None:
+        return None
+    narrowest = _number(
+        _require(entry, "narrowest_width_m", "workpieces"), "narrowest_width_m", "workpieces"
+    )
+    widest = _number(
+        _require(entry, "widest_width_m", "workpieces"), "widest_width_m", "workpieces"
+    )
+    if narrowest <= 0.0 or widest <= 0.0:
+        raise PlanError(
+            f"workpieces states a non-positive width ({narrowest}, {widest}). A part has "
+            "a width or the plan does not state one; zero is neither, and it would open "
+            "the grasp predicate's window onto a fully closed gripper."
+        )
+    if widest < narrowest:
+        raise PlanError(
+            f"workpieces states a widest width of {widest} below its narrowest "
+            f"({narrowest}), so the window cite_skills::gripper_is_holding judges a "
+            "stall inside is empty and every grasp would report as holding nothing. "
+            "The pair is generated from L0 - run ./scripts/validate-model --write, "
+            "then ./scripts/build."
+        )
+    return Workpieces(narrowest_width_m=narrowest, widest_width_m=widest)
+
+
+def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
+    """Refuse a plan that would drive physical hardware without a deliberate opt-in.
+
+    `cross-cutting-safety.md` requires that no command reaches a hardware
+    interface without passing the safety layer. Until Phase 2 builds that layer,
+    the only enforceable form of the rule is that bring-up refuses to start at
+    all — and refusing is the right shape, because it does not change *what* is
+    commanded on either path (P2). A `real` backend that does start behaves
+    identically to the simulated one; it simply may not start by accident.
+
+    The equivalent shell check, `require_explicit_hardware_opt_in` in
+    `scripts/_lib.sh`, guards `./scripts/enter hardware` and nothing else — which
+    is why the check also lives at this boundary rather than only in a script.
+
+    **WHAT ARRIVES HERE, STATED AS WHAT DOES AND NOT AS "EVERYTHING ELSE".** In
+    production this function has exactly one caller,
+    `cite_bringup/launch/simulation.launch.py`, which calls it before it builds
+    anything — so every route that brings the cell up through that launch file
+    arrives here: `./scripts/sim` in either form, every scenario, CI, and a
+    direct `ros2 launch cite_bringup simulation.launch.py`. `cite_twin.mode`
+    applies this same function at a mode transition, injected rather than
+    imported at its call site, which is a second arrival and not a second check.
+
+    **A process that does not come up through that launch file does not arrive
+    here at all**, and this function cannot refuse it: a `ros2 run` on a
+    controller manager, or a launch file somebody adds beside that one, reaches
+    the ROS graph past this boundary. This docstring said *"every other route
+    into the ROS graph ... arrives here instead"*, which claimed a reach no
+    single function has; the enforcement is at the one door the cell is started
+    through, and adding a second door means adding a second call.
+
+    ``environ`` is passed in rather than read from `os` here, so that the refusal
+    can be tested without mutating the process that tests it.
+
+    EVERY SIDE, not only the plant. A backend is selected per (asset, side), so a
+    twinned zone can name a physical machine on its counterpart while its plant
+    stays simulated — which is exactly what Phase 2.B is (ADR-0041, Decision 3),
+    and what `MODE_VIRTUAL_LEAD` describes. Reading only the plant here would let
+    the far side become physical behind a gate that never looked at it. The
+    reverse case — a physical plant on a paired zone — cannot reach this
+    function: the L0 validator refuses to generate a plan that declares one.
+
+    **IT DECIDES ON THE DECLARED FACT AND NOT ON THE BACKEND'S NAME.** This check
+    compared the backend id against the literal `sim`, and ADR-0054's Context
+    measures it returning without refusing — never having consulted
+    `CITE_ALLOW_HARDWARE` — on a model that declares the vendor's physical
+    `ros2_control` plugin under that id. Nothing anywhere constrained what plugin
+    an id could carry, so the allowlist was an allowlist over names, and a name
+    says nothing about the plugin behind it. L0 now declares per backend whether
+    it can reach a physical machine, the plan carries that fact per (asset,
+    side), and this refuses on it: a physical backend is refused whatever it is
+    called, and a simulated one is permitted whatever it is called.
+
+    **The allowlist property is kept and is now structural.** The dangerous
+    branch is the positive one, so reaching an arm requires that someone wrote
+    `true` in L0; there is no unanticipated name left to fall through.
+
+    **TWO RESIDUALS REMAIN, AND THIS FUNCTION SEES NEITHER.** L0 can lie —
+    `commands_physical_hardware: false` beside the vendor's physical component
+    passes here — and L0 can also tell the truth and be ignored, because nothing
+    verifies that the plugin L0 declares is the plugin the description loads.
+    **Read ADR-0054's Correction of 2026-09-10 for both**, which is where they are
+    stated and measured; restating them here is how four copies of the first one
+    drifted apart, and the second one is the half that no copy had.
+    """
+    # Asked side by side and through `ControllerManager.commands_physical_hardware_on`,
+    # which is the one place an (asset, side) becomes this answer. Reading the raw
+    # keys here as well would be the value-in-two-places P1 forbids, and the field
+    # that stopped being read is the one that goes stale.
+    #
+    # Reported by the plan FIELD rather than by the side name, because that is
+    # what this refusal has always printed and what its tests assert; the map
+    # from one to the other is `PHYSICAL_FIELD_BY_SIDE`, beside the constants.
+    # The backend id is carried alongside as CONTEXT and decides nothing - a
+    # reader still has to be told which entry of the type's `hardware_backends`
+    # to go and look at.
+    #
+    # A side the asset declares nothing for is skipped rather than defaulted: on
+    # an untwinned zone the counterpart does not exist, so there is no machine
+    # behind it to command. That is the accessor's judgement and not a second
+    # one - an asset that stopped stating a side would stop being gated here only
+    # because the accessor says the side is gone.
+    hardware = []
+    for manager in plan.controller_managers:
+        for side, field in PHYSICAL_FIELD_BY_SIDE.items():
+            try:
+                physical = manager.commands_physical_hardware_on(side)
+            except SideNotDeclaredError:
+                continue
+            if physical:
+                hardware.append((manager, field, manager.backend_on(side)))
+    if not hardware:
+        return
+    if environ.get(HARDWARE_OPT_IN_ENV) == HARDWARE_OPT_IN_VALUE:
+        return
+
+    named = ", ".join(
+        f"{manager.asset} ({field}, backend {backend!r})"
+        for manager, field, backend in sorted(hardware, key=lambda row: (row[0].asset, row[1]))
+    )
+    raise HardwareNotPermittedError(
+        f"zone {plan.zone!r} declares a hardware backend for {named}, and "
+        f"{HARDWARE_OPT_IN_ENV} is not set to {HARDWARE_OPT_IN_VALUE}. Starting "
+        "would command a physical machine. Confirm the cell is clear, then set "
+        f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} deliberately — see "
+        "docs/operations/safety-procedures.md."
+    )
+
+
+def _manager(entry: object, index: int) -> ControllerManager:
+    where = f"controller manager {index}"
+    asset = _require(entry, "asset", where)
+    where = f"controller manager {asset!r}"
+    counterpart_backend = _optional(entry, "counterpart_backend")
+    return ControllerManager(
+        asset=asset,
+        node=_require(entry, "node", where),
+        backend=_require(entry, "backend", where),
+        counterpart_backend=counterpart_backend,
+        # WITH `_require`, AND THE REMOVED-KEY PRECEDENT IN THE COMMENT
+        # IMMEDIATELY BELOW IS DELIBERATELY NOT FOLLOWED - it is a `_optional`
+        # beside a comment arguing for tolerance, and an implementer reading in
+        # file order meets it first.
+        #
+        # A removed key's presence is an absence of
+        # INFORMATION, so ignoring it is right; this key's absence is a SAFETY
+        # FACT NOBODY STATED. Parsing it with `_optional(..., False)` would make
+        # this layer strictly weaker than it was before ADR-0054 - a plan missing
+        # `backend` raises today - and the document most likely to be missing it
+        # is a stale installed `cite_generated`, which is what
+        # `simulation.launch.py` loads from the package share rather than from
+        # the source tree. Every manager would then read `False`, nothing would
+        # consult `CITE_ALLOW_HARDWARE`, and ADR-0054's own defect would reopen
+        # in a build state nobody notices. A `PlanError` naming the key sends its
+        # reader to rebuild; a default sends nobody anywhere.
+        commands_physical_hardware=_flag(
+            _require(entry, "commands_physical_hardware", where),
+            "commands_physical_hardware",
+            where,
+        ),
+        # Present exactly when `counterpart_backend` is, and absent exactly when
+        # it is, so the backend accessor and the fact accessor can never disagree
+        # about which sides this manager declares. Stating one without the other
+        # is refused rather than resolved in either direction.
+        counterpart_commands_physical_hardware=_counterpart_flag(
+            entry, counterpart_backend, where
+        ),
+        # A key naming what hosts this manager's controller manager used to be
+        # read here and is not any more. ADR-0048 clause 3 removed it from the
+        # plan: it was a total function of the backend the plan already states
+        # per side, and nothing read it. A consumer that needs the distinction
+        # derives it from `ControllerManager.backend_on` instead.
+        #
+        # It is IGNORED rather than rejected, and that is a decision. The document
+        # most likely to still carry it is a plan left in a stale build tree, and
+        # refusing that plan would report a key where the cause is a rebuild. So
+        # the parser stops reading it and says nothing about its presence -
+        # pinned by `test_a_plan_carrying_the_removed_host_key_loads_cleanly`,
+        # which is the one test allowed to spell the key.
+        description_topic=_require(entry, "description_topic", where),
+        joint_state_topic=_require(entry, "joint_state_topic", where),
+        description=resolve_uri(_require(entry, "description", where)),
+        spawn_xyz_m=_triple(_require(entry, "spawn_xyz_m", where), "spawn_xyz_m", where),
+        spawn_rpy_rad=_triple(_require(entry, "spawn_rpy_rad", where), "spawn_rpy_rad", where),
+        parameters=_require(entry, "parameters", where),
+        controllers=tuple(
+            ControllerRef(
+                name=_require(controller, "name", f"{where}, controller {position}"),
+                stage=int(
+                    _number(
+                        _require(controller, "stage", f"{where}, controller {position}"),
+                        "stage",
+                        where,
+                    )
+                ),
+            )
+            for position, controller in enumerate(_sequence(entry, "controllers", where))
+        ),
+        moveit=_moveit(_optional(entry, "moveit"), where),
+        trajectory_action=_optional(entry, "trajectory_action"),
+        gripper_action=_optional(entry, "gripper_action"),
+        skills=_skills(_optional(entry, "skills"), where),
+        gripper=_named_numbers(entry, GRIPPER_KEYS, where),
+        arm=_named_numbers(entry, ARM_KEYS, where),
+    )
+
+
+def _skills(entry: object | None, where: str) -> SkillActions | None:
+    """Read the arm's L3 action names, or None when the plan declares none.
+
+    None is a real state: a plan may describe an asset with controllers and no
+    planning group, and `cite_bringup` starts no skill server for it. What must
+    never happen is a launch file inventing the names instead, which is why
+    there is no default here.
+    """
+    if entry is None:
+        return None
+    where = f"{where}, skills"
+    return SkillActions(
+        **{name: _require(entry, name, where) for name in ("move_to", "pick", "place",
+                                                           "grasp", "transfer")}
+    )
+
+
+def _named_numbers(
+    entry: object, keys: tuple[str, ...], where: str
+) -> Mapping[str, float]:
+    """Read the values the plan carries for `keys`, under L3's own parameter names.
+
+    A key the plan omits is omitted here rather than defaulted to zero. That is
+    the whole point: the skill server declares its own defaults and says why, and
+    a zero manufactured here would override them with a number the model never
+    stated — which is exactly how `gripper_max_width_m` came to be delivered
+    while eleven real values were not.
+    """
+    if not isinstance(entry, dict):
+        raise PlanError(f"{where}: expected a mapping, got {_kind(entry)}")
+    return {
+        key: _number(entry[key], key, where)
+        for key in keys
+        if entry.get(key) is not None
+    }
+
+
+def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
+    if entry is None:
+        return None
+    where = f"{where}, moveit"
+    return MoveItConfig(
+        group=_require(entry, "group", where),
+        base_link=_require(entry, "base_link", where),
+        tip_link=_require(entry, "tip_link", where),
+        home_rad=tuple(
+            _number(value, f"home_rad[{position}]", where)
+            for position, value in enumerate(_sequence(entry, "home_rad", where))
+        ),
+        srdf=resolve_uri(_require(entry, "srdf", where)),
+        kinematics=resolve_uri(_require(entry, "kinematics", where)),
+        planning_pipelines=resolve_uri(_require(entry, "planning_pipelines", where)),
+        joint_limits=resolve_uri(_require(entry, "joint_limits", where)),
+        cartesian_limits=resolve_uri(_require(entry, "cartesian_limits", where)),
+        controllers=resolve_uri(_require(entry, "controllers", where)),
+        default_pipeline=str(_require(entry, "default_pipeline", where)),
+        default_planner_id=str(_require(entry, "default_planner_id", where)),
+        fallback_pipeline=str(_require(entry, "fallback_pipeline", where)),
+        # The only one of the four that may legitimately be empty: an empty
+        # planner id means "whatever that pipeline defaults to", so it is read
+        # with a default rather than required, and `_require` would reject it.
+        fallback_planner_id=str(_optional(entry, "fallback_planner_id") or ""),
+        # May legitimately be empty — a cell whose pipelines register no
+        # Cartesian planner has nothing to list — so it is read with a default.
+        cartesian_planner_ids=tuple(
+            str(value) for value in (_optional(entry, "cartesian_planner_ids") or [])
+        ),
+    )
+
+
+def _kind(value: object) -> str:
+    """Name a YAML value's shape in the words the plan is written in."""
+    return {dict: "a mapping", list: "a list", type(None): "empty"}.get(
+        type(value), f"a {type(value).__name__}"
+    )
+
+
+def _require(entry: object, key: str, where: str) -> object:
+    if not isinstance(entry, dict):
+        raise PlanError(f"{where}: expected a mapping, got {_kind(entry)}")
+    if key not in entry:
+        raise PlanError(f"{where}: missing required key {key!r}")
+    value = entry[key]
+    if value is None:
+        raise PlanError(f"{where}: {key!r} is empty")
+    return value
+
+
+def _optional(entry: object, key: str, default: object | None = None) -> object | None:
+    if not isinstance(entry, dict):
+        raise PlanError(f"expected a mapping, got {_kind(entry)}")
+    value = entry.get(key, default)
+    return default if value is None else value
+
+
+def _sequence(entry: object, key: str, where: str = "plan") -> list:
+    if not isinstance(entry, dict):
+        raise PlanError(f"{where}: expected a mapping, got {_kind(entry)}")
+    value = entry.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise PlanError(f"{where}: {key!r} must be a list, not {_kind(value)}")
+    return value
+
+
+def _offset(value: object, index: int) -> int:
+    """Read one side's domain offset, refusing anything that is not one.
+
+    A whole non-negative number and nothing else. `bool` is excluded explicitly
+    because it is an `int` in Python, and `True` would otherwise be accepted and
+    resolve to the counterpart's domain.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise DomainUnresolvedError(
+            f"side {index}: 'domain_offset' must be a whole number of domains above "
+            f"the base, got {value!r}. It is generated from the L0 model - run "
+            "./scripts/validate-model --write, then ./scripts/build."
+        )
+    return value
+
+
+def _flag(value: object, key: str, where: str) -> bool:
+    """Read a plan key that must be a YAML boolean, refusing anything else.
+
+    Strict about the type rather than truthy about the value, because every
+    caller is a safety gate: the string `"false"` is truthy in Python, and a
+    document that spelled it that way would be read as commanding hardware while
+    saying the opposite. `bool` is checked before `int` would matter, so `1` and
+    `0` are refused too - a plan is generated, and the generator writes `true`
+    and `false`.
+    """
+    if not isinstance(value, bool):
+        raise PlanError(f"{where}: {key!r} must be true or false, not {_kind(value)}")
+    return value
+
+
+def _counterpart_flag(entry: object, counterpart_backend: object, where: str) -> bool | None:
+    """Read the counterpart's declared fact, requiring it exactly where its backend is.
+
+    The pair is emitted together and read together (ADR-0054, decision 3). A
+    document stating a counterpart backend without the fact would give
+    `backend_on(COUNTERPART_SIDE)` an answer while
+    `commands_physical_hardware_on(COUNTERPART_SIDE)` said there is no such side
+    - which is the disagreement `Plan.load`'s declared-side refusal already
+    exists to prevent one layer up, arrived at from inside a single entry. A
+    document stating the fact without the backend is refused for the mirror
+    reason: it declares a side nothing can say what loads.
+    """
+    stated = _optional(entry, "counterpart_commands_physical_hardware")
+    if counterpart_backend is None:
+        if stated is None:
+            return None
+        raise PlanError(
+            f"{where}: states 'counterpart_commands_physical_hardware' without "
+            "'counterpart_backend', so it declares a counterpart side and says nothing "
+            "about what that side loads. The pair is generated together - run "
+            "./scripts/validate-model --write, then ./scripts/build."
+        )
+    if stated is None:
+        raise PlanError(
+            f"{where}: missing required key 'counterpart_commands_physical_hardware'. "
+            "It states 'counterpart_backend', so it declares a counterpart side, and "
+            "whether that side can reach a physical machine is what the hardware opt-in "
+            "decides on. The pair is generated together - run ./scripts/validate-model "
+            "--write, then ./scripts/build."
+        )
+    return _flag(stated, "counterpart_commands_physical_hardware", where)
+
+
+def _number(value: object, key: str, where: str) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise PlanError(f"{where}: {key!r} must be a number, got {value!r}") from exc
+
+
+def _triple(value: object, key: str, where: str) -> tuple[float, float, float]:
+    if not isinstance(value, str):
+        raise PlanError(
+            f"{where}: {key!r} must be three space-separated numbers in a string, "
+            f"got {_kind(value)} ({value!r})"
+        )
+    parts = value.split()
+    if len(parts) != 3:
+        raise PlanError(
+            f"{where}: {key!r} must be three space-separated numbers, got {value!r}"
+        )
+    x, y, z = (_number(part, key, where) for part in parts)
+    return (x, y, z)
+
+
+def default_plan_path(zone: str) -> Path:
+    """Where the generated bring-up plan for ``zone`` lives.
+
+    THE ZONE IS REQUIRED, AND THAT IS THE WHOLE POINT OF THE PARAMETER. It
+    defaulted to `cell_a` until ADR-0056, and while the facility declared one
+    zone that default was invisible rather than harmless: every caller that
+    omitted it was choosing a cell without saying so, and there was no way to
+    tell a caller that meant `cell_a` from one that had simply never thought
+    about it. A second zone turns each of those into a silently wrong answer —
+    the plan loads, the names resolve, and the cell that comes up is not the one
+    the caller wanted.
+
+    Removing the default is what turned them into visible call sites. It is the
+    same rule `cite_bringup.gz.plan_for`, `readiness_witness`, `skill_server.cpp`
+    and `detection_server.cpp` already follow, and for the reason those two C++
+    nodes state at their own parameter declarations: guessing a name puts the
+    work somewhere nothing is looking.
+    """
+    return resolve_uri(f"package://cite_generated/bringup/{zone}_plan.yaml")

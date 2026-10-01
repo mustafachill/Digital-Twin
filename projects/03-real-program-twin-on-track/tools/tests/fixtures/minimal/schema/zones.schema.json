@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Zone": {
+      "additionalProperties": false,
+      "description": "A named region. Zones partition; they do not nest.\n\nNesting would change every name in the system, so `naming-and-namespaces.md`\nrule 6 puts it behind an ADR.",
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/ZoneBounds"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "bounds"
+      ],
+      "title": "Zone",
+      "type": "object"
+    },
+    "ZoneBounds": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "default": "cite_world",
+          "pattern": "^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)?$",
+          "title": "Frame",
+          "type": "string"
+        },
+        "kind": {
+          "const": "aabb",
+          "default": "aabb",
+          "enum": [
+            "aabb"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Max M",
+          "type": "array"
+        },
+        "min_m": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Min M",
+          "type": "array"
+        }
+      },
+      "required": [
+        "min_m",
+        "max_m"
+      ],
+      "title": "ZoneBounds",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/zones/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "schema": {
+      "const": "cite/zones/v1",
+      "enum": [
+        "cite/zones/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    },
+    "zones": {
+      "items": {
+        "$ref": "#/$defs/Zone"
+      },
+      "minItems": 1,
+      "title": "Zones",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "zones"
+  ],
+  "title": "cite/zones/v1",
+  "type": "object"
+}

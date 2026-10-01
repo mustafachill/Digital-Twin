@@ -1,0 +1,365 @@
+"""Generate the simulation world from L0.
+
+The world holds what belongs to the *world*: physics settings, lighting, the
+ground, the systems every model relies on — and the simulation aids that are
+properties of the cell rather than of any one spawned model. The cell itself is
+not in here; it is spawned from the generated description, so that the
+description is the one place the cell's contents are stated and the simulator and
+the planner cannot disagree about what exists.
+
+Why the belts and the beams are declared here rather than in the description, and
+it is forced rather than preferred: every authored body in the scene is joined to
+the cell root by a fixed joint, and converting URDF to SDF lumps fixed-joint
+links into their parent. All twenty-nine links of the scene arrive in the
+simulator as one link named ``cite_world``. There is no ``conveyor_1`` model and
+no ``beam_c1_out`` model to attach a model plugin to, and a plugin attached to the
+scene would see the scene's origin instead of the belt's. Both aids are therefore
+world systems, and both receive the pose the generator resolved from the same L0
+frame that positions their geometry — so a belt's carry volume and the belt a
+station reaches for cannot describe different places.
+
+A third aid, the rigid grasp hold (ADR-0061), is declared here for a different
+reason: it is not forced the way the other two are — an arm's own last link
+survives the URDF-to-SDF conversion as its own entity (it is joined to its
+neighbours by revolute joints, not fixed ones), so a *model* plugin on the arm
+could in principle reach it. It is a world system anyway, for the reason ADR-0061
+itself gives rather than a geometric one: it has to reach across two
+independently spawned models — the arm and the work-piece — exactly as the belt
+and the beam already do, and putting it anywhere else would make "a simulation
+aid lives in the generated world" a rule with one exception instead of a rule.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from cite_tools.generate import Artifact
+from cite_tools.model import ids
+from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
+from cite_tools.render import environment
+
+#: 1 ms. Small enough for stable contact with a parallel gripper, and the value a
+#: scenario's determinism depends on — changing it changes results, so it is a
+#: generated constant rather than a launch argument someone can vary per run.
+STEP_SIZE_S = 0.001
+
+#: Throttled to the wall clock. SDFormat's own default, restored: this used to be
+#: `0.0` — unthrottled — on the reasoning that scenarios are graded on outcomes
+#: and wall-clock bounds rather than on matching real time, so throttling would
+#: only make them slower. ADR-0043 supersedes that reasoning. It is sound for ONE
+#: simulation graded on outcomes and does not survive a second simulation that
+#: has to agree with the first about what time it is: two free-running sides were
+#: measured at 0.888 and 0.698 in the same wall-clock window, with nothing wrong
+#: on either, and at real-time factor `r` a sim clock falls behind by `(1 - r)`
+#: seconds per second without bound. Past the first twenty-odd milliseconds that
+#: deficit dominates mirroring latency entirely, so a divergence metric taken
+#: across two unthrottled sides measures the clocks and not the cell.
+#:
+#: A CEILING, NOT A FLOOR, and the distinction is the whole reason this is safe
+#: to land alone. SDFormat calls it a *target* speedup factor: it bounds how fast
+#: a server may run and cannot make a slow one faster. On a machine already below
+#: real time it changes nothing; where a machine free-runs above real time it
+#: gives that headroom back as wall time, bounded by that machine's own
+#: free-running factor. That every scenario's wall-clock ceiling still has margin
+#: under it was audited before this landed — see
+#: `docs/measurements/2026-08-29-real-time-factor-conditions/` — and no ceiling
+#: moved.
+#:
+#: The other half of ADR-0043 is a requirement on the machine, still unmeasured
+#: by anything in this tree — and its WORDING is superseded. ADR-0043's status
+#: line says not to cite half 2 as written, because with this constant in the
+#: world a measured factor is capped at it by construction, which makes "both
+#: sides sustain 1.0" a test no machine passes. ADR-0049 keeps the 1.0 floor and
+#: restates it as two quantities, neither of whose thresholds is set: CAPACITY —
+#: both sides sampled concurrently with this throttle LIFTED — and the
+#: accumulated CLOCK DEFICIT in seconds, wall time elapsed minus simulated time
+#: elapsed over a stated window, with the throttle in force. Cite those two, not
+#: half 2. Do not read this constant as that guarantee. When something does measure
+#: it, `Δ sim_time / Δ real_time` over a stated window is the method; Gazebo's
+#: own `real_time_factor` field over-reports under CPU starvation and
+#: `cross-cutting-testing.md` forbids it.
+REAL_TIME_FACTOR = 1.0
+
+GROUND_SIZE_M = 40.0
+
+#: How often a simulation aid repeats its current state when nothing has changed.
+#:
+#: A publication rate, not a schedule. Both aids publish a change IMMEDIATELY, so
+#: nothing in the system ever waits for this interval and no behaviour depends on
+#: its value (P4). It exists only so that a subscriber which starts late learns
+#: the current state without waiting for the next transition. The previous
+#: conveyor published every physics step, which at ``STEP_SIZE_S`` is 1 kHz per
+#: belt for a value that changes when someone asks it to.
+AID_PUBLISH_PERIOD_S = 0.1
+
+#: The frame on a conveyor type that names its working surface. Named here rather
+#: than guessed at the template, because a belt without one cannot be driven and
+#: that has to be an error with a sentence rather than an empty element.
+CONVEYOR_SURFACE_FRAME = "surface"
+
+
+class WorldError(Exception):
+    """The model describes something the world generator cannot express."""
+
+
+@dataclass(frozen=True)
+class _ConveyorView:
+    asset: str
+    #: "x y z roll pitch yaw" — the working surface, in the world.
+    surface_pose: tuple[float, ...]
+    length_m: float
+    width_m: float
+    carry_height_m: float
+    direction: str
+    installed_speed_mps: float
+    command_topic: str
+    state_topic: str
+
+
+@dataclass(frozen=True)
+class _BeamView:
+    asset: str
+    beam_pose: tuple[float, ...]
+    beam_axis: str
+    beam_length_m: float
+    beam_width_m: float
+    beam_offset_m: float
+    detection_topic: str
+
+
+@dataclass(frozen=True)
+class _GraspHoldView:
+    asset: str
+    #: `<asset>_<attach_link_suffix>` — the link the box is fixed to. Never a
+    #: finger (ADR-0061); see `GraspSpec.attach_link_suffix` for why the arm's
+    #: own last link is what survives as an entity at all.
+    attach_link: str
+    #: Which declared graspable is in the jaws is the one question the cell
+    #: cannot answer for the simulator, so it stays here (ADR-0065, decision 3).
+    attach_radius_m: float
+    #: Where the cell tells this plugin to take hold and to let go (ADR-0065).
+    #:
+    #: EVERY OTHER PARAMETER THIS VIEW USED TO CARRY IS GONE, and its absence is
+    #: the decision rather than a tidy-up. The plugin had the stall threshold and
+    #: timeout the `GripperActionController` loads, the drive joint to watch, the
+    #: two rails, the controller's `goal_tolerance` as a release margin, and the
+    #: drive-joint window `cite_skills::gripper_is_holding` judges a stall inside.
+    #: Together those let it decide on its own that a grasp had begun and ended —
+    #: a re-derivation of a judgement `cite_skills` already makes, which ADR-0062
+    #: and ADR-0064 were both refuted attempts to tune. The cell answers that
+    #: question once and says so on these two topics.
+    #:
+    #: Built by `ids.interface` from the zone and the asset id, the same call the
+    #: bring-up plan makes for the same two names, so the topics the plugin
+    #: listens on and the topics the bridge publishes to come from one place and
+    #: cannot drift (P1) — exactly the arrangement a belt's command topic already
+    #: has.
+    attach_topic: str
+    detach_topic: str
+
+
+#: Which component of a mounting offset lies along each beam axis.
+_AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
+
+
+def _beam_offset_m(asset: ResolvedAsset, axis: str) -> float:
+    """How far past the housing the middle of the beam lies, along the beam axis.
+
+    A through beam is emitted from its housing and crosses the thing it watches;
+    the housing is one END of the segment, not its middle. Reading it as the
+    middle is a silent, and very nearly invisible, mis-modelling: ``beam_c1_out``
+    stands 0.250 m to the side of a 0.400 m belt and declares a 0.500 m beam, so
+    a centred segment spans y in [0.000, 0.500] — half of it in the empty air
+    beside the belt, with its near edge exactly on the belt's centreline. The
+    sensor could then only be broken by a part that had not drifted by a
+    millimetre. Emitted from the housing across the belt, the same 0.500 m spans
+    y in [-0.250, +0.250] and covers the belt with 50 mm to spare, which is
+    plainly what the number was chosen for.
+
+    Nothing new is declared to get this. The direction is the direction of the
+    asset the sensor is mounted on, and how far away it stands is already stated
+    once — as the sensor's own pose, relative to that asset's frame. A sensor
+    placed directly in ``cite_world``, or standing on the centreline of what it
+    watches, has no such offset and its housing IS the middle of its beam.
+    """
+    if asset.parent_asset is None:
+        return 0.0
+    index = _AXIS_INDEX.get(axis)
+    if index is None:
+        return 0.0
+    return -asset.instance.pose.xyz_m[index]
+
+
+def _footprint(asset: ResolvedAsset) -> tuple[float, float]:
+    """The belt's length and width, from the collision box the model declares.
+
+    Read from the geometry rather than declared again as a carry extent: the
+    volume a belt transports through IS the belt, and stating its size a second
+    time is the duplication ADR-0004 exists to make impossible.
+    """
+    body = asset.asset_type.description.body
+    if body is None or body.collision.kind != "box":
+        raise WorldError(
+            f"conveyor {asset.id!r} has type {asset.asset_type.id!r}, whose collision "
+            "geometry is not a box. The belt's carry volume is derived from that box, "
+            "so a conveyor type needs one."
+        )
+    return body.collision.size_m[0], body.collision.size_m[1]
+
+
+def _pose6(asset_pose) -> tuple[float, ...]:
+    return (*asset_pose.xyz_m, *asset_pose.rpy_rad)
+
+
+def _carry_height_m(cell: ResolvedCell) -> float:
+    """How far above a belt's surface a part still counts as resting on it.
+
+    The tallest work-piece the facility handles, and that is a derivation rather
+    than a convention.
+
+    A part sitting on the belt has its origin half its own height above the
+    surface, so a volume one part-height tall holds the tallest declared part
+    dead centre, with half a part-height of margin below it and half above. A
+    part that has been lifted higher than its own height is unambiguously off the
+    belt — it is clear of the surface by more than it is tall — so that is where
+    the belt lets go, and a gripper retreating from a pick takes it away without
+    the two fighting over it.
+
+    It used to be declared on the conveyor instead, at 0.100 m, because L0
+    recorded no work-piece geometry to derive it from. It does now, and the
+    number this produces for cell_a is 0.050 m — so the old value held a 50 mm
+    cube until it had been lifted 75 mm, three times as far as it needed to be.
+    Reading it from the part is the same rule ``_footprint`` follows for the
+    belt: a size that is already stated once is never stated again (P1).
+
+    A facility with belts and no work-piece geometry gets a sentence rather than
+    a default. Such a belt already transports nothing — the ``<carry>`` list is
+    built from the same names — and silently emitting some plausible height would
+    hide that behind a plugin that looked configured.
+    """
+    heights = [
+        extent
+        for asset_type in cell.workpiece_types
+        if (body := asset_type.description.body) is not None
+        and (extent := body.vertical_extent_m) is not None
+    ]
+    if not heights:
+        raise WorldError(
+            f"zone {cell.zone!r} has conveyors, but no work-piece type behind "
+            "facility.workpiece_models declares collision geometry with a height. A belt's "
+            "carry volume is how far above its surface a part still counts as resting on "
+            "it, which is the part's own height, so it is derived rather than declared. "
+            "Give the facility a work-piece type with box or cylinder collision geometry."
+        )
+    return max(heights)
+
+
+def _conveyors(cell: ResolvedCell) -> tuple[_ConveyorView, ...]:
+    views: list[_ConveyorView] = []
+    #: Resolved once for the cell rather than per belt: it is a property of what
+    #: the facility carries, and three belts cannot be allowed to disagree.
+    #: Deferred until a belt actually exists, so a cell with no conveyors is not
+    #: asked for work-piece geometry it has no use for.
+    carry_height_m: float | None = None
+    for asset in cell.of_category("conveyor"):
+        configuration = asset.instance.configuration
+        if configuration is None or configuration.kind != "conveyor":
+            continue
+        if carry_height_m is None:
+            carry_height_m = _carry_height_m(cell)
+        surface = asset.frames.get(CONVEYOR_SURFACE_FRAME)
+        if surface is None:
+            raise WorldError(
+                f"conveyor {asset.id!r} has no {CONVEYOR_SURFACE_FRAME!r} frame. The belt "
+                "is driven relative to its working surface, which is the same frame the "
+                "stations pick and place against."
+            )
+        length_m, width_m = _footprint(asset)
+        views.append(
+            _ConveyorView(
+                asset=asset.id,
+                surface_pose=_pose6(surface),
+                length_m=length_m,
+                width_m=width_m,
+                carry_height_m=carry_height_m,
+                direction=configuration.direction,
+                installed_speed_mps=configuration.installed_speed_mps,
+                # The same call the bring-up plan makes, so the name the plugin
+                # advertises under and the name the plan declares come from one
+                # place and cannot drift (P1).
+                command_topic=ids.interface(cell.zone, asset.id, "command"),
+                state_topic=ids.interface(cell.zone, asset.id, "state"),
+            )
+        )
+    return tuple(views)
+
+
+def _beams(cell: ResolvedCell) -> tuple[_BeamView, ...]:
+    views: list[_BeamView] = []
+    for asset in cell.of_category("sensor"):
+        configuration = asset.instance.configuration
+        if configuration is None or configuration.kind != "sensor":
+            continue
+        views.append(
+            _BeamView(
+                asset=asset.id,
+                beam_pose=_pose6(asset.world_pose),
+                beam_axis=configuration.beam_axis,
+                beam_length_m=configuration.beam_length_m,
+                beam_width_m=configuration.beam_width_m,
+                beam_offset_m=_beam_offset_m(asset, configuration.beam_axis),
+                detection_topic=ids.interface(cell.zone, asset.id, "detection"),
+            )
+        )
+    return tuple(views)
+
+
+def _grasp_holds(cell: ResolvedCell) -> tuple[_GraspHoldView, ...]:
+    """One rigid-hold plugin declaration per arm that fits a grasping gripper.
+
+    Skips an arm with no end effector, and one whose end effector declares no
+    `grasp` specification, exactly as `generate.description._end_effector_drive_rate`
+    and `generate.bringup._grasp` already do for the same absence — a vacuum
+    end effector has nothing here to hold rigidly, and that is a real state
+    rather than an error.
+    """
+    views: list[_GraspHoldView] = []
+    for asset in cell.of_category("robot"):
+        if asset.instance.end_effector is None:
+            continue
+        effector = cell.end_effector_type(asset.instance.end_effector.type)
+        if effector is None or effector.grasp is None:
+            continue
+        grasp = effector.grasp
+        views.append(
+            _GraspHoldView(
+                asset=asset.id,
+                attach_link=ids.link(asset.id, grasp.attach_link_suffix),
+                attach_radius_m=grasp.attach_radius_m,
+                # The same two calls the bring-up plan makes, so the name the
+                # plugin listens on and the name the bridge publishes to come
+                # from one place and cannot drift (P1).
+                attach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_ATTACH),
+                detach_topic=ids.interface(cell.zone, asset.id, ids.GRASP_DETACH),
+            )
+        )
+    return tuple(views)
+
+
+def generate(cell: ResolvedCell) -> list[Artifact]:
+    text = (
+        environment()
+        .get_template("world/cell.sdf.j2")
+        .render(
+            cell=cell,
+            step_size=STEP_SIZE_S,
+            real_time_factor=REAL_TIME_FACTOR,
+            ground_size=GROUND_SIZE_M,
+            publish_period_s=AID_PUBLISH_PERIOD_S,
+            conveyors=_conveyors(cell),
+            beams=_beams(cell),
+            grasp_holds=_grasp_holds(cell),
+            workpieces=cell.workpiece_models,
+        )
+    )
+    return [Artifact(f"worlds/{cell.zone}.sdf", text)]

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Derive, or check, the convex-hull collision meshes the L0 model declares (ADR-0028).
+#
+#   ./scripts/hulls            check — re-derive every declared mesh from the vendor
+#                              file and compare byte for byte, and compare the
+#                              machine-written region of assets/manifest.yaml against
+#                              what the same inputs produce. This is the gate form.
+#   ./scripts/hulls --write    rewrite the hull meshes and that manifest region.
+#
+# WHY THIS SCRIPT EXISTS. It is the only documented way to regenerate a derived
+# asset, and the way that was documented did not work. `assets/README.md` and
+# `cite_description/README.md` both said
+#
+#     ./scripts/enter dev python3 -m cite_tools.cli hulls --model model --write
+#
+# and the container's entrypoint deliberately keeps the tooling virtualenv off
+# PATH, so the container's `python3` has no `cite_tools` and that command fails
+# with ModuleNotFoundError. CLAUDE.md §7 is explicit about the shape of the fix: a
+# fixed entry point exists so that changes to the toolchain do not ripple through
+# documentation and agent configurations, and a command written directly against
+# the underlying tool works for its author and for nobody else.
+#
+# WHERE IT RUNS. Both environments, and it never re-executes itself into the
+# container. `cite_venv_bin` picks the container's virtualenv inside the container
+# and the repository's outside it, so the same command works from a macOS laptop
+# and from the Linux workstation — the ADR-0013 property `./scripts/validate-model`
+# has, for the same reason.
+#
+# WHAT IT NEEDS THAT `validate-model` DOES NOT. The vendor meshes. A hull is a
+# function of the bytes `external/cite.repos` pins, so this reads
+# `workspace/src/external/`, which exists only after `./scripts/bootstrap` has run
+# `vcs import`. That is exactly why `cite-model hulls` is a separate command from
+# `cite-model validate` rather than a step inside it: folding it in would make the
+# L0 model unvalidatable on a host without a ROS checkout, to gain nothing, since
+# the hulls are committed and nothing regenerates them on a normal run.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+PY="$(cite_python)" || true
+[ -n "$PY" ] || die "No Python found. Run ./scripts/bootstrap --host-only"
+
+# Before anything reads the model or a mesh. This script's whole output is a
+# verdict about THIS checkout's assets, produced by whichever generator the
+# interpreter happens to resolve — and in a worktree without its own virtualenv
+# that is another checkout's. See require_local_cite_tools in scripts/_lib.sh.
+require_local_cite_tools "$PY" "The hull pipeline"
+
+if ! "$PY" -c "import cite_tools.cli" 2>/dev/null; then
+    die "cite_tools is not installed. Run ./scripts/bootstrap --host-only"
+fi
+
+exec "$PY" -m cite_tools.cli hulls --model "${REPO_ROOT}/model" "$@"

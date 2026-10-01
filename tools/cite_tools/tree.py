@@ -76,6 +76,20 @@ SKIP_NAMES = {
     ".git",
 }
 
+#: The frozen milestone snapshots (ADR-0068): whole trees extracted from past commits by
+#: `tools/snapshot_project.sh`. They are records of past states, not sources, so a finding
+#: inside one is one no commit of the main tree may act on — a snapshot takes only the patches
+#: its `PROVENANCE.md` lists. **Skipping them is a deliberate reduction of coverage**, and
+#: ADR-0068 decision 4 records it. **Nothing else lints them either**: a snapshot's contract is
+#: that it builds, its scenario passes and its `./run` runs, and its own lint, unit tests and
+#: doctor are outside it and fail by construction — the extract omits `docs/measurements/`,
+#: `CLAUDE.md` and the charter, and its `git ls-files` walkers need a git checkout of it. What
+#: the main tree does check there is each snapshot's `run` (shellcheck, in `scripts/lint`) and
+#: that each tree still hashes to its pin (`tools/tests/test_snapshots_are_frozen.py`). The one
+#: file there that belongs to the main tree, `projects/README.md`, stays walked: see
+#: `WALKED_INSIDE_SKIP_PATHS`.
+SNAPSHOTS = Path("projects")
+
 #: Paths relative to the repository root, skipped at **exactly** that location.
 #:
 #: `workspace/src/external` is the vendor tree `./scripts/bootstrap` imports from
@@ -101,15 +115,51 @@ SKIP_NAMES = {
 #: exemption — the escape hatch takes an exact path in a *tracked* configuration file, which
 #: cannot describe a file that only exists on one laptop. Its tracked template
 #: `.env.example` is checked, and that is the copy a commit can act on.
+#:
+#: `SNAPSHOTS` is anchored for the same reason as the vendor tree: a directory called
+#: `projects` anywhere else is not a snapshot.
 SKIP_PATHS = {
     Path("workspace/src/external"),
     Path(".env"),
+    SNAPSHOTS,
 }
+
+#: Files inside a `SKIP_PATHS` entry that are ours all the same, and so stay walked.
+#:
+#: `projects/README.md` is the main tree's index of the snapshots, written alongside this
+#: repository's other documentation and linking into it; skipping it with the snapshots would
+#: take a main-tree document out of the English and link checks for no reason.
+#: `projects/snapshots.yaml` is the main tree's manifest of them — the workflow matrix and the
+#: pinned tree hashes — and is main-tree configuration for the same reason. Listed by exact
+#: path, so the exception cannot widen to anything else under `projects/`.
+WALKED_INSIDE_SKIP_PATHS = frozenset({SNAPSHOTS / "README.md", SNAPSHOTS / "snapshots.yaml"})
+
+
+def in_a_snapshot(relative: Path) -> bool:
+    """True if a repository-relative path lies inside a frozen snapshot (ADR-0068).
+
+    Exported for the host tests that walk `git ls-files` rather than this module's walk, so
+    that the exemption is stated once (P1): `projects/` and everything under it, except the
+    main tree's own files there. Matched by path component, so `projectsX/` and
+    `tools/projects/` are not snapshots.
+    """
+    return relative.is_relative_to(SNAPSHOTS) and relative not in WALKED_INSIDE_SKIP_PATHS
+
+
+def _leads_to_a_walked_file(relative: Path) -> bool:
+    """True if `relative` is a walked exception, or a directory on the way to one."""
+    return any(kept.is_relative_to(relative) for kept in WALKED_INSIDE_SKIP_PATHS)
 
 
 def _under_skipped_path(relative: Path) -> bool:
-    """True if `relative` is one of the anchored `SKIP_PATHS`, or lies inside one."""
-    return any(relative.is_relative_to(prefix) for prefix in SKIP_PATHS)
+    """True if `relative` is one of the anchored `SKIP_PATHS`, or lies inside one.
+
+    A path in `WALKED_INSIDE_SKIP_PATHS`, or a directory containing one, is not skipped: the
+    directory must survive pruning for the walk to reach the file at all.
+    """
+    return any(
+        relative.is_relative_to(prefix) for prefix in SKIP_PATHS
+    ) and not _leads_to_a_walked_file(relative)
 
 
 def _is_skipped_directory_name(name: str) -> bool:

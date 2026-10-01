@@ -49,6 +49,8 @@ from pathlib import Path
 
 import pytest
 
+from cite_tools.tree import in_a_snapshot
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "workspace" / "src" / "cite_interfaces"
 
@@ -91,6 +93,10 @@ def tracked_markdown() -> list[Path]:
     `git ls-files` rather than a walk: the question is what the repository
     carries, and a walk answers about whatever is on disk - including build trees
     and, in a worktree, another checkout's artefacts.
+
+    The frozen snapshots under `projects/` are left out (ADR-0068 decision 4): each
+    carries its source commit's documents, whose counts were true of that commit's
+    package and are not this one's to correct.
     """
     listed = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files", "*.md"],
@@ -98,7 +104,7 @@ def tracked_markdown() -> list[Path]:
         text=True,
         check=True,
     ).stdout.splitlines()
-    return [REPO_ROOT / name for name in listed]
+    return [REPO_ROOT / name for name in listed if not in_a_snapshot(Path(name))]
 
 
 def _on_disk() -> dict[str, int]:

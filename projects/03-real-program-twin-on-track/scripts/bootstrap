@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+# Prepare the environment. Safe to re-run; every step is idempotent.
+#
+#   ./scripts/bootstrap                 build the image and set the workspace up
+#   ./scripts/bootstrap --in-container  run the inner half only (used by devcontainer)
+#   ./scripts/bootstrap --host-only     Python tooling only — enough to validate the
+#                                       facility model from a machine without ROS
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+HOST_ONLY=0
+IN_CONTAINER=0
+for arg in "$@"; do
+    case "$arg" in
+        --host-only)    HOST_ONLY=1 ;;
+        --in-container) IN_CONTAINER=1 ;;
+        -h|--help)      sed -n '2,9p' "$0"; exit 0 ;;
+        *)              die "Unknown argument: $arg" ;;
+    esac
+done
+
+# --- Host-side Python tooling ------------------------------------------------
+# Pick an interpreter the pinned wheels actually support. The container runs
+# Python 3.12 (the Ubuntu 24.04 default), so preferring it here keeps the host
+# and the container on the same version — which is the point of pinning at all.
+# Without this check, a host on a newer Python falls through to building
+# packages from source and fails with a compiler error that says nothing about
+# the real cause.
+CITE_PY_MIN_MINOR=10
+CITE_PY_MAX_MINOR=13
+
+python_minor_ok() {
+    local py="$1" minor
+    minor="$("$py" -c 'import sys; print(sys.version_info[1])' 2>/dev/null)" || return 1
+    [ -n "$minor" ] && [ "$minor" -ge "$CITE_PY_MIN_MINOR" ] && [ "$minor" -le "$CITE_PY_MAX_MINOR" ]
+}
+
+select_python() {
+    local candidate
+    for candidate in python3.12 python3.11 python3.13 python3.10 python3; do
+        if have "$candidate" && python_minor_ok "$(command -v "$candidate")"; then
+            command -v "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+setup_host_tooling() {
+    step "Host tooling (Python)"
+
+    local py
+    if ! py="$(select_python)"; then
+        local found="none"
+        have python3 && found="$(python3 -V 2>&1)"
+        die "No suitable Python found (need 3.${CITE_PY_MIN_MINOR}-3.${CITE_PY_MAX_MINOR}, found: ${found}).
+  The pinned dependencies in requirements/ have no wheels outside that range and
+  would be built from source, which needs a full C and Fortran toolchain.
+  Install Python 3.12 to match the container:
+    macOS:  brew install python@3.12
+    Ubuntu: sudo apt install python3.12 python3.12-venv"
+    fi
+    ok "Using $("$py" -V 2>&1) at ${py}"
+
+    local venv="${REPO_ROOT}/.venv"
+    if [ -d "$venv" ] && ! python_minor_ok "$venv/bin/python"; then
+        warn "Existing .venv uses an unsupported Python — recreating"
+        rm -rf "$venv"
+    fi
+    if [ ! -d "$venv" ]; then
+        info "Creating virtualenv at .venv"
+        "$py" -m venv "$venv"
+    fi
+    "$venv/bin/pip" install --quiet --upgrade pip
+    "$venv/bin/pip" install --quiet \
+        -r "${REPO_ROOT}/requirements/tools.txt" \
+        -r "${REPO_ROOT}/requirements/dev.txt"
+    "$venv/bin/pip" install --quiet -e "${REPO_ROOT}/tools"
+    ok "Python tooling ready — activate with: source .venv/bin/activate"
+
+    if [ -f "${REPO_ROOT}/.pre-commit-config.yaml" ]; then
+        if "$venv/bin/pre-commit" install --install-hooks >/dev/null 2>&1; then
+            ok "pre-commit hooks installed"
+        else
+            warn "pre-commit hook installation failed (non-fatal)"
+        fi
+    fi
+}
+
+# --- Inner half: runs where ROS exists ---------------------------------------
+setup_ros_workspace() {
+    step "External sources (vcstool)"
+    mkdir -p "${REPO_ROOT}/workspace/src/external"
+    if have vcs; then
+        # --recursive is required, not optional: xarm_ros2 carries xarm_sdk/cxx as a
+        # git submodule, and without it that directory arrives empty and the build
+        # fails on xarm_sdk. Reproducibility is preserved because the submodule
+        # pointer is part of the parent's pinned commit, so a SHA pin on the parent
+        # fixes the submodule exactly (ADR-0008).
+        #
+        # `git_without_enclosing_repo` is what makes this work from a git worktree;
+        # see the block on it in _lib.sh for the failure it removes. Failure is
+        # FATAL rather than a warning, because the state it leaves behind is not
+        # "no external source" — it is a target directory that exists and is empty,
+        # which every later step reads as source that is simply already there.
+        if ! git_without_enclosing_repo \
+                vcs import --recursive "${REPO_ROOT}/workspace/src" \
+                < "$CITE_VCS_MANIFEST"; then
+            die "vcs import failed, so workspace/src/external is incomplete.
+  Every declared patch and every build after this point would silently be
+  missing the external source. Nothing further has run.
+  Check network access and external/cite.repos, then re-run ./scripts/bootstrap."
+        fi
+        ok "External repositories imported"
+    else
+        warn "vcstool not found — skipping external source import"
+    fi
+
+    step "Local patches"
+    local patches=()
+    while IFS= read -r line; do patches+=("$line"); done < <(declared_patches "$CITE_PATCH_DIR")
+    if [ ${#patches[@]} -eq 0 ]; then
+        ok "No patches to apply"
+    else
+        # A patch declared in external/patches/ and not present in the checkout is
+        # a total failure of a declared modification, so each branch below either
+        # reaches "present" or stops the bootstrap naming the patch and the reason.
+        # The one state that is allowed to pass quietly is `applied`, and it is
+        # what keeps re-running bootstrap idempotent.
+        local p name repo target state
+        for p in "${patches[@]}"; do
+            name="$(basename "$p")"
+            repo="$(patch_target_repo "$p")"
+            [ -n "$repo" ] || die "${name} carries no '# Repo:' header, so there is no
+  checkout it can be applied to. See external/patches/README.md for the header
+  every patch must have."
+            target="${REPO_ROOT}/workspace/src/${repo}"
+            state="$(patch_state "$p" "$target")"
+            case "$state" in
+                applied)
+                    ok "${name} already applied"
+                    ;;
+                pending)
+                    git -C "$target" apply "$p" \
+                        || die "${name} passed its own dry-run and then failed to apply
+  to workspace/src/${repo}. The checkout is now in an unknown state; delete it
+  and re-run ./scripts/bootstrap."
+                    ok "Applied ${name}"
+                    ;;
+                no-target)
+                    die "${name} targets workspace/src/${repo}, which does not exist.
+  The external source it modifies was never imported, so this patch cannot reach
+  the build. Run ./scripts/bootstrap with vcstool available."
+                    ;;
+                empty)
+                    die "${name} targets workspace/src/${repo}, which exists and is EMPTY.
+  That is the signature of an import that failed part-way — the usual cause is
+  running from a git worktree whose .git pointer the container cannot resolve.
+  Delete workspace/src/${repo} and re-run ./scripts/bootstrap."
+                    ;;
+                conflict)
+                    die "${name} does not apply to workspace/src/${repo}, and is not
+  already present there. A declared modification is missing from the build.
+  The usual cause is a version bump in external/cite.repos that moved the code
+  this patch edits: refresh the patch against the pinned commit, or delete it and
+  record why in external/patches/README.md. Bootstrap will not continue with a
+  declared patch unaccounted for."
+                    ;;
+                *)
+                    die "${name}: unknown patch state '${state}' — this is a bug in patch_state."
+                    ;;
+            esac
+        done
+    fi
+
+    step "System dependencies (rosdep)"
+    if have rosdep; then
+        # The image builds its apt layers with a cache mount, so /var/lib/apt/lists
+        # is empty in the final image. Without this refresh every `rosdep install`
+        # in a fresh container fails with "Unable to locate package" for packages
+        # that do exist — which reads as a missing dependency rather than a stale
+        # index, and sends people looking in the wrong place entirely.
+        if in_container; then
+            sudo apt-get update -qq || warn "apt-get update failed; rosdep may not resolve"
+        fi
+        rosdep update --rosdistro "${ROS_DISTRO:-jazzy}" >/dev/null 2>&1 || true
+        rosdep install --from-paths "${REPO_ROOT}/workspace/src" \
+            --ignore-src -r -y --rosdistro "${ROS_DISTRO:-jazzy}" \
+            || warn "rosdep reported unresolved dependencies"
+        ok "System dependencies resolved"
+    else
+        warn "rosdep not found — skipping"
+    fi
+
+    step "Environment file"
+    if [ ! -f "${REPO_ROOT}/.env" ] && [ -f "${REPO_ROOT}/.env.example" ]; then
+        cp "${REPO_ROOT}/.env.example" "${REPO_ROOT}/.env"
+        ok "Created .env from .env.example"
+    else
+        ok ".env present"
+    fi
+}
+
+# --- Dispatch ----------------------------------------------------------------
+if [ "$IN_CONTAINER" -eq 1 ] || in_container; then
+    setup_ros_workspace
+    step "Done"
+    ok "Container workspace ready. Next: ./scripts/build"
+    exit 0
+fi
+
+setup_host_tooling
+
+if [ "$HOST_ONLY" -eq 1 ]; then
+    step "Done"
+    ok "Host tooling only. You can run ./scripts/validate-model and ./scripts/lint here."
+    exit 0
+fi
+
+if native_ros_available; then
+    setup_ros_workspace
+    step "Done"
+    ok "Native ROS workspace ready. Next: ./scripts/build"
+    exit 0
+fi
+
+if ! have docker; then
+    warn "No native ROS 2 and no Docker on this machine."
+    warn "Host tooling is ready; building and running require Linux with ROS 2 Jazzy,"
+    warn "or Docker. See docs/onboarding/getting-started.md."
+    exit 0
+fi
+
+step "Container image"
+info "Building cite-digital-twin:p03-real-program — first run takes a while"
+compose build dev
+ok "Image built"
+
+step "Container workspace"
+compose run --rm dev ./scripts/bootstrap --in-container
+
+step "Done"
+ok "Ready. Next: ./scripts/build"

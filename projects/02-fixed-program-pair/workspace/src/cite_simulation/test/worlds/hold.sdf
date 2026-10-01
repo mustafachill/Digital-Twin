@@ -1,0 +1,157 @@
+<?xml version="1.0"?>
+<!-- Test apparatus for the rigid grasp hold plugin (ADR-0061, ADR-0065).
+     Deliberately NOT the CITE cell: round synthetic numbers, a fixed "wrist",
+     and three boxes — one within the declared attach radius and declared
+     graspable, one nearer still and NOT declared graspable, and one declared
+     graspable but well outside the radius. Copying cell_b's coordinates into it
+     would put those coordinates in a second place (P1) for a mechanism this
+     file exercises by shape, not by floor plan.
+
+     NO JOINT IS DRIVEN HERE ANY MORE, and the rig kept its jaw joint anyway.
+     Since ADR-0065 the plugin reads no joint at all — the cell decides whether
+     the jaws hold something and says so, and this apparatus says so on the same
+     two topics the generated world names. The joint stays because a wrist with a
+     jaw hanging off it is what the plugin attaches beside in the real cell, and
+     a rig whose attach link has nothing articulated near it would not exercise
+     that geometry; nothing commands it.
+
+     Gravity is off. Nothing here needs to rest on anything, and a box that is
+     picked up must stay where it was put so that "did it attach" is answered by
+     the joint that exists and not by where anything fell. -->
+<sdf version="1.9">
+  <world name="hold">
+    <gravity>0 0 0</gravity>
+    <physics name="default" type="ignored">
+      <!-- The same step the generated world uses. -->
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+
+    <!-- wrist stands at (0, 0, 0.5) in the world and never moves — pinned to
+         the world by a fixed joint, exactly as `picker_mount_world_anchor`
+         pins the generated arm's own base. jaw hangs off it on one revolute
+         joint, driven directly by the test rather than by any controller: what
+         is under test is what this plugin does with a joint's position and
+         velocity, not how a controller produces them. -->
+    <model name="rig">
+      <pose>0 0 0.5 0 0 0</pose>
+      <link name="wrist">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.01</iyy><iyz>0</iyz>
+            <izz>0.01</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <link name="jaw">
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>0.0001</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.0001</iyy><iyz>0</iyz>
+            <izz>0.0001</izz>
+          </inertia>
+        </inertial>
+      </link>
+      <joint name="world_anchor" type="fixed">
+        <parent>world</parent>
+        <child>wrist</child>
+      </joint>
+      <joint name="jaw_joint" type="revolute">
+        <parent>wrist</parent>
+        <child>jaw</child>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-0.2</lower><upper>2.5</upper><effort>10</effort><velocity>10</velocity></limit>
+        </axis>
+      </joint>
+    </model>
+
+    <!-- 0.2 m from wrist — inside the 0.5 m attach_radius_m the plugin below
+         declares. -->
+    <model name="box">
+      <pose>0.2 0 0.5 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.00004</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.00004</iyy><iyz>0</iyz>
+            <izz>0.00004</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 0.1 m from wrist — NEARER than `box`, and deliberately absent from the
+         <graspable> list below. `NearestGraspable` takes the nearest DECLARED
+         model, so a plugin that had stopped reading the list would take this one
+         instead: that is what makes the list testable independently of the
+         radius. -->
+    <model name="box_undeclared">
+      <pose>0.1 0 0.5 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.00004</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.00004</iyy><iyz>0</iyz>
+            <izz>0.00004</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 2.0 m from wrist — well outside the radius. Declared graspable exactly
+         like `box`, so the test that nothing ever attaches to it is a test of
+         the radius and not of the <graspable> list. -->
+    <model name="box_far">
+      <pose>2.0 0 0.5 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.00004</ixx><ixy>0</ixy><ixz>0</ixz>
+            <iyy>0.00004</iyy><iyz>0</iyz>
+            <izz>0.00004</izz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.05</size></box></geometry>
+        </visual>
+      </link>
+    </model>
+
+    <!-- The two topics stand in for the ones the generated world builds per arm
+         from the L0 asset id; this apparatus has no model to build a name from,
+         so it states a synthetic pair rather than copying a real cell's (P1).
+         `box_undeclared` is deliberately absent from the list. -->
+    <plugin filename="cite_grasp_hold" name="cite_simulation::GraspHold">
+      <attach_link>wrist</attach_link>
+      <attach_radius_m>0.5</attach_radius_m>
+      <attach_topic>/test/hold/grasp/attach</attach_topic>
+      <detach_topic>/test/hold/grasp/detach</detach_topic>
+      <graspable>box</graspable>
+      <graspable>box_far</graspable>
+    </plugin>
+  </world>
+</sdf>

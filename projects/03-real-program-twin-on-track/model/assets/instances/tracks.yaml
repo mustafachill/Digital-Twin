@@ -1,0 +1,44 @@
+---
+# yaml-language-server: $schema=../../schema/asset_instances.schema.json
+schema: cite/asset_instances/v1
+
+# The linear track `picker` rides on in cell_b (ADR-0067).
+#
+# LAYOUT STATUS: PROVISIONAL, like every fixture in this model: engineered, not
+# surveyed. What IS derived rather than chosen is where the pick table and the
+# belt stand relative to the track, and that derivation is stated here once.
+#
+# THE REAL PROGRAM DECIDES THE LAYOUT. `model/programs/xarm5_real_demo.blockly.xml`
+# picks at track 0 with joints [-28, 31, -45, 14, -30] deg and places at track
+# 650 mm with [60, 30, -55, 25, -30] deg. Forward kinematics on the generated
+# description, from `picker_link_base` to the centre of the pad faces closed on
+# the 66 mm work-piece, gives, in the arm's base frame (x forward, y left):
+#
+#   pick   ( 0.3765, -0.2002, -0.0769) m   tool axis straight down
+#   place  ( 0.2398,  0.4153, -0.0376) m   tool axis straight down, track +0.650
+#
+# THE AXIS RUNS ALONG +X AND THE ARM FACES -Y on its carriage (yaw -90 deg), so
+# the arm's left is the track's direction of travel. That is the orientation in
+# which the program makes sense: it picks front-right, slides towards its left
+# and places front-left, 1.27 m further along, where the belt carries the part
+# on along +x. The other three orientations put the place point back beside the
+# pick, or behind the rail.
+#
+# With the carriage's stroke-zero frame at (-0.300, 3.300, 0.710):
+#
+#   pick   (-0.500, 2.924) at z 0.633   -> infeed_table centred there, surface 0.600
+#   place  ( 0.765, 3.060) at z 0.672   -> transfer_belt's infeed there, surface
+#                                          0.635, so the part is released 4 mm up
+#
+# The stand height, 0.710 m, is what puts the pick table's surface at the
+# standard 0.600 m: the pads close on the part's centre 0.110 m below the base.
+assets:
+  - id: picker_track
+    zone: cell_b
+    type: ufactory_linear_motor
+    pose:
+      frame: cite_world
+      xyz_m: [0.050, 3.300, 0.000]
+    # `sim` is the only backend the type declares; see the type for the
+    # hardware path, which is not implemented.
+    hardware: {backend: sim}

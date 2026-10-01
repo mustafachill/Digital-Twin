@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "Material": {
+      "additionalProperties": false,
+      "description": "What one named appearance looks like.\n\nWHY THIS EXISTS. ``Body.material`` has carried a name since the first\nauthored body — ``table_top``, ``conveyor_frame``, ``pedestal_steel`` — and\nuntil this class existed the name resolved to nothing: no library, no rule,\nno emitter. Every visual in the generated scene was a bare ``<geometry>``,\nevery renderer fell back to its own default, and the project owner opened the\nGUI and reported that the box, the table and everything else were black. The\nmodel already said what each thing was made of; the generator threw it away.\n\nWHY THE VOCABULARY IS SDF'S. ``ambient`` and ``diffuse`` are the two terms\nboth artifacts that carry a visual can be made to express, and they are the\ntwo a person means by \"what colour is it\": diffuse is the colour under direct\nlight, ambient the colour in shadow. Declaring a single colour instead and\nderiving the pair in the generator would put a rendering policy in code that\nsomeone would then want to vary per material (P5).\n\nNO ``specular``, AND THAT IS A DECISION RATHER THAN AN OMISSION. The scene —\nthe artifact this defect is about — is a URDF, and URDF has exactly one\ncolour element per material with no specular term at all, so a declared\nspecular could be honoured by some emitters and silently dropped by the one\nthat matters. Nothing in this cell needs a highlight. Add it when something\ndoes, together with the emitter that can carry it.\n\nWHAT THE URDF CHANNEL COSTS, measured in this container on 2026-09-28 with\n`gz sdf -p` over a probe URDF and not reasoned about: sdformat's URDF parser\nmaps ``<color rgba>`` onto **both** the SDF ambient and the SDF diffuse, after\nmultiplying the three colour components by 1.25 and clamping each at 1.0; the\nalpha passes through untouched. So the scene renders ``diffuse`` at 1.25x and\nignores ``ambient`` entirely, while an artifact emitted as SDF carries both\nverbatim. That is not compensated for here — a divide-by-1.25 in the\ngenerator would be an undeclared constant tracking an upstream implementation\ndetail, and what it would buy is cosmetic. It is the reason every shipped\ncomponent below stays at or under 0.8: above that the scene clips and the\nmodel states a colour the cell cannot show.",
+      "properties": {
+        "ambient": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Ambient",
+          "type": "array"
+        },
+        "diffuse": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            }
+          ],
+          "title": "Diffuse",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "ambient",
+        "diffuse"
+      ],
+      "title": "Material",
+      "type": "object"
+    }
+  },
+  "$id": "https://cite.shsu.edu/schema/cite/materials/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "GENERATED from tools/cite_tools/model/schema.py by `cite-model schema`. Do not edit. The pydantic models are authoritative (ADR-0021).",
+  "properties": {
+    "materials": {
+      "items": {
+        "$ref": "#/$defs/Material"
+      },
+      "minItems": 1,
+      "title": "Materials",
+      "type": "array"
+    },
+    "schema": {
+      "const": "cite/materials/v1",
+      "enum": [
+        "cite/materials/v1"
+      ],
+      "title": "Schema",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "materials"
+  ],
+  "title": "cite/materials/v1",
+  "type": "object"
+}

@@ -119,8 +119,22 @@ step "Shell"
 # all. The pin removes the ambiguity, so the skip may go with it.
 if SHELL_GATE="$(assert_shellcheck_pinned "${VENV}/shellcheck" "$CITE_DEV_REQUIREMENTS")"; then
     # -x follows sourced files, so the `source=` directives in each script resolve
+    # tools/*.sh is the snapshot extractor (ADR-0068).
     check "${VENV}/shellcheck" -x -P "${REPO_ROOT}" \
-        "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh
+        "${REPO_ROOT}"/scripts/* "${REPO_ROOT}"/infra/docker/*.sh "${REPO_ROOT}"/tools/*.sh
+    # Each snapshot's `run` (ADR-0068): the one file per snapshot that did not
+    # exist at its source commit, and so the one its own tree never linted. Named
+    # exactly; nothing else under projects/ is checked here. SCRIPTDIR, so a
+    # `source=scripts/_lib.sh` directive resolves against that snapshot's own
+    # library rather than this tree's.
+    SNAPSHOT_RUNS=()
+    for run in "${REPO_ROOT}"/projects/*/run; do
+        # An unmatched glob stays literal; only files that exist are checked.
+        if [ -f "$run" ]; then SNAPSHOT_RUNS+=("$run"); fi
+    done
+    if [ "${#SNAPSHOT_RUNS[@]}" -gt 0 ]; then
+        check "${VENV}/shellcheck" -x -P SCRIPTDIR "${SNAPSHOT_RUNS[@]}"
+    fi
 else
     FAILED=1
     err "Shell gate broken — ${SHELL_GATE}.

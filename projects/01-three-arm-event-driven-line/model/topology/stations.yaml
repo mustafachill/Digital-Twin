@@ -1,0 +1,121 @@
+---
+# yaml-language-server: $schema=../schema/stations.schema.json
+schema: cite/stations/v1
+
+# A station says what it is connected to, never what it does. Behaviour is L4's —
+# that separation is what keeps a layout change from being a code change.
+#
+# Every pick and place point is a reference to a frame on another asset. There is
+# no coordinate anywhere in this file, which is the property that made v1's
+# diverged pick/place tables impossible to reproduce here.
+stations:
+  - id: station_infeed
+    zone: cell_a
+    type: source_station
+    assets: [table_pick]
+    capacity: 6
+
+  - id: station_transfer_1
+    zone: cell_a
+    type: transfer_station
+    actor: arm_1
+    assets: [arm_1, pedestal_1]
+    pick_from: {asset: table_pick, frame: surface}
+    place_to: {asset: conveyor_1, frame: infeed}
+    # The infeed is fed from outside the cell, and this is what tells the station
+    # a part has arrived. It used to have no trigger, on the reasoning that L4
+    # would start the station instead — but nothing tells L4 either, and the
+    # station's cycle came to rest polling `Detect` against a region no sensor
+    # was in. A station that acts observes; see `beam_pick` in
+    # assets/instances/sensors.yaml for the placement and the alternative that
+    # was rejected.
+    trigger: {sensor: beam_pick, state: blocked}
+
+  - id: station_transfer_2
+    zone: cell_a
+    type: transfer_station
+    actor: arm_2
+    assets: [arm_2, pedestal_2]
+    pick_from: {asset: conveyor_1, frame: outfeed}
+    place_to: {asset: conveyor_2, frame: infeed}
+    trigger: {sensor: beam_c1_out, state: blocked}
+
+  - id: station_transfer_3
+    zone: cell_a
+    type: transfer_station
+    actor: arm_3
+    assets: [arm_3, pedestal_3]
+    pick_from: {asset: conveyor_2, frame: outfeed}
+    place_to: {asset: conveyor_3, frame: infeed}
+    trigger: {sensor: beam_c2_out, state: blocked}
+
+  - id: station_accumulation
+    zone: cell_a
+    type: sink_station
+    assets: [table_accumulation]
+    capacity: 12
+    # The sink watches the last belt's outfeed beam. Without it, an arrival at
+    # the accumulation table is an INFERENCE — the line counted a piece when the
+    # upstream robot let go of it, which is a statement about a gripper and not
+    # about the table. `beam_c3_out` was declared here and used by nothing, so
+    # the one asset that could have observed the arrival was watching nobody.
+    #
+    # A sink has no actor, so this is not what starts work: nothing at a sink
+    # acts. It is what makes the arrival observed rather than assumed.
+    trigger: {sensor: beam_c3_out, state: blocked}
+
+  # ------------------------------------------------------------------------ #
+  # cell_b — the one-arm cell (ADR-0056)
+  # ------------------------------------------------------------------------ #
+  #
+  # THREE STATIONS IS THE MINIMUM, AND IT IS ENFORCED RATHER THAN STYLISTIC.
+  # `line_plan.hpp` refuses a topology with no transfer station, and refuses a
+  # transfer station that has other than exactly one upstream and one downstream
+  # neighbour; `schema.py` requires at least one flow edge and `referential.py`
+  # refuses a self-edge. With one arm there is exactly one possible actor, so the
+  # two remaining slots must be a source and a sink. A two-station cell cannot be
+  # written.
+  #
+  # EVERY ID BELOW NAMES A `cell_b` ASSET, AND NOTHING CHECKS THAT EITHER.
+  # `referential.py` resolves station and flow references against GLOBALLY known
+  # ids, so naming `arm_1` here would pass referential validation and then skip
+  # its reach check in silence, because the geometric level only ever sees one
+  # zone's assets. Filed as a validator gap in docs/open-work.md.
+  - id: b_infeed
+    zone: cell_b
+    type: source_station
+    assets: [infeed_table]
+    capacity: 6
+
+  # The cell's only acting station: pick off the table, place on the belt.
+  #
+  # ADR-0031's DIRECT-HANDOFF REFUSAL IS STRUCTURALLY UNREACHABLE HERE, and that
+  # is not the gate being relaxed. `line_plan.hpp` computes `receiver_is_a_robot`
+  # as "downstream is not a sink and names an actor", and a source or sink may not
+  # name an actor at all. With one arm the downstream neighbour is always the
+  # sink, so the condition cannot be true — the refusal is still armed, there is
+  # simply no second robot in this cell to hand a part to. A later reader
+  # comparing cell_a's topology with this one should not read the absence of a
+  # refusal as a decision.
+  #
+  # Its inbound edge is `via: null`, which costs this cell ADR-0039's detector
+  # entirely; see model/topology/flow_cell_b.yaml, where that edge is declared,
+  # for what remains.
+  - id: b_transfer_1
+    zone: cell_b
+    type: transfer_station
+    actor: picker
+    assets: [picker, picker_base]
+    pick_from: {asset: infeed_table, frame: surface}
+    place_to: {asset: transfer_belt, frame: infeed}
+    trigger: {sensor: infeed_beam, state: blocked}
+
+  # The sink. It has a trigger and no actor: nothing here acts, and the trigger is
+  # what makes the arrival observed rather than counted when the arm let go —
+  # which is a statement about a gripper and not about the table.
+  - id: b_accumulation
+    zone: cell_b
+    type: sink_station
+    assets: [outfeed_table]
+    capacity: 12
+    trigger: {sensor: outfeed_beam, state: blocked}
