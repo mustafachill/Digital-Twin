@@ -267,9 +267,9 @@ plan:
         # The home configuration comes from L0: where an arm rests between cycles
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [0, -0.35, -1.05, 0, 1.4]
-        # Named joint poses a fixed program moves the arm through (ADR-0066),
-        # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
-        # and each of these.
+        # Named joint poses the arm's program moves it through, read from that
+        # program file by the generator (ADR-0067); none is written in L0.
+        # `MoveTo.named_configuration` accepts `home` and each of these.
         poses_rad:
           zero: [0, 0, 0, 0, 0]
           blockly_01: [0, 0, -0.785398163, 0.785398163, 0]

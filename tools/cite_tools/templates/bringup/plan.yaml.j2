@@ -294,9 +294,9 @@ plan:
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [{{ manager.home_rad | map('m') | join(', ') }}]
 {% if manager.poses_rad %}
-        # Named joint poses a fixed program moves the arm through (ADR-0066),
-        # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
-        # and each of these.
+        # Named joint poses the arm's program moves it through, read from that
+        # program file by the generator (ADR-0067); none is written in L0.
+        # `MoveTo.named_configuration` accepts `home` and each of these.
         poses_rad:
 {% for name, values in manager.poses_rad %}
           {{ name }}: [{{ values | map('m') | join(', ') }}]
