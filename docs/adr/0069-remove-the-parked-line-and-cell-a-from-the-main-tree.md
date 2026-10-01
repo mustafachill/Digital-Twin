@@ -219,8 +219,10 @@ package); `cite_facility`'s `test_topology_message.py`; the `continuous_line` an
   `projects/01`.
 - **StopAll was the main tree's only automatic all-belts stop**, and it left with the line.
   `./scripts/program` now commands every side's belt back to zero when it ends — normally, on
-  a failure and on Ctrl-C — and `program_cycle` stops the belt it started when its test ends,
-  passed or failed; but that is each tool stopping what it started, not a cell-wide stop. A physical belt is a drive whose setpoint persists, so
+  a failure and on Ctrl-C, in the order program, belts, pair, with the pair supervisor in a
+  process group of its own so that the terminal's Ctrl-C does not reach it before the belts are
+  stopped — and `program_cycle` stops the belt it started when its test ends, passed or failed;
+  but that is each tool stopping what it started, not a cell-wide stop. A physical belt is a drive whose setpoint persists, so
   before [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md)'s belt becomes real
   it needs a drive-side stop of its own; nothing in this tree provides one.
 - **`Pick`, `Place` and `Transfer` have no production caller in the main tree.** The skill
@@ -229,6 +231,10 @@ package); `cite_facility`'s `test_topology_message.py`; the `continuous_line` an
   owner's decision of 2026-10-01** they and their routes stay as they are, and the end-to-end
   coverage that matters is `program_cycle` — the real program, through `MoveTo` and `Grasp`
   (ADR-0067).
+- **A refused bring-up now exits non-zero and an interrupted one does not change.** Every
+  `BRING-UP FAILED` path in `simulation.launch.py` ends the launch with status 1, where it
+  ended with 0; a launch stopped by Ctrl-C or by the pair supervisor reports no refusal and
+  keeps the status `launch` gives it.
 - `ConveyorState` was the typed contract reserved for a measured belt speed, which CLAUDE.md §2
   names as what would close the open-loop belt gap. A future closed-loop belt re-introduces a
   contract by its own decision.

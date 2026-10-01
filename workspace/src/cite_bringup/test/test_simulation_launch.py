@@ -302,6 +302,35 @@ def test_no_process_exit_handler_passes_a_failure_through(
         )
 
 
+def test_an_interrupted_bring_up_is_not_a_refusal(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """Ctrl-C mid-bring-up is not BRING-UP FAILED, and does not change the status.
+
+    An interrupted step exits non-zero. Before the guard, the gate after it
+    logged "BRING-UP FAILED before ..." and `FailTheLaunch` made the launch
+    exit 1 — blaming the cell for the operator's Ctrl-C.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+    handlers = [
+        action.event_handler
+        for action in actions
+        if isinstance(action, RegisterEventHandler)
+        and isinstance(action.event_handler, OnProcessExit)
+    ]
+    assert handlers
+    context._set_is_shutdown(True)
+
+    for handler in handlers:
+        assert not handler.handle(_Exited(returncode=-2), context), (
+            f"{handler.describe()[0]} reports a refusal while the launch is stopping"
+        )
+    # The transition refusals are static entity lists, so their last action is
+    # what has to stand down.
+    module.FailTheLaunch().execute(context)
+
+
 def test_a_successful_exit_continues_the_chain(
     module: ModuleType, context: LaunchContext, monkeypatch
 ) -> None:

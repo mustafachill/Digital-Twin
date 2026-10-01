@@ -150,7 +150,12 @@ class FailTheLaunch(OpaqueFunction):
         super().__init__(function=self._fail)
 
     @staticmethod
-    def _fail(context: LaunchContext) -> None:  # noqa: ARG004 - launch's callback shape
+    def _fail(context: LaunchContext) -> None:
+        # Not while the launch is already stopping. An interrupt — Ctrl-C, or the
+        # pair supervisor stopping a side — is not a refusal, and a handler that
+        # fires during that teardown must leave the exit status as it was.
+        if context.is_shutdown:
+            return
         raise BringUpFailed("bring-up refused; the BRING-UP FAILED line above says why")
 
 
@@ -1314,7 +1319,13 @@ def _gate(entities: list, what: str, *, hint: str = "") -> callable:
     against a cell that had never finished coming up.
     """
 
-    def handler(event, context):  # noqa: ANN001, ARG001 - launch's callback shape
+    def handler(event, context):  # noqa: ANN001 - launch's callback shape
+        # Silent while the launch is stopping, as `_fatal_on_exit` is: an
+        # interrupt mid-bring-up ends a step non-zero, and reporting it as
+        # "BRING-UP FAILED before ..." — and exiting 1 — would blame the cell
+        # for the operator's Ctrl-C.
+        if context.is_shutdown:
+            return None
         if event.returncode == 0:
             return entities
         message = (

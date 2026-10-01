@@ -241,6 +241,10 @@ domain and the wrong partition sees the ROS graph and an empty Gazebo transport.
 
 ### How a pair fails
 
+A launch that refuses (`BRING-UP FAILED: ...`) exits non-zero, and one interrupted by Ctrl-C or
+by the pair supervisor stopping it leaves its exit status as `launch` gives it, with no
+`BRING-UP FAILED` line for the interrupt ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
+
 | What you see | What it means |
 |---|---|
 | `[pair] X exited N` before any readiness | that side's bring-up failed. Its own diagnosis is above, in that side's stream |
