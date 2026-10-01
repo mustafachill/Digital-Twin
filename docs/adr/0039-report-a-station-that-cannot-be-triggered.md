@@ -1,6 +1,10 @@
 # ADR-0039: Report a station that cannot be triggered, as a line state of its own
 
-- **Status:** Proposed. Written before the implementation, which is the point
+- **Status:** Deprecated — [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  removed the event-driven line from the main tree with no replacement there: the untriggerable-station report lived in `cite_orchestration` and was published on `LineState`, and both are gone.
+  The mechanism still runs, unchanged, in `projects/01-three-arm-event-driven-line`.
+  **Nothing below is rewritten, and nothing below binds the main tree.**
+  **[Replaced 2026-10-01, kept for the record:]** *"Proposed. Written before the implementation, which is the point
   ([CLAUDE.md §12](../../CLAUDE.md)). Every "will" below is a commitment, not a description.
   Nothing here is built at `70c6431`.
   **Corrected 2026-08-28 — see the section "Correction — 2026-08-28" below, which every
@@ -14,7 +18,7 @@
   correction so that the newest state is met first.** Nothing was measured false and no
   decision moves; the 2026-08-28 correction stands exactly as written. What is new is
   evidence: three CI runs, with logs, at the station correction item 5 names — and a
-  measured contrast at a belt-fed station that shows what the coverage gap costs.
+  measured contrast at a belt-fed station that shows what the coverage gap costs."*
 - **Date:** 2026-08-27
 - **Deciders:** Coder agent, from the project owner's brief, against the defect
   [ADR-0038](0038-stop-the-line-without-ending-the-process.md) records in its Evidence

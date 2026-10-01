@@ -1,6 +1,11 @@
 # ADR-0056: Keep the three-arm cell as a second zone, and run one zone at a time
 
-- **Status:** **Proposed — implemented, and all eight promotion clauses now have evidence
+- **Status:** Superseded by [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  — zone `cell_a` has left L0 and the main tree; the three-arm cell runs only as
+  `projects/01-three-arm-event-driven-line`. What survives of this record is ADR-0069 decision 5's
+  rule that `--zone` is **required whenever L0 declares more than one zone**; with one zone it
+  defaults to that zone. **Nothing below is rewritten and nothing below binds any longer.**
+  **[Replaced 2026-10-01, kept for the record:]** *"**Proposed — implemented, and all eight promotion clauses now have evidence
   behind them. Promotion is the project owner's, and this record does not take it**, for the
   reason clause 4's evidence gives below: the cycle is met as worded and it took two attempts
   per scenario to get there.
@@ -21,7 +26,7 @@
   registered in advance. It is a demonstration that the cell works, not a reliability figure,
   and **no CI run has driven `cell_b`** — the branch is unpushed.
   It said *"nothing in this record is implemented"* until 2026-09-17, which was true when it was
-  written and had stopped being true by the time three reviewers found it independently.
+  written and had stopped being true by the time three reviewers found it independently."*
 - **Date:** 2026-09-16
 - **Deciders:** Project owner; drafted by the orchestrator against a three-pass source audit
   of this checkout at `2b135b3`.

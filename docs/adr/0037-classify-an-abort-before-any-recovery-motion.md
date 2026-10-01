@@ -364,7 +364,7 @@ Chosen. Detailed below.
 
 Both trees are reordered so that the classification node is the **first** leaf of the
 recovery branch. Clearing the arm becomes an action **of the retry path**, reachable only
-when the policy has chosen to retry.
+when the policy has chosen to retry. **[Overtaken 2026-10-01 — ADR-0069 removed both behaviour trees and `cite_orchestration` from the main tree; they run only in `projects/01-three-arm-event-driven-line`. Decisions 2-4, in `cite_interfaces` and L3, are still in the main tree.]**
 
 The current tree comment's justification — *"a station that failed mid-cycle may have left
 the arm somewhere the next attempt would collide with"* (`line_station.xml:153-154`) — is
@@ -577,7 +577,7 @@ deciding it inside this ADR would widen the change without evidence. It is named
 #### It is typed, and it lives in `cite_interfaces`
 
 P3 and [ADR-0010](0010-typed-ros-interfaces.md): a new `.srv` in `cite_interfaces`,
-discoverable with `ros2 interface show`. Not a `std_msgs/String` command topic, not a
+discoverable with `ros2 interface show`. **[Overtaken 2026-10-01 — ADR-0069 removed `ResetStation.srv` and its server from the main tree; the reset runs only in `projects/01-three-arm-event-driven-line`.]** Not a `std_msgs/String` command topic, not a
 parameter, not an untyped trigger — a service, because a reset has exactly one caller at a
 time, must return an answer, and must be able to refuse.
 

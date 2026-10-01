@@ -56,7 +56,11 @@ L4 negotiates; L3 executes one half of the physical motion. Chosen.
 **L4 owns ownership.** The line coordinator holds the single owner of each work-piece,
 performs the two-party confirmation, enforces the timeout with its defined outcome, and
 arbitrates the shared volume. Ownership state lives in exactly one place and is published
-as typed line state.
+as typed line state. **[Overtaken 2026-10-01 — ADR-0069 removed the line coordinator and
+`LineState` from the main tree; the L4 half of this split runs only in
+`projects/01-three-arm-event-driven-line`. The L3 half, `Transfer`, is still served in the main
+tree, and no program there sends it a goal; its callers are tests and the twin boundary's
+forwarding.]**
 
 **L3 owns motion, for one robot at a time.** `Transfer` is a single-robot skill: bring the
 held work-piece to a handoff pose, signal ready, hold position until released, then retreat.
