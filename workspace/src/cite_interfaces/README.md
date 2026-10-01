@@ -27,9 +27,9 @@ than by reading the definitions.
 | `MoveTo`, `Grasp`, `Pick`, `Place`, `Transfer` (actions) | `cite_skills/src/skill_server.cpp`, one server per arm |
 | `ResultCode` | every action result above |
 | `ModelVersion`, `GetModelVersion` | `cite_facility/model_info.py` |
-| `RobotState` | **nothing** |
+| `RobotState` | `cite_skills/src/skill_server.cpp`, latched on each arm's `state` topic; read by `cite_bringup`'s program and its simulation-only grasp-hold bridge |
 | `SafetyState` | **nothing** |
-| `TwinMode`, `DivergenceMetrics`, `SetMode` | `cite_twin/twin_boundary.py` — **which no bring-up starts**, and which refuses a zone declaring one side, as the shipped model does. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
+| `TwinMode`, `DivergenceMetrics`, `SetMode` | `cite_twin/twin_boundary.py`, which the pair supervisor starts under `./scripts/sim --pair` and `./scripts/program` (ADR-0057) and no launch file starts; it refuses a zone declaring one side, and the one shipped zone, `cell_b`, declares two. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
 
 `TwinMode` and `DivergenceMetrics` each carry their own topic name as a `string TOPIC`
 constant, and `SetMode` carries its own as a `string SERVICE` on the request — so each name exists in one place and a consumer reads it
@@ -45,7 +45,8 @@ it (`SetMode::Request::SERVICE`).
   (CLAUDE.md §4).
 - **It does not guarantee behaviour.** `SetMode.srv` says so in its own body: bring-up and
   `./scripts/enter hardware` enforce the hardware opt-in before the stack starts, and the L5
-  server now applies the same check at the transition — in a process nothing starts. A
+  server now applies the same check at the transition — in a process only the pair supervisor
+  starts, and no CI step. A
   contract is not an implementation, and an implementation nothing runs is not a guarantee
   either (P7).
 

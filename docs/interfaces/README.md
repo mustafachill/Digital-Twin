@@ -5,14 +5,18 @@
   `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
   build rather than surfacing at runtime. The conventions below are what that package does,
   not what it intends to do.
-  All six actions now have a server, and five of them are called by a shipped tree.
-  `Transfer` has a server that nothing calls, which is an
-  [L3](../architecture/L3-capabilities.md) and [L4](../architecture/L4-orchestration.md)
-  gap, not an interface gap — see those documents for what has and has not been run.
-  **`ConveyorState` is published by nothing.** It exists so that a belt's commanded and
-  measured speed can disagree visibly; no belt fills it, and the only file in the workspace
-  that mentions the type is `cite_orchestration/conveyor_index.hpp`, in a comment saying so.
-  L4 commands belts over a bare `std_msgs/Float64` and gets no confirmation back.
+  All five actions have a server, `cite_skills`' skill server, one per arm. The real robot's
+  program calls `MoveTo` and `Grasp`; `Pick`, `Place` and `Transfer` have no in-tree caller
+  outside tests and the twin boundary's forwarding — an
+  [L3](../architecture/L3-capabilities.md) gap, not an interface gap.
+  **It held ten more until 2026-10-01**, when [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  removed the ten that only the event-driven line used — `LineState`, `LineTopology`,
+  `StationTopology`, `StationEdge`, `StationState`, `DetectionEvent`, `Detection`,
+  `Detect.action`, `ResetStation.srv` and `ConveyorState`. They run, frozen, in
+  `projects/01-three-arm-event-driven-line`. `ConveyorState` was the typed contract reserved
+  for a measured belt speed and was published by nothing; belts are commanded over a bare
+  `std_msgs/Float64` and give no confirmation back, and a closed-loop belt now needs a contract
+  of its own (ADR-0069, "What this costs us").
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a
@@ -38,7 +42,7 @@ workspace/src/cite_interfaces/
 
 | Use | When | Examples |
 |---|---|---|
-| **Message** | Continuously published state or events | joint state, line state, divergence metrics |
+| **Message** | Continuously published state or events | joint state, robot state, divergence metrics |
 | **Service** | A request with a fast, bounded answer | query mode, fetch model version |
 | **Action** | Long-running, cancellable, reports progress | every L3 skill, mode transition |
 
@@ -71,10 +75,11 @@ identity cannot be attributed. Both are required for L6 recording to be interpre
 later ([L6](../architecture/L6-data-and-telemetry.md)).
 
 This binds messages that are **published**. A message that only ever appears nested inside
-another — `StationState`, `StationTopology`, `StationEdge`, `Detection` — carries neither,
-because it inherits both from its container, and stamping it twice would be the same fact in
-two places. `LineTopology` carries a `header` and a `zone` rather than an `asset_id`: a
-topology is not about one asset.
+another carries neither, because it inherits both from its container, and stamping it twice
+would be the same fact in two places. *(The four nested messages this paragraph named —
+`StationState`, `StationTopology`, `StationEdge`, `Detection` — and `LineTopology`, which
+carried a `header` and a `zone` rather than an `asset_id`, left the package on 2026-10-01 with
+ADR-0069; none of the 13 definitions left is nested-only.)*
 
 ## Enumerations are constants, not strings
 
@@ -138,6 +143,12 @@ is a typed key-value array in the style of `diagnostic_msgs`, **not** a JSON blo
 string. The container stays typed even when the contents vary.
 
 ## A field a sensor cannot fill says so
+
+*This section records a convention whose message, writer, reader and consumer all left the
+main tree on 2026-10-01 with the event-driven line (ADR-0069): `Detection`,
+`cite_skills/observation.hpp` and `cite_orchestration`'s `PickAt` run only in
+`projects/01-three-arm-event-driven-line`. It is kept because the rule binds the next message
+that carries a pose a sensor cannot fill.*
 
 A message declares the shape of an answer; it does not promise that every sensor can give
 one. `Detection` carries a `geometry_msgs/PoseStamped pose`, and the only pose sensor in

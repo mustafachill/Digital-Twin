@@ -24,7 +24,7 @@ profiles explicitly and using the named set below rather than improvising per pu
 | Profile | Reliability | Durability | History | Depth | Use for |
 |---|---|---|---|---|---|
 | `SENSOR` | Best effort | Volatile | Keep last | 5 | High-rate sensor streams where the newest value is what matters |
-| `STATE` | Reliable | Volatile | Keep last | 10 | Periodic state — joint state, line state, divergence metrics |
+| `STATE` | Reliable | Volatile | Keep last | 10 | Periodic state — joint state, divergence metrics (and `LineState`, until it left with the line, ADR-0069) |
 | `COMMAND` | Reliable | Volatile | Keep last | 10 | Commands that must arrive |
 | `LATCHED` | Reliable | Transient local | Keep last | 1 | Configuration a late joiner must receive — model version, mode, robot description |
 | `EVENT` | Reliable | Volatile | Keep all | 100 | Discrete events that must not be dropped — faults, transitions, handoffs |
@@ -82,7 +82,10 @@ retransmission to endpoints the publisher has already been matched with**, and m
 discovery event. Publish before it happens and the message is delivered to zero subscribers,
 with no incompatibility to find and nothing wrong on either side of `ros2 topic info`.
 
-The measured case is in this repository. `ConveyorIndex` creates its belt command publishers
+The measured case was in this repository, and is now in
+`projects/01-three-arm-event-driven-line`, since `cite_orchestration` left the main tree on
+2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
+`ConveyorIndex` creates its belt command publishers
 inside `line_orchestrator`'s topology callback and publishes the start-up setpoint from the
 same callback. With the scenario's own publisher removed, **a subscriber that had been up for
 a hundred seconds received nothing for the following three hundred.** The bridge had been
