@@ -23,7 +23,6 @@ import os
 import signal
 
 from cite_bringup.plan import default_plan_path, load
-from cite_bringup.program import cell_b_pick_place
 from cite_bringup.program.cell import (
     holding_refusal,
     RosCell,
@@ -292,11 +291,6 @@ def test_a_cell_without_a_program_is_refused(tmp_path) -> None:
     with pytest.raises(ValueError, match="program"):
         target(load(path))
 
-
-def test_the_adr_0066_record_refuses_todays_plan() -> None:
-    """The hand-written list is a record: its taught poses are gone from L0."""
-    with pytest.raises(ValueError, match="declares no pose"):
-        cell_b_pick_place.target(load(default_plan_path(ZONE)))
 
 
 def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:

@@ -316,8 +316,10 @@ class MoveItConfig:
     #: endpoints, so that the skill server can refuse to have such a request
     #: rescued by a planner that samples (ADR-0027).
     cartesian_planner_ids: tuple[str, ...]
-    #: The arm's named joint poses (ADR-0066), by name. Empty where L0 declares
-    #: none; `home` is never among them, because it is `home_rad` above.
+    #: The arm's named joint poses, by name: the poses of the program it runs
+    #: (ADR-0067), which the generator reads from the program file. Empty for an
+    #: arm with no program; `home` is never among them, because it is
+    #: `home_rad` above.
     poses_rad: Mapping[str, tuple[float, ...]]
 
 
@@ -1622,7 +1624,7 @@ def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
 
 
 def _poses(entry: object, where: str) -> Mapping[str, tuple[float, ...]]:
-    """Read `moveit.poses_rad`, which the plan emits only where L0 declares poses."""
+    """Read `moveit.poses_rad`, which the plan emits only for an arm with a program."""
     poses = _optional(entry, "poses_rad") or {}
     if not isinstance(poses, dict):
         raise PlanError(f"{where}: 'poses_rad' must be a mapping, not {_kind(poses)}")

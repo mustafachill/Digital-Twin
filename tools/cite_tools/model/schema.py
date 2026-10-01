@@ -79,7 +79,7 @@ class Pose(Strict):
 class NamedFrame(Strict):
     """A reference frame a type offers, that instances can be placed against.
 
-    ``conveyor_1/outfeed`` resolves through one of these, so the coordinate of a
+    ``transfer_belt/outfeed`` resolves through one of these, so the coordinate of a
     belt's end is written once — in the type — rather than at every station that
     reaches for it.
     """
@@ -1218,7 +1218,7 @@ class PlanningSpec(Strict):
     """How this type is planned for, and where its SRDF comes from.
 
     Group names are the vendor's, prefixed with the asset id exactly as joints
-    and controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording
+    and controllers are — so `picker` plans with group `picker_xarm5`. Recording
     the vendor's suffix here rather than hardcoding it keeps the same property
     the description has: a vendor rename is a model edit.
     """
@@ -1620,8 +1620,8 @@ class BreakBeamConfiguration(Strict):
     #: offset from it is not an authored number. ``beam-indexes-off-frame`` in
     #: cite_tools.validate.geometric refuses a second, fitted copy.
     #:
-    #: False for a beam that only observes. ``beam_pick`` watches a table that
-    #: nothing indexes, and ``beam_c3_out`` reports arrivals at a sink with no
+    #: False for a beam that only observes. ``infeed_beam`` watches a table that
+    #: nothing indexes, and ``outfeed_beam`` reports arrivals at a sink with no
     #: actor, so neither stops a belt and neither has a pick point to stand off
     #: from.
     indexes_workpiece: bool = False
@@ -1632,16 +1632,12 @@ class BreakBeamConfiguration(Strict):
 class RobotConfiguration(Strict):
     kind: Literal["robot"] = "robot"
     home_rad: list[float] = Field(default_factory=list)
-    #: Named joint configurations a fixed program moves the arm through
-    #: (ADR-0066), one value per joint in the type's joint order. `home` is not
-    #: one of them: it is `home_rad` above, and a second statement of it here
-    #: would be the same pose in two places. `named-pose-*` in
-    #: cite_tools.validate.referential checks the names and the lengths.
-    poses_rad: dict[Identifier, list[float]] = Field(default_factory=dict)
     #: The program this arm runs, as the real robot's programming tool wrote it,
     #: relative to ``model/`` (ADR-0067). Read by `cite_tools.model.blockly`;
-    #: its poses become named poses beside ``poses_rad`` and its steps the
-    #: bring-up plan's ``program:`` block. Nothing in it is copied by hand.
+    #: its poses become the arm's named poses — the bring-up plan's
+    #: ``poses_rad`` — and its steps the plan's ``program:`` block. Nothing in it
+    #: is copied by hand. The taught poses ADR-0066 declared here beside it were
+    #: removed by ADR-0069; a program is the only source of a named pose.
     program: Annotated[str, Field(pattern=r"^programs/[a-z0-9_]+\.blockly\.xml$")] | None = None
 
 
@@ -1722,7 +1718,7 @@ class TwinSpec(Strict):
     ADR-0041's Decision 3, and it is a ZONE fact written once rather than an
     asset fact written per instance. In Phase 2.A the counterpart is a complete
     second simulation of the cell, so its world contains every asset whether or
-    not anyone wanted that asset twinned; "arm_1 is paired but conveyor_1 is not"
+    not anyone wanted that asset twinned; "the arm is paired but the belt is not"
     has no meaning there, and writing the same deployment fact on fifteen
     instances is P1 at a different granularity.
 

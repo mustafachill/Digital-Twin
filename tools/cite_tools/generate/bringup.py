@@ -82,7 +82,7 @@ class _ManagerView:
     #: what a pipeline is made of, so the L3 server never restates it.
     cartesian_planner_ids: tuple[str, ...]
     home_rad: tuple[float, ...]
-    #: The arm's named joint poses from L0, in declaration order (ADR-0066).
+    #: The arm's named joint poses, from its program, in program order (ADR-0067).
     poses_rad: tuple[tuple[str, tuple[float, ...]], ...]
     trajectory_action: str | None
     gripper_action: str | None
@@ -417,19 +417,17 @@ def _home(asset: ResolvedAsset) -> tuple[float, ...]:
 
 
 def _poses(asset: ResolvedAsset) -> tuple[tuple[str, tuple[float, ...]], ...]:
-    """The named joint poses a fixed program moves this arm through (ADR-0066).
+    """The named joint poses this arm's program moves it through (ADR-0067).
 
-    From L0 for the reason `_home` is: which poses a program uses is a decision
-    about this cell, and the angles live once, in the model. The poses of the
-    arm's program, if it runs one, follow: they are read from the program file
-    and never written in L0 (ADR-0067), and `program-pose-name-taken` keeps the
-    two sets of names apart.
+    Read from the program file and never written in L0; an arm with no program
+    has none. The taught poses ADR-0066 declared in L0 beside them were removed
+    by ADR-0069, and `program-pose-name-taken` keeps `home` reserved for
+    `home_rad`.
     """
     configuration = asset.instance.configuration
     if configuration is None or configuration.kind != "robot":
         return ()
-    taught = tuple((name, tuple(values)) for name, values in configuration.poses_rad.items())
-    return taught + tuple(blockly.poses(asset.program).items())
+    return tuple(blockly.poses(asset.program).items())
 
 
 def _step(step: blockly.Step) -> str:
