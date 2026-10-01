@@ -39,8 +39,8 @@ from cite_bringup.plan import (
 import pytest
 import yaml
 
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
-ZONE = "cell_a"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
+ZONE = "cell_b"
 
 
 def _generated() -> Path:

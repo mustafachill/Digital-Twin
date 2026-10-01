@@ -64,8 +64,8 @@ from rclpy.node import Node as RclpyNode
 from sensor_msgs.msg import JointState
 import yaml
 
-ZONE = "cell_a"
-ASSET = "arm_1"
+ZONE = "cell_b"
+ASSET = "picker"
 #: The one named pose this rig declares beside `home` (ADR-0066).
 PROBE_POSE = "probe"
 NAMESPACE = f"/cite/{ZONE}/{ASSET}"
@@ -156,17 +156,28 @@ def _joints(manager: dict) -> list:
 
     The skill server's MoveIt client waits for a complete joint state, so a
     missing drive joint means it never learns where the arm is.
+
+    The arm's track, when it rides one (ADR-0067), is a joint of the same
+    description: without its state `robot_state_publisher` never connects the
+    arm's base to its mount and every pose fails to resolve. So its joints are
+    reported too, at zero, which is where the program starts.
+
+    The arm's joints come FIRST whatever order the file lists its controllers in,
+    because the harness pairs them with the home configuration by position.
     """
     controllers = _read(_resolve(manager["parameters"]))
-    names: list = []
+    arm: list = []
+    rest: list = []
     for key, value in controllers.items():
         parameters = value.get("ros__parameters", {})
         if key.endswith("_joint_trajectory_controller"):
-            names.extend(parameters["joints"])
+            arm.extend(parameters["joints"])
+        elif key.endswith("_trajectory_controller"):
+            rest.extend(parameters["joints"])
         elif key.endswith("_gripper_controller") and "joint" in parameters:
-            names.append(parameters["joint"])
-    assert names, "no joints found in the generated controller configuration"
-    return names
+            rest.append(parameters["joint"])
+    assert arm, "no arm joints found in the generated controller configuration"
+    return arm + rest
 
 
 def _yaml_parameters(document: dict, prefix: str) -> dict:

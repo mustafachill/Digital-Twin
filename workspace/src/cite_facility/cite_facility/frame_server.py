@@ -48,7 +48,7 @@ class FrameServer(LifecycleNode):
     def __init__(self) -> None:
         super().__init__("frame_server")
         # No default (ADR-0056 decision 4). `require_zone` below refuses an
-        # empty one with a diagnosis; a `cell_a` here would quietly serve the
+        # empty one with a diagnosis; a literal zone here would quietly serve the
         # wrong cell the moment a second zone exists.
         self.declare_parameter("zone", "")
         self._transforms: list[StaticTransform] = []

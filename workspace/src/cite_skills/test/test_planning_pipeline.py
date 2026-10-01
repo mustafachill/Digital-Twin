@@ -124,15 +124,18 @@ from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
 import yaml
 
-ZONE = "cell_a"
-#: A DIFFERENT arm from the one `test_skill_contract.py` drives, and that is the
-#: reason it is named here rather than taken as "the first arm in the plan".
-#: There is one DDS domain per checkout (`scripts/_lib.sh`), colcon runs the two
-#: launch tests concurrently, and two `move_group` nodes in one namespace answer
-#: each other's service calls. The symptom is a test that passes alone and fails
-#: in the suite, which is the worst shape a failure can take.
-ASSET = "arm_2"
-NAMESPACE = f"/cite/{ZONE}/{ASSET}"
+ZONE = "cell_b"
+ASSET = "picker"
+#: NOT THE ARM'S OWN NAMESPACE, and that is the reason it is spelled here rather
+#: than taken from the plan. There is one DDS domain per checkout
+#: (`scripts/_lib.sh`), colcon runs this file and `test_skill_contract.py`
+#: concurrently, and two `move_group` nodes in one namespace answer each other's
+#: service calls — the symptom is a test that passes alone and fails in the
+#: suite. This rig used to run a different arm from that one; the model declares
+#: one arm now (ADR-0069), so it runs the same arm's generated configuration
+#: under a namespace of its own. Every parameter below is passed by value, so
+#: the namespace changes no setting.
+NAMESPACE = f"/cite/{ZONE}/{ASSET}_pipeline_rig"
 
 STARTUP_CEILING_S = 180.0
 CALL_CEILING_S = 120.0
@@ -192,6 +195,23 @@ def _arm_joints(manager: dict) -> list:
         if key.endswith("_joint_trajectory_controller"):
             return list(value["ros__parameters"]["joints"])
     raise AssertionError("no joint trajectory controller in the generated configuration")
+
+
+def _track_joints(manager: dict) -> list:
+    """Return the joints of any track the arm rides (ADR-0067), from its own controller.
+
+    The track's joint is in the arm's description, between the mount and the
+    arm's base, so without a state for it `robot_state_publisher` never connects
+    the two and nothing on the arm resolves in the cell's frames.
+    """
+    controllers = _read(_resolve(manager["parameters"]))
+    joints: list = []
+    for key, value in controllers.items():
+        if key.endswith("_trajectory_controller") and not key.endswith(
+            "_joint_trajectory_controller"
+        ):
+            joints.extend(value["ros__parameters"]["joints"])
+    return joints
 
 
 def _gripper_joint(manager: dict) -> str | None:
@@ -269,8 +289,9 @@ class Harness(RclpyNode):
         gripper = _gripper_joint(manager)
         self.home = list(self.moveit["home_rad"])
 
-        self.names = list(self.arm_joints) + ([gripper] if gripper else [])
-        self.positions = list(self.home) + ([0.0] if gripper else [])
+        tracks = _track_joints(manager)
+        self.names = list(self.arm_joints) + ([gripper] if gripper else []) + tracks
+        self.positions = list(self.home) + ([0.0] if gripper else []) + [0.0] * len(tracks)
 
         self.callbacks = ReentrantCallbackGroup()
         self.states = self.create_publisher(JointState, f"{NAMESPACE}/joint_states", 10)
@@ -872,7 +893,7 @@ class TestPlanningPipeline(unittest.TestCase):
     # These two tests make them distinguishable. 9a loads the cell's real
     # planning scene, PROVES that a particular joint-space interpolation passes
     # through a named generated object — start valid, goal valid, an intermediate
-    # configuration in contact with `conveyor_1` or whatever else it finds — and
+    # configuration in contact with the pick table or whatever else it finds — and
     # asserts the request is refused with an empty trajectory. 9b removes the
     # objects and asserts the identical request then succeeds. Without 9b the
     # refusal in 9a could be coming from anywhere; with it, the scene is the only
@@ -886,33 +907,25 @@ class TestPlanningPipeline(unittest.TestCase):
     #: joint-space INTERPOLATION and a pose goal would put IK between the test
     #: and what it is asserting.
     #:
-    #: Their shape, so the next reader does not have to reverse-engineer it: the
-    #: base is swung a quarter or a half turn towards one of the belts and the
-    #: shoulder and elbow are pitched out and down. That is the shape of every
-    #: motion in this cell that has furniture under it, and the belts are the
-    #: furniture nearest an arm — `conveyor_1` and `conveyor_2` stand either side
-    #: of `arm_2`, their top faces level with its mounting plane.
+    #: GENERATED RATHER THAN LISTED. A grid of base yaws, shoulder pitches and
+    #: elbow pitches — the base swung towards the furniture beside the arm and
+    #: the shoulder and elbow pitched out and down, which is the shape of every
+    #: motion in a cell that has furniture under it. The list this replaced was
+    #: ten configurations found by sweeping `cell_a`, whose belts stood either
+    #: side of its middle arm; that cell left the main tree with ADR-0069 and the
+    #: one arm left rides a track beside its pick table, so the sweep is asked of
+    #: whatever layout the model now has instead of being copied from one.
     #:
-    #: They were found by sweeping 225 configurations against move_group's own
-    #: collision check on 2026-08-27; twelve satisfied the premise below and
-    #: these ten are them, ordered so that the one blocked earliest along its
-    #: path is tried first. NONE OF THAT IS TRUSTED HERE. Each candidate is
-    #: admitted only if move_group says, now, that the start is clear, the goal
-    #: is clear, and some point on the straight line between them is inside a
-    #: named generated object. If none is, this test fails rather than passing
-    #: vacuously — the layout moved, or the scene stopped being loaded, and both
-    #: are worth being told about.
-    BLOCKED_CANDIDATES = (
-        (1.5708, 1.20, -1.05),
-        (-1.5708, 1.20, -1.05),
-        (1.5708, 1.20, -1.40),
-        (-1.5708, 1.20, -1.40),
-        (1.5708, 0.80, -1.05),
-        (-1.5708, 0.80, -1.05),
-        (1.1781, 1.20, -1.05),
-        (-1.1781, 1.20, -1.05),
-        (1.5708, 1.20, -1.80),
-        (-1.5708, 1.20, -1.80),
+    #: NONE OF IT IS TRUSTED. Each candidate is admitted only if move_group says,
+    #: now, that the start is clear, the goal is clear, and some point on the
+    #: straight line between them is inside a named generated object. If none
+    #: is, this test fails rather than passing vacuously — the layout moved, or
+    #: the scene stopped being loaded, and both are worth being told about.
+    BLOCKED_CANDIDATES = tuple(
+        (yaw, shoulder, elbow)
+        for yaw in (1.5708, -1.5708, 1.1781, -1.1781, 0.7854, -0.7854, 3.1416, 0.0)
+        for shoulder in (1.20, 0.80, 0.40)
+        for elbow in (-1.05, -1.40, -1.80)
     )
 
     #: Where along the straight joint-space line between start and goal the

@@ -304,7 +304,7 @@ PUBLISHED_EVIDENCE_THAT_NAMES_IT = (
 CONTEXTS_A_RUNNING_SYSTEM_READS = (
     'workspace/src/cite_simulation/launch/anything.launch.py',
     'model/assets/types/robots/x.yaml',
-    'workspace/src/cite_generated/bringup/cell_a_plan.yaml',
+    'workspace/src/cite_generated/bringup/cell_b_plan.yaml',
     'workspace/src/cite_skills/src/skill_server.cpp',
 )
 

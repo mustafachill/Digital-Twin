@@ -80,7 +80,7 @@ CEILING_S = 10.0
 #: The zone every fixture in this file is built from. Its generated plan is read
 #: and copied into a tempdir; nothing here starts a cell, of this zone or any
 #: other.
-ZONE = "cell_a"
+ZONE = "cell_b"
 
 #: The boundary's ceiling here, shorter than the sides' because everything it
 #: covers in this file is a `python3` process that starts in milliseconds. One
@@ -668,7 +668,7 @@ def _paired_plan(tmp_path: Path) -> Plan:
         sides.append(
             {
                 "name": "counterpart",
-                "gz_partition": "cite/cell_a/counterpart",
+                "gz_partition": "cite/cell_b/counterpart",
                 "domain_offset": 1,
             }
         )
@@ -732,11 +732,11 @@ def test_an_untwinned_zone_is_refused_rather_than_given_a_second_side(
     ]
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
-    monkeypatch.setattr(pair, "default_plan_path", lambda zone="cell_a": path)
+    monkeypatch.setattr(pair, "default_plan_path", lambda zone: path)
     # Present, so that the refusal is the one about sides and not the one about
     # a base the deployment did not supply.
     monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
-    assert pair.main(["--zone", "cell_a"]) == 1
+    assert pair.main(["--zone", ZONE]) == 1
     assert "declares 1 side(s)" in capsys.readouterr().err
 
 
@@ -784,7 +784,7 @@ def test_the_supervisor_needs_a_base_it_did_not_read_from_the_ambient_domain(
 def test_a_pair_with_no_zone_named_is_refused_before_anything_starts(capsys) -> None:
     """`--zone` is required and has no default (ADR-0056 decision 4).
 
-    It defaulted to `cell_a` until then, so `./scripts/sim --pair` with no zone
+    It defaulted to a literal zone until then, so `./scripts/sim --pair` with no zone
     started two full simulations of whichever cell that default named — and the
     supervisor starts one readiness witness per side, each of which declares its
     own zone with no default, so the value this argument supplies is the only
@@ -1096,9 +1096,9 @@ def test_a_boundary_announcing_another_zone_is_refused(tmp_path: Path) -> None:
     asked for - and it is the supervisor, which stated the zone, that is
     positioned to notice.
     """
-    announcement = boundary_announcement("cell_b")
-    # Started for `cell_a` - which is what `announces` on the spec records - and
-    # announcing `cell_b`.
+    announcement = boundary_announcement("another_zone")
+    # Started for `ZONE` - which is what `announces` on the spec records - and
+    # announcing a zone that is not it.
     wrong = _fake_boundary(
         tmp_path,
         f"import time\nprint({announcement!r}, flush=True)\ntime.sleep(600)\n",
@@ -1111,7 +1111,7 @@ def test_a_boundary_announcing_another_zone_is_refused(tmp_path: Path) -> None:
         wrong,
     )
     assert code == 1
-    assert "announced readiness as 'cell_b'" in text
+    assert "announced readiness as 'another_zone'" in text
     assert "announced readiness as" in text
     assert "--zone" in text
 

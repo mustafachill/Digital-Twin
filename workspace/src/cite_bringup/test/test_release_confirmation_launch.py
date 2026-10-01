@@ -128,8 +128,8 @@ from rclpy.node import Node as RclpyNode
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 
-ZONE = 'cell_a'
-ARM = 'arm_1'
+ZONE = 'cell_b'
+ARM = 'picker'
 
 #: The hardware plugin every generated description declares, and the one this rig
 #: substitutes for it. Asserted rather than assumed when the swap is made, exactly

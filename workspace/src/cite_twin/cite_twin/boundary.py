@@ -223,11 +223,11 @@ class BoundaryError(Exception):
 def operator_endpoint(name: str) -> str:
     """Form the `/cite/twin/...` name L5 advertises for a side-owned interface.
 
-    `/cite/cell_a/arm_1/move_to` becomes `/cite/twin/cell_a/arm_1/move_to`.
+    `/cite/cell_b/picker/move_to` becomes `/cite/twin/cell_b/picker/move_to`.
 
     **The operator's command enters L5 and not the plant's skill server**, and
     it cannot enter the plant's skill server and be observed there: both sides
-    carry identical names, so L5 cannot serve `/cite/cell_a/arm_1/move_to`
+    carry identical names, so L5 cannot serve `/cite/cell_b/picker/move_to`
     beside the plant's own server, and reading another server's goals is not
     something the action protocol offers (ADR-0050 decision 2).
 

@@ -36,11 +36,13 @@ import pytest
 import rclpy
 from rclpy.lifecycle import TransitionCallbackReturn
 
-#: A graph with one cell up: the names a `cell_a` bring-up puts on it, plus the
-#: facility-scope names that are there whichever cell is running.
-CELL_A_GRAPH = (
-    "/cite/cell_a/arm_1/move_to",
-    "/cite/cell_a/conveyor_1/command",
+#: A graph with one cell up: the names a bring-up of a zone called `zone_x` puts
+#: on it, plus the facility-scope names that are there whichever cell is running.
+#: The rule is a pure function over names, so the second zone is synthetic: the
+#: model declares one (ADR-0069), and these cases are about two.
+ZONE_X_GRAPH = (
+    "/cite/zone_x/arm/move_to",
+    "/cite/zone_x/belt/command",
     "/cite/facility/model_version",
     "/cite/facility/get_model_version",
     "/cite/line/topology",
@@ -48,11 +50,11 @@ CELL_A_GRAPH = (
     "/clock",
 )
 
-DECLARED = ("cell_a", "cell_b")
+DECLARED = ("cell_b", "zone_x")
 
 
 def test_another_declared_zone_on_the_graph_is_reported() -> None:
-    assert zones_already_on_the_graph(CELL_A_GRAPH, ["cell_b"], DECLARED) == ["cell_a"]
+    assert zones_already_on_the_graph(ZONE_X_GRAPH, ["cell_b"], DECLARED) == ["zone_x"]
 
 
 def test_our_own_zone_is_not_foreign_to_itself() -> None:
@@ -63,7 +65,7 @@ def test_our_own_zone_is_not_foreign_to_itself() -> None:
     process into a hard bring-up failure. `occupancy.py` records it; this pins
     that it stays that way rather than being "fixed" into a flake.
     """
-    assert zones_already_on_the_graph(CELL_A_GRAPH, ["cell_a"], DECLARED) == []
+    assert zones_already_on_the_graph(ZONE_X_GRAPH, ["zone_x"], DECLARED) == []
 
 
 def test_the_reserved_facility_scopes_are_not_zones() -> None:
@@ -72,7 +74,7 @@ def test_the_reserved_facility_scopes_are_not_zones() -> None:
     They are not listed anywhere in the rule — it asks which names belong to a
     DECLARED ZONE, so a scope that is not a zone of this facility never arises.
     """
-    facility_only = [name for name in CELL_A_GRAPH if not name.startswith("/cite/cell_")]
+    facility_only = [name for name in ZONE_X_GRAPH if not name.startswith("/cite/zone_x/")]
     assert zones_already_on_the_graph(facility_only, ["cell_b"], DECLARED) == []
 
 
@@ -83,7 +85,7 @@ def test_a_scope_that_is_not_a_declared_zone_is_ignored() -> None:
 
 def test_a_facility_declaring_one_zone_can_never_refuse() -> None:
     """The rule contributes nothing until a second zone is declared, by construction."""
-    assert zones_already_on_the_graph(CELL_A_GRAPH, ["cell_a"], ["cell_a"]) == []
+    assert zones_already_on_the_graph(ZONE_X_GRAPH, ["zone_x"], ["zone_x"]) == []
 
 
 def test_an_empty_graph_refuses_nothing() -> None:
@@ -106,8 +108,8 @@ def test_a_zone_name_that_is_a_prefix_of_another_is_not_a_false_match() -> None:
 
 def test_the_refusal_names_the_zone_that_is_already_there() -> None:
     """Name the intruder, because "another zone is running" only sends a reader looking."""
-    message = refusal(["cell_a"], ["cell_b"], "37")
-    assert "cell_a" in message
+    message = refusal(["zone_x"], ["cell_b"], "37")
+    assert "zone_x" in message
     assert "cell_b" in message
     assert "37" in message
     # The three collisions a reader cannot be expected to know about.
@@ -145,19 +147,24 @@ def _configure(node, zones: list[str], graph: tuple[str, ...]):
     return node.on_configure(None)
 
 
-def test_model_info_refuses_to_configure_beside_another_zone(ros) -> None:
+def test_model_info_refuses_to_configure_beside_another_zone(ros, monkeypatch) -> None:
     """Refuse to configure beside another zone.
 
     The bring-up stops here, with `simulation.launch.py` turning the FAILURE into
     a `Shutdown` that carries this node's own diagnosis.
+
+    The model declares one zone (ADR-0069), so the node is told of a second one
+    rather than skipping: a skip here would leave the node half of this file
+    asserting nothing until somebody declared another cell.
     """
+    import cite_facility.model_info as model_info
+
+    ours = declared_zones()[0]
+    theirs = "zone_x"
+    monkeypatch.setattr(model_info, "declared_zones", lambda: sorted([ours, theirs]))
     node = ModelInfo()
     try:
-        available = declared_zones()
-        if len(available) < 2:
-            pytest.skip("the facility declares one zone; there is no second one to collide")
-        ours, theirs = available[1], available[0]
-        graph = (f"/cite/{theirs}/arm_1/move_to", "/cite/facility/model_version")
+        graph = (f"/cite/{theirs}/arm/move_to", "/cite/facility/model_version")
         assert _configure(node, [ours], graph) == TransitionCallbackReturn.FAILURE, (
             "model_info configured beside another zone's names. Nothing then stops two "
             "cells sharing one /clock, one get_model_version and two different "
@@ -176,7 +183,7 @@ def test_model_info_configures_when_it_is_the_only_zone(ros) -> None:
     node = ModelInfo()
     try:
         ours = declared_zones()[0]
-        graph = (f"/cite/{ours}/arm_1/move_to", "/cite/facility/model_version", "/clock")
+        graph = (f"/cite/{ours}/picker/move_to", "/cite/facility/model_version", "/clock")
         assert _configure(node, [ours], graph) == TransitionCallbackReturn.SUCCESS
     finally:
         node.destroy_node()

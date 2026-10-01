@@ -75,8 +75,8 @@ def endpoint(field: str) -> _SkillEndpoint:
         asset="arm_1",
         field=field,
         action_type=action_type,
-        side_name=f"/cite/cell_a/arm_1/{field}",
-        endpoint=f"/cite/twin/cell_a/arm_1/{field}",
+        side_name=f"/cite/cell_b/arm_1/{field}",
+        endpoint=f"/cite/twin/cell_b/arm_1/{field}",
     )
 
 
@@ -462,7 +462,7 @@ class TestATransitionMayNotOutrunTheCell:
         verdict = _a_transition_may_not_outrun_the_cell(
             TwinMode.MODE_VIRTUAL_LEAD,
             TwinMode.MODE_SIM,
-            ["/cite/twin/cell_a/arm_1/pick"],
+            ["/cite/twin/cell_b/arm_1/pick"],
         )
         assert not verdict.accepted
         assert verdict.code == ResultCode.PRECONDITION_FAILED
@@ -472,10 +472,10 @@ class TestATransitionMayNotOutrunTheCell:
         verdict = _a_transition_may_not_outrun_the_cell(
             TwinMode.MODE_VALIDATED,
             TwinMode.MODE_SIM,
-            ["/cite/twin/cell_a/arm_1/pick", "/cite/twin/cell_a/arm_3/move_to"],
+            ["/cite/twin/cell_b/arm_1/pick", "/cite/twin/cell_b/arm_3/move_to"],
         )
-        assert "/cite/twin/cell_a/arm_1/pick" in verdict.detail
-        assert "/cite/twin/cell_a/arm_3/move_to" in verdict.detail
+        assert "/cite/twin/cell_b/arm_1/pick" in verdict.detail
+        assert "/cite/twin/cell_b/arm_3/move_to" in verdict.detail
         assert "cancel" in verdict.detail
 
     def test_the_mode_does_not_move(self) -> None:

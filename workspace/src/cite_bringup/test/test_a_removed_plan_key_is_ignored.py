@@ -45,7 +45,7 @@ from cite_bringup.plan import load, PlanError, resolve_uri
 import pytest
 import yaml
 
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
 
 #: The key itself. The one place in `workspace/` it may still be spelled.
 REMOVED_KEY = "hosted_by"

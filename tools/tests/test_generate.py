@@ -1085,6 +1085,16 @@ def test_the_shipped_zone_is_paired(real_model: Path) -> None:
     assert [side["name"] for side in plan["sides"]] == list(ids.SIDES)
 
 
+def test_no_plan_carries_a_detection_block(real_model: Path) -> None:
+    """The detection server left the main tree with the line (ADR-0069).
+
+    A `detection:` block names a server nothing starts, and a reader would take it
+    for an interface the cell provides.
+    """
+    for path in per_zone(real_model, "bringup/{zone}_plan.yaml"):
+        assert "detection" not in yaml.safe_load(artifacts(real_model)[path])["plan"], path
+
+
 class TestTwinSidesAndTheGazeboPartition:
     """What pairing a zone changes, and — more importantly — what it does not.
 

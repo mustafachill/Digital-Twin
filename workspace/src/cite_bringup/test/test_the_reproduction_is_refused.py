@@ -230,7 +230,7 @@ def _generate(model: Path, interpreter: Path) -> Path:
         / "src"
         / "cite_generated"
         / "bringup"
-        / "cell_a_plan.yaml"
+        / "cell_b_plan.yaml"
     )
 
 
@@ -251,7 +251,7 @@ def test_the_reproduction_is_refused_with_an_empty_environment(
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
-    assert "arm_1" in message and "arm_2" in message and "arm_3" in message
+    assert "picker" in message
     assert "commands_physical_hardware" in message
     assert HARDWARE_OPT_IN_ENV in message
 

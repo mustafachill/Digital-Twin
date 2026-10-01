@@ -197,8 +197,8 @@ class FakeSide(Node):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--side", required=True)
-    parser.add_argument("--zone", default="cell_a")
-    parser.add_argument("--assets", default="arm_1")
+    parser.add_argument("--zone", default="cell_b")
+    parser.add_argument("--assets", default="picker")
     parser.add_argument("--offset", type=float, default=0.0)
     parser.add_argument("--belts", default="", help="Belt command topics to listen on.")
     arguments, _ = parser.parse_known_args()

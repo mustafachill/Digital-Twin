@@ -26,8 +26,10 @@ into the other cell's world — and two `/clock` publishers from two independent
 simulators, which is CLAUDE.md §10's "a mixed-time system produces plausible,
 wrong results".
 
-The realistic trigger is the use ADR-0056 keeps `cell_a` for: somebody
-demonstrates the showcase in a second terminal while a `cell_b` run is up.
+The realistic trigger was the use ADR-0056 kept a second zone for: somebody
+demonstrating a showcase cell in a second terminal while another run is up. With
+one zone declared (ADR-0069) the rule refuses nothing, by construction, and it
+comes back into force the day a second zone is.
 
 WHAT THE DETECTOR IS. A zone's bring-up puts that zone's name into the ROS graph
 — `/cite/<zone>/<asset>/<interface>` for every asset it runs — and the set of

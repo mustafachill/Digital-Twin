@@ -139,7 +139,47 @@ The main tree carries only the twin path; the event-driven line and `cell_a` liv
 
 ### Coverage given up
 
-To be filled by the implementing change with each deleted assertion and why.
+Filled by the implementing change. **Deleted with the code they tested** — their subject is
+gone from the main tree and still runs in `projects/01`, so nothing here is a loss of coverage
+of anything the main tree ships: `cite_orchestration`'s whole test suite; `cite_skills`'
+`test_detection`, `test_observation`, `test_detection_contract.py` and
+`test_downstream_include.py` (whose only subject was reaching `observation.hpp` from another
+package); `cite_facility`'s `test_topology_message.py`; the `continuous_line` and
+`pick_and_place` scenarios with the guards `test_a_stopped_line_ends_the_run.py`,
+`test_continuous_line_ladder.py` and `test_place_assertion_sees_height.py`; the
+`cite_bringup` launch-file tests of the detection server and the line coordinator; the
+`./scripts/demo` self-test block; and `tools/tests/test_event_driven_line_is_kept.py`.
+
+**Given up or weakened, because the assertion needed a second arm or a second zone:**
+
+- **A behaviour-tree `Pick`/`Place` driven end to end in simulation.** `pick_and_place` was a
+  blocking CI scenario; `program_cycle` still carries a part from table to belt, but through
+  the real program's joint moves rather than through `Pick` and `Place`, so the L3 pick and
+  place skills are no longer exercised by any scenario in main CI.
+- **`bringup`'s `test_no_joint_name_is_shared_between_arms`** is vacuous on one arm, as its
+  own docstring says; only its joint-count half still has teeth.
+- **`test_trajectory_constraints_launch.py`** ran two different arms' generated controller
+  files; it now runs the one arm's file twice under two namespaces. The per-instance joint
+  naming it also caught is now held only by `tools/tests/test_trajectory_constraints.py`,
+  on a second arm added to a model copy.
+- **`cite_skills/test_planning_pipeline.py`'s collision premise** was swept against belts
+  standing either side of a middle arm; it now searches a generated grid against `cell_b`'s
+  furniture. Whether a candidate in that grid satisfies the premise is the test's own
+  finding, not a value carried over.
+- **Multi-instance properties in the host suite** — per-instance backends and parameters,
+  per-instance tolerance names, every arm's gripper policy, an arm without a track, a second
+  arm being a data-only change — are now asked of a second, track-less arm that the
+  `add_arm` fixture adds to a model copy. That arm is generated and never validated
+  geometrically, so these assertions no longer say anything about a real multi-arm layout.
+- **Indexing beams and belt station points** no longer exist in the shipped cell; the
+  validator rules about them (`beam-indexes-*`, `beam-off-its-belt`, `beam-cannot-index`,
+  `insufficient-support-margin`) are now exercised only on a copy of the model that puts a
+  belt station point and an indexing beam back.
+- **`cite_twin`'s mixed far side** ran on three real assets; it now runs on the shipped arm
+  and a renamed clone of its controller manager, which shares the arm's generated files.
+- **The second-zone refusal in `cite_facility`'s `model_info`** is asserted with a second
+  zone injected into the node rather than read from the model; the model declares one zone,
+  so the refusal contributes nothing to a real bring-up until a second is declared.
 
 ## Consequences
 

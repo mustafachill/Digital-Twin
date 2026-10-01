@@ -1666,9 +1666,10 @@ private:
     // held. Both need L4 to tell this arm that the peer has taken the part.
     //
     // **There is no typed channel for that signal.** Nothing in
-    // `cite_interfaces` carries a rendezvous release or publishes ownership. Inventing one is not this change's to make — the interface package
-    // is reviewed before its consumers (ADR-0010) — and improvising an untyped
-    // one would be P3 twice over.
+    // `cite_interfaces` carries a rendezvous release or publishes ownership.
+    // Inventing one is not this change's to make — the interface package is
+    // reviewed before its consumers (ADR-0010) — and improvising an untyped one
+    // would be P3 twice over.
     //
     // So a caller asking for the hold is told, in a code it can branch on, that
     // the path is unbuilt. It is told BEFORE the arm moves: parking a loaded arm

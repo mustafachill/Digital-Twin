@@ -81,7 +81,6 @@ from cite_bringup.plan import (
     PLANT_SIDE,
     require_domain,
     require_hardware_opt_in,
-    resolve_uri,
 )
 from cite_bringup.readiness import ready_announcement
 from launch import LaunchContext, LaunchDescription
@@ -496,9 +495,9 @@ def _bridge(plan: Plan, gz_env: dict[str, str]) -> Node:
     `detection_topic`, and the plan states a separate ROS name for that level,
     `level_topic` (see `cite_bringup.plan.Sensor`). So the bridge keeps the
     plugin's name on the Gazebo side — it has to, that is what the plugin
-    advertises — and lands it in ROS under the plan's `level_topic`. `parameter_bridge` names both ends
-    from one argument, so the ROS end is moved with a remapping, which rclcpp
-    applies when the publisher is created.
+    advertises — and lands it in ROS under the plan's `level_topic`.
+    `parameter_bridge` names both ends from one argument, so the ROS end is moved
+    with a remapping, which rclcpp applies when the publisher is created.
 
     ## QoS
 

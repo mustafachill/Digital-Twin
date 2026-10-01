@@ -366,8 +366,8 @@ def test_activation_is_triggered_only_by_a_successful_configure(
 # in `move_group`, blaming the model. `docs/open-work.md` #72.
 #
 # Two properties are checked here and they are separable. The FIRST is that the
-# driver is asked about every managed node — a driver that is handed two of three
-# exits 0 having confirmed nothing about the third. The SECOND is that nothing
+# driver is asked about every managed node — a driver that is handed one of two
+# exits 0 having confirmed nothing about the other. The SECOND is that nothing
 # downstream of `_facility` is started before that exit, which is what turns a
 # stalled node from a ten-second misdirection into a one-second diagnosis.
 
@@ -404,8 +404,8 @@ def test_the_driver_is_asked_about_every_managed_node(module: ModuleType) -> Non
     `_facility` hands back the fully-qualified name of each node it started, so a
     node added there is driven with nothing else to remember — which is why this
     asserts against `MANAGED` above, the deliberately independent statement of
-    what the three are. A driver handed two of three would exit 0 having
-    confirmed nothing about the third, and every gate below it would fire.
+    what they are. A driver handed one of two would exit 0 having confirmed
+    nothing about the other, and every gate below it would fire.
     """
     _, managed = module._facility(_plan())
     assert [name.rsplit("/", 1)[-1] for name in managed] == list(MANAGED)
@@ -608,8 +608,10 @@ def test_the_planning_scene_is_loaded_before_the_skills(
             elif name == "skill_server":
                 skills.append(entity)
 
-    assert len(loaders) == 3, "one planning-scene loader per arm"
-    assert len(skills) == 3, "one skill server per arm"
+    planned = [m for m in _plan().controller_managers if m.moveit is not None]
+    assert planned, "the plan carries no arm with MoveIt, so this would count nothing"
+    assert len(loaders) == len(planned), "one planning-scene loader per arm"
+    assert len(skills) == len(planned), "one skill server per arm"
 
     # Ordering: the skill servers must be reachable only through a chain that has
     # already passed a loader. Structurally, the loaders are produced by handlers
@@ -622,7 +624,7 @@ def test_the_planning_scene_is_loaded_before_the_skills(
         for e in (action.event_handler.handle(_Exited(returncode=0), context) or [])
         if getattr(e, "node_executable", None) in ("planning_scene_loader.py", "skill_server")
     ]
-    assert order.count("loader") == 3
+    assert order.count("loader") == len(planned)
     assert order.index("skill") > max(
         index for index, kind in enumerate(order) if kind == "loader"
     ), "a skill server can start before the planning scene is loaded"
@@ -879,7 +881,8 @@ def test_the_skill_servers_are_given_those_parameters(
     """The pure function above is only worth testing if the nodes use it."""
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     servers = _nodes(module._bring_up(context), "skill_server", context)
-    assert len(servers) == 3
+    planned = [m for m in _plan().controller_managers if m.moveit is not None]
+    assert planned and len(servers) == len(planned)
     namespaces = {_namespace(node, context) for node in servers}
     assert namespaces == {
         m.node.rsplit("/", 1)[0] for m in _plan().controller_managers
@@ -1039,7 +1042,7 @@ _COUNTERPART_PARTITION = "cite/cell_b/counterpart"
 
 
 def _counterpart_partition() -> str:
-    """The partition the counterpart side carries in the plan `_paired` writes."""
+    """Return the partition the counterpart side carries in the plan `_paired` writes."""
     for side in _document()["plan"]["sides"]:
         if side["name"] == "counterpart":
             return side["gz_partition"]

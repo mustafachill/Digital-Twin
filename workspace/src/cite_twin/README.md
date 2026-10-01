@@ -15,10 +15,10 @@ restated here (P1).
   `twin: {sides: pair}` as of 2026-09-18
   ([ADR-0059](../../../docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so
   `twin_boundary.py` **starts on a clean checkout** under `./scripts/sim --zone cell_b --pair`;
-  that run is recorded in ADR-0059 and its figures are not copied here. On `cell_a`, which
-  stays `single`, it still refuses, saying that the zone declares no counterpart. Its launch
-  tests drive it against a plan fabricated in memory from `cell_a`'s generated one — see
-  [`docs/open-work.md`](../../../docs/open-work.md) #62 for why that fabrication is what it is.
+  that run is recorded in ADR-0059 and its figures are not copied here. On a zone that
+  declares `single` it refuses, saying that the zone declares no counterpart. Its paired launch
+  test drives it against `cell_b`'s generated plan as generated; its mixed-far-side launch test
+  against an edited copy of that plan, with one physical and one simulated far side.
 - **The pair supervisor starts it, and nothing else does**
   ([ADR-0057](../../../docs/adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
   `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
@@ -149,13 +149,14 @@ anyone presenting one must label it as one
 
 ## How to run it
 
-It needs a zone that declares a counterpart, which the shipped model does not:
+It needs a zone that declares a counterpart, which `cell_b` does:
 
 ```bash
-./scripts/enter dev ros2 run cite_twin twin_boundary.py
+./scripts/enter dev ros2 run cite_twin twin_boundary.py --zone cell_b
 ```
 
-On a clean checkout that exits 2 with `zone 'cell_a' declares no side named 'counterpart'`.
+On a zone that declares `single` it exits 2 with `zone '<zone>' declares no side named
+'counterpart'`.
 Pairing a zone is an L0 change — `twin: {sides: pair}` on the zone, then
 `./scripts/validate-model --write` and `./scripts/build` — and not something bring-up or this
 package may invent (ADR-0041 Decision 3).
