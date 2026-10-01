@@ -287,7 +287,7 @@ private:
   /// The nearest declared graspable model within `attach_radius_m_` of the
   /// attach link's own origin, or `kNullEntity` if none is that close.
   ///
-  /// Nearest rather than first found: `continuous_line` may have more than one
+  /// Nearest rather than first found: a cell may have more than one
   /// work-piece on the belt at once, and a grasp must never take whichever one
   /// this loop happened to visit first.
   gz::sim::Entity NearestGraspable(const gz::sim::EntityComponentManager & ecm) const
