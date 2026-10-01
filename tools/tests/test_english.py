@@ -322,7 +322,7 @@ def test_the_shipped_configuration_leaves_the_tree_clean() -> None:
 def test_the_shipped_exemption_list_is_one_entry() -> None:
     """A ratchet rather than a constant test. ADR-0035 says a second entry is the point at
     which per-file granularity should be reconsidered, and the precedent it borrows from —
-    the teardown exemption in `tests/scenarios/continuous_line.py` — is valuable precisely
+    the scenarios' single teardown exemption (`tests/scenarios/bringup.py`) — is valuable precisely
     because it was never widened. Widening this should require deciding to."""
     assert len(load_config(REPO_ROOT).exemptions) == 1
 

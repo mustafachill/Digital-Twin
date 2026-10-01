@@ -16,8 +16,9 @@ for it**:
 * `./scripts/validate-model` therefore exits 0.
 
 What the cell then does is come up with every arm, every controller and every
-skill server active, and no line: `line_orchestrator` has no topology to derive a
-station tree from. Bring-up looks perfect.
+skill server active, and no process topology: nothing that reads the flow — the
+program scenario's station frames among it — has anything to read. Bring-up looks
+perfect.
 
 The check itself is trivial. Its value is entirely in the second test below,
 which demonstrates that removing the document is silent — because a guard whose

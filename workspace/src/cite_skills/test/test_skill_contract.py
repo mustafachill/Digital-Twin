@@ -488,9 +488,8 @@ class TestSkillContract(unittest.TestCase):
         """ADR-0065, decision 1: `RobotState` has a publisher, and it latches.
 
         `RobotState` was declared with `gripper_holding`, `held_workpiece_id` and
-        `active_skill` and had no publisher at all — the same shape CLAUDE.md
-        records for `ConveyorState`: a typed contract designed for exactly this
-        and left unconnected, so the information was in the system and not on the
+        `active_skill` and had no publisher at all: a typed contract designed for
+        exactly this and left unconnected, so the information was in the system and not on the
         wire.
 
         THE LATCH IS WHAT THIS TEST IS FOR, and it is not a formality. The topic

@@ -396,7 +396,7 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
         """A healthy motion must not trip the detector.
 
         This is the direction that matters most for keeping the detector alive.
-        `./scripts/scenario pick_and_place` is a blocking CI gate, and a
+        `./scripts/scenario program_cycle` drives this controller in CI, and a
         tolerance that fires on a good run is a flake — which this project's
         history says gets exempted rather than fixed.
 

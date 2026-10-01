@@ -36,14 +36,9 @@
 // can plan to the target the first just installed, and the arm executes it. A
 // second goal is therefore rejected rather than queued.
 //
-// `Detect` is the sixth skill and is deliberately NOT here. It commands no
-// motion, needs neither the planner nor the gripper, and belongs to a zone's
-// sensors rather than to one arm — three arms each serving it would be three
-// views of one belt. It lives in `detection_server.cpp`.
-//
 // Every skill implements the full action contract, cancellation included. L3 is
 // explicit that covering only the happy path is a review finding — a skill that
-// cannot be cancelled leaves L4 with no way to recover from anything.
+// cannot be cancelled leaves its caller with no way to recover from anything.
 
 #include <algorithm>
 #include <atomic>
@@ -1670,10 +1665,8 @@ private:
     // retreat", and `hold_timeout` is contracted to expire with the piece still
     // held. Both need L4 to tell this arm that the peer has taken the part.
     //
-    // **There is no typed channel for that signal.** `cite_interfaces` has six
-    // actions, fourteen messages and two services, and none of them carries a
-    // rendezvous release; `LineState` and `StationState` publish ownership
-    // nowhere. Inventing one is not this change's to make — the interface package
+    // **There is no typed channel for that signal.** Nothing in
+    // `cite_interfaces` carries a rendezvous release or publishes ownership. Inventing one is not this change's to make — the interface package
     // is reviewed before its consumers (ADR-0010) — and improvising an untyped
     // one would be P3 twice over.
     //

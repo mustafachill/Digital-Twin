@@ -303,7 +303,7 @@ class SideSpec:
 
 
 def side_specs(
-    plan: Plan, environ: Mapping[str, str], *, headless: bool = True, line: bool = False
+    plan: Plan, environ: Mapping[str, str], *, headless: bool = True
 ) -> list[SideSpec]:
     """One spec per side the plan declares, in the plan's order.
 
@@ -328,7 +328,6 @@ def side_specs(
             f"zone:={plan.zone}",
             f"side:={side.name}",
             f"headless:={'true' if headless else 'false'}",
-            f"line:={'true' if line else 'false'}",
         )
         domain = resolve_domain_id(plan, side.name, base)
         specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
@@ -654,7 +653,7 @@ def supervise(
     interrupted = False
     # The handlers go in BEFORE any side is started, and the order is the fix
     # for a three-minute teardown. A supervisor started as a background job of a
-    # non-interactive shell (`scripts/program`, `scripts/demo`) inherits SIGINT
+    # non-interactive shell (`scripts/program`) inherits SIGINT
     # as IGNORED, an ignored disposition survives `exec`, and a side started
     # while it was still ignored could not hear the SIGINT `_stop` sends it - so
     # every such teardown waited out `STOP_GRACE_S` per side before the group
@@ -951,17 +950,15 @@ def _verdict(participants: Sequence[_Side], interrupted: bool, out) -> int:
 
 
 #: The `key:=value` arguments `./scripts/sim` forwards, and the option each one
-#: means here. The solo path is `ros2 launch`, which takes that spelling, so
-#: `./scripts/sim --headless line:=true` works and `./scripts/sim --pair
-#: line:=true` used to fail with an argparse error - the same request, refused
-#: only because the pair path is a Python program rather than a launch file. A
-#: paired line could not be started through the entry point at all.
+#: means here. The solo path is `ros2 launch`, which takes that spelling, so a
+#: `key:=value` that works without `--pair` used to fail with an argparse error
+#: with it - the same request, refused only because the pair path is a Python
+#: program rather than a launch file.
 #:
 #: Translated here rather than in `scripts/sim`, because the shell would then
 #: hold a second statement of which arguments a pair takes.
 _LAUNCH_STYLE = {
     "zone": "--zone",
-    "line": "--line",
     "headless": "--headless",
     "ceiling": "--ceiling",
 }
@@ -990,7 +987,7 @@ def _flags(argv: Sequence[str], parser: argparse.ArgumentParser) -> list[str]:
                 + ", which is a smaller set than a single side's launch: the "
                 "rest are per-side and a pair has two."
             )
-        if option in ("--line", "--headless"):
+        if option == "--headless":
             if value.lower() in _TRUE:
                 rewritten.append(option)
             elif value.lower() not in _FALSE:
@@ -1013,9 +1010,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--headless", action="store_true", help="Run both simulators without a GUI."
     )
-    parser.add_argument(
-        "--line", action="store_true", help="Start the L4 coordinator on each side."
-    )
     # The SIDES' ceiling, and there is deliberately no option for the boundary's.
     # `--ceiling` exists because a caller may know something about how long a
     # cell takes to come up on a given machine; nothing comparable is knowable
@@ -1032,7 +1026,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         path = default_plan_path(args.zone)
         plan = load(path)
-        specs = side_specs(plan, os.environ, headless=args.headless, line=args.line)
+        specs = side_specs(plan, os.environ, headless=args.headless)
     except PlanError as exc:
         print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
         return 1

@@ -98,9 +98,7 @@ NODE_NAME = "twin_boundary"
 #:
 #: Keyed by that dataclass's own field names and checked against them at import,
 #: so a sixth skill added to the plan reader is a failure here rather than a
-#: skill L5 silently does not route. `Detect` is deliberately absent: it is
-#: zone-level rather than per-asset, and it observes rather than commands, so it
-#: is not a goal that crosses (ADR-0050 decision 2 is about commands).
+#: skill L5 silently does not route.
 SKILL_ACTION_TYPES: Mapping[str, type] = {
     "move_to": MoveTo,
     "pick": Pick,
@@ -472,5 +470,5 @@ def twin_endpoints() -> tuple[str, ...]:
     """
     # `SetMode.Request.SERVICE` and not `SetMode.SERVICE`: rosidl puts a
     # service's constants on the section they were declared in, which is how
-    # C++ reaches it too (`ResetStation::Request::SERVICE`).
+    # C++ reaches it too (`SetMode::Request::SERVICE`).
     return (TwinMode.TOPIC, DivergenceMetrics.TOPIC, SetMode.Request.SERVICE)

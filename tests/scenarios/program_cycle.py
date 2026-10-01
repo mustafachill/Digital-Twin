@@ -18,8 +18,7 @@ Plant only, one cycle. Driving both sides through the twin boundary is what
 `./scripts/program` demonstrates; a scenario includes one launch in one process
 and cannot hold two sides (CLAUDE.md §2).
 
-Every coordinate is resolved from TF at run time, from the frames L0 generates,
-exactly as `pick_and_place` does.
+Every coordinate is resolved from TF at run time, from the frames L0 generates.
 """
 
 from __future__ import annotations
@@ -46,7 +45,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.node import Node
 
 # Loaded by path under `launch_test`, so the sibling helper needs this directory
-# on the path first; see the same block in `pick_and_place.py`.
+# on the path first; see the same block in `bringup.py`.
 _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
@@ -68,8 +67,10 @@ SPAWN_DROP_M = 0.005
 
 #: Wall-clock ceilings that bound a failure and sequence nothing. The cycle is
 #: the real program's: eleven moves at a ninth of the joint speed limit, two
-#: 650 mm track moves at 0.1 m/s and six one-second dwells, which is longer than
-#: `pick_and_place`'s cycle; see `pick_and_place.CYCLE_CEILING_S` for the basis.
+#: 650 mm track moves at 0.1 m/s and six one-second dwells. Every ceiling here
+#: is wall clock, so a starved host times out with nothing broken; the condition
+#: they are sized for is `docs/architecture/cross-cutting-testing.md` under
+#: "Wall-clock ceilings", and none may be widened to absorb a slow host.
 BRING_UP_CEILING_S = 300.0
 SETTLE_CEILING_S = 60.0
 CYCLE_CEILING_S = 900.0
@@ -78,7 +79,7 @@ CYCLE_CEILING_S = 900.0
 SETTLE_TOLERANCE_M = 1e-4
 SAMPLE_PERIOD_S = 2.0
 
-#: How far the part must rise to count as picked, as in `pick_and_place`.
+#: How far the part must rise to count as picked.
 LIFTED_M = 0.05
 
 #: How far the part must travel ALONG THE TRACK while it is lifted to count as
@@ -88,8 +89,7 @@ CARRIED_M = 0.30
 
 #: How close to the belt's infeed frame the placed part must rest, horizontally
 #: and in height. Horizontal: the release is 4 mm above the belt, so the part
-#: lands where the pads held it; `pick_and_place.PLACE_TOLERANCE_M`'s basis.
-#: Height: the same two-sided bound `pick_and_place` uses — too high is still
+#: lands where the pads held it. Height: a two-sided bound — too high is still
 #: held, too low fell off the belt.
 PLACE_TOLERANCE_M = 0.05
 HEIGHT_TOLERANCE_M = 0.05
@@ -101,7 +101,8 @@ BELTED_M = 0.30
 BELT_CEILING_S = 300.0
 
 #: Recorded in a failure report as a condition of the run, never as a promise
-#: of reproducibility; see `pick_and_place.SEED_VARIABLE`.
+#: of reproducibility: `gz sim --seed` does not seed the physics solver (see
+#: `./scripts/scenario`'s header).
 SEED_VARIABLE = "CITE_PHYSICS_SEED"
 
 
@@ -168,9 +169,8 @@ class TestProgramCycle(unittest.TestCase):
     def _emit_timing(self, what: str, ceiling_s: float, elapsed_s: float, spins: int) -> None:
         """Print one timing record in the format every scenario shares.
 
-        The keys and their meaning are `pick_and_place._emit_timing`'s, and
-        `tests/scenarios/guards/test_timing_records.py` holds all scenarios to
-        one format.
+        `tests/scenarios/guards/test_timing_records.py` holds every scenario
+        to one format.
         """
         print(
             "CITE_TIMING "
@@ -189,7 +189,7 @@ class TestProgramCycle(unittest.TestCase):
         )
 
     def _workpiece_xyz(self) -> tuple[float, float, float] | None:
-        """Ask the simulator where the part is; see `pick_and_place._workpiece_xyz`."""
+        """Ask the simulator where the part is, through the partitioned door."""
         result = gz_run(["gz", "model", "-m", self.workpiece, "-p"], zone=ZONE, timeout=30)
         number = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
         triples = re.findall(rf"\[\s*({number})\s+({number})\s+({number})\s*\]", result.stdout)
@@ -393,8 +393,8 @@ def _along(point, origin, axis: tuple[float, float]) -> float:
 
 @launch_testing.post_shutdown_test()
 class TestCleanShutdown(unittest.TestCase):
-    #: The same single exemption `pick_and_place` carries, for the same
-    #: upstream `move_group` teardown segfault; see `bringup.py`.
+    #: The same single exemption `bringup` carries, for the same upstream
+    #: `move_group` teardown segfault; see `bringup.py`.
     UPSTREAM_TEARDOWN_SEGFAULT = "move_group"
 
     def test_nothing_of_ours_exited_badly(self, proc_info) -> None:

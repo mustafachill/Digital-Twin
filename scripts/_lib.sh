@@ -1109,7 +1109,7 @@ first_party_packages() {
 # itself (P1).
 #
 # `tests/` holds the simulation scenarios and their guards. The scenarios are not
-# collected by pytest — they are named `bringup.py` and `pick_and_place.py`, not
+# collected by pytest — they are named `bringup.py` and `program_cycle.py`, not
 # `test_*.py`, and they need a running simulator — but the guards under
 # `tests/scenarios/guards/` are, and they are the reason this path is here.
 #

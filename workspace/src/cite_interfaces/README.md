@@ -11,7 +11,7 @@ exists, and it is why this package sits at the bottom of the dependency graph.
 
 ## What is here
 
-23 definitions — 14 `.msg`, 3 `.srv`, 6 `.action` — listed in `CMakeLists.txt` and frozen
+13 definitions — 6 `.msg`, 2 `.srv`, 5 `.action` — listed in `CMakeLists.txt` and frozen
 against `test/interfaces.baseline`. Read the shapes with `ros2 interface show`; they are not
 restated here (P1). The conventions they follow are in
 [`docs/interfaces/README.md`](../../../docs/interfaces/README.md).
@@ -25,22 +25,14 @@ than by reading the definitions.
 | Definition | Produced at this commit by |
 |---|---|
 | `MoveTo`, `Grasp`, `Pick`, `Place`, `Transfer` (actions) | `cite_skills/src/skill_server.cpp`, one server per arm |
-| `Detect` (action) | `cite_skills/src/detection_server.cpp`, one server per zone |
-| `Detection` | inside a `Detect` result — see the limitation below |
-| `DetectionEvent` | `detection_server.cpp`, one publisher per beam |
 | `ResultCode` | every action result above |
-| `LineTopology`, `StationTopology`, `StationEdge` | `cite_facility/topology_server.py` |
-| `LineState`, `StationState` | `cite_orchestration/src/line_orchestrator.cpp` |
 | `ModelVersion`, `GetModelVersion` | `cite_facility/model_info.py` |
-| `ConveyorState` | **nothing** |
 | `RobotState` | **nothing** |
 | `SafetyState` | **nothing** |
 | `TwinMode`, `DivergenceMetrics`, `SetMode` | `cite_twin/twin_boundary.py` — **which no bring-up starts**, and which refuses a zone declaring one side, as the shipped model does. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
-| `ResetStation` | `cite_orchestration/line_orchestrator` — the operator's only control over a blocked station (ADR-0037) |
 
-`LineTopology`, `LineState`, `TwinMode` and `DivergenceMetrics` each carry their own topic
-name as a `string TOPIC` constant, and `ResetStation` and `SetMode` carry theirs as a
-`string SERVICE` on the request — so each name exists in one place and a consumer reads it
+`TwinMode` and `DivergenceMetrics` each carry their own topic name as a `string TOPIC`
+constant, and `SetMode` carries its own as a `string SERVICE` on the request — so each name exists in one place and a consumer reads it
 off the definition rather than composing it. In Python a service's constant is on the
 section it was declared in (`SetMode.Request.SERVICE`), which is the same place C++ reaches
 it (`SetMode::Request::SERVICE`).
@@ -50,8 +42,7 @@ it (`SetMode::Request::SERVICE`).
 - **No node, no logic, no runtime behaviour.** The one exception is the QoS library below,
   which is a table of constants and no more.
 - **No `std_msgs/String` carrying structured data**, anywhere, for any reason
-  (CLAUDE.md §4). `LineTopology` exists precisely because the topology used to be published
-  that way as a temporary exception; the exception expired when a consumer appeared.
+  (CLAUDE.md §4).
 - **It does not guarantee behaviour.** `SetMode.srv` says so in its own body: bring-up and
   `./scripts/enter hardware` enforce the hardware opt-in before the stack starts, and the L5
   server now applies the same check at the transition — in a process nothing starts. A
@@ -84,7 +75,7 @@ targets. `CMakeLists.txt` records that; it is not a detail to tidy away.
 Nothing to run. To use it:
 
 ```bash
-ros2 interface show cite_interfaces/msg/DetectionEvent
+ros2 interface show cite_interfaces/msg/TwinMode
 ros2 interface list | grep cite_interfaces
 ```
 

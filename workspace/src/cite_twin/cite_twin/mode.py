@@ -48,7 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from cite_bringup.plan import Plan
 
 #: Every mode, under the name every document writes it by. Mapped rather than
-#: formatted, for the reason `cite_facility.topology_server.STATION_TYPES` is: a
+#: formatted, so that a
 #: mode the message grows and this table does not know about is refused by name
 #: at the boundary, rather than being reported as a number no reader can act on.
 #:

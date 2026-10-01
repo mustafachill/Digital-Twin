@@ -74,8 +74,8 @@ GZ_TRANSPORT_COMMANDS: tuple[tuple[str, ...], ...] = (
 )
 
 #: Plans read so far, keyed by zone. A plan is a generated artifact that does not
-#: change while a process runs, and `continuous_line` asks for this environment
-#: about twice a second for the length of a line run; re-reading and re-resolving
+#: change while a process runs, and a scenario that polls a pose asks for this
+#: environment about twice a second for the length of a run; re-reading and re-resolving
 #: the YAML on every sample would make the instrument the expensive part. A stale
 #: entry cannot outlive the process that cached it, and a stale *tree* is caught
 #: by `./scripts/validate-model`, which is where that question belongs.

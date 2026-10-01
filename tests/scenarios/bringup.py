@@ -224,10 +224,10 @@ class TestCellBringUp(unittest.TestCase):
         one of this file's ceilings.
         """
         # `time.monotonic`, never the node clock: these ceilings are wall clock by
-        # deliberate design — this observer does not set `use_sim_time`, for the
-        # reason `continuous_line.Sample` gives — and a monotonic clock cannot jump
-        # backwards under a wall-clock step and report a wait that took less than
-        # no time. Do not "fix" this to the node clock.
+        # deliberate design — this observer does not set `use_sim_time`, so a
+        # stalled simulated clock cannot hold a ceiling open — and a monotonic
+        # clock cannot jump backwards under a wall-clock step and report a wait
+        # that took less than no time. Do not "fix" this to the node clock.
         started = time.monotonic()
         end = self.node.get_clock().now().nanoseconds + int(ceiling_s * 1e9)
         spins = 0
@@ -253,11 +253,11 @@ class TestCellBringUp(unittest.TestCase):
             it waited for was there. A LOOP COUNT AND NOT A TIME UNIT: one spin is
             one `rclpy.spin_once` timeout, every emitting loop sets that quantum
             for itself, and the loops that emit these records do not all agree on
-            it — `pick_and_place._run_cycle` spins on that file's own
-            `SAMPLE_PERIOD_S`, which is not the quantum the `_spin_until` waits
-            use. So `spins` may never be multiplied into a duration, and may not
-            be read as a sampling density across one table either, because the
-            three scenarios are parsed as one table and their quanta differ.
+            it — `program_cycle` spins on that file's own `SAMPLE_PERIOD_S`,
+            which is not the quantum the `_spin_until` waits use. So `spins` may
+            never be multiplied into a duration, and may not be read as a
+            sampling density across one table either, because the scenarios are
+            parsed as one table and their quanta differ.
             `elapsed_s` is the only time field. `_await_future` shortens its last spin to
             whatever is left of the ceiling, so even within one file a spin is not
             a fixed slice of time.
@@ -265,7 +265,7 @@ class TestCellBringUp(unittest.TestCase):
             `spins: 0` means the predicate answered on its first evaluation and
             the record is NOT a measurement of a milestone. THIS is the field to
             filter on, and `elapsed_s` is not: a zero-spin record usually reads
-            near 0.000 s, but not always — `pick_and_place`'s work-piece predicate
+            near 0.000 s, but not always — `program_cycle`'s work-piece predicate
             shells out to `gz model -p`, and one evaluation of a subprocess can
             cost an appreciable fraction of a second, which measures that
             subprocess and nothing this project sets a ceiling on. How much it
@@ -414,12 +414,12 @@ class TestCellBringUp(unittest.TestCase):
         that is a real loss rather than a technicality.** With one arm there is
         no second instance for a name to collide with, so the `assertNotIn` below
         cannot fail however the prefix behaves; what still has teeth is the count,
-        which fails if the arm publishes the wrong set of joints. The zone where
-        this test can actually detect a dropped prefix is `cell_a`, which CI no
-        longer drives (ADR-0056 decision 5) — so this is one of the regressions
-        that decision's "What this costs us" is about, named here rather than left
-        for whoever next reads a green run as coverage. Pointing `ZONE` at
-        `cell_a` restores it, and nothing else in this file needs changing.
+        which fails if the arm publishes the wrong set of joints. No zone in the
+        main tree has a second arm since `cell_a` left it (ADR-0069, "Coverage
+        given up") — so this is a regression that record names, stated here
+        rather than left for whoever next reads a green run as coverage. A model
+        that declares a multi-arm zone again restores it, and nothing else in
+        this file needs changing.
         """
         owners: dict[str, str] = {}
         for arm in self.arms:
@@ -668,9 +668,8 @@ class TestCellBringUp(unittest.TestCase):
         # The two ends of the chain, both read from what the generator emitted:
         # a station point in facility coordinates, and the arm's own planning
         # frame. What this test is about is that they are connected, and it used
-        # to name all four frames literally — `cell_a__table_pick__surface`,
-        # `cell_a__conveyor_1__infeed`, `arm_1_mount`, `arm_1_link_base` — which
-        # made it a test of one cell's layout as well as of the TF tree.
+        # to name all four frames literally, which made it a test of one cell's
+        # layout as well as of the TF tree.
         #
         # `_mount` is composed rather than read, and it is the one frame in this
         # list the plan does not carry: it is the joint between the facility's

@@ -64,7 +64,7 @@ import sys
 import time
 
 from cite_bringup.plan import default_plan_path, load, Plan, PlanError
-from cite_interfaces.action import Detect, Grasp, MoveTo, Pick, Place, Transfer
+from cite_interfaces.action import Grasp, MoveTo, Pick, Place, Transfer
 from cite_runtime import runtime
 import rclpy
 from rclpy.action import ActionClient
@@ -137,14 +137,6 @@ def endpoints(plan: Plan) -> list[tuple[str, type]]:
     `docs/open-work.md` #72). What the launch gates on now is
     `lifecycle_driver.py` exiting, which is a process exit like the other two.
 
-    The L4 line coordinator is **not** in this list, and that is a stated
-    limitation rather than an oversight: it starts only under `line:=true`, it
-    takes exclusive hold of the very skills below, and a pair is brought up idle.
-    A witness that waited on it would fail every bring-up that does not run it.
-    **So readiness under `line:=true` does not cover L4**: the token means this
-    side's skills and detection are serving, and says nothing about whether the
-    coordinator that was started alongside them ever reached its own first tick.
-
     **An empty list is not "nothing to wait on", it is a plan this witness cannot
     read**, and :func:`main` refuses it rather than exiting 0. See the refusal
     there for what that would otherwise announce.
@@ -155,8 +147,6 @@ def endpoints(plan: Plan) -> list[tuple[str, type]]:
             continue
         for field, action_type in _SKILL_ACTIONS:
             wanted.append((getattr(manager.skills, field), action_type))
-    if plan.detection is not None:
-        wanted.append((plan.detection.detect_action, Detect))
     return wanted
 
 

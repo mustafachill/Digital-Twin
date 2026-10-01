@@ -39,7 +39,6 @@ from cite_facility.artifacts import ArtifactError, require_zone, require_zones
 from cite_facility.frame_server import FrameServer
 from cite_facility.model_info import ModelInfo
 from cite_facility.planning_scene_loader import PlanningSceneLoader
-from cite_facility.topology_server import TopologyServer
 import pytest
 import rclpy
 from rclpy.lifecycle import TransitionCallbackReturn
@@ -47,7 +46,7 @@ from rclpy.lifecycle import TransitionCallbackReturn
 #: The nodes that read a zone, and how each one is asked to use it. Named rather
 #: than discovered: a test that walks the package passes when a node stops being
 #: in it, which is the failure mode this file exists to prevent.
-MANAGED = (FrameServer, ModelInfo, TopologyServer)
+MANAGED = (FrameServer, ModelInfo)
 
 
 @pytest.fixture()

@@ -38,7 +38,7 @@ class ArtifactError(Exception):
 
 
 #: Why an unnamed zone is refused rather than defaulted. Stated once, because
-#: four nodes in this package ask the same question and a second copy of the
+#: every node in this package ask the same question and a second copy of the
 #: sentence is a second thing to keep true.
 _NO_ZONE = (
     "parameter {name!r} is empty. Every artifact this node reads is named after a "
@@ -52,12 +52,12 @@ _NO_ZONE = (
 def require_zone(zone: str) -> str:
     """Return ``zone``, or refuse an empty one.
 
-    The Python half of the rule `skill_server.cpp` and `detection_server.cpp`
-    state at their own parameter declarations, and the reason is theirs: a
-    default that silently works hides a bring-up plan that failed to deliver the
-    value. It was `cell_a` in four nodes here until ADR-0056 declared a second
-    zone, at which point every one of those defaults became a way to serve the
-    wrong cell without a single error anywhere.
+    The Python half of the rule `skill_server.cpp` states at its own parameter
+    declaration, and the reason is its: a default that silently works hides a
+    bring-up plan that failed to deliver the value. It was a literal zone in the
+    nodes here until ADR-0056 declared a second zone, at which point every one of
+    those defaults became a way to serve the wrong cell without a single error
+    anywhere.
     """
     if not zone:
         raise ArtifactError(_NO_ZONE.format(name="zone"))

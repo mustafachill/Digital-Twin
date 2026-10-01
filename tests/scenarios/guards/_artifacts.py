@@ -5,18 +5,15 @@ The guards read the generated tree directly as YAML rather than through
 workspace, and every file here is produced from the L0 model (ADR-0021), so
 reading it duplicates no value (P1).
 
-WHY THIS FILE EXISTS. Both guards used to name `cell_a`'s topology, transform
+WHY THIS FILE EXISTS. The guards used to name one zone's topology, transform
 table and world as module constants, and went on naming them after the scenarios
-they guard were pointed at `cell_b`. Nothing failed: a guard reading one cell's
-artifacts to check another cell's scenario is green about a file nobody drives.
-Breaking `cell_b`'s transform table and declaring a second carried work-piece in
-its world left both guards reporting 21 passed.
+they guard were pointed at another zone. Nothing failed: a guard reading one
+cell's artifacts to check another cell's scenario is green about a file nobody
+drives.
 
-So the guards do not name a zone at all any more. They parametrise over EVERY
-zone the generated tree declares, which is a superset of whatever zone the
-scenarios are pointed at and cannot come apart from it. `cell_a` keeps this much
-coverage after losing its scenarios, which is the cheapest half of what ADR-0056
-records as lost.
+So the guards do not name a zone at all. They parametrise over EVERY zone the
+generated tree declares, which is a superset of whatever zone the scenarios are
+pointed at and cannot come apart from it.
 
 ONE SPELLING IS DERIVED FROM A ZONE NAME and the rest come out of the plan:
 `<zone>_plan.yaml` is the same composition `cite_bringup.plan.default_plan_path`
@@ -64,28 +61,6 @@ def zone_ids() -> list[str]:
     return sorted(path.name[: -len("_plan.yaml")] for path in GENERATED.glob("bringup/*_plan.yaml"))
 
 
-def line_zone_ids() -> list[str]:
-    """Every zone whose behaviour-tree line can run: each acting station places.
-
-    A station with an actor and no place frame is one L4 refuses at plan time
-    (`line_plan.hpp`: "does not declare both a pick frame and a place frame").
-    `cell_b` is one since ADR-0067 — its belt is out of the arm's reach until the
-    track slides, and nothing in L3 or L4 slides it — so it is driven by the real
-    program and not by the line, and a guard over the line's scenarios has no
-    place point there to measure. Read off the generated topology, like
-    `zone_ids`, so a zone that regains a place point is covered again unasked.
-    """
-    return [
-        zone
-        for zone in zone_ids()
-        if all(
-            station.get("place_frame")
-            for station in load(zone).topology["stations"]
-            if station.get("actor")
-        )
-    ]
-
-
 @dataclass(frozen=True)
 class Artifacts:
     """One zone's generated artifacts, read as data."""
@@ -99,35 +74,6 @@ class Artifacts:
     @property
     def published_frames(self) -> set[str]:
         return {entry["child"] for entry in self.static_transforms}
-
-    @property
-    def conveyor_assets(self) -> tuple[str, ...]:
-        """The belts this zone runs, named by the plan rather than by spelling.
-
-        The guard used to find a belt with `child.endswith("__conveyor_1__surface")`,
-        which is a test of how an asset id happens to be spelled: rename the
-        asset and the guard silently measures nothing, or picks up whichever
-        other frame ends that way.
-        """
-        return tuple(conveyor["asset"] for conveyor in self.plan.get("conveyors") or ())
-
-    def belt_surface_frame(self, asset: str) -> str:
-        """Where the scenario looks a belt's surface up.
-
-        The same composition `continuous_line` makes when it resolves a belt
-        through TF — `f"{ZONE}__{link}__surface"` — with the asset coming from
-        the plan rather than from a guess about its name.
-        """
-        return f"{self.zone}__{asset}__surface"
-
-    def frame_height(self, frame: str) -> float:
-        for entry in self.static_transforms:
-            if entry.get("child") == frame:
-                return float(entry["xyz_m"][2])
-        raise AssertionError(
-            f"{frame} is not in the generated transform table for {self.zone}; the "
-            "scenario resolves it through TF and would hang waiting for it"
-        )
 
 
 def load(zone: str) -> Artifacts:

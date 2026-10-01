@@ -2,7 +2,7 @@
 
 Runtime access to the artifacts generated from the L0 facility model. It turns files in
 `cite_generated` into things the running graph can use: static transforms, the model
-version, the process topology, and each arm's planning scene.
+version, and each arm's planning scene.
 
 **This package never opens anything under `model/`.**
 [L0](../../../docs/architecture/L0-facility-model.md) is explicit that a running system does
@@ -15,13 +15,12 @@ the filesystem.
 
 ## What is here
 
-Four executables, plus two library modules they share.
+Three executables, plus the library modules they share.
 
 | Node | Kind | What it does |
 |---|---|---|
 | `frame_server.py` | managed (lifecycle) | publishes the static transforms for everything that is not a robot link — zone origins, station frames, each arm's mount |
 | `model_info.py` | managed (lifecycle) | publishes `ModelVersion` and serves `GetModelVersion` |
-| `topology_server.py` | managed (lifecycle) | publishes `LineTopology` — the process topology L4 builds its stations from |
 | `planning_scene_loader.py` | **one-shot process** | puts the cell's furniture into one arm's planning scene, verifies it arrived, and exits |
 
 `artifacts.py` locates and reads the generated files. `transforms.py` holds the one
@@ -36,20 +35,16 @@ both.
 | `/tf_static` | `tf2_msgs/TFMessage` | out of `frame_server` | as `StaticTransformBroadcaster` sets it |
 | `/cite/facility/model_version` | `cite_interfaces/ModelVersion` | out of `model_info` | `LATCHED` |
 | `/cite/facility/get_model_version` | `cite_interfaces/GetModelVersion` | served by `model_info` | — |
-| `LineTopology::TOPIC` | `cite_interfaces/LineTopology` | out of `topology_server` | `LATCHED` |
 | `apply_planning_scene`, `get_planning_scene` | `moveit_msgs` services | called by the loader, relative to the arm's namespace | — |
 
-Two things about that table are load-bearing rather than incidental.
+**`LATCHED` is not a preference.** A consumer that starts after `model_info` has published
+must receive the model version immediately. A `VOLATILE` publisher would connect to it
+silently and deliver nothing — the failure CLAUDE.md §10 names first.
 
-**`LATCHED` is not a preference.** A coordinator that starts after the topology server has
-published must receive the topology immediately. A `VOLATILE` publisher would connect to it
-silently and deliver nothing — the failure CLAUDE.md §10 names first, and the one this file
-already had: the topology server used to claim `LATCHED` in its docstring and publish with a
-bare depth of 1, exactly once, in `on_activate`.
-
-**The topology topic name is not written in this package.** It is a constant on the message
-(`LineTopology.TOPIC`), which is the one place it exists and the place a C++ consumer reads
-it from too.
+The process-topology server that published `LineTopology` left the main tree with the
+event-driven line it served
+([ADR-0069](../../../docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md));
+it runs in `projects/01`.
 
 ## What it deliberately does not do
 
@@ -71,14 +66,14 @@ it from too.
 
 ## How to run it
 
-All four are started by `cite_bringup` as part of the cell, and that is the normal way to
+All three are started by `cite_bringup` as part of the cell, and that is the normal way to
 run them:
 
 ```bash
 ./scripts/sim --headless
 ```
 
-The three managed nodes come up alongside the simulator — none of them depends on it — and
+The two managed nodes come up alongside the simulator — none of them depends on it — and
 bring-up drives each through `configure` then `activate`, stopping the launch if either
 transition fails. The loader is chained after the controllers and before the skill servers.
 
@@ -87,7 +82,6 @@ To inspect a running cell:
 ```bash
 ros2 topic echo /cite/facility/model_version --once
 ros2 service call /cite/facility/get_model_version cite_interfaces/srv/GetModelVersion
-ros2 topic echo /cite/line/topology --once
 ros2 topic echo /tf_static --once
 ```
 
@@ -102,7 +96,6 @@ answers some interfaces and not others.
 | `no generated artifact at <path>` | the artifact is missing. Regenerate; if it is still missing, no generator emits it |
 | `frame_server` refuses to configure with "more than one transform for X" | the generated frame table declares a duplicate child. Two publishers for one transform make TF alternate between them, which is intermittent and very hard to attribute, so it is refused rather than published |
 | `frame_server` refuses to configure on an empty table | activating with nothing would leave every consumer waiting on a transform that never arrives, which reports as nothing at all |
-| `topology_server` refuses: station type *X* cannot be mapped | the L0 model grew a station type this node does not know. Refused at `configure` with the name in the message, rather than published as a number no consumer can act on |
 | `no move_group answered 'apply_planning_scene'` | `move_group` is not running for that arm. Every plan for it would otherwise be computed against an empty world |
 | `move_group accepted the diff but [...] are not in its world` | the collision objects' frame cannot be resolved by TF, so they were dropped. This is the case the read-back exists to catch |
 | a skill goal fails with a TF lookup error naming frames | `frame_server` never published. It is a managed node; check that it reached `active` |
@@ -117,14 +110,10 @@ appears is reported rather than waited on forever.
 ./scripts/test --packages-select cite_facility
 ```
 
-Three pytest suites, none of which needs a ROS graph or a simulator:
+Two pytest suites, none of which needs a ROS graph or a simulator:
 
 * `test_artifacts.py` — the artifact reader, and the boundary: this package must never read
   `model/`.
-* `test_topology_message.py` — the generated topology turned into `LineTopology`. The
-  translation is the part that can be wrong: a station type that maps onto nothing, a trigger
-  naming a state that does not exist, a field that quietly becomes an empty string. Tested as
-  a module function so no lifecycle has to be driven.
 * `test_planning_scene_loader.py` — building MoveIt collision objects: the shape type, the
   number of dimensions, the pose convention and the frame. `pose` in the generated artifact
   is the pose of the primitive's **centre**, which is what MoveIt's `primitive_poses` means,

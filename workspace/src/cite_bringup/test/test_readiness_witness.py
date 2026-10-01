@@ -36,11 +36,11 @@ from pathlib import Path
 from cite_bringup import readiness_witness
 from cite_bringup.plan import load, resolve_uri
 from cite_bringup.readiness_witness import endpoints, main
-from cite_interfaces.action import Detect, Grasp, MoveTo, Pick, Place, Transfer
+from cite_interfaces.action import Grasp, MoveTo, Pick, Place, Transfer
 import pytest
 import yaml
 
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
 
 #: The plan's own key for each skill action, and the type its server advertises.
 #: Written out here rather than imported from the module under test, because a
@@ -77,9 +77,6 @@ def _declared(document: dict) -> set[tuple[str, type]]:
         if skills is None:
             continue
         declared.update((skills[key], action) for key, action in _SKILL_TYPES.items())
-    detection = plan.get("detection")
-    if detection is not None:
-        declared.add((detection["detect_action"], Detect))
     return declared
 
 
@@ -87,7 +84,7 @@ def test_the_condition_is_every_action_the_plan_declares() -> None:
     """The binding the witness had none of, in both directions.
 
     That nothing is MISSING is what stops a side announcing readiness while its
-    third arm never came up. That nothing is EXTRA is what stops a witness
+    an arm never came up. That nothing is EXTRA is what stops a witness
     waiting out its deadline on a name the plan does not carry.
     """
     wanted = endpoints(load(_generated()))
@@ -107,9 +104,9 @@ def test_a_plan_whose_managers_declare_no_skills_leaves_almost_nothing_to_wait_o
     `plan.load` accepts a plan with no `skills:` block on any controller manager
     - the field is optional, because a manager can exist before its skill server
     does - and it accepts it without complaint. So the shipped plan yields every
-    arm's skills plus the zone's detection, and the same plan with `skills:`
-    removed yields the detection alone. The witness used to exit 0 on that, and
-    the launch announced the side ready.
+    arm's skills, and the same plan with `skills:` removed yields nothing the
+    witness can wait on. The witness used to exit 0 on a shape like that, and the
+    launch announced the side ready; `main` now refuses it (the test below).
     """
     document = _document()
     for manager in document["plan"]["controller_managers"]:
@@ -117,6 +114,7 @@ def test_a_plan_whose_managers_declare_no_skills_leaves_almost_nothing_to_wait_o
     stripped = endpoints(load(_written(tmp_path, document)))
     assert set(stripped) == _declared(document)
     assert len(stripped) < len(endpoints(load(_generated())))
+    assert stripped == []
 
 
 def test_a_plan_that_names_no_endpoint_at_all_is_refused_rather_than_satisfied(
@@ -132,15 +130,11 @@ def test_a_plan_that_names_no_endpoint_at_all_is_refused_rather_than_satisfied(
     document = _document()
     for manager in document["plan"]["controller_managers"]:
         manager.pop("skills", None)
-    # The sensors go with it: `plan.load` refuses sensors with no `detection:`
-    # block, which is the one part of this shape the loader does catch. What it
-    # does not catch is a plan that declares neither, which loads cleanly and
-    # names nothing for the witness to observe.
-    document["plan"].pop("detection", None)
-    document["plan"].pop("sensors", None)
+    # A plan whose managers carry no skills loads cleanly and names nothing for
+    # the witness to observe.
     path = _written(tmp_path, document)
     assert endpoints(load(path)) == []
 
-    monkeypatch.setattr(readiness_witness, "default_plan_path", lambda zone="cell_a": path)
-    assert main(["--zone", "cell_a", "--side", "plant"]) == 2
+    monkeypatch.setattr(readiness_witness, "default_plan_path", lambda zone: path)
+    assert main(["--zone", "cell_b", "--side", "plant"]) == 2
     assert "no action server" in capsys.readouterr().err

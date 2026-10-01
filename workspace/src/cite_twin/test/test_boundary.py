@@ -75,8 +75,6 @@ def side_owned_names() -> set[str]:
         names.update({conveyor.state_topic, conveyor.command_topic})
     for sensor in PLAN.sensors:
         names.update({sensor.detection_topic, sensor.level_topic})
-    if PLAN.detection is not None:
-        names.add(PLAN.detection.detect_action)
     return names
 
 

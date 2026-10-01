@@ -19,7 +19,6 @@
   <exec_depend>cite_generated</exec_depend>
   <exec_depend>cite_facility</exec_depend>
   <exec_depend>cite_skills</exec_depend>
-  <exec_depend>cite_orchestration</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>moveit_ros_move_group</exec_depend>
   <!-- The two planning pipelines the generated MoveIt configuration declares

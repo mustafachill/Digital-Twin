@@ -701,13 +701,13 @@ def test_the_total_sibling_answers_the_plant_and_none_elsewhere(
 # --- The simulation-fidelity aids: two topics per beam, not two names for one --
 
 
-def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
-    """A beam has two interfaces and they must not collide.
+def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name() -> None:
+    """A beam's raw level lands in ROS under a name the plan states.
 
-    `detection_topic` is already spoken for: `cell_a_flow.yaml` gives it to a
-    station as a `DetectionEvent` trigger and `StationTopology.msg` documents it
-    as one. Bridging the raw `std_msgs/Bool` level onto that name would put two
-    publishers of two types on the topic the line acts on.
+    `detection_topic` is the name the plugin advertises on the Gazebo side and
+    `level_topic` is where the bridge lands the level in ROS, by a remapping. A
+    remapping onto its own name would be a plan that never said where the level
+    goes.
     """
     plan = load(_generated())
     assert plan.sensors, "the generated plan declares no sensors at all"
@@ -716,39 +716,25 @@ def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
         assert sensor.asset in sensor.detection_topic
         assert sensor.asset in sensor.level_topic
         assert sensor.frame_id.startswith(f"{plan.zone}__{sensor.asset}__"), (
-            "a beam's detections are reported in a frame the generated static TF "
-            "table publishes; this one names a frame from nowhere"
+            "a beam's frame is one the generated static TF table publishes; this "
+            "one names a frame from nowhere"
         )
 
 
 def test_a_beam_whose_two_topics_are_one_name_is_refused(tmp_path: Path, document: dict) -> None:
-    """Refused when the plan says it, not discovered when the line stalls.
-
-    The two would connect, both publish, and `ros2 topic echo` would show a
-    stream of deserialisation errors naming neither publisher.
-    """
+    """Refused when the plan says it, not discovered when nothing arrives."""
     sensor = document["plan"]["sensors"][0]
     sensor["level_topic"] = sensor["detection_topic"]
-    with pytest.raises(PlanError, match="fight over it"):
+    with pytest.raises(PlanError, match="never said where the level goes"):
         load(_written(tmp_path, document))
 
 
-def test_sensors_without_a_detection_block_are_refused(tmp_path: Path, document: dict) -> None:
-    """Beams bridged into ROS and read by nobody is a silent half-system."""
-    del document["plan"]["detection"]
-    with pytest.raises(PlanError, match="turns their levels into typed events"):
-        load(_written(tmp_path, document))
+def test_the_generated_plan_carries_no_detection_block() -> None:
+    """The detection server left the main tree with the line (ADR-0069).
 
-
-def test_the_detection_server_is_zone_scoped() -> None:
-    plan = load(_generated())
-    assert plan.detection is not None
-    assert plan.detection.namespace == f"/cite/{plan.zone}/detection"
-    assert plan.detection.detect_action == f"{plan.detection.namespace}/detect"
-    # Not an arm's namespace: one server watches every belt in the zone, and
-    # three would give the same question three answers.
-    for manager in plan.controller_managers:
-        assert manager.asset not in plan.detection.namespace
+    Asked of the committed artifact rather than of the template.
+    """
+    assert "detection" not in yaml.safe_load(_generated().read_text())["plan"]
 
 
 # --- The skill actions L4 calls come from the model ---------------------------

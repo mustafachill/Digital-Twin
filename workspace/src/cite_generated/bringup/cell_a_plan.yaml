@@ -597,56 +597,42 @@ plan:
       attach_topic: /cite/cell_a/arm_3/grasp/attach
       detach_topic: /cite/cell_a/arm_3/grasp/detach
 
-  # A break beam has TWO topics and they are deliberately not the same name.
+  # A break beam has TWO topic names and they are deliberately not the same.
   #
-  #   detection_topic — the TYPED `DetectionEvent`. The name a station's trigger
-  #                     in the process topology already subscribes to, and also
-  #                     the name the break-beam plugin advertises on the GAZEBO
-  #                     transport: both come from one call to `ids.interface`.
-  #   level_topic     — where the bridge lands the RAW `std_msgs/Bool` level in
-  #                     ROS. Bridging the level onto `detection_topic` would put
-  #                     two publishers of two different types on the one topic the
-  #                     line acts on, and they would fight over it.
-  #
-  # They are different interfaces, not two names for one: the level is a state
-  # republished periodically and a dropped sample is recovered by the next; the
-  # event is an edge that must not be dropped at all. L3 turns one into the other.
+  #   detection_topic — the name the break-beam plugin advertises on the GAZEBO
+  #                     transport, from one call to `ids.interface`.
+  #   level_topic     — where the bridge lands that RAW `std_msgs/Bool` level in
+  #                     ROS. The reader refuses a plan that makes the two one.
   sensors:
     - asset: beam_c1_out
       detection_topic: /cite/cell_a/beam_c1_out/detection
       level_topic: /cite/cell_a/beam_c1_out/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_a__beam_c1_out__beam
       beam_axis: y
       beam_length_m: 0.5
     - asset: beam_c2_out
       detection_topic: /cite/cell_a/beam_c2_out/detection
       level_topic: /cite/cell_a/beam_c2_out/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_a__beam_c2_out__beam
       beam_axis: y
       beam_length_m: 0.5
     - asset: beam_c3_out
       detection_topic: /cite/cell_a/beam_c3_out/detection
       level_topic: /cite/cell_a/beam_c3_out/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_a__beam_c3_out__beam
       beam_axis: y
       beam_length_m: 0.5
     - asset: beam_pick
       detection_topic: /cite/cell_a/beam_pick/detection
       level_topic: /cite/cell_a/beam_pick/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_a__beam_pick__beam
       beam_axis: y
       beam_length_m: 0.5
-
-  # L3 detection for the whole zone: one server for every beam, because a beam
-  # watches a belt rather than a robot.
-  detection:
-    namespace: /cite/cell_a/detection
-    detect_action: /cite/cell_a/detection/detect
