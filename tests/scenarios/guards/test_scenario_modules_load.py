@@ -253,27 +253,28 @@ def test_scenario_loader_still_matches_upstream() -> None:
     )
 
 
-# --- the driven zone is stated once (ADR-0056 decision 5) ---------------------
+# --- the driven zone is derived once (ADR-0069 decision 5) --------------------
 
 
 def test_every_scenario_takes_its_zone_from_the_one_statement() -> None:
-    """`ZONE = "cell_b"` stood in all three, and three copies can disagree.
+    """`ZONE = "cell_b"` once stood in every scenario, and copies can disagree.
 
     They cannot disagree now because they do not each state it: `_cell.zone()`
-    answers, from one `DRIVEN_ZONE` and one environment variable. This asserts
-    the wiring rather than the value, so changing which cell CI drives stays a
-    one-line change and does not also break this.
+    answers, from the generated plans and one environment variable. This asserts
+    the wiring rather than the value.
     """
     import _artifacts  # puts tests/scenarios on sys.path
     import _cell
 
     assert _artifacts.SCENARIOS  # the import above is what makes `_cell` resolve
-    for path in scenario_paths():
+    paths = scenario_paths()
+    assert paths, "no scenario was found, so this guard would pass about nothing"
+    for path in paths:
         with _ros_stubs():
             module = _load_like_launch_test(path)
-        assert getattr(module, "ZONE", None) == _cell.zone(path.stem), (
+        assert getattr(module, "ZONE", None) == _cell.zone(), (
             f"{path.name} does not take its zone from `_cell.zone()`. A scenario that "
-            "spells a cell is a fourth statement of which cell this repository drives."
+            "spells a cell is a second statement of which cell this repository drives."
         )
 
 
@@ -281,8 +282,7 @@ def test_no_scenario_assigns_a_zone_literal() -> None:
     """The tripwire for the assignment coming back.
 
     The test above compares two values and would keep passing if a scenario
-    re-introduced `ZONE = "cell_b"` while `DRIVEN_ZONE` still said `cell_b` —
-    which is exactly the state the three files were already in.
+    re-introduced `ZONE = "cell_b"` while the model's only zone was `cell_b`.
     """
     import re
 
@@ -296,36 +296,54 @@ def test_no_scenario_assigns_a_zone_literal() -> None:
 
 
 def test_the_selected_zone_overrides_the_default(monkeypatch) -> None:
-    """What makes `./scripts/scenario bringup --zone cell_a` work at all.
-
-    ADR-0056 names "a cheap periodic `bringup` against `cell_a`" as the answer if
-    the showcase is found broken. Without this it is a source edit, and the
-    record's own mitigation is unavailable to whoever needs it.
-    """
+    """What makes `./scripts/scenario bringup --zone <zone>` work at all."""
     import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
     import _cell
 
-    monkeypatch.setenv(_cell.SELECTED_BY, "cell_b")
-    assert _cell.zone() == "cell_b"
-    monkeypatch.setenv(_cell.SELECTED_BY, "cell_a")
-    assert _cell.zone("program_cycle") == "cell_a"
+    monkeypatch.setenv(_cell.SELECTED_BY, "some_zone")
+    assert _cell.zone() == "some_zone"
     monkeypatch.delenv(_cell.SELECTED_BY)
-    assert _cell.zone() == _cell.DRIVEN_ZONE
+    assert _cell.zone() == _artifacts.zone_ids()[0]
 
 
-def test_the_owner_split_of_zones_holds() -> None:
-    """The behaviour-tree scenarios drive `cell_a`; the real program, `cell_b`.
+def _plans(tmp_path: Path, *zones: str) -> Path:
+    for name in zones:
+        (tmp_path / f"{name}_plan.yaml").write_text(f"zone: {name}\n")
+    return tmp_path
 
-    The project owner's decision of 2026-09-29 (ADR-0067): `cell_b`'s arm rides a
-    track that nothing in L3 or L4 moves, so a behaviour-tree Place cannot reach
-    its belt, and that cell is gated by `program_cycle` instead.
+
+def test_one_declared_zone_is_the_default(monkeypatch, tmp_path) -> None:
+    """With one zone in the generated plans, that zone is what a scenario drives."""
+    import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
+    import _cell
+
+    monkeypatch.delenv(_cell.SELECTED_BY, raising=False)
+    assert _cell.zone(_plans(tmp_path, "zone_x")) == "zone_x"
+
+
+def test_several_declared_zones_have_no_default(monkeypatch, tmp_path) -> None:
+    """ADR-0056's rule, returning by itself the day a second zone is declared.
+
+    The refusal has to name every zone, so the reader knows what `--zone` takes.
     """
     import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
     import _cell
 
-    for name in ("bringup", "pick_and_place", "continuous_line"):
-        assert _cell.DEFAULT_ZONE_OF.get(name, _cell.DRIVEN_ZONE) == "cell_a", name
-    assert _cell.DEFAULT_ZONE_OF["program_cycle"] == "cell_b"
+    monkeypatch.delenv(_cell.SELECTED_BY, raising=False)
+    with pytest.raises(Exception, match=r"--zone is required.*zone_x, zone_y"):
+        _cell.zone(_plans(tmp_path, "zone_y", "zone_x"))
+    monkeypatch.setenv(_cell.SELECTED_BY, "zone_y")
+    assert _cell.zone(_plans(tmp_path, "zone_y", "zone_x")) == "zone_y"
+
+
+def test_no_declared_zone_has_no_default(monkeypatch, tmp_path) -> None:
+    """An empty plan set is a refusal, not a silent empty zone name."""
+    import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
+    import _cell
+
+    monkeypatch.delenv(_cell.SELECTED_BY, raising=False)
+    with pytest.raises(Exception, match="no generated bring-up plan"):
+        _cell.zone(tmp_path)
 
 
 def test_a_helper_module_is_not_offered_as_a_scenario() -> None:

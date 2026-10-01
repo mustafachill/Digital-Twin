@@ -4,26 +4,24 @@
 #   ./scripts/program                  one cycle, both sides, one window each
 #   ./scripts/program --headless       the same with no windows
 #   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
-#   ./scripts/program --zone cell_b    name the zone rather than letting the model choose
+#   ./scripts/program --zone cell_b    name the zone; needed only when the model declares several
 #
-# WHAT IT DOES. It brings up both sides of the paired cell WITHOUT the line,
-# starts each side's belt ON THAT SIDE (the belt is not twinned, ADR-0067), and
-# for each cycle puts one work-piece on each side's pick table (taking the last
-# cycle's off first) and runs `python3 -m cite_bringup.program --via twin
+# WHAT IT DOES. It brings up both sides of the paired cell, starts each side's
+# belt ON THAT SIDE (the belt is not twinned, ADR-0067), and for each cycle
+# puts one work-piece on each side's pick table (taking the last cycle's off
+# first) and runs `python3 -m cite_bringup.program --via twin
 # --cycles 1`: the real xArm 5's own program, read from its program file, sent
 # ONCE through the twin boundary, moving both arms and sliding both tracks step
 # by step (ADR-0067). Then it reports where the last box ended and tears the
 # pair down. Ctrl-C stops the program (goal cancelled, track held) and then the
 # pair.
 #
-# WHAT IT IS NOT. A demonstration, like ./scripts/demo: it gates nothing and is in
-# no CI step. `./scripts/scenario program_cycle` is what CHECKS the program, on one
-# side. ./scripts/demo is the parked event-driven line, and read from source it
-# does not run on the main tree today: since ADR-0067 cell_b's transfer station
-# declares no place frame, which the line refuses at plan time, and cell_a is not
-# paired. The three-arm line is kept runnable under projects/ (ADR-0068).
+# WHAT IT IS NOT. A demonstration: it gates nothing and is in no CI step.
+# `./scripts/scenario program_cycle` is what CHECKS the program, on one side. The
+# three-arm event-driven line is not in this tree; it runs as projects/01
+# (ADR-0068, ADR-0069).
 #
-# Read ./scripts/demo's header for the GPU and the speed of a windowed pair; all
+# Read ./scripts/sim's header for the GPU and the speed of a windowed pair; all
 # of it applies here.
 #
 # shellcheck source=scripts/_lib.sh
@@ -42,18 +40,24 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --zone|--cycles) WANT="$arg" ;;
-        -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
 [ -z "$WANT" ] || die "${WANT} needs a value."
 case "$CYCLES" in ''|*[!0-9]*) die "--cycles needs a whole number, 0 for forever." ;; esac
 
+# Defaulted only when the model leaves one answer (ADR-0069 decision 5), and
+# asked here, before the container is entered, so that a refusal costs nothing.
+if [ -z "$ZONE" ]; then
+    ZONE="$(default_zone)" || die "--zone is required when the model declares more than one zone."
+fi
+
 # ---------------------------------------------------------------- on the host
 if ! in_container; then
-    # Refused on a dirty host for the reasons ./scripts/demo gives: a cell left up
-    # answers on the same domain, and `compose exec` into a running container does
-    # not run the image's entrypoint.
+    # Refused on a dirty host: a cell left up answers on the same domain, and
+    # `compose exec` into a running container does not run the image's entrypoint
+    # (CLAUDE.md §2), so a run attached to it is not a run of this checkout.
     stop_this_checkouts_containers
     if [ "$(docker ps -q 2>/dev/null | wc -l)" -ne 0 ]; then
         die "a container of another checkout is running, and this would share its ROS
@@ -78,12 +82,6 @@ if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
     "${REPO_ROOT}/scripts/build"
 fi
 source_overlay
-
-if [ -z "$ZONE" ]; then
-    # The paired zone, as the model declares it; see ./scripts/demo.
-    ZONE="$(python3 -m cite_bringup.demo --print-zone)" \
-        || die "could not work out which zone is paired. Name one with --zone."
-fi
 
 PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
 PAIR_PID=""
@@ -116,7 +114,7 @@ teardown() {
 trap 'teardown; exit 130' INT TERM HUP
 trap teardown EXIT
 
-step "Bringing up both sides of ${ZONE}, without the line"
+step "Bringing up both sides of ${ZONE}"
 SIM_ARGS=(--zone "$ZONE" --pair)
 [ "$HEADLESS" -eq 0 ] || SIM_ARGS+=(--headless)
 "${REPO_ROOT}/scripts/sim" "${SIM_ARGS[@]}" > "$PAIR_LOG" 2>&1 &
@@ -143,17 +141,15 @@ ok "both sides are up"
 # list and the grasp hold all match that model name exactly (see
 # `cite_bringup.workpiece.workpiece_sdf`); a uniquely named box would ride
 # through the cell untouched. So the previous cycle's box is taken off the end
-# of the belt first, as the continuous_line scenario empties its sink.
+# of the belt first.
 replace_boxes() {
-    # `cite_bringup.demo`'s own spawn, unchanged, so the box is the same box the
-    # parked line's demonstration uses.
     python3 - "$ZONE" "$1" <<'PY'
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from cite_bringup.demo import SPAWN_DROP_M, frame, spawn, world_name
 from cite_bringup.gz import plan_for, run
-from cite_bringup.workpiece import part_of, workpiece_sdf
+from cite_bringup.workpiece import (
+    SPAWN_DROP_M, frame, part_of, spawn, workpiece_sdf, world_name)
 
 zone, remove_first = sys.argv[1], sys.argv[2] == "1"
 name = "workpiece"
@@ -226,8 +222,8 @@ step "Where the last box ended"
 # for that.
 python3 - "$ZONE" <<'PY' || true
 import sys
-from cite_bringup.demo import frame, world_name
 from cite_bringup.gz import ModelPoses, plan_for
+from cite_bringup.workpiece import frame, world_name
 
 zone, name = sys.argv[1], "workpiece"
 plan = plan_for(zone)

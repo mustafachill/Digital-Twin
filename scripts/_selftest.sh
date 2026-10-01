@@ -1041,18 +1041,54 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# ./scripts/sim — the zone is named or the launch does not happen (ADR-0056).
+# ./scripts/sim — a zone is defaulted only when the model leaves one answer.
 #
-# The facility declares two cells and exactly one runs at a time, so `--zone` is
-# required and has no default. A default here would put the choice back exactly
-# where removing it from `default_plan_path` took it from: somewhere nobody made
-# it. These assertions are what stops one being added back for convenience.
+# When the generated plans declare exactly one zone, `--zone` may be left out and
+# that zone comes up; when they declare several, it is required and the script
+# refuses, naming them (ADR-0069 decision 5) — ADR-0056's rule, returning by
+# itself the day a second zone is declared. The rule is `default_zone`, which
+# runs `cite_bringup/zones.py`; it is driven here against synthetic plan sets,
+# because driving `./scripts/sim` with no zone on a one-zone model would START a
+# cell, and a self-test may not.
 #
-# Only the REFUSING paths are driven. `./scripts/sim --zone cell_b` starts a cell
-# — or, on a host with no ROS, a container — and a self-test may not do either.
-# Every case below exits before `require_ros_env`, which is the line that decides
-# where the rest of the script runs.
+# Only the REFUSING paths of `./scripts/sim` itself are driven. Every case below
+# exits before `require_ros_env`, which is the line that decides where the rest
+# of the script runs.
 # -----------------------------------------------------------------------------
+ZONES_TMP="$(mktemp -d)"
+mkdir -p "${ZONES_TMP}/one" "${ZONES_TMP}/two" "${ZONES_TMP}/none"
+printf 'zone: zone_x\n' > "${ZONES_TMP}/one/zone_x_plan.yaml"
+printf 'zone: zone_x\n' > "${ZONES_TMP}/two/zone_x_plan.yaml"
+printf 'zone: zone_y\n' > "${ZONES_TMP}/two/zone_y_plan.yaml"
+zone_refusal() { # zone_refusal <expected substring> <plans-dir>
+    local output
+    output="$(default_zone "$2" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+
+expect_eq   "one declared zone is the default" \
+            "zone_x" "$(default_zone "${ZONES_TMP}/one" 2>/dev/null)"
+expect_fail "two declared zones have no default" \
+            default_zone "${ZONES_TMP}/two"
+expect_ok   "and the refusal says --zone is required" \
+            zone_refusal "--zone is required" "${ZONES_TMP}/two"
+expect_ok   "and names every zone, so the reader can act on it" \
+            zone_refusal "zone_x, zone_y" "${ZONES_TMP}/two"
+expect_eq   "and prints no zone on stdout for a caller to pick up by mistake" \
+            "" "$(default_zone "${ZONES_TMP}/two" 2>/dev/null || true)"
+expect_fail "no declared zone has no default either" \
+            default_zone "${ZONES_TMP}/none"
+expect_ok   "the shipped model's plans have exactly one answer" \
+            default_zone
+rm -rf "$ZONES_TMP"
+
+# The three entry points ask that one function rather than stating a zone. A
+# grep, because the alternative is starting a cell.
+for entry in sim program; do
+    expect_ok "./scripts/${entry} defaults its zone through default_zone" \
+              grep -q 'ZONE="$(default_zone)"' "${REPO_ROOT}/scripts/${entry}"
+done
+
 sim_args() { "${REPO_ROOT}/scripts/sim" "$@"; }
 # Captured and then matched, never piped: `set -o pipefail` is in force here, and
 # a refusal exits non-zero by design, so a pipeline would report the refusal
@@ -1063,13 +1099,6 @@ sim_says() { # sim_says <expected substring> <args...>
     output="$("${REPO_ROOT}/scripts/sim" "$@" 2>&1 || true)"
     grep -qF -- "$expected" <<<"$output"
 }
-
-expect_fail "./scripts/sim with no zone refuses instead of choosing one" \
-            sim_args
-expect_ok   "and the refusal names the flag rather than a plan path" \
-            sim_says "--zone is required"
-expect_ok   "and it names both cells, so the reader can act on it" \
-            sim_says "cell_a"
 
 # `--zone` as the last token. Without the check this leaves ZONE empty and the
 # next refusal fires with a message about a missing flag the caller did type.
@@ -1091,21 +1120,20 @@ expect_fail "./scripts/sim --zone zone:=cell_b refuses too" \
 # below rather than silently competing with the flag"; both halves were false —
 # the case arm consumed it and the last writer won.
 expect_fail "two spellings naming different zones are refused" \
-            sim_args --zone cell_a zone:=cell_b
+            sim_args --zone cell_x zone:=cell_b
 expect_ok   "and the refusal names both spellings and both zones" \
-            sim_says "--zone says 'cell_a' and zone:= says 'cell_b'" --zone cell_a zone:=cell_b
+            sim_says "--zone says 'cell_x' and zone:= says 'cell_b'" --zone cell_x zone:=cell_b
 expect_fail "and it is refused whichever order they come in" \
-            sim_args zone:=cell_b --zone=cell_a
+            sim_args zone:=cell_b --zone=cell_x
 
 # -----------------------------------------------------------------------------
-# ./scripts/scenario — the same two token guards, for the script that HAS a
-# default (ADR-0056 decision 5).
+# ./scripts/scenario — the same two token guards, for the script whose default is
+# read by the scenario itself.
 #
-# `./scripts/scenario --zone` is not `./scripts/sim --zone`: which cell the
-# regression suite drives is a project decision stated once in
-# `tests/scenarios/_cell.py`, so this flag has a default and naming a zone is the
-# override. That is exactly why its failure modes are quieter, and why they are
-# driven here.
+# `./scripts/scenario --zone` exports a selection that `tests/scenarios/_cell.py`
+# reads, falling back to `cite_bringup/zones.py`'s answer when it is empty
+# (ADR-0069 decision 5). So naming a zone is an override, and that is exactly why
+# its failure modes are quieter, and why they are driven here.
 #
 # WHAT CARRIES THE WEIGHT IS THE MESSAGE, not the exit status, and that is
 # measured rather than assumed. Strip the refusals out and every `expect_fail`
@@ -1139,18 +1167,18 @@ expect_fail "./scripts/scenario --zone --teardown-advisory refuses rather than s
             scenario_args bringup --zone --teardown-advisory
 expect_ok   "and quotes the token it was given" \
             scenario_says "was given '--teardown-advisory'" bringup --zone --teardown-advisory
-expect_fail "./scripts/scenario --zone zone:=cell_a refuses too" \
-            scenario_args bringup --zone zone:=cell_a
+expect_fail "./scripts/scenario --zone zone:=cell_x refuses too" \
+            scenario_args bringup --zone zone:=cell_x
 expect_ok   "and quotes that token as well" \
-            scenario_says "was given 'zone:=cell_a'" bringup --zone zone:=cell_a
+            scenario_says "was given 'zone:=cell_x'" bringup --zone zone:=cell_x
 # Already refused before the guards landed, and pinned here so the two spellings
 # of a missing name cannot come apart.
 expect_fail "./scripts/scenario --zone with no name after it refuses" \
             scenario_args bringup --zone
 
-# An empty zone is refused rather than falling back. `_cell.zone()` reads
-# `os.environ.get(SELECTED_BY) or DRIVEN_ZONE`, so an exported empty string comes
-# back as the default: the caller named something and silently got `cell_b`.
+# An empty zone is refused rather than falling back. `_cell.zone()` treats an
+# exported empty string as no selection and returns the default: the caller
+# named something and would silently get the model's only zone.
 expect_fail "./scripts/scenario --zone= refuses instead of falling back to the default" \
             scenario_args bringup --zone=
 expect_ok   "and says that an empty zone would have run the default" \

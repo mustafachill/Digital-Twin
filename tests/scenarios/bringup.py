@@ -57,12 +57,10 @@ from _cell import cell, zone  # noqa: E402  (the path insert above has to come f
 
 #: The cell this scenario drives, resolved once at load.
 #:
-#: NOT A LITERAL ANY MORE. `ZONE = "cell_b"` stood in all three scenarios, which
-#: is one fact stated three times and able to disagree silently — the shape
-#: CLAUDE.md §4 prohibits — and it also made ADR-0056's own mitigation, a cheap
-#: periodic `bringup` against `cell_a`, a source edit rather than a command. The
-#: statement lives once in `tests/scenarios/_cell.py`; `./scripts/scenario
-#: <name> --zone <zone>` overrides it for one run.
+#: NOT A LITERAL. `ZONE = "cell_b"` once stood in every scenario, which is one
+#: fact stated several times and able to disagree silently — the shape CLAUDE.md
+#: §4 prohibits. `_cell.zone()` answers instead: the model's only zone, or the
+#: one `./scripts/scenario <name> --zone <zone>` names (ADR-0069 decision 5).
 ZONE = zone()
 
 

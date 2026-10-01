@@ -2,25 +2,19 @@
 # Run a headless simulation-in-the-loop scenario and report pass or fail.
 #
 #   ./scripts/scenario                 list available scenarios
-#   ./scripts/scenario pick_and_place  run one
+#   ./scripts/scenario bringup         run one
 #   ./scripts/scenario bringup --zone cell_b
-#                                      run one against another cell
+#                                      name the cell; needed only when the
+#                                      model declares more than one
 #   ./scripts/scenario bringup --teardown-advisory
 #                                      gate on the cycle only; still run and
 #                                      report the post-shutdown check
 #
-# --zone names the cell to drive. Unlike `./scripts/sim --zone` it has a default,
-# and the difference is deliberate: `sim` STARTS a cell, so which one is the
-# caller's to choose, while which cell this repository's regression suite drives
-# is a project decision (ADR-0056 decision 5) and is stated ONCE, in
-# `tests/scenarios/_cell.py`. A required flag here would put that decision back
-# into every caller — CI, the tester agent and each developer — which is the
-# three-copies shape it was just taken out of.
-#
-# It is what makes ADR-0056's own mitigation available: the record names "a cheap
-# periodic `bringup` against `cell_a`" as the answer if the showcase is found
-# broken, and `./scripts/scenario bringup --zone cell_a` is that, as a command
-# rather than as a commit.
+# --zone names the cell to drive. Left out, the scenario drives the model's only
+# zone, read by `tests/scenarios/_cell.py` from `cite_bringup/zones.py` — the
+# same answer `./scripts/sim` and `./scripts/program` get, derived in one place
+# (ADR-0069 decision 5). When the model declares more than one zone there is no
+# default, and the scenario refuses at load, naming them.
 #
 # --teardown-advisory exists for CI and is off by default, so an interactive run
 # keeps answering the strict question. It does not delete, skip or exempt the
@@ -111,9 +105,9 @@ select_zone() {  # select_zone <spelling> <value>
     case "$2" in
         "") die "${1} was given an empty zone name.
   There is no zone called '', and an empty one would silently run the default.
-  ./scripts/scenario bringup --zone cell_a" ;;
+  ./scripts/scenario bringup --zone cell_b" ;;
         -*|*:=*) die "--zone needs a zone name and was given '${2}'.
-  ./scripts/scenario bringup --zone cell_a --teardown-advisory" ;;
+  ./scripts/scenario bringup --zone cell_b --teardown-advisory" ;;
     esac
     export CITE_SCENARIO_ZONE="$2"
 }
@@ -132,7 +126,7 @@ for arg in "$@"; do
         --zone=*) select_zone "--zone=" "${arg#--zone=}" ;;
     esac
 done
-[ "$WANT_ZONE" -eq 0 ] || die "--zone needs a zone name, e.g. --zone cell_a"
+[ "$WANT_ZONE" -eq 0 ] || die "--zone needs a zone name, e.g. --zone cell_b"
 
 require_ros_env scenario "$@"
 

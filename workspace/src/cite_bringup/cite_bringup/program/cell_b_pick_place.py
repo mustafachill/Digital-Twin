@@ -34,7 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from cite_bringup.demo import frame
+from cite_bringup.workpiece import frame
 from cite_bringup.plan import ControllerManager, Conveyor, Plan
 from cite_bringup.program.steps import belt, grip, move, release, Step, wait
 

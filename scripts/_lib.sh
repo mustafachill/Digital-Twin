@@ -830,6 +830,26 @@ cite_python() {
 }
 
 # -----------------------------------------------------------------------------
+# default_zone [plans-dir] — the zone a command drives when none is named.
+#
+# Prints the only zone the generated bring-up plans declare; when they declare
+# several, or none, it prints nothing on stdout, says why on stderr naming every
+# zone found, and fails (ADR-0069 decision 5). The rule lives in
+# `cite_bringup/zones.py` and only there: this runs that FILE by its path, with
+# the standard library alone, so it answers on a host with no ROS and no build,
+# before `require_ros_env` — a refusal here costs no container.
+#
+# The directory argument exists for the self-test, which points it at synthetic
+# plan sets; every production caller leaves it out.
+# -----------------------------------------------------------------------------
+default_zone() {
+    local plans="${1:-${REPO_ROOT}/workspace/src/cite_generated/bringup}"
+    local python
+    python="$(cite_python)" || python=python3
+    "$python" "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" --plans "$plans"
+}
+
+# -----------------------------------------------------------------------------
 # cite_tools resolution — which checkout's tooling is about to run?
 #
 # `cite_tools` is installed editable, so the interpreter resolves it through a

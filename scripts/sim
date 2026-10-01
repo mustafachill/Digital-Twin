@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 # Launch the simulated cell.
 #
-#   ./scripts/sim --zone cell_b              GUI (requires a display)
-#   ./scripts/sim --zone cell_b --headless   no GUI — the form used by CI and by the tester agent
-#   ./scripts/sim --zone cell_b --pair       both sides of a twin pair, under the pair supervisor
+#   ./scripts/sim                    GUI (requires a display)
+#   ./scripts/sim --headless         no GUI — the form used by CI and by the tester agent
+#   ./scripts/sim --pair             both sides of a twin pair, under the pair supervisor
+#   ./scripts/sim --zone cell_b      name the zone rather than letting the model choose
 #
 # A pair takes --headless like a single side does, and without it opens one
 # window per side. The two windows are not distinguishable by their titles,
 # because both sides of a pair carry byte-identical names (ADR-0044, clause 1).
 #
-# --zone IS REQUIRED AND HAS NO DEFAULT (ADR-0056). The facility declares two
-# cells: `cell_b`, the one-arm cell this project works on, and `cell_a`, the
-# three-arm cell Phase 1 closed on, which is kept as a showcase and is brought up
-# with `./scripts/sim --zone cell_a`. Exactly one zone runs at a time — two share
-# one ROS graph and collide on the reserved `/cite/facility`, `/cite/line` and
-# `/cite/twin` scopes, which are deliberately not zone-scoped.
+# --zone DEFAULTS ONLY WHEN THERE IS ONE ANSWER (ADR-0069 decision 5). When the
+# L0 model declares exactly one zone, that zone is brought up; when it declares
+# more than one, --zone is required and this refuses, naming them — ADR-0056's
+# rule, returning by itself the day a second zone is declared. The default is
+# derived in `cite_bringup/zones.py` and nowhere else. Exactly one zone runs at a
+# time: two share one ROS graph and collide on the reserved `/cite/facility`,
+# `/cite/line` and `/cite/twin` scopes, which are deliberately not zone-scoped.
 #
 # --pair requires the zone to declare `twin: {sides: pair}` in the L0 model; on an
 # untwinned zone it refuses rather than inventing a second side. The two sides run
 # the same launch in two environments and are joined, never sequenced (ADR-0047).
 #
-# Launch arguments take the same `key:=value` spelling either way, so
-# `./scripts/sim --zone cell_b --pair line:=true` runs the line on both sides. A
-# pair takes fewer of them than one side does: `side:=` is the supervisor's to
-# decide.
+# Any other `key:=value` argument is forwarded to the launch, on one side or on
+# both. A pair takes fewer of them than one side does: `side:=` is the
+# supervisor's to decide.
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
@@ -38,7 +39,7 @@ PASSTHROUGH=()
 # knows `ros2 launch` will type it. A comment here used to claim that a bare
 # `zone:=X` "is caught below rather than silently competing with the flag", and
 # both halves were false: the case arm consumed it and the last writer won, so
-# `--zone cell_a zone:=cell_b` brought up `cell_b` without a word.
+# `--zone cell_x zone:=cell_b` brought up `cell_b` without a word.
 #
 # `set_zone` is what makes the comment true. A second spelling that agrees is
 # redundant and allowed; one that disagrees is refused, naming both, because
@@ -73,25 +74,22 @@ for arg in "$@"; do
         --zone)     WANT_ZONE=1 ;;
         --zone=*)   set_zone "--zone=" "${arg#--zone=}" ;;
         zone:=*)    set_zone "zone:=" "${arg#zone:=}" ;;
-        -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
         *)          PASSTHROUGH+=("$arg") ;;
     esac
 done
 
 if [ "$WANT_ZONE" -eq 1 ]; then
     die "--zone needs a zone name.
-  ./scripts/sim --zone cell_b   the one-arm cell
-  ./scripts/sim --zone cell_a   the three-arm showcase"
+  ./scripts/sim --zone cell_b --headless"
 fi
 
-# Refused rather than defaulted (ADR-0056 decision 4). A default here would put
-# the zone back exactly where removing it from `default_plan_path` took it from:
-# somewhere nobody chose it.
+# Defaulted only when the model leaves one answer, and refused otherwise
+# (ADR-0069 decision 5). Asked here, on the host, before `require_ros_env`, so
+# the refusal costs no container; `default_zone` has already said which zones
+# there are to choose from.
 if [ -z "$ZONE" ]; then
-    die "--zone is required and has no default.
-  ./scripts/sim --zone cell_b   the one-arm cell this project works on
-  ./scripts/sim --zone cell_a   the three-arm cell Phase 1 closed on, kept as a showcase
-  Exactly one zone runs at a time; see ADR-0056."
+    ZONE="$(default_zone)" || die "--zone is required when the model declares more than one zone."
 fi
 
 # A PAIR USED TO BE FORCED HEADLESS HERE, AND IS NOT ANY MORE. The reason given
@@ -108,8 +106,8 @@ fi
 # which side it started first; beyond that, tell them apart by what you do to
 # them, or run --headless and inspect a side with Foxglove on its own domain.
 #
-# What it buys is the only way to WATCH a pair, which is what ./scripts/demo is
-# for. Two simulators and two GUIs on one machine is a real load — see CLAUDE.md
+# What it buys is the only way to WATCH a pair, which is what ./scripts/program
+# is for. Two simulators and two GUIs on one machine is a real load — see CLAUDE.md
 # §2 on the real-time factor under CPU starvation before reading anything into
 # how fast it runs.
 
