@@ -1,6 +1,14 @@
 # L4 — Orchestration
 
-- **Status:** `PARTIAL`.
+- **Status:** `DESIGNED` — **the implementation was removed from the main tree** by
+  [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) on
+  2026-10-01 and runs, frozen, as `projects/01-three-arm-event-driven-line` (its `./run`
+  and `./scripts/scenario continuous_line`, both run from that folder, whose README is the
+  runbook; [ADR-0068](../adr/0068-keep-proven-milestones-as-frozen-snapshots.md)). L4 stays in the
+  target architecture (charter §7). **Every "built", "tested" or "in CI" below, and every
+  file path under `cite_orchestration`, describes the tree before ADR-0069**; nothing in the
+  main tree today builds, tests or runs any of it.
+- **Status before 2026-10-01, kept as the design record:** `PARTIAL`.
   **Built:** two executables on BehaviorTree.CPP v4.
   `src/line_coordinator.cpp` runs one station from `trees/station_cycle.xml` — a
   pick-then-place cycle with an explicit recovery branch — and is what

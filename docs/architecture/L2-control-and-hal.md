@@ -2,27 +2,33 @@
 
 - **Status:** `PARTIAL`.
   **Built:** one `ros2_control` controller manager per arm, hosted in Gazebo by
-  `gz_ros2_control`, with **three controllers active per arm** — asserted by
-  `./scripts/scenario bringup`, which derives the set from the zone's bring-up
-  plan rather than counting to a number.
-  **The 9-across-three-arms figure is `cell_a`'s and is a CLOSED RECORD.** That
-  scenario drives `cell_b`, a one-arm cell, since ADR-0056; it last asserted 9
-  across three arms at the commits CLAUDE.md §2's CI table names, and it does not
-  assert it now. `./scripts/scenario bringup --zone cell_a` is what asks the
-  question again. Controller configuration, MoveIt configuration and the
+  `gz_ros2_control`, with every controller the zone's bring-up plan declares active —
+  asserted by `./scripts/scenario bringup`, which derives the set from the plan rather than
+  counting to a number. `cell_b`'s one arm, `picker`, declares **four**: the joint-state
+  broadcaster, the gripper, the arm's trajectory controller and the linear track's
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md); read
+  `workspace/src/cite_generated/bringup/cell_b_plan.yaml` rather than this sentence).
+  **The 9-across-three-arms figure is `cell_a`'s and is a CLOSED RECORD.** `cell_a` left the
+  main tree on 2026-10-01
+  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); it last
+  asserted 9 across three arms at the commits CLAUDE.md §2's CI table names, and the
+  three-arm cell is checked now only from `projects/01-three-arm-event-driven-line`.
+  Controller configuration, MoveIt configuration and the
   planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
   the scene per arm and reads it back rather than trusting the service result. The gripper
   runs as a `ros2_control` controller ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md))
   and its stall is now the sole evidence that a part is held, no simulation plugin having
   survived to forge it ([ADR-0029](../adr/0029-simulated-grasping-by-friction.md)).
   **Built:** the planning pipelines. Each arm's `move_group` loads Pilz and OMPL from a
-  generated `cell_a_arm_*_planning_pipelines.yaml` and plans with Pilz PTP by default
+  generated `<zone>_<arm>_planning_pipelines.yaml` — today only
+  `cell_b_picker_planning_pipelines.yaml` — and plans with Pilz PTP by default
   ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). A launch test drives the real
   `move_group` against the real generated files and requires both pipelines to load, PTP to
   plan, an identical request to return a byte-identical trajectory, and — the assertion this
   layer's safety rests on — a PTP path through a **named** object in the real generated
   planning scene to be refused, with its complement proving the refusal came from the scene.
-  Mutation-checked, and observed refusing a real path during `continuous_line`.
+  Mutation-checked, and observed refusing a real path during `continuous_line` on `cell_a`,
+  before that scenario left the main tree (ADR-0069).
   **Built with a stated residual:** that gate checks trajectory **waypoints** and
   interpolates nothing between them, at Pilz's fixed 0.1 s sampling. An object thinner than
   one waypoint step can lie between two checked states. The step, the arithmetic and the two

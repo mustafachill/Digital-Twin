@@ -27,16 +27,20 @@ hardware.
 | Element | Rule | Example |
 |---|---|---|
 | `cite` | Fixed root. Isolates this system from anything else on the network. | `cite` |
-| `<zone>` | Facility zone from the L0 model. `lower_snake_case`. | `cell_a` |
-| `<asset_id>` | Unique asset instance from the L0 model. | `arm_1` |
+| `<zone>` | Facility zone from the L0 model. `lower_snake_case`. | `cell_b` |
+| `<asset_id>` | Unique asset instance from the L0 model. | `picker` |
 | `<interface>` | Topic, service, or action name. | `joint_states` |
 
 ```
-/cite/cell_a/arm_1/joint_states
-/cite/cell_a/arm_1/joint_trajectory_controller/follow_joint_trajectory
-/cite/cell_a/conveyor_1/state
-/cite/cell_a/sensor_belt_1_end/detection
+/cite/cell_b/picker/joint_states
+/cite/cell_b/picker/picker_joint_trajectory_controller/follow_joint_trajectory
+/cite/cell_b/transfer_belt/state
+/cite/cell_b/infeed_beam/detection
 ```
+
+These are read from `workspace/src/cite_generated/bringup/cell_b_plan.yaml`, the plan of the
+one zone L0 declares; the examples named `cell_a` until that zone left L0 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
+Note that the controller name carries the instance prefix too — see *Prefixes* below.
 
 ## Frames
 
@@ -48,8 +52,8 @@ use the full identity, flattened because TF has no hierarchy:
 
 ```
 <zone>__<asset_id>__<link>          ids.frame()
-cell_a__conveyor_1__infeed
-cell_a__table_pick__surface
+cell_b__transfer_belt__infeed
+cell_b__infeed_table__surface
 ```
 
 Double underscore separates the three parts, so a single-underscore link name is
@@ -60,9 +64,9 @@ names are the vendor's and the description is invoked rather than ingested (L1):
 
 ```
 <asset_id>_<link>                   ids.link()
-arm_1_link_base
-arm_1_link_tcp
-arm_1_mount
+picker_link_base
+picker_link_tcp
+picker_mount
 ```
 
 The distinction is not cosmetic and it is not optional: a URDF's link names are what
@@ -83,8 +87,8 @@ Every robot instance is generated with `<asset_id>_` prefixing its joints, links
 controllers:
 
 ```
-arm_1_joint1 … arm_1_joint5
-arm_1_joint_trajectory_controller
+picker_joint1 … picker_joint5
+picker_joint_trajectory_controller
 ```
 
 Two arms of the same type instantiate the same component definition with different
@@ -109,7 +113,7 @@ prefixes and never collide.
 
 ## Why not per-robot root namespaces
 
-An alternative is `/arm_1/...` with each robot at the root. Rejected for two reasons:
+An alternative is `/picker/...` with each robot at the root. Rejected for two reasons:
 nothing distinguishes this system's topics from anything else on a shared lab network, and
 there is nowhere to put facility-level or zone-level state. The `/cite/<zone>/` prefix
 costs a few characters and buys both.
@@ -120,7 +124,7 @@ costs a few characters and buys both.
 |---|---|
 | `/cite/facility/...` | Facility-scope state that belongs to no single asset |
 | `/cite/twin/...` | L5 mode, divergence metrics, registration |
-| `/cite/line/...` | L4 line state, throughput, work-piece tracking |
+| `/cite/line/...` | L4 line state, throughput, work-piece tracking — **reserved, and unused in the main tree** since [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) removed L4 from it |
 | `cite_world` | The facility root frame, tied to the survey origin |
 
 **The first three are FACILITY-SINGULAR, and that is what bounds a deployment to one
@@ -132,13 +136,16 @@ and two zones started from one checkout share one ROS graph and one set of these
 
 So the invariant is not a preference: **exactly one zone is up at a time**
 ([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
-decision 3). Zone-scoping these three is one of the four ADR-sized changes that record
+decision 3). *(ADR-0056 is superseded by [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which removed the second zone; L0 declares
+one zone today, so the invariant holds trivially, and the reasoning here is what a second zone
+would have to answer.)* Zone-scoping these three is one of the four ADR-sized changes that record
 declines, and rule 6 above already requires an ADR for the first of them — it changes every
 name in the system.
 
 What a second zone actually collides with, if one is started anyway: two servers on the fixed
 `/cite/facility/get_model_version`; two latched publishers on `/cite/line/topology`, on which
-`line_orchestrator` `RCLCPP_FATAL`s at a zone mismatch, and only with `line:=true`; two
+`line_orchestrator` `RCLCPP_FATAL`s at a zone mismatch, and only with `line:=true` *(both the
+topology publisher and the line left the main tree with ADR-0069)*; two
 `/robot_description` publishers describing **different robots**; and two `/clock` publishers
 from two independent simulators, which is the mixed-time system CLAUDE.md §10 warns about.
 ADR-0056 decision 3 records what refuses that, and — just as importantly — what the refusal
