@@ -178,9 +178,14 @@ tree**; they run only in the `projects/01` snapshot.
   `aef87e6`, falsified the number here, in L0's status line and in ADR-0027 at once, which is
   why ADR-0027's first correction ends *"do not state the cardinality of a generated
   collection in prose."*
-  `tools/tests/` holds **1597** tests, counted by collection rather than by a run
+  `tools/tests/` holds **1599** tests, counted by collection rather than by a run
   (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, on
-  `feat/remove-parked-line`, 2026-10-01). **The 1782 -> 1597 step spans ADR-0069's removal —
+  `feat/remove-parked-line` at `35b254a`, 2026-10-01, after that branch's review
+  remediation). **The 1597 -> 1599 step is +2 and it is tree growth alone**: the remediation
+  adds one tracked file, `tests/scenarios/guards/test_program_cycle_stops_its_belt.py`, which
+  `test_superseded_real_time_requirement.py` counts by suffix and
+  `test_a_removed_plan_key_stays_removed.py` counts by tree. 1 + 1 = 2.
+  It read **1597** earlier the same day on the same branch. **The 1782 -> 1597 step spans ADR-0069's removal —
   deleted guards such as `test_event_driven_line_is_kept.py`, tests retargeted from three arms
   to one, and fewer tracked files for the tree-parametrized suites to count — and is not
   reconciled term by term.**
@@ -475,6 +480,18 @@ tree**; they run only in the `projects/01` snapshot.
   test files and an ADR and no package. This line carried **20** until 2026-08-29, which was
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
+  **Re-taken on 2026-10-01 on `feat/remove-parked-line` at `35b254a`, after that branch's
+  review remediation, from one full `./scripts/test` run with `docker ps` empty, exit 0, by the
+  `fixer` agent**: `172 passed, 0 failed (shell gate self-tests)`; `1635 passed, 1 skipped` for
+  the host half; and ten per-package `Summary:` lines totalling **1219 tests, 0 failures, 33
+  skipped**. **All three steps are attributed, because each was measured directly**: the shell
+  gate's +20 is the remediation's new self-test cases (undeclared, empty and named zones on
+  `sim`, `program` and `scenario`, `zones.py --check`, the install-prefix refusal, and the
+  belt stop in `./scripts/program`); the per-package +2 is two new cases in
+  `cite_bringup/test/test_simulation_launch.py`; and the host half's +5 is `tools/tests`' +2
+  above plus `tests/`' **34 -> 37** — the new guard's 2 cases and one more
+  `test_gz_calls_carry_the_partition.py` case, which parametrises over the `.py` files under
+  `tests/`. The tie closes: 1599 + 37 = 1636 = 1635 passed plus the 1 skipped.
   **On 2026-10-01 on `feat/remove-parked-line`, at `416ffc8`, the `coder` agent took one full
   `./scripts/test` run, exit 0, and reported these verbatim; this pass did not re-run it**:
   `152 passed, 0 failed (shell gate self-tests)`; `1630 passed, 1 skipped` for the host half;
@@ -1183,10 +1200,13 @@ tree**; they run only in the `projects/01` snapshot.
   other than English — six Turkish-specific letters plus nine non-Latin script ranges, chosen
   by measuring four candidate instruments against the archived v1 tree, where this one catches
   **17 of 17** first-party files. It runs in the host half of `lint`, the half that always
-  runs, and reported **`2001 files checked, no non-English content outside 1 exemption(s)`** on
-  `feat/remove-parked-line`, 2026-10-01, **5** of them untracked — the same five as below,
+  runs, and reported **`2002 files checked, no non-English content outside 1 exemption(s)`** on
+  `feat/remove-parked-line` at `35b254a`, 2026-10-01, after that branch's review remediation —
+  **+1, the one tracked file it adds**, the guard the collection above counts, with the same
+  untracked files still on disk. It reported **`2001 files checked`** earlier that day,
+  **5** of them untracked — the same five as below,
   re-derived by differencing `cite_tools.english.files_to_check` against `git ls-files` — so
-  **1996** are tracked. **The 2091 -> 2001 step spans ADR-0069's removal of the line,
+  **1996** were tracked. **The 2091 -> 2001 step spans ADR-0069's removal of the line,
   `cite_orchestration`, `cell_a`'s generated artifacts and the documents' and tests' edits, and
   is not reconciled term by term.** It reported `2091 files checked` on
   `feat/projects-snapshots`, 2026-09-30, **5** of them untracked (the 3 below plus two
