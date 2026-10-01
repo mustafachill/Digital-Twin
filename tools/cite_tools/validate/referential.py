@@ -775,8 +775,6 @@ def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:
       model, a blended move, a move that does not wait.
     * `program-pose-outside-joint-limits` — a pose past the vendor's own joint
       limits, which L0 states for exactly this check.
-    * `program-pose-name-taken` — a program pose named `home`, which would make
-      one name mean two poses: `home` is `home_rad`.
     * `program-track-*` — a track move on an arm with no track, or past the
       track's stroke or speed.
     """
@@ -806,17 +804,10 @@ def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:
             if asset_type is not None and asset_type.kinematics is not None
             else None
         )
+        # No rule reserves `home` here: the reader names every pose itself,
+        # `zero` or `blockly_NN`, so a program pose cannot be called `home`
+        # (see `cite_tools.model.blockly.POSE_PREFIX`).
         for name, values in blockly.poses(steps).items():
-            if name == "home":
-                findings.append(
-                    error(
-                        "program-pose-name-taken",
-                        where,
-                        f"the program's pose {name!r} is also declared by home_rad",
-                        "The program's names are derived from its blocks; `home` is "
-                        "reserved for home_rad.",
-                    )
-                )
             if limits is None:
                 findings.append(
                     error(

@@ -184,7 +184,8 @@ public:
     declare_parameter("tip_link", "");
     declare_parameter("gripper_action", "");
     declare_parameter("home_rad", std::vector<double>{});
-    // Named joint poses beside `home`, from L0's `poses_rad` (ADR-0066). Two
+    // Named joint poses beside `home`, from the bring-up plan's `moveit.poses_rad`,
+    // which the generator fills from this arm's own program (ADR-0067). Two
     // parallel parameters because a ROS parameter cannot be a map: the i-th name
     // owns values [i * dof, (i + 1) * dof) of the flat array. Empty on an arm
     // that declares none, which leaves `home` the only named configuration.
@@ -624,7 +625,8 @@ public:
       RCLCPP_ERROR(
         get_logger(),
         "pose_values_rad has %zu values for %zu pose name(s), but planning group '%s' "
-        "has %zu joints, so it should have %zu. The poses come from L0 `poses_rad`.",
+        "has %zu joints, so it should have %zu. The poses come from the plan's "
+        "`moveit.poses_rad`, generated from the arm's program (ADR-0067).",
         pose_values_.size(), pose_names_.size(), planning_group_.c_str(), dof,
         pose_names_.size() * dof);
       return false;

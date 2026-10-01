@@ -421,8 +421,8 @@ def _poses(asset: ResolvedAsset) -> tuple[tuple[str, tuple[float, ...]], ...]:
 
     Read from the program file and never written in L0; an arm with no program
     has none. The taught poses ADR-0066 declared in L0 beside them were removed
-    by ADR-0069, and `program-pose-name-taken` keeps `home` reserved for
-    `home_rad`.
+    by ADR-0069. None of these can be called `home`, which `home_rad` owns,
+    because the reader names every pose itself (`cite_tools.model.blockly.POSE_PREFIX`).
     """
     configuration = asset.instance.configuration
     if configuration is None or configuration.kind != "robot":
