@@ -480,6 +480,14 @@ tree**; they run only in the `projects/01` snapshot.
   test files and an ADR and no package. This line carried **20** until 2026-08-29, which was
   CI's figure at `60eb4a5`, before `cite_test_hardware` existed, **21** until 2026-08-31 and
   **22** until 2026-09-01.
+  **Re-taken again the same day at `4ba6783`, after the second remediation round, from one full
+  run with `docker ps` empty, exit 0, by the `fixer` agent**: `182 passed, 0 failed (shell gate
+  self-tests)`; `1635 passed, 1 skipped`; ten `Summary:` lines totalling **1220 tests, 0
+  failures, 33 skipped**. Both moves are attributed: the shell gate's +10 is the process-group
+  self-tests for `./scripts/program`'s pair, and the per-package +1 is
+  `test_an_interrupted_bring_up_is_not_a_refusal` in `cite_bringup`. The host half did not
+  move — that round adds no file under `tools/` or `tests/` — and the tie still closes at
+  1599 + 37 = 1636.
   **Re-taken on 2026-10-01 on `feat/remove-parked-line` at `35b254a`, after that branch's
   review remediation, from one full `./scripts/test` run with `docker ps` empty, exit 0, by the
   `fixer` agent**: `172 passed, 0 failed (shell gate self-tests)`; `1635 passed, 1 skipped` for
