@@ -453,7 +453,8 @@ boundary fails no gate in CI.
 ./scripts/scenario bringup        # headless, asserted, and a blocking CI gate
 ```
 
-`--pair` implies headless and requires the zone to declare `twin: {sides: pair}` in the L0
+`--pair` takes `--headless` like a single side does, and without it opens one window per side
+(it used to imply `--headless` and no longer does). It requires the zone to declare `twin: {sides: pair}` in the L0
 model; on an untwinned zone it refuses rather than inventing a second side. **`cell_b`
 declares `pair`** (ADR-0059), so `--pair` comes up on it from a clean checkout. It brings up
 both sides and

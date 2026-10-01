@@ -127,7 +127,8 @@ Transport replaces a physical interaction with a deterministic one, and it flatt
   A beam reported a part only once its *centre* crossed the beam's volume, which with the
   old 0.040 m width gave the sensor a window of part-centre heights — it saw a part between
   20 mm and 100 mm tall and missed everything outside that, while a physical beam sees all
-  of it. Along the belt the same lateness cost the line its pick position: `beam_c1_out`
+  of it. Along the belt the same lateness cost the line its pick position (on `cell_a`, before
+  the line and that zone left the main tree with ADR-0069): `beam_c1_out`
   reported the 50 mm cube 25 mm after its leading edge arrived, the indexed belt stopped on
   that edge, and every piece parked 69 mm short of `arm_2`'s grasp. `continuous_line`
   stopped at milestone 4 of 10, four runs out of four.

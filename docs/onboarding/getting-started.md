@@ -59,9 +59,9 @@ are real.
 | `./scripts/lint` | Lint everything lintable on this machine. |
 | `./scripts/format` | Apply formatting in place. |
 | `./scripts/validate-model` | Validate the L0 facility model. Runs anywhere. |
-| `./scripts/sim --zone <name> [--headless] [--pair]` | Launch the simulated cell. `--zone` is required and has no default: `cell_b` is the one-arm cell this project works on, `cell_a` the three-arm showcase, and one zone runs at a time ([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)). `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
+| `./scripts/sim [--zone <name>] [--headless] [--pair]` | Launch the simulated cell. L0 declares one zone, `cell_b`, the one-arm cell, so `--zone` may be left out; it becomes required again if a second zone is declared ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) decision 5). `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
-| `./scripts/demo` | Bring both sides of the twin pair up with the line running, put a work-piece on each side and watch it carried to the end of the belt. One window per side; `--headless` for none. A demonstration, not a check — `./scripts/scenario continuous_line` is what asserts this. |
+| `./scripts/program [--headless]` | Bring the twin pair up, put a box on each side's table and run the real robot's program once through the twin boundary. A demonstration, not a check — `./scripts/scenario program_cycle` is what asserts it, on one side. |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
 | `./scripts/clean [--all]` | Remove build artifacts. |

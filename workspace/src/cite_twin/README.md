@@ -127,7 +127,8 @@ unsatisfiable in a way ADR-0050 did not anticipate, that is a finding to report.
 `tcp_position_error_m`, `tcp_orientation_error_rad`, `cycle_time_deviation_s` and
 `event_timing_deviation_s` carry **NaN** in every sample because **nothing here computes
 them**. The first two need a tool pose per side, which needs one TF buffer per side (ADR-0050
-clause 1c) and forward kinematics; the last two need L4 line state from both sides.
+clause 1c) and forward kinematics; the last two need L4 line state from both sides, and the
+main tree has no L4 since ADR-0069.
 
 They used to be zero, and **that fact lived here and not in the contract** — so the day term
 3 gains an instrument and a sample turns valid, `tcp_position_error_m = 0.0` would have been

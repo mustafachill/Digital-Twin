@@ -5,12 +5,12 @@
   bring-up and by nothing else** — `cite_twin` is started by `./scripts/sim --pair`
   ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)) and appears in
   no launch file and no scenario, so a solo bring-up starts no L5; it refuses a zone that
-  declares one side, which `cell_a` does and `cell_b`, paired since 2026-09-18
-  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), does not — and
-  **orchestration is off by default**: the line coordinator
-  starts only with `line:=true`, because it takes exclusive hold of every arm's skills, so a
-  default bring-up leaves the arms free for an operator or a scenario. The physical path is
-  Phase 2 and has never been run.
+  declares one side, and `cell_b`, the one zone L0 declares, is paired since 2026-09-18
+  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)) — and **orchestration is not
+  in the main tree**: the line coordinator, the detection server and `line:=true` left it on
+  2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). The three-arm line is run from
+  [`../../projects/01-three-arm-event-driven-line/`](../../projects/01-three-arm-event-driven-line/README.md).
+  The physical path is Phase 2 and has never been run.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell
@@ -50,17 +50,15 @@ against an invalid model debugs the wrong thing.
 ```bash
 ./scripts/sim                          # GUI, Linux only
 ./scripts/sim --headless               # anywhere
-./scripts/sim --headless line:=true    # and let L4 drive every station
 ```
+
+`--zone` may be left out because L0 declares exactly one zone, `cell_b`; the default is derived
+in `cite_bringup/zones.py`, and the flag becomes required again the day a second zone is
+declared (ADR-0069 decision 5).
 
 A windowed run opens with the camera already framing the whole zone from the customer side,
 across the line from the arm; the pose is generated from L0 into `worlds/<zone>_gui.config`,
 and the view can still be moved by hand.
-
-**`line:=true` hands the cell over.** The coordinator claims each arm's skill server, and a
-skill server admits one goal at a time, so anything else that sends a goal — an operator, a
-diagnostic, a scenario — is refused by a server that is busy. Bring the line up this way only
-when you mean to watch it run.
 
 **Expect:** bring-up proceeds through the ordered sequence, each step gated on the previous
 one reporting active:
@@ -70,6 +68,9 @@ simulator → descriptions → controller manager → controllers
           → MoveIt → skills → twin sync → orchestration
 ```
 
+The last two stages are the target sequence: a solo bring-up stops at skills, twin sync is the
+pair supervisor's (below), and orchestration is not in the main tree.
+
 **If a step fails:** bring-up stops with a diagnosis naming the step. It does not continue
 degraded — that is the point of lifecycle sequencing.
 
@@ -77,41 +78,32 @@ degraded — that is the point of lifecycle sequencing.
 
 ```bash
 ros2 control list_controllers          # all active
-ros2 topic hz /cite/cell_a/arm_1/joint_states
+ros2 topic hz /cite/cell_b/picker/joint_states
 ros2 action list | grep cite           # skill servers present
 # /cite/twin/mode has NO publisher in this bring-up: cite_twin is not started
 # by it, and needs a zone declaring `twin: {sides: pair}` to start at all.
 ```
 
-The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process, and the
-beams are what start a station:
+The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process:
 
 ```bash
-ros2 node list | grep gz_bridge                             # exactly one
-ros2 topic echo /cite/cell_a/beam_pick/detection_level      # the raw level, std_msgs/Bool
-ros2 topic echo /cite/cell_a/beam_pick/detection            # the typed DetectionEvent
-ros2 topic pub --once /cite/cell_a/conveyor_1/command \
-    std_msgs/msg/Float64 "{data: 0.15}"                     # only with the line NOT running
+ros2 node list | grep gz_bridge                                 # exactly one
+ros2 topic echo /cite/cell_b/infeed_beam/detection_level        # a beam's raw level, std_msgs/Bool
+ros2 topic pub --once /cite/cell_b/transfer_belt/command \
+    std_msgs/msg/Float64 "{data: 0.15}"                         # the belt, by hand
 ```
 
-**If a beam's level ticks and its `detection` topic is silent:** the detection server is not
-running or is watching a different name. The two are deliberately different topics — the raw
-`gz.msgs.Boolean` is landed on `…/detection_level` and only `cite_skills`' detection server
-publishes the typed event on `…/detection`.
+The beams still stand in `cell_b`'s world and their levels are still bridged, but **nothing in
+the main tree reads them**: the detection server that turned a level into a typed event on
+`…/detection` left with the line (ADR-0069). The topic names are the plan's — read
+`workspace/src/cite_generated/bringup/cell_b_plan.yaml` rather than this block.
 
-**Do not command a belt by hand while the line is running.** L4 owns that setpoint
-([ADR-0032](../adr/0032-index-the-belt.md)); a second publisher fights it, and a belt running
-under a part a station is reaching for puts the part on the floor.
-
-**If the belts never start and nothing reports an error:** check the log for
-`line_orchestrator` announcing that it re-sent a setpoint to a subscriber that appeared after
-the belt was last commanded. The start-up command is published from the same callback that
-creates the publishers, when no subscriber has been matched yet — **reliable QoS is a promise
-to *matched* subscribers, so that first message is delivered to nobody** however long the
-bridge has been up. Delivery depends on the matched-subscriber event, which is where to look
-if an RMW other than the default is in use. This failed silently for ten commits and the
-symptom was a line that simply never moved; the measurement is in the 2026-08-27 correction
-on [ADR-0032](../adr/0032-index-the-belt.md).
+**If a belt setpoint seems never to arrive:** reliable QoS is a promise to *matched*
+subscribers, so a setpoint published before the bridge's subscriber matched is delivered to
+nobody, however long the bridge has been up. The line's belt owner failed this way silently for
+ten commits; the measurement is in the 2026-08-27 correction on
+[ADR-0032](../adr/0032-index-the-belt.md), and the rule is in
+[`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md).
 
 **If a controller is inactive:** check that its joint names match the description
 (`./scripts/validate-model`). The spawner error names the spawner, not the mismatch — this
@@ -124,17 +116,19 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 
 > **The zone must declare it.** `./scripts/sim --pair` refuses an untwinned zone rather than
 > inventing a second side: whether a zone runs as a pair is an L0 fact.
-> `model/facility/zones.yaml` ships `cell_b` as `twin: {sides: pair}` and `cell_a` as `single`
+> `model/facility/zones.yaml` ships one zone, `cell_b`, as `twin: {sides: pair}`
 > ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so the command below comes
-> up on `cell_b` from a clean checkout and refuses on `cell_a`.
+> up from a clean checkout. It said `cell_a` was shipped `single` and refused until that zone
+> left L0 on 2026-10-01 (ADR-0069).
 >
 > **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
-> step does, and what CI drives on `cell_b` is the plant alone.
+> step does, and what CI drives on `cell_b` is the plant alone (`bringup` twice and
+> `program_cycle`).
 
 ```bash
-./scripts/sim --zone cell_b --pair             # both sides, under the supervisor
-./scripts/sim --zone cell_b --pair --headless  # the same, with no windows
-./scripts/sim --zone cell_b --pair line:=true  # and let L4 drive every station, on both sides
+./scripts/sim --pair             # both sides, under the supervisor
+./scripts/sim --pair --headless  # the same, with no windows
+./scripts/sim --zone cell_b --pair --headless  # naming the zone, which only a second zone would require
 ```
 
 **Launch arguments keep the `key:=value` spelling they have without `--pair`.** A pair takes
@@ -189,8 +183,7 @@ through the twin boundary.
 ./scripts/program --headless --cycles 3
 ```
 
-Or by hand, on a pair that is already up (`./scripts/sim --zone cell_b --pair`, **without**
-`line:=true`):
+Or by hand, on a pair that is already up (`./scripts/sim --pair`):
 
 ```bash
 ./scripts/enter dev python3 -m cite_bringup.program.belt --zone cell_b                # every side's belt at its installed speed
@@ -213,11 +206,9 @@ carriages are moving drops later track commands and sends no stop, so each side 
 point it already has; and through the twin the counterpart's track position and custody are
 not read back.
 
-**The beam-triggered line does not run on `cell_b`.** Since ADR-0067 its transfer station
-declares no place frame, because the belt's infeed is out of reach at track position 0, and
-`line_plan.hpp` refuses the line at plan time; `./scripts/demo` runs that line on the paired
-zone, so it cannot run it either. On the main tree the line is started single-sided on `cell_a`
-(`./scripts/sim --zone cell_a line:=true`), which is the zone `continuous_line` drives. The previous behaviour — taught poses and a timed
+**The beam-triggered line is not in the main tree** ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). It ran single-sided on `cell_a`,
+and never on `cell_b` after ADR-0067, whose transfer station declares no place frame because the
+belt's infeed is out of reach at track position 0. The previous behaviour — taught poses and a timed
 belt run through the twin (ADR-0066) — is kept runnable in
 [`../../projects/02-fixed-program-pair/`](../../projects/02-fixed-program-pair/README.md), and
 the three-arm line in
@@ -230,7 +221,7 @@ A shell is on the plant's domain by default — `./scripts/doctor` prints it —
 other side, resolve its domain from the plan rather than adding one by hand:
 
 ```bash
-ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # the one zone L0 declares
 ./scripts/enter dev python3 -c '
 import os, sys
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id

@@ -82,7 +82,11 @@ is a bridge one layer up.
   is a continuum of poses, and on this arm almost none of the interpolated poses has an IK
   solution; a caller asking for a line along a surface and receiving an arbitrary joint path
   would be receiving a different, possibly colliding, motion.
-- **The only named configuration is `home`**, and it comes from the L0 model.
+- **The named configurations are `home` and the arm's program poses**, and nothing else.
+  `home` comes from the L0 model; the program poses come from the robot's Blockly program,
+  read when the plan is generated and delivered as the plan's `poses_rad`
+  ([ADR-0067](../../../docs/adr/0067-the-real-program-drives-the-twin-on-a-track.md)). This line
+  said "the only named configuration is `home`" until 2026-10-01.
 
 ## Limitations that are known, and how each is known
 
