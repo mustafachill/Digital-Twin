@@ -58,8 +58,8 @@ from cite_tools.model.resolve import resolve
 
 
 def _controllers_yaml(model_dir: Path) -> str:
-    cell = resolve(load(model_dir), "cell_a")
-    arm = next(a for a in generate(cell) if a.path.endswith("cell_a_arm_1_controllers.yaml"))
+    cell = resolve(load(model_dir), "cell_b")
+    arm = next(a for a in generate(cell) if a.path.endswith("cell_b_picker_controllers.yaml"))
     return arm.content
 
 

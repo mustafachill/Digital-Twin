@@ -31,6 +31,40 @@ def physical_rules(path: Path, severity: Severity = Severity.ERROR) -> set[str]:
     return {f.rule for f in physical.check(load(path)) if f.severity is severity}
 
 
+#: The zone the model declares, named once (ADR-0069 left one).
+ZONE = "cell_b"
+
+
+def move_the_track(model: Path, edit_yaml: Callable, dy: float) -> None:
+    """Slide the arm's track — and so the arm — `dy` metres away from its pick table.
+
+    The arm stands on the track's carriage, so moving the track is how this cell
+    moves its arm. +y is away from `infeed_table`.
+    """
+
+    def mutate(document: dict) -> None:
+        x, y, z = document["assets"][0]["pose"]["xyz_m"]
+        document["assets"][0]["pose"]["xyz_m"] = [x, y + dy, z]
+
+    edit_yaml(model / "assets/instances/tracks.yaml", mutate)
+
+
+def place_on_the_belt(model: Path, edit_yaml: Callable) -> None:
+    """Give `b_transfer_1` back the belt place point ADR-0067 removed.
+
+    The shipped cell has no station point on a belt — the program places there
+    and no station does — so a rule about points on a belt has nothing to judge
+    unless one is put back. Restoring it also makes the point unreachable from
+    track zero, which these tests do not ask about.
+    """
+
+    def mutate(document: dict) -> None:
+        station = next(s for s in document["stations"] if s["id"] == "b_transfer_1")
+        station["place_to"] = {"asset": "transfer_belt", "frame": "infeed"}
+
+    edit_yaml(model / "topology/stations.yaml", mutate)
+
+
 class TestTheRealCellIsSound:
     def test_no_geometric_errors(self, real_model: Path) -> None:
         assert geometric_rules(real_model) == set()
@@ -65,25 +99,18 @@ class TestReach:
     def test_moving_an_arm_out_of_range_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        # Push pedestal_1 a metre further from the pick table. The arm on top of
-        # it can no longer reach its own station.
-        edit_yaml(
-            real_model / "assets/instances/fixtures.yaml",
-            lambda d: d["assets"][0]["pose"].__setitem__("xyz_m", [1.0, -0.35, 0.0]),
-        )
+        # Slide the track 0.35 m further from the pick table. The arm on its
+        # carriage can no longer reach its own station.
+        move_the_track(real_model, edit_yaml, 0.35)
         assert "unreachable-station" in geometric_rules(real_model)
 
     def test_a_marginal_reach_is_warned_about(self, real_model: Path, edit_yaml: Callable) -> None:
-        # +0.10 m, not +0.15: table_pick moved 25 mm further out to buy real
-        # clearance against pedestal_1, so the warning band moved with it and
-        # +0.15 now lands past the reach limit and reports as an error instead.
-        # The property under test is unchanged — a reach that is legal but tight
-        # is warned about — only the displacement that produces one.
-        edit_yaml(
-            real_model / "assets/instances/fixtures.yaml",
-            lambda d: d["assets"][0]["pose"].__setitem__("xyz_m", [0.10, -0.35, 0.0]),
-        )
+        # +0.20 m lands in the band where the reach is legal but tight; +0.30 m
+        # already reports as an error. The property under test is that a tight
+        # reach is warned about, not the displacement that produces one.
+        move_the_track(real_model, edit_yaml, 0.20)
         assert "reach-margin" in geometric_rules(real_model, Severity.WARNING)
+        assert "unreachable-station" not in geometric_rules(real_model)
 
     def test_a_point_reachable_only_along_the_track_is_caught(
         self, real_model: Path, edit_yaml: Callable
@@ -126,11 +153,13 @@ class TestLayout:
         assert "outside-zone" in geometric_rules(real_model)
 
     def test_overlapping_bodies_are_caught(self, real_model: Path, edit_yaml: Callable) -> None:
-        # Put conveyor_2 on top of conveyor_1. The physics engine would resolve
-        # the penetration on the first step and fling them apart.
+        # Put the outfeed table where the belt stands. The physics engine would
+        # resolve the penetration on the first step and fling them apart.
         edit_yaml(
-            real_model / "assets/instances/conveyors.yaml",
-            lambda d: d["assets"][1]["pose"].__setitem__("xyz_m", [1.050, 0.0, 0.0]),
+            real_model / "assets/instances/fixtures.yaml",
+            lambda d: next(a for a in d["assets"] if a["id"] == "outfeed_table")[
+                "pose"
+            ].__setitem__("xyz_m", [1.310, 3.060, 0.0]),
         )
         assert "overlapping-assets" in geometric_rules(real_model)
 
@@ -140,14 +169,14 @@ class TestLayout:
         # The property that makes anchoring worth it: move the belt and the
         # sensor follows, with no second edit and no chance of divergence.
         model = load(real_model)
-        before = resolve(model, "cell_a").asset("beam_c1_out")
-        assert before is not None
+        before = resolve(model, ZONE).asset("outfeed_beam")
+        assert before is not None and before.parent_asset == "transfer_belt"
 
         edit_yaml(
             real_model / "assets/instances/conveyors.yaml",
-            lambda d: d["assets"][0]["pose"].__setitem__("xyz_m", [1.550, 0.0, 0.0]),
+            lambda d: d["assets"][0]["pose"].__setitem__("xyz_m", [1.810, 3.060, 0.035]),
         )
-        after = resolve(load(real_model), "cell_a").asset("beam_c1_out")
+        after = resolve(load(real_model), ZONE).asset("outfeed_beam")
         assert after is not None
         assert round(after.world_pose.xyz_m[0] - before.world_pose.xyz_m[0], 6) == 0.5
 
@@ -162,14 +191,14 @@ class TestInertia:
             inertial["iyy"] = 0.1
             inertial["izz"] = 5.0
 
-        edit_yaml(real_model / "assets/types/fixtures/pedestal_600.yaml", mutate)
+        edit_yaml(real_model / "assets/types/fixtures/work_table_600.yaml", mutate)
         assert "inertia-triangle-inequality" in physical_rules(real_model)
 
     def test_centre_of_mass_outside_the_body_is_rejected(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         edit_yaml(
-            real_model / "assets/types/fixtures/pedestal_600.yaml",
+            real_model / "assets/types/fixtures/work_table_600.yaml",
             lambda d: d["asset_type"]["description"]["body"]["inertial"].__setitem__(
                 "com_m", [0.0, 0.0, 2.0]
             ),
@@ -180,7 +209,7 @@ class TestInertia:
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         edit_yaml(
-            real_model / "assets/types/fixtures/pedestal_600.yaml",
+            real_model / "assets/types/fixtures/work_table_600.yaml",
             lambda d: d["asset_type"]["description"]["body"]["inertial"].__setitem__(
                 "mass_kg", 40000.0
             ),
@@ -192,7 +221,7 @@ class TestInertia:
     ) -> None:
         # The classic placeholder: someone copies a working inertial block to a
         # new part and never recomputes it. L1 names this specifically.
-        source = load(real_model).asset_type("pedestal_600")
+        source = load(real_model).asset_type("work_table_600")
         assert source is not None and source.description.body is not None
         borrowed = source.description.body.inertial.model_dump()
 
@@ -254,8 +283,8 @@ class TestFramesAndTheirGeometry:
 class TestSupportMargin:
     """The rule that would have caught the belt end, and did not exist to.
 
-    `cell_a__conveyor_1__infeed` lay exactly on the leading-edge plane of the
-    belt's collision box. Every rule above passed it — the frame IS on its own
+    A belt's infeed transfer frame once lay exactly on the leading-edge plane of
+    the belt's collision box. Every rule above passed it — the frame IS on its own
     geometry, the point IS inside the envelope, the corridor above it IS clear —
     and every work-piece released there was set down with half of it over the
     void, tipped about the edge and fell 0.600 m to the floor. `pick_and_place`
@@ -265,7 +294,12 @@ class TestSupportMargin:
     BELT = "assets/types/conveyors/belt_1200x400.yaml"
 
     def _set_inset(self, model: Path, edit_yaml: Callable, inset: float) -> None:
-        """Move both transfer frames `inset` metres in from the belt's ends."""
+        """Move both transfer frames `inset` metres in from the belt's ends.
+
+        Also puts a station point back on the belt, which the shipped cell does
+        not have: without one the rule has nothing to judge.
+        """
+        place_on_the_belt(model, edit_yaml)
 
         def mutate(document: dict) -> None:
             frames = {f["id"]: f for f in document["asset_type"]["frames"]}
@@ -323,9 +357,9 @@ class TestSupportMargin:
         # of margin — and never showed this failure. Same generator, opposite
         # support margin, and the rule must not fire on the good case.
         model = load(real_model)
-        cell = resolve(model, "cell_a")
-        station = next(s for s in cell.stations if s.id == "station_transfer_1")
-        assert station.pick_from == ("table_pick", "surface")
+        cell = resolve(model, ZONE)
+        station = next(s for s in cell.stations if s.id == "b_transfer_1")
+        assert station.pick_from == ("infeed_table", "surface")
         assert "insufficient-support-margin" not in geometric_rules(real_model)
 
     def test_a_facility_with_no_workpiece_is_not_judged(
@@ -345,6 +379,7 @@ class TestSupportMargin:
     ) -> None:
         # The bound follows the part rather than being a constant: widen the cube
         # to 100 mm and the shipped 0.050 m inset is no longer enough for it.
+        place_on_the_belt(real_model, edit_yaml)
         edit_yaml(
             real_model / "assets/types/workpieces/workpiece.yaml",
             lambda d: d["asset_type"]["description"]["body"]["collision"].__setitem__(
@@ -360,9 +395,8 @@ class TestApproachCorridors:
     def test_an_obstruction_above_a_pick_point_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        # The committed placement: the sensor housing 50 mm back from the outfeed
-        # and on the belt centreline, straight through the gripper's descent onto
-        # station_transfer_2's pick point.
+        # The housing on the pick table's centreline, straight through the
+        # gripper's descent onto b_transfer_1's pick point.
         edit_yaml(
             real_model / "assets/instances/sensors.yaml",
             lambda d: d["assets"][0]["pose"].__setitem__("xyz_m", [-0.05, 0.0, 0.08]),
@@ -380,12 +414,16 @@ class TestClearance:
     """Exact face contact is a layout one micrometre from a penetration."""
 
     def test_touching_faces_are_warned_about(self, real_model: Path, edit_yaml: Callable) -> None:
-        # table_accumulation's near face exactly on conveyor_3's far face. The
-        # overlap check uses a strict inequality and calls this "not
-        # intersecting", which is true and useless.
+        # outfeed_table's near face half a millimetre from transfer_belt's far
+        # face. The overlap check uses a strict inequality and calls this "not
+        # intersecting", which is true and useless. Not exactly on it: 2.210 less
+        # half the table is 1.9100000000000001 in floating point, which the
+        # overlap check then reports as an error rather than this as a warning.
         edit_yaml(
             real_model / "assets/instances/fixtures.yaml",
-            lambda d: d["assets"][4]["pose"].__setitem__("xyz_m", [6.15, 0.0, 0.0]),
+            lambda d: next(a for a in d["assets"] if a["id"] == "outfeed_table")[
+                "pose"
+            ].__setitem__("xyz_m", [2.2105, 3.060, 0.0]),
         )
         assert "insufficient-clearance" in geometric_rules(real_model, Severity.WARNING)
 
@@ -396,8 +434,8 @@ class TestClearance:
         # A sensor mounted on its conveyor is meant to be in contact with it.
         # Warning about that would be warning about the anchoring the model wants.
         model = load(real_model)
-        beam = resolve(model, "cell_a").asset("beam_c1_out")
-        assert beam is not None and beam.parent_asset == "conveyor_1"
+        beam = resolve(model, ZONE).asset("outfeed_beam")
+        assert beam is not None and beam.parent_asset == "transfer_belt"
         assert "insufficient-clearance" not in geometric_rules(real_model, Severity.WARNING)
 
 
@@ -411,12 +449,14 @@ class TestZoneContainmentUsesExtents:
         # origin alone and passed this.
         edit_yaml(
             real_model / "assets/instances/fixtures.yaml",
-            lambda d: d["assets"][4]["pose"].__setitem__("xyz_m", [6.7, 0.0, 0.0]),
+            lambda d: next(a for a in d["assets"] if a["id"] == "outfeed_table")[
+                "pose"
+            ].__setitem__("xyz_m", [2.8, 3.060, 0.0]),
         )
         model = load(real_model)
-        asset = resolve(model, "cell_a").asset("table_accumulation")
+        asset = resolve(model, ZONE).asset("outfeed_table")
         assert asset is not None
-        assert model.zone("cell_a").bounds.max_m[0] > asset.world_pose.xyz_m[0]
+        assert model.zone(ZONE).bounds.max_m[0] > asset.world_pose.xyz_m[0]
         assert "outside-zone" in geometric_rules(real_model)
 
     def test_a_body_wholly_inside_is_accepted(self, real_model: Path) -> None:
@@ -967,49 +1007,72 @@ class TestTheRemedyTheHintNamesIsAValidModel:
 class TestIndexingBeams:
     """A beam that stops a belt has to leave the part where a robot can reach it.
 
-    THE FAILURE THESE EXIST FOR. `beam_c1_out` was authored 50 mm upstream of the
-    point `station_transfer_2` picks from. A through beam breaks on a part's
-    leading edge, so the belt stopped with the cube 69 mm short of the grasp and
-    `arm_2` closed on air at `commanded 45.0 mm, reached 46.0 mm, stalled=false`.
-    `continuous_line` stopped at milestone 4 of 10 on four runs out of four, and
-    the model validated cleanly every time.
+    THE FAILURE THESE EXIST FOR. An indexing beam was once authored 50 mm
+    upstream of the point a station picked from. A through beam breaks on a
+    part's leading edge, so the belt stopped with the cube 69 mm short of the
+    grasp and the arm closed on air, and the model validated cleanly every time.
 
     The position is derived now — `cite_tools.model.resolve.index_offset_m` — so
     the specific mistake cannot be made again. These are for the mistakes that
     are still available: authoring an offset next to the derived one, indexing to
     a point nobody picks from, and declaring a part the geometry cannot serve.
-    Ten minutes of scenario against a fraction of a second here.
+
+    THE SHIPPED CELL HAS NO INDEXING BEAM. The three-arm line whose belts were
+    indexed left the main tree with ADR-0069, and `cell_b`'s arm picks from a
+    table. So the cases that need one build it: `_belt_fed` points
+    `b_transfer_1` at the belt's outfeed and makes `outfeed_beam` index to it,
+    which is the same shape the line had. The validator rules are unchanged and
+    still apply to any beam that declares `indexes_workpiece`.
     """
 
     SENSORS = "assets/instances/sensors.yaml"
     WORKPIECE = "assets/types/workpieces/workpiece.yaml"
 
     #: Index of each beam in `sensors.yaml`, which lists them in this order.
-    PICK, C1_OUT, C2_OUT, C3_OUT = 0, 1, 2, 3
+    INFEED, OUTFEED = 0, 1
+
+    @classmethod
+    def _belt_fed(cls, model: Path, edit_yaml: Callable) -> None:
+        def pick_from_the_belt(document: dict) -> None:
+            station = next(s for s in document["stations"] if s["id"] == "b_transfer_1")
+            station["pick_from"] = {"asset": "transfer_belt", "frame": "outfeed"}
+
+        def index(document: dict) -> None:
+            beam = document["assets"][cls.OUTFEED]
+            assert beam["id"] == "outfeed_beam", beam["id"]
+            beam["pose"]["xyz_m"] = [0.000, 0.250, 0.030]
+            beam["configuration"]["indexes_workpiece"] = True
+
+        edit_yaml(model / "topology/stations.yaml", pick_from_the_belt)
+        edit_yaml(model / cls.SENSORS, index)
 
     @staticmethod
-    def _beam_x(path: Path, beam: str = "beam_c1_out") -> float:
+    def _beam_x(path: Path, beam: str = "outfeed_beam") -> float:
         model = load(path)
-        asset = resolve(model, "cell_a").asset(beam)
+        asset = resolve(model, ZONE).asset(beam)
         assert asset is not None
         return asset.world_pose.xyz_m[0]
 
-    def test_the_stand_off_is_derived_from_the_part(self, real_model: Path) -> None:
-        """The shipped number, and where it comes from.
+    def test_the_stand_off_is_derived_from_the_part(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The derived number, and where it comes from.
 
-        `conveyor_1/outfeed` is at x = 1.595. Half a 66 mm cube is 33 mm and half
-        a 4 mm beam is 2 mm, so the housing stands at 1.630 and a part whose
+        `transfer_belt/outfeed` is at x = 1.855. Half a 66 mm cube is 33 mm and
+        half a 4 mm beam is 2 mm, so the housing stands at 1.890 and a part whose
         leading edge breaks the beam has its centre exactly on the pick point.
         """
-        assert self._beam_x(real_model) == pytest.approx(1.630)
+        self._belt_fed(real_model, edit_yaml)
+        assert self._beam_x(real_model) == pytest.approx(1.890)
 
     def test_the_stand_off_follows_the_part(self, real_model: Path, edit_yaml: Callable) -> None:
         """The whole point of deriving it rather than writing it down.
 
-        Double the part and the beam moves with it, with nothing authored to keep
-        in step. A fitted coordinate would have stayed at 1.630 and started
+        Widen the part and the beam moves with it, with nothing authored to keep
+        in step. A fitted coordinate would have stayed at 1.890 and started
         parking the new part 17 mm short, reporting nothing.
         """
+        self._belt_fed(real_model, edit_yaml)
 
         def widen(document: dict) -> None:
             document["asset_type"]["description"]["body"]["collision"]["size_m"] = [
@@ -1019,7 +1082,7 @@ class TestIndexingBeams:
             ]
 
         edit_yaml(real_model / self.WORKPIECE, widen)
-        assert self._beam_x(real_model) == pytest.approx(1.647)
+        assert self._beam_x(real_model) == pytest.approx(1.907)
 
     def test_an_authored_offset_beside_the_derived_one_is_caught(
         self, real_model: Path, edit_yaml: Callable
@@ -1030,23 +1093,27 @@ class TestIndexingBeams:
         whatever the simulator happens to do. The old -0.050 is used here because
         it is exactly the value that was there.
         """
+        self._belt_fed(real_model, edit_yaml)
         edit_yaml(
             real_model / self.SENSORS,
-            lambda d: d["assets"][self.C1_OUT]["pose"].__setitem__("xyz_m", [-0.050, 0.250, 0.030]),
+            lambda d: d["assets"][self.OUTFEED]["pose"].__setitem__(
+                "xyz_m", [-0.050, 0.250, 0.030]
+            ),
         )
         assert "beam-indexes-off-frame" in geometric_rules(real_model)
 
     def test_indexing_to_a_point_no_station_picks_from_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        """`station_accumulation` is a sink with no actor: nothing picks there.
+        """`b_accumulation` is a sink with no actor: nothing picks there.
 
         A belt indexed to a point no arm reaches for parks parts where nobody
-        collects them, and the line blocks behind them.
+        collects them, and the line blocks behind them. The shipped cell, with
+        only the beam declared as indexing.
         """
         edit_yaml(
             real_model / self.SENSORS,
-            lambda d: d["assets"][self.C3_OUT]["configuration"].__setitem__(
+            lambda d: d["assets"][self.OUTFEED]["configuration"].__setitem__(
                 "indexes_workpiece", True
             ),
         )
@@ -1061,6 +1128,7 @@ class TestIndexingBeams:
         past the end of the conveyor — where nothing crosses it, the belt never
         stops, and parts run off the end.
         """
+        self._belt_fed(real_model, edit_yaml)
 
         def lengthen(document: dict) -> None:
             document["asset_type"]["description"]["body"]["collision"]["size_m"] = [
@@ -1080,6 +1148,7 @@ class TestIndexingBeams:
         Reported rather than raised: resolution runs first, so an exception here
         would replace every geometric finding with a traceback.
         """
+        self._belt_fed(real_model, edit_yaml)
         edit_yaml(
             real_model / "facility/facility.yaml",
             lambda d: d["facility"].__setitem__("workpiece_models", []),
@@ -1098,7 +1167,9 @@ class TestIndexingBeams:
         """
         edit_yaml(
             real_model / self.SENSORS,
-            lambda d: d["assets"][self.C1_OUT]["pose"].__setitem__("xyz_m", [0.000, 0.250, 0.080]),
+            lambda d: d["assets"][self.OUTFEED]["pose"].__setitem__(
+                "xyz_m", [-0.050, 0.250, 0.080]
+            ),
         )
         assert "beam-cannot-see-workpiece" in geometric_rules(real_model)
 

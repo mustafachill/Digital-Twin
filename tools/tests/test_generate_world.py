@@ -24,7 +24,11 @@ from cite_tools.generate import bringup, gui, world
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import resolve
 
-ZONE = "cell_a"
+#: The zone, its arm and its belt, named once. The model declares one of each
+#: (ADR-0069); every count below is asked of the model rather than written here.
+ZONE = "cell_b"
+ARM = "picker"
+BELT = "transfer_belt"
 
 
 @pytest.fixture
@@ -51,7 +55,9 @@ def value(plugin: ElementTree.Element, tag: str) -> str:
 class TestEveryAidIsInstantiated:
     def test_one_conveyor_plugin_per_conveyor(self, cell) -> None:
         root = world_xml(cell)
-        assert len(plugins(root, "cite_conveyor")) == len(cell.of_category("conveyor")) == 3
+        belts = cell.of_category("conveyor")
+        assert belts, "the cell declares no conveyor, so this test asserted nothing"
+        assert len(plugins(root, "cite_conveyor")) == len(belts)
 
     def test_one_beam_plugin_per_sensor(self, cell) -> None:
         # The property is the PAIRING, not the number. The trailing `== 3` that
@@ -93,11 +99,7 @@ class TestTheNamesAgreeWithThePlan:
             for p in plugins(world_xml(cell), "cite_conveyor")
         }
         assert emitted == set(declared.values())
-        assert emitted == {
-            ("/cite/cell_a/conveyor_1/command", "/cite/cell_a/conveyor_1/state"),
-            ("/cite/cell_a/conveyor_2/command", "/cite/cell_a/conveyor_2/state"),
-            ("/cite/cell_a/conveyor_3/command", "/cite/cell_a/conveyor_3/state"),
-        }
+        assert emitted == {(f"/cite/{ZONE}/{BELT}/command", f"/cite/{ZONE}/{BELT}/state")}
 
     def test_beam_topics_match_the_bring_up_plan(self, cell) -> None:
         plan = yaml.safe_load(bringup.generate(cell)[0].content)["plan"]
@@ -118,18 +120,14 @@ class TestTheNamesAgreeWithThePlan:
             for p in plugins(world_xml(cell), "cite_grasp_hold")
         }
         assert emitted == declared
-        assert len(declared) == 3
+        assert len(declared) == len(cell.of_category("robot")) == 1
 
     def test_every_arm_with_a_plugin_has_a_plan_entry_and_the_reverse(self, cell) -> None:
         # One condition, two generators. An arm with an entry and no plugin gets a
         # bridge publishing into an empty partition; an arm with a plugin and no
         # entry gets a plugin nothing can ever tell to take hold.
         plan = yaml.safe_load(bringup.generate(cell)[0].content)["plan"]
-        assert {entry["asset"] for entry in plan["grasp_holds"]} == {
-            "arm_1",
-            "arm_2",
-            "arm_3",
-        }
+        assert {entry["asset"] for entry in plan["grasp_holds"]} == {ARM}
         assert len(plugins(world_xml(cell), "cite_grasp_hold")) == len(plan["grasp_holds"])
 
     def test_only_declared_workpieces_are_carried_or_watched(self, cell) -> None:
@@ -151,13 +149,13 @@ class TestGeometryComesFromTheModel:
             value(p, "surface_pose").split()[0] for p in plugins(world_xml(cell), "cite_conveyor")
         }
         expected = {
-            f"{cell.asset(a).frames['surface'].xyz_m[0]:g}"
-            for a in ("conveyor_1", "conveyor_2", "conveyor_3")
+            f"{cell.asset(a.id).frames['surface'].xyz_m[0]:g}" for a in cell.of_category("conveyor")
         }
+        assert expected, "the cell declares no conveyor, so this test asserted nothing"
         assert emitted == expected
 
     def test_the_carry_footprint_is_the_belts_own_collision_box(self, cell) -> None:
-        belt = cell.asset("conveyor_1")
+        belt = cell.asset(BELT)
         size = belt.asset_type.description.body.collision.size_m
         plugin = plugins(world_xml(cell), "cite_conveyor")[0]
         assert float(value(plugin, "belt_length_m")) == pytest.approx(size[0])
@@ -182,21 +180,26 @@ class TestGeometryComesFromTheModel:
         assert len(heights) == 1
 
     def test_the_beam_crosses_the_belt_rather_than_being_centred_on_its_housing(self, cell) -> None:
-        # beam_c1_out stands 250 mm to the side of a 400 mm belt and declares a
-        # 500 mm beam. Centred on the housing that spans y in [0.000, 0.500] —
-        # half of it beside the belt, with its near edge exactly on the
-        # centreline. Offset by the mounting standoff it spans [-0.250, +0.250]
-        # and covers the belt with 50 mm to spare.
-        plugin = plugins(world_xml(cell), "cite_break_beam")[0]
+        # The belt's beam stands 250 mm to the side of a 400 mm belt and declares
+        # a 500 mm beam. Centred on the housing it would span 250 mm beside the
+        # belt, with its near edge exactly on the centreline. Offset by the
+        # mounting standoff it is centred on the belt and covers it with 50 mm to
+        # spare on each side.
+        plugin = next(
+            p
+            for p in plugins(world_xml(cell), "cite_break_beam")
+            if "/outfeed_beam/" in value(p, "state_topic")
+        )
+        belt_y = cell.asset(BELT).world_pose.xyz_m[1]
         housing_y = float(value(plugin, "beam_pose").split()[1])
         offset = float(value(plugin, "beam_offset_m"))
         half = float(value(plugin, "beam_length_m")) / 2.0
         centre = housing_y + offset
-        assert centre == pytest.approx(0.0)
-        assert centre - half <= -0.2 and centre + half >= 0.2
+        assert centre == pytest.approx(belt_y)
+        assert centre - half <= belt_y - 0.2 and centre + half >= belt_y + 0.2
 
     def test_a_belt_carries_no_faster_than_its_installed_drive(self, cell) -> None:
-        belt = cell.asset("conveyor_1")
+        belt = cell.asset(BELT)
         plugin = plugins(world_xml(cell), "cite_conveyor")[0]
         assert float(value(plugin, "installed_speed_mps")) == pytest.approx(
             belt.instance.configuration.installed_speed_mps
@@ -211,7 +214,7 @@ class TestGraspHoldAidIsInstantiated:
         root = world_xml(cell)
         arms = [a for a in cell.of_category("robot") if a.instance.end_effector is not None]
         assert arms, "the cell declares no arm with an end effector, so this asserted nothing"
-        assert len(plugins(root, "cite_grasp_hold")) == len(arms) == 3
+        assert len(plugins(root, "cite_grasp_hold")) == len(arms)
 
     def test_the_attach_link_is_the_arm_s_own_last_link_not_the_gripper_s(self, cell) -> None:
         # `xarm_gripper_base_link` and `link_tcp` do not survive the URDF-to-SDF
@@ -219,7 +222,7 @@ class TestGraspHoldAidIsInstantiated:
         # for the evidence. `link5` does.
         root = world_xml(cell)
         attach_links = {value(p, "attach_link") for p in plugins(root, "cite_grasp_hold")}
-        assert attach_links == {"arm_1_link5", "arm_2_link5", "arm_3_link5"}
+        assert attach_links == {f"{ARM}_link5"}
 
     def test_the_topics_are_generated_per_arm_from_the_asset_id(self, cell) -> None:
         # The names the cell's own bridge publishes to (ADR-0065). Built by the
@@ -229,14 +232,10 @@ class TestGraspHoldAidIsInstantiated:
         # can reach is a plugin that never attaches and never says so.
         root = world_xml(cell)
         assert {value(p, "attach_topic") for p in plugins(root, "cite_grasp_hold")} == {
-            "/cite/cell_a/arm_1/grasp/attach",
-            "/cite/cell_a/arm_2/grasp/attach",
-            "/cite/cell_a/arm_3/grasp/attach",
+            f"/cite/{ZONE}/{ARM}/grasp/attach"
         }
         assert {value(p, "detach_topic") for p in plugins(root, "cite_grasp_hold")} == {
-            "/cite/cell_a/arm_1/grasp/detach",
-            "/cite/cell_a/arm_2/grasp/detach",
-            "/cite/cell_a/arm_3/grasp/detach",
+            f"/cite/{ZONE}/{ARM}/grasp/detach"
         }
 
     def test_taking_hold_and_letting_go_are_never_one_topic(self, cell) -> None:
@@ -300,7 +299,7 @@ class TestTheGeneratorRefusesRatherThanGuesses:
         # Silently emitting an origin pose would put the carry volume at the
         # corner of the building, and the belt would simply never carry anything
         # — a failure with no error anywhere.
-        belt = cell.asset("conveyor_1")
+        belt = cell.asset(BELT)
         object.__setattr__(belt, "frames", {})
         with pytest.raises(world.WorldError, match="surface"):
             world.generate(cell)
@@ -364,9 +363,9 @@ class TestTheWindowOpensOnTheCell:
     opens and never on a headless run. The pose is derived from L0 per zone.
     """
 
-    @pytest.fixture(params=["cell_a", "cell_b"])
-    def zone_cell(self, request, real_model: Path):
-        return resolve(load(real_model), request.param)
+    @pytest.fixture
+    def zone_cell(self, real_model: Path):
+        return resolve(load(real_model), ZONE)
 
     def test_it_stands_across_the_line_from_the_arms_and_faces_them(self, zone_cell) -> None:
         pose = gui.gui_camera_pose(zone_cell)
@@ -377,9 +376,9 @@ class TestTheWindowOpensOnTheCell:
             for a in zone_cell.assets
             if a.id not in {r.id for r in zone_cell.of_category("robot")}
         ]
-        # The customer is on the side of the line away from the arms: +Y in
-        # cell_a, whose arms stand on -Y, and -Y in cell_b, whose arm rides a
-        # track on +Y since ADR-0067. Derived per zone, not assumed.
+        # The customer is on the side of the line away from the arms: -Y in
+        # cell_b, whose arm rides a track on +Y since ADR-0067. Derived from the
+        # model, not assumed, so a cell laid out the other way round is covered.
         customer = 1.0 if sum(others) / len(others) >= sum(robots) / len(robots) else -1.0
         assert (pose.y - max(ys) if customer > 0 else min(ys) - pose.y) > 0
         assert pose.yaw == pytest.approx(-customer * math.pi / 2)

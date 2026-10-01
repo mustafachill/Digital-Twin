@@ -224,7 +224,7 @@ def test_the_track_joint_is_under_the_arm_and_has_a_controller(model) -> None:
     assert "      - picker_track_joint" in controllers
 
 
-def test_the_carriage_collides_as_it_is_drawn(model) -> None:
+def test_the_carriage_collides_as_it_is_drawn(model, real_model, add_arm) -> None:
     """The carriage plate is checked, not only drawn, and is not at war with the base.
 
     Its collision box is its visual box, so an arm link swinging down past the
@@ -255,8 +255,13 @@ def test_the_carriage_collides_as_it_is_drawn(model) -> None:
         '<disable_collisions link1="picker_track_carriage" link2="picker_link_base" '
         'reason="Adjacent"/>'
     ) in srdf
+    # The control: an arm with no track gets no such pair. The shipped zone has
+    # one arm and it rides a track, so a second, fixed arm is added on a copy.
+    fixed_arm = add_arm(real_model)
     fixed = next(
-        a for a in moveit.generate(resolve(model, "cell_a")) if a.path.endswith(".srdf.xacro")
+        a
+        for a in moveit.generate(resolve(load(real_model), "cell_b"))
+        if a.path.endswith(f"_{fixed_arm}.srdf.xacro")
     )
     assert "disable_collisions" not in fixed.content
 
@@ -278,9 +283,11 @@ def test_the_default_grasp_width_is_the_programs_close(model, linkage) -> None:
     assert closes.pop() == pytest.approx(grasp.default_grasp_width_m, abs=1e-6)
 
 
-def test_an_arm_without_a_track_is_unchanged(model) -> None:
-    cell = resolve(model, "cell_a")
-    assert all(a.axis is None and not a.program for a in cell.assets)
+def test_an_arm_without_a_track_is_unchanged(real_model, add_arm) -> None:
+    fixed_arm = add_arm(real_model)
+    asset = resolve(load(real_model), "cell_b").asset(fixed_arm)
+    assert asset is not None
+    assert asset.axis is None and not asset.program
 
 
 # --------------------------------------------------------------------------- #

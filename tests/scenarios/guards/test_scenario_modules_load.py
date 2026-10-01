@@ -297,7 +297,7 @@ def test_no_scenario_assigns_a_zone_literal() -> None:
 
 def test_the_selected_zone_overrides_the_default(monkeypatch) -> None:
     """What makes `./scripts/scenario bringup --zone <zone>` work at all."""
-    import _artifacts  # noqa: F401  (puts tests/scenarios on sys.path)
+    import _artifacts  # puts tests/scenarios on sys.path
     import _cell
 
     monkeypatch.setenv(_cell.SELECTED_BY, "some_zone")

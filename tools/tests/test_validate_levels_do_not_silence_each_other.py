@@ -107,7 +107,7 @@ class TestTheHandEditDetectorSurvivesAPhysicalError:
             "the generated-artifact diff did not run: a physical error silenced "
             "the hand-edit detector"
         )
-        assert "cell_a_arm_1.urdf.xacro" in printed
+        assert "cell_b_picker.urdf.xacro" in printed
 
     def test_the_error_count_carries_both(
         self, checkout: Path, edit_yaml: Callable, capsys: pytest.CaptureFixture[str]

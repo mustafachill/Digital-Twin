@@ -323,18 +323,18 @@ def test_a_colour_a_standing_body_wears_may_not_exceed_the_bound(
 ) -> None:
     """The rule FIRING, on the entry a body in this cell actually wears.
 
-    `pedestal_steel` is worn by `pedestal_600`, which is instantiated in both
-    zones, so brightening it is exactly the change the bound refuses.
+    `table_top` is worn by `work_table_600`, which the cell instantiates twice,
+    so brightening it is exactly the change the bound refuses.
     """
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
             "diffuse", [0.92, 0.53, 0.56, 1.0]
         ),
     )
     findings = physical_findings(real_model, "scene-material-clips")
     assert len(findings) == 1
-    assert findings[0].where == "materials.pedestal_steel.diffuse[0]"
+    assert findings[0].where == "materials.table_top.diffuse[0]"
 
 
 def test_the_finding_says_why_the_bound_is_what_it_is(
@@ -369,7 +369,7 @@ def test_the_bound_is_inclusive(real_model: Path, edit_yaml: Callable) -> None:
     """Exactly at the bound the conversion reaches 1.0 and clips nothing."""
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
             "diffuse", [physical.MAX_SCENE_COLOUR_COMPONENT, 0.53, 0.56, 1.0]
         ),
     )
@@ -384,7 +384,7 @@ def test_alpha_is_not_bounded(real_model: Path, edit_yaml: Callable) -> None:
     """
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "pedestal_steel").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
             "diffuse", [0.52, 0.53, 0.56, 1.0]
         ),
     )
@@ -462,7 +462,7 @@ def test_a_dangling_material_is_reported_once_and_by_the_other_rule(
 ) -> None:
     """Two rule names for one fact would send the reader to two places."""
     edit_yaml(
-        real_model / "assets/types/fixtures/pedestal_600.yaml",
+        real_model / "assets/types/fixtures/work_table_600.yaml",
         lambda d: d["asset_type"]["description"]["body"].__setitem__("material", "nonexistent"),
     )
     assert "unknown-material" in rules(real_model)
